@@ -1840,6 +1840,57 @@ class LumitUiState extends ChangeNotifier {
   /// Empty until it has, and where no runner answers.
   final ValueNotifier<List<NativeDisplay>> displays = ValueNotifier(const []);
 
+  /// The display the video monitor fills, in the system's units, or null
+  /// when it is off (lib/shell/video_monitor.dart).
+  final ValueNotifier<Rect?> videoMonitor = ValueNotifier(null);
+
+  /// Put the video monitor on [display], or take it down with null. Kept for
+  /// the displays in use, so it comes back with them.
+  void setVideoMonitor(Rect? display) {
+    if (videoMonitor.value == display) return;
+    videoMonitor.value = display;
+    final setup = displaySetup;
+    if (setup.isEmpty) return;
+    if (display == null) {
+      workspace.videoMonitors.remove(setup);
+    } else {
+      workspace.videoMonitors[setup] = [
+        display.left,
+        display.top,
+        display.width,
+        display.height,
+      ];
+    }
+    workspace.save();
+  }
+
+  /// The video monitor on or off, for its key: on, it goes on the display it
+  /// was last on with these displays, else the first one the main window is
+  /// not on, else the main window's own.
+  Future<void> toggleVideoMonitor() async {
+    if (videoMonitor.value != null) {
+      setVideoMonitor(null);
+      return;
+    }
+    final all = displays.value;
+    if (all.isEmpty) return;
+    final main = await NativeWindows.frame();
+    final remembered = workspace.videoMonitors[displaySetup];
+    final last = remembered == null
+        ? null
+        : Rect.fromLTWH(
+            remembered[0], remembered[1], remembered[2], remembered[3]);
+    final other = [
+      for (final d in all)
+        if (d.bounds != main?.display) d.bounds,
+    ];
+    setVideoMonitor(all.any((d) => d.bounds == last)
+        ? last
+        : other.isNotEmpty
+            ? other.first
+            : all.first.bounds);
+  }
+
   /// Which displays there are, as the string an arrangement is remembered
   /// against. Empty while none are known.
   String get displaySetup => displaySetupOf(displays.value);
@@ -1864,6 +1915,14 @@ class LumitUiState extends ChangeNotifier {
     if (now.isEmpty) return;
     displays.value = now;
     final setup = displaySetup;
+    // The video monitor comes back on the display it was on with these
+    // displays, and goes when its display has.
+    final monitor = workspace.videoMonitors[setup];
+    final on = monitor == null
+        ? null
+        : Rect.fromLTWH(monitor[0], monitor[1], monitor[2], monitor[3]);
+    videoMonitor.value =
+        on != null && now.any((d) => d.bounds == on) ? on : null;
     final was = workspace.dockSetup;
     if (was == setup) return;
     if (was != null) {

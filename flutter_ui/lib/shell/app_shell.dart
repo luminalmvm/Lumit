@@ -1,6 +1,7 @@
 // The application widget, the boot gate, and the shell view that dispatches
 // keys and lays the panels out. Lifted out of main.dart unchanged.
 
+import 'dart:async' show unawaited;
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
@@ -44,6 +45,7 @@ import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/theme/style_sheet.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
+import 'package:lumit_flutter/shell/video_monitor.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
 import 'package:lumit_flutter/shell/window_frame.dart';
@@ -568,14 +570,16 @@ class _LumitAppViewState extends State<LumitAppView> {
   }
 
   Widget _shell(LumitUiState uiState, LumitState state) {
-    final dock = DockWidget(
-      root: uiState.split,
-      buildPanel: buildPanelBodyFrb,
-      // Persisted, so an arrangement survives a restart.
-      onLayoutChanged: uiState.saveLayout,
-      activePanel: uiState.activePane,
-      maximised: uiState.maximisedPane,
-      uiScale: uiState.workspace.interface.uiScale,
+    final dock = VideoMonitorHost(
+      child: DockWidget(
+        root: uiState.split,
+        buildPanel: buildPanelBodyFrb,
+        // Persisted, so an arrangement survives a restart.
+        onLayoutChanged: uiState.saveLayout,
+        activePanel: uiState.activePane,
+        maximised: uiState.maximisedPane,
+        uiScale: uiState.workspace.interface.uiScale,
+      ),
     );
     // Toolbar position Left: the tools go on a rail flush to the window's
     // left edge, and the menu bar's line carries the options and the
@@ -1040,6 +1044,9 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'panel.dock':
         final pane = ui.activePane.value;
         handled = pane != null && DockCommands.dock(pane);
+      // The Viewer's picture alone on a display of its own, and off again.
+      case 'window.monitor':
+        unawaited(ui.toggleVideoMonitor());
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);

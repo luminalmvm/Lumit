@@ -6811,6 +6811,10 @@
   "@keyMoveThePanelToTheMainWindow": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The main window is the one with the menu bar."
   },
+  "keyShowOrHideTheVideoMonitor": "Show or hide the video monitor",
+  "@keyShowOrHideTheVideoMonitor": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The video monitor is the Viewer's picture alone, filling a display of its own."
+  },
   "keyFocusThePreviousPanel": "Focus the previous panel",
   "@keyFocusThePreviousPanel": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -17370,6 +17374,28 @@
         "example": "Viewer, Scopes"
       }
     }
+  },
+  "menuVideoMonitor": "Video monitor",
+  "@menuVideoMonitor": {
+    "description": "Window menu: a submenu that shows the Viewer's picture alone, full screen on a display of the user's choosing, such as a second monitor for a client to watch. Lists Off and each display."
+  },
+  "videoMonitorOff": "Off",
+  "@videoMonitorOff": {
+    "description": "Window menu, Video monitor submenu: the row that turns the video monitor off. Ticked while it is off."
+  },
+  "displayNumbered": "Display {number}",
+  "@displayNumbered": {
+    "description": "Window menu, Video monitor submenu: a display the system gives no name, by its place in the list, the main display first.",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "videoMonitorTitle": "Lumit - Video monitor",
+  "@videoMonitorTitle": {
+    "description": "The title the operating system shows for the video monitor's window, in the taskbar and when switching windows. The window itself shows the Viewer's picture alone, with no title bar."
   },
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {

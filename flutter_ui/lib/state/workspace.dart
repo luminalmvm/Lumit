@@ -633,6 +633,11 @@ class Workspace extends ChangeNotifier {
   /// [dockSetup] the set of displays it was last used with.
   Map<String, Map<String, dynamic>> setupDocks = {};
   String? dockSetup;
+
+  /// The display the video monitor was on with each set of displays, as
+  /// `[x, y, width, height]`, by [displaySetupOf]. A setup it was off with is
+  /// absent.
+  Map<String, List<double>> videoMonitors = {};
   LumitColorScheme colorScheme = LumitColorScheme.dark;
   ThemeShape themeShape = ThemeShape.studio;
 
@@ -2334,6 +2339,7 @@ class Workspace extends ChangeNotifier {
         },
         if (setupDocks.isNotEmpty) 'setup_docks': setupDocks,
         if (dockSetup != null) 'dock_setup': dockSetup,
+        if (videoMonitors.isNotEmpty) 'video_monitors': videoMonitors,
       };
 
   void applyJson(Map<String, dynamic> j) {
@@ -2593,6 +2599,17 @@ class Workspace extends ChangeNotifier {
     }
     setupDocks = {...setupDocksFromJson(j['setup_docks'])};
     dockSetup = j['dock_setup'] is String ? j['dock_setup'] as String : null;
+    videoMonitors = {
+      if (j['video_monitors'] case final Map monitors)
+        for (final e in monitors.entries)
+          if (e.key is String &&
+              e.value is List &&
+              (e.value as List).length == 4 &&
+              (e.value as List).every((n) => n is num))
+            e.key as String: [
+              for (final n in e.value as List) (n as num).toDouble()
+            ],
+    };
     windowPlacements.clear();
     final rawWindows = j['windows'];
     if (rawWindows is Map) {

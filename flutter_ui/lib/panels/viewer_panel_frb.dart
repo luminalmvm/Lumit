@@ -809,7 +809,11 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       ..shownScale = _shownScale
       ..onZoom = goToNamedZoom
       ..channel = _channel
-      ..onChannel = ((c) => setState(() => _channel = c))
+      // The video monitor shows the channel too, so the views say so.
+      ..onChannel = ((c) {
+        setState(() => _channel = c);
+        ui.views.touch();
+      })
       ..background = ui.model.heldBackground
       ..compSize = Size(facts.size.width.toDouble(), facts.size.height.toDouble())
       ..hasSnapshot = _snapshot != null
@@ -858,7 +862,10 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           tier: tier,
           shownScale: _shownScale,
           background: ui.model.heldBackground,
-          onChannel: (c) => setState(() => _channel = c),
+          onChannel: (c) {
+            setState(() => _channel = c);
+            ui.views.touch();
+          },
           onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
           onWireframes: () =>
               ui.setViewerLayerControls(!ui.viewerLayerControls),

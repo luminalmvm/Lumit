@@ -339,6 +339,9 @@ pub fn default_keymap() -> Keymap {
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
         row(Panels, "Mod+F", "panel.search.focus"),
+        // The Viewer's picture alone, filling a display of its own. F11 is
+        // what fills a screen nearly everywhere else.
+        row(Global, "Mod+F11", "window.monitor"),
         // Putting a panel up and taking it down, on the numbers After Effects
         // gives its own.
         row(Panels, "Mod+0", "panel.toggle.project"),
