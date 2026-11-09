@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 
 import '../../l10n/strings.dart';
+import '../../state/background.dart' show showWindow;
 import '../../state/workspace.dart';
 import '../../theme/motion.dart';
 import '../escape_ladder.dart';
@@ -15,6 +16,42 @@ import 'base.dart';
 import 'menus.dart';
 import 'motion.dart';
 import 'popups.dart';
+
+/// The overlay of the floating window in front, when one is and is big
+/// enough to hold a dialogue. Set by the dock (lib/shell/dock_widget.dart).
+OverlayState? Function()? frontWindowOverlay;
+
+/// How small a window can be and still hold a dialogue: the main window's
+/// own least size.
+const Size _roomForDialogue = Size(840, 560);
+
+/// Where a window asked for from [context] opens: the window the work is in.
+/// Asked from the main window, by a shortcut or a menu, while a floating
+/// window is in front, it opens in that one. Asked from a floating window too
+/// small to hold it, it opens in the main window, which comes forward.
+OverlayState _overlayFor(BuildContext context) {
+  final own = Overlay.of(context);
+  final main = WidgetsBinding.instance.platformDispatcher.implicitView?.viewId;
+  if (View.maybeOf(own.context)?.viewId == main) {
+    return frontWindowOverlay?.call() ?? own;
+  }
+  final size = MediaQuery.maybeSizeOf(own.context);
+  if (size != null &&
+      (size.width < _roomForDialogue.width ||
+          size.height < _roomForDialogue.height)) {
+    final root = Overlay.maybeOf(context, rootOverlay: true);
+    if (root != null) {
+      unawaited(showWindow());
+      return root;
+    }
+  }
+  return own;
+}
+
+/// Whether a floating window [size] logical pixels big can hold a dialogue.
+bool roomForDialogue(Size size) =>
+    size.width >= _roomForDialogue.width &&
+    size.height >= _roomForDialogue.height;
 
 /// Show a positioned popup and complete with the value handed to `close`.
 /// Clicking outside, or pressing Escape, dismisses with null.
@@ -58,7 +95,7 @@ Future<T?> showLumitModal<T>({
   bool modeless = false,
   bool still = false,
 }) {
-  final overlay = Overlay.of(context);
+  final overlay = _overlayFor(context);
   final completer = Completer<T?>();
   late OverlayEntry entry;
   // One window answering another, a confirmation and then the dialogue it

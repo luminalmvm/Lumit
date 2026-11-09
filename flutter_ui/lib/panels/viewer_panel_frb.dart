@@ -67,7 +67,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/dock_widget.dart' show DockOffTopLine, DockPaneHandle;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
 import '../state/dock.dart';
 import '../state/settings.dart';
@@ -268,13 +268,16 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
       bool edge = true,
       bool wipeLead = false,
       ViewerWipe? wipe}) {
-    final surface = ViewerViewSurface(
+    Widget surface = ViewerViewSurface(
       key: ValueKey(view.id),
       pane: widget.pane,
       view: view,
       wipe: wipe,
       wipeLead: wipeLead,
     );
+    // One of several pictures, each under its own bars: none of them is a
+    // floating window's top line.
+    if (!alone) surface = DockOffTopLine(child: surface);
     // One view in the pane is the pane, so it needs no edge of its own: the
     // dock already draws one round the active pane.
     // A wipe's second side lends its picture and takes no presses, so the
@@ -867,6 +870,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           host: _menus,
           detached: round,
           transport: !deck,
+          top: !split && (arrangement == ViewerBars.top || deck),
           loop: ui.workspace.performance.loop,
           onLoop: ui.workspace.setLoopMode,
           viewId: widget.view.engineId,

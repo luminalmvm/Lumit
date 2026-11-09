@@ -16,6 +16,10 @@
 // a start-up that failed are each the whole window, and a window with no way
 // to close it is the worse fault.
 //
+// A floating window has no menu bar. The line its panels head it with is its
+// top line instead, and the buttons stand at the end of the one in its top
+// right corner (dock_widget.dart).
+//
 // macOS keeps its title bar. Its menus are in the system's bar, so Lumit has
 // no line of its own there to put the buttons in.
 
@@ -81,34 +85,51 @@ const double _buttonWidth = 40;
 /// where the system draws them.
 double get windowButtonsWidth => windowFrameDrawn ? _buttonWidth * 3 : 0;
 
-/// Whether the window is maximised, which decides the middle button's drawing.
+/// The same for a floating window, which has no minimise button.
+double get floatingButtonsWidth => windowFrameDrawn ? _buttonWidth * 2 : 0;
+
+/// Whether the main window is maximised, which decides the middle button's
+/// drawing.
 final ValueNotifier<bool> _maximised = ValueNotifier<bool>(false);
 
-/// Ask the runner for something. Every call answers whether the window is
-/// maximised, so asking for nothing in particular is how that is read.
-Future<void> _ask(String what) async {
+/// The same for each floating window, by its native handle.
+final Map<int, ValueNotifier<bool>> _floatingMaximised = {};
+
+ValueNotifier<bool> _maximisedOf(int? window) => window == null
+    ? _maximised
+    : _floatingMaximised.putIfAbsent(window, () => ValueNotifier(false));
+
+/// Ask the runner for something, of the main window or the floating window
+/// [window]. Every call answers whether that window is maximised, so asking
+/// for nothing in particular is how that is read.
+Future<void> _ask(String what, {int? window}) async {
   try {
-    _maximised.value = await _channel.invokeMethod<bool>(what) ?? false;
+    _maximisedOf(window).value = await _channel.invokeMethod<bool>(
+            what, window == null ? null : {'window': window}) ??
+        false;
   } catch (_) {
     // No runner listening, which is a test.
   }
 }
 
 /// A part of the top line that moves the window when dragged, and maximises
-/// it or puts it back on a double click.
+/// it or puts it back on a double click. [window] names a floating window,
+/// and [onMenu] gives its right-click a menu of its own.
 class WindowDragArea extends StatelessWidget {
   final Widget? child;
+  final int? window;
+  final void Function(BuildContext context, Offset at)? onMenu;
 
-  const WindowDragArea({super.key, this.child});
+  const WindowDragArea({super.key, this.child, this.window, this.onMenu});
 
   @override
   Widget build(BuildContext context) {
     if (!windowFrameDrawn) return child ?? const SizedBox.shrink();
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanStart: (_) => _ask('drag'),
-      onDoubleTap: () => _ask('maximise'),
-      onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
+      onPanStart: (_) => _ask('drag', window: window),
+      onDoubleTap: () => _ask('maximise', window: window),
+      onSecondaryTapUp: (d) => (onMenu ?? _menu)(context, d.globalPosition),
       child: child,
     );
   }
@@ -153,6 +174,159 @@ void _menu(BuildContext context, Offset at) {
       ),
     ),
   );
+}
+
+/// A floating window's title line's right-click: the window's buttons by
+/// name, full screen, keeping it above other programs, and its panels back
+/// in the main window.
+void showFloatingWindowMenu(
+  BuildContext context,
+  Offset at, {
+  required int window,
+  required bool maximised,
+  required bool fullScreen,
+  required bool onTop,
+  required ValueChanged<bool> onSetOnTop,
+  required ValueChanged<bool> onFullScreen,
+  required VoidCallback onDock,
+}) {
+  showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) {
+      MenuRow row(String key, Widget label, VoidCallback act) => MenuRow(
+            key: ValueKey<String>('floating-menu-$key'),
+            onPressed: () {
+              close(null);
+              act();
+            },
+            child: label,
+          );
+      return FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              row(
+                  'maximise',
+                  MenuLabel(
+                      maximised ? l10n.windowRestore : l10n.windowMaximise,
+                      ticked: false),
+                  () => _ask('maximise', window: window)),
+              row('full-screen',
+                  MenuLabel(l10n.windowFullScreen, ticked: fullScreen),
+                  () => onFullScreen(!fullScreen)),
+              row('on-top', MenuLabel(l10n.windowKeepOnTop, ticked: onTop),
+                  () => onSetOnTop(!onTop)),
+              const MenuDivider(),
+              row('dock', MenuLabel(l10n.windowPanelsToMain, ticked: false),
+                  onDock),
+              const MenuDivider(),
+              row('close', MenuLabel(l10n.close, ticked: false),
+                  () => _ask('close', window: window)),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// A floating window's buttons where Lumit draws them.
+class FloatingWindowButtons extends StatelessWidget {
+  final LumitTheme theme;
+
+  /// The floating window, by its native handle.
+  final int window;
+
+  const FloatingWindowButtons(
+      {super.key, required this.theme, required this.window});
+
+  @override
+  Widget build(BuildContext context) =>
+      _WindowButtons(theme: theme, window: window);
+}
+
+/// A floating window's own top line, for when the pane in its top right
+/// corner has no line to carry the buttons: the empty line moves the window,
+/// and the buttons stand at its end.
+class FloatingTitleLine extends StatelessWidget {
+  final LumitTheme theme;
+
+  /// The floating window, by its native handle.
+  final int window;
+  final bool onTop;
+  final void Function(BuildContext context, Offset at) onMenu;
+
+  const FloatingTitleLine({
+    super.key,
+    required this.theme,
+    required this.window,
+    required this.onTop,
+    required this.onMenu,
+  });
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        key: const ValueKey('floating-title-line'),
+        height: theme.density.menuBar,
+        child: Row(
+          children: [
+            Expanded(child: WindowDragArea(window: window, onMenu: onMenu)),
+            _WindowButtons(theme: theme, window: window),
+          ],
+        ),
+      );
+}
+
+/// A floating window's edges and corners on Linux, where Lumit's own title
+/// bar takes the system's frame away and the edges with it: a press on one
+/// asks the window manager to resize from there. Elsewhere [child] as it is.
+class FloatingResizeEdges extends StatelessWidget {
+  final int window;
+  final Widget child;
+
+  const FloatingResizeEdges(
+      {super.key, required this.window, required this.child});
+
+  /// How far in from each side an edge reaches.
+  static const double _reach = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform != TargetPlatform.linux || !windowFrameDrawn) {
+      return child;
+    }
+    Widget edge(String which, MouseCursor cursor) => MouseRegion(
+          cursor: cursor,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: (_) => _channel.invokeMethod<void>(
+                'beginResize', {'window': window, 'edge': which}).ignore(),
+          ),
+        );
+    const r = _reach;
+    return Stack(children: [
+      child,
+      Positioned(left: r, right: r, top: 0, height: r,
+          child: edge('n', SystemMouseCursors.resizeUp)),
+      Positioned(left: r, right: r, bottom: 0, height: r,
+          child: edge('s', SystemMouseCursors.resizeDown)),
+      Positioned(top: r, bottom: r, left: 0, width: r,
+          child: edge('w', SystemMouseCursors.resizeLeft)),
+      Positioned(top: r, bottom: r, right: 0, width: r,
+          child: edge('e', SystemMouseCursors.resizeRight)),
+      Positioned(left: 0, top: 0, width: r, height: r,
+          child: edge('nw', SystemMouseCursors.resizeUpLeft)),
+      Positioned(right: 0, top: 0, width: r, height: r,
+          child: edge('ne', SystemMouseCursors.resizeUpRight)),
+      Positioned(left: 0, bottom: 0, width: r, height: r,
+          child: edge('sw', SystemMouseCursors.resizeDownLeft)),
+      Positioned(right: 0, bottom: 0, width: r, height: r,
+          child: edge('se', SystemMouseCursors.resizeDownRight)),
+    ]);
+  }
 }
 
 /// [child] with a strip along its top that moves the window, for a screen
@@ -205,7 +379,10 @@ class WindowFrame extends StatelessWidget {
 class _WindowButtons extends StatefulWidget {
   final LumitTheme theme;
 
-  const _WindowButtons({required this.theme});
+  /// A floating window's native handle, or null for the main window.
+  final int? window;
+
+  const _WindowButtons({required this.theme, this.window});
 
   @override
   State<_WindowButtons> createState() => _WindowButtonsState();
@@ -217,7 +394,7 @@ class _WindowButtonsState extends State<_WindowButtons>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _ask('state');
+    _ask('state', window: widget.window);
   }
 
   @override
@@ -230,7 +407,7 @@ class _WindowButtonsState extends State<_WindowButtons>
   // catches every way it happens: the button, a snap, the keyboard.
   @override
   void didChangeMetrics() {
-    _ask('state');
+    _ask('state', window: widget.window);
     _place();
   }
 
@@ -252,6 +429,7 @@ class _WindowButtonsState extends State<_WindowButtons>
           'top': (rect.top * scale).round(),
           'right': (rect.right * scale).round(),
           'bottom': (rect.bottom * scale).round(),
+          if (widget.window case final window?) 'window': window,
         };
         if (mapEquals(placed, _placed)) return;
         _placed = placed;
@@ -261,20 +439,31 @@ class _WindowButtonsState extends State<_WindowButtons>
   @override
   Widget build(BuildContext context) {
     _place();
+    final window = widget.window;
+    final maximisedState = _maximisedOf(window);
     return ListenableBuilder(
-      listenable: Listenable.merge([_maximised, maximiseHovered]),
+      listenable: Listenable.merge([
+        maximisedState,
+        window == null ? maximiseHovered : floatingMaximiseHovered,
+      ]),
       builder: (context, _) {
-        final maximised = _maximised.value;
+        final maximised = maximisedState.value;
+        final hovered = window == null
+            ? maximiseHovered.value
+            : floatingMaximiseHovered.value == window;
         return Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _WindowButton(
-              theme: widget.theme,
-              mark: _Mark.windowMinimise,
-              label: l10n.windowMinimise,
-              onPressed: () => _ask('minimise'),
-            ),
+            // A floating window is minimised with the main one, and has no
+            // place of its own on the taskbar to go to.
+            if (window == null)
+              _WindowButton(
+                theme: widget.theme,
+                mark: _Mark.windowMinimise,
+                label: l10n.windowMinimise,
+                onPressed: () => _ask('minimise', window: window),
+              ),
             // On Windows the runner takes this button's pointer and press,
             // and says when it is hovered.
             _WindowButton(
@@ -282,14 +471,14 @@ class _WindowButtonsState extends State<_WindowButtons>
               theme: widget.theme,
               mark: maximised ? _Mark.windowRestore : _Mark.windowMaximise,
               label: maximised ? l10n.windowRestore : l10n.windowMaximise,
-              hovered: maximiseHovered.value,
-              onPressed: () => _ask('maximise'),
+              hovered: hovered,
+              onPressed: () => _ask('maximise', window: window),
             ),
             _WindowButton(
               theme: widget.theme,
               mark: _Mark.windowClose,
               label: l10n.close,
-              onPressed: () => _ask('close'),
+              onPressed: () => _ask('close', window: window),
             ),
           ],
         );

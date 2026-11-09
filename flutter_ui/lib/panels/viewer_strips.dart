@@ -17,7 +17,7 @@ import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
-import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/dock_widget.dart' show DockPaneHandle, dockTopLine;
 import '../shell/project_settings_frb.dart' show showProjectSettingsFrb;
 import '../state/settings.dart';
 import '../state/viewer_view.dart';
@@ -243,11 +243,12 @@ class ViewerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Container(
+    return dockTopLine(context, (room) => Container(
       key: const ValueKey('viewer-header'),
       height: viewerStripHeightFor(t),
       decoration: viewerStripDecoration(t, detached),
-      padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
+      padding:
+          EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)) + room,
       // The header strip narrows exactly as the bottom bar does (§12A.6's
       // ladder): the panel's name ellipsises first, and below the width the
       // three pickers themselves need, the strip slides sideways rather than
@@ -367,7 +368,7 @@ class ViewerHeader extends StatelessWidget {
           );
         },
       ),
-    );
+    ));
   }
 
   /// The folded pickers in a floating strip under their mark: the very same

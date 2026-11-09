@@ -32,6 +32,7 @@ import 'package:lumit_flutter/panels/viewer_picture.dart'
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
+import 'package:lumit_flutter/shell/pop_out.dart' show windowsQuitting;
 import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
@@ -2988,6 +2989,11 @@ class LumitUiState extends ChangeNotifier {
         // has gone.
         if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
         stopBlenders();
+        // The floating windows go with Lumit and stay in the arrangement,
+        // so they open where they were next time rather than being put back.
+        windowsQuitting = true;
+        rememberSession();
+        this.workspace.save();
         return AppExitResponse.exit;
       },
     );
@@ -5112,8 +5118,13 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
-  /// travels with a project shared with someone else.
-  String sessionJson() => jsonEncode(session().toJson());
+  /// travels with a project shared with someone else. Without the floating
+  /// windows, which are this machine's.
+  String sessionJson() {
+    final json = session().toJson()
+      ..['dock'] = withoutWindows(workspace.dock);
+    return jsonEncode(json);
+  }
 
   /// Put the saved session back after a project is opened, and start from
   /// nothing when a new one is made.

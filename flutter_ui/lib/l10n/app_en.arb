@@ -6803,6 +6803,14 @@
   "@keyFocusThePanelSSearchBox": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyMoveThePanelToANewWindow": "Move the panel to a new window",
+  "@keyMoveThePanelToANewWindow": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyMoveThePanelToTheMainWindow": "Move the panel to the main window",
+  "@keyMoveThePanelToTheMainWindow": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The main window is the one with the menu bar."
+  },
   "keyFocusThePreviousPanel": "Focus the previous panel",
   "@keyFocusThePreviousPanel": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -17329,9 +17337,39 @@
   "@closePanel": {
     "description": "The right-click menu on a panel's tab: the row that takes the panel out of the arrangement. The same thing as un-ticking the panel in the Window menu."
   },
-  "popOutPanel": "Pop out",
-  "@popOutPanel": {
-    "description": "The right-click menu on a panel's tab: the row that moves the Viewer into a separate window of its own, which can be dragged to another monitor. Closing that window puts the Viewer back where it was."
+  "panelToNewWindow": "Move to new window",
+  "@panelToNewWindow": {
+    "description": "The right-click menu on a panel's tab: the row that moves the panel out of the window it is in, into a separate window of its own, which can be dragged to another monitor. Closing that window puts the panel back in the main window."
+  },
+  "groupToNewWindow": "Move group to new window",
+  "@groupToNewWindow": {
+    "description": "The right-click menu on a panel's tab, when the panel is one of several tabbed or stacked together: the row that moves all of them, as they are, into a separate window of their own."
+  },
+  "panelToMainWindow": "Move to main window",
+  "@panelToMainWindow": {
+    "description": "The right-click menu on a panel's tab in a separate window: the row that puts the panel back in Lumit's main window, the one with the menu bar, where it came from."
+  },
+  "windowPanelsToMain": "Move panels to main window",
+  "@windowPanelsToMain": {
+    "description": "A row in the Window menu, and in the right-click menu on a separate window's title bar: puts the panels of the separate windows (or of that one window) back in Lumit's main window, the one with the menu bar, and closes those windows."
+  },
+  "windowFullScreen": "Full screen",
+  "@windowFullScreen": {
+    "description": "A tickable row in the right-click menu on a separate window's title bar: the window fills its whole screen, with no title bar, or goes back. Use the operating system's own word for it."
+  },
+  "windowKeepOnTop": "Keep on top",
+  "@windowKeepOnTop": {
+    "description": "A tickable row in the right-click menu on a separate window's title bar, and on the tab of a panel in one: the window stays in front of every other program's windows, not only Lumit's."
+  },
+  "floatingWindowTitle": "Lumit - {panels}",
+  "@floatingWindowTitle": {
+    "description": "The title the operating system shows for a separate window holding panels, in the taskbar and when switching windows. {panels} is the names of the panels in it, separated by commas, such as 'Viewer, Scopes'.",
+    "placeholders": {
+      "panels": {
+        "type": "String",
+        "example": "Viewer, Scopes"
+      }
+    }
   },
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {

@@ -2108,6 +2108,8 @@ Map<String, String> get _built => {
       "Focus the next panel": l10n.keyFocusTheNextPanel,
       "Focus the previous panel": l10n.keyFocusThePreviousPanel,
       "Focus the panel's search box": l10n.keyFocusThePanelSSearchBox,
+      "Move the panel to a new window": l10n.keyMoveThePanelToANewWindow,
+      "Move the panel to the main window": l10n.keyMoveThePanelToTheMainWindow,
       "Anywhere": l10n.keyAnywhere,
       "Tools": l10n.keyTools,
       "Project panel": l10n.keyProjectPanel,

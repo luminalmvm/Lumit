@@ -592,7 +592,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (!rail) const LumitToolBarFrb(),
         // A row with or without the rail, so the dock stays where it is when
         // a style brings the rail or takes it away. Moved, it would be built
-        // afresh, and its panels' state lost.
+        // afresh: its panels' state lost, its floating windows shut and
+        // opened again.
         Expanded(
           child: Row(
             textDirection: TextDirection.ltr,
@@ -1032,6 +1033,13 @@ class _LumitAppViewState extends State<LumitAppView> {
       // where it finally does something.
       case 'panel.maximise':
         ui.toggleMaximisedPane();
+      // The panel the keyboard is in, into a window of its own and back.
+      case 'panel.float':
+        final pane = ui.activePane.value;
+        handled = pane != null && DockCommands.float(pane);
+      case 'panel.dock':
+        final pane = ui.activePane.value;
+        handled = pane != null && DockCommands.dock(pane);
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);

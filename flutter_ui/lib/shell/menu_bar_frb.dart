@@ -2171,6 +2171,16 @@ List<MenuSection> lumitMenus(
                     () => showSettingsWindowFrb(context,
                         initialPage: SettingsPage.addons)),
               ]),
+            // Every floating window's panels back in this one.
+            MenuEntry(
+                l10n.windowPanelsToMain,
+                ui.split.windows.isEmpty
+                    ? null
+                    : () {
+                        dockAllWindows(ui.split);
+                        ui.workspace.touch();
+                        ui.saveLayout();
+                      }),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once
