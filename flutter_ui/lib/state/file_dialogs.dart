@@ -43,7 +43,8 @@ XTypeGroup _projectGroup() =>
 ///
 /// Public because the file picker is no longer the only road in: a folder
 /// dropped on the Project panel is read with this same list, so what a
-/// folder yields and what the dialogue offers cannot drift apart.
+/// folder yields and what the dialogue offers cannot drift apart, Lottie
+/// files aside.
 const List<String> footageExtensions = [
   // Video containers
   'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts',
@@ -61,9 +62,15 @@ const List<String> footageExtensions = [
   'gltf', 'glb', 'fbx', 'obj', 'vdb', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
   'ply', 'stl', 'dae',
 ];
+
+/// What the footage picker offers: the footage, and Lottie files, which
+/// import as a composition. A folder walk leaves these two out, so a `.json`
+/// beside the footage stays where it is.
+const List<String> _pickerExtensions = [...footageExtensions, 'json', 'lottie'];
+
 /// The footage type group.
 XTypeGroup _footageGroup() =>
-    XTypeGroup(label: l10n.fileTypeFootage, extensions: footageExtensions);
+    XTypeGroup(label: l10n.fileTypeFootage, extensions: _pickerExtensions);
 
 /// Everything, offered under the footage group. A file whose extension nobody
 /// listed - a container the machine's own codecs handle, a camera's odd suffix -
@@ -131,7 +138,7 @@ Future<String?> pickProjectSaveLocation(
 /// composition in from.
 Future<List<String>> pickFootage({bool projects = false}) async {
   final here = await pickFilesHere(
-      l10n.fileTypeFootage, [...footageExtensions, if (projects) 'lum']);
+      l10n.fileTypeFootage, [..._pickerExtensions, if (projects) 'lum']);
   if (here != null) return here;
   final files = await openFiles(
     acceptedTypeGroups: [

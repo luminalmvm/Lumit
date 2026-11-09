@@ -26127,5 +26127,509 @@
   "fxFaceBevel": "Bevel",
   "@fxFaceBevel": {
     "description": "Name of a Text or Shape layer's material for its bevel, beside Front, Side and Back."
+  },
+  "menuExportVector": "Export as Lottie or SVG…",
+  "@menuExportVector": {
+    "description": "File menu item: opens the Lottie and SVG window, which writes a composition as a Lottie, a dotLottie or an animated SVG."
+  },
+  "keyExportAsLottieOrSvg": "Export as Lottie or SVG",
+  "@keyExportAsLottieOrSvg": {
+    "description": "Settings → Keymap: what the shortcut that opens the Lottie and SVG window does."
+  },
+  "vectorTitle": "Lottie and SVG",
+  "@vectorTitle": {
+    "description": "Title of the window that writes a composition as a Lottie, a dotLottie or an animated SVG. Lottie and SVG are format names; keep them."
+  },
+  "vectorGroupContent": "Content",
+  "@vectorGroupContent": {
+    "description": "Lottie and SVG window: heading of the group of rows about what goes into the file (text, images, frame rate, span)."
+  },
+  "vectorGroupCheck": "Check",
+  "@vectorGroupCheck": {
+    "description": "Lottie and SVG window: heading of the list of what won't come across in the file."
+  },
+  "vectorFormatLottie": "Lottie",
+  "@vectorFormatLottie": {
+    "description": "Format name in the Lottie and SVG window: a Lottie .json file. Keep as written."
+  },
+  "vectorFormatDotLottie": "dotLottie",
+  "@vectorFormatDotLottie": {
+    "description": "Format name in the Lottie and SVG window: a .lottie file, a Lottie zipped with its pictures. Keep as written, lower-case d."
+  },
+  "vectorFormatSvg": "SVG",
+  "@vectorFormatSvg": {
+    "description": "Format name in the Lottie and SVG window: an SVG file that animates by itself. Keep as written."
+  },
+  "vectorWriteTo": "Write to",
+  "@vectorWriteTo": {
+    "description": "Lottie and SVG window row: the path the file is written to."
+  },
+  "vectorText": "Text",
+  "@vectorText": {
+    "description": "Lottie and SVG window row: how Text layers go into the file."
+  },
+  "vectorTextShapes": "As shapes",
+  "@vectorTextShapes": {
+    "description": "Lottie and SVG window, Text row option: text written as outlines, so no font is needed to play it."
+  },
+  "vectorTextText": "As text",
+  "@vectorTextText": {
+    "description": "Lottie and SVG window, Text row option: text written as text naming its font."
+  },
+  "vectorImages": "Images",
+  "@vectorImages": {
+    "description": "Lottie and SVG window row: where the pictures the composition uses go."
+  },
+  "vectorImagesEmbed": "Embed",
+  "@vectorImagesEmbed": {
+    "description": "Lottie and SVG window, Images row option: pictures written inside the file."
+  },
+  "vectorImagesBeside": "Beside the file",
+  "@vectorImagesBeside": {
+    "description": "Lottie and SVG window, Images row option: pictures written as files next to the exported one."
+  },
+  "vectorImagesLossless": "Lossless",
+  "@vectorImagesLossless": {
+    "description": "Lottie and SVG window, Images row, the second list: every picture kept exactly as it is."
+  },
+  "vectorImagesJpeg": "JPEG {quality}",
+  "@vectorImagesJpeg": {
+    "description": "Lottie and SVG window, Images row, the second list: pictures with no see-through pixels written as JPEG at this quality, out of 100. JPEG is a technical name and stays as it is.",
+    "placeholders": {
+      "quality": {
+        "type": "int"
+      }
+    }
+  },
+  "vectorRateComposition": "Composition · {fps}",
+  "@vectorRateComposition": {
+    "description": "Lottie and SVG window, Frame rate option: the composition's own rate, with the number after the dot.",
+    "placeholders": {
+      "fps": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorSpanWorkArea": "Work area",
+  "@vectorSpanWorkArea": {
+    "description": "Lottie and SVG window, Span option: only the composition's work area is written."
+  },
+  "vectorMinify": "Minify",
+  "@vectorMinify": {
+    "description": "Lottie and SVG window checkbox: the file is written as small as it can be, with names dropped."
+  },
+  "vectorPlayers": "Players",
+  "@vectorPlayers": {
+    "description": "Lottie and SVG window row: the players the check judges the file against."
+  },
+  "vectorPlayersAll": "All",
+  "@vectorPlayersAll": {
+    "description": "Lottie and SVG window, Players menu face when every player is ticked."
+  },
+  "vectorPlayersSome": "{count} of {total}",
+  "@vectorPlayersSome": {
+    "description": "Lottie and SVG window, Players menu face when some players are ticked: how many of how many.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "vectorPlayerWeb": "Web",
+  "@vectorPlayerWeb": {
+    "description": "A Lottie player the check judges against: the player web pages use, drawing as SVG."
+  },
+  "vectorPlayerWebCanvas": "Web (canvas)",
+  "@vectorPlayerWebCanvas": {
+    "description": "A Lottie player the check judges against: the player web pages use, drawing onto a canvas."
+  },
+  "vectorPlayerDotLottie": "dotLottie",
+  "@vectorPlayerDotLottie": {
+    "description": "A Lottie player the check judges against: the dotLottie players. Keep as written."
+  },
+  "vectorPlayerIos": "iOS",
+  "@vectorPlayerIos": {
+    "description": "A Lottie player the check judges against: the iOS player."
+  },
+  "vectorPlayerAndroid": "Android",
+  "@vectorPlayerAndroid": {
+    "description": "A Lottie player the check judges against: the Android player."
+  },
+  "vectorPlayerFlutter": "Flutter",
+  "@vectorPlayerFlutter": {
+    "description": "A Lottie player the check judges against: the Flutter player."
+  },
+  "vectorPlayerChrome": "Chrome",
+  "@vectorPlayerChrome": {
+    "description": "A browser the SVG check judges against."
+  },
+  "vectorPlayerFirefox": "Firefox",
+  "@vectorPlayerFirefox": {
+    "description": "A browser the SVG check judges against."
+  },
+  "vectorPlayerSafari": "Safari",
+  "@vectorPlayerSafari": {
+    "description": "A browser the SVG check judges against."
+  },
+  "vectorOutcomeLeftOut": "Left out",
+  "@vectorOutcomeLeftOut": {
+    "description": "Lottie and SVG window, check heading: things the file can't carry at all."
+  },
+  "vectorOutcomeSomePlayers": "Some players",
+  "@vectorOutcomeSomePlayers": {
+    "description": "Lottie and SVG window, check heading: things in the file that some of the chosen players don't draw."
+  },
+  "vectorOutcomeChanged": "Changed",
+  "@vectorOutcomeChanged": {
+    "description": "Lottie and SVG window, check heading: things written differently from how the composition has them."
+  },
+  "vectorNothingLeftOut": "Everything comes across",
+  "@vectorNothingLeftOut": {
+    "description": "Lottie and SVG window: the one line shown in place of the check when the file leaves nothing out."
+  },
+  "vectorCopyCheck": "Copy check",
+  "@vectorCopyCheck": {
+    "description": "Right-click menu row on a line of the Lottie and SVG window's check: copies the whole check as text."
+  },
+  "vectorPlayerLottie": "Lottie",
+  "@vectorPlayerLottie": {
+    "description": "Lottie and SVG window, player choice: the Lottie player a Flutter app ships with."
+  },
+  "vectorPlayerBrowser": "Browser",
+  "@vectorPlayerBrowser": {
+    "description": "Lottie and SVG window, player choice: the system's browser engine, which is the only thing that plays an animated SVG."
+  },
+  "vectorBrowserNoDotLottie": "Lottie and SVG only",
+  "@vectorBrowserNoDotLottie": {
+    "description": "Lottie and SVG window: why the Browser player can't be chosen while the format is dotLottie."
+  },
+  "vectorLottieNoSvg": "Lottie and dotLottie only",
+  "@vectorLottieNoSvg": {
+    "description": "Lottie and SVG window: why the Lottie player can't be chosen while the format is SVG."
+  },
+  "vectorWhite": "White",
+  "@vectorWhite": {
+    "description": "Lottie and SVG window, player background option."
+  },
+  "vectorTipPlayer": "Player",
+  "@vectorTipPlayer": {
+    "description": "Tooltip on the Lottie and SVG window's player picker."
+  },
+  "vectorTipZoom": "Zoom",
+  "@vectorTipZoom": {
+    "description": "Tooltip on the Lottie and SVG window's zoom picker (Fit, 100%, 200%)."
+  },
+  "vectorTipLoop": "Loop",
+  "@vectorTipLoop": {
+    "description": "Tooltip on the Lottie and SVG window's loop mark."
+  },
+  "vectorTipFollow": "Follow the Timeline",
+  "@vectorTipFollow": {
+    "description": "Tooltip on the Lottie and SVG window's link mark: the player shows the frame at the Timeline's playhead, and moving it moves the playhead, so the file plays beside the Viewer."
+  },
+  "vectorFacts": "{size} · {frames} frames · {fps} fps · {width} × {height}",
+  "@vectorFacts": {
+    "description": "Lottie and SVG window footer: the file's size, frame count, frame rate and picture size.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "frames": {
+        "type": "int"
+      },
+      "fps": {
+        "type": "String"
+      },
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      }
+    }
+  },
+  "vectorPreviewFailed": "The file could not be made",
+  "@vectorPreviewFailed": {
+    "description": "Lottie and SVG window footer, in place of the file's facts, when the engine could not make the file from the composition as the settings stand. Export stays off until the next change."
+  },
+  "vectorExportCount": "Export {count}",
+  "@vectorExportCount": {
+    "description": "Lottie and SVG window button when several compositions are ticked: how many files it writes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vectorExported": "{name} written",
+  "@vectorExported": {
+    "description": "Status-line notice after the Lottie and SVG window wrote a file, with the file's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorExportedMany": "{count} files written",
+  "@vectorExportedMany": {
+    "description": "Status-line notice after the Lottie and SVG window wrote several compositions.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vectorReasonEffect": "{label} is left out",
+  "@vectorReasonEffect": {
+    "description": "Lottie and SVG check line: an effect or layer style the file can't carry, by its name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonCameraLayer": "Cameras are left out",
+  "@vectorReasonCameraLayer": {
+    "description": "Lottie and SVG check line: a Camera layer."
+  },
+  "vectorReasonLightLayer": "Lights are left out",
+  "@vectorReasonLightLayer": {
+    "description": "Lottie and SVG check line: a Light layer."
+  },
+  "vectorReasonModelLayer": "3D models are left out",
+  "@vectorReasonModelLayer": {
+    "description": "Lottie and SVG check line: a Model layer."
+  },
+  "vectorReasonShape3dLayer": "3D shapes are left out",
+  "@vectorReasonShape3dLayer": {
+    "description": "Lottie and SVG check line: a 3D shape layer."
+  },
+  "vectorReasonAdjustmentLayer": "Adjustment layers are left out",
+  "@vectorReasonAdjustmentLayer": {
+    "description": "Lottie and SVG check line: an Adjustment layer."
+  },
+  "vectorReasonSequenceLayer": "Sequence layers are left out",
+  "@vectorReasonSequenceLayer": {
+    "description": "Lottie and SVG check line: a Sequence layer."
+  },
+  "vectorReasonNodeGraph": "Node graph compositions are left out",
+  "@vectorReasonNodeGraph": {
+    "description": "Lottie and SVG check line: a Precomp layer whose composition is a node graph."
+  },
+  "vectorReasonMatteSource": "The matte is left out",
+  "@vectorReasonMatteSource": {
+    "description": "Lottie and SVG check line: a layer's matte comes from a layer the file can't carry."
+  },
+  "vectorReasonMatteChain": "The matte's own matte is left out",
+  "@vectorReasonMatteChain": {
+    "description": "Lottie and SVG check line: the layer a matte comes from has a matte of its own, which the file can't carry."
+  },
+  "vectorReasonVideoFootage": "Video is left out",
+  "@vectorReasonVideoFootage": {
+    "description": "Lottie and SVG check line: a layer whose footage is a video."
+  },
+  "vectorReasonMissingFootage": "The file is missing",
+  "@vectorReasonMissingFootage": {
+    "description": "Lottie and SVG check line: a layer whose footage file can't be found."
+  },
+  "vectorReasonThreeDFlat": "Drawn flat",
+  "@vectorReasonThreeDFlat": {
+    "description": "Lottie and SVG check line: a 3D layer written as a flat one, its depth and turns in depth dropped."
+  },
+  "vectorReasonMotionBlur": "Motion blur is left out",
+  "@vectorReasonMotionBlur": {
+    "description": "Lottie and SVG check line: a layer with motion blur on."
+  },
+  "vectorReasonPaint": "Paint strokes are left out",
+  "@vectorReasonPaint": {
+    "description": "Lottie and SVG check line: a layer painted on."
+  },
+  "vectorReasonPuppet": "Puppet pins are left out",
+  "@vectorReasonPuppet": {
+    "description": "Lottie and SVG check line: a layer with puppet pins."
+  },
+  "vectorReasonMaskFeather": "Mask feather is left out",
+  "@vectorReasonMaskFeather": {
+    "description": "Lottie and SVG check line: a mask with a soft edge, which no player draws."
+  },
+  "vectorReasonMaskMode": "{mode} masks draw as Add",
+  "@vectorReasonMaskMode": {
+    "description": "Lottie and SVG check line: a mask mode the players draw as a plain Add mask. {mode} is the mode's name.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonMaskExpansion": "Mask expansion",
+  "@vectorReasonMaskExpansion": {
+    "description": "Lottie and SVG check line: a mask grown or shrunk by its Expansion, which some players ignore."
+  },
+  "vectorReasonBlendModeLeftOut": "{mode} draws as Normal",
+  "@vectorReasonBlendModeLeftOut": {
+    "description": "Lottie and SVG check line: a blend mode the file can't carry, drawn as Normal instead. {mode} is the mode's name.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonBlendModePlayers": "{mode} blend",
+  "@vectorReasonBlendModePlayers": {
+    "description": "Lottie and SVG check line: a blend mode some of the chosen players don't draw. {mode} is the mode's name.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonBakedOutline": "{label} is baked into the path",
+  "@vectorReasonBakedOutline": {
+    "description": "Lottie and SVG check line: a shape modifier the file can't carry, so its result is written as a plain path. {label} is the modifier's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonMerge": "{label} needs merge paths",
+  "@vectorReasonMerge": {
+    "description": "Lottie and SVG check line: a shape combine written as merge paths, which most players turn off. {label} is the item's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonExpressionBaked": "Expressions are baked into keys",
+  "@vectorReasonExpressionBaked": {
+    "description": "Lottie and SVG check line: a layer's expressions were sampled into keyframes."
+  },
+  "vectorReasonTextNeedsFont": "Needs {font} installed",
+  "@vectorReasonTextNeedsFont": {
+    "description": "Lottie and SVG check line: a Text layer written as text, which plays only where its font is installed. {font} is the font's name.",
+    "placeholders": {
+      "font": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonTextAnimators": "Text animators",
+  "@vectorReasonTextAnimators": {
+    "description": "Lottie and SVG check line: a Text layer's animators, which some players don't draw."
+  },
+  "vectorReasonLumaMatte": "Luma matte",
+  "@vectorReasonLumaMatte": {
+    "description": "Lottie and SVG check line: a luma matte, which the players named beside it can't draw."
+  },
+  "vectorReasonSplitEasing": "Separate easing for each number",
+  "@vectorReasonSplitEasing": {
+    "description": "Lottie and SVG check line: a value of several numbers (a scale, a colour) whose numbers ease differently, which some players read as one easing."
+  },
+  "vectorReasonMaskOpacity": "Mask opacity",
+  "@vectorReasonMaskOpacity": {
+    "description": "Lottie and SVG check line: a mask below full opacity, which some players ignore."
+  },
+  "vectorReasonOffsetPaths": "Offset paths",
+  "@vectorReasonOffsetPaths": {
+    "description": "Lottie and SVG check line: a shape's Offset modifier, which some players don't draw."
+  },
+  "vectorReasonTaper": "Stroke taper is left out",
+  "@vectorReasonTaper": {
+    "description": "Lottie and SVG check line: a stroke that tapers, which no file carries."
+  },
+  "vectorReasonTextOnPathStill": "Text on a path is drawn where it starts",
+  "@vectorReasonTextOnPathStill": {
+    "description": "Lottie and SVG check line: text that moves along a path is written at its first position."
+  },
+  "vectorReasonTextOnPath": "Text on a path",
+  "@vectorReasonTextOnPath": {
+    "description": "Lottie and SVG check line: text on a path, which some players don't draw."
+  },
+  "vectorReasonTextFillAnimator": "Animator fill is left out",
+  "@vectorReasonTextFillAnimator": {
+    "description": "Lottie and SVG check line: a text animator's fill colour, which the file can't carry."
+  },
+  "vectorReasonTextHeld": "The text is held at its first words",
+  "@vectorReasonTextHeld": {
+    "description": "Lottie and SVG check line: a Text layer whose words change over time is written with its first words only."
+  },
+  "vectorReasonPrecompCycle": "The composition contains itself",
+  "@vectorReasonPrecompCycle": {
+    "description": "Lottie and SVG check line: a Precomp layer whose composition leads back to the one being exported, so it is left out."
+  },
+  "vectorReasonEffectMix": "{label}'s Mix is left out",
+  "@vectorReasonEffectMix": {
+    "description": "Lottie and SVG check line: an effect's Mix control, which the file can't carry. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonEffectShadowOnly": "{label}'s Shadow only is left out",
+  "@vectorReasonEffectShadowOnly": {
+    "description": "Lottie and SVG check line: a Drop shadow's Shadow only switch, which the file can't carry. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonEffectHardEdge": "{label} is drawn with a hard edge",
+  "@vectorReasonEffectHardEdge": {
+    "description": "Lottie and SVG check line: a Stroke effect whose soft brush players draw hard. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonEffectRepeatEdge": "{label}'s Repeat edge pixels is left out",
+  "@vectorReasonEffectRepeatEdge": {
+    "description": "Lottie and SVG check line: a Gaussian blur's Repeat edge pixels switch, which an SVG can't carry, so the blur spreads past the layer's edge. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonEffectPlayers": "{label} effect",
+  "@vectorReasonEffectPlayers": {
+    "description": "Lottie and SVG check line under Some players: an effect the players named beside it don't draw. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonSetMatteChannel": "{label} is left out: only an alpha matte comes across",
+  "@vectorReasonSetMatteChannel": {
+    "description": "Lottie and SVG check line: a Set matte effect reading a channel other than alpha, which the file can't carry. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonSetMatteHidden": "{label} is left out: its matte layer is hidden",
+  "@vectorReasonSetMatteHidden": {
+    "description": "Lottie and SVG check line: a Set matte effect whose matte layer is switched off, which a Lottie can't carry. {label} is the effect's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vectorReasonCombinedTrim": "Trims each path, not the combined shape",
+  "@vectorReasonCombinedTrim": {
+    "description": "Lottie and SVG check line: a moving trim on shapes combined into one, which players apply to each shape on its own."
+  },
+  "vectorFileType": "Lottie",
+  "@vectorFileType": {
+    "description": "A file type in the system's Save dialogue of the Lottie and SVG window, and in the Import dialogue: a Lottie or dotLottie file."
   }
 }

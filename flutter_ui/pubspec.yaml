@@ -45,6 +45,10 @@ dependencies:
   qr: ^3.0.2
   # The page's own APIs, for the browser build (lib/state/files_web.dart).
   web: ^1.1.1
+  # Plays the Lottie and SVG window's preview: the exact bytes the export
+  # would write, through the player a Flutter app ships with
+  # (widgets/lottie_player.dart). Pure Dart, MIT.
+  lottie: ^3.8.2
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +68,9 @@ flutter:
     # The site's file, copied rather than redrawn (shell/wordmark.dart).
     - assets/brand/
     - assets/data/grammar/
+    # lottie-web 5.12.2, the player most pages use, for the window's browser
+    # player (widgets/web_player.dart). Its MIT licence sits beside it.
+    - assets/players/lottie/
   fonts:
     # The two redesign faces (docs/15-DESIGN.md §7.1): Hanken Grotesk
     # for UI text, Paper Mono for every number, timecode and container label.

@@ -44,6 +44,7 @@ import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/theme/style_sheet.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
+import 'package:lumit_flutter/shell/vector_export_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
 import 'package:lumit_flutter/shell/window_frame.dart';
@@ -1133,6 +1134,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           handled = false;
         } else {
           exportFrb(context);
+        }
+      case 'file.export.vector':
+        if (comp == null) {
+          handled = false;
+        } else {
+          showVectorExportFrb(context);
         }
       // Composition ▸ Save frame as….
       case 'comp.frame.save':

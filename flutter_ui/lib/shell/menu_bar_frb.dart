@@ -121,6 +121,8 @@ import 'pro_window.dart';
 import 'profile_chip.dart' show ProBadge;
 import 'project_history_window.dart';
 import 'export_dialog_frb.dart';
+import 'lottie_import_frb.dart';
+import 'vector_export_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
 import 'review_links_window.dart';
@@ -1276,6 +1278,9 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
+            MenuEntry(l10n.menuExportVector,
+                comp == null ? null : () => showVectorExportFrb(context),
+                action: 'file.export.vector'),
             // Scripts, sharing this project and joining somebody else's, and
             // exports sent out for comments. A page runs and sends nothing.
             if (!kIsWeb) ...[
@@ -2737,7 +2742,9 @@ Future<void> openProjectFrb(LumitState app,
 /// brought in, chosen from a list.
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
-  final picked = await (picker ?? () => pickFootage(projects: true))();
+  var picked = await (picker ?? () => pickFootage(projects: true))();
+  if (!context.mounted) return false;
+  picked = await importLottieFrb(context, app, picked);
   final projects = [
     for (final path in picked)
       if (path.toLowerCase().endsWith('.lum')) path,

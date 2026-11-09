@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../state/file_dialogs.dart' show droppedPaths;
 import 'extension_install_frb.dart';
+import 'lottie_import_frb.dart';
 import 'style_import.dart';
 import '../src/rust/api/styles.dart';
 import '../state/app_state.dart';
@@ -53,8 +54,12 @@ class WindowDropFrb extends StatelessWidget {
                 importStyle(context, context.read<LumitState>(), ui, style));
           }
           if (_inAnotherTarget(context, details.globalPosition)) return;
+          // A Lottie makes a composition of its own; the rest are footage.
+          final rest = await importLottieFrb(
+              context, context.read<LumitState>(), paths);
+          if (!context.mounted) return;
           final imported = await importDroppedPaths(context.read<LumitState>(),
-              paths.where((path) => !isScriptFile(path)).toList());
+              rest.where((path) => !isScriptFile(path)).toList());
           // Nothing lit up under the drop, so show where the files went.
           if (imported) ui.frontPanel(Panel.project);
           if (context.mounted) await runDroppedScripts(context, paths);
