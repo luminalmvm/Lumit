@@ -173,7 +173,8 @@ typedef CompBoxRows = ({
 /// A **shut** box keeps the rows that tell something: a parameter a wire is
 /// on ([wired] names the sockets), and one that is keyed or off its default.
 /// An **open** box lists every row under its group's heading, except that a
-/// group the schema folds shut shows only the rows that tell something.
+/// group the schema folds shut shows its first row, and the rest only once
+/// that row tells something (each row that tells something shows regardless).
 /// [owner] is the layer the effect sits on, where a layer-valued row starts.
 CompBoxRows compBoxRows(
   String effect,
@@ -219,10 +220,18 @@ CompBoxRows compBoxRows(
 
   bool tells(BridgeParamInfo p) =>
       wired.contains(p.id) || [p, ...?riders[p.id]].any(offDefault);
-  final shut = <String>{
-    for (final g in groups)
-      if (g.collapsed && g.label.isNotEmpty) ...g.params,
-  };
+  // A group the schema folds shut keeps its lead row on view, under its
+  // heading, so its switch (Clone to points' Time offset) is in reach from
+  // the box itself; once that row tells something, the whole group opens.
+  final listedIds = {for (final p in rows) p.id};
+  final byId = {for (final p in rows) p.id: p};
+  final shut = <String>{};
+  for (final g in groups) {
+    if (!g.collapsed || g.label.isEmpty) continue;
+    final lead = g.params.where(listedIds.contains).firstOrNull;
+    if (lead != null && tells(byId[lead]!)) continue;
+    shut.addAll(g.params.where((id) => id != lead));
+  }
   // A rider rides beside its host in the panel; the box has no room for
   // that, so it takes the row after its host.
   List<BridgeParamInfo> withRiders(Iterable<BridgeParamInfo> hosts) => [
