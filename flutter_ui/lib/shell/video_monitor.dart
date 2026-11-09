@@ -42,6 +42,9 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
 
   /// The display the window was last put on.
   Rect? _placed;
+
+  /// Whether that is the display the main window is on.
+  bool _overMain = false;
   bool _opening = false;
   VoidCallback? _escapeRelease;
 
@@ -49,10 +52,11 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
   void initState() {
     super.initState();
     _ui.videoMonitor.addListener(_sync);
-    // The monitor covers a whole display, so Escape takes it down before it
-    // reaches the selection.
+    // Over the main window's own display the monitor covers Lumit, so
+    // Escape takes it down before it reaches the selection. On a display of
+    // its own Escape is left to the work, and the monitor's key shuts it.
     _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
-      if (_ui.videoMonitor.value == null) return false;
+      if (_ui.videoMonitor.value == null || !_overMain) return false;
       _ui.setVideoMonitor(null);
       return true;
     });
@@ -93,6 +97,7 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
     }
     if (display == _placed) return;
     _placed = display;
+    unawaited(_noteMain(display));
     if (window.handle != 0) NativeWindows.monitor(window.handle, display);
   }
 
@@ -122,7 +127,13 @@ class _VideoMonitorHostState extends State<VideoMonitorHost> {
     }
     setState(() => _window = window);
     _placed = display;
+    unawaited(_noteMain(display));
     _place(window);
+  }
+
+  Future<void> _noteMain(Rect display) async {
+    final main = await NativeWindows.frame();
+    if (_placed == display) _overMain = main?.display == display;
   }
 
   Future<void> _place(PopOutWindow window) async {
