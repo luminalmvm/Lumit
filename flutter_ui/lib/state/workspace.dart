@@ -551,8 +551,15 @@ class UserWorkspace {
 /// disk or a crash part of the way through left no settings at all.
 void writeWhole(File file, String text) {
   final next = File('${file.path}.next');
-  next.writeAsStringSync(text, flush: true);
-  next.renameSync(file.path);
+  next.writeAsStringSync(text);
+  try {
+    next.renameSync(file.path);
+  } on FileSystemException {
+    // Something has the file open and will not let it be replaced: written
+    // straight into it, as it was before, rather than not at all.
+    file.writeAsStringSync(text);
+    next.deleteSync();
+  }
 }
 
 /// How many sets of displays an arrangement is remembered for. A machine meets
@@ -560,7 +567,8 @@ void writeWhole(File file, String text) {
 /// more than this many is forgotten.
 const int maxRememberedSetups = 8;
 
-/// Arrangements by display setup out of a settings or session file: only
+/// Arrangements by display setup out of a settings file or a project's own
+/// record: only
 /// entries that are a map under a string, the most recent last.
 Map<String, Map<String, dynamic>> setupDocksFromJson(Object? raw) {
   if (raw is! Map) return const {};

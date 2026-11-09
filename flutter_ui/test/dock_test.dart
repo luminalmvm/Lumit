@@ -55,7 +55,7 @@ void main() {
   });
 
   /// The floating windows are in the arrangement, so a settings file, a
-  /// project's session or a `.lumworkspace` that has them must read back
+  /// project's own record or a `.lumworkspace` that has them must read back
   /// whole: their panels, their places and where each panel came from.
   test('floating windows round-trip with their places', () {
     final root = defaultLayout();
