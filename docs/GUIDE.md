@@ -209,6 +209,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-roto` | The roto brush's maths |
 | `lumit-ml` | Installed addons: model packs and the model runtime |
 | `lumit-import` | After Effects import |
+| `lumit-lottie` | Vector export: Lottie, dotLottie and animated SVG, the check of what won't come across, and Lottie import |
 | `lumit-keymap` | Shortcuts |
 | `lumit-script` | Commands: the named edits scripts, the command line and MCP make, all through one `dispatch`, the JavaScript script runner with After Effects' scripting objects (`ae.js`), and the live endpoint other programs drive the open Lumit through (`live.rs`) |
 | `lumit-cli` | The command line's launcher, `lumit-cli`: loads the bridge library from beside it and runs the command line in it. Ships beside the bridge, in `lib\` on Windows |

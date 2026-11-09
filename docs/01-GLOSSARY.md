@@ -114,6 +114,9 @@ Not interchangeable.
 | **Stand-in** | In a shared project, a small copy of a whole clip sent to someone who has not got the file, and read as if it were the file. Not a *proxy*, which needs its original beside it |
 | **Preview resolution** | Full, Half, Third, Quarter, Auto |
 | **Adaptive degradation** | Lowering preview quality under load. Never touches export |
+| **Lottie** | An animation written as shapes and keys that a player draws in an app or on a page. Its file is a `.json`, and a **dotLottie** (`.lottie`) is one zipped with its pictures |
+| **Animated SVG** | An SVG file whose animation plays by itself in a browser |
+| **Vector export** | Writing a comp as a Lottie, a dotLottie or an animated SVG rather than as pixels. Its **check** lists, layer by layer, what won't come across |
 
 ## 6. Compositing
 
