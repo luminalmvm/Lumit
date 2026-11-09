@@ -1389,26 +1389,36 @@ void dockWindow(DockSplit root, int id) {
   final window = root.windows[at];
   final only = window.root.children.length == 1 ? window.root.children.single : null;
   final panes = panesIn(window.root);
+  // How the group was drawn, read before its panes leave it one by one.
+  final was = only is DockTabs
+      ? (
+          stacked: only.stacked,
+          solo: only.solo,
+          active: only.active,
+          open: [...only.open],
+          shares: {...only.shares},
+        )
+      : null;
   for (final pane in panes) {
     // A pane whose home is beside another pane of this window goes after it,
     // which the visit order already gives.
     dockPane(root, pane);
   }
-  if (only is DockTabs && panes.isNotEmpty) {
+  if (was != null && panes.length > 1) {
     final group = groupOf(root, panes.first);
     if (group != null &&
-        group.children.length == only.children.length &&
+        group.children.length == panes.length &&
         group.children.every((c) => panes.contains(c.id))) {
       group
-        ..stacked = only.stacked
-        ..solo = only.solo
-        ..active = only.active.clamp(0, group.children.length - 1);
+        ..stacked = was.stacked
+        ..solo = was.solo
+        ..active = was.active.clamp(0, group.children.length - 1);
       group.open
         ..clear()
-        ..addAll(only.open);
+        ..addAll(was.open);
       group.shares
         ..clear()
-        ..addAll(only.shares);
+        ..addAll(was.shares);
     }
   }
 }
