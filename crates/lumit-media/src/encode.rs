@@ -30,6 +30,7 @@ use std::path::Path;
 pub mod gif;
 #[cfg(not(target_arch = "wasm32"))]
 mod planes;
+pub mod webp;
 #[cfg(not(target_arch = "wasm32"))]
 use planes::{
     blank_frame, copy_pixels_into, copy_planar_f32_into, f32_to_i16, f32_to_i32, frame_len,

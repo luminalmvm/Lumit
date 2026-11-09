@@ -273,6 +273,8 @@ fn export_format(codec: &str) -> Result<lumit_render::export::format::ExportForm
         "m4a" => ExportFormat::Audio(AudioFormat::M4a),
         "wav" => ExportFormat::Audio(AudioFormat::Wav),
         "gif" => ExportFormat::Gif,
+        "webp" => ExportFormat::Webp { lossless: false },
+        "webp_lossless" => ExportFormat::Webp { lossless: true },
         other => return Err(format!("export: unknown format '{other}'")),
     })
 }
@@ -324,6 +326,8 @@ fn format_key(format: lumit_render::export::format::ExportFormat) -> &'static st
         ExportFormat::Audio(AudioFormat::M4a) => "m4a",
         ExportFormat::Audio(AudioFormat::Wav) => "wav",
         ExportFormat::Gif => "gif",
+        ExportFormat::Webp { lossless: false } => "webp",
+        ExportFormat::Webp { lossless: true } => "webp_lossless",
     }
 }
 

@@ -43,7 +43,7 @@ impl AudioFormat {
     }
 }
 
-/// What the export writes: a video file, an animated GIF, one still image per
+/// What the export writes: a video file, an animated GIF or WebP, one still image per
 /// frame, or sound with no picture at all.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ExportFormat {
@@ -55,6 +55,8 @@ pub enum ExportFormat {
     Audio(AudioFormat),
     /// An animated `.gif`.
     Gif,
+    /// An animated `.webp`, lossy unless asked otherwise.
+    Webp { lossless: bool },
 }
 
 /// What one output format can and cannot carry (docs/06 §7.4).
@@ -201,6 +203,12 @@ impl ExportFormat {
                 colour_spaces: UNTAGGED_COLOUR_SPACE,
                 max_fps: Some(50),
             },
+            // A WebP is a GIF's row with full alpha and none of its palette.
+            ExportFormat::Webp { .. } => FormatCaps {
+                gif: false,
+                max_fps: None,
+                ..ExportFormat::Gif.caps()
+            },
             ExportFormat::Audio(f) => FormatCaps {
                 video: false,
                 audio: true,
@@ -229,6 +237,7 @@ impl ExportFormat {
             ExportFormat::Images(f) => f.extension(),
             ExportFormat::Audio(f) => f.extension(),
             ExportFormat::Gif => "gif",
+            ExportFormat::Webp { .. } => "webp",
         }
     }
 

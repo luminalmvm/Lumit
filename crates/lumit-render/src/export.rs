@@ -3109,6 +3109,19 @@ fn run(
                 size: (tw, th),
             }
         }
+        ExportFormat::Webp { lossless } => {
+            let (tw, th) = (delivered.0.max(1), delivered.1.max(1));
+            opened.store(true, Ordering::Relaxed);
+            let encoder = lumit_media::encode::webp::WebpEncoder::open(
+                out_path, tw, th, out_num, out_den, lossless,
+            )
+            .map_err(|e| e.to_string())?;
+            let _ = tx.send(ExportEvent::Encoder("WebP"));
+            Sink::Webp {
+                encoder,
+                size: (tw, th),
+            }
+        }
         // Handled above: sound with no picture never reaches the frame loop.
         ExportFormat::Audio(_) => return Err("audio-only export took the picture path".into()),
     };
@@ -3457,12 +3470,19 @@ enum Sink {
         encoder: lumit_media::encode::gif::GifEncoder,
         size: (u32, u32),
     },
+    Webp {
+        encoder: lumit_media::encode::webp::WebpEncoder,
+        size: (u32, u32),
+    },
 }
 
 impl Sink {
     fn size(&self) -> (u32, u32) {
         match self {
-            Sink::Video { size, .. } | Sink::Images { size, .. } | Sink::Gif { size, .. } => *size,
+            Sink::Video { size, .. }
+            | Sink::Images { size, .. }
+            | Sink::Gif { size, .. }
+            | Sink::Webp { size, .. } => *size,
         }
     }
 
@@ -3470,6 +3490,7 @@ impl Sink {
         match self {
             Sink::Video { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
             Sink::Gif { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
+            Sink::Webp { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
             Sink::Images {
                 encoder, written, ..
             } => {
@@ -3485,6 +3506,7 @@ impl Sink {
             Sink::Video { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
             Sink::Images { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
             Sink::Gif { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
+            Sink::Webp { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
         }
     }
 

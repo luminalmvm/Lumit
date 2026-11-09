@@ -2819,6 +2819,18 @@
   "@formatGifPicker": {
     "description": "The file type shown in the system Save dialogue for a .gif file. GIF stays as it is."
   },
+  "formatWebp": "WebP (.webp)",
+  "@formatWebp": {
+    "description": "Export format: an animated WebP that loops, smaller than a GIF. It can carry transparency. WebP and .webp are technical names and stay as they are."
+  },
+  "formatWebpLossless": "WebP lossless (.webp)",
+  "@formatWebpLossless": {
+    "description": "Export format: an animated WebP that loops and keeps every pixel exactly, at a larger file size. WebP and .webp are technical names and stay as they are."
+  },
+  "formatWebpPicker": "WebP image",
+  "@formatWebpPicker": {
+    "description": "The file type shown in the system Save dialogue for a .webp file. WebP stays as it is."
+  },
   "exportGifDither": "Dither",
   "@exportGifDither": {
     "description": "Export dialog, Picture section: how a GIF spreads the picture over its 256 colours."
