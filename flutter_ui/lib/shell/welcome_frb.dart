@@ -50,6 +50,7 @@ import 'backups_window.dart';
 import 'menu_bar_frb.dart';
 import 'project_history_window.dart'
     show BackupStill, backupErrorText, noticeMissingFootage;
+import 'update_chip.dart';
 import 'wordmark.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
@@ -528,6 +529,11 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           child: Row(
             children: [
               Text(_version, style: welcomeNote(t)),
+              const SizedBox(width: 14),
+              const SizedBox(
+                height: welcomeButtonHeight,
+                child: UpdateChip(labelled: true),
+              ),
               const Spacer(),
               _OutlineLink(
                 id: 'welcome-manual',
