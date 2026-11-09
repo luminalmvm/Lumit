@@ -2348,6 +2348,8 @@ dependencies = [
  "base64",
  "image",
  "lumit-core",
+ "lumit-import",
+ "lumit-ingress",
  "lumit-text",
  "png",
  "serde",

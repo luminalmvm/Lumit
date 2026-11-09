@@ -10,6 +10,8 @@ publish = false
 [dependencies]
 lumit-core = { path = "../lumit-core" }
 lumit-text = { path = "../lumit-text" }
+lumit-import = { path = "../lumit-import" }
+lumit-ingress = { path = "../lumit-ingress" }
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 png = "0.18"

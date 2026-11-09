@@ -1,5 +1,5 @@
-//! Vector export: a comp as a Lottie, a dotLottie or an animated SVG, and
-//! the check of what won't come across.
+//! Vector export: a comp as a Lottie, a dotLottie or an animated SVG, the
+//! check of what won't come across, and Lottie import.
 //!
 //! # In plain terms
 //!
@@ -16,6 +16,9 @@
 //! was written differently, and the export window lists it before anything
 //! is written.
 //!
+//! Import reads a Lottie back into a comp, with a report of what didn't come
+//! across ([`import`]).
+//!
 //! # Threads
 //!
 //! Everything runs on the caller's thread, which is a bridge worker or the
@@ -30,6 +33,7 @@ use uuid::Uuid;
 pub mod check;
 pub mod colour;
 pub mod fit;
+pub mod import;
 pub mod keys;
 pub mod lottie;
 mod picture;
@@ -105,6 +109,10 @@ pub enum LottieError {
     Zip(String),
     #[error("The file couldn't be written: {0}")]
     Json(String),
+    #[error("This file isn't a Lottie.")]
+    NotLottie,
+    #[error("This Lottie is too large to open: {0}")]
+    TooLarge(String),
 }
 
 /// `comp` of `doc` as `settings` ask, in memory.
