@@ -674,7 +674,13 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  double get _rate => _fps <= 0 ? _compFps : _fps;
+  /// The rate the file is written at: the one chosen, held to the fastest the
+  /// format plays.
+  double get _rate {
+    final rate = _fps <= 0 ? _compFps : _fps;
+    final most = _caps.maxFps;
+    return most > 0 && rate > most ? most.toDouble() : rate;
+  }
 
   /// The footer's line: what pressing the button would produce.
   String get _summary {
@@ -1431,15 +1437,15 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: _ownRate
                     ? DragValueField(
                         key: const ValueKey('export-fps'),
-                        value: _fps,
+                        value: _rate,
                         min: 1,
-                        max: 240,
+                        max: _caps.maxFps > 0 ? _caps.maxFps.toDouble() : 240,
                         decimals: 2,
                         resetTo: _compFps,
                         fill: t.surface0,
                         onChanged: (v) => _edit(() => _fps = v.toDouble()),
                       )
-                    : _well(t, _formatRate(_compFps),
+                    : _well(t, _formatRate(_rate),
                         key: const ValueKey('export-fps'),
                         tone: t.textDisabled),
               ),

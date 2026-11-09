@@ -819,6 +819,10 @@ class BridgeFormatCaps {
   /// arrived, exactly as a codec name is.
   final List<String> colourSpaces;
 
+  /// The fastest the file plays, frames a second: 50 for a GIF, whose
+  /// frames count in hundredths of a second. Zero is no limit.
+  final int maxFps;
+
   const BridgeFormatCaps({
     required this.video,
     required this.audio,
@@ -831,6 +835,7 @@ class BridgeFormatCaps {
     this.audio24Bit = false,
     required this.metadata,
     this.colourSpaces = const [],
+    this.maxFps = 0,
   });
 
   static Future<BridgeFormatCaps> default_() =>
@@ -848,7 +853,8 @@ class BridgeFormatCaps {
       audioBitRate.hashCode ^
       audio24Bit.hashCode ^
       metadata.hashCode ^
-      colourSpaces.hashCode;
+      colourSpaces.hashCode ^
+      maxFps.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -865,7 +871,8 @@ class BridgeFormatCaps {
           audioBitRate == other.audioBitRate &&
           audio24Bit == other.audio24Bit &&
           metadata == other.metadata &&
-          colourSpaces == other.colourSpaces;
+          colourSpaces == other.colourSpaces &&
+          maxFps == other.maxFps;
 }
 
 /// One key/value pair written into the container.

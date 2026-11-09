@@ -103,6 +103,10 @@ pub struct FormatCaps {
     /// says nothing is read as sRGB and comes back looking wrong. Empty where
     /// the format carries no picture at all.
     pub colour_spaces: &'static [ColourSpace],
+    /// The fastest the file plays, frames a second, or `None` for no limit. A
+    /// GIF counts in hundredths of a second, and browsers play a frame of one
+    /// hundredth as ten, so a GIF goes no faster than 50, two a frame.
+    pub max_fps: Option<u32>,
 }
 
 /// Eight bits only: H.264 and HEVC are written 4:2:0 at eight bits.
@@ -142,6 +146,7 @@ impl ExportFormat {
                 bit_rate: false,
                 metadata: true,
                 colour_spaces: BUILT_IN_COLOUR_SPACES,
+                max_fps: None,
             },
             // H.264/HEVC in mp4: 4:2:0, eight bits, no alpha, a bitrate to
             // choose, and a container that holds metadata.
@@ -157,6 +162,7 @@ impl ExportFormat {
                 bit_rate: true,
                 metadata: true,
                 colour_spaces: BUILT_IN_COLOUR_SPACES,
+                max_fps: None,
             },
             // Stills: lossless RGBA, either depth, no sound and no bitrate.
             // The image2 muxer writes one file per frame and has nowhere to
@@ -177,6 +183,7 @@ impl ExportFormat {
                 bit_rate: false,
                 metadata: false,
                 colour_spaces: STILL_COLOUR_SPACES,
+                max_fps: None,
             },
             // A GIF is eight-bit sRGB with no sound, no bitrate and no tags.
             // Its alpha is one bit, but it is still alpha.
@@ -192,6 +199,7 @@ impl ExportFormat {
                 bit_rate: false,
                 metadata: false,
                 colour_spaces: UNTAGGED_COLOUR_SPACE,
+                max_fps: Some(50),
             },
             ExportFormat::Audio(f) => FormatCaps {
                 video: false,
@@ -209,6 +217,7 @@ impl ExportFormat {
                 bit_rate: f == AudioFormat::M4a,
                 metadata: true,
                 colour_spaces: &[],
+                max_fps: None,
             },
         }
     }

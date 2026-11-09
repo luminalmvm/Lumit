@@ -378,6 +378,7 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
             .take(if web { 1 } else { usize::MAX })
             .map(lumit_render::export::ColourSpace::stored_name)
             .collect(),
+        max_fps: caps.max_fps.unwrap_or(0),
     }
 }
 

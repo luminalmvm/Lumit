@@ -28403,8 +28403,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeFormatCaps dco_decode_bridge_format_caps(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return BridgeFormatCaps(
       video: dco_decode_bool(arr[0]),
       audio: dco_decode_bool(arr[1]),
@@ -28417,6 +28417,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       audio24Bit: dco_decode_bool(arr[8]),
       metadata: dco_decode_bool(arr[9]),
       colourSpaces: dco_decode_list_String(arr[10]),
+      maxFps: dco_decode_u_32(arr[11]),
     );
   }
 
@@ -36381,6 +36382,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_audio24Bit = sse_decode_bool(deserializer);
     var var_metadata = sse_decode_bool(deserializer);
     var var_colourSpaces = sse_decode_list_String(deserializer);
+    var var_maxFps = sse_decode_u_32(deserializer);
     return BridgeFormatCaps(
         video: var_video,
         audio: var_audio,
@@ -36392,7 +36394,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         audioBitRate: var_audioBitRate,
         audio24Bit: var_audio24Bit,
         metadata: var_metadata,
-        colourSpaces: var_colourSpaces);
+        colourSpaces: var_colourSpaces,
+        maxFps: var_maxFps);
   }
 
   @protected
@@ -45393,6 +45396,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.audio24Bit, serializer);
     sse_encode_bool(self.metadata, serializer);
     sse_encode_list_String(self.colourSpaces, serializer);
+    sse_encode_u_32(self.maxFps, serializer);
   }
 
   @protected

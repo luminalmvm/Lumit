@@ -30514,6 +30514,7 @@ impl SseDecode for crate::api::export::BridgeFormatCaps {
         let mut var_audio24Bit = <bool>::sse_decode(deserializer);
         let mut var_metadata = <bool>::sse_decode(deserializer);
         let mut var_colourSpaces = <Vec<String>>::sse_decode(deserializer);
+        let mut var_maxFps = <u32>::sse_decode(deserializer);
         return crate::api::export::BridgeFormatCaps {
             video: var_video,
             audio: var_audio,
@@ -30526,6 +30527,7 @@ impl SseDecode for crate::api::export::BridgeFormatCaps {
             audio_24_bit: var_audio24Bit,
             metadata: var_metadata,
             colour_spaces: var_colourSpaces,
+            max_fps: var_maxFps,
         };
     }
 }
@@ -42530,6 +42532,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeFormatCaps {
             self.audio_24_bit.into_into_dart().into_dart(),
             self.metadata.into_into_dart().into_dart(),
             self.colour_spaces.into_into_dart().into_dart(),
+            self.max_fps.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -50683,6 +50686,7 @@ impl SseEncode for crate::api::export::BridgeFormatCaps {
         <bool>::sse_encode(self.audio_24_bit, serializer);
         <bool>::sse_encode(self.metadata, serializer);
         <Vec<String>>::sse_encode(self.colour_spaces, serializer);
+        <u32>::sse_encode(self.max_fps, serializer);
     }
 }
 
