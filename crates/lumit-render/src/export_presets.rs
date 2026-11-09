@@ -17,7 +17,8 @@
 //! one reads as an empty library rather than an error, because losing your
 //! saved presets should cost you a re-save, not an export.
 
-use crate::export::{Bitrate, ExportFormat, ExportPreset, ExportSpec, PRESET_AUDIO_BPS};
+use crate::export::format::ExportFormat;
+use crate::export::{Bitrate, ExportPreset, ExportSpec, PRESET_AUDIO_BPS};
 use std::path::{Path, PathBuf};
 
 /// One preset: a name and the whole settings payload behind it.
