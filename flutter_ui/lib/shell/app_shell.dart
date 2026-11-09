@@ -585,13 +585,18 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The tools, under the menu and above everything else, where a
         // toolbar goes, and where docs/07 §1.7 puts it.
         if (!rail) const LumitToolBarFrb(),
+        // A row with or without the rail, so the dock stays where it is when
+        // a style brings the rail or takes it away. Moved, it would be built
+        // afresh, and its panels' state lost.
         Expanded(
-          child: rail
-              ? Row(textDirection: TextDirection.ltr, children: [
-                  const LumitToolRailFrb(),
-                  Expanded(child: dock),
-                ])
-              : dock,
+          child: Row(
+            textDirection: TextDirection.ltr,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (rail) const LumitToolRailFrb(),
+              Expanded(child: dock),
+            ],
+          ),
         ),
         // The strip under the dock (docs/07 §1): the running export's
         // progress and Cancel, reachable without the dialogue open.
