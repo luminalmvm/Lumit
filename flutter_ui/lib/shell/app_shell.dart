@@ -90,7 +90,12 @@ class LumitAppNew extends StatelessWidget {
     // was doing real damage here: Material's own greys showed through wherever a
     // panel did not paint, so the shell read as a Material app with Lumit panels
     // in it rather than as Lumit. The backdrop is `surface0` from the theme.
-    return MaterialApp(
+    //
+    // Told the language again whenever the settings change, so the interface
+    // turns to read right to left, or back, as the language is picked.
+    return ListenableBuilder(
+      listenable: uiState.workspace,
+      builder: (context, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
       scrollBehavior: const HouseScrollBehavior(),
       // Lumit's own strings come from the `l10n` global rather than from
@@ -160,7 +165,7 @@ class LumitAppNew extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
