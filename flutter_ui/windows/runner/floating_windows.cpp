@@ -500,7 +500,10 @@ void Monitor(HWND window, const RECT& display) {
   SetWindowLongPtr(window, GWL_STYLE, style);
   SetWindowLongPtr(window, GWL_EXSTYLE,
                    GetWindowLongPtr(window, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
-  SetWindowPos(window, HWND_TOP, display.left, display.top,
+  // Topmost, or the taskbar of the display it fills draws over it: the
+  // shell only drops a taskbar for a full screen window that is in front,
+  // and this one never is.
+  SetWindowPos(window, HWND_TOPMOST, display.left, display.top,
                display.right - display.left, display.bottom - display.top,
                SWP_FRAMECHANGED | SWP_NOACTIVATE);
   // Already up and in front: the keyboard goes back now.
