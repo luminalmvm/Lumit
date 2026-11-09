@@ -53,9 +53,7 @@ Drag a panel's tab. The frame you drag it over shows where it would land:
 Drag a seam between two panels to change their share. Press `` ` `` (backtick) with the
 pointer over a panel to maximise it to the whole window, and again to put it back.
 
-Right-clicking a panel's tab offers **Close panel**. The Viewer's also offers **Pop out**,
-which moves it into a window of its own that can sit on another monitor. Close that window to
-put the Viewer back where it was.
+Right-clicking a panel's tab offers **Close panel**.
 
 ## Stack a group
 
@@ -71,9 +69,51 @@ another, each under a header with its name.
 A panel ticked in the **Window** menu joins a stack when the arrangement has one. Unticking
 **Stacked group** turns the stack back into tabs.
 
-:::note[Not built yet]
-Panels cannot be torn off into their own operating-system window.
+## Floating windows
+
+Any panel can go into a window of its own, on any monitor. A floating window holds panels
+the way the main window does: tabs, stacks and splits.
+
+- Drag a tab off every Lumit window and let go. The panel opens in a window there.
+- Hold `Ctrl` (`Cmd` on macOS) while dragging a tab, and it opens in a window wherever you
+  let go.
+- Right-click a tab for **Move to new window**, or **Move group to new window** for its
+  whole group.
+- Drag a tab from one window into another. The drop zones are the same in every window.
+- Right-click a tab in a floating window for **Move to main window** and **Keep on top**.
+
+A floating window's close button puts its panels back in the main window. **Window ▸ Move
+panels to main window** does it for every floating window.
+
+Floating windows stay above the main window and are minimised with it. On Windows, and on
+Linux with Lumit's own title bar, the title lines of the panels along a floating window's
+top are its title bar, with its buttons at the end of the top right one. An empty part of
+them moves the window, a double-click maximises it, and a right-click offers **Full
+screen**, **Keep on top** and **Move panels to main window**. macOS keeps its own title
+bar.
+
+Shortcuts work in whichever window is in front, and `Ctrl+F6` moves the keyboard from panel
+to panel across every window. A menu opens in the window it was asked from, and so does a
+dialogue, unless that window is smaller than 840 × 560.
+
+Where each window stands, its size, and whether it is maximised or full screen are part of
+the arrangement. Lumit keeps an arrangement for each set of displays it is used with, so a
+laptop on its own and the same laptop with a second screen each open as they were last
+left. A window whose display has gone opens over the main window.
+
+:::note[Linux on Wayland]
+- A floating window opens where Wayland puts it, and keeps its size but not its place.
+- A tab cannot be dragged from one window into another. **Move to new window** and **Move
+  to main window** do it.
 :::
+
+## Video monitor
+
+**Window ▸ Video monitor** fills a display with the Viewer's picture alone, on black, with
+no bars, guides or handles. It follows the view being worked in, plays with it, and shows a
+wipe or a split when that view's Viewer is comparing two. `Ctrl+F11` turns it on and off, and
+`Escape` takes it down. It comes back on the same display whenever that set of displays is
+connected.
 
 ## The shipped workspaces
 
@@ -116,7 +156,7 @@ A project opened on another machine is the same edit under that machine's panel 
 
 | Yours, per user | The project's |
 | --- | --- |
-| Which panels are open, where, size | Which compositions are open, and which is in front |
+| Which panels are open, where, size, and the floating windows | Which compositions are open, and which is in front |
 | Timeline column visibility and widths | Per-composition Viewer state: resolution, magnification, channel, guides |
 | Interface scale, tooltips, motion | Per-composition Timeline state: twirls, work area, playhead, zoom, horizontal and vertical scroll |
 | Where a settings or export window was left | Guides, markers, the region of interest |
