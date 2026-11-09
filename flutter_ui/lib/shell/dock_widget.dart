@@ -509,11 +509,19 @@ class _DockWidgetState extends State<DockWidget> {
         final weights = _givenWay(split, shown,
             (horizontal ? box.maxWidth : box.maxHeight) - seams);
         final children = _splitChildren(context, t, split, shown, weights);
-        if (!horizontal) return Column(children: children);
+        // Every child fills its slot across the split too. A stack with
+        // every panel shut is no taller than its headers, and stood in the
+        // middle of its slot.
+        if (!horizontal) {
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children);
+        }
         return Row(
           // The arrangement is the one the user built, in every language:
           // the seam drags and the drop sides below are in screen terms.
           textDirection: TextDirection.ltr,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: children,
         );
       },
