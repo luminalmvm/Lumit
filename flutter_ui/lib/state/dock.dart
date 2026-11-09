@@ -7,6 +7,8 @@
 // one another with a tab bar; a *pane* is one panel. A pane that sits alone —
 // not inside a tabs node — renders bare, with no tab bar.
 
+import 'dart:ui' show Rect;
+
 import 'package:lumit_flutter/l10n/strings.dart';
 
 /// The dockable panels — glossary names (docs/01-GLOSSARY.md §7).
@@ -228,11 +230,28 @@ sealed class DockNode {
       shares.add(i < weights.length ? (weights[i] as num).toDouble() : 1);
     }
     if (children.isEmpty) return null;
-    return DockSplit(
+    final split = DockSplit(
       j['axis'] == 'vertical' ? DockAxis.vertical : DockAxis.horizontal,
       children,
       shares,
     );
+    if (j['windows'] case final List list) {
+      final seen = panesIn(split).toSet();
+      for (final raw in list) {
+        final window = DockWindow.fromJson(raw);
+        if (window == null || split.windows.any((w) => w.id == window.id)) {
+          continue;
+        }
+        // A pane is in one place only. A file that says otherwise keeps the
+        // first place it names.
+        for (final pane in panesIn(window.root)) {
+          if (!seen.add(pane)) _removePanel(window.root, pane);
+        }
+        _simplifyRoot(window.root);
+        if (window.root.children.isNotEmpty) split.windows.add(window);
+      }
+    }
+    return split;
   }
 }
 
@@ -346,8 +365,15 @@ class DockSplit extends DockNode {
   /// Weighted shares, same length as children, normalised on use.
   final List<double> shares;
 
-  DockSplit(this.axis, this.children, this.shares)
-      : assert(children.length == shares.length);
+  /// The floating windows, each holding panels taken out of the main one.
+  /// Only the arrangement's root has any: a window is part of the
+  /// arrangement, so it saves, restores and changes with the workspace and
+  /// the project as the main window's panels do.
+  final List<DockWindow> windows;
+
+  DockSplit(this.axis, this.children, this.shares, {List<DockWindow>? windows})
+      : windows = windows ?? [],
+        assert(children.length == shares.length);
 
   @override
   Map<String, dynamic> toJson() => {
@@ -359,7 +385,200 @@ class DockSplit extends DockNode {
         // what it was.
         'shares': [...shares],
         'children': [for (final c in children) c.toJson()],
+        // Left out when there are none, so an arrangement in one window
+        // writes the bytes it always did.
+        if (windows.isNotEmpty) 'windows': [for (final w in windows) w.toJson()],
       };
+}
+
+/// Where a floating window sits on the screen, in the units the system
+/// places windows in: physical pixels on Windows and Linux, points on macOS.
+///
+/// [bounds] is the window as it is when neither maximised nor full screen,
+/// so putting either back lands where it was. [display] is the display it was
+/// on, which is how a frame from a monitor that has since gone is spotted.
+class FloatingFrame {
+  final Rect bounds;
+  final bool maximised;
+  final bool fullScreen;
+  final Rect? display;
+
+  const FloatingFrame(
+    this.bounds, {
+    this.maximised = false,
+    this.fullScreen = false,
+    this.display,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'x': bounds.left,
+        'y': bounds.top,
+        'w': bounds.width,
+        'h': bounds.height,
+        if (maximised) 'maximised': true,
+        if (fullScreen) 'full_screen': true,
+        if (display case final d?) 'display': [d.left, d.top, d.width, d.height],
+      };
+
+  /// Null for anything that is not a finite rectangle of some size, which a
+  /// hand-edited file can hold: the window then opens where a new one would.
+  static FloatingFrame? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final x = raw['x'], y = raw['y'], w = raw['w'], h = raw['h'];
+    if (x is! num || y is! num || w is! num || h is! num) return null;
+    final bounds = Rect.fromLTWH(
+        x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble());
+    if (!bounds.isFinite || bounds.width < 1 || bounds.height < 1) return null;
+    return FloatingFrame(
+      bounds,
+      maximised: raw['maximised'] == true,
+      fullScreen: raw['full_screen'] == true,
+      display: _rect(raw['display']),
+    );
+  }
+
+  static Rect? _rect(Object? raw) {
+    if (raw is! List || raw.length != 4 || raw.any((n) => n is! num)) {
+      return null;
+    }
+    final r = Rect.fromLTWH((raw[0] as num).toDouble(),
+        (raw[1] as num).toDouble(), (raw[2] as num).toDouble(),
+        (raw[3] as num).toDouble());
+    return r.isFinite && r.width > 0 && r.height > 0 ? r : null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is FloatingFrame &&
+      other.bounds == bounds &&
+      other.maximised == maximised &&
+      other.fullScreen == fullScreen &&
+      other.display == display;
+
+  @override
+  int get hashCode => Object.hash(bounds, maximised, fullScreen, display);
+}
+
+/// Where a pane in a floating window came from, so it can be put back: beside
+/// [beside], at [at], in the split [depth] levels below the root, taking
+/// [share] of it. In a group, [index] is the tab it was.
+class DockHome {
+  final PaneId beside;
+  final DropPosition at;
+  final int depth;
+  final double share;
+  final int index;
+
+  const DockHome(this.beside, this.at,
+      {this.depth = 0, this.share = 0.5, this.index = -1});
+
+  Map<String, dynamic> toJson() => {
+        'beside': _paneJson(beside),
+        'at': at.name,
+        'depth': depth,
+        'share': share,
+        if (index >= 0) 'index': index,
+      };
+
+  static DockHome? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final beside = _paneFromJson(raw['beside']);
+    final at = DropPosition.values.asNameMap()[raw['at']];
+    if (beside == null || at == null) return null;
+    final depth = raw['depth'], share = raw['share'], index = raw['index'];
+    return DockHome(
+      beside,
+      at,
+      depth: depth is num && depth >= 0 ? depth.toInt() : 0,
+      share: share is num && share.isFinite && share > 0 && share <= 1
+          ? share.toDouble()
+          : 0.5,
+      index: index is num && index >= 0 ? index.toInt() : -1,
+    );
+  }
+}
+
+Map<String, dynamic> _paneJson(PaneId pane) => {
+      'panel': pane.panel.name,
+      if (pane.instance != 0) 'n': pane.instance,
+    };
+
+PaneId? _paneFromJson(Object? raw) {
+  if (raw is! Map) return null;
+  final panel = Panel.values.asNameMap()[raw['panel']];
+  return panel?.pane(_instance(raw['n']));
+}
+
+/// A floating window: an arrangement of its own beside the main window's.
+class DockWindow {
+  /// What the window is known by while it lasts and across restarts: its
+  /// view is keyed by it, and a window's place is remembered against it.
+  final int id;
+
+  /// Its panels, arranged as the main window's are.
+  final DockSplit root;
+
+  /// Where it was last seen, or null for a window never yet placed.
+  FloatingFrame? frame;
+
+  /// Kept above every other program's windows, not only Lumit's.
+  bool onTop;
+
+  /// Where each pane in it came from (see [dockPane]). Kept in step with the
+  /// panes it holds by [simplify].
+  final Map<PaneId, DockHome> homes;
+
+  DockWindow(this.id, this.root,
+      {this.frame, this.onTop = false, Map<PaneId, DockHome>? homes})
+      : homes = homes ?? {};
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'root': root.toJson(),
+        if (frame case final f?) 'frame': f.toJson(),
+        if (onTop) 'on_top': true,
+        if (homes.isNotEmpty)
+          'homes': [
+            for (final e in homes.entries)
+              {'pane': _paneJson(e.key), ...e.value.toJson()},
+          ],
+      };
+
+  /// Null when there is nothing in it this build can show, which drops the
+  /// window rather than the arrangement.
+  static DockWindow? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id'];
+    final tree = raw['root'];
+    if (id is! num || tree is! Map) return null;
+    final DockNode? parsed;
+    try {
+      parsed = DockNode.fromJson(tree.cast<String, dynamic>());
+    } catch (_) {
+      return null;
+    }
+    final root = switch (parsed) {
+      DockSplit split => split,
+      null => null,
+      final node => DockSplit(DockAxis.horizontal, [node], [1.0]),
+    };
+    if (root == null || root.children.isEmpty) return null;
+    final homes = <PaneId, DockHome>{};
+    if (raw['homes'] case final List list) {
+      for (final h in list) {
+        final pane = h is Map ? _paneFromJson(h['pane']) : null;
+        final home = DockHome.fromJson(h);
+        if (pane != null && home != null) homes[pane] = home;
+      }
+    }
+    return DockWindow(
+      id.toInt(),
+      root,
+      frame: FloatingFrame.fromJson(raw['frame']),
+      onTop: raw['on_top'] == true,
+      homes: homes,
+    );
+  }
 }
 
 /// The default workspace (docs/07 §1.6 "Edit"): a vertical root (upper band
@@ -664,16 +883,32 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
         ),
     };
 
-/// Every pane present in the tree, in visit order. This is the one the
-/// invariants are stated over: a pane appears exactly once, and a panel may
-/// appear more than once only through its instance number.
+/// Every pane present in the tree, in visit order, the floating windows' after
+/// the main window's. This is the one the invariants are stated over: a pane
+/// appears exactly once, and a panel may appear more than once only through
+/// its instance number.
 List<PaneId> panesIn(DockNode node) => switch (node) {
       DockPane pane => [pane.id],
       DockTabs(:final children) => [for (final c in children) c.id],
-      DockSplit(:final children) => [
+      DockSplit(:final children, :final windows) => [
           for (final c in children) ...panesIn(c),
+          for (final w in windows) ...panesIn(w.root),
         ],
     };
+
+/// The panes in the main window alone.
+List<PaneId> mainPanesIn(DockSplit root) =>
+    [for (final c in root.children) ...panesIn(c)];
+
+/// The floating window holding [pane], or null when it is in the main window
+/// or nowhere.
+DockWindow? windowOf(DockSplit root, PaneId pane) {
+  for (final w in root.windows) {
+    if (panesIn(w.root).contains(pane)) return w;
+  }
+  return null;
+}
+
 
 /// Every panel present in the tree, in visit order, a panel with two panes
 /// appearing twice. What the Window menu's ticks and the width sweep read.
@@ -702,11 +937,12 @@ bool panelVisible(DockNode node, Panel panel) => panelsIn(node).contains(panel);
 /// for is the one you want to look at. With no group at all it pairs up
 /// with the first tile instead, so it never has to invent a share of the
 /// window. Hiding drops the pane and simplifies, exactly as closing a tab does.
-/// The last panel standing cannot be hidden: an empty dock has no way back.
+/// The main window's last panel cannot be hidden: an empty dock has no way
+/// back. A panel shown is shown in the main window.
 void setPanelVisible(DockSplit root, Panel panel, bool visible) {
   if (panelsIn(root).contains(panel) == visible) return;
   if (!visible) {
-    if (panesIn(root).length <= 1) return;
+    if (mainPanesIn(root).every((p) => p.panel == panel)) return;
     // Every pane of it, so ticking the Viewer off closes all of them rather
     // than leaving the arrangement half agreeing with the menu.
     for (final pane in panesIn(root).where((p) => p.panel == panel).toList()) {
@@ -737,8 +973,9 @@ bool frontedOver(DockNode node, Panel panel, Panel behind) => switch (node) {
       DockTabs(:final children) => !node.stacked &&
           node.activePane.panel == panel &&
           children.any((c) => c.panel == behind),
-      DockSplit(:final children) =>
-        children.any((c) => frontedOver(c, panel, behind)),
+      DockSplit(:final children, :final windows) =>
+        children.any((c) => frontedOver(c, panel, behind)) ||
+            windows.any((w) => frontedOver(w.root, panel, behind)),
     };
 
 /// The first tab group in visit order, or null when every panel sits alone.
@@ -766,8 +1003,8 @@ DockTabs? groupOf(DockNode node, PaneId pane) {
       return null;
     case DockTabs(:final children):
       return children.any((c) => c.id == pane) ? node : null;
-    case DockSplit(:final children):
-      for (final child in children) {
+    case DockSplit(:final children, :final windows):
+      for (final child in [...children, for (final w in windows) w.root]) {
         final found = groupOf(child, pane);
         if (found != null) return found;
       }
@@ -797,13 +1034,15 @@ void showPane(DockSplit root, PaneId pane) {
   root.shares.insert(0, 0.2);
 }
 
-/// Close one pane, whichever tab group or split holds it, and simplify. The
-/// last pane standing cannot be closed: an empty dock has no way back.
+/// Close one pane, whichever tab group, split or window holds it, and
+/// simplify. The main window's last pane cannot be closed: an empty dock has
+/// no way back. A floating window's last pane takes the window with it.
 ///
 /// What the Viewer's own close does, since a second Viewer goes without the
 /// panel type going with it.
 void closePane(DockSplit root, PaneId pane) {
-  if (panesIn(root).length <= 1) return;
+  final main = mainPanesIn(root);
+  if (main.length <= 1 && main.contains(pane)) return;
   if (!_removePanel(root, pane)) return;
   simplify(root);
 }
@@ -863,9 +1102,9 @@ bool activatePanelTab(DockNode node, Panel panel) {
       if (node.active == i && !shut) return false;
       node.front(i);
       return true;
-    case DockSplit(:final children):
+    case DockSplit(:final children, :final windows):
       var moved = false;
-      for (final c in children) {
+      for (final c in [...children, for (final w in windows) w.root]) {
         if (activatePanelTab(c, panel)) moved = true;
       }
       return moved;
@@ -882,6 +1121,9 @@ enum DropPosition { left, right, above, below, stack }
 /// simplify (dock.rs::dock_simplification_options). A panel dropped onto
 /// itself is a no-op. After the move every panel still appears exactly once,
 /// each shares list matches its children length, and all shares are positive.
+///
+/// The two may be in different windows. The main window's last pane stays
+/// where it is, and a pane leaving the main window remembers where it was.
 void movePanel(
   DockSplit root,
   PaneId dragged,
@@ -891,8 +1133,18 @@ void movePanel(
   if (dragged == target) return;
   final present = panesIn(root).toSet();
   if (!present.contains(dragged) || !present.contains(target)) return;
+  final from = windowOf(root, dragged);
+  final to = windowOf(root, target);
+  if (from == null && to != null && mainPanesIn(root).length <= 1) return;
+  final home = to == null
+      ? null
+      : from == null
+          ? _homeIn(root, dragged)
+          : from.homes[dragged];
 
   _removePanel(root, dragged);
+  from?.homes.remove(dragged);
+  if (to != null && home != null) to.homes[dragged] = home;
   final loc = _tileOf(root, target);
   // The target should always survive the removal; bail defensively if not.
   if (loc == null) return;
@@ -952,6 +1204,10 @@ void movePanel(
     if (child is DockSplit) return _tileOf(child, pane);
     return (split: split, tile: child, index: i);
   }
+  for (final w in split.windows) {
+    final found = _tileOf(w.root, pane);
+    if (found != null) return found;
+  }
   return null;
 }
 
@@ -970,7 +1226,7 @@ bool _removePanel(DockNode node, PaneId pane) {
         node.active = node.active.clamp(0, children.length - 1);
       }
       return true;
-    case DockSplit(:final children):
+    case DockSplit(:final children, :final windows):
       for (var i = 0; i < children.length; i++) {
         final child = children[i];
         if (child is DockPane && child.id == pane) {
@@ -978,6 +1234,9 @@ bool _removePanel(DockNode node, PaneId pane) {
           return true;
         }
         if (_removePanel(child, pane)) return true;
+      }
+      for (final w in windows) {
+        if (_removePanel(w.root, pane)) return true;
       }
       return false;
   }
@@ -1009,7 +1268,22 @@ void _removeSplitChild(DockSplit split, int i) {
 /// its child, and join a nested split into a same-axis parent (scaling the
 /// nested child's shares by its own share). The root always stays a DockSplit;
 /// were it to collapse to one child, it keeps a one-child split instead.
+///
+/// Each floating window's tree is simplified the same way, and a window left
+/// with nothing in it goes.
 void simplify(DockSplit root) {
+  _simplifyRoot(root);
+  for (final w in root.windows) {
+    _simplifyRoot(w.root);
+  }
+  root.windows.removeWhere((w) => w.root.children.isEmpty);
+  for (final w in root.windows) {
+    final held = panesIn(w.root).toSet();
+    w.homes.removeWhere((pane, _) => !held.contains(pane));
+  }
+}
+
+void _simplifyRoot(DockSplit root) {
   final result = _simplifyNode(root);
   if (identical(result, root)) return;
   root.children.clear();
@@ -1017,6 +1291,253 @@ void simplify(DockSplit root) {
   if (result != null) {
     root.children.add(result);
     root.shares.add(1.0);
+  }
+}
+
+// --- Floating windows -------------------------------------------------------
+
+/// A number no window in [root] has yet.
+int nextWindowId(DockSplit root) => root.windows.fold(
+    1, (next, w) => w.id >= next ? w.id + 1 : next);
+
+/// Whether [pane] may be taken out into a window of its own: anywhere but
+/// the main window's last pane, and not a pane already alone in a window.
+bool canFloat(DockSplit root, PaneId pane) {
+  final window = windowOf(root, pane);
+  if (window != null) return panesIn(window.root).length > 1;
+  final main = mainPanesIn(root);
+  return main.contains(pane) && main.length > 1;
+}
+
+/// Take [pane] out into a new window, placed at [frame], and answer it. Null
+/// when it cannot go ([canFloat]).
+DockWindow? floatPane(DockSplit root, PaneId pane, {FloatingFrame? frame}) {
+  if (!canFloat(root, pane)) return null;
+  final from = windowOf(root, pane);
+  final home = from == null ? _homeIn(root, pane) : from.homes[pane];
+  _removePanel(root, pane);
+  final window = DockWindow(
+    nextWindowId(root),
+    DockSplit(DockAxis.horizontal,
+        [DockPane(pane.panel, instance: pane.instance)], [1.0]),
+    frame: frame,
+    homes: {if (home != null) pane: home},
+  );
+  root.windows.add(window);
+  simplify(root);
+  return window;
+}
+
+/// Take the whole group holding [pane] out into a new window, drawn the way
+/// it was. Null when there is no group or nothing would be left behind.
+DockWindow? floatGroup(DockSplit root, PaneId pane, {FloatingFrame? frame}) {
+  final group = groupOf(root, pane);
+  if (group == null) return null;
+  final members = [for (final c in group.children) c.id];
+  final from = windowOf(root, pane);
+  final left = from == null
+      ? mainPanesIn(root).where((p) => !members.contains(p)).length
+      : panesIn(from.root).where((p) => !members.contains(p)).length;
+  if (left == 0) return null;
+  // The first member goes back where the group stood, the rest into it.
+  final homes = <PaneId, DockHome>{};
+  if (from == null) {
+    final first = _homeOfTile(root, members.first);
+    if (first != null) homes[members.first] = first;
+    for (var i = 1; i < members.length; i++) {
+      homes[members[i]] = DockHome(members.first, DropPosition.stack, index: i);
+    }
+  } else {
+    for (final m in members) {
+      if (from.homes[m] case final home?) homes[m] = home;
+    }
+  }
+  final loc = _tileOf(root, pane);
+  if (loc == null) return null;
+  _removeSplitChild(loc.split, loc.index);
+  final window = DockWindow(
+    nextWindowId(root),
+    DockSplit(DockAxis.horizontal, [group], [1.0]),
+    frame: frame,
+    homes: homes,
+  );
+  root.windows.add(window);
+  simplify(root);
+  return window;
+}
+
+/// Put [pane] back in the main window: where it came from when that is still
+/// there to go beside, and otherwise where [showPane] puts a panel.
+void dockPane(DockSplit root, PaneId pane) {
+  final from = windowOf(root, pane);
+  if (from == null) return;
+  final home = from.homes.remove(pane);
+  _removePanel(root, pane);
+  if (home != null && mainPanesIn(root).contains(home.beside)) {
+    _putBack(root, pane, home);
+  } else {
+    showPane(root, pane);
+  }
+  simplify(root);
+}
+
+/// Put every pane of window [id] back in the main window. A window that was
+/// one group comes back as that group, drawn the way it was.
+void dockWindow(DockSplit root, int id) {
+  final at = root.windows.indexWhere((w) => w.id == id);
+  if (at < 0) return;
+  final window = root.windows[at];
+  final only = window.root.children.length == 1 ? window.root.children.single : null;
+  final panes = panesIn(window.root);
+  for (final pane in panes) {
+    // A pane whose home is beside another pane of this window goes after it,
+    // which the visit order already gives.
+    dockPane(root, pane);
+  }
+  if (only is DockTabs && panes.isNotEmpty) {
+    final group = groupOf(root, panes.first);
+    if (group != null &&
+        group.children.length == only.children.length &&
+        group.children.every((c) => panes.contains(c.id))) {
+      group
+        ..stacked = only.stacked
+        ..solo = only.solo
+        ..active = only.active.clamp(0, group.children.length - 1);
+      group.open
+        ..clear()
+        ..addAll(only.open);
+      group.shares
+        ..clear()
+        ..addAll(only.shares);
+    }
+  }
+}
+
+/// Every floating window's panes back in the main window.
+void dockAllWindows(DockSplit root) {
+  for (final w in root.windows.toList()) {
+    dockWindow(root, w.id);
+  }
+}
+
+/// [root]'s arrangement with every floating window's panes back in the main
+/// window, as JSON, leaving [root] as it is. What travels inside a `.lum`:
+/// where windows stand is this machine's business, and a project opened on
+/// another opens in one window.
+Map<String, dynamic> withoutWindows(DockSplit root) {
+  if (root.windows.isEmpty) return root.toJson();
+  final copy = DockNode.fromJson(root.toJson());
+  if (copy is! DockSplit) return root.toJson();
+  dockAllWindows(copy);
+  return copy.toJson();
+}
+
+/// The splits from [root]'s main tree down to the one holding [pane]'s tile,
+/// each with the index of the child the way goes through. Null when [pane]
+/// is not in the main tree.
+List<({DockSplit split, int index})>? _pathTo(DockSplit root, PaneId pane) {
+  for (var i = 0; i < root.children.length; i++) {
+    final child = root.children[i];
+    if (!panesIn(child).contains(pane)) continue;
+    if (child is DockSplit) {
+      final rest = _pathTo(child, pane);
+      return rest == null ? null : [(split: root, index: i), ...rest];
+    }
+    return [(split: root, index: i)];
+  }
+  return null;
+}
+
+/// Where [pane] sits in the main tree, said as the drop that would put it
+/// back once it has gone: into its group beside the pane next to it, or
+/// beside the tile next to it in the split it shares with that tile. Null
+/// when it is alone in the tree.
+DockHome? _homeIn(DockSplit root, PaneId pane) {
+  final path = _pathTo(root, pane);
+  if (path == null) return null;
+  final last = path.last;
+  final tile = last.split.children[last.index];
+  if (tile is DockTabs) {
+    final i = tile.children.indexWhere((c) => c.id == pane);
+    final next = i + 1 < tile.children.length ? i + 1 : i - 1;
+    if (next < 0) return null;
+    return DockHome(tile.children[next].id, DropPosition.stack, index: i);
+  }
+  return _homeOfTile(root, pane);
+}
+
+/// Where the tile holding [pane] stands in its split, as a drop beside the
+/// tile next to it.
+DockHome? _homeOfTile(DockSplit root, PaneId pane) {
+  final path = _pathTo(root, pane);
+  if (path == null) return null;
+  final (:split, :index) = path.last;
+  if (split.children.length < 2) return null;
+  final total = split.shares.fold<double>(0, (a, b) => a + b);
+  final share = total <= 0 ? 0.5 : split.shares[index] / total;
+  final after = index > 0;
+  final neighbour = split.children[after ? index - 1 : index + 1];
+  final horizontal = split.axis == DockAxis.horizontal;
+  return DockHome(
+    after ? panesIn(neighbour).last : panesIn(neighbour).first,
+    after
+        ? (horizontal ? DropPosition.right : DropPosition.below)
+        : (horizontal ? DropPosition.left : DropPosition.above),
+    depth: path.length - 1,
+    share: share,
+  );
+}
+
+/// Put [pane], which is in no tree, back per [home]: in the split it came
+/// out of when the tree still has one that deep on the way to its
+/// neighbour, and otherwise against the neighbour's own tile.
+void _putBack(DockSplit root, PaneId pane, DockHome home) {
+  final made = DockPane(pane.panel, instance: pane.instance);
+  final loc = _tileOf(root, home.beside);
+  if (loc == null) return;
+  if (home.at == DropPosition.stack) {
+    final tile = loc.tile;
+    if (tile is DockTabs) {
+      final at = home.index < 0
+          ? tile.children.length
+          : home.index.clamp(0, tile.children.length);
+      tile.children.insert(at, made);
+      tile.front(at);
+    } else {
+      loc.split.children[loc.index] = home.index == 0
+          ? DockTabs([made, tile as DockPane])
+          : DockTabs([tile as DockPane, made], active: 1);
+    }
+    return;
+  }
+  final axis = home.at == DropPosition.left || home.at == DropPosition.right
+      ? DockAxis.horizontal
+      : DockAxis.vertical;
+  final before = home.at == DropPosition.left || home.at == DropPosition.above;
+  final share = home.share.clamp(0.05, 0.9);
+  final path = _pathTo(root, home.beside);
+  if (path != null &&
+      home.depth < path.length &&
+      path[home.depth].split.axis == axis) {
+    final (:split, :index) = path[home.depth];
+    final total = split.shares.fold<double>(0, (a, b) => a + b);
+    final at = before ? index : index + 1;
+    split.children.insert(at, made);
+    split.shares.insert(at, total * share / (1 - share));
+    return;
+  }
+  if (loc.split.axis == axis) {
+    final whole = loc.split.shares[loc.index];
+    loc.split.shares[loc.index] = whole * (1 - share);
+    final at = before ? loc.index : loc.index + 1;
+    loc.split.children.insert(at, made);
+    loc.split.shares.insert(at, whole * share);
+  } else {
+    loc.split.children[loc.index] = DockSplit(
+      axis,
+      before ? [made, loc.tile] : [loc.tile, made],
+      before ? [share, 1 - share] : [1 - share, share],
+    );
   }
 }
 

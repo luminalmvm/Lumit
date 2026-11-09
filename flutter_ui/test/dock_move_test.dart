@@ -1,6 +1,7 @@
 // The re-dock model ops (dock.dart movePanel/simplify): stacking, same-axis
-// and cross-axis splits, unwrapping, joining, the every-panel-once invariant,
-// self-drop no-ops, and the root staying a DockSplit.
+// and cross-axis splits, unwrapping, joining, the every-panel-once invariant
+// across the main window and the floating ones, self-drop no-ops, and the
+// root staying a DockSplit.
 
 import 'dart:math';
 
@@ -45,6 +46,11 @@ void checkInvariants(DockSplit root) {
   }
 
   walk(root);
+  for (final w in root.windows) {
+    expect(w.root.children, isNotEmpty, reason: 'an empty window goes');
+    walk(w.root);
+  }
+  expect(root.children, isNotEmpty, reason: 'the main window keeps a panel');
 }
 
 void main() {
@@ -105,17 +111,32 @@ void main() {
     final rng = Random(20260721);
     const positions = DropPosition.values;
 
-    for (var i = 0; i < 50; i++) {
+    // Moves within and between windows, panels and groups taken out into
+    // windows of their own, and put back.
+    for (var i = 0; i < 400; i++) {
       final panels = panesIn(root);
       final dragged = panels[rng.nextInt(panels.length)];
-      var target = panels[rng.nextInt(panels.length)];
-      if (dragged == target) continue;
-      final pos = positions[rng.nextInt(positions.length)];
-      movePanel(root, dragged, target, pos);
+      final roll = rng.nextInt(10);
+      if (roll == 0) {
+        floatPane(root, dragged);
+      } else if (roll == 1) {
+        floatGroup(root, dragged);
+      } else if (roll == 2) {
+        dockPane(root, dragged);
+      } else if (roll == 3 && root.windows.isNotEmpty) {
+        dockWindow(root, root.windows[rng.nextInt(root.windows.length)].id);
+      } else {
+        final target = panels[rng.nextInt(panels.length)];
+        if (dragged == target) continue;
+        movePanel(root, dragged, target,
+            positions[rng.nextInt(positions.length)]);
+      }
 
       checkInvariants(root);
       expect(panelsIn(root).toSet(), inventory,
-          reason: 'no panel is lost or duplicated by move $i');
+          reason: 'no panel is lost or duplicated by step $i');
+      expect(panelsIn(DockNode.fromJson(root.toJson())!).toSet(), inventory,
+          reason: 'and the arrangement reads back whole after step $i');
     }
   });
 }
