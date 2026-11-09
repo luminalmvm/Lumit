@@ -1121,6 +1121,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         colour: documentColour(byte(rgb[0]), byte(rgb[1]), byte(rgb[2]), 255),
         // A shape's colours are scene-linear, so the picker counts in 0—1
         // rather than in bytes.
+        linear: true,
         scale: ColourScale.unit,
         onPicked: (p) => _writeAll([
           for (final (channel, v) in [p.r, p.g, p.b].indexed)
@@ -1674,6 +1675,7 @@ class ShapePaintRow extends StatelessWidget {
               ShapePaint.gradientColour => ColourSwatchButton(
                   key: ValueKey<String>(key),
                   colour: _shown(item.gradientColour ?? _defaultEnd),
+                  linear: true,
                   scale: ColourScale.unit,
                   onPicked: (p) => _write((i) => shapeItemWith(i,
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),

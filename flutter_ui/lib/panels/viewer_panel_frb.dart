@@ -1441,6 +1441,7 @@ Future<void> showViewerBackgroundPicker({
     // rather than scene-linear floats.
     scale: ColourScale.bytes,
     presets: t.backgroundPresets,
+    linear: true,
     onCommit: (picked) {
       try {
         comp.setBackground(

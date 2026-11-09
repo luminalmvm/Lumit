@@ -315,11 +315,17 @@ class FloatSurface extends StatefulWidget {
   /// surface and onto another, so "the pointer left" is not a dismissal there.
   final VoidCallback? onLeaveAfterOption;
 
+  /// Whether the surface casts its drop shadow. Off for the colour picker,
+  /// whose eyedropper reads the screen around it: a shadow would darken the
+  /// colour it takes.
+  final bool shadow;
+
   const FloatSurface({
     super.key,
     required this.child,
     this.width,
     this.onLeaveAfterOption,
+    this.shadow = true,
   });
 
   /// The row of the nearest floating surface the pointer is on, or null outside
@@ -655,9 +661,9 @@ class _FloatSurfaceState extends State<FloatSurface> {
           color: t.surface3,
           borderRadius: BorderRadius.circular(t.tokens.floatRadius),
           border: Border.all(color: t.hairline, width: 1),
-          boxShadow: t.floatShadow,
+          boxShadow: widget.shadow ? t.floatShadow : null,
         ),
-        dressed,
+        widget.shadow ? dressed : dressed.withoutShadows(),
       ),
       child: Entrance.content(
         spec: scope.motion.content,

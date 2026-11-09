@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 
 import '../state/workspace.dart';
 import '../widgets/controls/base.dart' show ThemeScope;
+import '../widgets/screen_dropper.dart' show windowPictureKey;
 
 class LookFade extends StatefulWidget {
   final Workspace workspace;
@@ -23,7 +24,8 @@ class LookFade extends StatefulWidget {
 
 class _LookFadeState extends State<LookFade>
     with SingleTickerProviderStateMixin {
-  final _boundary = GlobalKey();
+  /// The window's picture, which the colour picker's eyedropper reads too.
+  final _boundary = windowPictureKey;
   late final _fade = AnimationController(vsync: this, value: 0);
   ui.Image? _was;
 

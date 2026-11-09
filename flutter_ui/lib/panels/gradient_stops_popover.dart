@@ -545,6 +545,7 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
             key: const ValueKey<String>('grad-stop-colour'),
             colour: _shown(stop.colour, 100),
             // A shape's colours are scene-linear, so the picker counts in 0-1.
+            linear: true,
             scale: ColourScale.unit,
             onPicked: (p) {
               setState(() => stop.colour =

@@ -93,6 +93,18 @@ class PartStyle {
         blur: blur,
       );
 
+  /// The same without its drop shadows, for a surface that must not darken
+  /// the screen around it.
+  PartStyle withoutShadows() => PartStyle(
+        background: background,
+        borderColour: borderColour,
+        borderWidth: borderWidth,
+        radius: radius,
+        insetShadows: insetShadows,
+        colour: colour,
+        blur: blur,
+      );
+
   /// Just its edge, drawn over a box's content so a fill inside can't cover
   /// it where the corner curves. Null when the style sets no edge.
   BoxDecoration? edge(BorderRadius? radius) =>

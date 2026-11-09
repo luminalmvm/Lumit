@@ -501,6 +501,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     return ColourSwatchButton(
       key: ValueKey<String>(keyName),
       resetTo: resetTo,
+      linear: true,
       colour:
           documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255),
       onPicked: (picked) => onPicked(BridgeColourRgba(

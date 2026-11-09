@@ -850,6 +850,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       position: position,
       initial: PickedColour.of(_backgroundColour),
       presets: t.backgroundPresets,
+      linear: true,
       onCommit: (picked) => setState(() {
         _background = [
           picked.r.toDouble(),

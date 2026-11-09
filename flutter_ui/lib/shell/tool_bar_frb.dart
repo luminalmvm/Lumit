@@ -1004,6 +1004,7 @@ class _Swatch extends StatelessWidget {
             details.globalPosition,
             current: PickedColour(colour.r, colour.g, colour.b),
             resetTo: PickedColour(resetTo.r, resetTo.g, resetTo.b),
+            linear: true,
             onPicked: (picked) =>
                 onPicked!(ToolColour(picked.r, picked.g, picked.b)),
           ),
@@ -1012,6 +1013,7 @@ class _Swatch extends StatelessWidget {
             position: details.globalPosition,
             initial: PickedColour(colour.r, colour.g, colour.b),
             scale: ColourScale.bytes,
+            linear: true,
             onCommit: (picked) {
               onPicked!(ToolColour(picked.r, picked.g, picked.b));
               // Picking a colour is asking for one.
