@@ -578,23 +578,25 @@ class _HoverTipState extends State<_HoverTip> {
         : Provider.of<LumitUiState?>(context, listen: false)
             ?.keymap
             .chordFor(action);
-    // The chord reads as a menu row's does: small and muted. Isolated left
-    // to right, so a right to left tip keeps Shift+= as it is.
-    final says = chord == null
-        ? Text(widget.message, style: t.body)
-        : Text.rich(
-            TextSpan(text: widget.message, children: [
-              TextSpan(
-                text: '  \u2066$chord\u2069',
-                style: t.small.copyWith(color: t.textMuted),
-              ),
-            ]),
-            style: t.body,
-          );
-    final body = widget.body;
     final tip = partStyle(context, t, 'tooltip');
-    _entry = OverlayEntry(
-      builder: (_) => Positioned.fill(
+    _entry = OverlayEntry(builder: (_) {
+      // Read from the widget as it is now, not as it was when the tip opened,
+      // so a message that moves (the update's per cent) moves while it is up.
+      final body = widget.body;
+      // The chord reads as a menu row's does: small and muted. Isolated left
+      // to right, so a right to left tip keeps Shift+= as it is.
+      final says = chord == null
+          ? Text(widget.message, style: t.body)
+          : Text.rich(
+              TextSpan(text: widget.message, children: [
+                TextSpan(
+                  text: '  \u2066$chord\u2069',
+                  style: t.small.copyWith(color: t.textMuted),
+                ),
+              ]),
+              style: t.body,
+            );
+      return Positioned.fill(
         child: IgnorePointer(
           ignoring: body == null,
           // Pulled back on screen when it would hang off an edge — a control
@@ -642,9 +644,19 @@ class _HoverTipState extends State<_HoverTip> {
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
     Overlay.of(context).insert(_entry!);
+  }
+
+  @override
+  void didUpdateWidget(_HoverTip old) {
+    super.didUpdateWidget(old);
+    if (_entry == null) return;
+    // After the frame: the tip is not under this widget, and marking it
+    // during this build would be marking something outside it.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _entry?.markNeedsBuild());
   }
 
   void _hide() {
