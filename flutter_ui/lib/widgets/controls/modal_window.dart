@@ -21,6 +21,30 @@ import 'popups.dart';
 /// enough to hold a dialogue. Set by the dock (lib/shell/dock_widget.dart).
 OverlayState? Function()? frontWindowOverlay;
 
+/// The main window's overlay, where a dialogue asked for from a floating
+/// window too small to hold it opens. A floating window's own lookups stop
+/// at its view, so the dock says.
+OverlayState? Function()? mainWindowOverlay;
+
+/// Every window's overlay but [own], so a dialogue up in one window stops
+/// the pointer in the rest.
+List<OverlayState> Function(OverlayState own)? otherWindowOverlays;
+
+/// What dismisses each dialogue that is up, by the overlay it is in.
+final Map<OverlayState, List<VoidCallback>> _modalsIn = {};
+
+/// Whether a dialogue is up in [overlay].
+bool modalOpenIn(OverlayState? overlay) =>
+    _modalsIn[overlay]?.isNotEmpty ?? false;
+
+/// Dismiss every dialogue up in [overlay], unanswered: its window is going,
+/// and whoever asked must not wait for ever.
+void dismissModalsIn(OverlayState? overlay) {
+  for (final dismiss in [...?_modalsIn[overlay]]) {
+    dismiss();
+  }
+}
+
 /// How small a window can be and still hold a dialogue: the main window's
 /// own least size.
 const Size _roomForDialogue = Size(840, 560);
@@ -39,8 +63,8 @@ OverlayState _overlayFor(BuildContext context) {
   if (size != null &&
       (size.width < _roomForDialogue.width ||
           size.height < _roomForDialogue.height)) {
-    final root = Overlay.maybeOf(context, rootOverlay: true);
-    if (root != null) {
+    final root = mainWindowOverlay?.call();
+    if (root != null && root.mounted) {
       unawaited(showWindow());
       return root;
     }
@@ -103,12 +127,38 @@ Future<T?> showLumitModal<T>({
   // The wash is then already up as far as the eye is concerned, so it stays
   // up rather than fading in a second time.
   final takesOver = _modalJustLeft;
+  // While it is up, the other windows take no pointer: what the dialogue is
+  // about must not change under it from a window it does not cover.
+  final others = modeless
+      ? const <OverlayState>[]
+      : [...?otherWindowOverlays?.call(overlay)];
+  final blocks = [
+    for (final _ in others)
+      OverlayEntry(
+        builder: (_) => Positioned.fill(
+          child: Listener(
+              behavior: HitTestBehavior.opaque,
+              child: const SizedBox.expand()),
+        ),
+      ),
+  ];
+  final placed = <OverlayEntry>[];
+  late final VoidCallback dismiss;
   void close(T? v) {
     if (completer.isCompleted) return;
     completer.complete(v);
+    _modalsIn[overlay]?.remove(dismiss);
+    if (_modalsIn[overlay]?.isEmpty ?? false) _modalsIn.remove(overlay);
+    // Removing from a window that has gone does nothing, which is right.
+    for (final block in placed) {
+      block.remove();
+    }
     entry.remove();
     _noteModalLeft();
   }
+
+  dismiss = () => close(null);
+  if (!modeless) (_modalsIn[overlay] ??= []).add(dismiss);
 
   entry = OverlayEntry(
     // The entry's **own** context, not the caller's. The window outlives
@@ -166,6 +216,11 @@ Future<T?> showLumitModal<T>({
     },
   );
   overlay.insert(entry);
+  for (final (i, other) in others.indexed) {
+    if (!other.mounted) continue;
+    other.insert(blocks[i]);
+    placed.add(blocks[i]);
+  }
   return completer.future;
 }
 

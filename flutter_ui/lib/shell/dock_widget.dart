@@ -327,7 +327,20 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     DockCommands._float = _floatKey;
     DockCommands._dock = _dockKey;
     frontWindowOverlay = _frontOverlay;
+    mainWindowOverlay = _mainOverlay;
+    otherWindowOverlays = _otherOverlays;
   }
+
+  /// The main window's own overlay.
+  OverlayState? _mainOverlay() => mounted ? Overlay.maybeOf(context) : null;
+
+  /// Every window's overlay but [own].
+  List<OverlayState> _otherOverlays(OverlayState own) => [
+        if (_mainOverlay() case final main? when main != own) main,
+        for (final host in _hosts.values)
+          if (host.overlay.currentState case final other? when other != own)
+            other,
+      ];
 
   /// The overlay of the floating window in front, when it can hold a
   /// dialogue: what the main window's dialogues open in meanwhile.
@@ -374,6 +387,8 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     if (DockCommands._float == _floatKey) DockCommands._float = (_) => false;
     if (DockCommands._dock == _dockKey) DockCommands._dock = (_) => false;
     if (frontWindowOverlay == _frontOverlay) frontWindowOverlay = null;
+    if (mainWindowOverlay == _mainOverlay) mainWindowOverlay = null;
+    if (otherWindowOverlays == _otherOverlays) otherWindowOverlays = null;
     for (final host in _hosts.values) {
       host.dispose();
       final window = host.window;
@@ -400,6 +415,7 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     final wanted = {for (final w in widget.root.windows) w.id};
     for (final id in _hosts.keys.where((id) => !wanted.contains(id)).toList()) {
       final host = _hosts.remove(id)!..dispose();
+      dismissModalsIn(host.overlay.currentState);
       WidgetsBinding.instance.addPostFrameCallback((_) => host.window.close());
     }
     // A window's title names its panels, which move in and out of it. Set
@@ -548,6 +564,9 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
   void _closed(int id) {
     if (!mounted || windowsQuitting) return;
     if (_window(id) == null) return;
+    // A dialogue up in it holds work, a filled-in export say: the window
+    // stays until that is answered.
+    if (modalOpenIn(_hosts[id]?.overlay.currentState)) return;
     setState(() => dockWindow(widget.root, id));
     widget.onLayoutChanged();
   }
