@@ -345,24 +345,19 @@ class _PaletteState extends State<_Palette> {
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    command.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: off ? t.body.copyWith(color: t.textDisabled) : null,
-                  ),
-                ),
-                if (command.needsPro)
-                  const Padding(
-                    padding: EdgeInsetsDirectional.only(start: 8),
-                    child: Opacity(opacity: 0.6, child: ProBadge()),
-                  ),
-              ],
+            child: Text(
+              command.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: off ? t.body.copyWith(color: t.textDisabled) : null,
             ),
           ),
+          // On the right, before the tick and the chord, as in the menus.
+          if (command.needsPro)
+            const Padding(
+              padding: EdgeInsetsDirectional.only(start: 16, end: 8),
+              child: Opacity(opacity: 0.6, child: ProBadge()),
+            ),
           // After the name, so ticked and unticked names start in line.
           if (command.ticked) ...[
             menuTick(true, colour: t.textMuted),

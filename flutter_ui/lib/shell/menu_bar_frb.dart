@@ -3848,9 +3848,9 @@ class _MenuListState extends State<_MenuList> {
 
   /// One row's contents: the tick column where the menu has toggles, the name,
   /// and the chord it answers to on the right. A row for Lumit Pro, to an
-  /// account without it, wears the badge beside its name, so the chords keep
-  /// their column, faded to about the chord's weight so a menu of them
-  /// doesn't shout.
+  /// account without it, wears the badge on the right too, just before any
+  /// chord so the chords keep their column, faded to about the chord's weight
+  /// so a menu of them doesn't shout.
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
@@ -3866,21 +3866,18 @@ class _MenuListState extends State<_MenuList> {
           const SizedBox(width: 8),
         ],
         Expanded(
-          child: Row(
-            children: [
-              Flexible(
-                child: item.tip == null
-                    ? text
-                    : LumitTooltip(message: item.tip!, child: text),
-              ),
-              if (item.needsPro)
-                const Padding(
-                  padding: EdgeInsetsDirectional.only(start: 8),
-                  child: Opacity(opacity: 0.6, child: ProBadge()),
+          child: item.tip == null
+              ? text
+              : Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: LumitTooltip(message: item.tip!, child: text),
                 ),
-            ],
-          ),
         ),
+        if (item.needsPro)
+          const Padding(
+            padding: EdgeInsetsDirectional.only(start: 16),
+            child: Opacity(opacity: 0.6, child: ProBadge()),
+          ),
         if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),
