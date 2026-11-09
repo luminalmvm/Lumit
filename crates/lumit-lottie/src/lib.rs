@@ -1,11 +1,11 @@
-//! Vector export: a comp as a Lottie or a dotLottie, and the check of what
-//! won't come across.
+//! Vector export: a comp as a Lottie, a dotLottie or an animated SVG, and
+//! the check of what won't come across.
 //!
 //! # In plain terms
 //!
 //! Interface and web motion is shipped as files a player draws, not as
 //! video: a Lottie (`.json`) for apps and pages, a dotLottie (`.lottie`, the
-//! same zipped with its pictures). Each is
+//! same zipped with its pictures), or an SVG that animates by itself. Each is
 //! a comp written as shapes and keys, which is what most of a motion design
 //! already is in Lumit, so this crate writes them from the document directly:
 //! paths stay paths, eased keys stay the same curves ([`keys`]), and only
@@ -34,6 +34,7 @@ pub mod keys;
 pub mod lottie;
 mod picture;
 pub mod settings;
+pub mod svg;
 pub mod time;
 pub mod walk;
 
@@ -41,7 +42,7 @@ pub mod walk;
 /// [`write`](Exported::bytes) puts on disk.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Exported {
-    /// The file: Lottie JSON text or a `.lottie` zip.
+    /// The file: Lottie JSON text, a `.lottie` zip, or SVG text.
     pub bytes: Vec<u8>,
     /// Pictures written beside the file (images set to Beside), by file name.
     pub beside: Vec<(String, Vec<u8>)>,
@@ -96,7 +97,7 @@ pub trait Host {
 pub enum LottieError {
     #[error("There is no composition to export.")]
     NoComp,
-    #[error("A node graph composition can't be exported as a Lottie.")]
+    #[error("A node graph composition can't be exported as a Lottie or SVG.")]
     NodeGraph,
     #[error("The export was stopped.")]
     Cancelled,
@@ -117,5 +118,10 @@ pub fn export(
     if c.graph.is_some() {
         return Err(LottieError::NodeGraph);
     }
-    lottie::export(doc, c, settings, host)
+    match settings.format {
+        settings::Format::Lottie | settings::Format::DotLottie => {
+            lottie::export(doc, c, settings, host)
+        }
+        settings::Format::Svg => svg::export(doc, c, settings, host),
+    }
 }

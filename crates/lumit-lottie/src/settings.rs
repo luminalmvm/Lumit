@@ -15,6 +15,8 @@ pub enum Format {
     Lottie,
     /// A `.lottie`: the same animation zipped with its pictures (dotLottie v2).
     DotLottie,
+    /// An `.svg` that animates by itself in a browser.
+    Svg,
 }
 
 impl Format {
@@ -24,6 +26,7 @@ impl Format {
         match self {
             Format::Lottie => "json",
             Format::DotLottie => "lottie",
+            Format::Svg => "svg",
         }
     }
 
@@ -33,6 +36,7 @@ impl Format {
         match key {
             "lottie" | "json" => Some(Format::Lottie),
             "dotlottie" | "lottie_zip" => Some(Format::DotLottie),
+            "svg" => Some(Format::Svg),
             _ => None,
         }
     }
@@ -43,6 +47,7 @@ impl Format {
         match self {
             Format::Lottie => "lottie",
             Format::DotLottie => "dotlottie",
+            Format::Svg => "svg",
         }
     }
 }
@@ -50,7 +55,8 @@ impl Format {
 /// How a Text layer goes out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextMode {
-    /// The letters' outlines, drawn the same by every player.
+    /// The letters' outlines, drawn the same by every player. An SVG is always
+    /// written this way.
     #[default]
     Shapes,
     /// A Lottie text layer naming its font, which a player draws only with the
@@ -91,7 +97,7 @@ pub struct Settings {
     pub minify: bool,
     /// The players the check judges against. Never changes the bytes written.
     pub players: Players,
-    /// A `.lottie` asks its player to loop.
+    /// An SVG plays on repeat, and a `.lottie` asks its player to loop.
     pub loop_playback: bool,
     /// The file's own name without its extension, which names the pictures
     /// written beside it (`stem_1.png`).
