@@ -702,7 +702,9 @@ class _DragController extends ChangeNotifier {
       // a rect overlapping the visible pane, so skip it — only the on-stage
       // pane is a valid drop target.
       if (!_onStage(box)) continue;
-      final rect = box.localToGlobal(Offset.zero) & box.size;
+      // As drawn, so a scaled interface finds it where it is seen.
+      final rect = MatrixUtils.transformRect(
+          box.getTransformTo(null), Offset.zero & box.size);
       if (rect.contains(pointer)) {
         hoveredPanel = id;
         dropPosition = _positionIn(rect, pointer);
@@ -714,7 +716,9 @@ class _DragController extends ChangeNotifier {
       final box =
           headerKey(id).currentContext?.findRenderObject() as RenderBox?;
       if (box == null || !box.attached || !_onStage(box)) continue;
-      if ((box.localToGlobal(Offset.zero) & box.size).contains(pointer)) {
+      if (MatrixUtils.transformRect(
+              box.getTransformTo(null), Offset.zero & box.size)
+          .contains(pointer)) {
         hoveredPanel = id;
         dropPosition = DropPosition.stack;
         return;
