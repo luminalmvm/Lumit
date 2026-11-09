@@ -671,7 +671,9 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     _places.clear();
     for (final MapEntry(key: view, value: frame) in asked.entries) {
       final f = await frame;
-      if (f != null) _places[view] = (client: f.client, scale: f.scale);
+      if (f != null && f.placed) {
+        _places[view] = (client: f.client, scale: f.scale);
+      }
     }
   }
 

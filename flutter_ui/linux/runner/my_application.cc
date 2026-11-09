@@ -669,6 +669,11 @@ static FlValue* frame_value(GtkWindow* window, FlView* view) {
       fl_value_new_bool((state & GDK_WINDOW_STATE_FULLSCREEN) != 0));
   fl_value_set_string_take(frame, "client", rect_value(client));
   fl_value_set_string_take(frame, "scale", fl_value_new_float(1.0));
+  // Only X11 says where a window is. Told, so Dart never takes two windows
+  // both answering the corner of the screen as one over the other.
+  fl_value_set_string_take(
+      frame, "placed",
+      fl_value_new_bool(GDK_IS_X11_DISPLAY(gtk_widget_get_display(widget))));
   GdkMonitor* monitor =
       surface != nullptr ? gdk_display_get_monitor_at_window(
                                gtk_widget_get_display(widget), surface)
@@ -882,12 +887,6 @@ static void window_method_cb(FlMethodChannel* channel,
       }
       if (maximised) {
         gtk_window_maximize(window);
-      }
-      // Shown here, where it is put, if it is not already. The engine shows a
-      // new window at a frame drawn into it after it is made, and a window
-      // with nothing moving in it may never get one.
-      if (!gtk_widget_get_visible(GTK_WIDGET(window))) {
-        gtk_widget_show(GTK_WIDGET(window));
       }
     }
     return;
@@ -1153,9 +1152,9 @@ static void my_application_activate(GApplication* application) {
   // The zero-copy Viewer bridge: register the 'lumit/viewer_texture' channel
   // on the main engine so Dart can hand it engine-drawn DMA-BUF frames to
   // show as GL external textures — the Linux twin of the Windows runner's
-  // ViewerTextureBridge (flutter_window.cpp OnCreate). Only the main window shows
-  // the Viewer, so — exactly as on Windows — the bridge is registered here alone,
-  // not on the popped-out panels below. A build of the engine `.so` without the
+  // ViewerTextureBridge (flutter_window.cpp OnCreate). Every window's
+  // views draw from the one engine, so the bridge is registered here once,
+  // exactly as on Windows. A build of the engine `.so` without the
   // `shared-texture-linux` feature simply never calls the channel (Dart keeps the
   // read-back path), so this registration is inert then.
   FlEngine* engine = fl_view_get_engine(view);

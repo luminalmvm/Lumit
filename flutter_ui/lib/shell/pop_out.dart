@@ -164,6 +164,10 @@ typedef NativeFrame = ({
   double scale,
   Rect? display,
   Rect? work,
+
+  /// Whether the system says where its windows are. Wayland does not, and
+  /// every window answers the corner of the screen there.
+  bool placed,
 });
 
 /// One display, as the runner reports it.
@@ -240,6 +244,7 @@ abstract final class NativeWindows {
       scale: scale is num && scale > 0 ? scale.toDouble() : 1.0,
       display: rectFrom(raw['display']),
       work: rectFrom(raw['work']),
+      placed: raw['placed'] != false,
     );
   }
 

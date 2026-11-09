@@ -5,7 +5,7 @@ class MainFlutterWindow: NSWindow {
   // The zero-copy Viewer bridge: holds the 'lumit/viewer_texture'
   // channel and the IOSurface textures registered on it for as long as the
   // window's engine lives. See windows/runner/flutter_window.cpp for the
-  // sibling. Only the main window draws the Viewer, so only it needs one.
+  // sibling. Every window's views draw from the one engine, so one serves all.
   private var viewerTextureBridge: ViewerTextureBridge?
 
   /// The name AppKit files this window's frame under in the user's defaults —
