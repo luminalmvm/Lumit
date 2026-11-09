@@ -188,6 +188,10 @@ abstract final class NativeWindows {
   /// Told when a display comes, goes or changes.
   static VoidCallback? displaysChanged;
 
+  /// The set of displays Lumit last took stock of, as [displaySetupOf] names
+  /// it. The system's own may be a moment ahead of it.
+  static String? setupInUse;
+
   /// What the runner says on the channel about windows, from the one handler
   /// the channel has (state/background.dart). Says whether it was one of
   /// these.

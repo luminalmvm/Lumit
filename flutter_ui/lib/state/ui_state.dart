@@ -1915,6 +1915,7 @@ class LumitUiState extends ChangeNotifier {
     if (now.isEmpty) return;
     displays.value = now;
     final setup = displaySetup;
+    NativeWindows.setupInUse = setup;
     // The video monitor comes back on the display it was on with these
     // displays, and goes when its display has.
     final monitor = workspace.videoMonitors[setup];

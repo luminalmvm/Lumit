@@ -607,6 +607,14 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     final host = _hosts[id];
     if (host == null) return;
     final now = await NativeWindows.frame(host.window.handle);
+    // A display plugged in or pulled moves windows about before Lumit is
+    // told. Where they were shoved to is not where they were left, and is
+    // not kept against the displays there were.
+    final setup = NativeWindows.setupInUse;
+    if (setup != null &&
+        displaySetupOf(await NativeWindows.displays()) != setup) {
+      return;
+    }
     final w = _window(id);
     if (now == null || now.minimised || w == null || !mounted) return;
     // Full screen, the window stands where it stood before, as it will again
