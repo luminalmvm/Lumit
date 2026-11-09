@@ -32,7 +32,8 @@ import 'package:lumit_flutter/panels/viewer_picture.dart'
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
-import 'package:lumit_flutter/shell/pop_out.dart' show windowsQuitting;
+import 'package:lumit_flutter/shell/pop_out.dart'
+    show NativeDisplay, NativeWindows, displaySetupOf, windowsQuitting;
 import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
@@ -1830,8 +1831,56 @@ class LumitUiState extends ChangeNotifier {
     // A workspace of the user's own keeps the arrangement they drag it into
     // (docs/07 §1.4); a preset's factory layout is not theirs to overwrite.
     workspace.rememberActiveWorkspaceLayout();
+    _rememberSetupDock();
     workspace.save();
     rememberSession();
+  }
+
+  /// The displays there are, the primary one first, as the runner last said.
+  /// Empty until it has, and where no runner answers.
+  final ValueNotifier<List<NativeDisplay>> displays = ValueNotifier(const []);
+
+  /// Which displays there are, as the string an arrangement is remembered
+  /// against. Empty while none are known.
+  String get displaySetup => displaySetupOf(displays.value);
+
+  /// Keep the arrangement as the one for the displays in use.
+  void _rememberSetupDock() {
+    final setup = displaySetup;
+    if (setup.isEmpty) return;
+    workspace.setupDocks =
+        rememberSetupDock(workspace.setupDocks, setup, workspace.dock.toJson());
+    workspace.dockSetup = setup;
+  }
+
+  /// Ask the runner which displays there are, and bring back the arrangement
+  /// last used with them when they are not the ones the arrangement in use
+  /// was last used with: Lumit starting on a laptop that was last closed at a
+  /// desk, or a second screen plugged in or taken away while it runs. With
+  /// none remembered for them, the arrangement stays, and the dock brings any
+  /// window whose display has gone back into view.
+  Future<void> refreshDisplays() async {
+    final now = await NativeWindows.displays();
+    if (now.isEmpty) return;
+    displays.value = now;
+    final setup = displaySetup;
+    final was = workspace.dockSetup;
+    if (was == setup) return;
+    if (was != null) {
+      workspace.setupDocks = rememberSetupDock(
+          workspace.setupDocks, was, workspace.dock.toJson());
+    }
+    final path = _app.project?.path();
+    final remembered = (path == null
+            ? null
+            : workspace.sessionFor(path)?.setupDocks[setup]) ??
+        workspace.setupDocks[setup];
+    workspace.dockSetup = setup;
+    if (remembered != null) {
+      _applyDock(remembered);
+    } else {
+      workspace.save();
+    }
   }
 
   void setScheme(LumitColorScheme next) => workspace.setScheme(next);
@@ -2947,6 +2996,10 @@ class LumitUiState extends ChangeNotifier {
     // Where the playhead was left is worth keeping, and it moves far too often
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
+    // Which displays there are decides which arrangement is in use, and a
+    // display plugged in or taken away while Lumit runs changes it.
+    NativeWindows.displaysChanged = () => unawaited(refreshDisplays());
+    unawaited(refreshDisplays());
     _lifecycle = AppLifecycleListener(
       onInactive: () {
         rememberSession();
@@ -5099,6 +5152,7 @@ class LumitUiState extends ChangeNotifier {
         viewerLayout: views.toWorkspaceJson(),
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
+        setupDocks: _sessionSetupDocks(),
         viewerLooks: Map.of(viewerLooks),
         cutTrackHeights: {
           for (final e in cutTrackHeights.entries)
@@ -5117,12 +5171,26 @@ class LumitUiState extends ChangeNotifier {
         folds: folds.toJson());
   }
 
+  /// This project's arrangement with each set of displays it has been open
+  /// with, the one in use now included.
+  Map<String, Map<String, dynamic>> _sessionSetupDocks() {
+    final path = _app.project?.path();
+    final before = path == null
+        ? const <String, Map<String, dynamic>>{}
+        : workspace.sessionFor(path)?.setupDocks ?? const {};
+    final setup = displaySetup;
+    return setup.isEmpty
+        ? before
+        : rememberSetupDock(before, setup, workspace.dock.toJson());
+  }
+
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
   /// travels with a project shared with someone else. Without the floating
-  /// windows, which are this machine's.
+  /// windows or the other displays' arrangements: those are this machine's.
   String sessionJson() {
     final json = session().toJson()
-      ..['dock'] = withoutWindows(workspace.dock);
+      ..['dock'] = withoutWindows(workspace.dock)
+      ..remove('setup_docks');
     return jsonEncode(json);
   }
 
@@ -5222,7 +5290,9 @@ class LumitUiState extends ChangeNotifier {
       // is no local record — the first time this project is opened here.
       final session = workspace.sessionFor(path) ?? _embeddedSession(project!);
       if (session == null) return;
-      _applyDock(session.dock);
+      // The arrangement this project last had with these displays, when it
+      // has been open with them before.
+      _applyDock(session.setupDocks[displaySetup] ?? session.dock);
       restoredArrangement = true;
 
       final known = {
