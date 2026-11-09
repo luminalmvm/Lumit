@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/tools.dart' show ToolMode;
 import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
@@ -1062,6 +1063,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(opacityKeys(p.layer), hasLength(2), reason: 'the middle key went');
+    });
+
+    /// The Pen is usually left armed for drawing in the Viewer: a click on a
+    /// key in the graph selects it and never deletes it.
+    testWidgets('a click on a key with the Pen armed keeps it', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      p.uiState.tools.select(ToolMode.pen);
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(
+          'graph-key-${p.layer.internallayerId}/transform/opacity@opacity#1')));
+      await tester.pumpAndSettle();
+
+      expect(opacityKeys(p.layer), hasLength(3), reason: 'no key went');
     });
 
     /// Shift holds a key drag to one axis, chosen by which way the pointer

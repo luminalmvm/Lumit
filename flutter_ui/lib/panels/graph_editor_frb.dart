@@ -134,8 +134,10 @@ class GraphEditorFrb extends StatefulWidget {
 
   /// Whether the Pen tool is armed on the toolbar (docs/07 §1.7).
   ///
-  /// With it in hand the graph plants and lifts keys on a single click — the
-  /// same thing the Pen does to a path, done to a curve. Everything it offers
+  /// With it in hand a single click on the curve plants a key — the same thing
+  /// the Pen does to a path, done to a curve. A click on a key only selects it
+  /// (`Alt`-click lifts it), so the Pen left armed for the Viewer never
+  /// deletes a key by accident. Everything it offers
   /// is reachable without it (double-click, `Ctrl`-click, `Alt`-click), so
   /// nobody has to hold a tool to edit a curve.
   final bool penArmed;
@@ -3455,9 +3457,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   ? 'graph-key-$id'
                   : 'graph-key-$id-${isOut ? 'out' : 'in'}'),
               behavior: HitTestBehavior.opaque,
-              // `Alt`-click lifts the key, and so does a click with the Pen
-              // armed — the counterpart of planting one on the curve. A plain
-              // click still selects.
+              // `Alt`-click lifts the key. A plain click selects, with the Pen
+              // armed too: the Pen is usually in hand for drawing in the
+              // Viewer, and a click on a key there must not delete it.
               //
               // Deliberately **not** `onDoubleTap`. Registering one makes
               // Flutter hold every single tap back until the double-tap timer
@@ -3466,7 +3468,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // gesture for *planting* a key on empty curve, where there is no
               // competing single click to slow down.
               onTapUp: (d) {
-                if (altActuallyHeld() || widget.penArmed) {
+                if (altActuallyHeld()) {
                   _keyTapId = null;
                   _removeKey(channel, i);
                   return;
