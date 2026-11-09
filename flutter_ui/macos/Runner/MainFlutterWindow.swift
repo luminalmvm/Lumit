@@ -13,6 +13,34 @@ class MainFlutterWindow: NSWindow {
   /// way the Windows runner does.
   private static let savedFrameName = "LumitMainWindow"
 
+  /// Whether the window was zoomed, which the saved frame does not say.
+  private static let savedZoomedName = "LumitMainWindowZoomed"
+
+  /// The floating windows Dart has handed over (lib/shell/pop_out.dart), by
+  /// handle, with what watches each one.
+  private var adopted: [Int: [NSObjectProtocol]] = [:]
+
+  /// Messages to Dart waiting for things to settle: by window handle, and 0
+  /// for the displays.
+  private var settling: [Int: DispatchWorkItem] = [:]
+
+  /// The floating windows hidden with this one, front to back, to show again
+  /// with it.
+  private var hiddenFloating: [Int] = []
+
+  /// Where each floating window last stood un-zoomed and not full screen,
+  /// which AppKit does not say once it is either.
+  private var normalFrames: [Int: NSRect] = [:]
+
+  /// Quiet floating windows just shown, by handle, watched for a moment in
+  /// case they take the keyboard again.
+  private var quieting: [Int: NSObjectProtocol] = [:]
+
+  /// The outline of the window a dragged panel would make, made once and
+  /// kept, and the colour it was last drawn in.
+  private var ghost: NSWindow?
+  private var ghostColour: Int?
+
   /// Settings says closing the window keeps Lumit running in the menu bar
   /// (lib/state/background.dart).
   private var keepRunning = false
@@ -74,22 +102,27 @@ class MainFlutterWindow: NSWindow {
   }
 
   /// Kept running in the background, closing the window only hides it, and
-  /// the Dock icon goes with it. Quit in the menu bar is an ordinary quit.
+  /// the floating windows and the Dock icon go with it. Quit in the menu bar
+  /// is an ordinary quit.
   ///
-  /// Otherwise a panel popped out into a window of its own closes with this
-  /// one, as it does on the other systems. Its close docks it, so nothing in
-  /// it is lost, and quitting asks about unsaved work as it always did.
+  /// Otherwise, with a floating window open, closing this one quits.
+  /// FlutterAppDelegate asks Dart first, which asks about unsaved work, and
+  /// the floating windows stay where they are, so the next start opens them
+  /// there. Closing them one by one first would put their panels back in here.
   override func performClose(_ sender: Any?) {
     guard keepRunning else {
-      for window in NSApp.windows
-      where window !== self && window.isVisible
-        && window.contentViewController is FlutterViewController
-      {
-        window.performClose(nil)
+      let floatingOpen = NSApp.windows.contains {
+        $0 !== self && ($0.isVisible || $0.isMiniaturized)
+          && $0.contentViewController is FlutterViewController
+      }
+      if floatingOpen {
+        NSApp.terminate(nil)
+        return
       }
       return super.performClose(sender)
     }
     orderOut(nil)
+    hideFloating()
     NSApp.setActivationPolicy(.accessory)
     windowChannel?.invokeMethod("hidden", arguments: nil)
   }
@@ -102,7 +135,285 @@ class MainFlutterWindow: NSWindow {
     ignoresMouseEvents = false
     NSApp.setActivationPolicy(.regular)
     makeKeyAndOrderFront(nil)
+    showFloating()
     NSApp.activate(ignoringOtherApps: true)
+  }
+
+  /// Hide the floating windows on screen with this one, in the menu bar or
+  /// the Dock.
+  private func hideFloating() {
+    let shown = adoptedOnScreen
+    shown.forEach { $0.orderOut(nil) }
+    hiddenFloating += shown.map { Self.handle(of: $0) }
+  }
+
+  /// Bring them back above this one, without the keyboard.
+  private func showFloating() {
+    for handle in hiddenFloating {
+      floatingWindow(handle)?.order(.above, relativeTo: windowNumber)
+    }
+    hiddenFloating = []
+  }
+
+  /// A window's handle as Dart has it: the NSWindow's address
+  /// (lib/shell/pop_out_handle.dart).
+  private static func handle(of window: NSWindow) -> Int {
+    Int(bitPattern: Unmanaged.passUnretained(window).toOpaque())
+  }
+
+  /// The floating window Dart names by `handle`, or nil once it has gone. The
+  /// handle is only ever compared with the windows there are, never followed.
+  private func floatingWindow(_ handle: Int) -> NSWindow? {
+    NSApp.windows.first { $0 !== self && Self.handle(of: $0) == handle }
+  }
+
+  /// The adopted floating windows on screen on any Space, front to back.
+  private var adoptedOnScreen: [NSWindow] {
+    (NSWindow.windowNumbers(options: .allSpaces) ?? [])
+      .compactMap { NSApp.window(withWindowNumber: $0.intValue) }
+      .filter { adopted[Self.handle(of: $0)] != nil }
+  }
+
+  /// A rectangle as Dart has it, `[x, y, width, height]` down from the top
+  /// of the primary display (lib/shell/pop_out.dart). AppKit's run up from
+  /// its bottom.
+  private static func flipped(_ rect: NSRect) -> [Double] {
+    let top = NSScreen.screens.first?.frame.maxY ?? 0
+    return [rect.minX, top - rect.maxY, rect.width, rect.height].map { Double($0) }
+  }
+
+  /// One of Dart's rectangles as AppKit's.
+  private static func unflipped(_ raw: Any?) -> NSRect? {
+    guard let n = raw as? [NSNumber], n.count == 4 else { return nil }
+    let top = NSScreen.screens.first?.frame.maxY ?? 0
+    let height = CGFloat(n[3].doubleValue)
+    return NSRect(
+      x: CGFloat(n[0].doubleValue), y: top - CGFloat(n[1].doubleValue) - height,
+      width: CGFloat(n[2].doubleValue), height: height)
+  }
+
+  /// Do `act` once nothing has changed for `delay` seconds, so a drag across
+  /// the screen is one message to Dart, not a hundred.
+  private func whenStill(_ key: Int, after delay: Double, _ act: @escaping () -> Void) {
+    settling[key]?.cancel()
+    let work = DispatchWorkItem { [weak self] in
+      self?.settling[key] = nil
+      act()
+    }
+    settling[key] = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  /// The engine makes each window key as it shows it, which a window reopened
+  /// at start or a video monitor must not keep. The keyboard comes back here
+  /// now, and once more if the window takes it again in the next second,
+  /// before its first frame.
+  private func quieten(_ floating: NSWindow, _ handle: Int) {
+    guard isVisible else { return }
+    makeKey()
+    guard quieting[handle] == nil else { return }
+    quieting[handle] = NotificationCenter.default.addObserver(
+      forName: NSWindow.didBecomeKeyNotification, object: floating, queue: .main
+    ) { [weak self] _ in
+      guard let self = self, let watch = self.quieting.removeValue(forKey: handle) else { return }
+      NotificationCenter.default.removeObserver(watch)
+      self.makeKey()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+      if let watch = self?.quieting.removeValue(forKey: handle) {
+        NotificationCenter.default.removeObserver(watch)
+      }
+    }
+  }
+
+  /// Floating windows and displays (lib/shell/pop_out.dart). A call may name
+  /// a floating window by its handle, and one naming a window that has gone
+  /// answers false. A call naming none is about this window.
+  private func answerWindows(_ call: FlutterMethodCall, _ result: FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    let handle = args["window"] as? Int
+    let floating = handle.flatMap { floatingWindow($0) }
+    if handle != nil && floating == nil {
+      return result(false)
+    }
+    let window = floating ?? self
+    switch call.method {
+    case "adopt":
+      if let floating = floating, let handle = handle {
+        floating.level = args["onTop"] as? Bool == true ? .floating : .normal
+        // It can sit beside this window when this one is full screen.
+        floating.collectionBehavior.insert(.fullScreenAuxiliary)
+        if adopted[handle] == nil {
+          if !floating.isZoomed && !floating.styleMask.contains(.fullScreen) {
+            normalFrames[handle] = floating.frame
+          }
+          let center = NotificationCenter.default
+          var watching: [NSObjectProtocol] = []
+          for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+            watching.append(
+              center.addObserver(forName: name, object: floating, queue: .main) {
+                [weak self, weak floating] _ in
+                self?.whenStill(handle, after: 0.3) {
+                  guard let self = self, let floating = floating else { return }
+                  // Kept once still, so never a frame from partway through
+                  // zooming or going full screen.
+                  if !floating.isZoomed && !floating.styleMask.contains(.fullScreen) {
+                    self.normalFrames[handle] = floating.frame
+                  }
+                  self.windowChannel?.invokeMethod("windowMoved", arguments: ["window": handle])
+                }
+              })
+          }
+          watching.append(
+            center.addObserver(
+              forName: NSWindow.willCloseNotification, object: floating, queue: .main
+            ) { [weak self] _ in
+              guard let self = self else { return }
+              self.adopted.removeValue(forKey: handle)?.forEach {
+                NotificationCenter.default.removeObserver($0)
+              }
+              self.settling.removeValue(forKey: handle)?.cancel()
+              self.hiddenFloating.removeAll { $0 == handle }
+              self.normalFrames[handle] = nil
+            })
+          adopted[handle] = watching
+        }
+        if args["quiet"] as? Bool == true {
+          quieten(floating, handle)
+        }
+      }
+      result(nil)
+    case "frame":
+      // Zoomed or full screen, a floating window answers where it last stood
+      // as neither. The main window has none kept, so it answers its frame.
+      let fullScreen = window.styleMask.contains(.fullScreen)
+      var bounds = window.frame
+      if window.isZoomed || fullScreen, let handle = handle, let normal = normalFrames[handle] {
+        bounds = normal
+      }
+      var answer: [String: Any] = [
+        "bounds": Self.flipped(bounds),
+        "maximised": window.isZoomed,
+        "minimised": window.isMiniaturized,
+        "fullScreen": fullScreen,
+        "client": Self.flipped(window.contentRect(forFrameRect: window.frame)),
+        "scale": 1.0,
+      ]
+      if let screen = window.screen {
+        answer["display"] = Self.flipped(screen.frame)
+        answer["work"] = Self.flipped(screen.visibleFrame)
+      }
+      result(answer)
+    case "setFrame":
+      // Placed as it is un-zoomed, then zoomed or not. Nothing here makes it
+      // key, so the keyboard stays where it was.
+      if let floating = floating, let handle = handle,
+        let bounds = Self.unflipped(args["bounds"])
+      {
+        let zoomed = args["maximised"] as? Bool == true
+        if floating.isZoomed && !zoomed {
+          floating.zoom(nil)
+        }
+        floating.setFrame(bounds, display: true)
+        normalFrames[handle] = bounds
+        if zoomed && !floating.isZoomed {
+          floating.zoom(nil)
+        }
+      }
+      result(nil)
+    case "onTop":
+      floating?.level = args["on"] as? Bool == true ? .floating : .normal
+      result(nil)
+    case "monitor":
+      // A video monitor: no frame, over the display's menu bar, on every
+      // Space and beside full screen. Borderless, it cannot become key again,
+      // and the keyboard the engine gave it as it showed comes back here.
+      if let floating = floating, let handle = handle,
+        let display = Self.unflipped(args["display"])
+      {
+        floating.styleMask = [.borderless]
+        floating.level = .statusBar
+        floating.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        floating.hasShadow = false
+        floating.setFrame(display, display: true)
+        floating.orderFrontRegardless()
+        quieten(floating, handle)
+      }
+      result(nil)
+    case "displays":
+      result(
+        NSScreen.screens.enumerated().map { index, screen in
+          [
+            "name": screen.localizedName,
+            "bounds": Self.flipped(screen.frame),
+            "work": Self.flipped(screen.visibleFrame),
+            "scale": 1.0,
+            "primary": index == 0,
+          ] as [String: Any]
+        })
+    case "ghost":
+      // Above everything, and the pointer and the keyboard pass straight
+      // through it. The layer draws the fill and the edge at any size.
+      guard let rect = Self.unflipped(args["rect"]) else {
+        ghost?.orderOut(nil)
+        return result(nil)
+      }
+      let outline =
+        ghost
+        ?? NSWindow(contentRect: rect, styleMask: .borderless, backing: .buffered, defer: false)
+      if ghost == nil {
+        outline.isReleasedWhenClosed = false
+        outline.ignoresMouseEvents = true
+        outline.isOpaque = false
+        outline.backgroundColor = .clear
+        outline.hasShadow = false
+        outline.level = .popUpMenu
+        outline.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
+        outline.contentView?.wantsLayer = true
+        ghost = outline
+      }
+      let colour = args["colour"] as? Int ?? 0
+      if colour != ghostColour, let layer = outline.contentView?.layer {
+        // 0xAARRGGBB, drawn as the Windows runner draws it: the edge solid
+        // and the fill at about 18%, whatever the colour's own alpha.
+        let edge = NSColor(
+          srgbRed: CGFloat((colour >> 16) & 0xFF) / 255,
+          green: CGFloat((colour >> 8) & 0xFF) / 255,
+          blue: CGFloat(colour & 0xFF) / 255, alpha: 1)
+        layer.borderWidth = 2
+        layer.borderColor = edge.cgColor
+        layer.backgroundColor = edge.withAlphaComponent(0.18).cgColor
+        ghostColour = colour
+      }
+      if outline.frame != rect {
+        outline.setFrame(rect, display: true)
+      }
+      outline.orderFrontRegardless()
+      result(nil)
+    case "minimise":
+      window.miniaturize(nil)
+      result(window.isZoomed)
+    case "maximise":
+      window.zoom(nil)
+      result(window.isZoomed)
+    case "close":
+      // A floating window's close button asks the engine's delegate, which
+      // asks Dart and says no. performClose would beep at that no, and at a
+      // monitor, which has no close button, so the delegate is asked here.
+      if floating != nil {
+        _ = window.delegate?.windowShouldClose?(window)
+      } else {
+        performClose(nil)
+      }
+      result(window.isZoomed)
+    case "drag", "state", "maximiseButton":
+      // The system's title bar stays on macOS, and moves the window itself.
+      result(window.isZoomed)
+    case "beginResize":
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
   }
 
   /// The primary screen, which the splash is centred on.
@@ -245,9 +556,9 @@ class MainFlutterWindow: NSWindow {
       result(nil)
     }
 
-    // macOS draws the window's buttons itself, so this channel only carries
-    // what Settings says about running in the background, and Dart asking
-    // for the window back.
+    // macOS draws the window's buttons itself, so this channel carries what
+    // Settings says about running in the background, Dart asking for the
+    // window back, and the floating windows and displays.
     let window = FlutterMethodChannel(
       name: "lumit/window",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
@@ -270,12 +581,47 @@ class MainFlutterWindow: NSWindow {
         result(self?.setBackdrop(call.arguments as? [String: Any] ?? [:]) ?? false)
         return
       default:
-        result(FlutterMethodNotImplemented)
+        if let self = self {
+          self.answerWindows(call, result)
+        } else {
+          result(nil)
+        }
         return
       }
       result(nil)
     }
     windowChannel = window
+    // The floating windows stay above this one, as owned windows do on
+    // Windows: each time this one comes forward, they are put back in front
+    // of it, in the order they were in, without taking the keyboard.
+    for name in [NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification] {
+      NotificationCenter.default.addObserver(forName: name, object: self, queue: .main) {
+        [weak self] _ in
+        guard let self = self else { return }
+        for floating in self.adoptedOnScreen where floating.isOnActiveSpace {
+          floating.order(.above, relativeTo: self.windowNumber)
+        }
+      }
+    }
+    // Minimised, it takes the floating windows into the Dock with it.
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didMiniaturizeNotification, object: self, queue: .main
+    ) { [weak self] _ in
+      self?.hideFloating()
+    }
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didDeminiaturizeNotification, object: self, queue: .main
+    ) { [weak self] _ in
+      self?.showFloating()
+    }
+    // A display plugged in, unplugged or rearranged, told once it settles.
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      self?.whenStill(0, after: 0.5) {
+        self?.windowChannel?.invokeMethod("displaysChanged", arguments: nil)
+      }
+    }
     // Reduce transparency switched in System Settings: Dart asks for the
     // backdrop again and learns whether it shows.
     NSWorkspace.shared.notificationCenter.addObserver(
@@ -310,15 +656,23 @@ class MainFlutterWindow: NSWindow {
     // maximised — when there is nothing to go back to. `setFrameUsingName`
     // says so by returning false, and AppKit pulls a restored frame back onto
     // a screen that still exists by itself, so an unplugged display needs no
-    // code here the way it does on Windows. The one difference from the
-    // Windows runner (windows/runner/win32_window.cpp) is that AppKit saves
-    // the frame but not the zoomed state, so a window closed zoomed reopens at
-    // the frame it would have un-zoomed to. Left there until a macOS user asks
-    // for the rest.
-    if !setFrameUsingName(Self.savedFrameName) {
+    // code here the way it does on Windows. AppKit saves the frame but not
+    // whether it was zoomed, so that is kept beside it each time the window
+    // changes size, and a window closed zoomed opens zoomed, as it does on
+    // Windows (windows/runner/win32_window.cpp).
+    if !setFrameUsingName(Self.savedFrameName)
+      || (UserDefaults.standard.bool(forKey: Self.savedZoomedName) && !isZoomed)
+    {
       zoom(nil)
     }
     setFrameAutosaveName(Self.savedFrameName)
+    // Full screen is not zoomed or un-zoomed, so it is left out.
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didResizeNotification, object: self, queue: .main
+    ) { [weak self] _ in
+      guard let self = self, !self.styleMask.contains(.fullScreen) else { return }
+      UserDefaults.standard.set(self.isZoomed, forKey: Self.savedZoomedName)
+    }
 
     super.awakeFromNib()
   }
