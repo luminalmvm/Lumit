@@ -89,8 +89,27 @@ jobs:
         run: cargo check --workspace --release
 
   windows:
-    name: tests (Windows — the shipping target, with media)
+    name: tests (Windows, ${{ matrix.part }})
     runs-on: windows-latest
+    # Split across five runners. As one job it took an hour, most of it
+    # lumit-render's tests running one test program after another on WARP.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: render unit tests
+            test: -p lumit-render --lib
+          - part: render smoke
+            test: -p lumit-render --test smoke_end_to_end
+          # Every other test file in lumit-render: the globs match all but
+          # smoke_end_to_end.
+          - part: render end to end
+            test: -p lumit-render --test '[!s]*' --test 's[!m]*'
+          - part: gpu and core
+            test: -p lumit-gpu -p lumit-core
+          - part: everything else
+            test: --workspace --exclude lumit-render --exclude lumit-gpu --exclude lumit-core
+            clippy: true
     env:
       # BtbN "shared, GPL" build: GPL matches Lumit's licence, shared gives the
       # import libs + DLLs rsmpeg links against, n8.1 matches the crate's
@@ -139,13 +158,16 @@ jobs:
         shell: pwsh
         run: |
           "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
+      # Every part reads the same cache, and only the part that builds the most
+      # writes it, so the cache holds the dependencies of all of them.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.clippy == true }}
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      # One run, GPU crates included. Every GPU test borrows the process's one
+      - if: matrix.clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      # Every GPU test borrows the process's one
       # device and one set of compiled engines under a lock
       # (crates/lumit-gpu/src/test_support.rs), so the GPU tests run one at a
       # time by construction while the CPU tests around them run in parallel.
@@ -160,7 +182,8 @@ jobs:
       # dying rather than a test failing. Which adapter was picked, the first
       # question about a GPU failure on a runner with no graphics card, is
       # printed by every context as it opens.
-      - run: cargo test --workspace
+      - run: cargo test ${{ matrix.test }}
+        shell: bash
         env:
           RUST_BACKTRACE: 1
 
