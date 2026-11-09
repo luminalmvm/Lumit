@@ -162,7 +162,9 @@ runs:
             version="$(basename "$saved")"
             name="$(basename "$(dirname "$saved")")"
             mkdir -p "$(brew --cellar)/$name"
-            cp -a "$saved" "$(brew --cellar)/$name/"
+            # The runner may already have this version, and its files are
+            # read-only, so copying over them fails. It's the same keg, keep it.
+            [ -e "$(brew --cellar)/$name/$version" ] || cp -a "$saved" "$(brew --cellar)/$name/"
             ln -sfn "../Cellar/$name/$version" "$(brew --prefix)/opt/$name"
           done
         elif [ -z "${deps// /}" ]; then
