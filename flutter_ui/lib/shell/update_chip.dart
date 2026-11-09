@@ -21,9 +21,11 @@ import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'profile_chip.dart' show SyncRing;
 import 'update_dialog_frb.dart';
 
-/// The button on the bottom strip.
+/// The button on the bottom strip, or with [labelled] the welcome screen's,
+/// which says it in words and is only there while an update is under way.
 class UpdateChip extends StatelessWidget {
-  const UpdateChip({super.key});
+  final bool labelled;
+  const UpdateChip({super.key, this.labelled = false});
 
   @override
   Widget build(BuildContext context) {
@@ -32,29 +34,46 @@ class UpdateChip extends StatelessWidget {
     final updates = ui.updates;
     return ListenableBuilder(
       listenable: updates,
-      builder: (context, _) => LumitTooltip(
-        // The Help menu's row says the same thing in words.
-        message: updates.menuLabel,
-        maxWidth: 380,
-        body: _changes(ThemeScope.of(context).theme, updates),
-        child: HouseButton(
-          key: const ValueKey('status-update'),
-          frameless: true,
-          small: true,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          onPressed: updates.busy
-              ? null
-              : () => pressUpdateButton(
-                    context,
-                    updates: updates,
-                    notice: app.postNotice,
-                    projectIsDirty: () => app.project?.isDirty() ?? false,
-                    saveProject: () =>
-                        saveProjectFrb(app, ui, leaving: true),
-                  ),
-          child: UpdateMark(updates),
-        ),
-      ),
+      builder: (context, _) {
+        final t = ThemeScope.of(context).theme;
+        final waiting = switch (updates.stage) {
+          UpdateStage.available ||
+          UpdateStage.downloading ||
+          UpdateStage.ready =>
+            true,
+          _ => false,
+        };
+        if (labelled && !waiting) return const SizedBox.shrink();
+        return LumitTooltip(
+          // The Help menu's row says the same thing in words.
+          message: updates.menuLabel,
+          maxWidth: 380,
+          body: _changes(t, updates),
+          child: HouseButton(
+            key: ValueKey(labelled ? 'welcome-update' : 'status-update'),
+            frameless: !labelled,
+            small: !labelled,
+            padding: EdgeInsets.symmetric(horizontal: labelled ? 10 : 4),
+            onPressed: updates.busy
+                ? null
+                : () => pressUpdateButton(
+                      context,
+                      updates: updates,
+                      notice: app.postNotice,
+                      projectIsDirty: () => app.project?.isDirty() ?? false,
+                      saveProject: () =>
+                          saveProjectFrb(app, ui, leaving: true),
+                    ),
+            child: labelled
+                ? Row(mainAxisSize: MainAxisSize.min, children: [
+                    UpdateMark(updates),
+                    const SizedBox(width: 6),
+                    Text(updates.menuLabel, style: t.body),
+                  ])
+                : UpdateMark(updates),
+          ),
+        );
+      },
     );
   }
 }
