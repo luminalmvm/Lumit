@@ -120,6 +120,7 @@ mod streams;
 #[cfg(test)]
 mod test_files;
 mod turns;
+mod vector_host;
 #[cfg(target_arch = "wasm32")]
 mod web_kept;
 #[cfg(target_arch = "wasm32")]

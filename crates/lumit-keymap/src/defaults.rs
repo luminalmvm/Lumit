@@ -122,6 +122,8 @@ pub fn default_keymap() -> Keymap {
         // A still of the frame at the playhead, beside the chord that
         // exports the whole composition.
         row(Global, "Mod+Alt+Shift+M", "comp.frame.save"),
+        // The comp as a Lottie or an animated SVG, the third of the family.
+        row(Global, "Mod+Shift+M", "file.export.vector"),
         row(Global, "Mod+N", "comp.new"),
         row(Global, "Mod+A", "edit.select.all"),
         row(Global, "Mod+Shift+A", "edit.deselect.all"),

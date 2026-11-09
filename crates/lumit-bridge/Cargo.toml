@@ -62,6 +62,7 @@ lumit-text = { path = "../lumit-text" }
 # alone, so the docs/05 layering is unbroken.
 lumit-import = { path = "../lumit-import" }
 lumit-keymap = { path = "../lumit-keymap" }
+lumit-lottie = { path = "../lumit-lottie" }
 # The addons folder and the model runtime (docs/impl/addons.md §5). The bridge
 # is the composition root for these too: the Addons page is the one place that
 # knows what the user asked for and what the folder holds at once.
@@ -100,6 +101,9 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+# The working space's matrix, for a vector export's colours. Already in the
+# build graph through lumit-render.
+lumit-colour = { path = "../lumit-colour" }
 lumit-scene = { path = "../lumit-scene" }
 # The device the renderer opened, and what it says about the card.
 lumit-gpu = { path = "../lumit-gpu" }
