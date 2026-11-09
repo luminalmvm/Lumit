@@ -534,6 +534,15 @@ class UserWorkspace {
   }
 }
 
+/// Write [text] to [file] whole or not at all: into a file beside it, which
+/// then takes its place. Writing straight into it empties it first, so a full
+/// disk or a crash part of the way through left no settings at all.
+void writeWhole(File file, String text) {
+  final next = File('${file.path}.next');
+  next.writeAsStringSync(text, flush: true);
+  next.renameSync(file.path);
+}
+
 /// Where a floating window was left: how far it was dragged from the centre of
 /// the app window, and how big it was made when it is one of the resizable
 /// ones. Stored as an offset from centre rather than as a corner position so a
@@ -1884,7 +1893,7 @@ class Workspace extends ChangeNotifier {
     try {
       final f = userWorkspaceFile(w.name);
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(w.encode());
+      writeWhole(f, w.encode());
     } catch (_) {}
   }
 
@@ -2569,7 +2578,7 @@ class Workspace extends ChangeNotifier {
     try {
       final f = storeFile();
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(toJson()));
+      writeWhole(f, const JsonEncoder.withIndent('  ').convert(toJson()));
     } catch (_) {
       // Persistence is best-effort; the session keeps working without it.
     }
