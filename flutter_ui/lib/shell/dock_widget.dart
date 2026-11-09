@@ -10,7 +10,8 @@ import 'dart:async' show Timer, unawaited;
 import 'dart:math' show max, min;
 import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart'
     show GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/rendering.dart' show RenderOffstage;
@@ -265,7 +266,8 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     // Floating windows stand above the main one, the latest on top, so a
     // pointer over one that covers part of the main window is over it.
     panes: () => [
-      for (final w in widget.root.windows.reversed) ...panesIn(w.root),
+      if (!(_drag.dragged != null && mainWindowOnly(_drag.dragged!.panel)))
+        for (final w in widget.root.windows.reversed) ...panesIn(w.root),
       ...mainPanesIn(widget.root),
     ],
     places: _places,
@@ -329,6 +331,7 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     frontWindowOverlay = _frontOverlay;
     mainWindowOverlay = _mainOverlay;
     otherWindowOverlays = _otherOverlays;
+    mainWindowOnly = _mainWindowOnly;
   }
 
   /// The main window's own overlay.
@@ -341,6 +344,13 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
           if (host.overlay.currentState case final other? when other != own)
             other,
       ];
+
+  /// An extension's page on Linux is drawn by the main window itself, over
+  /// where its panel is, so its panel stays in the main window there.
+  static bool _mainWindowOnly(Panel panel) =>
+      panel == Panel.extension &&
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.linux;
 
   /// The overlay of the floating window in front, when it can hold a
   /// dialogue: what the main window's dialogues open in meanwhile.

@@ -1136,6 +1136,7 @@ void movePanel(
   final from = windowOf(root, dragged);
   final to = windowOf(root, target);
   if (from == null && to != null && mainPanesIn(root).length <= 1) return;
+  if (to != null && mainWindowOnly(dragged.panel)) return;
   final home = to == null
       ? null
       : from == null
@@ -1300,9 +1301,14 @@ void _simplifyRoot(DockSplit root) {
 int nextWindowId(DockSplit root) => root.windows.fold(
     1, (next, w) => w.id >= next ? w.id + 1 : next);
 
+/// The panels that cannot leave the main window, for a system where one is
+/// drawn by the main window itself. None unless the shell says.
+bool Function(Panel panel) mainWindowOnly = (_) => false;
+
 /// Whether [pane] may be taken out into a window of its own: anywhere but
 /// the main window's last pane, and not a pane already alone in a window.
 bool canFloat(DockSplit root, PaneId pane) {
+  if (mainWindowOnly(pane.panel)) return false;
   final window = windowOf(root, pane);
   if (window != null) return panesIn(window.root).length > 1;
   final main = mainPanesIn(root);
@@ -1334,6 +1340,7 @@ DockWindow? floatGroup(DockSplit root, PaneId pane, {FloatingFrame? frame}) {
   final group = groupOf(root, pane);
   if (group == null) return null;
   final members = [for (final c in group.children) c.id];
+  if (members.any((m) => mainWindowOnly(m.panel))) return null;
   final from = windowOf(root, pane);
   final left = from == null
       ? mainPanesIn(root).where((p) => !members.contains(p)).length
