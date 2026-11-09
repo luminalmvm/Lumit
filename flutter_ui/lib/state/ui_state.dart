@@ -1907,9 +1907,11 @@ class LumitUiState extends ChangeNotifier {
   /// Ask the runner which displays there are, and bring back the arrangement
   /// last used with them when they are not the ones the arrangement in use
   /// was last used with: Lumit starting on a laptop that was last closed at a
-  /// desk, or a second screen plugged in or taken away while it runs. With
-  /// none remembered for them, the arrangement stays, and the dock brings any
-  /// window whose display has gone back into view.
+  /// desk, or a second screen plugged in or taken away while it runs. Only
+  /// when one side or the other has a floating window: panels docked in the
+  /// main window stay where they were put. With none remembered for them, the
+  /// arrangement stays, and the dock brings any window whose display has gone
+  /// back into view.
   Future<void> refreshDisplays() async {
     final now = await NativeWindows.displays();
     if (now.isEmpty) return;
@@ -1936,10 +1938,30 @@ class LumitUiState extends ChangeNotifier {
             : workspace.sessionFor(path)?.setupDocks[setup]) ??
         workspace.setupDocks[setup];
     workspace.dockSetup = setup;
-    if (remembered != null) {
+    if (remembered != null &&
+        (workspace.dock.windows.isNotEmpty || _floats(remembered))) {
       _applyDock(remembered);
     } else {
+      // The one on screen stays, so it is the one for these displays now.
+      // Not with nothing remembered for them: a window's place on a display
+      // that has gone is not kept against the ones left.
+      if (remembered != null) {
+        _rememberSetupDock();
+        rememberSession();
+      }
       workspace.save();
+    }
+  }
+
+  /// Whether an arrangement, as JSON, has a floating window this build can
+  /// open.
+  static bool _floats(Map<String, dynamic>? json) {
+    if (json == null) return false;
+    try {
+      final parsed = DockNode.fromJson(json);
+      return parsed is DockSplit && parsed.windows.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -5351,8 +5373,11 @@ class LumitUiState extends ChangeNotifier {
       final session = workspace.sessionFor(path) ?? _embeddedSession(project!);
       if (session == null) return;
       // The arrangement this project last had with these displays, when it
-      // has been open with them before.
-      _applyDock(session.setupDocks[displaySetup] ?? session.dock);
+      // has been open with them before and floating windows are involved.
+      final forSetup = session.setupDocks[displaySetup];
+      _applyDock(forSetup != null && (_floats(forSetup) || _floats(session.dock))
+          ? forSetup
+          : session.dock);
       restoredArrangement = true;
 
       final known = {
