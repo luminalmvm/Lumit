@@ -685,8 +685,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// The footer's line: what pressing the button would produce.
   String get _summary {
     final (start, end) = _range;
-    final frames = (end - start).clamp(0, 1 << 30);
-    final seconds = _rate <= 0 ? 0.0 : frames / _rate;
+    final span = (end - start).clamp(0, 1 << 30);
+    final seconds = _compFps <= 0 ? 0.0 : span / _compFps;
+    // The span's own frames at the rate the file is written, counted as the
+    // engine counts them.
+    final frames =
+        _rate == _compFps ? span : (seconds * _rate).round().clamp(1, 1 << 30);
     final (width, height) = _outputSize;
     final line = l10n.exportSummary(
       '$frames',
@@ -923,7 +927,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             _Span.custom => l10n.custom,
           },
           '${_formatRate(_rate)} ${l10n.unitFps}',
-          _timecode(end - start, _rate),
+          _timecode(end - start, _compFps),
         ],
       ExportSection.picture => [
           _alphaChannel ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
@@ -1535,9 +1539,9 @@ class _ExportDialogState extends State<_ExportDialog> {
         _reading(
           t,
           l10n.exportTimeReading(
-            _timecode(start, _rate),
-            _timecode(end, _rate),
-            _timecode(end - start, _rate),
+            _timecode(start, _compFps),
+            _timecode(end, _compFps),
+            _timecode(end - start, _compFps),
           ),
           key: const ValueKey('export-time-reading'),
         ),
