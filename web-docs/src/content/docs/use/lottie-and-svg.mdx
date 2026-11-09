@@ -1,0 +1,124 @@
+---
+title: Lottie and SVG
+description: Write a composition as a Lottie, a dotLottie or an animated SVG.
+sidebar:
+  order: 18.2
+---
+
+import Shot from "../../../components/Shot.astro";
+
+**File ▸ Export as Lottie or SVG** (`Ctrl+Shift+M`) writes a composition as shapes and keys
+that a player draws in an app or on a page, rather than as pixels.
+
+<Shot file="lottie-and-svg.png" caption="The Lottie and SVG window." eager/>
+
+The window floats over the panels, which stay live behind it. The player, the size and the
+check follow every change to the composition.
+
+## Formats
+
+| Format | What it writes |
+| --- | --- |
+| **Lottie** (`.json`) | The animation as JSON. |
+| **dotLottie** (`.lottie`) | The same, zipped with its pictures. |
+| **SVG** (`.svg`) | An SVG that animates by itself in a browser, in a page or an `<img>`. |
+
+## Settings
+
+- **Write to**: the file. **Browse** picks another.
+- **Text**: **As shapes** writes each letter's outline. **As text** names the font, which a
+  player draws only with that font installed. An SVG always writes shapes.
+- **Images**: **Embed** puts the pictures in the file, **Beside the file** writes them next
+  to it. A dotLottie always carries its pictures. **Lossless** keeps each picture as it is,
+  and a **JPEG** quality writes the pictures that have no see-through pixels as JPEG.
+- **Frame rate**: the composition's own, or another.
+- **Span**: the work area, or the whole composition.
+- **Minify**: no names, and every number rounded to what can be seen.
+- **Players**: the players the check judges against: **Web**, **Web (canvas)**,
+  **dotLottie**, **iOS**, **Android** and **Flutter**. An SVG is judged against Chrome,
+  Firefox and Safari.
+
+Each composition remembers its file and its settings.
+
+## Several compositions
+
+Tick other compositions in the list under the window's title to export them with the same
+settings. Each goes to its own file, named after it, beside the first. The check covers
+them all.
+
+## The check
+
+The check lists, layer by layer, what won't come across.
+
+| Heading | Means |
+| --- | --- |
+| **Left out** | Not in the file, or drawn by none of the players ticked. |
+| **Some players** | In the file. The players named beside it don't draw it. |
+| **Changed** | In the file, written another way: an expression baked into keys, a 3D layer drawn flat. |
+
+Lines that say the same thing show once with a count, and open to the layers they are about.
+Click a layer to select it in the Timeline. Right-click a line to copy it, its layers or the
+whole check.
+
+## The player
+
+**Lottie** plays the file in the player Flutter apps draw Lottie with. **Browser** plays it
+in the system's web view, as a page shows it. An SVG plays in the browser only, and a
+dotLottie in the Lottie player only.
+
+- Play, loop, the scrubber and the frame, which can be typed or dragged.
+- **Follow the Timeline**: the player shows the frame at the playhead, and moving the
+  player moves the playhead, so the file plays beside the Viewer.
+- **Background**: a checkerboard, the composition's own, white or black.
+- **Zoom**: fit, 100% or 200%.
+
+Right-click the player for **Save frame as**, which saves the frame as the Lottie player
+draws it.
+
+Space plays and pauses, the arrow keys step a frame, Home and End go to the first and last
+frame, and Enter exports.
+
+## What comes across
+
+| | |
+| --- | --- |
+| Shapes | Paths, rectangles, ellipses, stars and polygons, fills, strokes, dashes, gradients, trim paths, repeaters, offset paths |
+| Text | Outlines, or text naming its font |
+| Layers | Shape, text, solid, null, picture and precomp layers, parenting and Retime |
+| Masks and mattes | Every mask mode, and alpha and luma mattes, inverted or not |
+| Keys | Every key with its easing, exactly. Expressions are baked into keys |
+| Effects | Drop shadow, Gaussian blur, Levels, Transform and Set matte, and Fill, Tint, Tritone and Stroke in a Lottie |
+| Other | Blend modes, and markers as named segments |
+
+Twist, Deform, Smooth and shapes combined by subtract or intersect are baked into the path
+while nothing in them moves.
+
+:::note[Left out]
+Cameras, lights, 3D models and 3D shapes, adjustment layers, Sequence layers, video, motion
+blur, layer styles, paint, puppet pins, stroke taper and every other effect. Mask feather
+in a Lottie. A 3D layer is drawn flat.
+:::
+
+Players blend colours as browsers do, not in linear light as Lumit does, which changes soft
+edges and see-through layers a little. The player shows the file as it is.
+
+## Import a Lottie
+
+A Lottie or a dotLottie picked in **File ▸ Import footage** (`Ctrl+I`), or dropped on the
+window, becomes a composition in one undo step. Its precomps arrive as compositions in a
+folder named after the file, and its pictures are written beside the file in a folder named
+after it. The **Import report** lists what didn't come across.
+
+## From the command line
+
+`lumit-cli export project.lum --comp Logo --out logo.json` writes a Lottie. The file's
+ending picks the format, or **--format** names it. See [Command line](/use/command-line/).
+Scripts and MCP use `export.vector` and `lottie.import`; see the
+[Scripting reference](/reference/scripting/).
+
+## Related
+
+- [Exporting](/use/export/)
+- [Shapes](/use/shapes/)
+- [Text](/use/text/)
+- [Command line](/use/command-line/)

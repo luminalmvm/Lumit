@@ -8,7 +8,8 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 **Export** writes a composition out as a file. One dialogue collects the settings, and a
-queue does the writing.
+queue does the writing. A composition written as shapes and keys rather than pixels is
+[Lottie and SVG](/use/lottie-and-svg/).
 
 ## Export a composition
 
@@ -82,6 +83,7 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | **ProRes 422 Proxy, LT, 422, HQ (.mov)** | Yes | Yes | No | 8 or 16 bit | No | Stated in the file | Yes |
 | **ProRes 4444, 4444 XQ (.mov)** | Yes | Yes | Yes | 8 or 16 bit | No | Stated in the file | Yes |
 | **GIF (.gif)** | Yes | No | Yes | 8 bit | No | None stated | No |
+| **WebP, WebP lossless (.webp)** | Yes | No | Yes | 8 bit | No | None stated | No |
 | **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
@@ -100,6 +102,10 @@ A GIF holds 256 colours. Three rows in **Picture** apply to a GIF and nothing el
 - **Plays**: **Forever**, or a number of times.
 
 A pixel under half alpha is clear and the rest are solid. **Alpha** is always **Straight**.
+A GIF is written at no more than 50 frames a second.
+
+A WebP keeps the whole of its alpha and plays forever. **WebP lossless** keeps every pixel
+exactly.
 
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
 has no container to carry metadata, so that section is disabled.
@@ -172,6 +178,7 @@ row reads back the configuration the project names and cannot be set from here.
 
 ## Related
 
+- [Lottie and SVG](/use/lottie-and-svg/)
 - [Preview and playback](/use/preview/)
 - [Compositions](/use/compositions/)
 - [Settings](/use/settings/)
