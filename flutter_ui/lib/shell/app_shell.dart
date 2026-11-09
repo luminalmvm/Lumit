@@ -1050,8 +1050,14 @@ class _LumitAppViewState extends State<LumitAppView> {
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);
+        if (ui.activePane.value case final pane? when handled) {
+          DockCommands.front(pane);
+        }
       case 'panel.focus.prev':
         handled = ui.cyclePanelFocus(-1);
+        if (ui.activePane.value case final pane? when handled) {
+          DockCommands.front(pane);
+        }
       case 'panel.search.focus':
         handled = ui.requestPanelSearch();
       case 'console.open':

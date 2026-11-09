@@ -23,6 +23,7 @@ import '../icons/icons.dart';
 import '../main.dart' show LumitNotice, LumitState, LumitUiState;
 import '../l10n/strings.dart';
 import '../panels/viewer_strips.dart' show viewerPaneCorners;
+import '../state/background.dart' show showWindow;
 import '../state/dock.dart';
 import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
@@ -242,6 +243,12 @@ abstract final class DockCommands {
 
   /// Put [pane] back in the main window.
   static bool dock(PaneId pane) => _dock(pane);
+
+  static void Function(PaneId pane) _front = (_) {};
+
+  /// Bring the window [pane] is in forward, for a key that moved the
+  /// keyboard there from another window.
+  static void front(PaneId pane) => _front(pane);
 }
 
 class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
@@ -328,6 +335,7 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     NativeWindows.moved = _movedByRunner;
     DockCommands._float = _floatKey;
     DockCommands._dock = _dockKey;
+    DockCommands._front = _frontKey;
     frontWindowOverlay = _frontOverlay;
     mainWindowOverlay = _mainOverlay;
     otherWindowOverlays = _otherOverlays;
@@ -370,6 +378,23 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     return true;
   }
 
+  void _frontKey(PaneId pane) {
+    final host = _hosts[windowOf(widget.root, pane)?.id];
+    if (host == null) {
+      // Only when a floating window has the keyboard: the main window is
+      // in front already otherwise.
+      if (_hosts.values.any((h) => h.window.isActivated)) {
+        unawaited(showWindow());
+      }
+    } else if (!host.window.isActivated) {
+      // Activating puts a maximised window back to its own size, so that
+      // one is asked to maximise again, which brings it forward as well.
+      host.window.isMaximised
+          ? host.window.setMaximised(true)
+          : host.window.activate();
+    }
+  }
+
   bool _dockKey(PaneId pane) {
     if (windowOf(widget.root, pane) == null) return false;
     _dockPane(pane);
@@ -396,6 +421,7 @@ class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
     if (NativeWindows.moved == _movedByRunner) NativeWindows.moved = null;
     if (DockCommands._float == _floatKey) DockCommands._float = (_) => false;
     if (DockCommands._dock == _dockKey) DockCommands._dock = (_) => false;
+    if (DockCommands._front == _frontKey) DockCommands._front = (_) {};
     if (frontWindowOverlay == _frontOverlay) frontWindowOverlay = null;
     if (mainWindowOverlay == _mainOverlay) mainWindowOverlay = null;
     if (otherWindowOverlays == _otherOverlays) otherWindowOverlays = null;
