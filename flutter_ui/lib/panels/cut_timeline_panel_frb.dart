@@ -1213,10 +1213,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final ui = _ui;
     if (ui == null || _claimed) return;
     _claimed = true;
-    _heldDelete = ui.deleteClaim;
-    _heldCopy = ui.copyClaim;
-    _heldCut = ui.cutClaim;
-    _heldPaste = ui.pasteClaim;
+    // A slot still holding this panel's own claim keeps what it held.
+    if (ui.deleteClaim != _deleteClaim) _heldDelete = ui.deleteClaim;
+    if (ui.copyClaim != _copyClaim) _heldCopy = ui.copyClaim;
+    if (ui.cutClaim != _cutClaim) _heldCut = ui.cutClaim;
+    if (ui.pasteClaim != _pasteClaim) _heldPaste = ui.pasteClaim;
     ui.deleteClaim = _deleteClaim;
     ui.copyClaim = _copyClaim;
     ui.cutClaim = _cutClaim;
@@ -1237,6 +1238,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// Whether the keys are this panel's to answer.
   bool get _keysAreOurs => mounted && _ui?.activePanel == Panel.cutTimeline;
 
+  /// A key that is not this panel's goes to the claim held beneath it. Two
+  /// panels can hold each other's, so a question already passing stops.
+  bool _passing = false;
+  bool _pass(bool Function()? held) {
+    if (_passing || held == null) return false;
+    _passing = true;
+    try {
+      return held();
+    } finally {
+      _passing = false;
+    }
+  }
+
   /// Delete: the picked clips go, and leave a gap, or close it while the
   /// Ripple switch is on.
   ///
@@ -1244,7 +1258,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// itself was picked by its head: a clip let go of must never turn the next
   /// Delete into one that removes its whole track.
   bool _deleteClaim() {
-    if (!_keysAreOurs) return false;
+    if (!_keysAreOurs) return _pass(_heldDelete);
     if (_selected.isEmpty) return !_headPicked;
     return _deleteSelected(ripple: _autoRipple);
   }
@@ -1252,6 +1266,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// Copy: the picked clips, and their links while Linked is on, are held
   /// by the engine for a paste. Says whether it took any.
   bool _copyClaim() {
+    if (!_keysAreOurs) return _pass(_heldCopy);
     final ui = _ui;
     final comp = ui?.selectedComp;
     if (!_keysAreOurs || ui == null || comp == null || _selected.isEmpty) {
@@ -1262,6 +1277,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// Cut: a copy, then the picked clips go and leave their room.
   bool _cutClaim() {
+    // Passed on before the copy, so another panel's answer deletes no clips.
+    if (!_keysAreOurs) return _pass(_heldCut);
     if (!_copyClaim()) return false;
     _deleteSelected(ripple: false);
     return true;
@@ -1271,6 +1288,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// there is one, and the playhead moves to their end. Nothing held leaves
   /// the chord to the layer clipboard.
   bool _pasteClaim() {
+    if (!_keysAreOurs) return _pass(_heldPaste);
     final ui = _ui;
     final comp = ui?.selectedComp;
     if (!_keysAreOurs || ui == null || comp == null) return false;
