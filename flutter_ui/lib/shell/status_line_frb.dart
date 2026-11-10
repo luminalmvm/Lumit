@@ -149,6 +149,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     // moves the meter too, coalesced to one repaint per half second.
     _ui.cacheChanged.addListener(_bumped);
     _ui.frameArrived.addListener(_bumped);
+    // A multicam sync reports every tenth of a second; the bar eases, so the
+    // coalesced repaint is enough.
+    _ui.multicam.working.addListener(_bumped);
     _syncTimer();
   }
 
@@ -305,6 +308,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     _ui.playing.removeListener(_tick);
     _ui.cacheChanged.removeListener(_bumped);
     _ui.frameArrived.removeListener(_bumped);
+    _ui.multicam.working.removeListener(_bumped);
     _timer?.cancel();
     _bump?.cancel();
     super.dispose();
@@ -415,6 +419,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 // a job follows the notice across a plain gap.
                 if (!roomed) const SizedBox(width: 8),
                 ..._job(t, _transcriptionSection(t)),
+                ..._job(t, _multicamSection(t)),
                 ..._job(t, _proxySection(t)),
                 ..._job(t, _exportSection(t)),
                 if (_outputPeakDb case final db?) ...[
@@ -941,6 +946,34 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         );
       },
     );
+  }
+
+  /// A multicam sync running with no window of its own showing it, drawn as
+  /// the export is: how far along, and a Cancel.
+  List<Widget> _multicamSection(LumitTheme t) {
+    final done = _ui.multicam.working.value;
+    if (done == null || _ui.multicam.shown) return const [];
+    return [
+      Flexible(
+        child: Text(
+          l10n.multicamSyncing,
+          key: const ValueKey('status-multicam-progress'),
+          style: t.small,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      const SizedBox(width: 8),
+      SizedBox(width: 120, child: HouseProgressBar(fraction: done)),
+      const SizedBox(width: 8),
+      HouseButton(
+        key: const ValueKey('status-multicam-cancel'),
+        small: true,
+        frameless: true,
+        onPressed: _ui.multicam.cancel,
+        child: Text(l10n.cancel, style: t.small),
+      ),
+      const SizedBox(width: 8),
+    ];
   }
 
   /// The running MAKE-PROXY, drawn exactly as the export beside it is:

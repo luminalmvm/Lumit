@@ -9130,6 +9130,175 @@
   "@sourceTitle": {
     "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
   },
+  "multicamNew": "New multicam comp…",
+  "@multicamNew": {
+    "description": "Project panel menu on footage, and the Composition menu: makes a multicam comp of the selected footage, its files synced so every camera and recorder is in step. Opens a short dialog."
+  },
+  "multicamMark": "Multicam",
+  "@multicamMark": {
+    "description": "Project panel menu on a composition: a tick that makes the comp a multicam comp, its Sequence layers its angles, or an ordinary comp again."
+  },
+  "multicamDialogTitle": "New multicam comp",
+  "@multicamDialogTitle": {
+    "description": "Title of the dialog that makes a multicam comp from the selected footage."
+  },
+  "multicamDefaultName": "{name} multicam",
+  "@multicamDefaultName": {
+    "description": "Name a new multicam comp starts with: the first selected footage item's name, then the word multicam.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "multicamSyncBy": "Sync by",
+  "@multicamSyncBy": {
+    "description": "New multicam comp dialog: label of the row choosing how the files are lined up in time."
+  },
+  "multicamSyncSound": "Sound",
+  "@multicamSyncSound": {
+    "description": "New multicam comp dialog, Sync by: line the files up by comparing their sound."
+  },
+  "multicamSyncTimecode": "Timecode",
+  "@multicamSyncTimecode": {
+    "description": "New multicam comp dialog, Sync by: line the files up by the timecode they were recorded with."
+  },
+  "multicamSyncInMarks": "In marks",
+  "@multicamSyncInMarks": {
+    "description": "New multicam comp dialog, Sync by: each file's In mark, set in the source view, is the same moment."
+  },
+  "multicamSyncMarkers": "Markers",
+  "@multicamSyncMarkers": {
+    "description": "New multicam comp dialog, Sync by: each file's first marker, set in the source view, is the same moment."
+  },
+  "multicamSyncOutMarks": "Out marks",
+  "@multicamSyncOutMarks": {
+    "description": "New multicam comp dialog, Sync by: each file's Out mark, set in the source view, is the same moment."
+  },
+  "multicamSyncStarts": "Starts",
+  "@multicamSyncStarts": {
+    "description": "New multicam comp dialog, Sync by: each angle's first file starts with the comp, and its other files follow on."
+  },
+  "multicamAngles": "Angles",
+  "@multicamAngles": {
+    "description": "New multicam comp dialog: label of the row choosing what makes one angle (one camera)."
+  },
+  "multicamEachFile": "Each file",
+  "@multicamEachFile": {
+    "description": "New multicam comp dialog, Angles: every file is an angle of its own."
+  },
+  "multicamEachFolder": "Each folder",
+  "@multicamEachFolder": {
+    "description": "New multicam comp dialog, Angles: the files in one folder on disk are one camera, one after another on one angle."
+  },
+  "multicamDrift": "Correct drift",
+  "@multicamDrift": {
+    "description": "New multicam comp dialog, a tick: a sound recorder whose clock runs slightly fast or slow against the cameras is played at the speed that keeps it in step."
+  },
+  "multicamMake": "Make",
+  "@multicamMake": {
+    "description": "New multicam comp dialog: the button that makes the comp."
+  },
+  "multicamUnsynced": "{count, plural, =1{{names} didn't sync} other{{count} files didn't sync: {names}}}",
+  "@multicamUnsynced": {
+    "description": "Status line after making or syncing a multicam comp: files that had nothing to line them up by, placed at the start of their angle. names is their file names, joined by commas.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "multicamUncertain": "{count, plural, =1{{names} may be out of sync} other{{count} files may be out of sync: {names}}}",
+  "@multicamUncertain": {
+    "description": "Status line after making or syncing a multicam comp: files placed on weak evidence, worth checking. names is their file names, joined by commas.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "multicamFailed": "Couldn't make the multicam comp",
+  "@multicamFailed": {
+    "description": "Status line when making a multicam comp failed."
+  },
+  "multicamSyncing": "Syncing",
+  "@multicamSyncing": {
+    "description": "Status line, beside the progress bar, while a multicam comp's files are being lined up and no window is showing the progress."
+  },
+  "anglesTitle": "Angles",
+  "@anglesTitle": {
+    "description": "Title of the Viewer's source side while it shows every angle of a multicam comp, as Source is its title for one footage item."
+  },
+  "anglesTimecode": "Timecode",
+  "@anglesTimecode": {
+    "description": "Angle viewer menu, a tick: each angle's own timecode on its picture."
+  },
+  "multicamBoth": "Picture and sound",
+  "@multicamBoth": {
+    "description": "Angle viewer, switch mode: clicking an angle switches the picture and the sound together. Also a tooltip."
+  },
+  "multicamPicture": "Picture",
+  "@multicamPicture": {
+    "description": "Angle viewer, switch mode: clicking an angle switches the picture only, and the sound stays on its angle."
+  },
+  "multicamSound": "Sound",
+  "@multicamSound": {
+    "description": "Angle viewer, switch mode: clicking an angle switches the sound only."
+  },
+  "multicamOpen": "Open multicam comp",
+  "@multicamOpen": {
+    "description": "Menu row on a multicam clip and on the angle viewer: opens the multicam comp itself, its angles as tracks, to fix their sync."
+  },
+  "anglesPrevious": "Previous angles",
+  "@anglesPrevious": {
+    "description": "Angle viewer: tooltip of the button showing the page of angles before this one, when there are more angles than fit."
+  },
+  "anglesNext": "Next angles",
+  "@anglesNext": {
+    "description": "Angle viewer: tooltip of the button showing the next page of angles."
+  },
+  "cutAngleMenu": "Angle",
+  "@cutAngleMenu": {
+    "description": "Cut timeline, right-click menu on a multicam clip: submenu listing the angles, the one the clip shows ticked."
+  },
+  "cutSoundAngleMenu": "Sound angle",
+  "@cutSoundAngleMenu": {
+    "description": "Cut timeline, right-click menu on a multicam clip: submenu listing the angles, the one its sound plays ticked."
+  },
+  "cutFlatten": "Flatten",
+  "@cutFlatten": {
+    "description": "Cut timeline, right-click menu on a multicam clip: puts the footage its angle plays in its place, as ordinary clips."
+  },
+  "cutJoin": "Join",
+  "@cutJoin": {
+    "description": "Cut timeline clip menu: join the clip with the clip either side that carries straight on from it, taking the cut away."
+  },
+  "cutAddSoundMenu": "Add sound",
+  "@cutAddSoundMenu": {
+    "description": "Cut timeline clip menu on a multicam clip, a submenu of angles: hear that angle's sound under the clip as well. A ticked angle is heard already; choosing it again takes it away."
+  },
+  "cutShowAngles": "Show angles",
+  "@cutShowAngles": {
+    "description": "Cut timeline, right-click menu on a multicam clip: shows every angle of its multicam comp in the Viewer's source side."
+  },
+  "multicamSyncToAngle": "Sync to angle",
+  "@multicamSyncToAngle": {
+    "description": "Cut timeline, track menu on an angle of a multicam comp: submenu of the other angles; lines this angle's files up again by their sound against the one picked."
+  },
+  "sourceAddMarker": "Add marker",
+  "@sourceAddMarker": {
+    "description": "Source view menu: puts a marker on the footage at the frame shown. Markers on footage can line files up in a multicam comp."
+  },
+  "sourceClearMarkers": "Clear markers",
+  "@sourceClearMarkers": {
+    "description": "Source view menu: takes every marker off the footage shown."
+  },
   "histSetMulticam": "Set multicam",
   "@histSetMulticam": {
     "description": "Edit > History step: a composition made a multicam comp, made ordinary again, or given other starting angles."

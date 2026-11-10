@@ -127,6 +127,17 @@ class ViewerSurface {
   int? sourceIn;
   int? sourceOut;
 
+  /// A footage view showing every angle of a multicam comp instead of one
+  /// item: [itemId] is then the comp's id. Not written down, for
+  /// [sourceFrame]'s reason, and the mode stays footage so the source side
+  /// is still the source side.
+  bool angles = false;
+
+  /// The angles a click picked for Insert and Overwrite while the angle
+  /// viewer stands on its own. Null reads as the comp's own starting angles.
+  UuidValue? anglePicture;
+  UuidValue? angleSound;
+
   // --- How this view is looking at it ------------------------------------
 
   /// Null means "fit", which is a rule rather than a number and has to be
@@ -186,7 +197,8 @@ class ViewerSurface {
 
   /// A 3D viewport's picture: the size it fills round the comp's middle,
   /// comp pixels, which its panel measures, and the share of its tier it is
-  /// drawn at so a wide pane costs at most twice the comp's pixels.
+  /// drawn at so a wide pane costs at most twice the comp's pixels. An
+  /// angle viewer keeps its grid's size here too, in screen pixels.
   (int, int) canvas = (0, 0);
   double canvasShare = 1;
 

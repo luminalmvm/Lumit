@@ -30,6 +30,7 @@ import '../shell/create_captions_dialog_frb.dart'
 import '../shell/speech_install_dialog_frb.dart' show transcribeWithPrompt;
 import '../shell/model_settings_dialog.dart'
     show modelLightNames, showDroppedModelSettingsFrb;
+import '../shell/multicam_dialog_frb.dart' show showMulticamDialogFrb;
 import '../shell/status_line_frb.dart';
 import '../state/dock.dart';
 import '../state/file_dialogs.dart';
@@ -43,6 +44,8 @@ enum _ProjectMenuAction {
   addToComp,
   revealInComp,
   newCompFromSelection,
+  newMulticam,
+  multicam,
   openInSource,
   toggleFolder,
   newFolder,
@@ -376,6 +379,17 @@ Future<void> showProjectMenuFrb({
   });
   final transcribing =
       Provider.of<LumitState>(context, listen: false).transcription.running;
+  // Whether the comp is a multicam comp, for its tick. Read as the menu opens.
+  final isMulticam = switch (item) {
+    ItemReference_Composition(:final field0) => () {
+        try {
+          return field0.isMulticam();
+        } catch (_) {
+          return false;
+        }
+      }(),
+    _ => false,
+  };
   // Where Reveal in composition can go: a list of them when there are two.
   final usedIn = several || item is ItemReference_Folder
       ? const <(CompositionReference, String)>[]
@@ -434,6 +448,8 @@ Future<void> showProjectMenuFrb({
                   key: 'comp-settings',
                   chord: 'comp.settings',
                   enabled: !several),
+              row(_ProjectMenuAction.multicam, l10n.multicamMark,
+                  key: 'multicam', enabled: !several, ticked: isMulticam),
               row(_ProjectMenuAction.export, l10n.menuExport,
                   key: 'export', enabled: !several),
             ],
@@ -466,6 +482,8 @@ Future<void> showProjectMenuFrb({
               row(_ProjectMenuAction.newCompFromSelection,
                   l10n.projectNewCompFromSelection,
                   key: 'new-comp'),
+              row(_ProjectMenuAction.newMulticam, l10n.multicamNew,
+                  key: 'new-multicam'),
               if (openComp != null && hasAudio)
                 row(_ProjectMenuAction.addAudioOnly, l10n.addAudioOnly,
                     key: 'add-audio-only'),
@@ -738,6 +756,20 @@ Future<void> showProjectMenuFrb({
         for (final target in acts)
           if (target case ItemReference_Footage(:final field0)) field0,
       ]);
+    case _ProjectMenuAction.newMulticam:
+      await showMulticamDialogFrb(context: context, items: [
+        for (final target in acts)
+          if (target case ItemReference_Footage(:final field0)) field0,
+      ]);
+    case _ProjectMenuAction.multicam:
+      if (item case ItemReference_Composition(:final field0)) {
+        try {
+          field0.setMulticam(on_: !isMulticam);
+        } catch (_) {
+          // The comp went as the menu closed.
+        }
+        onLocalEdit();
+      }
     case _ProjectMenuAction.openInSource:
       if (item case ItemReference_Footage(:final field0)) {
         ui.openFootageView(field0);

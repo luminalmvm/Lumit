@@ -224,7 +224,19 @@ double cutOpacityY(double opacity, double height) =>
 /// on are part of the key, so a take, a head trim, a slip or a re-speed
 /// fetches again, and a move along the comp keeps the pictures it has.
 String cutThumbKey(BridgeClip clip) => '${clip.id}@${clip.source}'
+    '@${clip.angle?.id}'
     '@${clip.sourceIn.num}/${clip.sourceIn.den}@${clip.retime.hashCode}';
+
+/// Whether the join of [a] and [b] on one row is a through edit: a cut with
+/// nothing changed across it. [b] starts where [a] ends, both play the same
+/// source, [b] carries straight on in it from where [a] stops, and neither
+/// is retimed. A cut between two angles of one multicam clip is one.
+bool cutThroughEdit(BridgeClip a, BridgeClip b) =>
+    a.source == b.source &&
+    a.endFrame == b.startFrame &&
+    a.sourceOut == b.sourceIn &&
+    !a.retimed &&
+    !b.retimed;
 
 /// How far apart the pictures along a clip are asked for, in pixels. The
 /// painter draws whole frames and takes the nearest one it has.
