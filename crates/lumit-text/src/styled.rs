@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use lumit_core::mask::MaskPolyline;
 use lumit_core::model::LinearColour;
-use lumit_core::text::{Caps, GlyphXform, Kerning, Script, TextAlign};
+use lumit_core::text::{AxisSpacing, Caps, GlyphXform, Kerning, Script, TextAlign};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::MetadataProvider;
@@ -54,6 +54,12 @@ struct Placed {
     advance: f32,
     /// Px per font unit, before the style's own scale.
     scale: f32,
+    /// The place on the font's axes an animator set this letter at, as an
+    /// index into [`Laid::places`]. `None` is the layer's own place.
+    place: Option<usize>,
+    /// How far the letter is drawn off its pen position, which is how a letter
+    /// grows about its middle under Per character spacing.
+    nudge: f32,
 }
 
 struct Line {
@@ -80,6 +86,8 @@ struct Laid {
     size: f32,
     scale_x: f32,
     scale_y: f32,
+    /// The places on the font's axes the animators set letters at.
+    places: Vec<harfrust::Font>,
 }
 
 impl Laid {
@@ -314,6 +322,8 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
                     dy: -lift - dy,
                     advance,
                     scale,
+                    place: None,
+                    nudge: 0.0,
                 });
                 match spans.last_mut() {
                     Some(span) if span.0 == k => span.2 = pen + advance,
@@ -491,11 +501,120 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         size,
         scale_x,
         scale_y,
+        places: Vec::new(),
+    }
+}
+
+/// The face a block names, at the layer's own place on its axes.
+fn face_of(block: &TextBlock<'_>) -> std::sync::Arc<Face> {
+    let face = crate::fonts::face(&block.style.family, &block.style.face);
+    if block.style.axes.is_empty() {
+        face
+    } else {
+        std::sync::Arc::new(face.with_axes(&block.style.axes))
+    }
+}
+
+/// How close two places on an axis may be and still share one font: a
+/// hundredth of a unit, far finer than an eye can tell apart.
+fn place_key(moves: &[([u8; 4], f32)]) -> Vec<([u8; 4], i32)> {
+    #[allow(clippy::cast_possible_truncation)] // a place on an axis, far inside i32
+    moves
+        .iter()
+        .map(|(tag, v)| (*tag, (v * 100.0).round() as i32))
+        .collect()
+}
+
+/// **Letters set at their own place on the font's axes.** Each letter an
+/// animator moves on an axis is given that place, and the room it takes
+/// changes with it: a bold letter is wider than a light one. How the line
+/// makes that room is the layer's Variable font spacing.
+///
+/// The words are shaped at the layer's own place, so kerning and the breaks
+/// of a wrapped paragraph are the layer's, and only the letters' own widths
+/// change here.
+fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block: &TextBlock<'_>) {
+    if xforms.iter().all(|x| x.axes.is_empty()) {
+        return;
+    }
+    // The shaper's own advances, which a font without an advance table still
+    // varies through its outlines' end points, the way it shaped the line.
+    let base_shaper = harfrust::ShaperFont::new(&face.shaper);
+    let mut keys: Vec<Vec<([u8; 4], i32)>> = Vec::new();
+    // The width each letter gains, by its place in `laid.glyphs`.
+    let mut gains = vec![0.0f32; laid.glyphs.len()];
+    let base = |tag: [u8; 4]| face.place_on(tag).unwrap_or(f32::NAN);
+    for (g, glyph) in laid.glyphs.iter_mut().enumerate() {
+        let Some(x) = xforms.get(glyph.ch) else {
+            continue;
+        };
+        let moves: Vec<([u8; 4], f32)> = x
+            .axes
+            .resolved(&base)
+            .filter(|(_, v)| v.is_finite())
+            .collect();
+        if moves.is_empty() {
+            continue;
+        }
+        let key = place_key(&moves);
+        let place = if let Some(i) = keys.iter().position(|k| *k == key) {
+            i
+        } else {
+            keys.push(key);
+            laid.places.push(face.varied(&moves));
+            laid.places.len() - 1
+        };
+        glyph.place = Some(place);
+        let Some(varied) = laid.places.get(place) else {
+            continue;
+        };
+        let id = harfrust::GlyphId::new(glyph.glyph);
+        let now = harfrust::ShaperFont::new(varied).glyph_h_advance(id);
+        let was = base_shaper.glyph_h_advance(id);
+        if let Some(gain) = gains.get_mut(g) {
+            #[allow(clippy::cast_precision_loss)] // font units, far inside f32
+            {
+                *gain = (now - was) as f32 * glyph.scale * laid.scale_x;
+            }
+        }
+    }
+    match block.style.axis_spacing {
+        AxisSpacing::PerCharacter => {
+            for (glyph, gain) in laid.glyphs.iter_mut().zip(&gains) {
+                glyph.nudge = -gain * 0.5;
+            }
+        }
+        spacing @ (AxisSpacing::Adaptive | AxisSpacing::Default) => {
+            // Line by line, every letter is pushed on by what the letters
+            // before it on the line gained.
+            let mut pushed = vec![0.0f32; laid.lines.len().max(1)];
+            for (glyph, gain) in laid.glyphs.iter_mut().zip(&gains) {
+                let Some(push) = pushed.get_mut(glyph.line) else {
+                    continue;
+                };
+                glyph.x += *push;
+                glyph.advance += gain;
+                *push += gain;
+            }
+            // Adaptive lines each line up again by what it gained in all.
+            if spacing == AxisSpacing::Adaptive {
+                let share = match block.paragraph.align {
+                    TextAlign::Left => 0.0,
+                    TextAlign::Centre => 0.5,
+                    TextAlign::Right => 1.0,
+                };
+                for glyph in &mut laid.glyphs {
+                    if let Some(gain) = pushed.get(glyph.line) {
+                        glyph.x -= gain * share;
+                    }
+                }
+            }
+        }
     }
 }
 
 pub(crate) fn layout(block: &TextBlock<'_>, animated: bool) -> BlockLayout {
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
+    let face = face_of(block);
     let laid = lay(block, &face);
     let margin = if animated {
         animator_margin(laid.size)
@@ -632,7 +751,11 @@ fn placements(
         let Some(place) = run.place(laid, glyph, flat_x) else {
             continue;
         };
-        let matrix = animated(glyph_matrix(glyph, laid, slanted), glyph.advance, &x);
+        let matrix = animated(
+            glyph_matrix(glyph, laid, slanted).then_translate(glyph.nudge, 0.0),
+            glyph.advance,
+            &x,
+        );
         out.push((i, matrix.then(&place), x));
     }
     out
@@ -708,6 +831,9 @@ fn paint<'s>(
     }
 }
 
+/// Draw the laid words into a `w` × `h` raster, `zoom` raster pixels to each
+/// of the layer's own: a layer shown larger than its own size is drawn that
+/// large, so its letters stay sharp.
 fn draw(
     block: &TextBlock<'_>,
     face: &Face,
@@ -715,6 +841,7 @@ fn draw(
     run: &Run<'_>,
     xforms: &[GlyphXform],
     (w, h): (u32, u32),
+    zoom: f32,
 ) -> Vec<u8> {
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
     let Some(font) = face.font() else {
@@ -723,13 +850,16 @@ fn draw(
     let style = block.style;
     let outlines = font.outline_glyphs();
     let location = LocationRef::new(face.shaper.normalized_coords());
-    let mut paths: HashMap<u32, Vec<Command>> = HashMap::new();
+    // A letter is drawn at its own place on the font's axes, so one shape
+    // per glyph and place.
+    let mut paths: HashMap<(u32, Option<usize>), Vec<Command>> = HashMap::new();
     let stroke_colour = lumit_core::pixels::solid_rgba(style.stroke);
     let stroke_width = finite(style.stroke_width).max(0.0);
 
-    let mut outline = Stroke::new(stroke_width);
+    // Widths in the layer's own pixels, drawn `zoom` times as wide.
+    let mut outline = Stroke::new(stroke_width * zoom);
     outline.join(Join::Miter).miter_limit(4.0).scale(false);
-    let mut bold = Stroke::new(laid.size * FAUX_BOLD);
+    let mut bold = Stroke::new(laid.size * FAUX_BOLD * zoom);
     bold.join(Join::Round).scale(false);
     let stroked = style.stroke_on && stroke_width > 0.0;
     // Letter by letter, each letter's fill and outline go down together. All
@@ -747,10 +877,15 @@ fn draw(
             (upper, lower)
         };
         for (i, matrix, x) in placements(laid, run, xforms, style.faux_italic) {
+            let matrix = matrix.then_scale(zoom, zoom);
             let Some(glyph) = laid.glyphs.get(i) else {
                 continue;
             };
-            let path = paths.entry(glyph.glyph).or_insert_with(|| {
+            let path = paths.entry((glyph.glyph, glyph.place)).or_insert_with(|| {
+                let location = glyph
+                    .place
+                    .and_then(|p| laid.places.get(p))
+                    .map_or(location, |f| LocationRef::new(f.normalized_coords()));
                 let mut pen = Path(Vec::new());
                 if let Some(outline) = outlines.get(skrifa::GlyphId::new(glyph.glyph)) {
                     // A glyph that fails to draw is left out, the frame carries on.
@@ -792,14 +927,28 @@ fn draw(
 }
 
 pub(crate) fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
-    let laid = lay(block, &face);
+    rasterise_zoomed(block, xforms, 1.0, None)
+}
+
+/// [`rasterise`] drawn `zoom` times as large, the raster's own size grown
+/// with it. `fit` lays the words into another raster's frame instead of the
+/// styled one's: its left edge and first baseline, and its size, in the
+/// layer's own pixels. That is how an unstyled line, which the plain path
+/// lays out and crops tighter, is drawn larger exactly where it sat.
+pub(crate) fn rasterise_zoomed(
+    block: &TextBlock<'_>,
+    xforms: &[GlyphXform],
+    zoom: f32,
+    fit: Option<([f32; 2], (u32, u32))>,
+) -> RasterText {
+    let face = face_of(block);
+    let mut laid = lay(block, &face);
+    respace(&mut laid, &face, xforms, block);
     let margin = if xforms.is_empty() {
         0.0
     } else {
         animator_margin(laid.size)
     };
-    let (width, height) = laid.raster_size(margin);
     if laid.glyphs.is_empty() {
         return RasterText {
             width: 1,
@@ -807,16 +956,26 @@ pub(crate) fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterT
             rgba: vec![0; 4],
         };
     }
-    let run = Run::Straight {
-        origin: laid.origin(margin),
+    let first = laid.lines.first().map_or(0.0, |l| l.baseline);
+    let (origin, (width, height)) = match fit {
+        Some(([left, baseline], size)) => ([left, baseline - first], size),
+        None => (laid.origin(margin), laid.raster_size(margin)),
     };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
+    let (width, height) = (
+        (width as f32 * zoom).round().max(1.0) as u32,
+        (height as f32 * zoom).round().max(1.0) as u32,
+    );
+    let run = Run::Straight { origin };
     RasterText {
         width,
         height,
-        rgba: draw(block, &face, &laid, &run, xforms, (width, height)),
+        rgba: draw(block, &face, &laid, &run, xforms, (width, height), zoom),
     }
 }
 
+/// A block along `path` into a `width` × `height` raster of the layer's own
+/// pixels, drawn `zoom` times as large (the raster with it).
 pub(crate) fn rasterise_on_path(
     block: &TextBlock<'_>,
     path: &MaskPolyline,
@@ -824,8 +983,13 @@ pub(crate) fn rasterise_on_path(
     width: u32,
     height: u32,
     xforms: &[GlyphXform],
+    zoom: f32,
 ) -> RasterText {
-    let (w, h) = (width.max(1), height.max(1));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
+    let (w, h) = (
+        (width.max(1) as f32 * zoom).round().max(1.0) as u32,
+        (height.max(1) as f32 * zoom).round().max(1.0) as u32,
+    );
     if path.is_empty() || !path.length().is_finite() {
         return RasterText {
             width: w,
@@ -833,13 +997,14 @@ pub(crate) fn rasterise_on_path(
             rgba: vec![0u8; (w as usize) * (h as usize) * 4],
         };
     }
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
-    let laid = lay(block, &face);
+    let face = face_of(block);
+    let mut laid = lay(block, &face);
+    respace(&mut laid, &face, xforms, block);
     let run = Run::Along { path, offset };
     RasterText {
         width: w,
         height: h,
-        rgba: draw(block, &face, &laid, &run, xforms, (w, h)),
+        rgba: draw(block, &face, &laid, &run, xforms, (w, h), zoom),
     }
 }
 
@@ -848,7 +1013,7 @@ pub(crate) fn outlines(
     path: Option<&MaskPolyline>,
     offset: f32,
 ) -> Vec<GlyphOutline> {
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
+    let face = face_of(block);
     let Some(font) = face.font() else {
         return Vec::new();
     };

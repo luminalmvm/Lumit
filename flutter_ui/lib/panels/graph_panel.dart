@@ -701,7 +701,14 @@ GraphLayout _layoutOf(
     } else {
       chainX += shut + _chainAir;
     }
-    final open = exposed.contains(key) || isDriver;
+    final textSource =
+        node.node is BridgeNodeRef_Source && node.inputs.isNotEmpty;
+    // A Text layer's Source carries its animators' numbers as sockets and has
+    // no twirl to open it by, so it stands open: a shut box draws only the
+    // sockets already wired, which would leave nothing to wire to.
+    final open = exposed.contains(key) ||
+        isDriver ||
+        textSource;
     // Open, every row under its group's heading; shut, the rows that tell
     // something: a wire on them, a key, or a value off its default.
     final rows = held == null
@@ -733,11 +740,11 @@ GraphLayout _layoutOf(
       width: graphBoxWidth(
           node.node is BridgeNodeRef_Out
           ? graphOutNodeWidth
-          : rows.isEmpty
+          : rows.isEmpty && !textSource
               ? graphNodeWidth
               : graphNodeOpenWidth,
           widths[key],
-          open: rows.isNotEmpty),
+          open: rows.isNotEmpty || textSource),
       foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
       colour: colours[key] ?? 0,
       collapsed: folded.contains(key),

@@ -101,6 +101,9 @@ pub struct BridgeTextStyle {
     /// The face inside the family, such as "Bold Italic". Empty is the
     /// family's regular face.
     pub face: String,
+    /// A variable font's axes, set for the whole layer on top of the face.
+    pub axes: Vec<BridgeFontAxisValue>,
+    pub axis_spacing: BridgeAxisSpacing,
     /// Baseline to baseline in px. Unset is auto, 120 % of the size.
     pub leading: Option<f64>,
     pub kerning: BridgeKerning,
@@ -188,9 +191,21 @@ pub enum BridgeSelectorBasis {
 pub enum BridgeSelectorShape {
     Square,
     Ramp,
+    Smooth,
 }
 
-/// Which stretch of the words an animator reaches, in per cent of the run.
+/// How a selector picks its letters: by place in the words, or by how near
+/// they are to a target layer.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorKind {
+    Range,
+    Proximity,
+    Wiggly,
+}
+
+/// Which stretch of the words an animator reaches, in per cent of the run, or
+/// for a Proximity selector which letters are near its target.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeRangeSelector {
@@ -199,6 +214,91 @@ pub struct BridgeRangeSelector {
     pub offset: BridgeScalar,
     pub basis: BridgeSelectorBasis,
     pub shape: BridgeSelectorShape,
+    pub kind: BridgeSelectorKind,
+    /// The layer a Proximity selector measures from, in the same comp.
+    pub target: Option<Uuid>,
+    /// Px in the text layer's own pixels.
+    pub radius: BridgeScalar,
+    pub invert: bool,
+    /// A Wiggly selector: the range of weights, per cent, how often they
+    /// change course a second, how much the letters wander together, per
+    /// cent, and which wander.
+    pub min_amount: BridgeScalar,
+    pub max_amount: BridgeScalar,
+    pub wiggles: BridgeScalar,
+    pub correlation: BridgeScalar,
+    pub seed: u32,
+}
+
+/// One font axis an animator moves its letters along: a tag such as `wght`
+/// and the place on it, in the font's own numbers.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeAnimatorAxis {
+    pub tag: String,
+    pub value: BridgeScalar,
+}
+
+/// A place the whole layer is set at on one of its font's axes.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeFontAxisValue {
+    pub tag: String,
+    pub value: f64,
+}
+
+/// How letters make room for each other while animators move them on the
+/// font's axes: Variable font spacing.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeAxisSpacing {
+    Adaptive,
+    PerCharacter,
+    Default,
+}
+
+/// One axis of a variable font, as the Text panel shows it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeFontAxis {
+    /// The four-letter tag, such as `wght`.
+    pub tag: String,
+    /// What the font calls it, such as "Weight".
+    pub name: String,
+    pub min: f64,
+    pub max: f64,
+    /// The font's own default place on it.
+    pub default_value: f64,
+    /// Where the chosen face sits on it, which an unset axis reads as.
+    pub face: f64,
+    /// An axis the font asks not to be shown.
+    pub hidden: bool,
+}
+
+/// The axes of a family's face: empty for a font that doesn't vary, or one
+/// not installed here. Not sync, since it may read the font's file.
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn text_font_axes(family: String, face: String) -> Vec<BridgeFontAxis> {
+    lumit_text::fonts::axes(&family, &face)
+        .into_iter()
+        .map(|a| BridgeFontAxis {
+            tag: a.tag,
+            name: a.name,
+            min: a.min,
+            max: a.max,
+            default_value: a.default,
+            face: a.face,
+            hidden: a.hidden,
+        })
+        .collect()
+}
+
+/// The installed families with axes of their own, for the Text panel's
+/// Variable fonts only filter.
+#[must_use]
+pub fn text_variable_font_families() -> Vec<String> {
+    lumit_text::fonts::variable_families()
 }
 
 /// One animator group: what a reached letter is asked to do, and the range
@@ -224,6 +324,12 @@ pub struct BridgeTextAnimator {
     pub fill_r: BridgeScalar,
     pub fill_g: BridgeScalar,
     pub fill_b: BridgeScalar,
+    /// The font axes the reached letters are set along, at most eight on a
+    /// layer.
+    pub axes: Vec<BridgeAnimatorAxis>,
+    /// The property groups the animator lists, in the order added; `None`
+    /// lists them all.
+    pub properties: Option<Vec<String>>,
 }
 
 /// A solid asset's definition.
@@ -859,6 +965,19 @@ fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
     BridgeTextStyle {
         family: style.family.clone(),
         face: style.face.clone(),
+        axes: style
+            .axes
+            .iter()
+            .map(|a| BridgeFontAxisValue {
+                tag: a.tag.clone(),
+                value: a.value,
+            })
+            .collect(),
+        axis_spacing: match style.axis_spacing {
+            lumit_core::text::AxisSpacing::Adaptive => BridgeAxisSpacing::Adaptive,
+            lumit_core::text::AxisSpacing::PerCharacter => BridgeAxisSpacing::PerCharacter,
+            lumit_core::text::AxisSpacing::Default => BridgeAxisSpacing::Default,
+        },
         leading: style.leading,
         kerning: match style.kerning {
             Kerning::Off => BridgeKerning::Off,
@@ -895,6 +1014,20 @@ fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
     lumit_core::text::TextStyle {
         family: style.family,
         face: style.face,
+        axes: style
+            .axes
+            .into_iter()
+            .filter(|a| a.value.is_finite() && lumit_core::text::axis_tag(&a.tag).is_some())
+            .map(|a| lumit_core::text::FontAxisValue {
+                tag: a.tag,
+                value: a.value,
+            })
+            .collect(),
+        axis_spacing: match style.axis_spacing {
+            BridgeAxisSpacing::Adaptive => lumit_core::text::AxisSpacing::Adaptive,
+            BridgeAxisSpacing::PerCharacter => lumit_core::text::AxisSpacing::PerCharacter,
+            BridgeAxisSpacing::Default => lumit_core::text::AxisSpacing::Default,
+        },
         leading: style.leading.filter(|l| l.is_finite() && *l >= 0.0),
         kerning: match style.kerning {
             BridgeKerning::Off => Kerning::Off,

@@ -323,7 +323,7 @@ fn styled_text_runs_along_a_path_and_converts_to_outlines() {
         expansion: 0.0,
         corners: Vec::new(),
     };
-    let r = rasterise_on_path(&b, &path, 0.0, 420, 200, &[]);
+    let r = rasterise_on_path(&b, &path, 0.0, 420, 200, &[], 1.0);
     assert_eq!((r.width, r.height), (420, 200));
     assert!(ink(&r) > 10_000);
     // The ink sits on the path's baseline, not at the top of the box.
@@ -339,4 +339,172 @@ fn styled_text_runs_along_a_path_and_converts_to_outlines() {
     assert!(lumit_core::shape::modifier::items(&groups)
         .iter()
         .all(|i| i.stroke.is_some() && i.stroke_width.value_at(0.0) == 3.0));
+}
+
+/// Bahnschrift, the variable font every Windows has, or `None` where it
+/// isn't installed and the test has nothing to measure.
+fn bahnschrift() -> Option<TextStyle> {
+    crate::fonts::is_variable("Bahnschrift").then(|| TextStyle {
+        family: "Bahnschrift".into(),
+        ..TextStyle::default()
+    })
+}
+
+/// The animators' answer for every letter of `text`: set on `tag` at `value`,
+/// all of them.
+fn axis_everywhere(text: &str, tag: [u8; 4], value: f32) -> Vec<GlyphXform> {
+    let mut x = vec![GlyphXform::default(); text.chars().count()];
+    for g in &mut x {
+        g.axes.mix(tag, value, 1.0);
+    }
+    x
+}
+
+/// The left and right edges of a raster's ink.
+fn ink_span(r: &RasterText) -> (u32, u32) {
+    let (mut lo, mut hi) = (u32::MAX, 0);
+    for y in 0..r.height {
+        for x in 0..r.width {
+            if r.rgba[((y * r.width + x) * 4 + 3) as usize] > 0 {
+                lo = lo.min(x);
+                hi = hi.max(x);
+            }
+        }
+    }
+    (lo, hi)
+}
+
+/// **A variable font lists its axes**, with the face's own place on each.
+#[test]
+fn a_variable_font_lists_its_axes() {
+    let Some(_) = bahnschrift() else { return };
+    let axes = crate::fonts::axes("Bahnschrift", "Bold");
+    let weight = axes
+        .iter()
+        .find(|a| a.tag == "wght")
+        .expect("a weight axis");
+    assert!(
+        weight.min < weight.face && weight.face <= weight.max,
+        "{weight:?}"
+    );
+    assert!(weight.face > 600.0, "Bold sits heavy: {weight:?}");
+    assert!(
+        crate::fonts::axes("", "").is_empty(),
+        "the built-in font doesn't vary"
+    );
+}
+
+/// **The layer's own axes change the letters**: a heavier weight inks more.
+#[test]
+fn the_layers_axes_set_the_letters() {
+    let Some(light) = bahnschrift() else { return };
+    let paragraph = ParagraphStyle::default();
+    let heavy = TextStyle {
+        axes: vec![lumit_core::text::FontAxisValue {
+            tag: "wght".into(),
+            value: 700.0,
+        }],
+        ..light.clone()
+    };
+    let thin = rasterise(&block("Lumit", &light, &paragraph), &[]);
+    let thick = rasterise(&block("Lumit", &heavy, &paragraph), &[]);
+    assert!(
+        ink(&thick) > ink(&thin) * 11 / 10,
+        "{} vs {}",
+        ink(&thick),
+        ink(&thin)
+    );
+}
+
+/// **An animator's axis sets each letter at its own place**: a heavier
+/// weight inks more, letter by letter.
+#[test]
+fn an_animators_weight_sets_the_letters() {
+    let Some(style) = bahnschrift() else { return };
+    let paragraph = ParagraphStyle::default();
+    let text = "Lumit";
+    let light = rasterise(
+        &block(text, &style, &paragraph),
+        &axis_everywhere(text, *b"wght", 300.0),
+    );
+    let heavy = rasterise(
+        &block(text, &style, &paragraph),
+        &axis_everywhere(text, *b"wght", 700.0),
+    );
+    assert!(ink(&heavy) > ink(&light) * 11 / 10);
+}
+
+/// **Variable font spacing decides the room** a narrower letter leaves:
+/// Per character keeps every letter's middle where it was, Default closes the
+/// line up from its start.
+#[test]
+fn the_spacing_decides_the_room_a_narrower_letter_leaves() {
+    let Some(style) = bahnschrift() else { return };
+    let paragraph = ParagraphStyle::default();
+    let text = "WWWW";
+    let wide = axis_everywhere(text, *b"wdth", 100.0);
+    let narrow = axis_everywhere(text, *b"wdth", 75.0);
+    let base = ink_span(&rasterise(&block(text, &style, &paragraph), &wide));
+    let per = TextStyle {
+        axis_spacing: lumit_core::text::AxisSpacing::PerCharacter,
+        ..style.clone()
+    };
+    let closed = TextStyle {
+        axis_spacing: lumit_core::text::AxisSpacing::Default,
+        ..style.clone()
+    };
+    let kept = ink_span(&rasterise(&block(text, &per, &paragraph), &narrow));
+    let shut = ink_span(&rasterise(&block(text, &closed, &paragraph), &narrow));
+    let middle = |s: (u32, u32)| (s.0 + s.1) / 2;
+    assert!(
+        middle(kept).abs_diff(middle(base)) <= 3,
+        "{kept:?} vs {base:?}"
+    );
+    assert!(shut.0.abs_diff(base.0) <= 3, "{shut:?} vs {base:?}");
+    assert!(
+        (kept.1 - kept.0) > (shut.1 - shut.0) + 20,
+        "{kept:?} vs {shut:?}"
+    );
+}
+
+/// The middle of a raster's ink, in its own pixels.
+fn ink_middle(r: &RasterText) -> [f64; 2] {
+    let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
+    for y in 0..r.height {
+        for x in 0..r.width {
+            let a = f64::from(r.rgba[((y * r.width + x) * 4 + 3) as usize]);
+            sx += a * f64::from(x);
+            sy += a * f64::from(y);
+            n += a;
+        }
+    }
+    [sx / n, sy / n]
+}
+
+/// **Text shown larger is drawn larger**: four times as many pixels a side,
+/// the same letters in the same place of the layer, plain line or styled.
+#[test]
+fn text_shown_larger_is_drawn_larger_in_the_same_place() {
+    let paragraph = ParagraphStyle::default();
+    for style in [TextStyle::default(), kerned()] {
+        let b = block("Lumit", &style, &paragraph);
+        let (small, size) = crate::rasterise_at(&b, &[], 1.0);
+        let (large, own) = crate::rasterise_at(&b, &[], 4.0);
+        assert_eq!(size, own, "the layer keeps its own size");
+        assert_eq!((small.width, small.height), size);
+        assert!(
+            large.width.abs_diff(size.0 * 4) <= 1,
+            "{} vs {:?}",
+            large.width,
+            size
+        );
+        assert!(large.height.abs_diff(size.1 * 4) <= 1);
+        let ratio = ink(&large) as f64 / ink(&small) as f64;
+        assert!((14.0..18.0).contains(&ratio), "{ratio}");
+        let (a, b) = (ink_middle(&small), ink_middle(&large));
+        assert!(
+            (a[0] - b[0] / 4.0).abs() < 1.0 && (a[1] - b[1] / 4.0).abs() < 1.0,
+            "{a:?} {b:?}"
+        );
+    }
 }

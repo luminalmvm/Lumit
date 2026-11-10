@@ -1541,7 +1541,7 @@ fn text_carriage(
         return (Vec::new(), Some(Box::new(label)));
     }
 
-    let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+    let xforms = lumit_core::text::layer_glyph_xforms(doc, comp, layer, document, &line, t_comp);
     let spine = document
         .path
         .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
@@ -1970,6 +1970,7 @@ fn comp_walk(
     // Measure and `sourceRectAtTime` read a Text layer's words through this,
     // and every render comes through here before a driver is asked.
     lumit_core::text::install_words_box(lumit_text::words_box);
+    lumit_core::text::install_glyph_middles(lumit_text::glyph_middles);
     // The frame's own pixels, kept for a probe at another moment to find its
     // clip in.
     let frame_pixels = pixels_by_layer;
@@ -2172,29 +2173,56 @@ fn comp_walk(
                 // keyframed numbers at this layer time; a layer with none hands
                 // back an empty list and the rasteriser takes the path it
                 // always took, byte for byte.
-                let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+                let xforms =
+                    lumit_core::text::layer_glyph_xforms(doc, comp, layer, document, &line, t_comp);
                 // An unstyled single line draws the way it always has. A
                 // styled one, or one with a line break, is set by the shaper.
                 let block = lumit_text::TextBlock::of(document, &line);
-                let r = match &spine {
+                // **Continuously rasterised**, as a shape layer is: the words
+                // are drawn as large as the layer and its parents show them,
+                // so a small text scaled up never blurs. The placement keeps
+                // the layer's own size, and a raster too big to hold is drawn
+                // at the most it can be.
+                let shown =
+                    shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
+                let room = |w: u32, h: u32| {
+                    (SHAPE_RASTER_PIXELS / (f64::from(w.max(1)) * f64::from(h.max(1))))
+                        .sqrt()
+                        .max(1.0)
+                };
+                let (r, natural) = match &spine {
                     Some(path) => {
                         let (w, h) = lumit_text::path_box(path, size);
-                        lumit_text::rasterise_along(
+                        let zoom = f64::from(shown).clamp(1.0, room(w, h)) as f32;
+                        let r = lumit_text::rasterise_along_at(
                             &block,
                             path,
                             document.path_offset.value_at(lt) as f32,
                             w,
                             h,
                             &xforms,
-                        )
+                            zoom,
+                        );
+                        (r, (w.max(1), h.max(1)))
                     }
-                    None => lumit_text::rasterise(&block, &xforms),
+                    // Shown at its own size or smaller, the layer is drawn as it
+                    // always was, without laying it out twice.
+                    None if shown <= 1.0 => {
+                        let r = lumit_text::rasterise(&block, &xforms);
+                        let size = (r.width, r.height);
+                        (r, size)
+                    }
+                    None => {
+                        let own = lumit_text::layout(&block, !xforms.is_empty());
+                        let zoom = f64::from(shown).clamp(1.0, room(own.width, own.height)) as f32;
+                        lumit_text::rasterise_at(&block, &xforms, zoom)
+                    }
                 };
                 (
                     Arc::new(r.rgba),
                     r.width,
                     r.height,
-                    (r.width as f32, r.height as f32),
+                    (natural.0 as f32, natural.1 as f32),
                 )
             }),
             // Vector art: rasterised at the size the frame is being drawn at,

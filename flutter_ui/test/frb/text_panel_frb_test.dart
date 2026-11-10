@@ -49,7 +49,12 @@ void main() {
       (layer.getTransform().anchorX as BridgeScalar_Static).field0;
 
   test('the plain style held in Dart is the engine\'s own', () {
-    expect(plainTextStyle, defaultTextStyle());
+    // A list is compared by identity in the generated classes, so the axes,
+    // empty on both sides, are held together on their own.
+    final engine = defaultTextStyle();
+    expect(plainTextStyle.axes, isEmpty);
+    expect(engine.axes, isEmpty);
+    expect(plainTextStyle.copyWith(axes: engine.axes), engine);
     expect(plainParagraphStyle, defaultParagraphStyle());
   });
 
@@ -162,6 +167,53 @@ void main() {
           () => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pump();
       expect(find.text('No Such Family 6f1c (not installed)'), findsOneWidget);
+    });
+
+    testWidgets('a variable font shows its axes, and they reach the layer',
+        (tester) async {
+      // Bahnschrift is the variable font every Windows has. Without it there
+      // is nothing to show.
+      final axes = await tester
+          .runAsync(() => textFontAxes(family: 'Bahnschrift', face: ''));
+      if (axes == null || axes.every((a) => a.tag != 'wght')) return;
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      final document = text.getText()!;
+      text.setText(
+        document: document.copyWith(
+          style: document.style.copyWith(family: 'Bahnschrift'),
+        ),
+      );
+      p.uiState.selectedLayer.value = text;
+      await mount(tester, p, const TextPanelFrb());
+      // The axes arrive a moment after the panel does.
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('text-axis-wght')), findsOneWidget);
+      expect(find.byKey(const ValueKey('text-axis-spacing')), findsOneWidget);
+
+      await typeInto(tester, 'text-axis-wght', '650');
+      final style = text.getText()!.style;
+      expect(style.axes.single.tag, 'wght');
+      expect(style.axes.single.value, 650);
+
+      // Reset puts every axis back where the face sets it.
+      await tester.tap(find.byKey(const ValueKey('text-axes-reset')));
+      await tester.pump();
+      expect(text.getText()!.style.axes, isEmpty);
+    });
+
+    testWidgets('a font that does not vary shows no axes', (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      p.uiState.selectedLayer.value = text;
+      await mount(tester, p, const TextPanelFrb());
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('text-axis-spacing')), findsNothing);
+      expect(find.byKey(const ValueKey('text-variable-only')), findsOneWidget);
     });
   });
 

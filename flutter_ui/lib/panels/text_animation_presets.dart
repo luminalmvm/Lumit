@@ -17,6 +17,7 @@ import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../shell/menu_layer_frb.dart' show onSelection;
 import 'graph_maths.dart' show easyEase;
+import '../state/font_axes.dart';
 import 'text_animator_rows_frb.dart';
 
 /// How far the soft edge of a range reaches, per cent of the words.
@@ -71,6 +72,14 @@ List<BridgeTextAnimator> textPresetAnimators(
         offset: sweep(-_softEdge, 100),
         basis: basis,
         shape: BridgeSelectorShape.ramp,
+        kind: BridgeSelectorKind.range,
+        radius: const BridgeScalar.static_(200),
+        invert: false,
+        minAmount: const BridgeScalar.static_(0),
+        maxAmount: const BridgeScalar.static_(100),
+        wiggles: const BridgeScalar.static_(2),
+        correlation: const BridgeScalar.static_(50),
+        seed: 0,
       );
 
   final fresh = freshTextAnimator(preset.title);
@@ -93,6 +102,14 @@ List<BridgeTextAnimator> textPresetAnimators(
             offset: const BridgeScalar.static_(0),
             basis: characters,
             shape: BridgeSelectorShape.square,
+            kind: BridgeSelectorKind.range,
+            radius: const BridgeScalar.static_(200),
+            invert: false,
+            minAmount: const BridgeScalar.static_(0),
+            maxAmount: const BridgeScalar.static_(100),
+            wiggles: const BridgeScalar.static_(2),
+            correlation: const BridgeScalar.static_(50),
+            seed: 0,
           ),
           opacity: hidden,
         )
@@ -127,6 +144,14 @@ List<BridgeTextAnimator> textPresetAnimators(
             offset: const BridgeScalar.static_(0),
             basis: characters,
             shape: BridgeSelectorShape.ramp,
+            kind: BridgeSelectorKind.range,
+            radius: const BridgeScalar.static_(200),
+            invert: false,
+            minAmount: const BridgeScalar.static_(0),
+            maxAmount: const BridgeScalar.static_(100),
+            wiggles: const BridgeScalar.static_(2),
+            correlation: const BridgeScalar.static_(50),
+            seed: 0,
           ),
           positionX: sweep(_spread, 0),
         ),
@@ -147,14 +172,70 @@ bool addTextPreset(
     addTextAnimator(layer,
         adding: textPresetAnimators(preset, comp, frame));
 
-/// A blank animator, then the presets, for every menu that offers them.
+/// A blank animator, one by property, one by font axis, then the presets, for
+/// every menu that offers them: the same list as the Timeline's Add animator.
 List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
-  bool isText(BridgeLayerEntry entry) => entry.info.kind == BridgeLayerKind.text;
+  bool isText(BridgeLayerEntry entry) =>
+      entry.info.kind == BridgeLayerKind.text;
   final comp = ui.selectedComp;
+  // The axes of the picked layer's font, offered to every picked text layer.
+  BridgeTextStyle? style;
+  try {
+    style = ui.selectedLayer.value?.getText()?.style;
+  } catch (_) {
+    // The layer has gone since it was picked.
+  }
+  // Asked now, answered a moment later: the row below is live, so a font
+  // just switched to a variable one fills it while the menu is open.
+  List<BridgeFontAxis> axesNow() => style == null
+      ? const <BridgeFontAxis>[]
+      : shownFontAxes(style.family, style.face);
+  axesNow();
+  BridgeTextAnimator fresh(LayerReference layer) => freshTextAnimator(l10n
+      .textAnimatorDefaultName((layer.getText()?.animators.length ?? 0) + 1));
   return [
-    MenuEntry(l10n.textAnimatorBlank,
+    MenuEntry(
+        l10n.textAnimatorBlank,
         onSelection(app, ui, (entry) => addTextAnimator(entry.layer),
             when: isText, name: 'Animate text')),
+    MenuEntry.divider(),
+    for (final p in AnimatorProperty.values)
+      if (!p.solidOnly)
+        MenuEntry(
+          p.label,
+          onSelection(
+            app,
+            ui,
+            (entry) => addTextAnimator(entry.layer,
+                adding: [animatorWithProperty(fresh(entry.layer), p)]),
+            when: isText,
+            name: 'Animate text',
+          ),
+        ),
+    if (style != null && style.family.isNotEmpty)
+      MenuEntry.live(fontAxesArrived, () {
+        final axes = axesNow();
+        // A font with no axes says so by the row being off.
+        if (axes.isEmpty) return MenuEntry(l10n.textFontAxes, null);
+        return MenuEntry.submenu(l10n.textFontAxes, [
+          for (final axis in axes)
+            MenuEntry(
+              l10n.textAnimatorAxisLabel(axis.name),
+              onSelection(
+                app,
+                ui,
+                (entry) => addTextAnimator(entry.layer, adding: [
+                  animatorWith(fresh(entry.layer), axes: [
+                    BridgeAnimatorAxis(
+                        tag: axis.tag, value: BridgeScalar.static_(axis.face)),
+                  ])
+                ]),
+                when: isText,
+                name: 'Animate text',
+              ),
+            ),
+        ]);
+      }),
     MenuEntry.divider(),
     for (final preset in TextAnimationPreset.values)
       MenuEntry(
@@ -201,6 +282,15 @@ BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
       offset: reversedScalar(s.offset),
       basis: s.basis,
       shape: s.shape,
+      kind: s.kind,
+      target: s.target,
+      radius: reversedScalar(s.radius),
+      invert: s.invert,
+      minAmount: reversedScalar(s.minAmount),
+      maxAmount: reversedScalar(s.maxAmount),
+      wiggles: reversedScalar(s.wiggles),
+      correlation: reversedScalar(s.correlation),
+      seed: s.seed,
     ),
     positionX: reversedScalar(a.positionX),
     positionY: reversedScalar(a.positionY),
@@ -214,5 +304,9 @@ BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
     fillR: reversedScalar(a.fillR),
     fillG: reversedScalar(a.fillG),
     fillB: reversedScalar(a.fillB),
+    axes: [
+      for (final x in a.axes)
+        BridgeAnimatorAxis(tag: x.tag, value: reversedScalar(x.value)),
+    ],
   );
 }

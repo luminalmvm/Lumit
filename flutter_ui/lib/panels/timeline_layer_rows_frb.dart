@@ -44,6 +44,9 @@ import 'timeline_timings.dart';
 import 'transform_rows_frb.dart';
 import 'timeline_mask_rows_frb.dart';
 import 'timeline_puppet_rows_frb.dart';
+import '../state/font_axes.dart' show fontAxesReady;
+import 'text_animator_rows_frb.dart'
+    show animateMenuRows, animatorAddMenuRows, writeTextAnimator;
 import 'timeline_shape_rows_frb.dart';
 import 'shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
@@ -619,6 +622,15 @@ class FoldRow extends StatelessWidget {
     );
   }
 
+  /// Which of this layer's text animators [path] is the heading of, or null
+  /// for any other path.
+  int? _animatorIndexOf(String? path) {
+    if (path == null) return null;
+    final stem = '${animatorsPath(layer.internallayerId.toString())}/';
+    if (!path.startsWith(stem)) return null;
+    return int.tryParse(path.substring(stem.length));
+  }
+
   /// A heading's name, which an effect's Rename turns into its editor in place.
   Widget _headingName(
       BuildContext context, String label, bool named, double lit) {
@@ -820,6 +832,80 @@ class FoldRow extends StatelessWidget {
                       child: TimingsCell(effectId: effectId),
                     ),
                   ),
+                ] else if (!locked &&
+                    path ==
+                        animatorsPath(layer.internallayerId.toString())) ...[
+                  // A Text layer's Animators heading: Add animator, After
+                  // Effects' Animate, in the place Global add has on a shape
+                  // layer's Contents.
+                  Expanded(child: _headingName(context, label, named, lit)),
+                  RowButton(
+                    key: ValueKey<String>('tl-text-animate-$path'),
+                    label: l10n.textAnimatorAdd,
+                    arrow: true,
+                    onTap: (at) async {
+                      // The font's axes are in the menu, so they are asked
+                      // for before it opens.
+                      final style = layer.getText()?.style;
+                      if (style != null) {
+                        await fontAxesReady(style.family, style.face);
+                      }
+                      if (!context.mounted) return;
+                      showMenuAt<void>(
+                        context: context,
+                        position: at,
+                        width: 190,
+                        rows: (close) => animateMenuRows(
+                          close: () => close(null),
+                          layer: layer,
+                          solid: false,
+                          onChanged: onChanged,
+                          comp: comp,
+                          frame: playheadFrame,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(width: valueColumn.width),
+                ] else if (_animatorIndexOf(locked ? null : path)
+                    case final index?) ...[
+                  // An animator's heading: Add ▸ Property or Selector, as
+                  // beside an animator in After Effects.
+                  Expanded(child: _headingName(context, label, named, lit)),
+                  RowButton(
+                    key: ValueKey<String>('tl-text-animator-add-$path'),
+                    label: l10n.shapeOpAdd,
+                    arrow: true,
+                    onTap: (at) async {
+                      final document = layer.getText();
+                      if (document == null ||
+                          index >= document.animators.length) {
+                        return;
+                      }
+                      await fontAxesReady(
+                          document.style.family, document.style.face);
+                      if (!context.mounted) return;
+                      showMenuAt<void>(
+                        context: context,
+                        position: at,
+                        width: 170,
+                        rows: (close) => animatorAddMenuRows(
+                          close: () => close(null),
+                          animators: document.animators,
+                          index: index,
+                          style: document.style,
+                          solid: false,
+                          put: (next) {
+                            writeTextAnimator(layer, index, next);
+                            onChanged();
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(width: valueColumn.width),
                 ] else if (!locked &&
                     path == contentsPath(layer.internallayerId.toString())) ...[
                   // A shape layer's Contents heading: Global add, in the
@@ -1038,6 +1124,19 @@ class FoldRow extends StatelessWidget {
           onSeek: onSeek,
           onChanged: onChanged,
         ),
+      FoldAnimatorSettingRow(:final index, :final animator, :final setting) =>
+        AnimatorSettingRow(
+          layer: layer,
+          index: index,
+          animator: animator,
+          setting: setting,
+          valueColumn: valueColumn,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+          onLabelTap: () => onSelectProperty(path),
+        ),
       FoldAnimatorValueRow(:final index, :final animator, :final value) =>
         AnimatorValueRow(
           comp: comp,
@@ -1052,6 +1151,7 @@ class FoldRow extends StatelessWidget {
             onEditProperty(path);
             onChanged();
           },
+          onLabelTap: () => onSelectProperty(path),
         ),
       FoldStrokeValueRow(:final stroke, :final value) => StrokeValueRow(
           comp: comp,

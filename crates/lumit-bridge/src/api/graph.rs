@@ -369,7 +369,34 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
         label: graph::SOURCE_LABEL.to_owned(),
         custom_name: None,
         enabled: true,
-        inputs: Vec::new(),
+        // A Text layer's animators are what its Source makes of the words, so
+        // their keyable numbers are sockets here, for a driver to move.
+        inputs: match &layer.kind {
+            lumit_core::model::LayerKind::Text { document } => document
+                .animators
+                .iter()
+                .enumerate()
+                .flat_map(|(i, animator)| {
+                    animator
+                        .wireable_numbers()
+                        .into_iter()
+                        .map(move |(name, label)| (i, animator.name.clone(), name, label))
+                })
+                .map(|(i, animator, name, label)| {
+                    let port = lumit_core::text::animator_port(i, &name);
+                    BridgePort {
+                        wired: input_wired(InputRef::Param {
+                            node: NodeRef::Source,
+                            port: port.clone(),
+                        }),
+                        id: port,
+                        label: format!("{animator} · {label}"),
+                        port_type: BridgePortType::Number,
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        },
         outputs: vec![
             BridgePort::of(graph::IMAGE_PORT, true),
             BridgePort::of(graph::MATTE_PORT, output_wired(&OutputRef::SourceMatte)),

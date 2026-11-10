@@ -116,6 +116,8 @@ import 'timeline_group_row_frb.dart';
 import 'timeline_outline_row_frb.dart' show renameLayerInView;
 import 'transform_rows_frb.dart';
 import 'viewer_tool_cursor.dart' show handPanLayer;
+import 'text_animator_rows_frb.dart'
+    show TextAnimatorValue, removeTextAnimatorValue, removeTextAnimators;
 
 // The parts this file was split into (the split rule): every name they
 // hold was reachable through this file before the split, and still is.
@@ -747,10 +749,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
       : {..._selectedProperties};
 
-  /// Forget any selected property at or below [path], and any keyframes of
+  /// Forget any selected property below [path], and any keyframes of
   /// theirs the marquee had caught.
   void _dropSelectionUnder(String path) {
-    _selectedProperties.removeWhere((p) => p == path || isUnderPath(path, p));
+    // The heading itself stays picked: it is still on show, and a click that
+    // shuts it is the same click that picks it, for Delete to act on.
+    _selectedProperties.removeWhere((p) => isUnderPath(path, p));
     _laneKeySelection.removeWhere((id) {
       final hash = id.lastIndexOf('#');
       if (hash <= 0) return false;
@@ -2692,6 +2696,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
         _deleteSelectedMasks() ||
         _deleteSelectedShapeEntries() ||
+        _deleteSelectedAnimators() ||
         _deleteSelectedEffects() ||
         _deleteSequenceClip();
   }
@@ -2752,6 +2757,77 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     setState(() => _selectedProperties.removeWhere((path) {
           final owner = layerIdOfPath(path);
           return owner != null && isUnderPath(contentsPath(owner), path);
+        }));
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    return true;
+  }
+
+  /// Delete the picked text animator rows, returning whether there was one:
+  /// **Animators** takes every animator off its layer, an animator's heading
+  /// that animator, and one of its rows that property (a font axis, or a
+  /// group put back and off the animator's list). One write per layer and
+  /// pick, each its own undo step.
+  bool _deleteSelectedAnimators() {
+    if (!mounted) return false;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    // Per layer: everything, the animators, and the rows by animator.
+    final all = <String>{};
+    final whole = <String, Set<int>>{};
+    final rows = <String, List<(int, TextAnimatorValue)>>{};
+    for (final path in _selectedProperties) {
+      final layerId = layerIdOfPath(path);
+      if (layerId == null) continue;
+      final head = animatorsPath(layerId);
+      if (path == head) {
+        all.add(layerId);
+        continue;
+      }
+      if (!path.startsWith('$head/')) continue;
+      final parts = path.substring(head.length + 1).split('/');
+      final index = int.tryParse(parts.first);
+      if (index == null) continue;
+      if (parts.length == 1) {
+        (whole[layerId] ??= {}).add(index);
+      } else if (parts.length == 2) {
+        final value = TextAnimatorValue.values
+            .where((v) => v.name == parts[1])
+            .firstOrNull;
+        if (value != null) (rows[layerId] ??= []).add((index, value));
+      }
+    }
+    if (all.isEmpty && whole.isEmpty && rows.isEmpty) return false;
+    var deleted = false;
+    for (final entry in ui.model.layers) {
+      final id = entry.layer.internallayerId.toString();
+      try {
+        if (all.contains(id)) {
+          if (entry.layer.getText()?.animators.isEmpty ?? true) continue;
+          removeTextAnimators(entry.layer);
+          deleted = true;
+          continue;
+        }
+        // The rows first, while the indices still name their animators.
+        for (final (index, value)
+            in rows[id] ?? const <(int, TextAnimatorValue)>[]) {
+          if (whole[id]?.contains(index) ?? false) continue;
+          deleted |= removeTextAnimatorValue(entry.layer, index, value);
+        }
+        final gone = (whole[id]?.toList() ?? [])..sort((a, b) => b - a);
+        for (final index in gone) {
+          if (index < entry.layer.getText()!.animators.length) {
+            removeTextAnimators(entry.layer, index: index);
+            deleted = true;
+          }
+        }
+      } catch (_) {
+        // Gone between the draw and the press; nothing left to delete.
+      }
+    }
+    if (!deleted) return false;
+    setState(() => _selectedProperties.removeWhere((path) {
+          final owner = layerIdOfPath(path);
+          return owner != null && isUnderPath(animatorsPath(owner), path);
         }));
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
     ui.model.refresh();
