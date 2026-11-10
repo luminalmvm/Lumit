@@ -17,6 +17,7 @@ import 'graph.dart';
 import 'graph_looks.dart';
 import 'model.dart';
 import 'model_rows.dart';
+import 'multicam.dart';
 import 'orient.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
@@ -541,6 +542,9 @@ class BridgeClip {
   final double startExact;
   final double endExact;
 
+  /// The angle a multicam clip plays, or `None` on any other clip.
+  final BridgeClipAngle? angle;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -573,6 +577,7 @@ class BridgeClip {
     this.group,
     required this.startExact,
     required this.endExact,
+    this.angle,
   });
 
   @override
@@ -607,7 +612,8 @@ class BridgeClip {
       label.hashCode ^
       group.hashCode ^
       startExact.hashCode ^
-      endExact.hashCode;
+      endExact.hashCode ^
+      angle.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -644,7 +650,8 @@ class BridgeClip {
           label == other.label &&
           group == other.group &&
           startExact == other.startExact &&
-          endExact == other.endExact;
+          endExact == other.endExact &&
+          angle == other.angle;
 }
 
 /// One end of a clip's fade: how long it takes, and the curve it takes. Zero

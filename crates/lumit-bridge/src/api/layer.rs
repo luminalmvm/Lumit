@@ -1575,6 +1575,8 @@ pub struct BridgeClip {
     /// may sit between two frames, and this is where it is drawn.
     pub start_exact: f64,
     pub end_exact: f64,
+    /// The angle a multicam clip plays, or `None` on any other clip.
+    pub angle: Option<crate::api::multicam::BridgeClipAngle>,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1713,6 +1715,7 @@ fn bridge_clip(
         group: clip.group,
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
+        angle: crate::api::multicam::clip_angle(doc, clip),
     }
 }
 
@@ -5001,12 +5004,18 @@ impl LayerReference {
     ) -> Result<Option<crate::api::state::BridgeRenderedFrame>, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let clip = &clips[index];
-        let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-            return Ok(None);
-        };
         // The clip's own source moment, through whatever map it plays by —
-        // which is the identity when it has none of its own.
-        let opens_at = clip.source_time(clip.place_start.to_f64() + along.unwrap_or(0.0));
+        // which is the identity when it has none of its own. A multicam clip
+        // shows its angle's footage there.
+        let lt = clip.place_start.to_f64() + along.unwrap_or(0.0);
+        let (item, opens_at) = match clip.source {
+            lumit_core::sequence::ClipSource::Footage(item) => (item, clip.source_time(lt)),
+            // The head of a clip is the first picture it has.
+            _ => match crate::api::multicam::wave::shown(self, clip, lt, along.is_none())? {
+                Some(shown) => shown,
+                None => return Ok(None),
+            },
+        };
 
         #[cfg(feature = "media")]
         {
@@ -5378,36 +5387,19 @@ impl LayerReference {
         // The choice of audio streams moves onto the clip, which is where a
         // Sequence layer keeps one.
         converted.audio_streams = Default::default();
-        converted.kind = LayerKind::Sequence {
-            clips: vec![Clip {
-                id: Uuid::now_v7(),
-                source: ClipSource::Footage(*item),
-                source_in: local,
-                source_out,
-                place_start: local,
-                place_duration: duration,
-                // None by construction: a retimed layer is refused above, and
-                // `convert_from_sequenced` still brings a clip's own map back
-                // the other way.
-                retime: None,
-                interpolation: layer.interpolation.clone(),
-                fade_in: Default::default(),
-                fade_out: Default::default(),
-                effects: Vec::new(),
-                fx: true,
-                gain_db: 0.0,
-                link: None,
-                audio_streams: layer.audio_streams.clone(),
-                audible: true,
-                blend: None,
-                label: None,
-                group: None,
-                opacity: 1.0,
-                takes: Vec::new(),
-                transition: None,
-                extra: serde_json::Map::new(),
-            }],
-        };
+        // Not retimed by construction: a retimed layer is refused above, and
+        // `convert_from_sequenced` still brings a clip's own map back the other
+        // way.
+        let mut clip = Clip::new(
+            ClipSource::Footage(*item),
+            local,
+            source_out,
+            local,
+            duration,
+        );
+        clip.interpolation = layer.interpolation.clone();
+        clip.audio_streams = layer.audio_streams.clone();
+        converted.kind = LayerKind::Sequence { clips: vec![clip] };
 
         self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
@@ -6400,6 +6392,11 @@ impl LayerReference {
         let Some(clip) = clips.get(index) else {
             return Ok(BridgeAudioPeaks::empty());
         };
+        // A multicam clip's wave is its angle's files', one after another.
+        if let (lumit_core::sequence::ClipSource::Comp(_), Some(_)) = (clip.source, clip.angle) {
+            let (a, b) = (start_seconds, end_seconds);
+            return crate::api::multicam::wave::of(self, clip, a, b, buckets, multiwave, stereo);
+        }
         self.footage_peaks(clip, start_seconds, end_seconds, buckets, multiwave, stereo)
     }
 

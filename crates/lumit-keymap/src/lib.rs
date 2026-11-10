@@ -68,6 +68,14 @@ impl ActionId {
         if let Some(n) = self.0.strip_prefix("marker.goto.") {
             return format!("Go to marker {n}");
         }
+        // The angles of a multicam clip, nine of each, described by shape as
+        // the markers are.
+        if let Some(n) = self.0.strip_prefix("multicam.cut.") {
+            return format!("Cut to angle {n}");
+        }
+        if let Some(n) = self.0.strip_prefix("multicam.switch.") {
+            return format!("Switch to angle {n}");
+        }
         let known = match self.0.as_str() {
             // Transport and navigation.
             "playback.toggle" => "Play or pause",
@@ -143,6 +151,13 @@ impl ActionId {
             "cut.envelope.pan" => "Show or hide the pan envelope",
             "cut.take.next" => "Switch the picked clips to their next take",
             "cut.take.prev" => "Switch the picked clips to their previous take",
+            "multicam.angle.next" => "Switch to the next angle",
+            "multicam.angle.prev" => "Switch to the previous angle",
+            "multicam.mode.both" => "Switch picture and sound together",
+            "multicam.mode.picture" => "Switch the picture only",
+            "multicam.mode.sound" => "Switch the sound only",
+            "multicam.page.next" => "Show the next page of angles",
+            "multicam.page.prev" => "Show the previous page of angles",
             "cut.paste.attributes" => "Paste a clip's attributes onto the picked clips",
             "cut.tracks.minimise" => "Minimise every track, or restore them",
             "cut.group" => "Group the picked clips",

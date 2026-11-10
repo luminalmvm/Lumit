@@ -9130,6 +9130,42 @@
   "@sourceTitle": {
     "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
   },
+  "histSetMulticam": "Set multicam",
+  "@histSetMulticam": {
+    "description": "Edit > History step: a composition made a multicam comp, made ordinary again, or given other starting angles."
+  },
+  "histEditFootageMarkers": "Edit footage markers",
+  "@histEditFootageMarkers": {
+    "description": "Edit > History step: a marker put on or taken off a footage item."
+  },
+  "keyMulticamAngleNext": "Switch to the next angle",
+  "@keyMulticamAngleNext": {
+    "description": "Settings > Keymap action: switches the multicam clip under the playhead to the next angle, without a cut."
+  },
+  "keyMulticamAnglePrev": "Switch to the previous angle",
+  "@keyMulticamAnglePrev": {
+    "description": "Settings > Keymap action: switches the multicam clip under the playhead to the previous angle, without a cut."
+  },
+  "keyMulticamModeBoth": "Switch picture and sound together",
+  "@keyMulticamModeBoth": {
+    "description": "Settings > Keymap action: angle switches change the picture and the sound together."
+  },
+  "keyMulticamModePicture": "Switch the picture only",
+  "@keyMulticamModePicture": {
+    "description": "Settings > Keymap action: angle switches change the picture only."
+  },
+  "keyMulticamModeSound": "Switch the sound only",
+  "@keyMulticamModeSound": {
+    "description": "Settings > Keymap action: angle switches change the sound only."
+  },
+  "keyMulticamPageNext": "Show the next page of angles",
+  "@keyMulticamPageNext": {
+    "description": "Settings > Keymap action: the angle viewer shows the next page of angles."
+  },
+  "keyMulticamPagePrev": "Show the previous page of angles",
+  "@keyMulticamPagePrev": {
+    "description": "Settings > Keymap action: the angle viewer shows the previous page of angles."
+  },
   "sourcePlay": "Play this footage",
   "@sourcePlay": {
     "description": "Tooltip for the play button under the source picture, which plays the loaded footage item by itself."

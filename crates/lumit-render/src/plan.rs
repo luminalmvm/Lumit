@@ -771,12 +771,13 @@ pub fn collect_comp_jobs(
                     let ClipSource::Comp(nested_id) = clip.source else {
                         continue;
                     };
-                    let Some(nested) = doc
-                        .comp(nested_id)
+                    // A multicam clip decodes its angle and no other.
+                    let Some(nested) = lumit_core::multicam::nested_for(doc, clip)
                         .filter(|_| !visited.contains(&nested_id))
                     else {
                         continue;
                     };
+                    let nested = nested.as_ref();
                     let st = clip.nested_time(nested, lt);
                     if sample_times[idx] == t && held.is_some_and(|held| held(nested, st, None)) {
                         continue;

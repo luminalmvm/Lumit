@@ -4068,6 +4068,11 @@ pub struct Document {
     /// copy every edit makes copies a pointer ([`crate::transcript`]).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub transcripts: std::collections::BTreeMap<Uuid, Arc<crate::transcript::Transcript>>,
+    /// Footage items' markers, by item id, in seconds of the item's own time.
+    /// What a multicam comp can be synced by. A map beside the items for the
+    /// reason `proxies` is one.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub footage_markers: std::collections::BTreeMap<Uuid, Vec<crate::markers::Marker>>,
     /// The project-wide *use proxies* master switch (docs/03 §3a).
     ///
     /// On — the default, and what a file written before proxies existed loads
@@ -4509,6 +4514,7 @@ impl Document {
             proxies: std::collections::BTreeMap::new(),
             footage_trims: std::collections::BTreeMap::new(),
             transcripts: std::collections::BTreeMap::new(),
+            footage_markers: std::collections::BTreeMap::new(),
             use_proxies: true,
             packed: std::collections::BTreeMap::new(),
             auto_pack: false,

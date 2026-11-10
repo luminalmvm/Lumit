@@ -167,6 +167,11 @@ impl Fade {
 pub struct Clip {
     pub id: Uuid,
     pub source: ClipSource,
+    /// The angle a multicam clip plays: one Sequence layer of the comp it
+    /// plays, by id ([`crate::multicam`]). Unset on every other clip, and left
+    /// out of the file then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angle: Option<Uuid>,
     /// Trim into the source (seconds).
     pub source_in: Rational,
     /// Exclusive trim end (seconds).
@@ -279,6 +284,7 @@ impl Clip {
         Self {
             id: Uuid::now_v7(),
             source,
+            angle: None,
             source_in,
             source_out,
             place_start,
@@ -770,6 +776,7 @@ impl Clip {
         let left = Clip {
             id: Uuid::now_v7(),
             source: self.source,
+            angle: self.angle,
             source_in: self.source_in,
             source_out: s_cut,
             place_start: self.place_start,
@@ -798,6 +805,7 @@ impl Clip {
         let right = Clip {
             id: Uuid::now_v7(),
             source: self.source,
+            angle: self.angle,
             source_in: s_cut,
             source_out: self.source_out,
             place_start: at,
@@ -1132,7 +1140,7 @@ impl SequenceShape {
 /// A copy of a clip's stack with fresh instance ids, for the piece of a split
 /// that is a new clip. An effect is found by its id alone, so two pieces
 /// sharing one would answer for each other.
-fn respawn(effects: &[EffectInstance]) -> Vec<EffectInstance> {
+pub(crate) fn respawn(effects: &[EffectInstance]) -> Vec<EffectInstance> {
     effects
         .iter()
         .map(|e| EffectInstance {

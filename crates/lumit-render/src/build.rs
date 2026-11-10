@@ -4154,9 +4154,10 @@ fn comp_walk(
                             ));
                         }
                     };
-                    let nested = doc
-                        .comp(nested_id)
+                    // A multicam clip draws its comp seen through its angle.
+                    let nested = lumit_core::multicam::nested_for(doc, clip)
                         .filter(|_| !visited.contains(&nested_id))?;
+                    let nested = nested.as_ref();
                     let st = clip.nested_time(nested, lt);
                     visited.push(nested_id);
                     let nested_draws = comp_walk(

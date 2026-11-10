@@ -33,6 +33,8 @@ use crate::api::{
 mod attributes;
 pub(crate) mod fold;
 pub(crate) mod freeze;
+pub(crate) mod join;
+pub(crate) mod multicam;
 pub(crate) mod place;
 mod relink;
 mod solids;
@@ -1889,14 +1891,21 @@ impl CompositionReference {
     /// under `frame` is showing, read through the clip's Retime.
     ///
     /// The clip is the one on `layer`, or without one on the top-most
-    /// unlocked picture Sequence layer that has a clip there. `None` over a
-    /// gap, and for a clip that plays a composition.
+    /// unlocked picture Sequence layer that has a clip there. A multicam
+    /// clip answers for its angle's footage. `None` over a gap, and for a
+    /// clip that plays any other composition.
     #[frb(sync)]
     pub fn cut_match_frame(
         &self,
         frame: i64,
         layer: Option<LayerReference>,
     ) -> Result<Option<BridgeMatchFrame>, BridgeError> {
+        let doc = self
+            .project()?
+            .read()
+            .map_err(|_| BridgeError::ReadFailed)?
+            .store
+            .snapshot();
         let comp = self.composition()?;
         let at = comp.frame_rate.time_of_frame(frame);
         let at = at.map_err(|_| BridgeError::InvalidTime)?.0;
@@ -1908,7 +1917,7 @@ impl CompositionReference {
             let local = at.checked_sub(l.start_offset.0).ok()?;
             let there = |c: &&Clip| c.place_start <= local && local < c.place_end();
             let clip = clips.iter().filter(there).max_by_key(|c| c.place_start)?;
-            Some((clip.source, clip.source_at(local)?))
+            lumit_core::multicam::footage_at(&doc, clip, local)
         };
         let found = match layer {
             Some(layer) => comp
@@ -1924,17 +1933,17 @@ impl CompositionReference {
                 open.find_map(under)
             }
         };
-        let Some((ClipSource::Footage(item), shown)) = found else {
+        let Some(shown) = found else {
             return Ok(None);
         };
         Ok(Some(BridgeMatchFrame {
             footage: FootageReference {
                 project: self.project_id(),
-                id: item,
+                id: shown.item,
             },
             source_time: BridgeRational {
-                num: shown.num(),
-                den: shown.den(),
+                num: shown.source_time.num(),
+                den: shown.source_time.den(),
             },
         }))
     }

@@ -100,6 +100,8 @@ pub struct WorkerState {
     /// The same for every other view, so a picture made before a model was
     /// read or a lens baked is made again in each of them.
     beside_shown: Vec<(u32, CompositionReference, u64, f32)>,
+    /// The angle viewer, drawn beside the program while it plays.
+    angles: Option<item::AnglesLatch>,
     /// How each Viewer view is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
@@ -3222,6 +3224,7 @@ fn worker_loop(
         prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
         beside_shown: Vec::new(),
+        angles: None,
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
         // which is what it already held.
@@ -3550,16 +3553,24 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 chase_audio(playback, frame, late);
             }
             let present_started = web_time::Instant::now();
+            // The time the angle viewer may take: up to half a frame past
+            // the program's next picture, which the present grid takes up.
+            // None while this picture was that late itself or the ring is
+            // under half: the program comes first.
+            let period = 1.0 / playback.fps.max(1.0);
+            let room = (playback.ring.len() * 2 >= playback.capacity())
+                .then(|| period * 1.5 - late.map_or(0.0, |l| l.as_secs_f64()))
+                .filter(|room| *room > period);
+            let program = playback.comp.id;
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
             // rebuilding (docs/TODO.md, "measure first").
-            let Some(playback) = &mut state.playback else {
-                return;
-            };
             playback
                 .present_costs
                 .push(present_started.elapsed().as_secs_f64());
+            // The angle viewer moves with the program.
+            item::follow(state, stream, program, frame, room);
             if let Some(req) = state.scope_waiting.take() {
                 if let Err(err) = trace_scope(req, state, stream) {
                     note!("Dropping the trace: {err}");
@@ -5941,6 +5952,7 @@ mod tests {
             prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
             beside_shown: Vec::new(),
+            angles: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),
             applied_look: (0, super::ViewerLook::default()),

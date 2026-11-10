@@ -230,15 +230,31 @@ impl Edit<'_> {
         if comp == self.comp.id {
             return Err(BridgeCutResult::WrongLayer.into());
         }
-        let (length, width, height) = {
+        let (length, width, height, multicam) = {
             let doc = self.of.document()?;
             let inner = doc.comp(comp).ok_or(BridgeError::InvalidComp)?;
             (
                 inner.duration.0,
                 f64::from(inner.width),
                 f64::from(inner.height),
+                inner.is_multicam(),
             )
         };
+        // A multicam comp goes down as its picture and its sound, linked.
+        if multicam {
+            let target = target.map(|layer| layer.id());
+            return self.place_multicam(
+                target,
+                comp,
+                Rational::ZERO,
+                length,
+                at_frame,
+                false,
+                false,
+                None,
+                None,
+            );
+        }
         let at = self.time(at_frame.max(0))?;
         let r = match target {
             Some(layer) => self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?,

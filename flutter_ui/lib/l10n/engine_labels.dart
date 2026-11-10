@@ -1922,6 +1922,13 @@ Map<String, String> get _built => {
           l10n.keySwitchThePickedClipsToTheirNextTake,
       "Switch the picked clips to their previous take":
           l10n.keySwitchThePickedClipsToTheirPreviousTake,
+      "Switch to the next angle": l10n.keyMulticamAngleNext,
+      "Switch to the previous angle": l10n.keyMulticamAnglePrev,
+      "Switch picture and sound together": l10n.keyMulticamModeBoth,
+      "Switch the picture only": l10n.keyMulticamModePicture,
+      "Switch the sound only": l10n.keyMulticamModeSound,
+      "Show the next page of angles": l10n.keyMulticamPageNext,
+      "Show the previous page of angles": l10n.keyMulticamPagePrev,
       "Paste a clip's attributes onto the picked clips":
           l10n.keyPasteAClipSAttributesOntoThePickedClips,
       "Minimise every track, or restore them":
@@ -2261,6 +2268,8 @@ Map<String, String> get _built => {
       "Set work area": l10n.histSetWorkArea,
       "Edit composition markers": l10n.histEditCompMarkers,
       "Edit layer markers": l10n.histEditLayerMarkers,
+      "Edit footage markers": l10n.histEditFootageMarkers,
+      "Set multicam": l10n.histSetMulticam,
       "Set blend mode": l10n.histSetBlendMode,
       "Set parent": l10n.histSetParent,
       "Edit transform": l10n.histEditTransform,

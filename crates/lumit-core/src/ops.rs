@@ -110,6 +110,12 @@ pub enum Op {
         item: Uuid,
         edit: Box<crate::transcript::TranscriptEdit>,
     },
+    /// A footage item's markers, the whole list. Refused on anything but
+    /// footage. An empty list leaves no entry.
+    SetFootageMarkers {
+        id: Uuid,
+        markers: Vec<crate::markers::Marker>,
+    },
     /// Flip one item's *use proxy* switch, leaving the proxy attached. Refuses
     /// on an item with no proxy: a switch on nothing would sit in the document
     /// meaning nothing, and the panel would have asked about a control it is
@@ -879,6 +885,12 @@ pub enum Op {
         comp: Uuid,
         start: CompTime,
     },
+    /// Make a composition a multicam comp, change the angles its clips start
+    /// on, or make it an ordinary comp again (`None`).
+    SetCompMulticam {
+        comp: Uuid,
+        multicam: Option<Box<crate::multicam::Multicam>>,
+    },
     TrimCompToWorkArea {
         comp: Uuid,
     },
@@ -1026,6 +1038,8 @@ impl Op {
             Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
+            Op::SetCompMulticam { .. } => "Set multicam",
+            Op::SetFootageMarkers { .. } => "Edit footage markers",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
             // Unreachable: the loop above leaves no batch behind.
@@ -2668,6 +2682,8 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 start: previous,
             })
         }
+        Op::SetCompMulticam { comp, multicam } => crate::multicam::set_mark(doc, *comp, multicam),
+        Op::SetFootageMarkers { id, markers } => crate::markers::set_on_footage(doc, *id, markers),
         Op::TrimCompToWorkArea { comp } => {
             let batch = reshape::trim_comp_to_work_area(doc, *comp)?;
             apply(doc, &batch)

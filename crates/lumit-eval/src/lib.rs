@@ -2388,7 +2388,9 @@ fn feed_source(
                             h.update(b"cycle");
                             return Some(());
                         }
-                        let Some(nested) = doc.comp(comp) else {
+                        // A multicam clip is named by its comp seen through
+                        // its angle, so each angle caches as its own picture.
+                        let Some(nested) = lumit_core::multicam::nested_for(doc, clip) else {
                             h.update(b"nocomp");
                             return Some(());
                         };
@@ -2403,8 +2405,8 @@ fn feed_source(
                         visited.push(comp);
                         let r = comp_key_visited(
                             doc,
-                            nested,
-                            clip.nested_time(nested, lt),
+                            &nested,
+                            clip.nested_time(&nested, lt),
                             quality,
                             stamper,
                             visited,
