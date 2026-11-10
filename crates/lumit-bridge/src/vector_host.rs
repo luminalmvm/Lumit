@@ -99,8 +99,8 @@ fn source_of(_project: Option<&Path>, _f: &lumit_core::model::FootageItem) -> So
 }
 
 /// A still image, or a layered file whose layers are stills.
+#[cfg(feature = "media")]
 fn is_still_file(path: &Path) -> bool {
-    #[cfg(feature = "media")]
     if lumit_media::sequence::is_still(path) {
         return true;
     }
