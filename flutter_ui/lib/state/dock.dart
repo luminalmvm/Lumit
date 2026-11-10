@@ -81,6 +81,11 @@ enum Panel {
   /// One text area for the project, kept in the `.lum`.
   notes,
 
+  /// The words of the fronted comp's footage, or of the source view's, laid
+  /// out as a page: pick words to pick their clips, delete words to cut
+  /// them. The Cut workspace's own, beside the Cut timeline.
+  transcript,
+
   /// Moves the selected layers' anchors to a point of their boxes, or lines
   /// that point up with the same point of the composition.
   align,
@@ -119,6 +124,7 @@ enum Panel {
         Panel.stagger => l10n.panelStagger,
         Panel.retime => l10n.retime,
         Panel.notes => l10n.panelNotes,
+        Panel.transcript => l10n.panelTranscript,
         Panel.align => l10n.panelAlign,
         Panel.captions => l10n.panelCaptions,
         Panel.debug => l10n.panelDebug,
@@ -854,8 +860,8 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.55, 0.45],
         ),
-      // Cut: Project, Effect controls, Effects & presets and Notes tabbed
-      // down the left, each full height. The Viewer
+      // Cut: Project, Transcript, Effect controls, Effects & presets and Notes
+      // tabbed down the left, each full height. The Viewer
       // takes the rest of the top band (the Source view is a second view
       // inside it, so one pane serves), and the **Cut timeline** runs across
       // the bottom at the Audio arrangement's proportions, with the Mixer at
@@ -870,6 +876,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
               [
                 DockTabs([
                   DockPane(Panel.project),
+                  DockPane(Panel.transcript),
                   DockPane(Panel.effectControls),
                   DockPane(Panel.effectsAndPresets),
                   DockPane(Panel.notes),

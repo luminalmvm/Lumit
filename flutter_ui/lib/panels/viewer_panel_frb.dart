@@ -1837,6 +1837,7 @@ class _SourceBarState extends State<_SourceBar>
   void _onTransport() {
     if (_ui?.playing.value == true && _ticker.isActive) {
       _ticker.stop();
+      _ui?.sourcePlaying.value = false;
       if (mounted) setState(() {});
     }
   }
@@ -1864,12 +1865,14 @@ class _SourceBarState extends State<_SourceBar>
       }
     }
     _ticker.start();
+    ui.sourcePlaying.value = true;
     setState(() {});
   }
 
   void _stop() {
     if (!_ticker.isActive) return;
     _ticker.stop();
+    _ui?.sourcePlaying.value = false;
     if (_sound) audioStop();
     if (mounted) setState(() {});
   }

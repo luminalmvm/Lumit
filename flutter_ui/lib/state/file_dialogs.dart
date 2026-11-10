@@ -279,6 +279,17 @@ Future<String?> pickScript() async {
 /// Pick a program, or null when cancelled.
 Future<String?> pickProgram() async => (await openFile())?.path;
 
+/// Pick a script to assemble a cut from: plain text or Final Draft. Null
+/// when cancelled.
+Future<String?> pickTranscriptScript() async {
+  final file = await openFile(acceptedTypeGroups: [
+    XTypeGroup(
+        label: l10n.transcriptAssembleTitle,
+        extensions: const ['txt', 'md', 'fdx']),
+  ]);
+  return file?.path;
+}
+
 /// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_shaderGroup()]);

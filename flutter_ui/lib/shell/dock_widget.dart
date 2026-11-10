@@ -107,6 +107,9 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.notes => 160,
       // A caption's times, a few words and its reading speed.
       Panel.captions => 220,
+      // The strip's subject switch and its search well, before the buttons
+      // fold into the overflow mark.
+      Panel.transcript => 180,
       // One grid. The second goes under it when there is no room beside.
       Panel.align => 120,
       Panel.debug => 180,
@@ -2716,7 +2719,7 @@ List<List<Panel>> panelGroups(DockNode root) {
     [Panel.scopes, Panel.grade],
     [Panel.graph, Panel.node],
     [Panel.mixer, Panel.audio, Panel.audioTimeline],
-    [Panel.cutTimeline],
+    [Panel.cutTimeline, Panel.transcript],
     [Panel.text, Panel.paragraph],
     [Panel.captions],
   ];

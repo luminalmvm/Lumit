@@ -416,6 +416,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _ui!.workspace.addListener(_onToolChanged);
     _ui!.selectedLayer.addListener(_onLayerPicked);
     _ui!.selectAllRequest.addListener(_onSelectAll);
+    _ui!.cutPickRequest.addListener(_onPickRequest);
     // The playhead stays on screen while the transport runs, as it does in
     // the Timeline.
     _ui!.playheadFrame.addListener(_edgeFollow);
@@ -434,6 +435,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _ui?.workspace.removeListener(_onToolChanged);
     _ui?.selectedLayer.removeListener(_onLayerPicked);
     _ui?.selectAllRequest.removeListener(_onSelectAll);
+    _ui?.cutPickRequest.removeListener(_onPickRequest);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     // After the frame: letting go of the clip tells Effect controls, which
     // must not be told to rebuild while the tree is being taken down.
@@ -484,6 +486,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     setState(() => _selected = {
           for (final track in _tracks)
             for (final clip in track.clips) clip.id.toString(),
+        });
+  }
+
+  /// The Transcript panel asks for the clips under its selected words to be
+  /// picked here, with their mates while Linked is on. The request is put
+  /// back once taken, so the next one is seen as new.
+  void _onPickRequest() {
+    final asked = _ui?.cutPickRequest.value;
+    if (asked == null) return;
+    _ui!.cutPickRequest.value = null;
+    if (!mounted) return;
+    setState(() => _selected = {
+          for (final id in asked) ..._withMates(id),
         });
   }
 
@@ -5163,6 +5178,28 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           // Each marker's line, from the ruler down through every track.
           MarkerLinesGround(
               comp: comp, axis: axis, hScroll: _hLane, regions: true),
+          // The stretch the Transcript panel's selected words cover.
+          Positioned.fill(
+            top: t.density.ruler,
+            child: IgnorePointer(
+              child: ValueListenableBuilder<({int start, int end})?>(
+                valueListenable: ui.transcriptSpan,
+                builder: (context, span, _) => span == null
+                    ? const SizedBox.shrink()
+                    : Stack(children: [
+                        Positioned(
+                          key: const ValueKey('ctl-transcript-span'),
+                          left: axis.xOf(span.start),
+                          width: max(1.0,
+                              axis.xOf(span.end) - axis.xOf(span.start)),
+                          top: 0,
+                          bottom: 0,
+                          child: ColoredBox(color: t.selectionFill),
+                        ),
+                      ]),
+              ),
+            ),
+          ),
           PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
         ],
       ),

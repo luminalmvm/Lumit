@@ -663,7 +663,8 @@ class LumitUiState extends ChangeNotifier {
         panel != Panel.expressions &&
         panel != Panel.effectControls &&
         panel != Panel.captions &&
-        panel != Panel.node) {
+        panel != Panel.node &&
+        panel != Panel.transcript) {
       return false;
     }
     panelSearchRequest.value++;
@@ -702,6 +703,7 @@ class LumitUiState extends ChangeNotifier {
     Panel.graph,
     Panel.cutTimeline,
     Panel.captions,
+    Panel.transcript,
   };
 
   /// Ask the focused panel to select everything, and say whether one was asked.
@@ -2735,12 +2737,15 @@ class LumitUiState extends ChangeNotifier {
     // Except over the Mixer: picking a track there is mixing, and taking the
     // faders away for its effects is the one thing nobody asked for. The
     // Grade panel is the same: it is the layer's controls in the Colour
-    // workspace, and Effect controls sit one tab behind it on purpose.
+    // workspace, and Effect controls sit one tab behind it on purpose. So is
+    // the Transcript panel: picking words picks their clips, and the words
+    // have to stay in sight.
     if (primary != null &&
         !_restoring &&
         !frontedOver(split, Panel.mixer, Panel.effectControls) &&
         !frontedOver(split, Panel.grade, Panel.effectControls) &&
-        !frontedOver(split, Panel.captions, Panel.effectControls)) {
+        !frontedOver(split, Panel.captions, Panel.effectControls) &&
+        !frontedOver(split, Panel.transcript, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
     }
     if (primary == null) {
@@ -3532,6 +3537,9 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(_sourceNames.clear);
     _app.removeListener(_followTrims);
     workspace.presetApplied.removeListener(_onPresetApplied);
+    transcriptSpan.dispose();
+    sourcePlaying.dispose();
+    cutPickRequest.dispose();
     cutLinked.dispose();
     cutClip.dispose();
     cutClips.dispose();
@@ -3875,6 +3883,9 @@ class LumitUiState extends ChangeNotifier {
   /// Plays or stops the source side, set by its bar while it is on screen.
   VoidCallback? sourcePlayToggle;
 
+  /// Whether the source side is playing, as its bar says.
+  final ValueNotifier<bool> sourcePlaying = ValueNotifier(false);
+
   /// A transport key pressed with the source side in front: it plays and
   /// steps the clip rather than the composition. False for any other key, so
   /// it carries on to the composition.
@@ -4068,6 +4079,16 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
+  /// The stretch of the composition the Transcript panel's selected words
+  /// cover, in comp frames, which the Cut timeline draws as a band over its
+  /// lanes. Null with no words selected.
+  final ValueNotifier<({int start, int end})?> transcriptSpan =
+      ValueNotifier(null);
+
+  /// The clips the Transcript panel asks the Cut timeline to pick, by id. The
+  /// timeline picks them and puts this back to null.
+  final ValueNotifier<Set<String>?> cutPickRequest = ValueNotifier(null);
+
   /// Whether edits in the Cut timeline carry linked clips along: the panel's
   /// Linked switch, and what the source side's Insert and Overwrite read.
   /// Not written down.
@@ -4173,6 +4194,23 @@ class LumitUiState extends ChangeNotifier {
     final end = model.durationFrames - 1;
     playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
   }
+
+  /// A placing edit made by another panel, the Transcript panel's words going
+  /// into the composition: the same target layer and switches the source
+  /// side's Insert and Overwrite use, so the two doors cannot disagree.
+  /// [edit] is handed the layer to land on and the Linked, sound-with-picture
+  /// and streams settings as the engine's calls take them. Answers whether it
+  /// went through.
+  bool placeLikeSource(
+    BridgeCutResult Function(LayerReference? target, bool linked,
+            bool withPicture, BridgeStreamsArrival arrival)
+        edit, {
+    String? name,
+  }) =>
+      _sourceEdit(
+          name: name,
+          () => edit(_sourceTarget(), cutLinked.value,
+              workspace.interface.cutSoundWithPicture, streamsArrival));
 
   /// The source side's Replace: the source from its In over the clip picked
   /// in the Cut timeline, which keeps its place and its length.

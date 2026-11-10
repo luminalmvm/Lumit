@@ -15,6 +15,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
+import 'package:lumit_flutter/panels/transcript_panel_frb.dart'
+    show transcriptKeyOf;
 import 'package:lumit_flutter/panels/viewer_camera.dart'
     show cameraFromView, cameraToView, isFlyKey;
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
@@ -643,6 +645,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         // the transport come from there, and the Audio timeline is a timeline.
         Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
         Panel.cutTimeline => BridgeKeyContext.cut,
+        Panel.transcript => BridgeKeyContext.transcript,
         Panel.effectControls => BridgeKeyContext.effects,
         Panel.graph => BridgeKeyContext.nodes,
         Panel.captions => BridgeKeyContext.captions,
@@ -701,6 +704,11 @@ class _LumitAppViewState extends State<LumitAppView> {
     // presses the control, and must not also run a panel command underneath
     // it.
     if (FocusManager.instance.primaryFocus is ControlFocusNode) {
+      return KeyEventResult.ignored;
+    }
+
+    // The Transcript panel's caret and text-size keys are its own.
+    if (ui.activePanel == Panel.transcript && transcriptKeyOf(event) != null) {
       return KeyEventResult.ignored;
     }
 
@@ -1354,6 +1362,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = ui.activePanel == Panel.captions;
       case 'captions.prev' || 'captions.next':
         handled = stepToCaption(ui, forward: action == 'captions.next');
+      // The Transcript panel's keys act on its own words, on its own key
+      // handler; taken here the same way.
+      case final id when id.startsWith('transcript.'):
+        handled = ui.activePanel == Panel.transcript;
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
         // first — a selected mask row is what Delete is about, not the
