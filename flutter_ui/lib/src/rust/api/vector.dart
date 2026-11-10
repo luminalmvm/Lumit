@@ -21,8 +21,8 @@ BridgeVectorSettings vectorSettingsDefault() =>
 String vectorExtension({required String format}) =>
     BridgeLib.instance.api.crateApiVectorVectorExtension(format: format);
 
-/// Whether `path` is a Lottie: a `.lottie`, or a `.json` that starts like one.
-/// Read from the head of the file only, so a large file answers at once.
+/// Whether `path` is a Lottie: a `.lottie`, or a `.json` object with `fr`,
+/// `ip` and `op` among its top-level keys. A file too large to import is not one.
 Future<bool> isLottieFile({required String path}) =>
     BridgeLib.instance.api.crateApiVectorIsLottieFile(path: path);
 
