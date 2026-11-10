@@ -83,6 +83,9 @@ composition has the Viewer back. Drag along the strip under the picture to move 
 | **Replace**, `Shift+R` | Places the footage from its In over the clip picked in the Cut timeline, which keeps its place and length. |
 | **Fit to fill**, `Shift+F` | Places the marked stretch over the work area, at whatever speed fills it. |
 
+A [multicam comp](/use/multicam/) loads as the angle viewer, which shows every angle at
+once. `M` puts a marker on the footage at the frame shown.
+
 With no marks set, the whole item is placed. The clip lands on the selected picture track,
 or the lowest one, or a new track when the composition has none. The playhead moves to the
 end of the placed clip. Replace lands on the picked clip's own track, and is **refused**
@@ -239,6 +242,8 @@ the Audio timeline and Audio layers in the Timeline follow it.
   leaves a gap, and **Ripple delete**, which closes it. **Split** cuts at the playhead and
   is there while the playhead is over the clip. **Select to end** selects the clip and
   every clip after it.
+- A cut that changed nothing, where the clip after carries straight on from the clip
+  before, is drawn dotted. **Join** on either clip's menu takes it away.
 - Right-click a gap for **Paste**, **Close gap**, **Insert title**, **Insert solid**,
   **Select all**, **Add marker here** and the work area's ends.
 - Right-click the ground under the last track for **Paste**, the insert rows, **Select all**,
@@ -424,11 +429,12 @@ Markers run as lines down through the tracks, and a region, a marker with a leng
 faint band. `R` adds a region over the work area.
 
 :::note[Not built yet]
-Multicam, captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
+Captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
 :::
 
 ## Related
 
 - [Sequence layers](/use/sequence-layers/)
+- [Multicam](/use/multicam/)
 - [Workspaces and panels](/use/workspaces/)
 - [Proxies](/use/proxies/)

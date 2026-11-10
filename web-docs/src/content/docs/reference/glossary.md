@@ -22,6 +22,8 @@ areas and components of Lumit.
 | **[Transcript](/use/captions/#transcripts)** | The words said in a footage item, each with when it is said and who says it. |
 | **Composition** | A timeline holding layers. |
 | **[Node graph](/use/node-graphs/)** (composition) | A composition whose picture is made by boxes and wires instead of a layer stack. |
+| **[Multicam comp](/use/multicam/)** | A composition holding the cameras and recorders of one shoot, in step. |
+| **Angle** | One camera or recorder in a multicam comp. A **sound angle** has no picture. |
 
 ## Layers and time
 
@@ -30,6 +32,7 @@ areas and components of Lumit.
 | **Layer** | One entry in a composition. |
 | **Clip** | One item within a Sequence layer. |
 | **[Caption layer](/use/captions/)** | A Text layer that shows the words being said, a few at a time. |
+| **Multicam clip** | A clip that plays one angle of a multicam comp. |
 | **Property** | A named value that a layer's transform, effect, etc. has. |
 | **Keyframe** | A property value linked to a specific frame, used to animate properties. |
 | **Retime** | The adjusting of the default layer/clip time. |

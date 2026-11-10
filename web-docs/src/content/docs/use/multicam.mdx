@@ -1,0 +1,136 @@
+---
+title: Multicam
+description: Cut between cameras filmed at the same time, synced by sound, timecode or marks.
+sidebar:
+  order: 8.6
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **multicam comp** holds the cameras and recorders of one shoot, each on a track of its own,
+in step. Each track is an **angle**. In the [Cut workspace](/use/cutting/) a multicam comp is
+cut as it plays, by picking angles in the **angle viewer**.
+
+<Shot file="multicam.png" caption="The angle viewer beside the composition, and multicam clips on the tracks." eager/>
+
+## Making a multicam comp
+
+Select the footage in the [Project panel](/panels/project/), right-click and choose **New
+multicam comp…**. It is also on the **Composition** menu.
+
+| Setting | What it does |
+| --- | --- |
+| **Name** | The comp's name. |
+| **Sync by** | What lines the files up. |
+| **Angles** | **Each file** gives every file an angle. **Each folder** makes the files in one folder on disk one camera, one after another on one angle. |
+| **Correct drift** | A sound file whose clock runs fast or slow against the cameras plays at the speed that keeps it in step. With **Sound** only. |
+
+| Sync by | What lines up |
+| --- | --- |
+| **Sound** | The files' sound. |
+| **Timecode** | The timecode each file was recorded with. |
+| **In marks** | Each file's In mark, set in the source view. |
+| **Out marks** | Each file's Out mark, set in the source view. |
+| **Markers** | Each file's first marker, set in the source view. |
+| **Starts** | Each angle's first file starts with the comp, and its other files follow on. |
+
+The comp takes the frame size and rate most of the picture files have. An angle of another
+size is fitted to the frame. Picture angles stand above sound angles, and each angle wears a
+label colour of its own. A file with no picture is a **sound angle**, and a new clip's sound
+plays the first one.
+
+A file with nothing to line it up by goes in after the other files on its angle, and the
+status line names it. A file placed on weak evidence is named too.
+
+**Multicam** on a composition's menu in the Project panel makes any comp a multicam comp,
+its Sequence layers its angles, or an ordinary comp again.
+
+## Placing it
+
+Drag a multicam comp onto a track, as footage. Its picture lands on a picture track and its
+sound on a sound track, linked. Each is a **multicam clip**, showing the angle's name and
+wearing its colour.
+
+## The angle viewer
+
+Double-click a multicam clip, or in the Cut workspace a multicam comp in the Project panel,
+to show its angles in the [source view](/use/cutting/#the-source-view). While the playhead is over a multicam
+clip, the angle viewer shows the moment under it and plays with it.
+
+The angle the picture shows is outlined. Each angle heard carries a speaker. An angle whose
+track is switched off in the multicam comp is left out. **Timecode** on the angle viewer's
+menu shows each angle's own timecode.
+
+| Control | What it does |
+| --- | --- |
+| **Picture and sound** | Picking an angle switches both. |
+| **Picture** | Picking an angle switches the picture. The sound stays on its angle. |
+| **Sound** | Picking an angle switches the sound. |
+| **Previous angles**, **Next angles** | Show the next page of angles, sixteen to a page. |
+
+| In the angle viewer | What it does |
+| --- | --- |
+| Click an angle | Cuts the multicam clip at the playhead and switches the piece after the cut. |
+| `Alt`+click | Switches the clip under the playhead without a cut. |
+| `Shift`+click | Shows the angle across the work area. |
+| `Ctrl`+`Alt`+click | Hears the angle's sound under the clip as well, or no longer. |
+
+With no multicam clip under the playhead, the angle viewer stands on its own frame with a
+strip and In and Out marks, and a click picks the angles to place. **Insert** and
+**Overwrite** place the marked stretch with them.
+
+## Footage in step
+
+With an ordinary clip under the playhead whose file is in a multicam comp, the angle viewer
+shows that comp in step with it, the clip's own angle outlined. Clicking another angle, or
+pressing its number, puts that angle on the track above, in step, from the playhead to the
+Out mark, else to the end of the clip.
+
+## Cutting
+
+Play, and cut to the angles as the shot goes. Each cut is one undo step, and clears the
+Cut timeline's selection.
+
+| Key | What it does |
+| --- | --- |
+| `1` to `9` | Cuts to that angle of the page. |
+| `Alt`+`1` to `9` | Switches to that angle without a cut. |
+| `Ctrl`+`Shift`+`←`, `Ctrl`+`Shift`+`→` | Switches to the previous or the next angle. |
+| `Ctrl`+`Alt`+`1`, `2`, `3` | **Picture and sound**, **Picture**, **Sound**. |
+| `Ctrl`+`Shift`+`↑`, `Ctrl`+`Shift`+`↓` | Previous and next page of angles. |
+
+With no multicam clip under the playhead, the digits go to their [markers](/use/markers/).
+
+## Afterwards
+
+- **Angle ▸** on a multicam clip's menu switches the picked clips' picture, and **Sound
+  angle ▸** their sound.
+- **Add sound ▸** hears another angle's sound under the clip as well. Switching leaves it on
+  its angle.
+- A cut inside one multicam clip, like any cut that changed nothing, is drawn dotted.
+  **Join** on the clip's menu takes it away, and the later piece takes the earlier one's
+  angle.
+- The **Roll** tool moves a cut between two angles.
+- **Flatten** puts the footage the angle plays in the clip's place. Each piece keeps its
+  file's own effects and fades, then the angle track's effects, then the clip's effects,
+  fades and speed. The angle track's own placement in the multicam comp is not carried.
+- **Open multicam comp** opens the comp with its angles as tracks. Moving an angle's clips
+  there moves every cut that shows it. Effects on an angle's track show in every cut of it.
+- Right-click an angle's track for **Sync to angle ▸**, which lines its files up again by
+  their sound against another angle. A file that would land on another stays where it was,
+  and the status line names it.
+- [Captions](/use/captions/) made from a track of multicam clips follow the angle each clip
+  plays.
+
+## Markers on footage
+
+With footage in the source view, `M` puts a marker on it at the frame shown. Its strip shows
+them. **Add marker** and **Clear markers** are on the source view's menu, and right-clicking
+a marker offers **Delete marker**.
+
+## Related
+
+- [Cutting](/use/cutting/)
+- [Sequence layers](/use/sequence-layers/)
+- [Captions](/use/captions/)
+- [Proxies](/use/proxies/)
