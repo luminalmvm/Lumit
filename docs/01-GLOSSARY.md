@@ -15,6 +15,8 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **File layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A file arrives with all of them mixed on one layer or clip unless Settings says otherwise. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |
+| **Transcript** | The words said in a footage item's sound, each with when it starts and ends, how sure the hearing was and who said it, in the item's own time. Made by **transcribing** |
+| **Speaker** | Someone who speaks in a transcript. One job that hears several items gives the same person the same speaker in each |
 | **Packed project** | A `.lum` that also carries its footage files inside it. The verbs are **pack** and **unpack** |
 | **Shared project** | A project several people edit at once. The **host** shares it and owns the file, the **guests** join with an **invite**, which is written as an **invite link**. One that is **kept online** is held by Lumit's server, which cannot read it and puts the edits in order, so nobody's machine has to be on |
 | **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. Somebody's own, or **Lumit's relay**, which comes with Lumit Pro |
@@ -35,6 +37,7 @@ composites over it.
 | **Sequence layer** | Clips cut back to back on one row, each with its own source, trim and Retime. The layer's own effects apply to the whole output |
 | **Precomp layer** | Another comp as a source. The verb is **precompose**. Has Retime |
 | **Solid**, **Text**, **Shape**, **Null** layers | Flat colour, styled text, vector shapes, a transform-only rig |
+| **Caption layer** | A Text layer that shows **captions**: a few timed words at a time, styled like any text. One made from a layer follows that layer's clips, trims and Retime, so its words stay on the speech through any edit. In code one caption is a `Cue` |
 | **Adjustment layer** | Applies its effects to everything below. Also a switch any drawing layer can carry |
 | **Layer group** | A header row folding layers together in the Timeline. Organisation only, the render never reads it |
 | **Audio layer** | An audio item, or footage's audio |
@@ -176,6 +179,7 @@ Not interchangeable.
 | **Text panel** | Sets a text layer's font, size, spacing and outline |
 | **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
 | **Expressions panel** | Keeps saved expressions and puts one on the selected properties |
+| **Captions panel** | Lists the selected caption layer's captions to read, retype, retime, split and join |
 | **Stack** (of panels) | A panel group drawn as twirled panels one above another, not as tabs |
 | **Flowchart** | A comp drawn between the comps that place it and the comps it places |
 
@@ -186,7 +190,7 @@ Not interchangeable.
 | **OFX** | OpenFX. Lumit hosts it |
 | **LFX** | An effect an extension carries: a WGSL shader and an optional interface page |
 | **CLAP**, **VST3** | Audio plugin standards Lumit hosts. No VST2 |
-| **Addon** | An optional download from Settings: the model runtime and model packs. Analysis only, never generation |
+| **Addon** | An optional download from Settings: the model runtime and model packs. Analysis only, never generation: a model measures a picture or hears speech, and makes no picture of its own |
 | **Model pack** | One addon holding one model |
 | **Extension** | A folder somebody else made, with an `extension.json`, that adds panels or effects. Its panel is shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
 | **Preset** | Saved effects, properties or animation |

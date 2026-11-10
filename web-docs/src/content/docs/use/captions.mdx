@@ -1,0 +1,160 @@
+---
+title: Captions
+description: Turn what is said in a layer into timed captions, style them, and export them.
+sidebar:
+  order: 12.2
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **caption layer** is a Text layer that shows the words being said, a few at a time. Lumit
+hears the speech in a layer, writes it down word by word, and cuts the words into captions.
+The hearing runs on your own computer.
+
+<Shot file="captions-panel.png" caption="A caption layer and the Captions panel." eager/>
+
+## Make captions
+
+1. Select a layer with sound: footage, a Sequence layer or a Precomp layer.
+2. Choose **Layer ▸ Audio ▸ Create captions…**.
+3. Pick the **Language**, the **Style** and how many **Lines**, then press **Create**.
+
+The first time, Lumit asks to install the speech model. See [Addons](/use/addons/#captions-whisper).
+
+Footage that has not been heard yet is transcribed first. The status line shows how far it
+has got, how fast it is going and how long is left. **Cancel** stops it, and keeps every
+file already finished. A file is only heard once: making captions from it again uses the
+words already written down.
+
+The new caption layer goes at the top of the stack, and the **Captions** panel opens on it.
+**Window ▸ Captions** opens the panel at any time.
+
+| Control | What it does |
+| --- | --- |
+| **Language** | The language spoken. **Detect** hears it from the first speech. |
+| **Speakers** | **Detect** tells the voices apart. **One** puts every word to one speaker. A number tells that many apart. |
+| **Audio stream** | Which of the file's sounds to hear, for a file that carries several. |
+| **Style** | How the captions look. See [styles](#styles). |
+| **Lines** | One or two lines a caption. |
+| **Characters per line** | The longest a line may be. |
+
+**More** shows the rest:
+
+| Control | What it does |
+| --- | --- |
+| **Words per caption** | The most words a caption holds. **1** shows one word at a time. |
+| **Gap** | Frames left empty between two captions. |
+| **Shortest**, **Longest** | How long a caption stays up, in seconds. |
+| **Reading speed** | Characters a second. A caption stays up longer to meet it, when there is room. |
+| **Speaker names** | **Names** puts the speaker's name in front when the speaker changes. **Dashes** puts a dash in front of each speaker's line when two share a caption. |
+| **Keep um and uh** | Keeps the sounds people make between words. |
+| **Words to expect** | Names and words the speakers use, so they are heard and spelt right. |
+| **Into English** | Writes what was said in English. Only with a speech pack that translates. |
+
+Captions break at pauses, at the ends of sentences and where the speaker changes, and never
+run past the limits.
+
+## Transcripts
+
+A **transcript** is the words said in a footage item, each with when it is said and who
+says it. It is saved with the project, and every caption layer made from that footage is cut
+from it.
+
+Right-click footage in the Project panel and choose **Transcribe** to write one without
+making captions. **Remove transcript** lets it go. Relinking the footage to a different file
+removes it too.
+
+## Captions follow the edit
+
+A caption layer made from a layer stays linked to it. Cut, trim, move or slow down that
+layer, or the clips in it, and the captions follow: each word stays on the moment it is
+said, and words cut out of the edit leave the captions with them.
+
+Captions imported from a file keep their own times on the caption layer.
+
+## Edit captions
+
+The **Captions** panel lists the captions of the selected caption layer, or of the top one
+in the composition, in the order they show. The caption being said is marked. Click one to
+move the playhead to it.
+
+- Double-click a caption, or press `Enter`, to retype it. `Shift+Enter` starts a new line.
+  Words you keep keep their timing.
+- Double-click a time to change it.
+- **Split** cuts the caption at the playhead, between the words either side of it.
+- **Join** makes the selected captions one.
+- **Add** puts a new caption at the playhead.
+- `Delete` removes the selected captions.
+- **Find** searches the captions. **Replace** changes what it finds, one at a time or **All**.
+  **Match case** and **Whole word** narrow what is found.
+
+The figure beside each caption is its reading speed, in characters a second. It turns
+amber above the layer's **Reading speed**.
+
+Twirl a caption layer open in the Timeline to see its captions as blocks. Drag an end to
+retime one, or the middle to move it. Double-click one to retype it in the Captions panel.
+Right-click one for **Split at the playhead**, **Join with next**, **Raise to top** and
+**Delete**. Double-clicking a caption layer in the Viewer retypes the caption showing.
+
+**Raise to top** moves the selected captions to the top of the picture, off a title at the
+bottom. **Put back down** returns them. **Position…** moves them by a number of pixels.
+
+Right-click a word in a caption to **Emphasise** it. The built-in styles colour it.
+
+**Limits** sets the lines, characters per line and timing the layer keeps. **Make captions
+again** cuts the captions again from their words, under those limits. Splits, joins and
+retiming done by hand are not kept.
+
+| Shortcut | What it does |
+| --- | --- |
+| `Ctrl+Shift+D` | Split the caption at the playhead |
+| `Ctrl+J` | Join the selected captions |
+| `Ctrl+Alt+C` | Add a caption at the playhead |
+| `Ctrl+Alt+↑`, `Ctrl+Alt+↓` | Go to the previous or next caption |
+
+The first three work while the Captions panel has focus. All of them change in
+[Settings ▸ Keymap](/use/settings/).
+
+## Styles
+
+A caption layer is styled like any Text layer: its font, size, fill, outline and background
+in the [Text panel](/use/text/#style-it), its box in the Paragraph panel. Its animators can
+follow the words as they are said.
+
+**Style** in the Captions panel sets all of that at once:
+
+| Style | Looks like |
+| --- | --- |
+| **Plain** | White words with a thin dark outline. |
+| **Box** | White words on a dark box, a line at a time. |
+| **Highlight** | The word being said turns yellow. |
+| **Karaoke** | The words fill with colour as they are said. |
+| **Pop** | Each word pops in as it is said. |
+| **Word box** | Bold capitals, with a box round the word being said. |
+| **One word** | One large word at a time. |
+
+**Save style…** keeps the current caption layer's look in the list.
+
+## Subtitle files
+
+**Export** in the Captions panel writes the captions as **SRT**, **WebVTT**, **Timed Text**
+or plain **Text**, on the composition's clock. WebVTT carries the time of every word.
+
+**File ▸ Import captions…** makes a caption layer from an `.srt`, `.vtt`, `.ttml`, `.dfxp`,
+`.ass`, `.ssa` or `.lrc` file. Words without their own times are spread over each caption by
+length.
+
+The [export](/use/export/) dialog's **Captions** row chooses how caption layers leave with
+the video: burned into the picture, as a subtitle file beside it, or carried inside it.
+
+:::note[Limitation]
+Captions are made from footage, Sequence and Precomp layers. Speech mixed into a
+composition only as its sound mix is not heard on its own.
+:::
+
+## Related
+
+- [Text](/use/text/)
+- [Addons](/use/addons/)
+- [Export](/use/export/)
+- [Cutting](/use/cutting/)

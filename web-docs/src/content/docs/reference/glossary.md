@@ -19,6 +19,7 @@ areas and components of Lumit.
 | **[Audio stream](/use/audio/#audio-streams)** | One of the sounds a media file carries side by side. |
 | **[Packed project](/use/projects/#packed-projects)** | A project file that also carries its footage files inside it. |
 | **Folder** | A grouping item in the Project panel. |
+| **[Transcript](/use/captions/#transcripts)** | The words said in a footage item, each with when it is said and who says it. |
 | **Composition** | A timeline holding layers. |
 | **[Node graph](/use/node-graphs/)** (composition) | A composition whose picture is made by boxes and wires instead of a layer stack. |
 
@@ -28,6 +29,7 @@ areas and components of Lumit.
 | --- | --- |
 | **Layer** | One entry in a composition. |
 | **Clip** | One item within a Sequence layer. |
+| **[Caption layer](/use/captions/)** | A Text layer that shows the words being said, a few at a time. |
 | **Property** | A named value that a layer's transform, effect, etc. has. |
 | **Keyframe** | A property value linked to a specific frame, used to animate properties. |
 | **Retime** | The adjusting of the default layer/clip time. |
