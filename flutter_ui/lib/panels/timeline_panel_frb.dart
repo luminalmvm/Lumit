@@ -3564,25 +3564,44 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _lastReveal = null;
         return;
       }
+      // `U`: the keyed rows and the headings over them, and nothing else. The
+      // rows decide which layers open, as the menu's reveal does: the engine's
+      // groups know nothing of a shape's or a mask's own keys, so a circle
+      // keyed on its Size left its layer shut.
+      if (_revealTaps == 1) {
+        final ids = {for (final l in layers) l.internallayerId.toString()};
+        final entries = [
+          for (final entry in ui.model.layers)
+            if (ids.contains(entry.layer.internallayerId.toString())) entry
+        ];
+        final rows = layerRows(
+          layers: entries,
+          open: _open,
+          rowHeight: 1,
+          hasAudio: _hasAudio,
+          hasPicture: _hasPicture,
+          sequenceExtra: _sequenceExtra,
+          flowParams: _flowParams,
+          volumeDb: _volumeDb,
+          driven: _driven,
+          reveal: {for (final id in ids) id: RevealFilter.keyframed},
+          revealPicked: _revealPicked,
+        );
+        for (final row in rows) {
+          if (row.foldRows.isEmpty) continue;
+          _setOpen(row.id, true);
+          _revealed[row.id] = RevealFilter.keyframed;
+        }
+        return;
+      }
       for (final layer in layers) {
         final id = layer.internallayerId.toString();
-        final groups = layer.revealGroups(
-          kind: _revealTaps == 1
-              ? BridgeRevealKind.animated
-              : BridgeRevealKind.modified,
-        );
+        final groups = layer.revealGroups(kind: BridgeRevealKind.modified);
         // Nothing qualifies: leave the layer shut rather than opening it onto
         // a list of headings the reveal just said were empty.
         if (!groups.any) continue;
         _setOpen(id, true);
-        // `U`: the keyed rows and the headings over them, and nothing else.
-        // The group paths below are what `UU` opens — a heading opened by path
-        // shows everything under it, which is exactly what the first tap is
-        // not for.
-        if (_revealTaps == 1) {
-          _revealed[id] = RevealFilter.keyframed;
-          continue;
-        }
+        // `UU`: a heading opened by path shows everything under it.
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
           // The drivers on the layer's graph come in the same list, and
