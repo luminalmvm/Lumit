@@ -175,6 +175,11 @@ fn sounding(layer: &Layer) -> bool {
         }
 }
 
+/// What each nested composition says, by its id and the angle it is played
+/// through: a multicam clip hears one angle of its composition, so the same
+/// composition says different words through different clips.
+type Nested = BTreeMap<(Uuid, Option<Uuid>), Vec<Said>>;
+
 /// Every word heard on `comp`'s rows, each beside its row's place in the
 /// stack, sorted by start and then by the stack, with mic bleed taken out.
 /// `nested` holds what each nested composition says, heard once.
@@ -182,7 +187,7 @@ fn listen(
     doc: &Document,
     comp: &Composition,
     depth: u8,
-    nested: &mut BTreeMap<Uuid, Vec<Said>>,
+    nested: &mut Nested,
 ) -> Vec<(Heard, usize)> {
     let mut out = Vec::new();
     for (stack, layer) in heard_layers(comp) {
@@ -250,25 +255,23 @@ pub fn sources(doc: &Document, comp: &Composition) -> Vec<Uuid> {
 
 fn gather(doc: &Document, comp: &Composition, depth: u8, out: &mut Vec<Uuid>) {
     for (_, layer) in heard_layers(comp) {
-        let sources: Vec<ClipSource> = match &layer.kind {
-            LayerKind::Footage { item } => vec![ClipSource::Footage(*item)],
-            LayerKind::Sequence { clips } => clips
-                .iter()
-                .filter(|c| c.audible)
-                .map(|c| c.source)
-                .collect(),
-            _ => Vec::new(),
-        };
-        for source in sources {
-            match source {
-                ClipSource::Footage(item) if !out.contains(&item) => out.push(item),
-                ClipSource::Comp(id) if depth < DEPTH => {
-                    if let Some(nested) = doc.comp(id) {
-                        gather(doc, nested, depth + 1, out);
+        match &layer.kind {
+            LayerKind::Footage { item } if !out.contains(item) => out.push(*item),
+            LayerKind::Sequence { clips } => {
+                for clip in clips.iter().filter(|c| c.audible) {
+                    match clip.source {
+                        ClipSource::Footage(item) if !out.contains(&item) => out.push(item),
+                        // Through its angle, when the clip is a multicam one.
+                        ClipSource::Comp(_) if depth < DEPTH => {
+                            if let Some(nested) = crate::multicam::nested_for(doc, clip) {
+                                gather(doc, &nested, depth + 1, out);
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
+            _ => {}
         }
     }
 }
@@ -304,12 +307,7 @@ fn footage_words(
 
 /// The words one clip says, in its layer's time, held inside the clip.
 /// `nested` is as [`listen`] has it.
-fn clip_words(
-    doc: &Document,
-    clip: &Clip,
-    depth: u8,
-    nested: &mut BTreeMap<Uuid, Vec<Said>>,
-) -> Vec<Said> {
+fn clip_words(doc: &Document, clip: &Clip, depth: u8, nested: &mut Nested) -> Vec<Said> {
     let Some(map) = Map::of(clip) else {
         return Vec::new();
     };
@@ -317,13 +315,15 @@ fn clip_words(
     let words = match clip.source {
         ClipSource::Footage(item) => footage_words(doc, item, clip.audio_streams.places(), lo, hi),
         ClipSource::Comp(id) => {
-            let Some(comp) = doc.comp(id).filter(|_| depth < DEPTH) else {
+            // The composition as the clip plays it: a multicam clip hears
+            // its angle's row alone, as the mix does.
+            let Some(comp) = crate::multicam::nested_for(doc, clip).filter(|_| depth < DEPTH)
+            else {
                 return Vec::new();
             };
-            // multicam: a multicam clip hears its angle's row alone, so the
-            // filter on the nested words goes here.
+            let id = (id, clip.angle);
             if !nested.contains_key(&id) {
-                let words: Vec<Said> = listen(doc, comp, depth + 1, nested)
+                let words: Vec<Said> = listen(doc, &comp, depth + 1, nested)
                     .into_iter()
                     .map(|(h, _)| Said {
                         item: h.item,

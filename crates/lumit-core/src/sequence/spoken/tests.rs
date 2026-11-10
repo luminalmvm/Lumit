@@ -261,6 +261,33 @@ fn nested_comps_footage_layers_and_bleed() {
     let items: Vec<(Uuid, usize)> = heard.iter().map(|h| (h.item, h.index)).collect();
     assert_eq!(items, [(a, 2), (b, 1), (a, 3)], "the faint copy went");
     assert_eq!(heard[1].end, ms(1200), "held to the layer's out point");
+
+    // A multicam clip says its own angle's words and no other's, and a clip
+    // of footage takes no notice of an angle left on it.
+    let angles = comp(&mut doc, 25);
+    let wide = row(&mut doc, angles, vec![clip(a, 0, 4000, 0)]);
+    let close = row(&mut doc, angles, vec![clip(b, 0, 4000, 0)]);
+    let cut = comp(&mut doc, 25);
+    let mut through = Clip::new(
+        ClipSource::Comp(angles),
+        Rational::ZERO,
+        ms(4000),
+        Rational::ZERO,
+        ms(4000),
+    );
+    through.angle = Some(close);
+    let mut take = clip(a, 0, 4000, 4000);
+    take.angle = Some(wide);
+    row(&mut doc, cut, vec![through, take]);
+    let through = super::heard(&doc, doc.comp(cut).unwrap());
+    let (angle, after): (Vec<&Heard>, Vec<&Heard>) =
+        through.iter().partition(|h| h.start < ms(4000));
+    assert_eq!(
+        angle.iter().map(|h| (h.item, h.index)).collect::<Vec<_>>(),
+        [(b, 0), (b, 1)],
+        "the close angle alone"
+    );
+    assert!(after.iter().all(|h| h.item == a) && after.len() == TALK.len());
 }
 
 const PLAN: &[(&str, i64, i64, f32)] = &[
