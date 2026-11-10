@@ -73,6 +73,8 @@ pub enum Task {
     Matte,
     /// The thing that was clicked on, traced.
     Segmentation,
+    /// The words somebody said, with when they said them.
+    Speech,
 }
 
 impl fmt::Display for Task {
@@ -82,6 +84,7 @@ impl fmt::Display for Task {
             Task::Depth => "depth",
             Task::Matte => "matte",
             Task::Segmentation => "segmentation",
+            Task::Speech => "speech",
         })
     }
 }
@@ -344,6 +347,105 @@ impl Default for Sam2 {
     }
 }
 
+/// Whisper: an encoder run once per window of speech, then a decoder run once
+/// per word piece, with its cache carried from one step to the next (§4).
+///
+/// The pack also carries the files that say how to read the model: the
+/// tokenizer, the generation settings and the model's own shape. Two smaller
+/// models may ride along, one that hears where speech is and one that tells
+/// voices apart.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Whisper {
+    /// The encoder `.onnx` file inside the addon folder.
+    pub encoder: String,
+    /// The merged decoder `.onnx` file, the one with and without a cache.
+    pub decoder: String,
+    /// `tokenizer.json`: the word pieces and the special tokens.
+    pub tokenizer: String,
+    /// `generation_config.json`: the languages, the tasks, the tokens never
+    /// to write, and the heads that line words up with time.
+    pub generation: String,
+    /// `config.json`: how many layers and heads, and how many mel bands.
+    pub config: String,
+    /// Whether the model writes other languages in English well. A model
+    /// trained only to transcribe says false, and Lumit then does not offer
+    /// it.
+    pub translates: bool,
+    /// Silero VAD, which says where speech is. Without it every stretch of
+    /// sound counts as speech.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vad: Option<String>,
+    /// A speaker model, which turns a second of a voice into a fingerprint.
+    /// Without it nobody is told apart.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voices: Option<String>,
+    /// The log-mel spectrogram, `[1, mels, 3000]`.
+    pub features: String,
+    /// What the encoder hands the decoder, `[1, 1500, width]`.
+    pub hidden: String,
+    /// The word pieces so far, `[1, n]` int64.
+    pub input_ids: String,
+    /// The encoder's output, as the decoder names it.
+    pub encoder_states: String,
+    /// Whether the cache is being read, `[1]` bool.
+    pub use_cache: String,
+    /// The cache going in, `<past>.<layer>.decoder.key` and so on.
+    pub past: String,
+    /// The cache coming out, `<present>.<layer>.decoder.key` and so on.
+    pub present: String,
+    /// The next word piece's scores, `[1, n, vocabulary]`.
+    pub logits: String,
+    /// Where each piece looked in the sound, `<name>.<layer>`,
+    /// `[1, heads, n, 1500]`.
+    pub cross_attentions: String,
+    /// Silero's 576 samples in.
+    pub vad_input: String,
+    /// Silero's state in, `[2, 1, 128]`.
+    pub vad_state: String,
+    /// Silero's sample rate, an int64 scalar.
+    pub vad_rate: String,
+    /// Silero's speech probability out, `[1, 1]`.
+    pub vad_output: String,
+    /// Silero's state out, fed back on the next chunk.
+    pub vad_state_out: String,
+    /// The speaker model's filterbank in, `[1, frames, 80]`.
+    pub voices_input: String,
+    /// The speaker model's fingerprint out, `[1, width]`.
+    pub voices_output: String,
+}
+
+impl Default for Whisper {
+    fn default() -> Self {
+        Whisper {
+            encoder: String::new(),
+            decoder: String::new(),
+            tokenizer: "tokenizer.json".into(),
+            generation: "generation_config.json".into(),
+            config: "config.json".into(),
+            translates: true,
+            vad: None,
+            voices: None,
+            features: "input_features".into(),
+            hidden: "last_hidden_state".into(),
+            input_ids: "input_ids".into(),
+            encoder_states: "encoder_hidden_states".into(),
+            use_cache: "use_cache_branch".into(),
+            past: "past_key_values".into(),
+            present: "present".into(),
+            logits: "logits".into(),
+            cross_attentions: "cross_attentions".into(),
+            vad_input: "input".into(),
+            vad_state: "state".into(),
+            vad_rate: "sr".into(),
+            vad_output: "output".into(),
+            vad_state_out: "stateN".into(),
+            voices_input: "x".into(),
+            voices_output: "embedding".into(),
+        }
+    }
+}
+
 /// The family whose tensor contract the engine speaks, and the names it
 /// speaks it with. A re-export of the same architecture under different
 /// tensor names is a catalogue edit, not a Lumit release.
@@ -360,6 +462,8 @@ pub enum Arch {
     Birefnet(Birefnet),
     /// Segmentation, SAM 2.
     Sam2(Sam2),
+    /// Speech, Whisper. Boxed, because it names far more than the others.
+    Whisper(Box<Whisper>),
 }
 
 impl Arch {
@@ -372,10 +476,11 @@ impl Arch {
             Arch::DepthAnything(_) => Task::Depth,
             Arch::Rvm(_) | Arch::Birefnet(_) => Task::Matte,
             Arch::Sam2(_) => Task::Segmentation,
+            Arch::Whisper(_) => Task::Speech,
         }
     }
 
-    /// The `.onnx` files inside the addon folder this family names.
+    /// The files inside the addon folder this family names.
     #[must_use]
     pub fn files(&self) -> Vec<&str> {
         match self {
@@ -384,6 +489,19 @@ impl Arch {
             Arch::Rvm(m) => vec![m.file.as_str()],
             Arch::Birefnet(m) => vec![m.file.as_str()],
             Arch::Sam2(m) => vec![m.encoder.as_str(), m.decoder.as_str()],
+            Arch::Whisper(m) => [
+                Some(&m.encoder),
+                Some(&m.decoder),
+                Some(&m.tokenizer),
+                Some(&m.generation),
+                Some(&m.config),
+                m.vad.as_ref(),
+                m.voices.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect(),
         }
     }
 }
@@ -752,13 +870,13 @@ mod tests {
         }
     }
 
-    /// The five model blocks the catalogue publishes, copied from
+    /// The model blocks the catalogue publishes, copied from
     /// `lumit-addons/addons/<id>/addon.json`, with the task each one claims.
     ///
     /// The catalogue is a second repository and nothing in either tree reads
     /// the other's files, so this is the only place a block written one way
     /// and a struct written another are ever put together.
-    const PUBLISHED: [(&str, Task); 5] = [
+    const PUBLISHED: [(&str, Task); 6] = [
         (
             r#""task": "synthesis", "arch": "rife", "file": "rife.onnx",
                "img0": "img0", "img1": "img1", "timestep": "timestep",
@@ -798,6 +916,16 @@ mod tests {
                "masks": "masks", "iou": "iou_predictions", "size": 1024,
                "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]"#,
             Task::Segmentation,
+        ),
+        (
+            r#""task": "speech", "arch": "whisper",
+               "encoder": "encoder_model_fp16.onnx",
+               "decoder": "decoder_model_merged_fp16.onnx",
+               "tokenizer": "tokenizer.json", "generation": "generation_config.json",
+               "config": "config.json", "translates": false,
+               "vad": "silero_vad.onnx",
+               "voices": "voices.onnx""#,
+            Task::Speech,
         ),
     ];
 
