@@ -154,6 +154,8 @@ Not interchangeable.
 | Term | Meaning |
 |---|---|
 | **Panel** | A dockable piece of UI |
+| **Window** | One of Lumit's operating-system windows. The **main window** has the menu bar. A **floating window** holds panels taken out of it, arranged as the main window's are |
+| **Video monitor** | The Viewer's picture alone, filling a display of its own |
 | **Workspace** | A saved panel layout |
 | **Profile** | One person's settings on a machine: appearance, shortcuts, layout, preferences and what they have saved. Never anything about the machine |
 | **Account** | A Lumit account, which a profile can be signed in to. Optional |

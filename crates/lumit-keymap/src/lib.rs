@@ -354,6 +354,9 @@ impl ActionId {
             "panel.focus.next" => "Focus the next panel",
             "panel.focus.prev" => "Focus the previous panel",
             "panel.search.focus" => "Focus the panel's search box",
+            "panel.float" => "Move the panel to a new window",
+            "panel.dock" => "Move the panel to the main window",
+            "window.monitor" => "Show or hide the video monitor",
             _ => return self.0.clone(),
         };
         known.to_string()

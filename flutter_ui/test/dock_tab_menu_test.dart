@@ -1,5 +1,4 @@
-// The right-click menu on a panel's tab: Close panel, and Pop out only on the
-// Viewer.
+// The right-click menu on a panel's tab: Close panel.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -64,8 +63,6 @@ void main() {
 
     await rightClickTab(tester, Panel.hierarchy.title);
     expect(find.text(l10n.closePanel), findsOneWidget);
-    expect(find.text(l10n.popOutPanel), findsNothing,
-        reason: 'only the Viewer pops out');
 
     await tester.tap(find.byKey(const ValueKey('tab-menu-close')));
     await tester.pump();

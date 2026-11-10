@@ -6,26 +6,40 @@
 // movePanel. Every pane is a drop target, bare ones included. A pane standing
 // alone has no tab, so its title lifts it instead (DockPaneHandle).
 
+import 'dart:async' show Timer, unawaited;
 import 'dart:math' show max, min;
+import 'dart:ui' show ViewFocusEvent, ViewFocusState;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/gestures.dart'
     show GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/rendering.dart' show RenderOffstage;
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
-import '../main.dart' show LumitUiState;
+import '../main.dart' show LumitNotice, LumitState, LumitUiState;
 import '../l10n/strings.dart';
 import '../panels/viewer_strips.dart' show viewerPaneCorners;
+import '../state/background.dart' show showWindow;
 import '../state/dock.dart';
 import '../theme/style_sheet.dart';
-import '../state/settings.dart' show effectiveUiScale;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import '../widgets/ui_scale.dart';
 import 'pop_out.dart';
+import 'window_frame.dart'
+    show
+        FloatingResizeEdges,
+        FloatingTitleLine,
+        FloatingWindowButtons,
+        WindowDragArea,
+        floatingButtonsWidth,
+        showFloatingWindowMenu,
+        windowFrameDrawn;
 
 typedef PanelBuilder = Widget Function(BuildContext context, PaneId pane);
 
@@ -217,7 +231,27 @@ class DockWidget extends StatefulWidget {
   State<DockWidget> createState() => _DockWidgetState();
 }
 
-class _DockWidgetState extends State<DockWidget> {
+/// What the keyboard asks of the dock, which is the one thing that knows
+/// how big each panel is and where each window stands. Each answers whether
+/// anything moved.
+abstract final class DockCommands {
+  static bool Function(PaneId pane) _float = (_) => false;
+  static bool Function(PaneId pane) _dock = (_) => false;
+
+  /// Move [pane] into a window of its own.
+  static bool float(PaneId pane) => _float(pane);
+
+  /// Put [pane] back in the main window.
+  static bool dock(PaneId pane) => _dock(pane);
+
+  static void Function(PaneId pane) _front = (_) {};
+
+  /// Bring the window [pane] is in forward, for a key that moved the
+  /// keyboard there from another window.
+  static void front(PaneId pane) => _front(pane);
+}
+
+class _DockWidgetState extends State<DockWidget> with WidgetsBindingObserver {
   // One stable key per pane, used to hit-test the pane rects during a drag.
   // A pane keeps its key even while it is an inactive tab (unbuilt, so its
   // key resolves to no context and is skipped). Made on demand, because the
@@ -236,67 +270,526 @@ class _DockWidgetState extends State<DockWidget> {
   late final _DragController _drag = _DragController(
     paneKey: _paneKey,
     headerKey: _headerKey,
-    panes: () => panesIn(widget.root),
+    // Floating windows stand above the main one, the latest on top, so a
+    // pointer over one that covers part of the main window is over it.
+    panes: () => [
+      if (!(_drag.dragged != null && mainWindowOnly(_drag.dragged!.panel)))
+        for (final w in widget.root.windows.reversed) ...panesIn(w.root),
+      ...mainPanesIn(widget.root),
+    ],
+    places: _places,
+    onStart: _placeViews,
     onGhostShow: _showGhost,
     onGhostHide: _removeGhost,
     onCommit: _commitMove,
+    onFloat: _float,
+    onOutside: _outline,
   );
-  OverlayEntry? _ghost;
 
-  // Panes popped out into windows of their own. They stay in the arrangement,
-  // so it saves, restores and changes with the project as it always did, and
-  // the dock just leaves them out. Closing the window puts the pane back where
-  // it was.
-  final Map<PaneId, PopOutWindow> _popped = {};
+  /// The outline sent last, so a pointer standing still sends nothing.
+  Rect? _outlined;
 
-  bool _shown(DockNode node) =>
-      panesIn(node).any((pane) => !_popped.containsKey(pane));
-
-  void _popOut(PaneId pane) {
-    final size = _paneKey(pane).currentContext?.size ?? const Size(960, 540);
-    final window = PopOutWindow.open(
-      title: paneTitle(pane),
-      size: size * effectiveUiScale(widget.uiScale),
-      onClosed: () => _dock(pane),
-    );
-    if (window == null) return;
-    setState(() => _popped[pane] = window);
-    widget.activePanel.value = pane;
+  void _outline(Rect? bounds) {
+    if (bounds == _outlined) return;
+    _outlined = bounds;
+    unawaited(NativeWindows.ghost(bounds, _drag.theme?.accent));
   }
 
-  void _dock(PaneId pane) {
-    if (_forget(pane) && mounted) setState(() {});
+  /// The pill that follows a drag, one in each window, each drawing it only
+  /// while the pointer is over its own window.
+  final List<OverlayEntry> _ghosts = [];
+
+  /// The floating windows on screen, by the arrangement's window id. Opened
+  /// a frame after a window joins the arrangement and closed a frame after it
+  /// leaves, so a view is never drawn into a window that is not there.
+  final Map<int, _Host> _hosts = {};
+
+  /// A frame has been asked for to open the windows still missing.
+  bool _opening = false;
+
+  /// The main window's view, which every other window's place is read
+  /// against.
+  int? _mainView;
+
+  /// Where each of Lumit's views draws on the screen, by view id, as the
+  /// runner said when a drag last started.
+  final Map<int, _ViewPlace> _places = {};
+
+  /// The last pane the keyboard was in, in each window: 0 for the main one.
+  final Map<int, PaneId> _lastActive = {};
+
+  /// How big a window opened from a menu is made, by window id: the size its
+  /// panel had in the window it came from.
+  final Map<int, Size> _sizeHints = {};
+
+  /// Windows the user has just made, which come up with the keyboard. Every
+  /// other window opens quietly: one coming back at start, or with a project
+  /// or a workspace, leaves the keyboard where it was.
+  final Set<int> _madeNow = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.activePanel.addListener(_noteActive);
+    NativeWindows.moved = _movedByRunner;
+    DockCommands._float = _floatKey;
+    DockCommands._dock = _dockKey;
+    DockCommands._front = _frontKey;
+    frontWindowOverlay = _frontOverlay;
+    mainWindowOverlay = _mainOverlay;
+    otherWindowOverlays = _otherOverlays;
+    mainWindowOnly = _mainWindowOnly;
   }
 
-  // The window closes after the frame that takes its view out of the tree.
-  bool _forget(PaneId pane) {
-    final window = _popped.remove(pane);
-    if (window == null) return false;
-    WidgetsBinding.instance.addPostFrameCallback((_) => window.close());
+  /// The main window's own overlay.
+  OverlayState? _mainOverlay() => mounted ? Overlay.maybeOf(context) : null;
+
+  /// Every window's overlay but [own].
+  List<OverlayState> _otherOverlays(OverlayState own) => [
+        if (_mainOverlay() case final main? when main != own) main,
+        for (final host in _hosts.values)
+          if (host.overlay.currentState case final other? when other != own)
+            other,
+      ];
+
+  /// An extension's page on Linux is drawn by the main window itself, over
+  /// where its panel is, so its panel stays in the main window there.
+  static bool _mainWindowOnly(Panel panel) =>
+      panel == Panel.extension &&
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  /// The overlay of the floating window in front, when it can hold a
+  /// dialogue: what the main window's dialogues open in meanwhile.
+  OverlayState? _frontOverlay() {
+    for (final host in _hosts.values) {
+      if (!host.window.isActivated) continue;
+      final overlay = host.overlay.currentState;
+      final size = overlay == null ? null : MediaQuery.maybeSizeOf(overlay.context);
+      return size != null && roomForDialogue(size) ? overlay : null;
+    }
+    return null;
+  }
+
+  bool _floatKey(PaneId pane) {
+    if (!popOutAvailable || !canFloat(widget.root, pane)) return false;
+    _float(pane);
+    return true;
+  }
+
+  void _frontKey(PaneId pane) {
+    final host = _hosts[windowOf(widget.root, pane)?.id];
+    if (host == null) {
+      // Only when a floating window has the keyboard: the main window is
+      // in front already otherwise.
+      if (_hosts.values.any((h) => h.window.isActivated)) {
+        unawaited(showWindow());
+      }
+    } else if (!host.window.isActivated) {
+      // Activating puts a maximised window back to its own size, so that
+      // one is asked to maximise again, which brings it forward as well.
+      host.window.isMaximised
+          ? host.window.setMaximised(true)
+          : host.window.activate();
+    }
+  }
+
+  bool _dockKey(PaneId pane) {
+    if (windowOf(widget.root, pane) == null) return false;
+    _dockPane(pane);
     return true;
   }
 
   @override
+  void didUpdateWidget(DockWidget old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.activePanel, widget.activePanel)) {
+      old.activePanel.removeListener(_noteActive);
+      widget.activePanel.addListener(_noteActive);
+    }
+    // Another arrangement came in, a project's or a workspace's: a window it
+    // shares with the one before keeps its native window, and goes where the
+    // new arrangement says.
+    if (!identical(old.root, widget.root)) _replace();
+  }
+
+  @override
   void dispose() {
-    _popped.keys.toList().forEach(_forget);
+    WidgetsBinding.instance.removeObserver(this);
+    widget.activePanel.removeListener(_noteActive);
+    if (NativeWindows.moved == _movedByRunner) NativeWindows.moved = null;
+    if (DockCommands._float == _floatKey) DockCommands._float = (_) => false;
+    if (DockCommands._dock == _dockKey) DockCommands._dock = (_) => false;
+    if (DockCommands._front == _frontKey) DockCommands._front = (_) {};
+    if (frontWindowOverlay == _frontOverlay) frontWindowOverlay = null;
+    if (mainWindowOverlay == _mainOverlay) mainWindowOverlay = null;
+    if (otherWindowOverlays == _otherOverlays) otherWindowOverlays = null;
+    for (final host in _hosts.values) {
+      host.dispose();
+      final window = host.window;
+      WidgetsBinding.instance.addPostFrameCallback((_) => window.close());
+    }
+    _hosts.clear();
     _removeGhost();
     _drag.dispose();
     super.dispose();
   }
 
+  DockWindow? _window(int id) {
+    for (final w in widget.root.windows) {
+      if (w.id == id) return w;
+    }
+    return null;
+  }
+
+  // --- Floating windows ---------------------------------------------------
+
+  /// Open the windows the arrangement has and the screen has not, and close
+  /// the ones it no longer has.
+  void _syncWindows() {
+    final wanted = {for (final w in widget.root.windows) w.id};
+    for (final id in _hosts.keys.where((id) => !wanted.contains(id)).toList()) {
+      final host = _hosts.remove(id)!..dispose();
+      dismissModalsIn(host.overlay.currentState);
+      WidgetsBinding.instance.addPostFrameCallback((_) => host.window.close());
+    }
+    // A window's title names its panels, which move in and out of it. Set
+    // after the frame: the window tells its listeners, which build.
+    for (final w in widget.root.windows) {
+      final host = _hosts[w.id];
+      final title = _windowTitle(w);
+      if (host == null || host.title == title) continue;
+      host.title = title;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => host.window.setTitle(title));
+    }
+    if (_opening || wanted.every(_hosts.containsKey)) return;
+    _opening = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openMissing());
+  }
+
+  Future<void> _openMissing() async {
+    try {
+      if (!mounted) return;
+      if (!popOutAvailable) {
+        // Nowhere to open a window, a browser above all: the panels come back
+        // into the window there is rather than going missing.
+        if (widget.root.windows.isEmpty) return;
+        setState(() => dockAllWindows(widget.root));
+        widget.onLayoutChanged();
+        return;
+      }
+      final displays = await NativeWindows.displays();
+      final main = await NativeWindows.frame();
+      var cascade = 0;
+      for (final w in widget.root.windows.toList()) {
+        if (!mounted) return;
+        if (_hosts.containsKey(w.id) || !widget.root.windows.contains(w)) {
+          continue;
+        }
+        _open(
+            w,
+            quiet: !_madeNow.remove(w.id),
+            fitWindowFrame(w.frame,
+                displays: displays,
+                main: main,
+                size: _sizeHints.remove(w.id),
+                cascade: cascade++),
+            main?.scale ?? 1.0);
+      }
+    } finally {
+      _opening = false;
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Open [w]'s native window and put it at [frame]: frameless where Lumit
+  /// draws the title line, above the main window, watched for moves. Placed
+  /// before it is first drawn, so it never shows somewhere else first.
+  ///
+  /// [units] is how many of the system's units make one logical pixel, for
+  /// the size the window is first made at.
+  void _open(DockWindow w, FloatingFrame? frame, double units,
+      {bool quiet = false}) {
+    final window = PopOutWindow.open(
+      title: _windowTitle(w),
+      size: frame == null
+          ? const Size(960, 600)
+          : Size(frame.bounds.width / units, frame.bounds.height / units),
+      onClosed: () => _closed(w.id),
+    );
+    if (window == null) {
+      setState(() => dockWindow(widget.root, w.id));
+      widget.onLayoutChanged();
+      return;
+    }
+    final host = _Host(w.id, window)
+      ..placed = frame
+      ..title = _windowTitle(w);
+    host.listener = () => _changed(w.id);
+    window.changes.addListener(host.listener!);
+    _hosts[w.id] = host;
+    host.ready = _adopt(host, w, frame, quiet);
+  }
+
+  Future<void> _adopt(
+      _Host host, DockWindow w, FloatingFrame? frame, bool quiet) async {
+    final handle = host.window.handle;
+    if (handle == 0) return;
+    await NativeWindows.adopt(handle,
+        ownTitle: windowFrameDrawn, onTop: w.onTop, quiet: quiet);
+    if (!_hosts.containsKey(w.id)) return;
+    // Placing it shows it there, with the keyboard left where it was.
+    if (frame != null) {
+      await NativeWindows.setFrame(handle, frame.bounds,
+          maximised: frame.maximised);
+      if (frame.fullScreen) host.window.setFullScreen(true);
+    }
+    // A window made just now by hand comes to the front with the keyboard.
+    if (!quiet && _hosts.containsKey(w.id)) {
+      if (frame?.maximised ?? false) {
+        host.window.setMaximised(true);
+      } else if (!(frame?.fullScreen ?? false)) {
+        host.window.activate();
+      }
+    }
+  }
+
+  /// Every window the new arrangement shares with the old keeps its native
+  /// window; the ones whose place differs move.
+  void _replace() {
+    for (final w in widget.root.windows) {
+      final host = _hosts[w.id];
+      if (host == null || host.placed == w.frame) continue;
+      host.placed = w.frame;
+      final frame = w.frame;
+      if (frame == null) continue;
+      host.ready = host.ready.then((_) async {
+        final displays = await NativeWindows.displays();
+        final main = await NativeWindows.frame();
+        final fitted =
+            fitWindowFrame(frame, displays: displays, main: main) ?? frame;
+        if (!_hosts.containsKey(w.id)) return;
+        host.window.setFullScreen(false);
+        await NativeWindows.setFrame(host.window.handle, fitted.bounds,
+            maximised: fitted.maximised);
+        if (fitted.fullScreen) host.window.setFullScreen(true);
+      });
+    }
+  }
+
+  /// The system's own title for [w]: what its panels are called.
+  String _windowTitle(DockWindow w) => l10n.floatingWindowTitle([
+        for (final node in w.root.children) ..._frontTitles(node),
+      ].join(', '));
+
+  List<String> _frontTitles(DockNode node) => switch (node) {
+        DockPane pane => [paneTitle(pane.id)],
+        DockTabs tabs =>
+          tabs.stacked ? [for (final c in tabs.children) paneTitle(c.id)]
+              : [paneTitle(tabs.activePane.id)],
+        DockSplit split => [
+            for (final c in split.children) ..._frontTitles(c),
+          ],
+      };
+
+  /// The system closed window [id], or its close button was pressed: its
+  /// panels go back into the main window. Not while Lumit is quitting, when
+  /// they stay where they are for the next start.
+  void _closed(int id) {
+    if (!mounted || windowsQuitting) return;
+    if (_window(id) == null) return;
+    // A dialogue up in it holds work, a filled-in export say: the window
+    // stays until that is answered.
+    if (modalOpenIn(_hosts[id]?.overlay.currentState)) return;
+    setState(() => dockWindow(widget.root, id));
+    widget.onLayoutChanged();
+  }
+
+  /// Window [id] was resized, put in front or sent back (and moved, on
+  /// Linux).
+  void _changed(int id) {
+    final host = _hosts[id];
+    if (host == null || !mounted) return;
+    final active = host.window.isActivated;
+    if (active && !host.active) _focusWindow(id);
+    host.active = active;
+    host.soon(() => _noteFrame(id));
+  }
+
+  /// The runner says a window it watches stopped moving.
+  void _movedByRunner(int handle) {
+    for (final host in _hosts.values) {
+      if (host.window.handle == handle) {
+        host.soon(() => _noteFrame(host.id));
+        return;
+      }
+    }
+  }
+
+  /// Write down where window [id] is now, so it opens there next time.
+  Future<void> _noteFrame(int id) async {
+    final host = _hosts[id];
+    if (host == null) return;
+    final now = await NativeWindows.frame(host.window.handle);
+    // A display plugged in or pulled moves windows about before Lumit is
+    // told. Where they were shoved to is not where they were left, and is
+    // not kept against the displays there were.
+    final setup = NativeWindows.setupInUse;
+    if (setup != null &&
+        displaySetupOf(await NativeWindows.displays()) != setup) {
+      return;
+    }
+    final w = _window(id);
+    if (now == null || now.minimised || w == null || !mounted) return;
+    // Full screen, the window stands where it stood before, as it will again
+    // when it leaves full screen.
+    final full = host.window.isFullScreen || now.fullScreen;
+    final before = w.frame;
+    final frame = FloatingFrame(
+        full && before != null ? before.bounds : now.bounds,
+        maximised: full ? before?.maximised ?? false : now.maximised,
+        fullScreen: full,
+        display: now.display);
+    if (frame == w.frame) return;
+    w.frame = frame;
+    host.placed = frame;
+    widget.onLayoutChanged();
+  }
+
+  /// Keep the last pane the keyboard was in, per window.
+  void _noteActive() {
+    final pane = widget.activePanel.value;
+    if (pane == null) return;
+    _lastActive[windowOf(widget.root, pane)?.id ?? 0] = pane;
+  }
+
+  /// Window [id] (0 for the main one) came to the front: the keyboard goes
+  /// back to the pane it was in there.
+  void _focusWindow(int id) {
+    final roots = id == 0
+        ? mainPanesIn(widget.root)
+        : panesIn(_window(id)?.root ?? DockSplit(DockAxis.horizontal, [], []));
+    if (roots.isEmpty) return;
+    final current = widget.activePanel.value;
+    if (current != null && roots.contains(current)) return;
+    final last = _lastActive[id];
+    widget.activePanel.value =
+        last != null && roots.contains(last) ? last : roots.first;
+  }
+
+  @override
+  void didChangeViewFocus(ViewFocusEvent event) {
+    if (event.state != ViewFocusState.focused) return;
+    if (event.viewId == _mainView) {
+      _focusWindow(0);
+      return;
+    }
+    for (final host in _hosts.values) {
+      if (host.window.viewId == event.viewId) {
+        _focusWindow(host.id);
+        return;
+      }
+    }
+  }
+
+  /// Ask the runner where every view is, for a drag that may cross windows.
+  Future<void> _placeViews() async {
+    final main = _mainView;
+    final asked = <int, Future<NativeFrame?>>{
+      if (main != null) main: NativeWindows.frame(),
+      for (final host in _hosts.values)
+        host.window.viewId: NativeWindows.frame(host.window.handle),
+    };
+    _places.clear();
+    for (final MapEntry(key: view, value: frame) in asked.entries) {
+      final f = await frame;
+      if (f != null && f.placed) {
+        _places[view] = (client: f.client, scale: f.scale);
+      }
+    }
+  }
+
+  /// Take [pane] out into a window of its own, at [bounds] when a drag let go
+  /// somewhere, and otherwise over the main window at the size it had.
+  /// [group] takes the whole group it is in.
+  void _float(PaneId pane, {Rect? bounds, bool group = false}) {
+    final size = _paneSize(pane);
+    DockWindow? made;
+    setState(() {
+      final frame = bounds == null ? null : FloatingFrame(bounds);
+      made = group
+          ? floatGroup(widget.root, pane, frame: frame)
+          : floatPane(widget.root, pane, frame: frame);
+    });
+    final window = made;
+    if (window == null) return;
+    if (size != null) _sizeHints[window.id] = size;
+    _madeNow.add(window.id);
+    widget.activePanel.value = pane;
+    widget.onLayoutChanged();
+  }
+
+  /// [pane]'s size on screen, in logical pixels, or null when it is not
+  /// drawn.
+  Size? _paneSize(PaneId pane) {
+    final box = _paneKey(pane).currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return MatrixUtils.transformRect(
+            box.getTransformTo(null), Offset.zero & box.size)
+        .size;
+  }
+
+  /// Put [pane] back in the main window.
+  void _dockPane(PaneId pane) {
+    setState(() => dockPane(widget.root, pane));
+    widget.activePanel.value = pane;
+    widget.onLayoutChanged();
+  }
+
+  /// Put every panel of window [id] back in the main window.
+  void _dockWindow(int id) {
+    setState(() => dockWindow(widget.root, id));
+    widget.onLayoutChanged();
+  }
+
+  /// Keep window [id] above other programs' windows, or not.
+  void _setOnTop(int id, bool on) {
+    final w = _window(id);
+    final host = _hosts[id];
+    if (w == null || host == null) return;
+    w.onTop = on;
+    unawaited(NativeWindows.setOnTop(host.window.handle, on));
+    setState(() {});
+    widget.onLayoutChanged();
+  }
+
   void _showGhost() {
     _removeGhost();
-    _ghost = OverlayEntry(builder: (_) => _GhostLayer(drag: _drag));
-    Overlay.of(context).insert(_ghost!);
+    void insert(OverlayState? overlay, int? view) {
+      if (overlay == null) return;
+      final entry = OverlayEntry(builder: (_) => _GhostLayer(drag: _drag, view: view));
+      overlay.insert(entry);
+      _ghosts.add(entry);
+    }
+
+    insert(Overlay.maybeOf(context), _mainView);
+    for (final host in _hosts.values) {
+      insert(host.overlay.currentState, host.window.viewId);
+    }
   }
 
   void _removeGhost() {
-    _ghost?.remove();
-    _ghost = null;
+    for (final entry in _ghosts) {
+      entry.remove();
+    }
+    _ghosts.clear();
   }
 
   void _commitMove(PaneId dragged, PaneId target, DropPosition pos) {
     setState(() => movePanel(widget.root, dragged, target, pos));
+    widget.activePanel.value = dragged;
     widget.onLayoutChanged();
   }
 
@@ -308,14 +801,11 @@ class _DockWidgetState extends State<DockWidget> {
     widget.onLayoutChanged();
   }
 
-  /// Close every other pane of [keep]'s group. A popped-out pane keeps its
-  /// window, as the row that offers this says.
+  /// Close every other pane of [keep]'s group.
   void _closeOthers(PaneId keep, DockTabs group) {
     setState(() {
       for (final c in group.children.toList()) {
-        if (c.id != keep && !_popped.containsKey(c.id)) {
-          closePane(widget.root, c.id);
-        }
+        if (c.id != keep) closePane(widget.root, c.id);
       }
     });
     widget.onLayoutChanged();
@@ -360,72 +850,139 @@ class _DockWidgetState extends State<DockWidget> {
 
   @override
   Widget build(BuildContext context) {
+    _mainView = View.maybeOf(context)?.viewId;
+    _syncWindows();
     final t = ThemeScope.of(context).theme;
-    // A popped pane taken out of the arrangement (closed, or another project's
-    // arrangement came in without it) takes its window with it. So does every
-    // popped pane when nothing would be left in the dock.
-    final present = panesIn(widget.root).toSet();
-    for (final pane in _popped.keys.toList()) {
-      if (!present.contains(pane) || !_shown(widget.root)) _forget(pane);
-    }
-    final dock = ValueListenableBuilder<PaneId?>(
-      valueListenable: widget.maximised,
-      builder: (context, maximised, _) => Container(
-        // Cards stand on the room; flush panes sit on the canvas.
-        color: t.tokens.roomed ? t.room : t.surface0,
-        padding: EdgeInsets.all(t.tokens.windowInset),
-        // One pane filling the window, when one has been asked for and is
-        // still in the arrangement. A pane closed while it was maximised
-        // simply puts the arrangement back rather than showing nothing.
-        child: maximised != null &&
-                present.contains(maximised) &&
-                !_popped.containsKey(maximised)
-            ? _maximised(context, t, maximised)
-            : _buildNode(context, widget.root),
+    return ViewAnchor(
+      view: _hosts.isEmpty
+          ? null
+          : ViewCollection(views: [
+              for (final w in widget.root.windows)
+                if (_hosts[w.id] case final host?)
+                  KeyedSubtree(
+                    key: ValueKey<(String, int)>(('window', w.id)),
+                    child: host.window.view(
+                        _FloatingWindowView(dock: this, window: w, host: host)),
+                  ),
+            ]),
+      child: _DockScope(
+        dock: this,
+        child: _dockArea(context, t, widget.root),
       ),
     );
-    return _PopOutScope(
-      // The main window keeps at least one pane.
-      popOut: popOutAvailable &&
-              present.where((p) => !_popped.containsKey(p)).length > 1
-          ? _popOut
-          : null,
-      child: ViewAnchor(
-        view: _popped.isEmpty
-            ? null
-            : ViewCollection(views: [
-                for (final MapEntry(key: pane, value: window)
-                    in _popped.entries)
-                  KeyedSubtree(
-                    key: ValueKey(pane),
-                    child: window.view(_PoppedPane(
-                      pane: pane,
-                      buildPanel: widget.buildPanel,
-                      activePanel: widget.activePanel,
-                      uiScale: widget.uiScale,
-                    )),
-                  ),
-              ]),
-        child: _DockScope(dock: this, child: dock),
+  }
+
+  /// One window's panels: [tree], or the pane in it filling the window when
+  /// one has been asked for. A pane closed while it was maximised simply puts
+  /// the arrangement back rather than showing nothing.
+  Widget _dockArea(BuildContext context, LumitTheme t, DockSplit tree,
+          {_Edge? edge}) =>
+      ValueListenableBuilder<PaneId?>(
+        valueListenable: widget.maximised,
+        builder: (context, maximised, _) {
+          final held = identical(tree, widget.root)
+              ? mainPanesIn(tree)
+              : panesIn(tree);
+          return Container(
+            // Cards stand on the room; flush panes sit on the canvas.
+            color: t.tokens.roomed ? t.room : t.surface0,
+            padding: EdgeInsets.all(t.tokens.windowInset),
+            child: maximised != null && held.contains(maximised)
+                ? _maximised(context, t, maximised, edge)
+                : _buildNode(context, tree, edge: edge),
+          );
+        },
+      );
+
+  /// The body of floating window [w]: its panels. Where Lumit draws the
+  /// window's frame, the line they head it with is the window's top line,
+  /// and a line of the window's own goes above them only when the pane in the
+  /// top right corner has no line to carry the buttons.
+  Widget _floatingBody(BuildContext context, DockWindow w, _Host host) {
+    final t = ThemeScope.of(context).theme;
+    final _Edge? edge = windowFrameDrawn
+        ? (
+            host: host,
+            corner: true,
+            direction: Directionality.of(context),
+            onMenu: (context, at) => _showWindowMenu(context, at, w.id),
+          )
+        : null;
+    final area = Stack(children: [
+      Positioned.fill(child: _dockArea(context, t, w.root, edge: edge)),
+      _WindowNotice(host: host),
+    ]);
+    if (edge == null) return area;
+    // Counted once the first frame is laid out, and until then taken as
+    // shown, so a window never opens with a line it then loses.
+    if (host.buttons.value == null) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => host.buttons.value ??= 0);
+    }
+    return FloatingResizeEdges(
+      window: host.window.handle,
+      child: ColoredBox(
+        color: t.tokens.roomed ? t.room : t.surface0,
+        child: ValueListenableBuilder<int?>(
+          valueListenable: host.buttons,
+          // Stretched, so the panels take the window's whole width rather
+          // than what the notice over them asks for.
+          builder: (context, shown, area) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (shown == 0)
+                FloatingTitleLine(
+                  theme: t,
+                  window: host.window.handle,
+                  onTop: w.onTop,
+                  onMenu: edge.onMenu,
+                ),
+              Expanded(child: area!),
+            ],
+          ),
+          child: area,
+        ),
       ),
+    );
+  }
+
+  /// A floating window's own menu, on its top line.
+  void _showWindowMenu(BuildContext context, Offset at, int id) {
+    final w = _window(id);
+    final host = _hosts[id];
+    if (w == null || host == null) return;
+    showFloatingWindowMenu(
+      context,
+      at,
+      window: host.window.handle,
+      maximised: host.window.isMaximised,
+      fullScreen: host.window.isFullScreen,
+      onTop: w.onTop,
+      onSetOnTop: (on) => _setOnTop(id, on),
+      onFullScreen: (on) => host.window.setFullScreen(on),
+      onDock: () => _dockWindow(id),
     );
   }
 
   /// The window filled with [pane]: its whole group when it is in one, so
   /// the tabs stay to switch between and to double-click back, and the pane
   /// on its own otherwise.
-  Widget _maximised(BuildContext context, LumitTheme t, PaneId pane) {
+  Widget _maximised(BuildContext context, LumitTheme t, PaneId pane,
+      [_Edge? edge]) {
     final group = groupOf(widget.root, pane);
     if (group != null) {
-      return _buildNode(context, group);
+      return _buildNode(context, group, edge: edge);
     }
-    return _PaneChrome(
-      pane: pane,
-      activePanel: widget.activePanel,
-      drag: _drag,
-      onClose: _closePanel,
-      header: _bareTitle(t, pane),
-      child: widget.buildPanel(context, pane),
+    return _onTop(
+      edge,
+      _PaneChrome(
+        pane: pane,
+        activePanel: widget.activePanel,
+        drag: _drag,
+        onClose: _closePanel,
+        header: _bareTitle(t, pane),
+        child: widget.buildPanel(context, pane),
+      ),
     );
   }
 
@@ -441,32 +998,37 @@ class _DockWidgetState extends State<DockWidget> {
         panel == Panel.cutTimeline) {
       return null;
     }
-    return DockPaneHandle(
-      child: _TitleLine(
-        panel: panel.name,
-        child: Text(
-          t.kickerCase(paneTitle(pane)),
-          key: const ValueKey('pane-title'),
-          style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+    return _TitleLine(
+      panel: panel.name,
+      lifts: true,
+      child: Text(
+        t.kickerCase(paneTitle(pane)),
+        key: const ValueKey('pane-title'),
+        style: t.tokens.titleCentred ? t.kickerOn : t.kicker,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 
-  Widget _buildNode(BuildContext context, DockNode node) => switch (node) {
-        DockPane pane => _PaneChrome(
-            pane: pane.id,
-            activePanel: widget.activePanel,
-            drag: _drag,
-            onClose: _closePanel,
-            header: _bareTitle(ThemeScope.of(context).theme, pane.id),
-            child: widget.buildPanel(context, pane.id),
+  /// [node], told where it stands against a floating window's top edge by
+  /// [edge]. A stack's headers each twirl their panel, so a stack in the
+  /// corner leaves the window a line of its own.
+  Widget _buildNode(BuildContext context, DockNode node, {_Edge? edge}) =>
+      switch (node) {
+        DockPane pane => _onTop(
+            edge,
+            _PaneChrome(
+              pane: pane.id,
+              activePanel: widget.activePanel,
+              drag: _drag,
+              onClose: _closePanel,
+              header: _bareTitle(ThemeScope.of(context).theme, pane.id),
+              child: widget.buildPanel(context, pane.id),
+            ),
           ),
         DockTabs() when node.stacked => _StackGroup(
             tabs: node,
-            hidden: _popped.keys.toSet(),
             buildPanel: widget.buildPanel,
             activePanel: widget.activePanel,
             drag: _drag,
@@ -476,14 +1038,14 @@ class _DockWidgetState extends State<DockWidget> {
           ),
         DockTabs() => _TabGroup(
             tabs: node,
-            hidden: _popped.keys.toSet(),
             buildPanel: widget.buildPanel,
             activePanel: widget.activePanel,
             drag: _drag,
             onClose: _closePanel,
             onChanged: _groupChanged,
+            edge: edge,
           ),
-        DockSplit() => _buildSplit(context, node),
+        DockSplit() => _buildSplit(context, node, edge: edge),
       };
 
   /// A group changed something of its own: the fronted tab, what is twirled
@@ -493,27 +1055,31 @@ class _DockWidgetState extends State<DockWidget> {
     widget.onLayoutChanged();
   }
 
-  Widget _buildSplit(BuildContext context, DockSplit split) {
+  Widget _buildSplit(BuildContext context, DockSplit split, {_Edge? edge}) {
     final t = ThemeScope.of(context).theme;
     final horizontal = split.axis == DockAxis.horizontal;
-    // A child whose panes are all popped out takes no room, and the seam
-    // across the gap it leaves moves the two either side of it.
-    final shown = [
-      for (var i = 0; i < split.children.length; i++)
-        if (_shown(split.children[i])) i,
-    ];
+    final shown = [for (var i = 0; i < split.children.length; i++) i];
     return LayoutBuilder(
       builder: (context, box) {
         final seams =
             (shown.length - 1) * _Divider.extentFor(t.tokens.tileGap);
         final weights = _givenWay(split, shown,
             (horizontal ? box.maxWidth : box.maxHeight) - seams);
-        final children = _splitChildren(context, t, split, shown, weights);
-        if (!horizontal) return Column(children: children);
+        final children =
+            _splitChildren(context, t, split, shown, weights, edge);
+        // Every child fills its slot across the split too. A stack with
+        // every panel shut is no taller than its headers, and stood in the
+        // middle of its slot.
+        if (!horizontal) {
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children);
+        }
         return Row(
           // The arrangement is the one the user built, in every language:
           // the seam drags and the drop sides below are in screen terms.
           textDirection: TextDirection.ltr,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: children,
         );
       },
@@ -563,16 +1129,34 @@ class _DockWidgetState extends State<DockWidget> {
   /// A split's children and the seams between them, each child weighted by
   /// [weights] where given, else by its share.
   List<Widget> _splitChildren(BuildContext context, LumitTheme t,
-      DockSplit split, List<int> shown, List<double>? weights) {
+      DockSplit split, List<int> shown, List<double>? weights,
+      [_Edge? edge]) {
     final horizontal = split.axis == DockAxis.horizontal;
+    // The buttons are in the corner the line ends at: the left one in a
+    // right to left language.
+    final last = edge?.direction == TextDirection.rtl ? 0 : shown.length - 1;
     final children = <Widget>[];
     for (final (k, i) in shown.indexed) {
+      // Side by side, every child runs along the top edge. One above
+      // another, only the first does.
+      final _Edge? along = edge == null
+          ? null
+          : horizontal
+              ? (
+                  host: edge.host,
+                  corner: edge.corner && k == last,
+                  direction: edge.direction,
+                  onMenu: edge.onMenu,
+                )
+              : k == 0
+                  ? edge
+                  : null;
       children.add(Expanded(
         // Flex is integer; scale the weight up to keep precision.
         flex: ((weights?[k] ?? split.shares[i]) * 10000)
             .round()
             .clamp(1, 1 << 30),
-        child: _buildNode(context, split.children[i]),
+        child: _buildNode(context, split.children[i], edge: along),
       ));
       if (k < shown.length - 1) {
         final j = shown[k + 1];
@@ -598,10 +1182,7 @@ class _DockWidgetState extends State<DockWidget> {
   void _resize(
       DockSplit split, int i, int j, double deltaPx, double totalExtent) {
     if (totalExtent <= 0) return;
-    final total = [
-      for (var k = 0; k < split.children.length; k++)
-        if (_shown(split.children[k])) split.shares[k],
-    ].reduce((a, b) => a + b);
+    final total = split.shares.reduce((a, b) => a + b);
     final deltaShare = deltaPx / totalExtent * total;
     const minShare = 0.05;
     final a = split.shares[i] + deltaShare;
@@ -620,46 +1201,107 @@ class _DockWidgetState extends State<DockWidget> {
   }
 }
 
+/// Where one of Lumit's views draws on the screen: its drawing area in the
+/// system's units, and how many of those make one logical pixel.
+typedef _ViewPlace = ({Rect client, double scale});
+
 /// The live state of a re-dock drag, shared between the dragged source (a tab
-/// pill), the ghost pill and every pane's drop preview.
+/// pill), the ghost pill and every pane's drop preview, in every window.
 /// It resolves the hovered pane and drop position by hit-testing the pointer
 /// against the pane rects each update, because MouseRegion does not fire while
 /// a pointer is captured by a drag.
+///
+/// The pointer stays with the window the drag began in, wherever it goes:
+/// each system keeps a pressed mouse with the window it was pressed in. A pane
+/// in another window is found by taking the pointer through the screen, with
+/// the places the runner gave for each window as the drag began.
 class _DragController extends ChangeNotifier {
   final GlobalKey Function(PaneId) paneKey;
   final GlobalKey Function(PaneId) headerKey;
   final Iterable<PaneId> Function() panes;
+
+  /// Each view's place on the screen, by view id. Filled by [onStart].
+  final Map<int, _ViewPlace> places;
+  final Future<void> Function() onStart;
   final VoidCallback onGhostShow;
   final VoidCallback onGhostHide;
   final void Function(PaneId dragged, PaneId target, DropPosition pos) onCommit;
+
+  /// Make a window of the dragged pane, at [bounds] in the system's units.
+  final void Function(PaneId pane, {Rect? bounds, bool group}) onFloat;
+
+  /// Where the outline of the window a drag would make goes, in the system's
+  /// units, while the pointer is over none of Lumit's windows; null when it
+  /// is over one, or the drag has ended.
+  final void Function(Rect? bounds) onOutside;
 
   _DragController({
     required this.paneKey,
     required this.headerKey,
     required this.panes,
+    required this.places,
+    required this.onStart,
     required this.onGhostShow,
     required this.onGhostHide,
     required this.onCommit,
+    required this.onFloat,
+    required this.onOutside,
   });
 
   PaneId? dragged;
   LumitTheme? theme;
+
+  /// The view the drag began in, and its size in logical pixels.
+  int? view;
+  Size viewSize = Size.zero;
+
+  /// The pointer, in logical pixels of the view the drag began in.
   Offset pointer = Offset.zero;
+
+  /// The dragged pane's size on screen, in logical pixels: what a window
+  /// made where it is let go is given.
+  Size? size;
   PaneId? hoveredPanel;
   DropPosition? dropPosition;
 
-  void start(PaneId pane, Offset globalPos, LumitTheme t) {
+  /// Over none of Lumit's windows: letting go makes a window there.
+  bool outside = false;
+
+  /// Held down, the key that makes a window wherever the pane is let go:
+  /// Ctrl, and Command on macOS.
+  bool detach = false;
+
+  /// A press that may become a drag: ask where every window is now, so the
+  /// answer is in before the pointer has travelled far enough to start one.
+  void prepare() {
+    places.clear();
+    _placing = onStart();
+  }
+
+  Future<void> _placing = Future<void>.value();
+
+  void start(PaneId pane, Offset localPos, LumitTheme t,
+      {int? view, Size viewSize = Size.zero, Size? size}) {
     dragged = pane;
     theme = t;
-    pointer = globalPos;
+    this.view = view;
+    this.viewSize = viewSize;
+    this.size = size;
+    pointer = localPos;
+    _placing.then((_) {
+      if (dragged != pane) return;
+      _resolve();
+      notifyListeners();
+    });
     _resolve();
     onGhostShow();
     notifyListeners();
   }
 
-  void update(Offset globalPos) {
-    pointer = globalPos;
+  void update(Offset localPos) {
+    pointer = localPos;
     _resolve();
+    onOutside(outside ? newWindowBounds : null);
     notifyListeners();
   }
 
@@ -667,16 +1309,23 @@ class _DragController extends ChangeNotifier {
     final dragged = this.dragged;
     final target = hoveredPanel;
     final pos = dropPosition;
+    final apart = detach || outside;
+    final bounds = newWindowBounds;
     _reset();
+    onOutside(null);
     onGhostHide();
     notifyListeners();
-    if (dragged != null && target != null && pos != null) {
+    if (dragged == null) return;
+    if (apart) {
+      onFloat(dragged, bounds: bounds);
+    } else if (target != null && pos != null) {
       onCommit(dragged, target, pos);
     }
   }
 
   void cancel() {
     _reset();
+    onOutside(null);
     onGhostHide();
     notifyListeners();
   }
@@ -686,41 +1335,104 @@ class _DragController extends ChangeNotifier {
     theme = null;
     hoveredPanel = null;
     dropPosition = null;
+    outside = false;
+    detach = false;
   }
 
-  /// Find the pane under the pointer and the drop position within it.
+  /// The pointer on the screen, in the system's units, or null when the
+  /// runner has not said where the drag's window is.
+  Offset? get screenPoint {
+    final place = places[view];
+    return place == null ? null : place.client.topLeft + pointer * place.scale;
+  }
+
+  /// The pointer in [inView]'s logical pixels, or null when where that view
+  /// is is not known.
+  Offset? pointerIn(int? inView) {
+    if (inView == view) return pointer;
+    final place = places[inView];
+    final screen = screenPoint;
+    if (place == null || screen == null) return null;
+    return (screen - place.client.topLeft) / place.scale;
+  }
+
+  /// Where a window made of the dragged pane goes, in the system's units:
+  /// its title line under the pointer, its panel the size it was. Null when
+  /// the screen is not known, and the window goes where a new one would.
+  Rect? get newWindowBounds {
+    final screen = screenPoint;
+    final place = places[view];
+    if (screen == null || place == null) return null;
+    final s = place.scale;
+    final content = size ?? const Size(640, 400);
+    final grab = const Offset(48, 14) * s;
+    return Rect.fromLTWH(screen.dx - grab.dx, screen.dy - grab.dy,
+        content.width * s, (content.height + 32) * s);
+  }
+
+  /// Find the pane under the pointer and the drop position within it, in
+  /// whichever window it is.
   void _resolve() {
     hoveredPanel = null;
     dropPosition = null;
+    outside = false;
+    final keys = HardwareKeyboard.instance;
+    detach = defaultTargetPlatform == TargetPlatform.macOS
+        ? keys.isMetaPressed
+        : keys.isControlPressed;
+    if (detach) return;
     for (final id in panes()) {
-      final ctx = paneKey(id).currentContext;
-      if (ctx == null) continue;
-      final box = ctx.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached) continue;
-      // A hidden tab is built (to keep its panel state) but sits under an
-      // offstage ancestor. It still resolves a render object and would report
-      // a rect overlapping the visible pane, so skip it — only the on-stage
-      // pane is a valid drop target.
-      if (!_onStage(box)) continue;
-      final rect = box.localToGlobal(Offset.zero) & box.size;
-      if (rect.contains(pointer)) {
-        hoveredPanel = id;
-        dropPosition = _positionIn(rect, pointer);
-        return;
-      }
+      final hit = _hit(paneKey(id));
+      if (hit == null) continue;
+      hoveredPanel = id;
+      dropPosition = _positionIn(hit.rect, hit.point);
+      return;
     }
     // A header in a stack joins the stack, under the panel it belongs to.
     for (final id in panes()) {
-      final box =
-          headerKey(id).currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.attached || !_onStage(box)) continue;
-      if ((box.localToGlobal(Offset.zero) & box.size).contains(pointer)) {
-        hoveredPanel = id;
-        dropPosition = DropPosition.stack;
-        return;
-      }
+      if (_hit(headerKey(id)) == null) continue;
+      hoveredPanel = id;
+      dropPosition = DropPosition.stack;
+      return;
     }
+    outside = !_overAWindow();
   }
+
+  /// [key]'s box and the pointer, both in logical pixels of the view the box
+  /// is in, when the pointer is over it.
+  ({Rect rect, Offset point})? _hit(GlobalKey key) {
+    final context = key.currentContext;
+    final box = context?.findRenderObject() as RenderBox?;
+    if (context == null ||
+        box == null ||
+        !box.attached ||
+        !box.hasSize ||
+        // A hidden tab is built (to keep its panel state) but sits under an
+        // offstage ancestor. It still resolves a render object and would
+        // report a rect overlapping the visible pane, so skip it — only the
+        // on-stage pane is a valid drop target.
+        !_onStage(box)) {
+      return null;
+    }
+    final point = pointerIn(_viewOf(context));
+    if (point == null) return null;
+    // Both corners, through every transform on the way: the interface is
+    // drawn at a scale, so a box's own size is not its size on screen.
+    final rect = MatrixUtils.transformRect(
+        box.getTransformTo(null), Offset.zero & box.size);
+    return rect.contains(point) ? (rect: rect, point: point) : null;
+  }
+
+  /// Whether the pointer is over one of Lumit's windows. With no places from
+  /// the runner, only the drag's own window is known.
+  bool _overAWindow() {
+    final screen = screenPoint;
+    if (screen == null) return (Offset.zero & viewSize).contains(pointer);
+    return places.values.any((p) => p.client.contains(screen));
+  }
+
+  static int? _viewOf(BuildContext context) =>
+      context.findAncestorWidgetOfExactType<View>()?.view.viewId;
 
   /// Whether [box] has no offstage ancestor — i.e. it is actually painted.
   static bool _onStage(RenderObject box) {
@@ -780,6 +1492,11 @@ class _DragSourceState extends State<_DragSource> {
   /// move handler must never look up inherited widgets through `context`.
   LumitTheme? _theme;
 
+  /// The view pressed in and its size, taken at pointer-down for the same
+  /// reason.
+  int? _view;
+  Size _viewSize = Size.zero;
+
   @override
   Widget build(BuildContext context) {
     return Listener(
@@ -787,6 +1504,12 @@ class _DragSourceState extends State<_DragSource> {
         _downAt = e.position;
         _dragging = false;
         _theme = ThemeScope.of(context).theme;
+        widget.drag.prepare();
+        final view = context.findAncestorWidgetOfExactType<View>()?.view;
+        _view = view?.viewId;
+        _viewSize = view == null
+            ? Size.zero
+            : view.physicalSize / view.devicePixelRatio;
       },
       onPointerMove: (e) {
         final theme = _theme;
@@ -794,7 +1517,8 @@ class _DragSourceState extends State<_DragSource> {
         if (!_dragging) {
           if ((e.position - _downAt!).distance < _dragSlop) return;
           _dragging = true;
-          widget.drag.start(widget.pane, e.position, theme);
+          widget.drag.start(widget.pane, e.position, theme,
+              view: _view, viewSize: _viewSize, size: _paneSize());
         } else {
           widget.drag.update(e.position);
         }
@@ -812,12 +1536,28 @@ class _DragSourceState extends State<_DragSource> {
       child: widget.child,
     );
   }
+
+  /// The dragged pane's size on screen, in logical pixels.
+  Size? _paneSize() {
+    final box =
+        widget.drag.paneKey(widget.pane).currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return MatrixUtils.transformRect(
+            box.getTransformTo(null), Offset.zero & box.size)
+        .size;
+  }
 }
 
-/// The ghost pill that follows the cursor during a drag, on the app Overlay.
+/// The ghost pill that follows the cursor during a drag, on one window's
+/// overlay. Each window has one, and draws it only while the pointer is over
+/// that window. With the key down that makes a window of it, the window it
+/// would make is drawn round the pill.
 class _GhostLayer extends StatelessWidget {
   final _DragController drag;
-  const _GhostLayer({required this.drag});
+
+  /// The view this layer is drawn in.
+  final int? view;
+  const _GhostLayer({required this.drag, required this.view});
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -825,24 +1565,58 @@ class _GhostLayer extends StatelessWidget {
         builder: (context, _) {
           final pane = drag.dragged;
           final t = drag.theme;
-          if (pane == null || t == null) return const SizedBox.shrink();
+          final inView = drag.pointerIn(view);
+          if (pane == null || t == null || inView == null) {
+            return const SizedBox.shrink();
+          }
           // The pointer is a window coordinate and the pill is placed in the
           // overlay's own space; at any UI scale but 100% those differ, and
           // the pill would trail the pointer by the difference.
-          final at = overlayLocal(context, drag.pointer);
-          return Positioned(
-            left: at.dx + 10,
-            top: at.dy + 8,
-            child: IgnorePointer(
-              // Picked up rather than cut in: the pill comes up from a little
-              // small as the tab leaves its strip (docs/15 §8).
-              child: Entrance(
-                spec: ThemeScope.of(context).motion.lift,
-                scale: 0.92,
-                alignment: Alignment.topLeft,
-                child: _GhostPill(title: paneTitle(pane), theme: t),
+          final at = overlayLocal(context, inView);
+          final size = drag.size;
+          // The window it would make, from its corners in the view's own
+          // pixels: the same rectangle [newWindowBounds] puts on the screen.
+          final corner = inView - const Offset(48, 14);
+          final window = size == null
+              ? null
+              : Rect.fromPoints(
+                  overlayLocal(context, corner),
+                  overlayLocal(context,
+                      corner + Offset(size.width, size.height + 32)));
+          return Stack(
+            children: [
+              if (drag.detach && window != null)
+                Positioned.fromRect(
+                  rect: window,
+                  child: IgnorePointer(
+                    child: Entrance(
+                      spec: ThemeScope.of(context).motion.dropZone,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: t.accent.withValues(alpha: 0.12),
+                          borderRadius:
+                              BorderRadius.circular(t.tokens.cardRadius),
+                          border: Border.all(color: t.accent),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                left: at.dx + 10,
+                top: at.dy + 8,
+                child: IgnorePointer(
+                  // Picked up rather than cut in: the pill comes up from a
+                  // little small as the tab leaves its strip (docs/15 §8).
+                  child: Entrance(
+                    spec: ThemeScope.of(context).motion.lift,
+                    scale: 0.92,
+                    alignment: Alignment.topLeft,
+                    child: _GhostPill(title: paneTitle(pane), theme: t),
+                  ),
+                ),
               ),
-            ),
+            ],
           );
         },
       );
@@ -1031,36 +1805,51 @@ class _TitleLine extends StatelessWidget {
 
   /// The panel it heads, or the fronted one of a group.
   final String panel;
-  const _TitleLine({required this.panel, required this.child});
+
+  /// Whether the line lifts its pane, as a bare pane's title does.
+  final bool lifts;
+
+  const _TitleLine(
+      {required this.panel, required this.child, this.lifts = false});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final roomed = t.tokens.roomed;
     final dot = t.tokens.headerDot;
-    return Container(
-      key: const ValueKey('pane-title-line'),
-      height: t.density.headerStrip,
-      decoration: dress(BoxDecoration(color: roomed ? t.surface1 : t.surface2),
-          partStyle(context, t, 'header', inside: panel)),
-      padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 10),
-      child: Row(
-        children: [
-          if (dot) ...[
-            _HeaderDot(colour: t.accent),
-            const SizedBox(width: 8),
+    return dockTopLine(context, (room) {
+      final words = Padding(
+        padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 10) + room,
+        child: Row(
+          children: [
+            if (dot) ...[
+              _HeaderDot(colour: t.accent),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: t.tokens.titleCentred
+                  ? Center(child: child)
+                  : Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: child),
+            ),
+            // The dot's own width again, so the words centre on the line
+            // rather than on what is left of it.
+            if (dot) const SizedBox(width: 14),
           ],
-          Expanded(
-            child: t.tokens.titleCentred
-                ? Center(child: child)
-                : Align(alignment: AlignmentDirectional.centerStart, child: child),
-          ),
-          // The dot's own width again, so the words centre on the line rather
-          // than on what is left of it.
-          if (dot) const SizedBox(width: 14),
-        ],
-      ),
-    );
+        ),
+      );
+      return Container(
+        key: const ValueKey('pane-title-line'),
+        height: t.density.headerStrip,
+        decoration: dress(
+            BoxDecoration(color: roomed ? t.surface1 : t.surface2),
+            partStyle(context, t, 'header', inside: panel)),
+        child: lifts
+            ? DockPaneHandle(child: words)
+            : DockWindowGround(child: words),
+      );
+    });
   }
 }
 
@@ -1095,9 +1884,6 @@ Widget _card(BuildContext context, LumitTheme t, String? panel, Widget child) {
 /// Lantern the whole group is one card and the tabs sit on its title line.
 class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
-
-  /// Panes popped out into windows of their own, which the group leaves out.
-  final Set<PaneId> hidden;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
   final ValueNotifier<PaneId?> activePanel;
@@ -1106,25 +1892,25 @@ class _TabGroup extends StatelessWidget {
   /// Take one pane out of the arrangement, for the tab's right-click menu.
   final void Function(PaneId) onClose;
 
+  /// Where it stands against a floating window's top edge, which its strip
+  /// of tabs runs along when it does.
+  final _Edge? edge;
+
   const _TabGroup({
     required this.tabs,
-    required this.hidden,
     required this.buildPanel,
     required this.onChanged,
     required this.activePanel,
     required this.drag,
     required this.onClose,
+    this.edge,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final shown = [
-      for (var i = 0; i < tabs.children.length; i++)
-        if (!hidden.contains(tabs.children[i].id)) i,
-    ];
-    // The tab in front, or the first one left when that one is popped out.
-    final front = shown.contains(tabs.active) ? tabs.active : shown.first;
+    final shown = [for (var i = 0; i < tabs.children.length; i++) i];
+    final front = tabs.active.clamp(0, tabs.children.length - 1);
     final active = tabs.children[front];
 
     return _card(
@@ -1133,13 +1919,16 @@ class _TabGroup extends StatelessWidget {
       active.id.panel.name,
       Column(
         children: [
-          _TabStrip(
-            tabs: tabs,
-            shown: shown,
-            front: front,
-            drag: drag,
-            onClose: onClose,
-            onChanged: onChanged,
+          _onTop(
+            edge,
+            _TabStrip(
+              tabs: tabs,
+              shown: shown,
+              front: front,
+              drag: drag,
+              onClose: onClose,
+              onChanged: onChanged,
+            ),
           ),
           // Two requirements meet here, each once lost to the other. Panel
           // state, scroll offsets, twirl-downs, survives a tab switch, so a
@@ -1723,11 +2512,10 @@ class _TabPillState extends State<_TabPill> {
 
 /// A panel's right-click menu, on its tab, its header in a stack, its own
 /// title when it stands alone, and the empty end of its strip: the panel's
-/// own commands (close, close the others, pop out, fill the window), what
-/// to add beside it, how the group it is in is drawn, and the way back to
-/// the workspace. A pane standing alone has no group, so those rows go.
-///
-/// Only the Viewer pops out: the engine draws into one window today.
+/// own commands (close, close the others, fill the window), where it lives
+/// (a window of its own, its group in one, back in the main window), what to
+/// add beside it, how the group it is in is drawn, and the way back to the
+/// workspace. A pane standing alone has no group, so those rows go.
 void _showPaneMenu(
   BuildContext context,
   Offset position, {
@@ -1738,9 +2526,7 @@ void _showPaneMenu(
   bool listTabs = false,
 }) {
   final dock = _DockScope.of(context);
-  final popOut = pane.panel == Panel.viewer
-      ? context.getInheritedWidgetOfExactType<_PopOutScope>()?.popOut
-      : null;
+  final root = dock?.widget.root;
   // Null outside the shell (a bare widget test), where there is no workspace
   // to reset.
   final ui = Provider.of<LumitUiState?>(context, listen: false);
@@ -1748,16 +2534,22 @@ void _showPaneMenu(
       ? const <PaneId>[]
       : [
           for (final c in group.children)
-            if (c.id != pane && !dock._popped.containsKey(c.id)) c.id,
+            if (c.id != pane) c.id,
         ];
   final maximised = dock?.widget.maximised;
+  final windows = popOutAvailable && root != null;
+  final floating = root == null ? null : windowOf(root, pane);
+  // The whole group goes when something is left behind it.
+  final groupFloats = windows &&
+      group != null &&
+      group.children.length > 1 &&
+      (floating == null
+          ? mainPanesIn(root).length > group.children.length
+          : panesIn(floating.root).length > group.children.length);
   // A strip too narrow for its tabs lists them first, as its mark does.
   final shown = !listTabs || group == null
       ? const <int>[]
-      : [
-          for (var i = 0; i < group.children.length; i++)
-            if (!(dock?._popped.containsKey(group.children[i].id) ?? false)) i,
-        ];
+      : [for (var i = 0; i < group.children.length; i++) i];
   showLumitPopup<void>(
     context: context,
     position: position,
@@ -1768,11 +2560,7 @@ void _showPaneMenu(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (shown.length > 1) ...[
-              ..._tabRows(
-                  group!,
-                  shown,
-                  shown.contains(group.active) ? group.active : shown.first,
-                  () => close(null), (i) {
+              ..._tabRows(group!, shown, group.active, () => close(null), (i) {
                 group.active = i;
                 onGroupChanged?.call();
               }),
@@ -1795,15 +2583,6 @@ void _showPaneMenu(
                 },
                 child: MenuLabel(l10n.closeOtherPanels, ticked: false),
               ),
-            if (popOut != null)
-              MenuRow(
-                key: const ValueKey('tab-menu-pop-out'),
-                onPressed: () {
-                  close(null);
-                  popOut(pane);
-                },
-                child: MenuLabel(l10n.popOutPanel, ticked: false),
-              ),
             if (maximised != null)
               MenuRow(
                 key: const ValueKey('tab-menu-maximise'),
@@ -1815,6 +2594,49 @@ void _showPaneMenu(
                     action: 'panel.maximise',
                     ticked: maximised.value == pane),
               ),
+            if (windows) ...[
+              const MenuDivider(),
+              MenuRow(
+                key: const ValueKey('tab-menu-pop-out'),
+                // The main window keeps one panel, so its last does not go.
+                enabled: canFloat(root, pane),
+                onPressed: () {
+                  close(null);
+                  dock!._float(pane);
+                },
+                child: MenuLabel(l10n.panelToNewWindow,
+                    action: 'panel.float', ticked: false),
+              ),
+              if (groupFloats)
+                MenuRow(
+                  key: const ValueKey('tab-menu-pop-out-group'),
+                  onPressed: () {
+                    close(null);
+                    dock!._float(pane, group: true);
+                  },
+                  child: MenuLabel(l10n.groupToNewWindow, ticked: false),
+                ),
+              if (floating != null)
+                MenuRow(
+                  key: const ValueKey('tab-menu-dock'),
+                  onPressed: () {
+                    close(null);
+                    dock!._dockPane(pane);
+                  },
+                  child: MenuLabel(l10n.panelToMainWindow,
+                      action: 'panel.dock', ticked: false),
+                ),
+              if (floating != null)
+                MenuRow(
+                  key: const ValueKey('tab-menu-on-top'),
+                  onPressed: () {
+                    close(null);
+                    dock!._setOnTop(floating.id, !floating.onTop);
+                  },
+                  child: MenuLabel(l10n.windowKeepOnTop,
+                      ticked: floating.onTop),
+                ),
+            ],
             if (dock != null) ...[
               const MenuDivider(),
               SubmenuRow(
@@ -1954,9 +2776,6 @@ const double _stackMinBody = 48;
 /// tab does: a panel's scroll, twirls and half-typed text survive being shut.
 class _StackGroup extends StatelessWidget {
   final DockTabs tabs;
-
-  /// Panes popped out into windows of their own, which the stack leaves out.
-  final Set<PaneId> hidden;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
 
@@ -1968,7 +2787,6 @@ class _StackGroup extends StatelessWidget {
 
   const _StackGroup({
     required this.tabs,
-    required this.hidden,
     required this.buildPanel,
     required this.onChanged,
     required this.onResized,
@@ -1980,10 +2798,7 @@ class _StackGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final panes = [
-      for (final c in tabs.children)
-        if (!hidden.contains(c.id)) c.id,
-    ];
+    final panes = [for (final c in tabs.children) c.id];
     final open = [for (final p in panes) if (tabs.isOpen(p)) p];
     final hit = t.tokens.tileGap < 7.0 ? 7.0 : t.tokens.tileGap;
     final total = open.fold<double>(0, (sum, p) => sum + tabs.shareOf(p));
@@ -2400,6 +3215,8 @@ class _PaneScope extends InheritedWidget {
 /// A pane standing alone has no tab, so its title does the tab's job: a drag
 /// re-docks it and a right-click offers Close panel. In a tab group or a
 /// stack the tab already does both, and this is its child and nothing more.
+/// On a floating window's top line the words alone lift the pane, and the
+/// empty line round them moves the window.
 class DockPaneHandle extends StatelessWidget {
   final Widget child;
   const DockPaneHandle({super.key, required this.child});
@@ -2409,13 +3226,15 @@ class DockPaneHandle extends StatelessWidget {
     final scope = context.dependOnInheritedWidgetOfExactType<_PaneScope>();
     final onClose = scope?.onClose;
     if (scope == null || onClose == null) return child;
-    return _DragSource(
+    final onTop = _WindowTop.of(context) != null;
+    final handle = _DragSource(
       pane: scope.pane,
       drag: scope.drag,
       child: GestureDetector(
         // The whole of the handle, so the empty strip beside the word lifts
         // the pane as well as the word does.
-        behavior: HitTestBehavior.opaque,
+        behavior:
+            onTop ? HitTestBehavior.deferToChild : HitTestBehavior.opaque,
         onSecondaryTapUp: (d) => _showPaneMenu(
           context,
           d.globalPosition,
@@ -2423,6 +3242,143 @@ class DockPaneHandle extends StatelessWidget {
           onClose: onClose,
         ),
         child: child,
+      ),
+    );
+    return DockWindowGround(child: handle);
+  }
+}
+
+/// Where a node of a floating window stands against the window's top edge:
+/// which window, whether in the corner the window's buttons stand in, the
+/// way the window reads, which decides that corner, and the window's menu.
+typedef _Edge = ({
+  _Host host,
+  bool corner,
+  TextDirection direction,
+  void Function(BuildContext context, Offset at) onMenu,
+});
+
+/// Told to the panes along a floating window's top edge, where Lumit draws
+/// the window's frame. Their line is the window's top line: the empty part
+/// moves the window, as a title bar does, and the pane in the corner shows
+/// the window's buttons at its end.
+class _WindowTop extends InheritedWidget {
+  final _Edge? edge;
+  const _WindowTop({required this.edge, required super.child});
+
+  static _Edge? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_WindowTop>()?.edge;
+
+  @override
+  bool updateShouldNotify(_WindowTop old) =>
+      old.edge?.host != edge?.host || old.edge?.corner != edge?.corner;
+}
+
+Widget _onTop(_Edge? edge, Widget child) =>
+    edge == null ? child : _WindowTop(edge: edge, child: child);
+
+/// [child] with no part in a floating window's top line. A panel showing
+/// several pictures side by side, each with lines of its own, puts each in
+/// one, and the window keeps a line of its own.
+class DockOffTopLine extends StatelessWidget {
+  final Widget child;
+  const DockOffTopLine({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) => _WindowTop(edge: null, child: child);
+}
+
+/// [child] on a floating window's top line, where its pane heads one: the
+/// empty line round it moves the window, a double click maximises it and a
+/// right click opens its menu. Elsewhere [child] as it is.
+class DockWindowGround extends StatelessWidget {
+  final Widget child;
+  const DockWindowGround({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final edge = _WindowTop.of(context);
+    if (edge == null) return child;
+    return Stack(fit: StackFit.passthrough, children: [
+      Positioned.fill(
+        child: WindowDragArea(
+            window: edge.host.window.handle, onMenu: edge.onMenu),
+      ),
+      child,
+    ]);
+  }
+}
+
+/// A top line a panel draws for itself, made by [line] with [room] added to
+/// its padding: where the pane heads a floating window's top right corner,
+/// the window's buttons stand in that room. Elsewhere there is none.
+///
+/// The room is on the side the window reads to, which a panel held left to
+/// right in every language cannot tell from its own direction.
+Widget dockTopLine(
+    BuildContext context, Widget Function(EdgeInsets room) line) {
+  final edge = _WindowTop.of(context);
+  if (edge == null || !edge.corner) return line(EdgeInsets.zero);
+  final left = edge.direction == TextDirection.rtl;
+  final room = floatingButtonsWidth;
+  return Stack(fit: StackFit.passthrough, children: [
+    line(left ? EdgeInsets.only(left: room) : EdgeInsets.only(right: room)),
+    Positioned(
+      top: 0,
+      bottom: 0,
+      left: left ? 0 : null,
+      right: left ? null : 0,
+      child: const DockWindowButtons(),
+    ),
+  ]);
+}
+
+/// A floating window's buttons, in the top line of the pane in its top
+/// right corner. Where no such line shows them, the window draws a line of
+/// its own for them.
+class DockWindowButtons extends StatefulWidget {
+  const DockWindowButtons({super.key});
+
+  @override
+  State<DockWindowButtons> createState() => _DockWindowButtonsState();
+}
+
+class _DockWindowButtonsState extends State<DockWindowButtons> {
+  /// The window these are counted as shown in.
+  _Host? _counted;
+
+  /// Count these as shown in [host]'s window, or in none. After the frame,
+  /// since the window's body rebuilds on the count.
+  void _count(_Host? host) {
+    final from = _counted;
+    if (identical(host, from)) return;
+    _counted = host;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (from != null) from.buttons.value = (from.buttons.value ?? 1) - 1;
+      if (host != null) host.buttons.value = (host.buttons.value ?? 0) + 1;
+    });
+  }
+
+  @override
+  void dispose() {
+    _count(null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final edge = _WindowTop.of(context);
+    final corner = edge != null && edge.corner ? edge : null;
+    _count(corner?.host);
+    if (corner == null) return const SizedBox.shrink();
+    return GestureDetector(
+      // As on the empty line: a right click opens the window's menu.
+      onSecondaryTapUp: (d) => corner.onMenu(context, d.globalPosition),
+      child: Directionality(
+        textDirection: corner.direction,
+        child: FloatingWindowButtons(
+            theme: ThemeScope.of(context).theme,
+            window: corner.host.window.handle),
       ),
     );
   }
@@ -2538,62 +3494,204 @@ class _DockScope extends InheritedWidget {
   bool updateShouldNotify(_DockScope old) => old.dock != dock;
 }
 
-/// Pop out, for the menus of the panes in this dock.
-class _PopOutScope extends InheritedWidget {
-  /// Null where a panel cannot be popped out.
-  final void Function(PaneId)? popOut;
+/// A floating window on screen: its native window, and what the dock keeps
+/// about it while it is up.
+class _Host {
+  final int id;
+  final PopOutWindow window;
 
-  const _PopOutScope({required this.popOut, required super.child});
+  /// The window's own overlay, which its menus, dialogues and the drag's
+  /// pill open in.
+  final GlobalKey<OverlayState> overlay = GlobalKey<OverlayState>();
 
-  @override
-  bool updateShouldNotify(_PopOutScope old) => old.popOut != popOut;
+  /// Where it was last put or last seen, so a new arrangement moves it only
+  /// when its place differs.
+  FloatingFrame? placed;
+
+  /// In front, as last seen.
+  bool active = false;
+
+  /// The system's title for it, as last set.
+  String? title;
+
+  /// Done once the runner has taken the window on and placed it.
+  Future<void> ready = Future<void>.value();
+
+  VoidCallback? listener;
+  Timer? _settle;
+
+  /// How many of its panes' top lines show the window's buttons, once its
+  /// first frame is laid out. None, and the window draws a line of its own
+  /// for them.
+  final ValueNotifier<int?> buttons = ValueNotifier<int?>(null);
+
+  _Host(this.id, this.window);
+
+  /// Run [act] once the window has been still for a moment: a drag across
+  /// the screen is one move, not a hundred.
+  void soon(VoidCallback act) {
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 350), act);
+  }
+
+  void dispose() {
+    _settle?.cancel();
+    final listener = this.listener;
+    if (listener != null) window.changes.removeListener(listener);
+  }
 }
 
-/// A popped-out pane, filling its window.
-///
-/// It sits in the tree under the dock, so the panel sees the same state and
-/// theme it does there. Its window is drawn apart from the main one, though,
-/// so it brings its own scale, and its own overlay for menus and tooltips to
-/// open in.
-class _PoppedPane extends StatefulWidget {
-  final PaneId pane;
-  final PanelBuilder buildPanel;
-  final ValueNotifier<PaneId?> activePanel;
-  final double uiScale;
-
-  const _PoppedPane({
-    required this.pane,
-    required this.buildPanel,
-    required this.activePanel,
-    required this.uiScale,
-  });
+/// The main window's latest notice, at the foot of a floating window that is
+/// in front as it is said, since the status line is out of sight there. It
+/// goes after a few seconds, or with its close mark, and one that stays waits
+/// for the close.
+class _WindowNotice extends StatefulWidget {
+  final _Host host;
+  const _WindowNotice({required this.host});
 
   @override
-  State<_PoppedPane> createState() => _PoppedPaneState();
+  State<_WindowNotice> createState() => _WindowNoticeState();
 }
 
-class _PoppedPaneState extends State<_PoppedPane> {
-  late final OverlayEntry _body = OverlayEntry(builder: (context) {
-    final t = ThemeScope.of(context).theme;
-    final pane = widget.pane;
-    return ColoredBox(
-      color: t.tokens.roomed ? t.room : t.surface1,
-      child: Listener(
-        // A press here points the keyboard at this pane, as one in the dock
-        // does.
-        onPointerDown: (_) => widget.activePanel.value = pane,
-        child: PanelFloor(
-          minWidth: panelMinWidth(pane.panel),
-          child: StylePart(
-              name: pane.panel.name, child: widget.buildPanel(context, pane)),
+class _WindowNoticeState extends State<_WindowNotice> {
+  ValueNotifier<LumitNotice?>? _notices;
+  LumitNotice? _shown;
+  Timer? _away;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notices = Provider.of<LumitState?>(context, listen: false)?.notice;
+    if (identical(notices, _notices)) return;
+    _notices?.removeListener(_said);
+    _notices = notices?..addListener(_said);
+  }
+
+  @override
+  void dispose() {
+    _away?.cancel();
+    _notices?.removeListener(_said);
+    super.dispose();
+  }
+
+  void _said() {
+    final notice = _notices?.value;
+    _away?.cancel();
+    if (notice == null || !widget.host.window.isActivated) {
+      if (_shown != null) setState(() => _shown = null);
+      return;
+    }
+    setState(() => _shown = notice);
+    if (!notice.sticky) {
+      _away = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _shown = null);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = _shown;
+    if (notice == null) return const SizedBox.shrink();
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: 12,
+      child: Align(
+        alignment: AlignmentDirectional.bottomStart,
+        child: Entrance(
+          key: ObjectKey(notice),
+          spec: scope.motion.reveal,
+          rise: scope.motion.revealRise,
+          child: FloatSurface(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: GestureDetector(
+                      onTap: notice.onTap,
+                      child: Text(
+                        notice.message,
+                        key: const ValueKey('floating-notice'),
+                        style: t.small.copyWith(
+                            color: notice.error ? t.warning : t.textPrimary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (notice.action case final action?) ...[
+                    const SizedBox(width: 4),
+                    HouseButton(
+                      small: true,
+                      frameless: true,
+                      onPressed: notice.onTap,
+                      child: Text(action, style: t.small),
+                    ),
+                  ],
+                  const SizedBox(width: 4),
+                  HouseButton(
+                    key: const ValueKey('floating-notice-close'),
+                    small: true,
+                    frameless: true,
+                    onPressed: () => setState(() => _shown = null),
+                    child:
+                        Text('×', style: t.small.copyWith(color: t.textMuted)),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
+  }
+}
+
+/// A floating window's content: the window's arrangement, drawn by the same
+/// dock as the main window's.
+///
+/// It sits in the tree under the dock, so its panels see the same state and
+/// theme they do there. Its window is drawn apart from the main one, though,
+/// so it brings its own scale, and its own overlay for menus, dialogues and
+/// tooltips to open in.
+class _FloatingWindowView extends StatefulWidget {
+  final _DockWidgetState dock;
+  final DockWindow window;
+  final _Host host;
+
+  const _FloatingWindowView({
+    required this.dock,
+    required this.window,
+    required this.host,
   });
 
   @override
-  Widget build(BuildContext context) => UiScaleView(
-        scale: widget.uiScale,
-        child: Overlay(initialEntries: [_body]),
+  State<_FloatingWindowView> createState() => _FloatingWindowViewState();
+}
+
+class _FloatingWindowViewState extends State<_FloatingWindowView> {
+  late final OverlayEntry _body = OverlayEntry(
+      builder: (context) =>
+          widget.dock._floatingBody(context, widget.window, widget.host));
+
+  @override
+  void didUpdateWidget(_FloatingWindowView old) {
+    super.didUpdateWidget(old);
+    // The dock rebuilt: the entry is not a child of this widget, so it is
+    // told to build again rather than finding out.
+    _body.markNeedsBuild();
+  }
+
+  @override
+  Widget build(BuildContext context) => _DockScope(
+        dock: widget.dock,
+        child: UiScaleView(
+          scale: widget.dock.widget.uiScale,
+          child: Overlay(key: widget.host.overlay, initialEntries: [_body]),
+        ),
       );
 }

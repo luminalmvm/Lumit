@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../shell/dock_widget.dart' show DockWindowGround, dockTopLine;
 import '../state/settings.dart' show LoopMode;
 import '../state/timecode.dart';
 import '../state/viewer_view.dart'
@@ -107,6 +108,9 @@ class ViewerBar extends StatelessWidget {
   /// deck under the picture carries them instead.
   final bool transport;
 
+  /// Whether the bar is above the picture, the pane's top line.
+  final bool top;
+
   /// What playback does at the end of the work area, and how to change it:
   /// the mark beside the transport. Handed in, like everything else here.
   final LoopMode loop;
@@ -152,12 +156,13 @@ class ViewerBar extends StatelessWidget {
     required this.viewId,
     this.leading = const [],
     this.transport = true,
+    this.top = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Container(
+    Widget bar(EdgeInsets room) => Container(
       key: const ValueKey('viewer-bar'),
       height: viewerStripHeightFor(t),
       decoration: viewerStripDecoration(t, detached),
@@ -167,14 +172,19 @@ class ViewerBar extends StatelessWidget {
       padding: EdgeInsets.only(
         left: viewerStripPaddingFor(t) - viewerMarkEdge,
         right: viewerStripPaddingFor(t),
-      ),
+      ) + room,
       // The empty bar's own menu. Every mark on it takes its own click first.
+      // Above the picture in a floating window, the empty bar is the
+      // window's to move.
       child: ViewerRightClick(
         rows: (close) => viewerBarRows(
             Provider.of<LumitUiState>(context, listen: false), close),
-        child: _body(context, t),
+        child: top
+            ? DockWindowGround(child: _body(context, t))
+            : _body(context, t),
       ),
     );
+    return top ? dockTopLine(context, bar) : bar(EdgeInsets.zero);
   }
 
   // A Viewer docked narrow has less width than this bar wants, and an

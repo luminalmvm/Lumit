@@ -166,6 +166,12 @@ class SavedSession {
   /// [PanelFolds.toJson]. Raw JSON for [dock]'s reason.
   final Map<String, dynamic>? folds;
 
+  /// The arrangement this project had with each set of displays it has been
+  /// open with, by [displaySetupOf]: a laptop alone and a laptop with a second
+  /// screen each bring back their own. This machine's record only: the copy
+  /// that travels in the `.lum` has none.
+  final Map<String, Map<String, dynamic>> setupDocks;
+
   /// How tall each row of the Cut timeline stands where it has been dragged
   /// off the usual height, by composition id and then row id. Session state
   /// for the reason the looks are: a way of working on the cut, not an edit
@@ -188,6 +194,7 @@ class SavedSession {
     this.viewerLayout,
     this.folds,
     this.cutTrackHeights = const {},
+    this.setupDocks = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -200,6 +207,7 @@ class SavedSession {
         'viewer_layout': viewerLayout,
         'folds': folds,
         'cut_track_heights': cutTrackHeights,
+        if (setupDocks.isNotEmpty) 'setup_docks': setupDocks,
         'viewer_looks': {
           for (final e in viewerLooks.entries)
             e.key: {'stops': e.value.stops, 'tone_map': e.value.toneMap},
@@ -293,6 +301,7 @@ class SavedSession {
             ? (j['folds'] as Map).cast<String, dynamic>()
             : null,
         cutTrackHeights: _heightsFromJson(j['cut_track_heights']),
+        setupDocks: setupDocksFromJson(j['setup_docks']),
       );
 
   /// The Cut timeline's row heights out of a session's JSON, dropping what is
@@ -317,6 +326,7 @@ class SavedSession {
   String get _foldsKey => folds == null ? '' : jsonEncode(folds);
   String get _heightsKey =>
       cutTrackHeights.isEmpty ? '' : jsonEncode(cutTrackHeights);
+  String get _setupsKey => setupDocks.isEmpty ? '' : jsonEncode(setupDocks);
 
   @override
   bool operator ==(Object other) =>
@@ -327,6 +337,7 @@ class SavedSession {
       other._dockKey == _dockKey &&
       other._foldsKey == _foldsKey &&
       other._heightsKey == _heightsKey &&
+      other._setupsKey == _setupsKey &&
       mapEquals(other.viewerLooks, viewerLooks) &&
       mapEquals(other.previewResolutions, previewResolutions) &&
       mapEquals(other.viewerOverlays, viewerOverlays) &&
@@ -342,6 +353,7 @@ class SavedSession {
         selectedLayer,
         _dockKey,
         _foldsKey,
+        _setupsKey,
         Object.hashAll(openComps),
         Object.hashAll([
           for (final e in viewerLooks.entries) Object.hash(e.key, e.value),
@@ -534,6 +546,56 @@ class UserWorkspace {
   }
 }
 
+/// Write [text] to [file] whole or not at all: into a file beside it, which
+/// then takes its place. Writing straight into it empties it first, so a full
+/// disk or a crash part of the way through left no settings at all.
+void writeWhole(File file, String text) {
+  final next = File('${file.path}.next');
+  next.writeAsStringSync(text);
+  try {
+    next.renameSync(file.path);
+  } on FileSystemException {
+    // Something has the file open and will not let it be replaced: written
+    // straight into it, as it was before, rather than not at all.
+    file.writeAsStringSync(text);
+    next.deleteSync();
+  }
+}
+
+/// How many sets of displays an arrangement is remembered for. A machine meets
+/// a handful (the laptop alone, at the desk, at the office), so the oldest of
+/// more than this many is forgotten.
+const int maxRememberedSetups = 8;
+
+/// Arrangements by display setup out of a settings file or a project's own
+/// record: only
+/// entries that are a map under a string, the most recent last.
+Map<String, Map<String, dynamic>> setupDocksFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+  return {
+    for (final e in raw.entries)
+      if (e.key is String && e.value is Map)
+        e.key as String: (e.value as Map).cast<String, dynamic>(),
+  };
+}
+
+/// [docks] with [setup]'s arrangement now [dock], moved to the end as the most
+/// recent, and the oldest dropped past [maxRememberedSetups].
+Map<String, Map<String, dynamic>> rememberSetupDock(
+    Map<String, Map<String, dynamic>> docks,
+    String setup,
+    Map<String, dynamic> dock) {
+  final out = {
+    for (final e in docks.entries)
+      if (e.key != setup) e.key: e.value,
+    setup: dock,
+  };
+  while (out.length > maxRememberedSetups) {
+    out.remove(out.keys.first);
+  }
+  return out;
+}
+
 /// Where a floating window was left: how far it was dragged from the centre of
 /// the app window, and how big it was made when it is one of the resizable
 /// ones. Stored as an offset from centre rather than as a corner position so a
@@ -572,6 +634,18 @@ class WindowPlacement {
 
 class Workspace extends ChangeNotifier {
   DockSplit dock = defaultLayout();
+
+  /// The arrangement last used with each set of displays, by
+  /// [displaySetupOf], most recent last: a laptop alone and a laptop with a
+  /// second screen each bring back their own. [dock] is the one in use, and
+  /// [dockSetup] the set of displays it was last used with.
+  Map<String, Map<String, dynamic>> setupDocks = {};
+  String? dockSetup;
+
+  /// The display the video monitor was on with each set of displays, as
+  /// `[x, y, width, height]`, by [displaySetupOf]. A setup it was off with is
+  /// absent.
+  Map<String, List<double>> videoMonitors = {};
   LumitColorScheme colorScheme = LumitColorScheme.dark;
   ThemeShape themeShape = ThemeShape.studio;
 
@@ -1884,7 +1958,7 @@ class Workspace extends ChangeNotifier {
     try {
       final f = userWorkspaceFile(w.name);
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(w.encode());
+      writeWhole(f, w.encode());
     } catch (_) {}
   }
 
@@ -2271,6 +2345,9 @@ class Workspace extends ChangeNotifier {
         'windows': {
           for (final e in windowPlacements.entries) e.key: e.value.toJson(),
         },
+        if (setupDocks.isNotEmpty) 'setup_docks': setupDocks,
+        if (dockSetup != null) 'dock_setup': dockSetup,
+        if (videoMonitors.isNotEmpty) 'video_monitors': videoMonitors,
       };
 
   void applyJson(Map<String, dynamic> j) {
@@ -2528,6 +2605,19 @@ class Workspace extends ChangeNotifier {
         }
       });
     }
+    setupDocks = {...setupDocksFromJson(j['setup_docks'])};
+    dockSetup = j['dock_setup'] is String ? j['dock_setup'] as String : null;
+    videoMonitors = {
+      if (j['video_monitors'] case final Map monitors)
+        for (final e in monitors.entries)
+          if (e.key is String &&
+              e.value is List &&
+              (e.value as List).length == 4 &&
+              (e.value as List).every((n) => n is num))
+            e.key as String: [
+              for (final n in e.value as List) (n as num).toDouble()
+            ],
+    };
     windowPlacements.clear();
     final rawWindows = j['windows'];
     if (rawWindows is Map) {
@@ -2569,7 +2659,7 @@ class Workspace extends ChangeNotifier {
     try {
       final f = storeFile();
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(toJson()));
+      writeWhole(f, const JsonEncoder.withIndent('  ').convert(toJson()));
     } catch (_) {
       // Persistence is best-effort; the session keeps working without it.
     }

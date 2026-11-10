@@ -54,6 +54,52 @@ void main() {
     expect(((back.children[0] as DockSplit).children[0] as DockTabs).active, 1);
   });
 
+  /// The floating windows are in the arrangement, so a settings file, a
+  /// project's own record or a `.lumworkspace` that has them must read back
+  /// whole: their panels, their places and where each panel came from.
+  test('floating windows round-trip with their places', () {
+    final root = defaultLayout();
+    final window = floatPane(root, Panel.notes.pane(),
+        frame: const FloatingFrame(Rect.fromLTWH(-1800, 40, 900, 600),
+            maximised: true, display: Rect.fromLTWH(-1920, 0, 1920, 1080)))!;
+    window.onTop = true;
+    floatGroup(root, Panel.text.pane());
+    final json = root.toJson();
+    final back = DockNode.fromJson(json) as DockSplit;
+    expect(back.toJson(), json);
+    expect(back.windows, hasLength(2));
+    expect(back.windows.first.frame, window.frame);
+    expect(back.windows.first.onTop, isTrue);
+    expect(panelsIn(back).toSet(), panelsIn(defaultLayout()).toSet(),
+        reason: 'every panel is still there, once');
+    // Put back where it came from: Notes rejoins the group it left.
+    dockPane(back, Panel.notes.pane());
+    expect(groupOf(back, Panel.project.pane())?.children.map((c) => c.panel),
+        contains(Panel.notes));
+    // And an arrangement with none writes what it always did.
+    expect(defaultLayout().toJson().containsKey('windows'), isFalse);
+  });
+
+  test('a file naming a pane twice keeps its first place', () {
+    final json = defaultLayout().toJson()
+      ..['windows'] = [
+        {
+          'id': 1,
+          'root': {
+            'kind': 'split',
+            'axis': 'horizontal',
+            'shares': [1.0],
+            'children': [
+              {'kind': 'pane', 'panel': 'viewer'},
+            ],
+          },
+        },
+      ];
+    final back = DockNode.fromJson(json) as DockSplit;
+    expect(back.windows, isEmpty, reason: 'the Viewer is already in the main window');
+    expect(panelsIn(back).where((p) => p == Panel.viewer), hasLength(1));
+  });
+
   group('panel visibility (the Window menu tick list)', () {
     test('hiding drops the panel and showing puts it back, fronted', () {
       final root = defaultLayout();
@@ -78,6 +124,8 @@ void main() {
       setPanelVisible(root, Panel.viewer, false);
       expect(panelsIn(root), [Panel.viewer],
           reason: 'an empty dock has no way back');
+      expect(floatPane(root, Panel.viewer.pane()), isNull,
+          reason: 'nor does a main window with nothing in it');
     });
   });
 

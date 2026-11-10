@@ -32,7 +32,7 @@ import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/flowchart_frb.dart' show openFlowchartFrb;
 import '../shell/menu_bar_frb.dart' show stepToMarkerFrb, trimCompAction;
-import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/dock_widget.dart' show DockPaneHandle, dockTopLine;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -97,9 +97,10 @@ class CompTabsFrb extends StatelessWidget {
     final comps = _openComps(selected);
     if (comps.isEmpty) return const SizedBox.shrink();
 
-    return Container(
+    return dockTopLine(context, (room) => Container(
       height: t.density.headerStrip,
       color: t.surface1,
+      padding: room,
       child: Row(
         children: [
           // The panel's own name, ahead of the tabs (§12A.1). A kicker like
@@ -147,7 +148,7 @@ class CompTabsFrb extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 
   /// The open comps in the strip's own order. Served from LumitState's cached
@@ -184,10 +185,10 @@ class CompTabsFrb extends StatelessWidget {
     if (comps.isEmpty) return const SizedBox.shrink();
     final mode = this.mode;
     final onMode = this.onMode;
-    return Container(
+    return dockTopLine(context, (room) => Container(
       height: lanternTimelineLine,
       color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10) + room,
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
@@ -274,7 +275,7 @@ class CompTabsFrb extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 
   /// The tabs themselves, scrolling sideways when there are more than fit.

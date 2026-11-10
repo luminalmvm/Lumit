@@ -341,6 +341,9 @@ pub fn default_keymap() -> Keymap {
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
         row(Panels, "Mod+F", "panel.search.focus"),
+        // The Viewer's picture alone, filling a display of its own. F11 is
+        // what fills a screen nearly everywhere else.
+        row(Global, "Mod+F11", "window.monitor"),
         // Putting a panel up and taking it down, on the numbers After Effects
         // gives its own.
         row(Panels, "Mod+0", "panel.toggle.project"),
@@ -446,20 +449,23 @@ pub fn default_keymap() -> Keymap {
     }
     Keymap {
         bindings,
-        unbound: UNBOUND.iter().map(|a| (Viewer, (*a).into())).collect(),
+        unbound: UNBOUND.iter().map(|(c, a)| (*c, (*a).into())).collect(),
         wheel: WheelKeys::default(),
         break_handles: HandleModifier::default(),
     }
 }
 
-/// The Viewer actions that ship with no key: how a 3D view shows models.
-const UNBOUND: &[&str] = &[
-    "viewer.look.final",
-    "viewer.look.shaded",
-    "viewer.look.wireframe",
-    "viewer.look.shaded_wire",
-    "viewer.look.normals",
-    "viewer.look.faces",
+/// The actions that ship with no key: how a 3D view shows models, and moving
+/// a panel between windows.
+const UNBOUND: &[(KeyContext, &str)] = &[
+    (KeyContext::Viewer, "viewer.look.final"),
+    (KeyContext::Viewer, "viewer.look.shaded"),
+    (KeyContext::Viewer, "viewer.look.wireframe"),
+    (KeyContext::Viewer, "viewer.look.shaded_wire"),
+    (KeyContext::Viewer, "viewer.look.normals"),
+    (KeyContext::Viewer, "viewer.look.faces"),
+    (KeyContext::Panels, "panel.float"),
+    (KeyContext::Panels, "panel.dock"),
 ];
 
 /// A **stored** keymap laid over the shipped defaults: the file's chord
@@ -478,11 +484,11 @@ const UNBOUND: &[&str] = &[
 pub fn with_new_defaults(stored: Keymap) -> Keymap {
     let mut out = stored;
     // The actions that ship with no key, so the page lists them.
-    for action in UNBOUND {
+    for (context, action) in UNBOUND {
         let known = out.bindings.iter().any(|b| b.action.0 == *action)
             || out.unbound.iter().any(|(_, a)| a.0 == *action);
         if !known {
-            out.unbound.push((KeyContext::Viewer, (*action).into()));
+            out.unbound.push((*context, (*action).into()));
         }
     }
     for binding in default_keymap().bindings {
