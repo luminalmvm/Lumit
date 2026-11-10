@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod clip_opacity;
+pub mod spoken;
 pub mod takes;
 pub mod transition;
 
