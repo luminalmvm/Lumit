@@ -259,11 +259,21 @@ fn keep_both_finds_a_name_that_writes_over_nothing() {
     let at = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
     std::fs::write(at("shot.mp4"), b"").unwrap();
     std::fs::write(at("shot_2.mp4"), b"").unwrap();
-    assert!(path_taken(&at("shot.mp4"), "h264"));
-    assert_eq!(free_path(&at("shot.mp4"), "h264"), at("shot_3.mp4"));
+    let burn = BridgeCaptionsOut::Burn;
+    assert!(path_taken(&at("shot.mp4"), "h264", burn));
+    assert_eq!(free_path(&at("shot.mp4"), "h264", burn), at("shot_3.mp4"));
 
     std::fs::write(at("frames.00001.png"), b"").unwrap();
-    assert!(path_taken(&at("frames.png"), "png"));
-    assert_eq!(free_path(&at("frames.png"), "png"), at("frames_2.png"));
-    assert!(!path_taken(&at("other.png"), "png"));
+    assert!(path_taken(&at("frames.png"), "png", burn));
+    assert_eq!(
+        free_path(&at("frames.png"), "png", burn),
+        at("frames_2.png")
+    );
+    assert!(!path_taken(&at("other.png"), "png", burn));
+
+    // A caption file beside it counts when the export writes one.
+    std::fs::write(at("talk.en.srt"), b"").unwrap();
+    assert!(!path_taken(&at("talk.mp4"), "h264", burn));
+    assert!(path_taken(&at("talk.mp4"), "h264", BridgeCaptionsOut::Srt));
+    assert!(!path_taken(&at("talk.mp4"), "h264", BridgeCaptionsOut::Vtt));
 }

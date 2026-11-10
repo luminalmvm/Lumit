@@ -79,6 +79,7 @@ import 'export_queue_frb.dart';
 import 'settings_window_frb.dart';
 import 'status_line_frb.dart';
 
+part 'export_rows.dart';
 part 'export_formats.dart';
 
 /// The frame the drawing gives this dialog.
@@ -433,6 +434,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// proxy switched on to work with is not a picture anybody meant to ship.
   bool _useProxies = false;
   bool _renderGuides = false;
+  BridgeCaptionsOut _captions = BridgeCaptionsOut.burn;
+  bool _hasCaptions = false;
 
   /// The Time overrides. Motion blur has three answers — the composition's
   /// own, on for every checked layer, off for all of them — and Retime blend
@@ -508,6 +511,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       _compFps = settings.fpsNum / settings.fpsDen;
       _fps = _compFps;
       _compFrames = widget.comp.durationFrames();
+      _hasCaptions = widget.comp.hasCaptions();
       final area = widget.comp.getWorkArea();
       if (area != null) {
         _hasWorkArea = true;
@@ -745,6 +749,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       colourSpace: _colourSpace,
       resample: _resample,
       renderGuides: _renderGuides,
+      captions: _captions,
       motionBlur: _motionBlur,
       retimeBlend: _retimeBlend,
       useProxies: _useProxies,
@@ -1369,6 +1374,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             dimmed: dim,
           ),
         ),
+        if (_hasCaptions) _captionsRow(t, dim),
       ],
       dimmed: dim,
     );
@@ -2194,91 +2200,6 @@ class _ExportDialogState extends State<_ExportDialog> {
       ? control
       : LumitTooltip(message: reason, child: control);
 
-  /// Dither, palette and plays, live only for a GIF.
-  List<Widget> _gifRows(LumitTheme t, bool dim) {
-    final why = _caps.gif ? null : l10n.tipExportFormatLimit;
-    final forever = _gifPlays == 0;
-    return [
-      _columns(
-        _row(
-          t,
-          l10n.exportGifDither,
-          _why(
-            why,
-            dialogDropdown<int>(
-              t,
-              id: 'export-gif-dither',
-              value: _gifDither,
-              options: const [0, 1, 2],
-              label: (d) => switch (d) {
-                1 => l10n.exportGifDitherPattern,
-                2 => l10n.exportGifDitherNone,
-                _ => l10n.exportGifDitherDiffusion,
-              },
-              onChanged: _caps.gif ? (d) => _edit(() => _gifDither = d) : null,
-            ),
-          ),
-          dimmed: dim,
-        ),
-        _row(
-          t,
-          l10n.exportGifPalette,
-          _why(
-            why,
-            dialogDropdown<bool>(
-              t,
-              id: 'export-gif-palette',
-              value: _gifPalettePerFrame,
-              options: const [false, true],
-              label: (perFrame) => perFrame
-                  ? l10n.exportGifPalettePerFrame
-                  : l10n.exportGifPaletteShared,
-              onChanged: _caps.gif
-                  ? (p) => _edit(() => _gifPalettePerFrame = p)
-                  : null,
-            ),
-          ),
-          labelColumn: exportLabelColumnPaired,
-          dimmed: dim,
-        ),
-      ),
-      _row(
-        t,
-        l10n.exportGifPlays,
-        Row(children: [
-          _why(
-            why,
-            _tick(
-              t,
-              'export-gif-forever',
-              l10n.exportGifForever,
-              forever,
-              _caps.gif ? (on) => _edit(() => _gifPlays = on ? 0 : 1) : null,
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: exportSizeWell,
-            height: dialogControlHeight,
-            child: forever || !_caps.gif
-                ? _well(t, forever ? '—' : '$_gifPlays',
-                    key: const ValueKey('export-gif-plays'),
-                    tone: t.textDisabled)
-                : DragValueField(
-                    key: const ValueKey('export-gif-plays'),
-                    value: _gifPlays,
-                    min: 1,
-                    max: 1000,
-                    fill: t.surface0,
-                    onChanged: (v) => _edit(() => _gifPlays = v.toInt()),
-                  ),
-          ),
-        ]),
-        dimmed: dim,
-      ),
-    ];
-  }
-
   /// The colour depth, offered only where the format carries more than one.
   Widget _depthDropdown(LumitTheme t, String id) => _why(
         _caps.depths.length > 1 ? null : l10n.tipExportFormatLimit,
@@ -2609,6 +2530,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       _colourSpace = stored.colourSpace;
       _resample = stored.resample;
       _renderGuides = stored.renderGuides;
+      _captions = stored.captions;
       _motionBlur = stored.motionBlur;
       _retimeBlend = stored.retimeBlend;
       _useProxies = stored.useProxies;
@@ -2765,8 +2687,8 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (path == null) return;
     // A sequence's frames were never in the Save dialogue's question, so its
     // first frame is always asked about.
-    if ((path != _picked || _images) &&
-        exportPathTaken(path: path, codec: _format.key)) {
+    if ((path != _picked || _images || _captionsBeside) &&
+        exportPathTaken(path: path, codec: _format.key, captions: _captions)) {
       final keep = await askLumitChoice<bool>(
         context: context,
         title: l10n.exportOverwriteTitle,
@@ -2778,7 +2700,8 @@ class _ExportDialogState extends State<_ExportDialog> {
       );
       if (keep == null || !mounted) return;
       if (keep) {
-        path = exportFreePath(path: path, codec: _format.key);
+        path = exportFreePath(
+            path: path, codec: _format.key, captions: _captions);
         setState(() => _path = path);
       }
     }
@@ -2823,8 +2746,8 @@ class _ExportDialogState extends State<_ExportDialog> {
     final id = widget.queued;
     if (path == null || id == null) return;
     if (path != _queuedPath &&
-        (path != _picked || _images) &&
-        exportPathTaken(path: path, codec: _format.key)) {
+        (path != _picked || _images || _captionsBeside) &&
+        exportPathTaken(path: path, codec: _format.key, captions: _captions)) {
       final keep = await askLumitChoice<bool>(
         context: context,
         title: l10n.exportOverwriteTitle,
@@ -2835,7 +2758,10 @@ class _ExportDialogState extends State<_ExportDialog> {
         ],
       );
       if (keep == null || !mounted) return;
-      if (keep) path = exportFreePath(path: path, codec: _format.key);
+      if (keep) {
+        path = exportFreePath(
+            path: path, codec: _format.key, captions: _captions);
+      }
     }
     if (_failedItem) {
       try {

@@ -296,8 +296,10 @@ class PhoneLine extends ChangeNotifier {
         codec: stored.codec,
         projectPath: project.path());
     if (path == null) return 'no_folder';
-    if (exportPathTaken(path: path, codec: stored.codec)) {
-      path = exportFreePath(path: path, codec: stored.codec);
+    if (exportPathTaken(
+        path: path, codec: stored.codec, captions: stored.captions)) {
+      path = exportFreePath(
+          path: path, codec: stored.codec, captions: stored.captions);
     }
     final area = j['range'] == 'whole' ? null : workAreaFrames(comp);
     final start = area?.start ?? 0;
@@ -338,6 +340,7 @@ class PhoneLine extends ChangeNotifier {
           effects: stored.effects,
           honourSolo: stored.honourSolo,
           renderGuides: stored.renderGuides,
+          captions: stored.captions,
           motionBlur: stored.motionBlur,
           retimeBlend: stored.retimeBlend,
           useProxies: stored.useProxies,

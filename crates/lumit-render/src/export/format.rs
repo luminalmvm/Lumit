@@ -109,6 +109,8 @@ pub struct FormatCaps {
     /// GIF counts in hundredths of a second, and browsers play a frame of one
     /// hundredth as ten, so a GIF goes no faster than 50, two a frame.
     pub max_fps: Option<u32>,
+    /// Can carry captions as subtitle streams: the mp4 and mov family.
+    pub subtitles: bool,
 }
 
 /// Eight bits only: H.264 and HEVC are written 4:2:0 at eight bits.
@@ -149,6 +151,7 @@ impl ExportFormat {
                 metadata: true,
                 colour_spaces: BUILT_IN_COLOUR_SPACES,
                 max_fps: None,
+                subtitles: true,
             },
             // H.264/HEVC in mp4: 4:2:0, eight bits, no alpha, a bitrate to
             // choose, and a container that holds metadata.
@@ -165,6 +168,7 @@ impl ExportFormat {
                 metadata: true,
                 colour_spaces: BUILT_IN_COLOUR_SPACES,
                 max_fps: None,
+                subtitles: true,
             },
             // Stills: lossless RGBA, either depth, no sound and no bitrate.
             // The image2 muxer writes one file per frame and has nowhere to
@@ -186,6 +190,7 @@ impl ExportFormat {
                 metadata: false,
                 colour_spaces: STILL_COLOUR_SPACES,
                 max_fps: None,
+                subtitles: false,
             },
             // A GIF is eight-bit sRGB with no sound, no bitrate and no tags.
             // Its alpha is one bit, but it is still alpha.
@@ -202,6 +207,7 @@ impl ExportFormat {
                 metadata: false,
                 colour_spaces: UNTAGGED_COLOUR_SPACE,
                 max_fps: Some(50),
+                subtitles: false,
             },
             // A WebP is a GIF's row with full alpha and none of its palette.
             ExportFormat::Webp { .. } => FormatCaps {
@@ -226,6 +232,7 @@ impl ExportFormat {
                 metadata: true,
                 colour_spaces: &[],
                 max_fps: None,
+                subtitles: false,
             },
         }
     }

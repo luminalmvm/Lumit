@@ -33,6 +33,18 @@ extern "C" {
     fn page_finish(id: u32) -> Result<(), JsValue>;
     #[wasm_bindgen(catch, js_namespace = lumitMedia, js_name = exportCancel)]
     fn page_cancel(id: u32) -> Result<(), JsValue>;
+    #[wasm_bindgen(catch, js_namespace = lumitMedia, js_name = exportText)]
+    fn page_text(name: &str, text: &str) -> Result<(), JsValue>;
+}
+
+/// A text file that goes with an export, such as its captions: the page
+/// downloads it beside the video.
+///
+/// # Errors
+///
+/// The page's own words when it cannot.
+pub fn text(name: &str, text: &str) -> Result<(), String> {
+    page_text(name, text).map_err(why)
 }
 
 /// The export dialogue's keys for the formats this browser can write:

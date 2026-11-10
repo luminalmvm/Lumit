@@ -16172,6 +16172,26 @@
   "@exportGuideLayers": {
     "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
   },
+  "exportCaptions": "Captions",
+  "@exportCaptions": {
+    "description": "Export dialog, Composition group: the row label for what happens to the composition's caption layers. Shown only when the composition has one."
+  },
+  "exportCaptionsBurn": "Burn in",
+  "@exportCaptionsBurn": {
+    "description": "Export dialog, Captions row: the captions are drawn into the picture."
+  },
+  "exportCaptionsSrt": "SRT file",
+  "@exportCaptionsSrt": {
+    "description": "Export dialog, Captions row: the captions are left out of the picture and written beside the video as a SubRip (.srt) subtitle file."
+  },
+  "exportCaptionsVtt": "WebVTT file",
+  "@exportCaptionsVtt": {
+    "description": "Export dialog, Captions row: the captions are left out of the picture and written beside the video as a WebVTT (.vtt) subtitle file."
+  },
+  "exportCaptionsEmbed": "In the video file",
+  "@exportCaptionsEmbed": {
+    "description": "Export dialog, Captions row: the captions are left out of the picture and carried inside the video file as subtitles that can be switched on and off."
+  },
   "exportDiskCache": "Disk cache",
   "@exportDiskCache": {
     "description": "Export dialog, Composition group: whether the export reads frames already banked on disk."

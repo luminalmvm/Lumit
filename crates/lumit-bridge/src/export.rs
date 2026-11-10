@@ -111,9 +111,11 @@ fn preset_default_file_name(name: &str) -> &'static str {
 // ---------------------------------------------------------------------------
 
 use crate::api::export::{
-    BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec, BridgeFormatCaps,
+    BridgeCaptionsOut, BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec,
+    BridgeFormatCaps,
 };
 use lumit_render::colour::ColourState;
+use lumit_render::export::captions::{sidecar_taken, CaptionsOut, SubtitleFormat};
 // Only the conversion names a metadata field, and only a build with an encoder
 // converts anything.
 #[cfg(feature = "media")]
@@ -383,6 +385,8 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
             .map(lumit_render::export::ColourSpace::stored_name)
             .collect(),
         max_fps: caps.max_fps.unwrap_or(0),
+        // The page writes no subtitles either.
+        subtitles: caps.subtitles && !web,
     }
 }
 
@@ -561,6 +565,7 @@ pub(crate) fn to_export_spec(
             palette_per_frame: spec.gif_palette_per_frame,
             plays: (spec.gif_plays > 0).then_some(spec.gif_plays),
         },
+        captions: captions_out(spec.captions),
     })
 }
 
@@ -659,6 +664,12 @@ pub(crate) fn from_export_spec(
         },
         gif_palette_per_frame: spec.gif.palette_per_frame,
         gif_plays: spec.gif.plays.unwrap_or(0),
+        captions: match spec.captions {
+            CaptionsOut::Burn => BridgeCaptionsOut::Burn,
+            CaptionsOut::File(SubtitleFormat::Srt) => BridgeCaptionsOut::Srt,
+            CaptionsOut::File(SubtitleFormat::Vtt) => BridgeCaptionsOut::Vtt,
+            CaptionsOut::Embed => BridgeCaptionsOut::Embed,
+        },
     })
 }
 
@@ -879,11 +890,23 @@ fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(path)
 }
 
+/// The engine's answer for what an export does with caption layers.
+fn captions_out(captions: BridgeCaptionsOut) -> CaptionsOut {
+    match captions {
+        BridgeCaptionsOut::Burn => CaptionsOut::Burn,
+        BridgeCaptionsOut::Srt => CaptionsOut::File(SubtitleFormat::Srt),
+        BridgeCaptionsOut::Vtt => CaptionsOut::File(SubtitleFormat::Vtt),
+        BridgeCaptionsOut::Embed => CaptionsOut::Embed,
+    }
+}
+
 /// Whether an export to `out_path` would write over something: a file already
 /// there, or an export still waiting or running in the queue under that name.
-pub(crate) fn path_taken(out_path: &str, codec: &str) -> bool {
+/// The caption files it writes beside it count too.
+pub(crate) fn path_taken(out_path: &str, codec: &str, captions: BridgeCaptionsOut) -> bool {
     let path = with_format_extension(out_path, codec);
     first_file(&path, codec).exists()
+        || sidecar_taken(std::path::Path::new(&path), captions_out(captions))
         || queue_list().iter().any(|row| {
             row.out_path == path
                 && matches!(
@@ -895,7 +918,7 @@ pub(crate) fn path_taken(out_path: &str, codec: &str) -> bool {
 
 /// The first of `name_2.ext`, `name_3.ext`, … that writes over nothing, for
 /// Keep both. `out_path` itself when every number up to the cap is taken.
-pub(crate) fn free_path(out_path: &str, codec: &str) -> String {
+pub(crate) fn free_path(out_path: &str, codec: &str, captions: BridgeCaptionsOut) -> String {
     let path = with_format_extension(out_path, codec);
     let file = std::path::Path::new(&path);
     let stem = file
@@ -910,7 +933,7 @@ pub(crate) fn free_path(out_path: &str, codec: &str) -> String {
     (2..10_000)
         .map(|n| file.with_file_name(format!("{stem}_{n}{ext}")))
         .map(|p| p.to_string_lossy().into_owned())
-        .find(|p| !path_taken(p, codec))
+        .find(|p| !path_taken(p, codec, captions))
         .unwrap_or(path)
 }
 

@@ -41,14 +41,14 @@ use lumit_render::export::ExportSpec;
 use lumit_script::{script::Limits, script::RunOptions, ExportState, Host};
 use uuid::Uuid;
 
-use crate::api::export::BridgeExportSpec;
+use crate::api::export::{BridgeCaptionsOut, BridgeExportSpec};
 
 const HELP: &str = "\
 Lumit on the command line.
 
 Usage:
   lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>]
-                   [--range <in>-<out>] [--out <file>]
+                   [--range <in>-<out>] [--captions <how>] [--out <file>]
                    [--format lottie|dotlottie|svg] [--text shapes|text] [--minify]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
@@ -63,6 +63,9 @@ export     Export comps of a project, by default as an H.264 mp4 with sound.
   --preset     A saved export preset, by the name Lumit's Export window shows.
   --range      The frames to export, first and last, such as 0-119. Without it,
                the work area, or the whole comp when there is none.
+  --captions   What happens to caption layers: burn draws them into the picture,
+               srt or vtt writes them in a file beside it, and embed carries
+               them inside an mp4 or mov. Without it, the preset's choice.
   --out        The file to write. With several comps, the folder they go in.
                Without it, beside the project, named as Lumit's Export window
                names them, never over a file.
@@ -127,6 +130,8 @@ struct Export {
     /// Text as text naming its font rather than as outlines.
     text_as_text: bool,
     minify: bool,
+    /// What happens to caption layers, when not the preset's choice.
+    captions: Option<BridgeCaptionsOut>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -302,6 +307,19 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 }
             }
             ("export", "--minify") => how.minify = true,
+            ("export", "--captions") => {
+                how.captions = Some(match text(wants(&flag, rest.pop())?)?.as_str() {
+                    "burn" => BridgeCaptionsOut::Burn,
+                    "srt" => BridgeCaptionsOut::Srt,
+                    "vtt" => BridgeCaptionsOut::Vtt,
+                    "embed" => BridgeCaptionsOut::Embed,
+                    other => {
+                        return Err(format!(
+                            "--captions takes burn, srt, vtt or embed, not {other}."
+                        ))
+                    }
+                })
+            }
             ("run" | "mcp", "--project") => {
                 project = Some(PathBuf::from(wants(&flag, rest.pop())?))
             }
@@ -402,7 +420,7 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
     }
     let stop = interrupt::stop_flag();
     // The preset first, so a misspelt name is heard before the project opens.
-    let settings = match &how.preset {
+    let mut settings = match &how.preset {
         Some(name) => crate::export::preset_get(name).ok_or_else(|| {
             let names: Vec<String> = crate::export::preset_list()
                 .into_iter()
@@ -416,6 +434,7 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
         None => crate::export::from_export_spec(&ExportSpec::default())
             .ok_or("This build of Lumit cannot export.")?,
     };
+    settings.captions = how.captions.unwrap_or(settings.captions);
     let host = open(project)?;
     // Extension effects draw in an export as they do in Lumit.
     crate::api::extensions::register_effects();
@@ -502,8 +521,12 @@ fn export_name(dir: &Path, settings: &BridgeExportSpec, name: &str) -> PathBuf {
     let stem = file.strip_suffix(".mp4").unwrap_or(&file);
     let path = dir.join(stem).to_string_lossy().into_owned();
     let path = crate::export::with_format_extension(&path, &settings.codec);
-    if crate::export::path_taken(&path, &settings.codec) {
-        PathBuf::from(crate::export::free_path(&path, &settings.codec))
+    if crate::export::path_taken(&path, &settings.codec, settings.captions) {
+        PathBuf::from(crate::export::free_path(
+            &path,
+            &settings.codec,
+            settings.captions,
+        ))
     } else {
         PathBuf::from(path)
     }

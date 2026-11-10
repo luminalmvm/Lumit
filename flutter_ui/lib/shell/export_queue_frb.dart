@@ -648,7 +648,8 @@ class _ExportQueueState extends State<_ExportQueue> {
     if (spec == null) return;
     comp.queueExport(
         spec: spec,
-        path: exportFreePath(path: item.path, codec: item.codec),
+        path: exportFreePath(
+            path: item.path, codec: item.codec, captions: spec.captions),
         start: false);
   }
 
