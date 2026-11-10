@@ -56,6 +56,7 @@ import '../state/text_documents.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'timeline_captions_frb.dart' show typeCaptionAtPlayhead;
 import 'viewer_gizmo.dart';
 import 'viewer_shape_layer.dart' show ShapeSpace;
 import 'viewer_tool_cursor.dart';
@@ -743,6 +744,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final existing = _textLayerAt(at);
     if (existing == null) return;
     _pressOnText = true;
+    // A caption layer's words are its captions, typed in the Captions panel:
+    // a double-click opens the one under the playhead there.
+    if (typeCaptionAtPlayhead(widget.uiState, existing.layer,
+        ask: clicks == 2)) {
+      return;
+    }
     _begin(existing.layer, created: false, box: existing.box, at: at);
     _dragUnit = null;
     _dragBase = _controller.selection.baseOffset;

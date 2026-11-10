@@ -1,5 +1,5 @@
-// The Text panel: the font, size, spacing and outline of a text layer's
-// letters.
+// The Text panel: the font, size, spacing, outline and background of a text
+// layer's letters.
 //
 // One style for the whole layer. The controls a title is usually set with are
 // always shown, and More opens the rest: scale, baseline shift, the faux
@@ -210,6 +210,96 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       suffix: ' px',
                       resetTo: plainTextStyle.strokeWidth,
                       change: (v) => restyle((s) => s.copyWith(strokeWidth: v)),
+                    ),
+                  ),
+                ],
+                // A plate behind the words, set the way the outline is.
+                textCell(
+                  t,
+                  l10n.textBackground,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      HouseCheckbox(
+                        key: const ValueKey('text-plate-on'),
+                        value: style.plateOn,
+                        onChanged: (on) => commitText(ui, target,
+                            restyle((s) => s.copyWith(plateOn: on))),
+                      ),
+                      const SizedBox(width: 8),
+                      _swatch(
+                        keyName: 'text-plate',
+                        colour: style.plate,
+                        resetTo: PickedColour(plainTextStyle.plate.r,
+                            plainTextStyle.plate.g, plainTextStyle.plate.b),
+                        onPicked: (c) => commitText(
+                            ui, target, restyle((s) => s.copyWith(plate: c))),
+                      ),
+                    ],
+                  ),
+                ),
+                if (style.plateOn) ...[
+                  textCell(
+                    t,
+                    l10n.textBackgroundOpacity,
+                    _number(
+                      ui,
+                      target,
+                      keyName: 'text-plate-opacity',
+                      value: style.plate.a * 100,
+                      min: 0,
+                      max: 100,
+                      suffix: ' %',
+                      resetTo: plainTextStyle.plate.a * 100,
+                      change: (v) => restyle((s) => s.copyWith(
+                          plate: BridgeColourRgba(
+                              r: s.plate.r,
+                              g: s.plate.g,
+                              b: s.plate.b,
+                              a: v / 100))),
+                    ),
+                  ),
+                  textCell(
+                    t,
+                    l10n.textBackgroundPadding,
+                    _number(
+                      ui,
+                      target,
+                      keyName: 'text-plate-padding',
+                      value: style.platePadding,
+                      min: 0,
+                      max: 2000,
+                      decimals: 1,
+                      suffix: ' px',
+                      resetTo: plainTextStyle.platePadding,
+                      change: (v) =>
+                          restyle((s) => s.copyWith(platePadding: v)),
+                    ),
+                  ),
+                  textCell(
+                    t,
+                    l10n.textBackgroundRadius,
+                    _number(
+                      ui,
+                      target,
+                      keyName: 'text-plate-radius',
+                      value: style.plateRadius,
+                      min: 0,
+                      max: 2000,
+                      decimals: 1,
+                      suffix: ' px',
+                      resetTo: plainTextStyle.plateRadius,
+                      change: (v) => restyle((s) => s.copyWith(plateRadius: v)),
+                    ),
+                  ),
+                  textCell(
+                    t,
+                    l10n.textBackgroundLines,
+                    HouseCheckbox(
+                      key: const ValueKey('text-plate-lines'),
+                      value: style.plateLines,
+                      onChanged: (on) => commitText(ui, target,
+                          restyle((s) => s.copyWith(plateLines: on))),
                     ),
                   ),
                 ],

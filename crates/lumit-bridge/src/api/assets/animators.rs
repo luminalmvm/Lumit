@@ -2,7 +2,10 @@
 
 use flutter_rust_bridge::frb;
 
-use super::{BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorShape, BridgeTextAnimator};
+use super::{
+    BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorMode, BridgeSelectorShape,
+    BridgeTextAnimator,
+};
 use crate::api::{effect::BridgeScalar, BridgeError};
 
 /// One animator on its way out to the panel, its keys on the comp's clock.
@@ -25,7 +28,17 @@ pub(crate) fn read_animator(
             shape: match animator.selector.shape {
                 lumit_core::text::SelectorShape::Square => BridgeSelectorShape::Square,
                 lumit_core::text::SelectorShape::Ramp => BridgeSelectorShape::Ramp,
+                lumit_core::text::SelectorShape::Smooth => BridgeSelectorShape::Smooth,
+                lumit_core::text::SelectorShape::Bounce => BridgeSelectorShape::Bounce,
             },
+            mode: match animator.selector.mode {
+                lumit_core::text::SelectorMode::Range => BridgeSelectorMode::Range,
+                lumit_core::text::SelectorMode::Current => BridgeSelectorMode::Current,
+                lumit_core::text::SelectorMode::Said => BridgeSelectorMode::Said,
+                lumit_core::text::SelectorMode::Unsaid => BridgeSelectorMode::Unsaid,
+                lumit_core::text::SelectorMode::Emphasis => BridgeSelectorMode::Emphasis,
+            },
+            ease: animator.selector.ease,
         },
         position_x: read(&animator.position_x),
         position_y: read(&animator.position_y),
@@ -39,6 +52,10 @@ pub(crate) fn read_animator(
         fill_r: read(&animator.fill_r),
         fill_g: read(&animator.fill_g),
         fill_b: read(&animator.fill_b),
+        box_opacity: read(&animator.box_opacity),
+        box_r: read(&animator.box_r),
+        box_g: read(&animator.box_g),
+        box_b: read(&animator.box_b),
     }
 }
 
@@ -67,7 +84,19 @@ pub(super) fn animator_from(
             shape: match animator.selector.shape {
                 BridgeSelectorShape::Square => lumit_core::text::SelectorShape::Square,
                 BridgeSelectorShape::Ramp => lumit_core::text::SelectorShape::Ramp,
+                BridgeSelectorShape::Smooth => lumit_core::text::SelectorShape::Smooth,
+                BridgeSelectorShape::Bounce => lumit_core::text::SelectorShape::Bounce,
             },
+            mode: match animator.selector.mode {
+                BridgeSelectorMode::Range => lumit_core::text::SelectorMode::Range,
+                BridgeSelectorMode::Current => lumit_core::text::SelectorMode::Current,
+                BridgeSelectorMode::Said => lumit_core::text::SelectorMode::Said,
+                BridgeSelectorMode::Unsaid => lumit_core::text::SelectorMode::Unsaid,
+                BridgeSelectorMode::Emphasis => lumit_core::text::SelectorMode::Emphasis,
+            },
+            ease: Some(animator.selector.ease)
+                .filter(|e| e.is_finite())
+                .map_or(0.0, |e| e.max(0.0)),
         },
         position_x: write(&animator.position_x)?,
         position_y: write(&animator.position_y)?,
@@ -81,6 +110,10 @@ pub(super) fn animator_from(
         fill_r: write(&animator.fill_r)?,
         fill_g: write(&animator.fill_g)?,
         fill_b: write(&animator.fill_b)?,
+        box_opacity: write(&animator.box_opacity)?,
+        box_r: write(&animator.box_r)?,
+        box_g: write(&animator.box_g)?,
+        box_b: write(&animator.box_b)?,
         extra: serde_json::Map::new(),
     })
 }

@@ -199,6 +199,10 @@ class DragValueField extends StatefulWidget {
   final double speed;
   final int decimals;
   final String? suffix;
+
+  /// What the resting face reads in place of nought, for a field whose
+  /// nought means "work it out", such as a box height of Auto.
+  final String? zeroLabel;
   final num? resetTo;
 
   /// Whether a positive value is shown with its `+`.
@@ -264,6 +268,7 @@ class DragValueField extends StatefulWidget {
     this.speed = 1,
     this.decimals = 0,
     this.suffix,
+    this.zeroLabel,
     this.resetTo,
     this.signed = false,
     this.keyed = false,
@@ -504,6 +509,7 @@ class _DragValueFieldState extends State<DragValueField>
       widget.bare ? 0 : monoSlotWidth(_valueStyle(t), 6) + 12 + 2;
 
   String _format(num v) {
+    if (v == 0 && widget.zeroLabel != null) return widget.zeroLabel!;
     var s = _plain(v);
     // `toStringAsFixed` already carries a minus; only the plus has to be put
     // back, and only where the reading is signed.

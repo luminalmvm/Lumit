@@ -33,6 +33,12 @@ const BridgeTextStyle plainTextStyle = BridgeTextStyle(
   strokeWidth: 1,
   strokeOver: true,
   strokesTogether: false,
+  plateOn: false,
+  // 0.6, as the engine's single precision holds it.
+  plate: BridgeColourRgba(r: 0, g: 0, b: 0, a: 0.6000000238418579),
+  platePadding: 12,
+  plateRadius: 0,
+  plateLines: false,
 );
 
 /// The paragraph of a layer nobody has styled, held the same way.
@@ -44,6 +50,7 @@ const BridgeParagraphStyle plainParagraphStyle = BridgeParagraphStyle(
   indentFirst: 0,
   spaceBefore: 0,
   spaceAfter: 0,
+  vertical: BridgeVerticalAlign.top,
 );
 
 extension TextDocumentCopy on BridgeTextDocument {
@@ -98,6 +105,11 @@ extension TextStyleCopy on BridgeTextStyle {
     double? strokeWidth,
     bool? strokeOver,
     bool? strokesTogether,
+    bool? plateOn,
+    BridgeColourRgba? plate,
+    double? platePadding,
+    double? plateRadius,
+    bool? plateLines,
   }) =>
       BridgeTextStyle(
         family: family ?? this.family,
@@ -119,12 +131,17 @@ extension TextStyleCopy on BridgeTextStyle {
         strokeWidth: strokeWidth ?? this.strokeWidth,
         strokeOver: strokeOver ?? this.strokeOver,
         strokesTogether: strokesTogether ?? this.strokesTogether,
+        plateOn: plateOn ?? this.plateOn,
+        plate: plate ?? this.plate,
+        platePadding: platePadding ?? this.platePadding,
+        plateRadius: plateRadius ?? this.plateRadius,
+        plateLines: plateLines ?? this.plateLines,
       );
 }
 
 extension ParagraphStyleCopy on BridgeParagraphStyle {
   /// [noBox] goes back to point text, since a null [boxWidth] means "leave it
-  /// alone".
+  /// alone". [autoHeight] lets the block grow with its lines again.
   BridgeParagraphStyle copyWith({
     BridgeTextAlign? align,
     double? boxWidth,
@@ -135,6 +152,9 @@ extension ParagraphStyleCopy on BridgeParagraphStyle {
     double? indentFirst,
     double? spaceBefore,
     double? spaceAfter,
+    double? boxHeight,
+    bool autoHeight = false,
+    BridgeVerticalAlign? vertical,
   }) =>
       BridgeParagraphStyle(
         align: align ?? this.align,
@@ -145,5 +165,7 @@ extension ParagraphStyleCopy on BridgeParagraphStyle {
         indentFirst: indentFirst ?? this.indentFirst,
         spaceBefore: spaceBefore ?? this.spaceBefore,
         spaceAfter: spaceAfter ?? this.spaceAfter,
+        boxHeight: autoHeight ? null : (boxHeight ?? this.boxHeight),
+        vertical: vertical ?? this.vertical,
       );
 }

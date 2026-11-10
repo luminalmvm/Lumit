@@ -138,6 +138,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
                 animators: Vec::new(),
                 style: Default::default(),
                 paragraph: Default::default(),
+                captions: None,
                 extra: serde_json::Map::new(),
             },
         },

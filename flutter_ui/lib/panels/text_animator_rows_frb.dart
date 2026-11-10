@@ -1,7 +1,8 @@
 // The Animators section: a Text layer's letters moved one at a time.
 //
 // An animator names a set of per-letter offsets — a push, a turn, a size, a
-// fade, a tint — and a **range selector** saying which letters they reach. The
+// fade, a tint, a box — and a **range selector** saying which letters they
+// reach, or the spoken words when a caption hands them in. The
 // selector hands every letter a weight and the offsets are applied times that
 // weight, so keying the selector's Offset sweeps the range across the words and
 // every letter is moved in its turn. That is the cascade, and nothing in this
@@ -180,36 +181,72 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           ],
         ),
       ),
+      _plainRow(
+        context,
+        l10n.textAnimatorFollows,
+        BareDropdown<BridgeSelectorMode>(
+          key: ValueKey<String>('text-animator-mode-$index'),
+          value: a.selector.mode,
+          options: BridgeSelectorMode.values,
+          label: (m) => switch (m) {
+            BridgeSelectorMode.range => l10n.textAnimatorFollowsRange,
+            BridgeSelectorMode.current => l10n.textAnimatorFollowsCurrent,
+            BridgeSelectorMode.said => l10n.textAnimatorFollowsSaid,
+            BridgeSelectorMode.unsaid => l10n.textAnimatorFollowsUnsaid,
+            BridgeSelectorMode.emphasis => l10n.textAnimatorFollowsEmphasis,
+          },
+          onChanged: (m) => putSelector(selectorWith(a.selector, mode: m)),
+        ),
+      ),
       // The range: which letters this animator reaches, in per cent of the
       // words. Offset is the one a cascade is keyed on, which is why it is a
-      // number of its own rather than something the two ends share.
-      _numberRow(
+      // number of its own rather than something the two ends share. Spoken
+      // words pick the letters themselves, and take an ease instead.
+      if (a.selector.mode == BridgeSelectorMode.range) ...[
+        _numberRow(
+            context,
+            l10n.textAnimatorRangeStart,
+            'range-start-$index',
+            [a.selector.start],
+            -1000,
+            1000,
+            0,
+            (s) => putSelector(selectorWith(a.selector, start: s.first))),
+        _numberRow(
+            context,
+            l10n.textAnimatorRangeEnd,
+            'range-end-$index',
+            [a.selector.end],
+            -1000,
+            1000,
+            100,
+            (s) => putSelector(selectorWith(a.selector, end: s.first))),
+        _numberRow(
+            context,
+            l10n.textAnimatorRangeOffset,
+            'range-offset-$index',
+            [a.selector.offset],
+            -1000,
+            1000,
+            0,
+            (s) => putSelector(selectorWith(a.selector, offset: s.first))),
+      ] else if (a.selector.mode != BridgeSelectorMode.emphasis)
+        _plainRow(
           context,
-          l10n.textAnimatorRangeStart,
-          'range-start-$index',
-          [a.selector.start],
-          -1000,
-          1000,
-          0,
-          (s) => putSelector(selectorWith(a.selector, start: s.first))),
-      _numberRow(
-          context,
-          l10n.textAnimatorRangeEnd,
-          'range-end-$index',
-          [a.selector.end],
-          -1000,
-          1000,
-          100,
-          (s) => putSelector(selectorWith(a.selector, end: s.first))),
-      _numberRow(
-          context,
-          l10n.textAnimatorRangeOffset,
-          'range-offset-$index',
-          [a.selector.offset],
-          -1000,
-          1000,
-          0,
-          (s) => putSelector(selectorWith(a.selector, offset: s.first))),
+          l10n.textAnimatorEase,
+          DragValueField(
+            key: ValueKey<String>('text-animator-ease-$index'),
+            value: a.selector.ease,
+            min: 0,
+            max: 10,
+            decimals: 2,
+            speed: 0.01,
+            suffix: ' s',
+            resetTo: 0,
+            onChanged: (v) => putSelector(
+                selectorWith(a.selector, ease: v.toDouble())),
+          ),
+        ),
       _plainRow(
         context,
         l10n.textAnimatorBasis,
@@ -234,6 +271,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           label: (s) => switch (s) {
             BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
             BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
+            BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
+            BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
           },
           onChanged: (s) => putSelector(selectorWith(a.selector, shape: s)),
         ),
@@ -311,6 +350,26 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           10,
           0,
           (s) => put(animatorWith(a, fillR: s[0], fillG: s[1], fillB: s[2]))),
+      // A box behind the letters reached, in a colour of its own rather than
+      // an offset, since there is no box underneath to offset.
+      _numberRow(
+          context,
+          l10n.textAnimatorBoxColour,
+          'anim-box-$index',
+          [a.boxR, a.boxG, a.boxB],
+          0,
+          10,
+          0,
+          (s) => put(animatorWith(a, boxR: s[0], boxG: s[1], boxB: s[2]))),
+      _numberRow(
+          context,
+          l10n.textAnimatorBoxOpacity,
+          'anim-box-opacity-$index',
+          [a.boxOpacity],
+          0,
+          100,
+          0,
+          (s) => put(animatorWith(a, boxOpacity: s.first))),
     ];
   }
 
@@ -474,6 +533,8 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
         offset: BridgeScalar.static_(0),
         basis: BridgeSelectorBasis.characters,
         shape: BridgeSelectorShape.square,
+        mode: BridgeSelectorMode.range,
+        ease: 0,
       ),
       positionX: const BridgeScalar.static_(0),
       positionY: const BridgeScalar.static_(0),
@@ -487,6 +548,10 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       fillR: const BridgeScalar.static_(0),
       fillG: const BridgeScalar.static_(0),
       fillB: const BridgeScalar.static_(0),
+      boxOpacity: const BridgeScalar.static_(0),
+      boxR: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxR)),
+      boxG: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxG)),
+      boxB: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxB)),
     );
 
 /// Whether any of [a]'s rows are keyed.
@@ -506,6 +571,10 @@ bool animatorHasKeys(BridgeTextAnimator a) => [
       a.fillR,
       a.fillG,
       a.fillB,
+      a.boxOpacity,
+      a.boxR,
+      a.boxG,
+      a.boxB,
     ].any((s) => s is BridgeScalar_Keyframed);
 
 /// [animator] with one channel replaced — the generated struct is immutable and
@@ -527,6 +596,10 @@ BridgeTextAnimator animatorWith(
   BridgeScalar? fillR,
   BridgeScalar? fillG,
   BridgeScalar? fillB,
+  BridgeScalar? boxOpacity,
+  BridgeScalar? boxR,
+  BridgeScalar? boxG,
+  BridgeScalar? boxB,
 }) =>
     BridgeTextAnimator(
       name: name ?? a.name,
@@ -543,6 +616,10 @@ BridgeTextAnimator animatorWith(
       fillR: fillR ?? a.fillR,
       fillG: fillG ?? a.fillG,
       fillB: fillB ?? a.fillB,
+      boxOpacity: boxOpacity ?? a.boxOpacity,
+      boxR: boxR ?? a.boxR,
+      boxG: boxG ?? a.boxG,
+      boxB: boxB ?? a.boxB,
     );
 
 /// Which of an animator's animatable numbers a row carries.
@@ -566,6 +643,10 @@ enum TextAnimatorValue {
   fillR,
   fillG,
   fillB,
+  boxOpacity,
+  boxR,
+  boxG,
+  boxB,
 }
 
 /// The numbers only a solid layer's letters can use.
@@ -593,6 +674,10 @@ String textAnimatorValueLabel(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.fillR => '${l10n.textAnimatorFillOffset} r',
       TextAnimatorValue.fillG => '${l10n.textAnimatorFillOffset} g',
       TextAnimatorValue.fillB => '${l10n.textAnimatorFillOffset} b',
+      TextAnimatorValue.boxOpacity => l10n.textAnimatorBoxOpacity,
+      TextAnimatorValue.boxR => '${l10n.textAnimatorBoxColour} r',
+      TextAnimatorValue.boxG => '${l10n.textAnimatorBoxColour} g',
+      TextAnimatorValue.boxB => '${l10n.textAnimatorBoxColour} b',
     };
 
 /// What one of an animator's numbers is when it changes nothing, for Reset.
@@ -602,6 +687,10 @@ double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.scaleY ||
       TextAnimatorValue.opacity =>
         100,
+      // The engine's soft yellow.
+      TextAnimatorValue.boxR => 1,
+      TextAnimatorValue.boxG => 0.75,
+      TextAnimatorValue.boxB => 0.15,
       _ => 0,
     };
 
@@ -624,6 +713,10 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.fillR => a.fillR,
       TextAnimatorValue.fillG => a.fillG,
       TextAnimatorValue.fillB => a.fillB,
+      TextAnimatorValue.boxOpacity => a.boxOpacity,
+      TextAnimatorValue.boxR => a.boxR,
+      TextAnimatorValue.boxG => a.boxG,
+      TextAnimatorValue.boxB => a.boxB,
     };
 
 /// [a] with the one number [value] names replaced.
@@ -648,6 +741,10 @@ BridgeTextAnimator animatorWithScalar(
       TextAnimatorValue.fillR => animatorWith(a, fillR: to),
       TextAnimatorValue.fillG => animatorWith(a, fillG: to),
       TextAnimatorValue.fillB => animatorWith(a, fillB: to),
+      TextAnimatorValue.boxOpacity => animatorWith(a, boxOpacity: to),
+      TextAnimatorValue.boxR => animatorWith(a, boxR: to),
+      TextAnimatorValue.boxG => animatorWith(a, boxG: to),
+      TextAnimatorValue.boxB => animatorWith(a, boxB: to),
     };
 
 /// Write one of [layer]'s animators back with one number replaced — the write
@@ -693,6 +790,8 @@ BridgeRangeSelector selectorWith(
   BridgeScalar? offset,
   BridgeSelectorBasis? basis,
   BridgeSelectorShape? shape,
+  BridgeSelectorMode? mode,
+  double? ease,
 }) =>
     BridgeRangeSelector(
       start: start ?? s.start,
@@ -700,4 +799,6 @@ BridgeRangeSelector selectorWith(
       offset: offset ?? s.offset,
       basis: basis ?? s.basis,
       shape: shape ?? s.shape,
+      mode: mode ?? s.mode,
+      ease: ease ?? s.ease,
     );

@@ -2210,15 +2210,15 @@ fn feed_source(
             // caption says something different at every frame, and hashing the
             // stored text would key them all the same and freeze the first
             // frame it rendered on screen for the rest of the comp.
-            let context = ExpressionContext {
+            let context = Arc::new(ExpressionContext {
                 document: doc.clone(),
                 comp: Some(owner.id),
                 layer: Some(layer.id),
                 comp_time,
                 current_depth: 0,
                 inputs: None,
-            };
-            let line = document.resolved_text(Arc::new(context));
+            });
+            let (line, spoken, [x, y]) = lumit_core::captions::show::spoken(document, context);
             h.update(line.as_bytes());
             h.update(&[0]); // length delimiter: text then size never collide
             feed_f64(h, document.size);
@@ -2265,24 +2265,23 @@ fn feed_source(
                 }
             }
             // Text animators. What is fed is what actually reaches the
-            // picture — each letter's resolved push, turn, size, opacity and
-            // tint — rather than the animators' settings: two different
+            // picture — each letter's resolved push, turn, size, opacity, tint
+            // and box — rather than the animators' settings: two different
             // selectors that happen to move the same letters the same way draw
             // the same frame and may share it, and a swept range keys per frame
             // because its weights change per frame. A layer with no animators
             // feeds nothing at all and keeps the key it has always had.
-            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt) {
-                for v in [
-                    x.position[0],
-                    x.position[1],
-                    x.rotation,
-                    x.scale[0],
-                    x.scale[1],
-                    x.opacity,
-                    x.fill[0],
-                    x.fill[1],
-                    x.fill[2],
-                ] {
+            // A caption moved off where the layer puts it, resolved with its
+            // words above. One that is not feeds nothing.
+            if x != 0.0 || y != 0.0 {
+                h.update(b"moved/");
+                feed_f64(h, x);
+                feed_f64(h, y);
+            }
+            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken) {
+                let lone = [x.rotation, x.opacity, x.depth];
+                let pairs = x.position.into_iter().chain(x.scale).chain(x.turn);
+                for v in pairs.chain(lone).chain(x.fill).chain(x.plate) {
                     h.update(&v.to_le_bytes());
                 }
             }
@@ -2923,6 +2922,7 @@ mod tests {
                     animators: Vec::new(),
                     style: Default::default(),
                     paragraph: Default::default(),
+                    captions: None,
                     extra: serde_json::Map::new(),
                 },
             },

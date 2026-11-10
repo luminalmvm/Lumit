@@ -930,6 +930,7 @@ fn example_doc(
                         animators: Vec::new(),
                         style: Default::default(),
                         paragraph: Default::default(),
+                        captions: None,
                         extra: serde_json::Map::new(),
                     },
                 },

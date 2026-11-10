@@ -71,6 +71,8 @@ List<BridgeTextAnimator> textPresetAnimators(
         offset: sweep(-_softEdge, 100),
         basis: basis,
         shape: BridgeSelectorShape.ramp,
+        mode: BridgeSelectorMode.range,
+        ease: 0,
       );
 
   final fresh = freshTextAnimator(preset.title);
@@ -93,6 +95,8 @@ List<BridgeTextAnimator> textPresetAnimators(
             offset: const BridgeScalar.static_(0),
             basis: characters,
             shape: BridgeSelectorShape.square,
+            mode: BridgeSelectorMode.range,
+            ease: 0,
           ),
           opacity: hidden,
         )
@@ -127,6 +131,8 @@ List<BridgeTextAnimator> textPresetAnimators(
             offset: const BridgeScalar.static_(0),
             basis: characters,
             shape: BridgeSelectorShape.ramp,
+            mode: BridgeSelectorMode.range,
+            ease: 0,
           ),
           positionX: sweep(_spread, 0),
         ),
@@ -173,6 +179,89 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
   ];
 }
 
+/// Animations that follow the spoken words. Only a caption hands words in, so
+/// these are offered on caption layers alone.
+enum CaptionAnimationPreset {
+  highlightWord,
+  karaoke,
+  popWordsIn,
+  boxWord;
+
+  String get title => switch (this) {
+        highlightWord => l10n.textPresetHighlightWord,
+        karaoke => l10n.textPresetKaraoke,
+        popWordsIn => l10n.textPresetPopWordsIn,
+        boxWord => l10n.textPresetBoxWord,
+      };
+}
+
+/// The animator [preset] adds. Nothing is keyed: the words' own times move it.
+BridgeTextAnimator captionPresetAnimator(CaptionAnimationPreset preset) {
+  final fresh = freshTextAnimator(preset.title);
+  BridgeRangeSelector follow(
+    BridgeSelectorMode mode,
+    BridgeSelectorBasis basis, {
+    BridgeSelectorShape shape = BridgeSelectorShape.smooth,
+    double ease = 0.08,
+  }) =>
+      selectorWith(fresh.selector,
+          mode: mode, basis: basis, shape: shape, ease: ease);
+  // A white fill offset this way comes out a warm yellow.
+  const tint = (
+    BridgeScalar.static_(0),
+    BridgeScalar.static_(-0.2),
+    BridgeScalar.static_(-0.9),
+  );
+  const words = BridgeSelectorBasis.words;
+  return switch (preset) {
+    CaptionAnimationPreset.highlightWord => animatorWith(fresh,
+        selector: follow(BridgeSelectorMode.current, words),
+        fillR: tint.$1,
+        fillG: tint.$2,
+        fillB: tint.$3),
+    CaptionAnimationPreset.karaoke => animatorWith(fresh,
+        selector: follow(
+            BridgeSelectorMode.said, BridgeSelectorBasis.characters,
+            ease: 0.04),
+        fillR: tint.$1,
+        fillG: tint.$2,
+        fillB: tint.$3),
+    CaptionAnimationPreset.popWordsIn => animatorWith(fresh,
+        selector: follow(BridgeSelectorMode.unsaid, words,
+            shape: BridgeSelectorShape.bounce, ease: 0.18),
+        scaleX: const BridgeScalar.static_(0),
+        scaleY: const BridgeScalar.static_(0),
+        opacity: const BridgeScalar.static_(0)),
+    // The word darkens on its box, so it reads on the yellow.
+    CaptionAnimationPreset.boxWord => animatorWith(fresh,
+        selector: follow(BridgeSelectorMode.current, words),
+        boxOpacity: const BridgeScalar.static_(100),
+        fillR: const BridgeScalar.static_(-0.9),
+        fillG: const BridgeScalar.static_(-0.9),
+        fillB: const BridgeScalar.static_(-0.9)),
+  };
+}
+
+/// The caption presets as their own group of menu rows, for a caption layer's
+/// menus to show.
+List<MenuEntry> captionPresetRows(LumitState app, LumitUiState ui) {
+  bool isText(BridgeLayerEntry entry) => entry.info.kind == BridgeLayerKind.text;
+  return [
+    for (final preset in CaptionAnimationPreset.values)
+      MenuEntry(
+        preset.title,
+        onSelection(
+          app,
+          ui,
+          (entry) => addTextAnimator(entry.layer,
+              adding: [captionPresetAnimator(preset)]),
+          when: isText,
+          name: preset.title,
+        ),
+      ),
+  ];
+}
+
 /// [scalar] played backwards: the same key times, the values the other way
 /// round, each side's ease with them. Unkeyed comes back as it was.
 BridgeScalar reversedScalar(BridgeScalar scalar) {
@@ -201,6 +290,8 @@ BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
       offset: reversedScalar(s.offset),
       basis: s.basis,
       shape: s.shape,
+      mode: s.mode,
+      ease: s.ease,
     ),
     positionX: reversedScalar(a.positionX),
     positionY: reversedScalar(a.positionY),
@@ -214,5 +305,9 @@ BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
     fillR: reversedScalar(a.fillR),
     fillG: reversedScalar(a.fillG),
     fillB: reversedScalar(a.fillB),
+    boxOpacity: reversedScalar(a.boxOpacity),
+    boxR: reversedScalar(a.boxR),
+    boxG: reversedScalar(a.boxG),
+    boxB: reversedScalar(a.boxB),
   );
 }

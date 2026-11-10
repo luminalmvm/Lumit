@@ -115,7 +115,8 @@ struct Piece {
 fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece> {
     match &layer.kind {
         LayerKind::Text { document } => {
-            let line = document.resolved_text(context.clone());
+            let (line, spoken, moved) =
+                lumit_core::captions::show::spoken(document, context.clone());
             let spine = document
                 .path
                 .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
@@ -123,7 +124,7 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
             let offset = document.path_offset.value_at(lt) as f32;
             let block = lumit_text::TextBlock::of(document, &line);
             let entries = lumit_text::shape_items(&block, spine.as_ref(), offset);
-            let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+            let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken);
             // A straight line with animators is drawn flat with room round it,
             // which moves its letters in, so it keeps its place here too.
             let roomy =
@@ -144,7 +145,8 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                     line.carets.get(k - line.start)?,
                     line.carets.get(k + 1 - line.start)?,
                 );
-                Some([(a + b) / 2.0, line.baseline])
+                let [x, y] = moved.map(|m| m as f32);
+                Some([(a + b) / 2.0 + x, line.baseline + y])
             };
             let chars: Vec<char> = line.chars().collect();
             let [fill, edge] = text_colours(document);
@@ -188,8 +190,9 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                     };
                     lumit_core::shape::solid::with_stroke(&flat.collect::<Vec<_>>(), outline)
                 };
+                // A caption moved off its place takes its solid letters along.
                 for p in contours.iter_mut().flatten() {
-                    (p[0], p[1]) = (p[0] + room[0], p[1] + room[1]);
+                    (p[0], p[1]) = (p[0] + room[0] + moved[0], p[1] + room[1] + moved[1]);
                 }
                 let added = |c: [f32; 4]| {
                     [
@@ -541,7 +544,9 @@ pub(crate) fn may_change(layer: &Layer, lt: f64, context: &Arc<ExpressionContext
     keyed
         || match &layer.kind {
             LayerKind::Text { document } => {
-                !document.animators.is_empty() || document.expression.is_some()
+                !document.animators.is_empty()
+                    || document.expression.is_some()
+                    || document.captions.is_some()
             }
             LayerKind::Shape { contents } => matches!(
                 lumit_core::shape::contents_at(contents, lt, context),

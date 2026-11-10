@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use lumit_core::mask::MaskPolyline;
 use lumit_core::model::LinearColour;
-use lumit_core::text::{Caps, GlyphXform, Kerning, Script, TextAlign};
+use lumit_core::text::{Caps, GlyphXform, Kerning, Script, TextAlign, VerticalAlign};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::MetadataProvider;
@@ -23,6 +23,8 @@ use zeno::{Angle, Command, Fill, Join, Mask, PathBuilder, Stroke, Transform};
 
 use crate::fonts::Face;
 use crate::{animator_margin, BlockLayout, BlockLine, GlyphOutline, RasterText, TextBlock};
+
+mod plate;
 
 /// The largest a styled letter is set, in px.
 const MAX_SIZE: f32 = 2000.0;
@@ -470,14 +472,37 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
             glyph.x += x + stretch * before;
         }
     }
-    let height = lines.last().map_or(ascent, |l| l.baseline) + descent;
+    let mut height = lines.last().map_or(ascent, |l| l.baseline) + descent;
+    // A box of fixed height keeps its size whatever the words, and its lines
+    // sit at its top, middle or bottom.
+    let fixed = Some(paragraph.box_height)
+        .filter(|h| h.is_finite())
+        .map_or(0.0, |h| h.min(crate::MAX_PATH_BOX_PX));
+    if fixed > 0.0 {
+        let drop = match paragraph.vertical {
+            VerticalAlign::Top => 0.0,
+            VerticalAlign::Middle => (fixed - height) * 0.5,
+            VerticalAlign::Bottom => fixed - height,
+        };
+        for line in &mut lines {
+            line.baseline += drop;
+        }
+        height = fixed;
+    }
 
     let stroke = if style.stroke_on {
         finite(style.stroke_width).max(0.0) * 0.5
     } else {
         0.0
     };
-    let pad = (stroke + size * 0.15 * scale_x.max(scale_y).max(1.0)).ceil();
+    let plate = if style.plate_on || block.boxed {
+        finite(style.plate_padding).clamp(0.0, MAX_SIZE)
+    } else {
+        0.0
+    };
+    let pad = (stroke + size * 0.15 * scale_x.max(scale_y).max(1.0))
+        .max(plate)
+        .ceil();
     Laid {
         glyphs,
         lines,
@@ -717,6 +742,10 @@ fn draw(
     (w, h): (u32, u32),
 ) -> Vec<u8> {
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
+    // Plates sit under the letters. Along a path there are none.
+    if let Run::Straight { origin } = run {
+        plate::draw(&mut rgba, (w, h), block, laid, *origin, xforms);
+    }
     let Some(font) = face.font() else {
         return rgba;
     };

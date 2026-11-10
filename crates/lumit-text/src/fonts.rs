@@ -2,7 +2,8 @@
 //!
 //! A layer names its font by family and face, the two strings the Text panel
 //! shows. A font that isn't installed here falls back to the built-in Inter, so
-//! a project opened on another machine still draws its words.
+//! a project opened on another machine still draws its words. Inter's Bold and
+//! Black are built in too, as the family "Inter", for when the system has none.
 //!
 //! ponytail: a missing glyph draws the font's own empty box, there is no
 //! fallback to a second font for a script the first doesn't cover.
@@ -54,6 +55,35 @@ pub(crate) fn builtin() -> Arc<Face> {
             Arc::new(Face::new(bytes, 0, None).expect("embedded Inter font parses"))
         })
         .clone()
+}
+
+/// The built-in family, and the faces of it carried in the program.
+const INTER: &str = "Inter";
+const BUNDLED: [(&str, &[u8]); 2] = [
+    (
+        "Bold",
+        include_bytes!("../../../assets/fonts/Inter-Bold.otf"),
+    ),
+    (
+        "Black",
+        include_bytes!("../../../assets/fonts/Inter-Black.otf"),
+    ),
+];
+
+/// A face of Inter the program carries, when that is what `family` and `face`
+/// name. Regular is the built-in face itself.
+fn bundled(family: &str, face: &str) -> Option<Arc<Face>> {
+    if !family.eq_ignore_ascii_case(INTER) {
+        return None;
+    }
+    if face.is_empty() || face.eq_ignore_ascii_case("Regular") {
+        return Some(builtin());
+    }
+    let (_, bytes) = BUNDLED
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(face))?;
+    let bytes: Bytes = Arc::new(*bytes);
+    Face::new(bytes, 0, None).map(Arc::new)
 }
 
 struct Registry {
@@ -117,19 +147,24 @@ fn faces_in(font: &FontRef<'_>) -> Vec<(String, Option<usize>)> {
 pub fn families() -> Vec<String> {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     let mut names: Vec<String> = registry.system.family_names().map(str::to_owned).collect();
+    names.push(INTER.to_owned());
     names.sort_by_key(|n| n.to_lowercase());
     names.dedup();
     names
 }
 
-/// The faces of one family, in the order the family lists them. Empty when the
-/// family isn't installed.
+/// The faces of one family, in the order the family lists them, with the
+/// faces of Inter the program carries. Empty when the family isn't installed.
 #[must_use]
 pub fn faces(family: &str) -> Vec<String> {
-    let Some(info) = family_named(family) else {
-        return Vec::new();
-    };
     let mut out: Vec<String> = Vec::new();
+    if family.eq_ignore_ascii_case(INTER) {
+        out.push("Regular".to_owned());
+        out.extend(BUNDLED.iter().map(|(name, _)| (*name).to_owned()));
+    }
+    let Some(info) = family_named(family) else {
+        return out;
+    };
     for font in info.fonts() {
         let Some(blob) = font.load(None) else {
             continue;
@@ -180,7 +215,8 @@ pub fn by_postscript_name(postscript: &str) -> Option<(String, String)> {
 }
 
 /// The face a layer names, or the nearest thing this machine has: the family's
-/// regular when the face is unknown, the built-in Inter when the family is.
+/// regular when the face is unknown, the built-in Inter when the family is. A
+/// face of Inter the system has wins over the one the program carries.
 pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
     if family.is_empty() {
         return builtin();
@@ -193,8 +229,11 @@ pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
     drop(known);
     // Read with the lock let go of. Two threads after the same new face both
     // read it, and the first one in is the one kept.
-    let found = family_named(family)
-        .and_then(|info| load(&info, face))
+    let system = family_named(family);
+    let installed = |info: &fontique::FamilyInfo| has_face(info, face);
+    let found = bundled(family, face)
+        .filter(|_| !system.as_ref().is_some_and(installed))
+        .or_else(|| system.and_then(|info| load(&info, face)))
         .unwrap_or_else(builtin);
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     registry.loaded.entry(key).or_insert(found).clone()
@@ -205,6 +244,20 @@ pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
 fn family_named(family: &str) -> Option<fontique::FamilyInfo> {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     registry.system.family_by_name(family)
+}
+
+/// Whether the family holds a face of exactly this name.
+fn has_face(info: &fontique::FamilyInfo, face: &str) -> bool {
+    info.fonts().iter().any(|font| {
+        let Some(blob) = font.load(None) else {
+            return false;
+        };
+        FontRef::from_index(blob.as_ref(), font.index()).is_ok_and(|parsed| {
+            faces_in(&parsed)
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case(face))
+        })
+    })
 }
 
 fn load(info: &fontique::FamilyInfo, face: &str) -> Option<Arc<Face>> {

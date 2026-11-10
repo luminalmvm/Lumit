@@ -11,8 +11,8 @@ use super::*;
 #[test]
 fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
     use crate::api::assets::{
-        BridgeColourRgba, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorShape,
-        BridgeTextAnimator, BridgeTextDocument,
+        BridgeColourRgba, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorMode,
+        BridgeSelectorShape, BridgeTextAnimator, BridgeTextDocument,
     };
     use crate::api::effect::BridgeScalar;
 
@@ -55,6 +55,8 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
             offset: zero(),
             basis: BridgeSelectorBasis::Characters,
             shape: BridgeSelectorShape::Square,
+            mode: BridgeSelectorMode::Range,
+            ease: 0.0,
         },
         position_x: zero(),
         position_y: BridgeScalar::Static(-40.0),
@@ -68,6 +70,10 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
         fill_r: zero(),
         fill_g: zero(),
         fill_b: zero(),
+        box_opacity: zero(),
+        box_r: BridgeScalar::Static(1.0),
+        box_g: BridgeScalar::Static(0.75),
+        box_b: BridgeScalar::Static(0.15),
     };
     let animated = BridgeTextDocument {
         animators: vec![animator.clone()],

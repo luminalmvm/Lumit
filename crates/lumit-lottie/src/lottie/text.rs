@@ -181,7 +181,7 @@ fn letters(
             .map(|t| {
                 (
                     t,
-                    lumit_core::text::glyph_xforms(&document.animators, words, t),
+                    lumit_core::text::glyph_xforms(&document.animators, words, t, &[]),
                 )
             })
             .collect()

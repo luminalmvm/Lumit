@@ -10512,6 +10512,66 @@
   "@textAnimatorsSection": {
     "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
   },
+  "textAnimatorFollows": "Follows",
+  "@textAnimatorFollows": {
+    "description": "Row label in the Animators section for what picks the letters an animator reaches: its own range, or the words of a caption as they are said."
+  },
+  "textAnimatorFollowsRange": "Range",
+  "@textAnimatorFollowsRange": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the letters its range start, end and offset mark out."
+  },
+  "textAnimatorFollowsCurrent": "Word being said",
+  "@textAnimatorFollowsCurrent": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the word of a caption that is being spoken at this moment."
+  },
+  "textAnimatorFollowsSaid": "Words said",
+  "@textAnimatorFollowsSaid": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches every word of a caption that has been spoken so far."
+  },
+  "textAnimatorFollowsUnsaid": "Words to come",
+  "@textAnimatorFollowsUnsaid": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the words of a caption that have not been spoken yet."
+  },
+  "textAnimatorFollowsEmphasis": "Emphasised words",
+  "@textAnimatorFollowsEmphasis": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the words of a caption that were picked out by hand for emphasis."
+  },
+  "textAnimatorEase": "Ease",
+  "@textAnimatorEase": {
+    "description": "Row label in the Animators section: how long, in seconds, a spoken word takes to change when the animator follows a caption's words."
+  },
+  "textAnimatorShapeSmooth": "Smooth",
+  "@textAnimatorShapeSmooth": {
+    "description": "Option in the Animators section's Shape picker: the movement eases in and out rather than rising evenly."
+  },
+  "textAnimatorShapeBounce": "Bounce",
+  "@textAnimatorShapeBounce": {
+    "description": "Option in the Animators section's Shape picker: the movement overshoots a little, then settles."
+  },
+  "textAnimatorBoxColour": "Box colour",
+  "@textAnimatorBoxColour": {
+    "description": "Row label in the Animators section: three numbers for the colour of a box drawn behind the letters the animator reaches."
+  },
+  "textAnimatorBoxOpacity": "Box opacity",
+  "@textAnimatorBoxOpacity": {
+    "description": "Row label in the Animators section: how solid the box behind the letters the animator reaches is, as a per cent. Nought draws no box."
+  },
+  "textPresetHighlightWord": "Highlight the word",
+  "@textPresetHighlightWord": {
+    "description": "Name of a caption animation preset: the word being said is tinted a warm yellow."
+  },
+  "textPresetKaraoke": "Karaoke",
+  "@textPresetKaraoke": {
+    "description": "Name of a caption animation preset: the letters are tinted one by one as each word is said, as a sing-along does."
+  },
+  "textPresetPopWordsIn": "Pop words in",
+  "@textPresetPopWordsIn": {
+    "description": "Name of a caption animation preset: each word grows in from nothing with a small bounce as it is said."
+  },
+  "textPresetBoxWord": "Box the word",
+  "@textPresetBoxWord": {
+    "description": "Name of a caption animation preset: a coloured box is drawn behind the word being said."
+  },
   "themeCopySuffix": "{name} copy",
   "@themeCopySuffix": {
     "description": "The name suggested for a duplicated theme. {name} is the original’s name.",
@@ -19665,6 +19725,26 @@
   "@textAllStrokesOverAllFills": {
     "description": "Text panel, Fill and stroke choice: every letter's fill is drawn first and every outline on top. After Effects' name for it."
   },
+  "textBackground": "Background",
+  "@textBackground": {
+    "description": "Text panel: label beside the switch and colour of a plate drawn behind the words."
+  },
+  "textBackgroundOpacity": "Opacity",
+  "@textBackgroundOpacity": {
+    "description": "Text panel: label beside how solid the plate behind the words is, as a per cent."
+  },
+  "textBackgroundPadding": "Padding",
+  "@textBackgroundPadding": {
+    "description": "Text panel: label beside how far the plate behind the words reaches past them, in pixels."
+  },
+  "textBackgroundRadius": "Corner radius",
+  "@textBackgroundRadius": {
+    "description": "Text panel: label beside how round the plate's corners are, in pixels."
+  },
+  "textBackgroundLines": "Per line",
+  "@textBackgroundLines": {
+    "description": "Text panel: label beside the switch that draws one plate behind each line rather than one round the whole block."
+  },
   "textScaleY": "Vertical scale",
   "@textScaleY": {
     "description": "Text panel: label beside how far the letters are stretched upwards, in per cent."
@@ -19756,6 +19836,26 @@
   "paragraphSpaceAfter": "Space after",
   "@paragraphSpaceAfter": {
     "description": "Paragraph panel: label beside the room added below each paragraph, in pixels."
+  },
+  "paragraphBoxHeight": "Box height",
+  "@paragraphBoxHeight": {
+    "description": "Paragraph panel: label beside how tall the block of words is, in pixels. Nought lets the block grow with its lines."
+  },
+  "paragraphBoxHeightAuto": "Auto",
+  "@paragraphBoxHeightAuto": {
+    "description": "Paragraph panel: what the box height field reads at nought, where the block grows with its lines. One word."
+  },
+  "tipParagraphAlignTop": "Align top",
+  "@tipParagraphAlignTop": {
+    "description": "Tooltip on the Paragraph panel button that sets the lines at the top of a box of fixed height."
+  },
+  "tipParagraphAlignMiddle": "Align middle",
+  "@tipParagraphAlignMiddle": {
+    "description": "Tooltip on the Paragraph panel button that sets the lines in the middle of a box of fixed height."
+  },
+  "tipParagraphAlignBottom": "Align bottom",
+  "@tipParagraphAlignBottom": {
+    "description": "Tooltip on the Paragraph panel button that sets the lines at the bottom of a box of fixed height, so new lines grow upwards."
   },
   "panelGroupStacked": "Stacked group",
   "@panelGroupStacked": {

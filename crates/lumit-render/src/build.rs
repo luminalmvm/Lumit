@@ -190,9 +190,11 @@ fn drawn(
     let at = p.flat_position();
     // A Shape layer's art moving under keys moves its picture too.
     let (dx, dy) = lumit_core::model::art_shift(layer, lt);
+    // So does a caption moved off where the layer puts it.
+    let (cx, cy) = lumit_core::captions::show::moved(layer, context);
     lumit_gpu::composite::MbSample {
         position: (at.0 as f32, at.1 as f32),
-        anchor: ((p.anchor.0 - dx) as f32, (p.anchor.1 - dy) as f32),
+        anchor: ((p.anchor.0 - dx - cx) as f32, (p.anchor.1 - dy - cy) as f32),
         scale: (p.scale.0 as f32, p.scale.1 as f32),
         rotation_deg: p.rotation_deg.2 as f32,
         z: at.2 as f32,
@@ -1384,14 +1386,17 @@ fn text_carriage(
     };
     // The same clock and the same words the layer's own picture is drawn at.
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
-    let line = document.resolved_text(Arc::new(ExpressionContext {
-        document: doc.clone(),
-        comp: Some(comp.id),
-        layer: Some(layer.id),
-        comp_time: t_comp,
-        current_depth: 0,
-        inputs: None,
-    }));
+    let (line, spoken, _) = lumit_core::captions::show::spoken(
+        document,
+        Arc::new(ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(layer.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        }),
+    );
     if name == "label_points" || name == "type_fill" {
         // A label is set straight and still, so the path and the animators
         // are left behind.
@@ -1405,7 +1410,7 @@ fn text_carriage(
         return (Vec::new(), Some(Box::new(label)));
     }
 
-    let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+    let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken);
     let spine = document
         .path
         .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
@@ -2018,7 +2023,8 @@ fn comp_walk(
                 // what was typed; an expression-driven one is evaluated here,
                 // which is what makes a caption able to print a live value.
 
-                let line = document.resolved_text(context.clone());
+                let (line, spoken, _) =
+                    lumit_core::captions::show::spoken(document, context.clone());
                 let size = document.size as f32;
                 // **Text on a path**. The named mask's own flattened
                 // curve, read through the carriage every path-walking effect
@@ -2036,7 +2042,8 @@ fn comp_walk(
                 // keyframed numbers at this layer time; a layer with none hands
                 // back an empty list and the rasteriser takes the path it
                 // always took, byte for byte.
-                let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+                let xforms =
+                    lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken);
                 // An unstyled single line draws the way it always has. A
                 // styled one, or one with a line break, is set by the shaper.
                 let block = lumit_text::TextBlock::of(document, &line);
@@ -7962,6 +7969,7 @@ mod render_below_at_tests {
                     animators: Vec::new(),
                     style: Default::default(),
                     paragraph: Default::default(),
+                    captions: None,
                     extra: serde_json::Map::new(),
                 },
             },

@@ -160,7 +160,7 @@ impl Svg<'_> {
             .iter()
             .enumerate()
             .map(|(i, t)| {
-                lumit_core::text::glyph_xforms(&document.animators, text, clock.at(i, *t))
+                lumit_core::text::glyph_xforms(&document.animators, text, clock.at(i, *t), &[])
             })
             .collect();
         let fill = document.fill.0.map(f64::from);

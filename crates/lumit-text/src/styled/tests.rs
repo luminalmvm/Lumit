@@ -19,6 +19,7 @@ fn block<'a>(text: &'a str, style: &'a TextStyle, paragraph: &'a ParagraphStyle)
         fill: WHITE,
         style,
         paragraph,
+        boxed: false,
     }
 }
 
@@ -339,4 +340,51 @@ fn styled_text_runs_along_a_path_and_converts_to_outlines() {
     assert!(lumit_core::shape::modifier::items(&groups)
         .iter()
         .all(|i| i.stroke.is_some() && i.stroke_width.value_at(0.0) == 3.0));
+}
+
+/// A plate goes down behind the letters, and the raster grows to hold its
+/// padding.
+#[test]
+fn a_plate_draws_behind_the_words_and_the_raster_holds_it() {
+    let paragraph = ParagraphStyle::default();
+    let style = TextStyle {
+        plate_on: true,
+        plate: LinearColour([1.0, 0.0, 0.0, 1.0]),
+        plate_padding: 40.0,
+        ..kerned()
+    };
+    let b = block("HH", &style, &paragraph);
+    let l = layout(&b, false);
+    let r = rasterise(&b, &[]);
+    assert_eq!((r.width, r.height), (l.width, l.height));
+    assert!(l.left >= 40.0, "the padding fell off the raster");
+    let at = |x: f32, y: f32| {
+        let i = ((y as u32 * r.width + x as u32) * 4) as usize;
+        r.rgba[i..i + 4].to_vec()
+    };
+    let baseline = l.lines[0].baseline;
+    assert_eq!(at(l.left - 20.0, baseline - 10.0), [255, 0, 0, 255]);
+    assert!(
+        r.rgba.chunks_exact(4).any(|p| p == [255, 255, 255, 255]),
+        "the plate covered the letters"
+    );
+}
+
+/// A bottom-aligned box of fixed height keeps its size and its last line
+/// where it was as a line is added, so the words grow upwards.
+#[test]
+fn a_bottom_aligned_box_keeps_the_last_baseline_still() {
+    let style = kerned();
+    let paragraph = ParagraphStyle {
+        box_height: 300.0,
+        vertical: lumit_core::text::VerticalAlign::Bottom,
+        ..ParagraphStyle::default()
+    };
+    let one = layout(&block("One", &style, &paragraph), false);
+    let two = layout(&block("One\nTwo", &style, &paragraph), false);
+    assert_eq!(one.height, two.height);
+    assert_eq!(two.lines.len(), 2);
+    let last = |l: &BlockLayout| l.lines.last().map(|line| line.baseline);
+    assert_eq!(last(&one), last(&two));
+    assert!(two.lines[0].baseline < one.lines[0].baseline);
 }
