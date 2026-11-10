@@ -168,6 +168,9 @@ Not interchangeable.
 | **Viewer** | Shows a comp, footage or layer. Holds one, two or four **views** |
 | **Timeline** | A comp's layers against time |
 | **Cut timeline** | The same layers as tracks of clips, for cutting |
+| **Transcript panel** | What the Cut timeline's composition says, or the source view's footage, as text. Deleting, moving or copying words cuts the composition to match |
+| **Filler words** | Hesitations such as *um*, phrases said only to fill, and words said twice in a row, which the Transcript panel finds and takes out |
+| **Pause** | A silence between two words while transcribed speech plays on. A stretch with no transcribed speech under it is a **break** |
 | **Source view** | A Viewer view of one footage item, with **In** and **Out** marks on the stretch to place |
 | **Work area** | The span used for preview and default export |
 | **Playhead** | The current time. Not *CTI* |
