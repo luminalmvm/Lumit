@@ -28,6 +28,7 @@ import 'hierarchy_panel_frb.dart';
 import 'mixer_panel_frb.dart';
 import 'node_panel.dart';
 import 'notes_panel_frb.dart';
+import 'captions_panel_frb.dart';
 import 'project_panel_frb.dart';
 import 'retime_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
@@ -56,6 +57,7 @@ const Set<Panel> _changing = {
   Panel.retime,
   Panel.notes,
   Panel.align,
+  Panel.captions,
 };
 
 /// The panels laid out along a time or space axis, or holding code. They read
@@ -135,6 +137,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.stagger => const StaggerPanelFrb(),
       Panel.retime => const RetimePanelFrb(),
       Panel.notes => const NotesPanelFrb(),
+      Panel.captions => const CaptionsPanelFrb(),
       Panel.align => const AlignPanel(),
       Panel.debug => const DebugPanel(),
       Panel.extension => ExtensionPanel(slot: pane.instance),

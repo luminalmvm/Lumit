@@ -25,6 +25,9 @@ import '../shell/comp_settings_frb.dart';
 import '../shell/dialog_frame.dart' show askLumitChoice;
 import '../shell/export_dialog_frb.dart' show showExportDialogFrb;
 import '../shell/interpret_footage_frb.dart';
+import '../shell/create_captions_dialog_frb.dart'
+    show rememberedTranscribeOptions;
+import '../shell/speech_install_dialog_frb.dart' show transcribeWithPrompt;
 import '../shell/model_settings_dialog.dart'
     show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/status_line_frb.dart';
@@ -57,6 +60,8 @@ enum _ProjectMenuAction {
   editInBlender,
   findMissing,
   addAudioOnly,
+  transcribe,
+  removeTranscript,
   setProxy,
   makeProxy,
   shareStandIn,
@@ -360,6 +365,17 @@ Future<void> showProjectMenuFrb({
   };
   final picked = targets ?? [item];
   final several = picked.length > 1;
+  // Whether anything picked has its words written down, for Remove
+  // transcript. Read as the menu opens.
+  final transcribed = picked.any((target) {
+    try {
+      return target is ItemReference_Footage && target.field0.hasTranscript();
+    } catch (_) {
+      return false;
+    }
+  });
+  final transcribing =
+      Provider.of<LumitState>(context, listen: false).transcription.running;
   // Where Reveal in composition can go: a list of them when there are two.
   final usedIn = several || item is ItemReference_Folder
       ? const <(CompositionReference, String)>[]
@@ -456,6 +472,13 @@ Future<void> showProjectMenuFrb({
               if (ui.hasSourceView && !missing)
                 row(_ProjectMenuAction.openInSource, l10n.projectOpenInSource,
                     key: 'open-in-source', enabled: !several),
+              if (hasAudio && !missing)
+                row(_ProjectMenuAction.transcribe, l10n.projectTranscribe,
+                    key: 'transcribe', enabled: !transcribing),
+              if (transcribed)
+                row(_ProjectMenuAction.removeTranscript,
+                    l10n.projectRemoveTranscript,
+                    key: 'remove-transcript'),
             ],
             // What the item is on disc, which only footage has.
             if (isFootage) ...[
@@ -783,6 +806,23 @@ Future<void> showProjectMenuFrb({
       }
     case _ProjectMenuAction.findMissing:
       onFindMissing?.call();
+    case _ProjectMenuAction.transcribe:
+      unawaited(transcribeWithPrompt(
+          context,
+          [
+            for (final target in acts)
+              if (target case ItemReference_Footage(:final field0)) field0,
+          ],
+          rememberedTranscribeOptions(ui.workspace)));
+    case _ProjectMenuAction.removeTranscript:
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
+        if (target case ItemReference_Footage(:final field0)
+            when field0.hasTranscript()) {
+          field0.removeTranscript();
+        }
+      }, name: 'Delete transcript');
+      onLocalEdit();
     case _ProjectMenuAction.addAudioOnly:
       eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
           (target) {

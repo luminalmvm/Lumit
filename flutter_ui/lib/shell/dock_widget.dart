@@ -105,6 +105,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // The two rows' labels and controls, and the two buttons.
       Panel.stagger => 220,
       Panel.notes => 160,
+      // A caption's times, a few words and its reading speed.
+      Panel.captions => 220,
       // One grid. The second goes under it when there is no room beside.
       Panel.align => 120,
       Panel.debug => 180,
@@ -2716,6 +2718,7 @@ List<List<Panel>> panelGroups(DockNode root) {
     [Panel.mixer, Panel.audio, Panel.audioTimeline],
     [Panel.cutTimeline],
     [Panel.text, Panel.paragraph],
+    [Panel.captions],
   ];
   final placed = {for (final group in named) ...group, Panel.extension};
   if (!panelVisible(root, Panel.debug)) placed.add(Panel.debug);

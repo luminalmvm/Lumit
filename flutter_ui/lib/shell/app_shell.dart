@@ -29,6 +29,8 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
 import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
+import 'package:lumit_flutter/panels/caption_layers.dart'
+    show frontCaptionsPanel, stepToCaption;
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
@@ -332,6 +334,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     // funeral). A hardware-keyboard handler fires wherever focus is; the
     // focused-text-field guard inside _onKey keeps typing safe.
     HardwareKeyboard.instance.addHandler(_handleKey);
+    // A caption asked to be typed into, from the Timeline or the Viewer, is
+    // typed into in the Captions panel, which comes up for it.
+    _captionUi = context.read<LumitUiState>();
+    _captionUi!.captionSelection.typeRequest.addListener(_frontCaptions);
     // A pane filling the window is a full-window surface, so Escape puts the
     // arrangement back — above the selection rung, and below a dialogue over
     // the top of it (docs/07 §14.1).
@@ -487,8 +493,14 @@ class _LumitAppViewState extends State<LumitAppView> {
   /// The question about someone's export is on screen.
   bool _asking = false;
 
+  LumitUiState? _captionUi;
+  void _frontCaptions() {
+    if (_captionUi case final ui?) frontCaptionsPanel(ui);
+  }
+
   @override
   void dispose() {
+    _captionUi?.captionSelection.typeRequest.removeListener(_frontCaptions);
     _share.removeListener(_offerConflicts);
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
@@ -633,6 +645,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         Panel.cutTimeline => BridgeKeyContext.cut,
         Panel.effectControls => BridgeKeyContext.effects,
         Panel.graph => BridgeKeyContext.nodes,
+        Panel.captions => BridgeKeyContext.captions,
         _ => BridgeKeyContext.global,
       };
 
@@ -1335,6 +1348,12 @@ class _LumitAppViewState extends State<LumitAppView> {
       // chord is taken here so nothing else answers it.
       case final id when id.startsWith('cut.'):
         handled = ui.activePanel == Panel.cutTimeline;
+      // The Captions panel answers its own keys; taken here so nothing else
+      // does. The previous and next caption work wherever focus is.
+      case 'captions.split' || 'captions.merge' || 'captions.add':
+        handled = ui.activePanel == Panel.captions;
+      case 'captions.prev' || 'captions.next':
+        handled = stepToCaption(ui, forward: action == 'captions.next');
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
         // first — a selected mask row is what Delete is about, not the

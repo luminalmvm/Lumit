@@ -14,12 +14,16 @@
 // claims is that nothing throws, which is the claim the crash reports are
 // about.
 
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
 import 'package:lumit_flutter/panels/expressions_panel_frb.dart';
+import 'package:lumit_flutter/panels/caption_styles.dart';
+import 'package:lumit_flutter/panels/captions_panel_frb.dart';
 import 'package:lumit_flutter/panels/audio_panel_frb.dart';
 import 'package:lumit_flutter/panels/audio_timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
@@ -256,6 +260,27 @@ void main() {
       await sweepWidths(tester,
           panel: Panel.expressions,
           build: () => const ExpressionsPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    /// With a caption layer, so the bar and the rows are what is squeezed.
+    testWidgets('Captions', (tester) async {
+      final p = populated();
+      final dir = Directory.systemTemp.createTempSync('lumit-sweep-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final srt = File('${dir.path}/captions.srt')
+        ..writeAsStringSync('1\n00:00:00,500 --> 00:00:02,000\n'
+            'A caption long enough to wrap\nonto a second line\n\n'
+            '2\n00:00:02,500 --> 00:00:04,000\nAnd another\n');
+      p.uiState.selectedComp!.importCaptions(
+          path: srt.path,
+          name: 'Captions',
+          look: captionLook(CaptionStyle.plain, height: 1080));
+      p.uiState.model.refresh();
+      await sweepWidths(tester,
+          panel: Panel.captions,
+          build: () => const CaptionsPanelFrb(),
           state: p.state,
           uiState: p.uiState);
     });

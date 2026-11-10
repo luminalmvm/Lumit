@@ -660,6 +660,7 @@ class LumitUiState extends ChangeNotifier {
         panel != Panel.effectsAndPresets &&
         panel != Panel.expressions &&
         panel != Panel.effectControls &&
+        panel != Panel.captions &&
         panel != Panel.node) {
       return false;
     }
@@ -698,6 +699,7 @@ class LumitUiState extends ChangeNotifier {
     Panel.effectControls,
     Panel.graph,
     Panel.cutTimeline,
+    Panel.captions,
   };
 
   /// Ask the focused panel to select everything, and say whether one was asked.
@@ -2725,7 +2727,8 @@ class LumitUiState extends ChangeNotifier {
     if (primary != null &&
         !_restoring &&
         !frontedOver(split, Panel.mixer, Panel.effectControls) &&
-        !frontedOver(split, Panel.grade, Panel.effectControls)) {
+        !frontedOver(split, Panel.grade, Panel.effectControls) &&
+        !frontedOver(split, Panel.captions, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
     }
     if (primary == null) {

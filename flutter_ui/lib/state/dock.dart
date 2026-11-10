@@ -92,7 +92,10 @@ enum Panel {
 
   /// How fast the selected layer plays and the commands that change it: the
   /// Retiming workspace's right-hand column heads with it.
-  retime;
+  retime,
+
+  /// A caption layer's captions, a row each, to read, retype and retime.
+  captions;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -117,6 +120,7 @@ enum Panel {
         Panel.retime => l10n.retime,
         Panel.notes => l10n.panelNotes,
         Panel.align => l10n.panelAlign,
+        Panel.captions => l10n.panelCaptions,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,
       };
@@ -615,6 +619,7 @@ DockSplit defaultLayout() => DockSplit(
                 DockPane(Panel.effectsAndPresets),
                 DockPane(Panel.text),
                 DockPane(Panel.paragraph),
+                DockPane(Panel.captions),
                 DockPane(Panel.align),
                 DockPane(Panel.stagger),
               ],
