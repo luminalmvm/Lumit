@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "resource.h"
+#include "utils.h"
 
 namespace {
 
@@ -143,27 +144,8 @@ void SaveWindowPlacement(HWND window) {
 
 // The window has no title bar. Lumit's menu bar is its top line and carries the
 // window buttons (lib/shell/window_frame.dart), so the frame keeps its sides
-// and bottom and gives its top to the client area. See WM_NCCALCSIZE below.
-
-// How far the frame's edge reaches past what is seen, in physical pixels. A
-// maximised window hangs over the screen by this much on every side.
-int FrameThickness(HWND window) {
-  const UINT dpi = FlutterDesktopGetDpiForHWND(window);
-  return GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
-         GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-}
-
-// Whether a point on the screen, as WM_NCHITTEST carries it, is on the top
-// resize edge. The title bar used to hold that edge. Now it is the first few
-// pixels of the client area, half the frame's thickness so the menus under it
-// keep most of their height. A maximised window has no edge to drag.
-bool OnTopEdge(HWND window, LPARAM point) {
-  RECT frame;
-  if (IsZoomed(window) || !GetWindowRect(window, &frame)) {
-    return false;
-  }
-  return GET_Y_LPARAM(point) < frame.top + FrameThickness(window) / 2;
-}
+// and bottom and gives its top to the client area. See WM_NCCALCSIZE below,
+// and FrameThickness and OnTopEdge in utils.cpp.
 
 // The Flutter view's own window procedure, under ViewProc.
 WNDPROC g_view_proc = nullptr;

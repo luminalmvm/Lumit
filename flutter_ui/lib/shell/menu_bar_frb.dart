@@ -131,7 +131,9 @@ import 'share_dialog_frb.dart';
 import 'theme_name_dialog.dart';
 import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
 import 'tour_frb.dart';
+import 'pop_out.dart' show popOutAvailable;
 import 'update_dialog_frb.dart';
+import 'video_monitor.dart' show videoMonitorMenu;
 import 'welcome_frb.dart' show projectDisplayName;
 import 'window_frame.dart';
 import 'wordmark.dart';
@@ -2171,6 +2173,19 @@ List<MenuSection> lumitMenus(
                     () => showSettingsWindowFrb(context,
                         initialPage: SettingsPage.addons)),
               ]),
+            // Every floating window's panels back in this one.
+            MenuEntry(
+                l10n.windowPanelsToMain,
+                ui.split.windows.isEmpty
+                    ? null
+                    : () {
+                        dockAllWindows(ui.split);
+                        ui.workspace.touch();
+                        ui.saveLayout();
+                      }),
+            // The Viewer's picture alone, full screen on a display of its own.
+            if (popOutAvailable && !kIsWeb)
+              MenuEntry.submenu(l10n.menuVideoMonitor, videoMonitorMenu(ui)),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once

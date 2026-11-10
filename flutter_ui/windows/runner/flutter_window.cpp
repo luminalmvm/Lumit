@@ -15,6 +15,7 @@
 #include <variant>
 
 #include "backdrop.h"
+#include "floating_windows.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
 #include "utils.h"
@@ -90,27 +91,44 @@ std::wstring Utf16FromUtf8(const std::string& text) {
 constexpr UINT_PTR kShowAnywayTimer = 1;
 constexpr UINT kShowAnywayAfterMs = 10000;
 
-// A panel popped out into a window of its own is in one of the engine's
-// windows (lib/shell/pop_out.dart).
-constexpr wchar_t kPopOutClass[] = L"FLUTTER_HOST_WINDOW";
-constexpr UINT_PTR kCloseAgainTimer = 2;
+// Displays come and go in bursts (a monitor waking, a dock plugged in), so
+// Dart is told once they have settled.
+constexpr UINT_PTR kDisplaysTimer = 3;
+constexpr UINT kDisplaysAfterMs = 500;
 
-// Ask every popped-out panel's window to close, and say whether there was one.
-bool ClosePopOuts() {
-  bool any = false;
-  ::EnumThreadWindows(
-      ::GetCurrentThreadId(),
-      [](HWND window, LPARAM found) -> BOOL {
-        wchar_t name[32];
-        if (::GetClassName(window, name, 32) &&
-            wcscmp(name, kPopOutClass) == 0) {
-          ::PostMessage(window, WM_CLOSE, 0, 0);
-          *reinterpret_cast<bool*>(found) = true;
-        }
-        return TRUE;
-      },
-      reinterpret_cast<LPARAM>(&any));
-  return any;
+// A rectangle Dart sent as [x, y, width, height], or false for anything else.
+bool RectArgument(const flutter::EncodableMap& args, const char* key,
+                  RECT* out) {
+  auto found = args.find(flutter::EncodableValue(key));
+  if (found == args.end()) {
+    return false;
+  }
+  const auto* list = std::get_if<flutter::EncodableList>(&found->second);
+  if (list == nullptr || list->size() != 4) {
+    return false;
+  }
+  double v[4];
+  for (size_t i = 0; i < 4; i++) {
+    if (const auto* d = std::get_if<double>(&(*list)[i])) {
+      v[i] = *d;
+    } else if (const auto* i32 = std::get_if<int32_t>(&(*list)[i])) {
+      v[i] = *i32;
+    } else if (const auto* i64 = std::get_if<int64_t>(&(*list)[i])) {
+      v[i] = static_cast<double>(*i64);
+    } else {
+      return false;
+    }
+  }
+  *out = RECT{static_cast<LONG>(v[0]), static_cast<LONG>(v[1]),
+              static_cast<LONG>(v[0] + v[2]), static_cast<LONG>(v[1] + v[3])};
+  return out->right > out->left && out->bottom > out->top;
+}
+
+bool BoolArgument(const flutter::EncodableMap& args, const char* key) {
+  auto found = args.find(flutter::EncodableValue(key));
+  const bool* value = found == args.end() ? nullptr
+                                          : std::get_if<bool>(&found->second);
+  return value && *value;
 }
 
 // The Start menu and a pinned taskbar button draw a shortcut's icon, not the
@@ -380,8 +398,79 @@ bool FlutterWindow::OnCreate() {
   window.SetMethodCallHandler(
       [this](const flutter::MethodCall<>& call,
              std::unique_ptr<flutter::MethodResult<>> result) {
-        const HWND hwnd = GetHandle();
         const std::string& method = call.method_name();
+        const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+        // A floating window, named by its handle (lib/shell/pop_out.dart),
+        // or the main window when the call names none.
+        HWND floating_window = nullptr;
+        if (args) {
+          const HWND named =
+              reinterpret_cast<HWND>(IntArgument(*args, "window"));
+          if (floating::IsFloating(named)) {
+            floating_window = named;
+          } else if (args->find(flutter::EncodableValue("window")) !=
+                     args->end()) {
+            // A window that has gone already: nothing to do to it.
+            result->Success(flutter::EncodableValue(false));
+            return;
+          }
+        }
+        const HWND hwnd = floating_window ? floating_window : GetHandle();
+        if (method == "adopt") {
+          if (floating_window) {
+            floating::Adopt(
+                floating_window, GetHandle(), BoolArgument(*args, "title"),
+                BoolArgument(*args, "onTop"), BoolArgument(*args, "quiet"),
+                [this](const char* told, HWND window) {
+                  TellWindow(told, window);
+                });
+          }
+          result->Success();
+          return;
+        }
+        if (method == "frame") {
+          result->Success(flutter::EncodableValue(floating::Frame(hwnd)));
+          return;
+        }
+        if (method == "setFrame") {
+          RECT bounds;
+          if (floating_window && RectArgument(*args, "bounds", &bounds)) {
+            floating::SetFrame(floating_window, bounds,
+                               BoolArgument(*args, "maximised"));
+          }
+          result->Success();
+          return;
+        }
+        if (method == "onTop") {
+          if (floating_window) {
+            floating::SetOnTop(floating_window, BoolArgument(*args, "on"));
+          }
+          result->Success();
+          return;
+        }
+        if (method == "monitor") {
+          RECT display;
+          if (floating_window && RectArgument(*args, "display", &display)) {
+            floating::Monitor(floating_window, display);
+          }
+          result->Success();
+          return;
+        }
+        if (method == "displays") {
+          result->Success(flutter::EncodableValue(floating::Displays()));
+          return;
+        }
+        if (method == "ghost") {
+          RECT rect;
+          if (args && RectArgument(*args, "rect", &rect)) {
+            floating::ShowGhost(
+                rect, static_cast<uint32_t>(IntArgument(*args, "colour")));
+          } else {
+            floating::HideGhost();
+          }
+          result->Success();
+          return;
+        }
         // The start-up splash (lib/shell/splash_window.dart). Nothing to
         // show when Lumit was started into the tray.
         if (method == "splashScale") {
@@ -394,7 +483,6 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "splash") {
-          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
           const std::vector<uint8_t>* bytes = nullptr;
           if (args) {
             auto found = args->find(flutter::EncodableValue("bytes"));
@@ -436,20 +524,23 @@ bool FlutterWindow::OnCreate() {
           ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
         } else if (method == "maximiseButton") {
           // Where the button is, sent each time it moves.
-          if (const auto* args =
-                  std::get_if<flutter::EncodableMap>(call.arguments())) {
-            maximise_button_ = {
+          if (args) {
+            const RECT button = {
                 static_cast<LONG>(IntArgument(*args, "left")),
                 static_cast<LONG>(IntArgument(*args, "top")),
                 static_cast<LONG>(IntArgument(*args, "right")),
                 static_cast<LONG>(IntArgument(*args, "bottom"))};
+            if (floating_window) {
+              floating::SetMaximiseButton(floating_window, button);
+            } else {
+              maximise_button_ = button;
+            }
           }
         } else if (method == "close") {
           ::PostMessage(hwnd, WM_CLOSE, 0, 0);
         } else if (method == "background") {
           // Settings: whether closing the window keeps Lumit running in the
           // tray (lib/state/background.dart), and the tray menu's words.
-          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
           auto text = [args](const char* key) -> std::wstring {
             if (args) {
               auto found = args->find(flutter::EncodableValue(key));
@@ -490,7 +581,6 @@ bool FlutterWindow::OnCreate() {
           Reveal();
         } else if (method == "backdrop") {
           // The style's see-through window (backdrop.cpp).
-          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
           std::string kind;
           bool dark = true;
           if (args) {
@@ -580,16 +670,18 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // the tray goes through Dart instead, and never comes here.
   if (message == WM_CLOSE && keep_running_) {
     ::ShowWindow(hwnd, SW_HIDE);
+    floating::HideAll();
     Tell("lumit/window", "hidden");
     return 0;
   }
 
-  // Flutter asks Dart before quitting only when this is the last window, so a
-  // popped-out panel's window would let Lumit quit without asking about
-  // unsaved work. Those close first, which docks their panels, and the close
-  // is tried again once they have gone.
-  if (message == WM_CLOSE && ClosePopOuts()) {
-    ::SetTimer(hwnd, kCloseAgainTimer, 50, nullptr);
+  // Flutter asks Dart before quitting only when this is the last window, so
+  // with a floating window open Lumit would quit without asking about
+  // unsaved work. Dart is asked to quit instead, which asks the question and
+  // ends the run. The floating windows stay as they are, so the next start
+  // opens them where they were.
+  if (message == WM_CLOSE && floating::Any()) {
+    Tell("lumit/window", "quit");
     return 0;
   }
 
@@ -605,9 +697,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_TIMER:
-      if (wparam == kCloseAgainTimer) {
-        ::KillTimer(hwnd, kCloseAgainTimer);
-        ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+      if (wparam == kDisplaysTimer) {
+        ::KillTimer(hwnd, kDisplaysTimer);
+        Tell("lumit/window", "displaysChanged");
         return 0;
       }
       if (wparam == kShowAnywayTimer) {
@@ -624,6 +716,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // A display came, went or changed: the floating windows' places are
+    // looked at again (lib/shell/dock_widget.dart).
+    case WM_DISPLAYCHANGE:
+      ::SetTimer(hwnd, kDisplaysTimer, kDisplaysAfterMs, nullptr);
       break;
     // Over the maximise button the frame answers the hit test
     // (win32_window.cpp), so the mouse comes here and not to Flutter. Flutter
@@ -751,6 +848,7 @@ void FlutterWindow::Reveal() {
   } else {
     ::ShowWindow(hwnd, SW_SHOW);
   }
+  floating::ShowHidden();
   ::SetForegroundWindow(hwnd);
   if (flutter_controller_) {
     flutter_controller_->ForceRedraw();
@@ -897,4 +995,20 @@ void FlutterWindow::Tell(const char* channel, const char* method) {
   flutter::MethodChannel<>(flutter_controller_->engine()->messenger(), channel,
                            &flutter::StandardMethodCodec::GetInstance())
       .InvokeMethod(method, nullptr);
+}
+
+void FlutterWindow::TellWindow(const char* method, HWND window) {
+  if (!flutter_controller_) {
+    return;
+  }
+  flutter::MethodChannel<>(flutter_controller_->engine()->messenger(),
+                           "lumit/window",
+                           &flutter::StandardMethodCodec::GetInstance())
+      .InvokeMethod(method,
+                    std::make_unique<flutter::EncodableValue>(
+                        flutter::EncodableMap{
+                            {flutter::EncodableValue("window"),
+                             flutter::EncodableValue(
+                                 reinterpret_cast<int64_t>(window))},
+                        }));
 }

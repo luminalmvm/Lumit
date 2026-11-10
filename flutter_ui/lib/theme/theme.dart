@@ -938,6 +938,10 @@ class LumitTheme {
   Color get qrInk => _rgb(0x14, 0x16, 0x18);
   Color get qrPaper => _rgb(0xff, 0xff, 0xff);
 
+  /// Round the picture on a video monitor: true black under every scheme,
+  /// because that display is the client's screen and not part of the app.
+  Color get videoMonitorGround => _rgb(0, 0, 0);
+
   /// The ground outside the work area: a step *away* from the surface ramp's
   /// direction — darker under a dark scheme, and darker again under a light
   /// one, because on white the only direction with anywhere to go is down.

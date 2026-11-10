@@ -1,6 +1,7 @@
 // The application widget, the boot gate, and the shell view that dispatches
 // keys and lays the panels out. Lifted out of main.dart unchanged.
 
+import 'dart:async' show unawaited;
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
@@ -44,6 +45,7 @@ import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/theme/style_sheet.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
+import 'package:lumit_flutter/shell/video_monitor.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
 import 'package:lumit_flutter/shell/window_frame.dart';
@@ -90,7 +92,12 @@ class LumitAppNew extends StatelessWidget {
     // was doing real damage here: Material's own greys showed through wherever a
     // panel did not paint, so the shell read as a Material app with Lumit panels
     // in it rather than as Lumit. The backdrop is `surface0` from the theme.
-    return MaterialApp(
+    //
+    // Told the language again whenever the settings change, so the interface
+    // turns to read right to left, or back, as the language is picked.
+    return ListenableBuilder(
+      listenable: uiState.workspace,
+      builder: (context, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
       scrollBehavior: const HouseScrollBehavior(),
       // Lumit's own strings come from the `l10n` global rather than from
@@ -160,7 +167,7 @@ class LumitAppNew extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -563,14 +570,16 @@ class _LumitAppViewState extends State<LumitAppView> {
   }
 
   Widget _shell(LumitUiState uiState, LumitState state) {
-    final dock = DockWidget(
-      root: uiState.split,
-      buildPanel: buildPanelBodyFrb,
-      // Persisted, so an arrangement survives a restart.
-      onLayoutChanged: uiState.saveLayout,
-      activePanel: uiState.activePane,
-      maximised: uiState.maximisedPane,
-      uiScale: uiState.workspace.interface.uiScale,
+    final dock = VideoMonitorHost(
+      child: DockWidget(
+        root: uiState.split,
+        buildPanel: buildPanelBodyFrb,
+        // Persisted, so an arrangement survives a restart.
+        onLayoutChanged: uiState.saveLayout,
+        activePanel: uiState.activePane,
+        maximised: uiState.maximisedPane,
+        uiScale: uiState.workspace.interface.uiScale,
+      ),
     );
     // Toolbar position Left: the tools go on a rail flush to the window's
     // left edge, and the menu bar's line carries the options and the
@@ -585,13 +594,19 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The tools, under the menu and above everything else, where a
         // toolbar goes, and where docs/07 §1.7 puts it.
         if (!rail) const LumitToolBarFrb(),
+        // A row with or without the rail, so the dock stays where it is when
+        // a style brings the rail or takes it away. Moved, it would be built
+        // afresh: its panels' state lost, its floating windows shut and
+        // opened again.
         Expanded(
-          child: rail
-              ? Row(textDirection: TextDirection.ltr, children: [
-                  const LumitToolRailFrb(),
-                  Expanded(child: dock),
-                ])
-              : dock,
+          child: Row(
+            textDirection: TextDirection.ltr,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (rail) const LumitToolRailFrb(),
+              Expanded(child: dock),
+            ],
+          ),
         ),
         // The strip under the dock (docs/07 §1): the running export's
         // progress and Cancel, reachable without the dialogue open.
@@ -1022,11 +1037,27 @@ class _LumitAppViewState extends State<LumitAppView> {
       // where it finally does something.
       case 'panel.maximise':
         ui.toggleMaximisedPane();
+      // The panel the keyboard is in, into a window of its own and back.
+      case 'panel.float':
+        final pane = ui.activePane.value;
+        handled = pane != null && DockCommands.float(pane);
+      case 'panel.dock':
+        final pane = ui.activePane.value;
+        handled = pane != null && DockCommands.dock(pane);
+      // The Viewer's picture alone on a display of its own, and off again.
+      case 'window.monitor':
+        unawaited(ui.toggleVideoMonitor());
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);
+        if (ui.activePane.value case final pane? when handled) {
+          DockCommands.front(pane);
+        }
       case 'panel.focus.prev':
         handled = ui.cyclePanelFocus(-1);
+        if (ui.activePane.value case final pane? when handled) {
+          DockCommands.front(pane);
+        }
       case 'panel.search.focus':
         handled = ui.requestPanelSearch();
       case 'console.open':
