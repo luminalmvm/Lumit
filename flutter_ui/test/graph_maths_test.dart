@@ -60,6 +60,50 @@ void main() {
     });
   });
 
+  group('keysWithKeyOnCurve', () {
+    // A key planted on a curve leaves the curve where it was, at every
+    // moment: it used to take a third's influence and bend the span.
+    test('an eased span keeps its curve through the new key', () {
+      const out =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.9));
+      const inn =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: -20, influence: 0.6));
+      final keys = [
+        key(0, 1, 100, interpOut: out),
+        key(2, 1, 0, interpIn: inn),
+      ];
+      for (final at in [rat(1, 2), rat(1, 1), rat(7, 4)]) {
+        final grown = keysWithKeyOnCurve(keys, at);
+        expect(grown, hasLength(3));
+        for (var t = 0.0; t <= 2; t += 1 / 64) {
+          expect(evaluateKeys(grown, t), closeTo(evaluateKeys(keys, t), 1e-6),
+              reason: 'at $t, with a key at ${rationalSeconds(at)}');
+        }
+      }
+    });
+
+    test('automatic neighbours keep the curve too', () {
+      const auto = BridgeSideInterp.auto(
+          BridgeAutoSide(clamped: false, speed: 0, influence: 1 / 3));
+      final keys = [
+        key(0, 1, 0, interpOut: auto),
+        key(1, 1, 60, interpIn: auto, interpOut: auto),
+        key(3, 1, 10, interpIn: auto),
+      ];
+      final grown = keysWithKeyOnCurve(keys, rat(2, 1));
+      for (var t = 0.0; t <= 3; t += 1 / 64) {
+        expect(evaluateKeys(grown, t), closeTo(evaluateKeys(keys, t), 1e-6));
+      }
+    });
+
+    test('a straight span stays straight and linear', () {
+      final keys = [key(0, 1, 0), key(2, 1, 10)];
+      final grown = keysWithKeyOnCurve(keys, rat(1, 1));
+      expect(grown[1].value, closeTo(5, 1e-9));
+      expect(grown[1].interpIn, isA<BridgeSideInterp_Linear>());
+    });
+  });
+
   group('evaluateKeys', () {
     test('the easy-ease midpoint is the value midpoint', () {
       // Symmetric flat handles: the curve is odd about the centre, so the

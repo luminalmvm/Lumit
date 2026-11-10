@@ -1259,13 +1259,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       return;
     }
 
-    final value =
-        channel.isStatic ? channel.staticValue : evaluateKeys(keys, seconds);
-    final next = [
-      ...keys,
-      keyframeAmong(keys, time, value),
-    ]..sort(
-        (a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
+    // On a curve the span is cut in two where the key goes, so the curve
+    // keeps its course through the new key instead of being bent by it.
+    final next = channel.isStatic
+        ? [...keys, keyframeAmong(keys, time, channel.staticValue)]
+        : keysWithKeyOnCurve(keys, time);
     commitChannelEdits({channel: BridgeScalar.keyframed(next)});
     widget.onChanged();
   }

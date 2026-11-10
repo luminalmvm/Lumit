@@ -17,6 +17,7 @@
 
 import 'dart:collection' show SplayTreeMap;
 import 'dart:math' as math;
+import 'dart:ui' show Offset;
 
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
@@ -1851,6 +1852,78 @@ int? axisKeyIndex(
   final at = rationalSeconds(rowKeys[index].time);
   final own = keys.indexWhere((k) => rationalSeconds(k.time) == at);
   return own < 0 ? null : own;
+}
+
+/// [keys] with a key planted at [time] that leaves the curve as it was, the way
+/// a point added to a path leaves the path: the span's cubic is cut in two
+/// there (de Casteljau), the new key takes the cut's two handles, and the two
+/// keys around it keep their speeds with their influences shortened to the
+/// halves. An automatic side of those two keys is fixed as the bezier it
+/// reads now, since a new neighbour would otherwise turn it. Outside the keys,
+/// on a held or straight span, the key is planted as [keyframeAmong] does,
+/// which keeps those curves already. [keys] need not be sorted; the list given
+/// back is.
+List<BridgeKeyframe> keysWithKeyOnCurve(
+    List<BridgeKeyframe> keys, BridgeRational time) {
+  final sorted = [...keys]
+    ..sort((a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
+  final t = rationalSeconds(time);
+  List<BridgeKeyframe> plain() => [
+        ...sorted,
+        keyframeAmong(sorted, time, evaluateKeys(sorted, t)),
+      ]..sort(
+          (a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
+  if (sorted.length < 2 ||
+      t <= rationalSeconds(sorted.first.time) ||
+      t >= rationalSeconds(sorted.last.time)) {
+    return plain();
+  }
+  final (i, a, b, t1, t2) = _spanAt(sorted, t);
+  final cubic = _shapedSpan(sorted, i);
+  if (cubic == null || t <= t1 || t >= t2) return plain();
+
+  // de Casteljau at the curve parameter of `t`.
+  final u = cubic.solveU(t);
+  Offset at(int k) => Offset(cubic.x[k], cubic.y[k]);
+  Offset lerp(Offset p, Offset q) => p + (q - p) * u;
+  final p0 = at(0), p1 = at(1), p2 = at(2), p3 = at(3);
+  final l1 = lerp(p0, p1), m = lerp(p1, p2), r2 = lerp(p2, p3);
+  final l2 = lerp(l1, m), r1 = lerp(m, r2);
+  final mid = lerp(l2, r1);
+  final left = mid.dx - t1, right = t2 - mid.dx;
+  if (left <= 0 || right <= 0) return plain();
+
+  double slope(Offset from, Offset to) =>
+      (to.dx - from.dx).abs() < 1e-12 ? 0 : (to.dy - from.dy) / (to.dx - from.dx);
+  BridgeSideInterp side(double speed, double influence) =>
+      BridgeSideInterp.bezier(BridgeBezierSide(
+          speed: speed, influence: influence.clamp(1e-3, 1.0).toDouble()));
+  // The far sides of the two keys, fixed where automatic.
+  final aIn = resolvedSide(sorted, i, isOut: false);
+  final bOut = resolvedSide(sorted, i + 1, isOut: true);
+  final grown = [...sorted];
+  grown[i] = BridgeKeyframe(
+    time: a.time,
+    value: a.value,
+    interpIn: aIn,
+    interpOut: side(slope(p0, p1), (l1.dx - t1) / left),
+  );
+  grown[i + 1] = BridgeKeyframe(
+    time: b.time,
+    value: b.value,
+    interpIn: side(slope(p2, p3), (t2 - r2.dx) / right),
+    interpOut: bOut,
+  );
+  grown.insert(
+    i + 1,
+    BridgeKeyframe(
+      time: time,
+      value: mid.dy,
+      interpIn: side(slope(l2, mid), (mid.dx - l2.dx) / left),
+      interpOut: side(slope(mid, r1), (r1.dx - mid.dx) / right),
+    ),
+  );
+  return grown;
 }
 
 /// A new keyframe at [seconds] carrying [value], taking its interpolation from

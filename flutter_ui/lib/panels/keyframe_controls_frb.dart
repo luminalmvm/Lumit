@@ -46,7 +46,7 @@ import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart' show FxQuiet, fxStopwatchColumn;
-import 'graph_maths.dart' show keyframeAmong, rowKeysOf;
+import 'graph_maths.dart' show keyframeAmong, keysWithKeyOnCurve, rowKeysOf;
 
 /// The zone value [editPickedKeys] sets: the picked keys' indices, and
 /// whether the number was typed.
@@ -662,12 +662,12 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
             : BridgeScalar.keyframed(rest));
         continue;
       }
-      // Keys must stay strictly ascending in time — the engine enforces it on
-      // the way in, so this inserts in order rather than appending and hoping.
-      final added = [...keys, _newKeyAt(keys, frame, values[axis])]..sort((a, b) =>
-          comp
-              .frameAtTime(time: a.time)
-              .compareTo(comp.frameAtTime(time: b.time)));
+      // A key on a curve cuts the span in two and leaves the curve as it was
+      // (the value is what the curve reads here). Keys must stay strictly
+      // ascending in time — the engine enforces it on the way in.
+      final added = keys.isEmpty
+          ? [_newKeyAt(keys, frame, values[axis])]
+          : keysWithKeyOnCurve(keys, comp.timeOfFrame(frame: frame));
       next.add(BridgeScalar.keyframed(added));
     }
     onWrite(next);
