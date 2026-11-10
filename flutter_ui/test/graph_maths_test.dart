@@ -286,6 +286,34 @@ void main() {
       expect(gridValues(0, double.nan, 360), isEmpty);
     });
   });
+
+  // Blender's View2D steps (view2d_draw.cc): divided by 2, 3 or 5 from the
+  // base while the lines stay 45 px apart, doubled until they are, hundredths
+  // below one.
+  group('gridSteps', () {
+    test('values step from a base of ten', () {
+      expect(gridSteps(100, 450, 10), (10.0, 5.0));
+      expect(gridSteps(1000, 450, 10), (160.0, 80.0),
+          reason: 'doubled up from ten');
+      expect(gridSteps(1, 450, 10).$1, 0.25, reason: 'hundredths below one');
+    });
+
+    test('frames step from the frame rate', () {
+      expect(gridSteps(600, 1200, 60).$1, 30);
+    });
+
+    test('no minor lines where they would crowd', () {
+      expect(gridSteps(50, 450, 10), (5.0, null),
+          reason: "fifths of a 45 px step would be 9 px apart");
+    });
+
+    test('labels take their places from the step', () {
+      expect(gridStepLabel(20, 10), '20');
+      expect(gridStepLabel(1.5, 0.5), '1.5');
+      expect(gridStepLabel(0.25, 0.25), '0.25');
+      expect(gridStepLabel(-0.0001, 0.005), '0.000');
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------

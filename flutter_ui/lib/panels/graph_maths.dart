@@ -1736,8 +1736,80 @@ double powerOfTenUnder(double v) {
   return p;
 }
 
-/// The values a graph pane rules its grid at between [lo] and [hi]: a nice
-/// step whose lines sit at least ~36 px apart down [height].
+/// The least distance, in logical pixels, between two major grid lines —
+/// Blender's *Minimum Grid Spacing*, at its default.
+const double graphGridMinSpacing = 45;
+
+/// The grid's major and minor steps along one axis, as Blender's View2D picks
+/// them (`view2d_draw.cc`): starting from [base] (10 for values, the frame
+/// rate for frames), a step is divided by 2, 3 or 5 while its lines stay at
+/// least [minSpacing] pixels apart, or doubled until they are. Below one unit
+/// it goes on in hundredths: 0.5, 0.1, 0.05, 0.01. The minor step divides the
+/// major one by 2, 3 or 5 again, and is null where its lines would come closer
+/// than a fifth of [minSpacing].
+(double, double?) gridSteps(double span, double pixels, double base,
+    {double minSpacing = graphGridMinSpacing}) {
+  if (!span.isFinite || span <= 0 || pixels <= 0) return (1, null);
+  int divisor(int d) {
+    for (final x in const [2, 3, 5]) {
+      if (d % x == 0) return x;
+    }
+    return d;
+  }
+
+  double step(double base, double perUnit) {
+    var distance = base < 1 ? 1.0 : base.roundToDouble();
+    if (perUnit * distance > minSpacing) {
+      while (distance > 1) {
+        final next = distance / divisor(distance.round());
+        if (perUnit * next < minSpacing) break;
+        distance = next;
+      }
+    } else {
+      while (perUnit * distance < minSpacing && distance < (1 << 30)) {
+        distance *= 2;
+      }
+    }
+    return distance;
+  }
+
+  final perUnit = pixels / span;
+  var major = step(base, perUnit);
+  if (major <= 1) major = step(100, perUnit / 100) / 100;
+  final whole = (major > 1 ? major : major * 100).round();
+  final minor = major / divisor(whole < 1 ? 1 : whole);
+  return (major, perUnit * minor > minSpacing / 5 ? minor : null);
+}
+
+/// The lines at multiples of [step] from [lo] to [hi], at most [limit] of
+/// them.
+List<double> gridLines(double lo, double hi, double step, {int limit = 400}) {
+  if (!lo.isFinite || !hi.isFinite || !(step > 0)) return const [];
+  final out = <double>[];
+  for (var n = (lo / step).ceil(); n * step <= hi && out.length < limit; n++) {
+    out.add(n * step);
+  }
+  return out;
+}
+
+/// A major grid line's number, as Blender writes it: by the step, not the
+/// value — whole numbers from a step of one up, one place from a half, two
+/// from a hundredth, three below.
+String gridStepLabel(double v, double step) {
+  final text = step >= 1
+      ? v.round().toString()
+      : v.toStringAsFixed(step >= 0.5
+          ? 1
+          : step >= 0.01
+              ? 2
+              : 3);
+  // No "-0".
+  return double.parse(text) == 0 ? text.replaceFirst('-', '') : text;
+}
+
+/// The values a graph pane rules its major grid lines at between [lo] and
+/// [hi]: [gridSteps] down [height], from a base of ten, as Blender's Graph
+/// Editor does.
 ///
 /// Empty when the range is not a range at all — **including a range with an
 /// infinity or a NaN at either end**. That bound used to reach
@@ -1748,38 +1820,8 @@ double powerOfTenUnder(double v) {
 List<double> gridValues(double lo, double hi, double height) {
   if (!lo.isFinite || !hi.isFinite) return const [];
   final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
-  final rawStep = span / (height / 36).clamp(1, 12);
-  final magnitude = powerOfTenUnder(rawStep.abs());
-  var step = magnitude;
-  for (final m in const [1.0, 2.0, 5.0, 10.0]) {
-    if (magnitude * m >= rawStep) {
-      step = magnitude * m;
-      break;
-    }
-  }
-  if (!step.isFinite || step <= 0) return const [];
-  final out = <double>[];
-  for (var v = (lo / step).ceilToDouble() * step; v <= hi; v += step) {
-    out.add(v);
-    // A range and a step that disagree by a rounding error would otherwise
-    // rule a line per pixel for ever.
-    if (out.length > 64) break;
-  }
-  return out;
-}
-
-/// A grid line's number, to as many places as [step] needs. One place for
-/// every step put the same number on two lines once the step was under 0.1.
-String gridLabel(double v, double step) {
-  if (v.abs() >= 100) return v.round().toString();
-  var places = 1;
-  for (var s = step.abs(); s > 0 && s < 0.0999 && places < 6; s *= 10) {
-    places++;
-  }
-  // Whole numbers stay plain, and the steps are summed so they land a hair off.
-  final text = v.toStringAsFixed(places);
-  final shown = double.parse(text);
-  return shown == shown.roundToDouble() ? shown.round().toString() : text;
+  final (major, _) = gridSteps(span, height, 10);
+  return gridLines(lo, hi, major);
 }
 
 /// **What interpolation a brand-new keyframe is born with** (M19).

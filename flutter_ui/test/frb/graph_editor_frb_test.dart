@@ -10,6 +10,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/graph_curve_list.dart'
+    show GraphCurveList, curveListFolded;
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -810,6 +812,11 @@ void main() {
 
       final before = opacityKeys(p.layer)[1];
       final inBefore = (before.interpIn as BridgeSideInterp_Bezier).field0;
+      // The list of curves stands below the acceleration readout, over this
+      // handle at this size: folded, it is out of the way.
+      addTearDown(() => curveListFolded.value = false);
+      curveListFolded.value = true;
+      await tester.pumpAndSettle();
       await _drag(tester, outHandle, const Offset(60, 0));
       final after = opacityKeys(p.layer)[1];
       final out = (after.interpOut as BridgeSideInterp_Bezier).field0;
@@ -1384,6 +1391,149 @@ void main() {
           reason: 'the reach it already showed');
       expect(key.interpIn, isA<BridgeSideInterp_Linear>(),
           reason: 'the side not typed into is untouched');
+    });
+
+
+    /// With a layer selected and nothing picked the graph shows the layer's
+    /// curves; clicking a key on one of them used to pick its property, which
+    /// ended that and took the layer's other curves off the graph.
+    testWidgets('a key clicked on a layer\'s curves keeps the other curves',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      p.layer.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: BridgeScalar.keyframed([
+          for (final (f, v) in const [(10, 0.0), (60, 90.0)])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: v,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mountGraph(tester, p, selectOpacity: false);
+      final keys = find.byWidgetPredicate((w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>)
+              .value
+              .startsWith('graph-key-${p.layer.internallayerId}/'));
+      expect(keys, findsNWidgets(4), reason: 'both curves, two keys each');
+
+      // The first key, low on the plot: the list of curves sits at the top.
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
+      await tester.pumpAndSettle();
+      expect(keys, findsNWidgets(4),
+          reason: 'the rotation curve is still there beside the picked key');
+    });
+
+    /// The arrow at the top of the list of curves folds it away and back.
+    testWidgets('the list of curves folds away on its arrow', (tester) async {
+      addTearDown(() => curveListFolded.value = false);
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      p.layer.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: BridgeScalar.keyframed([
+          for (final (f, v) in const [(10, 0.0), (60, 90.0)])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: v,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mountGraph(tester, p, selectOpacity: false);
+      final rows = find.byWidgetPredicate((w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('graph-curve-') &&
+          (w.key! as ValueKey<String>).value != 'graph-curve-list-fold');
+      expect(rows, findsNWidgets(2));
+
+      final fold = find.byKey(const ValueKey<String>('graph-curve-list-fold'));
+      await tester.tap(fold);
+      await tester.pumpAndSettle();
+      expect(rows, findsNothing, reason: 'folded, the names go');
+      expect(fold, findsOneWidget, reason: 'and the arrow stays to bring them back');
+
+      await tester.tap(fold);
+      await tester.pumpAndSettle();
+      expect(rows, findsNWidgets(2));
+    });
+
+    /// In the acceleration graph the readout and the list of curves stand one
+    /// above the other: both sit in the top left corner, and the readout was
+    /// drawn over the list.
+    testWidgets('the acceleration readout stands above the list of curves',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: const [0, 40, 100]);
+      p.layer.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: BridgeScalar.keyframed([
+          for (final (f, v) in const [(10, 0.0), (60, 90.0)])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: v,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      p.uiState.scrubTo(20);
+      await mountGraph(tester, p, selectOpacity: false);
+      await tester.tap(find.byKey(const ValueKey('graph-lens-acceleration')));
+      await tester.pumpAndSettle();
+      final readout =
+          tester.getRect(find.byKey(const ValueKey('graph-lens-readout')));
+      final list = tester.getRect(find.byType(GraphCurveList));
+      expect(readout.bottom, lessThanOrEqualTo(list.top),
+          reason: 'the list starts below the readout');
+    });
+    /// **The middle button navigates the graph as in Blender**: a drag moves
+    /// the view with the pointer, `Shift` or not, and `Ctrl` with it zooms,
+    /// right and up zooming in.
+    testWidgets('a middle-button drag pans the graph, and Ctrl zooms it',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: const [0, 40, 100]);
+      await mountGraph(tester, p);
+      Offset at(int i) =>
+          tester.getCenter(find.byKey(ValueKey<String>(opacityKey(p.layer, i))));
+      Future<void> middleDrag(Offset by) async {
+        final pointer =
+            TestPointer(7, PointerDeviceKind.mouse, null, kMiddleMouseButton);
+        final from = (at(0) + at(1)) / 2;
+        await tester.sendEventToBinding(pointer.down(from));
+        await tester.pump();
+        for (var i = 1; i <= 8; i++) {
+          await tester.sendEventToBinding(pointer.move(from + by * (i / 8)));
+          await tester.pump();
+        }
+        await tester.sendEventToBinding(pointer.up());
+        await tester.pumpAndSettle();
+      }
+
+      final before = at(1);
+      await middleDrag(const Offset(0, 40));
+      expect(at(1).dy - before.dy, closeTo(40, 1.5),
+          reason: 'the curve follows the pointer down');
+
+      final spread = at(1) - at(0);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await middleDrag(const Offset(30, -30));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      final now = at(1) - at(0);
+      expect(now.dx.abs(), greaterThan(spread.dx.abs() * 1.2),
+          reason: 'dragging right zooms time in');
+      expect(now.dy.abs(), greaterThan(spread.dy.abs() * 1.2),
+          reason: 'dragging up zooms the values in');
     });
 
   }, skip: !engineAvailable);

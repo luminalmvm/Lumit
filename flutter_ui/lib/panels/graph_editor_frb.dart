@@ -18,8 +18,11 @@
 // model. The bridge is only crossed when a gesture commits — one write per
 // channel, batched per layer, so a drag stays one undo step per property.
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -178,6 +181,14 @@ class GraphEditorFrb extends StatefulWidget {
   /// horizontal scroll are the Timeline's own, shared with the lane view.
   final void Function(PointerScrollEvent event, double contentX) onWheelTime;
 
+  /// A middle-button drag across time, as in Blender: [onPanTime] scrolls the
+  /// Timeline by that many pixels, and [onZoomTime] (`Ctrl` held) zooms it by
+  /// a factor about the content x where the drag began — given on the first
+  /// call of a drag, null after — until [onZoomTimeEnd].
+  final ValueChanged<double>? onPanTime;
+  final void Function(double factor, double? anchorX)? onZoomTime;
+  final VoidCallback? onZoomTimeEnd;
+
   /// What the pane's menus reach for that the Timeline holds: the lens and whose
   /// curves are drawn, the framing, the magnet, the key clipboard and the Ease
   /// popover. Null leaves the row disabled, as in a test that builds it alone.
@@ -226,6 +237,9 @@ class GraphEditorFrb extends StatefulWidget {
     required this.onSelectionChanged,
     required this.onChanged,
     required this.onWheelTime,
+    this.onPanTime,
+    this.onZoomTime,
+    this.onZoomTimeEnd,
     this.scope = GraphScope.selected,
     this.onLens,
     this.onScope,
@@ -252,6 +266,27 @@ class GraphEditorFrb extends StatefulWidget {
 /// accumulated — so the axis can change as the pointer moves, and letting
 /// `Shift` go mid-drag restores the full travel instead of losing whatever
 /// was suppressed while it was held.
+/// A middle-button drag on the pane: a pan, or with `Ctrl` a zoom.
+class _MiddleDrag {
+  final bool zoom;
+
+  /// Where the button went down, in the pane.
+  final Offset start;
+
+  /// Whether the Timeline has been told where the time zoom is anchored.
+  bool anchorSent = false;
+
+  /// Whether the values have started to follow, and the travel up or down
+  /// until they do.
+  bool values = false;
+  double travel = 0;
+
+  /// The value the zoom holds still: the one under [start].
+  double anchorValue = 0;
+
+  _MiddleDrag({required this.zoom, required this.start});
+}
+
 class _KeyDrag {
   final String grabbedId;
 
@@ -1070,6 +1105,79 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // window onto the values travels the other way to the wheel.
     final pan = -event.scrollDelta.dy / _paneSize.height * span;
     setState(() => _manual[widget.lens] = _sane((lo + pan, hi + pan)));
+  }
+
+  // --- middle button: Blender's View2D pan and zoom -------------------------
+
+  /// The middle-button drag in flight, or null.
+  _MiddleDrag? _middle;
+
+  /// Blender's drag-zoom rate: each pixel takes 1% off either end of the view
+  /// (`view2d_ops.cc`, `zoomfac` 0.01), so 2% of its width.
+  static const double _zoomPerPixel = 0.02;
+
+  void _middleDown(PointerDownEvent event) {
+    if (event.buttons != kMiddleMouseButton) return;
+    _middle = _MiddleDrag(
+      zoom: HardwareKeyboard.instance.isControlPressed,
+      start: event.localPosition,
+    );
+  }
+
+  /// A middle-button drag moves the view with the pointer, `Shift` held or
+  /// not; with `Ctrl` it zooms instead, about where the drag began: right and
+  /// up zoom in, left and down out, each axis by its own travel. The values
+  /// follow once the pointer has gone a few pixels up or down, since moving
+  /// them turns auto fit off and a sideways drag should not do that by a
+  /// tremor.
+  void _middleMove(PointerMoveEvent event) {
+    final drag = _middle;
+    if (drag == null || event.buttons & kMiddleMouseButton == 0) return;
+    final d = event.delta;
+    if (d.dx != 0) {
+      if (drag.zoom) {
+        widget.onZoomTime?.call(math.exp(d.dx * _zoomPerPixel),
+            drag.anchorSent ? null : drag.start.dx);
+        drag.anchorSent = true;
+      } else {
+        widget.onPanTime?.call(-d.dx);
+      }
+    }
+    final height = _paneSize.height;
+    if (height <= 0 || d.dy == 0) return;
+    // The first time the values move they take the whole travel, so none of
+    // the drag is lost to the threshold.
+    var dy = d.dy;
+    if (!drag.values) {
+      drag.travel += d.dy;
+      dy = drag.travel;
+      if (drag.travel.abs() < 4) return;
+      drag.values = true;
+      if (widget.autoFit) {
+        _manual[widget.lens] = _lastRange;
+        widget.onAutoFitOff?.call();
+      }
+      final range = _manual[widget.lens] ??= _lastRange;
+      drag.anchorValue =
+          _valueAt(drag.start.dy.clamp(0.0, height), range, height);
+    }
+    final (lo, hi) = _manual[widget.lens] ??= _lastRange;
+    if (drag.zoom) {
+      final at = drag.anchorValue;
+      final factor = math.exp(dy * _zoomPerPixel);
+      setState(() => _manual[widget.lens] =
+          _sane((at - (at - lo) * factor, at + (hi - at) * factor)));
+    } else {
+      final by = dy / height * (hi - lo);
+      setState(() => _manual[widget.lens] = _sane((lo + by, hi + by)));
+    }
+  }
+
+  void _middleUp(PointerEvent event) {
+    final drag = _middle;
+    if (drag == null) return;
+    _middle = null;
+    if (drag.zoom && drag.anchorSent) widget.onZoomTimeEnd?.call();
   }
 
   /// A vertical range the pane can actually draw: finite, the right way up, and
@@ -2830,6 +2938,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         _refitAfterFrame();
 
         return Listener(
+          // The middle button pans and, with `Ctrl`, zooms, as in Blender.
+          onPointerDown: _middleDown,
+          onPointerMove: _middleMove,
+          onPointerUp: _middleUp,
+          onPointerCancel: _middleUp,
           // Claimed through the resolver, not handled outright: the pane sits
           // inside the Timeline's horizontal scroll view, which registers for
           // the same wheel event and would *also* act on it — scrolling the
@@ -2926,6 +3039,25 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     ),
                   ),
                 ),
+              // The value gutter, held to the view as it paints.
+              if (_channels.isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _PinToViewport(
+                      controller: widget.hScroll,
+                      child: CustomPaint(
+                        key: const ValueKey<String>('graph-gutter'),
+                        painter: _GutterPainter(
+                          range: range,
+                          label:
+                              t.mono.copyWith(fontSize: 9, color: t.textMuted),
+                          fill: t.surface0.withValues(alpha: 0.85),
+                          unit: _axisUnit,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Positioned.fill(
                 child: GestureDetector(
                   key: const ValueKey('graph-plot'),
@@ -2991,55 +3123,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // The live readout, beside the key in hand (§6.2).
               ..._valueHint(range, height, constraints.maxWidth),
               ..._speedHint(range, height),
-              // The corner, in the acceleration graph only: every curve's
-              // acceleration at the playhead, pinned to the view's left edge.
-              if (widget.playhead case final playhead?
-                  when widget.lens == GraphLens.acceleration)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([
-                        playhead,
-                        if (widget.hScroll case final h?) h,
-                      ]),
-                      builder: (context, _) => Stack(
-                        children: [
-                          Positioned(
-                            left: _viewportLeft + 6,
-                            top: 4,
-                            child: GraphLensReadout(
-                              key: const ValueKey<String>('graph-lens-readout'),
-                              channels: widget.channels,
-                              shownKeys: [
-                                for (final c in widget.channels)
-                                  _shownKeys(c, painting: true)
-                              ],
-                              envelope: [
-                                for (final c in widget.channels) isEnvelope(c)
-                              ],
-                              fps: widget.fps,
-                              frame: playhead.value,
-                              palette: t.curve,
-                              style: t.mono
-                                  .copyWith(fontSize: 10, color: t.textPrimary),
-                              ground: t.surface0.withValues(alpha: 0.8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               // Over the live pane rather than instead of it, so the grid and
               // the axis stay readable behind the invitation to fill them.
               // Held to the view rather than to the start of time, since the
               // canvas is as wide as the comp.
               Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: widget.hScroll ?? const AlwaysStoppedAnimation(0),
-                  builder: (context, _) => Stack(
-                    children: _pinned(t, height, constraints.maxWidth),
-                  ),
+                child: _PinToViewport(
+                  controller: widget.hScroll,
+                  child: Stack(children: _pinned(t, height)),
                 ),
               ),
             ],
@@ -3051,15 +3142,15 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   /// What stays put as the Timeline scrolls: the list of curves, or with no
   /// curves the one short thing the plot has to say.
-  List<Widget> _pinned(LumitTheme t, double height, double paneWidth) {
-    final left = _viewportLeft;
-    final width = _viewportWidth(paneWidth);
+  ///
+  /// Laid out at the viewport's size, from its left edge ([_PinToViewport]).
+  List<Widget> _pinned(LumitTheme t, double height) {
     if (widget.channels.isEmpty) {
       final enable = widget.onEnableRetime;
       return [
         Positioned(
-          left: left,
-          width: width,
+          left: 0,
+          right: 0,
           top: 0,
           bottom: 0,
           child: enable == null
@@ -3084,24 +3175,60 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         ),
       ];
     }
+    final playhead = widget.playhead;
     return [
       Positioned(
-        left: left + 8,
+        left: 8,
         top: 8,
-        child: GraphCurveList(
-          channels: widget.channels,
-          dashed: _dashed,
-          lit: _litCurve,
-          maxHeight: height - 16,
-          onHover: (id) => setState(() => _litCurve = id),
-          onToggle: (c) {
-            final hidden = hiddenCurves.value;
-            _setHidden(hidden.contains(c.id)
-                ? ({...hidden}..remove(c.id))
-                : {...hidden, c.id});
-          },
-          onSolo: _solo,
-          onMenu: _showCurveListMenu,
+        bottom: 8,
+        // One column, so the acceleration readout and the list of curves
+        // stand one above the other instead of over each other.
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // In the acceleration graph only: every curve's acceleration at
+            // the playhead.
+            if (playhead != null && widget.lens == GraphLens.acceleration) ...[
+              IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: playhead,
+                  builder: (context, _) => GraphLensReadout(
+                    key: const ValueKey<String>('graph-lens-readout'),
+                    channels: widget.channels,
+                    shownKeys: [
+                      for (final c in widget.channels)
+                        _shownKeys(c, painting: true)
+                    ],
+                    envelope: [for (final c in widget.channels) isEnvelope(c)],
+                    fps: widget.fps,
+                    frame: playhead.value,
+                    palette: t.curve,
+                    style: t.mono.copyWith(fontSize: 10, color: t.textPrimary),
+                    ground: t.surface0.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
+            Flexible(
+              child: GraphCurveList(
+                channels: widget.channels,
+                dashed: _dashed,
+                lit: _litCurve,
+                maxHeight: height - 16,
+                onHover: (id) => setState(() => _litCurve = id),
+                onToggle: (c) {
+                  final hidden = hiddenCurves.value;
+                  _setHidden(hidden.contains(c.id)
+                      ? ({...hidden}..remove(c.id))
+                      : {...hidden, c.id});
+                },
+                onSolo: _solo,
+                onMenu: _showCurveListMenu,
+              ),
+            ),
+          ],
         ),
       ),
     ];
@@ -3931,7 +4058,6 @@ class _GraphPainter extends CustomPainter {
         }
       }
     }
-    if (channels.isNotEmpty) _paintGutter(canvas, size);
   }
 
   /// A flat line at [y], dashed over the view alone when [dash] is set, since
@@ -3947,17 +4073,54 @@ class _GraphPainter extends CustomPainter {
     }
   }
 
-  /// The values the grid rules at ([gridValues]).
-  List<double> _gridValues(Size size) =>
-      gridValues(range.$1, range.$2, size.height);
-
+  /// Blender's grid (`view2d_draw.cc`): major lines at [gridSteps]' step on
+  /// both axes — values from a base of ten, frames from the frame rate — and
+  /// fainter minor lines between them where there is room. Only what is on
+  /// screen is ruled: the canvas is as wide as the comp.
   void _paintGrid(Canvas canvas, Size size) {
-    final paint = Paint()
+    final major = Paint()
       ..color = grid
       ..strokeWidth = 1;
-    for (final v in _gridValues(size)) {
+    final minor = Paint()
+      ..color = grid.withValues(alpha: grid.a * 0.45)
+      ..strokeWidth = 1;
+    // A viewport either side as well: the offset this is drawn at can be a
+    // frame behind a zoom, and the edges must not show unruled ground.
+    final left = (viewportLeft - viewportWidth).clamp(0.0, size.width);
+    final right =
+        (viewportLeft + viewportWidth * 2).clamp(0.0, size.width).toDouble();
+
+    // Values.
+    final (lo, hi) = range;
+    final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
+    final (vMajor, vMinor) = gridSteps(span, size.height, 10);
+    if (vMinor != null) {
+      for (final v in gridLines(lo, hi, vMinor)) {
+        final y = _yOf(v, range, size);
+        canvas.drawLine(Offset(left, y), Offset(right, y), minor);
+      }
+    }
+    for (final v in gridLines(lo, hi, vMajor)) {
       final y = _yOf(v, range, size);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      canvas.drawLine(Offset(left, y), Offset(right, y), major);
+    }
+
+    // Frames.
+    final perFrame = axis.xOf(1) - axis.xOf(0);
+    if (perFrame <= 0) return;
+    final first = axis.frameAtExact(left), last = axis.frameAtExact(right);
+    final (fMajor, fMinor) =
+        gridSteps(last - first, perFrame * (last - first), fps.roundToDouble());
+    // Blender rules no minor frame lines under a one-frame step.
+    if (fMinor != null && fMajor > 1) {
+      for (final f in gridLines(first, last, fMinor)) {
+        final x = axis.xOf(f);
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), minor);
+      }
+    }
+    for (final f in gridLines(first, last, fMajor)) {
+      final x = axis.xOf(f);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), major);
     }
   }
 
@@ -3987,35 +4150,6 @@ class _GraphPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
       text.paint(canvas, Offset(viewportLeft + 8, y - text.height));
-    }
-  }
-
-  /// The value labels, in the **fixed right-hand gutter** the drawing gives
-  /// them (§12A.2, §6.3): a [graphGutterWidth] strip of translucent ground at
-  /// the right edge of the *viewport*, with each grid line's number sitting on
-  /// it.
-  ///
-  /// The viewport, not the canvas: the pane is as wide as the whole
-  /// composition and lives inside the Timeline's horizontal scroll view, so a
-  /// gutter pinned to the canvas would be off screen at every zoom but one.
-  /// Drawn last, over the curves — the drawing's own translucent strip, which
-  /// lets a curve be seen running under its own numbers.
-  void _paintGutter(Canvas canvas, Size size) {
-    final left = viewportLeft + viewportWidth - graphGutterWidth;
-    canvas.drawRect(
-      Rect.fromLTWH(left, 0, graphGutterWidth, size.height),
-      Paint()..color = gutterFill,
-    );
-    final values = _gridValues(size);
-    final step = values.length > 1 ? values[1] - values[0] : 1.0;
-    for (final v in values) {
-      final y = _yOf(v, range, size);
-      final text = TextPainter(
-        text: TextSpan(text: '${gridLabel(v, step)}$unit', style: label),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      text.paint(canvas,
-          Offset(left + 4, (y - text.height - 1).clamp(0, size.height - 12)));
     }
   }
 
@@ -4094,4 +4228,141 @@ class _HandlesPainter extends CustomPainter {
 
   @override
   bool? hitTest(Offset position) => false;
+}
+
+/// Lays [child] out at the size of the scroll view's viewport and draws it
+/// at the viewport's left edge, read **as it paints**.
+///
+/// What stays put while the Timeline scrolls (the list of curves, the value
+/// gutter) used to be positioned at build from the scroll offset. A zoom
+/// corrects that offset during layout, after the build, and without telling
+/// anyone, so through a zoom those parts were drawn a frame behind the
+/// curves and shook. At paint time the offset is the one the frame is laid
+/// out with.
+class _PinToViewport extends SingleChildRenderObjectWidget {
+  final ScrollController? controller;
+
+  const _PinToViewport({required this.controller, super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderPinToViewport(controller);
+
+  @override
+  void updateRenderObject(
+          BuildContext context, _RenderPinToViewport renderObject) =>
+      renderObject.controller = controller;
+}
+
+class _RenderPinToViewport extends RenderProxyBox {
+  _RenderPinToViewport(this._controller);
+
+  ScrollController? _controller;
+  set controller(ScrollController? value) {
+    if (value == _controller) return;
+    if (attached) _controller?.removeListener(markNeedsPaint);
+    _controller = value;
+    if (attached) value?.addListener(markNeedsPaint);
+    markNeedsLayout();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _controller?.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    _controller?.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  ScrollPosition? get _position {
+    final c = _controller;
+    if (c == null || !c.hasClients) return null;
+    final p = c.position;
+    return p.hasPixels && p.hasViewportDimension ? p : null;
+  }
+
+  double get _width =>
+      (_position?.viewportDimension ?? size.width).clamp(0.0, size.width);
+
+  /// Where the viewport's left edge is on this box, kept inside it.
+  double get _left {
+    final room = size.width - _width;
+    return (_position?.pixels ?? 0).clamp(0.0, room < 0 ? 0.0 : room);
+  }
+
+  @override
+  void performLayout() {
+    size = constraints.biggest;
+    child?.layout(BoxConstraints.tight(Size(_width, size.height)));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final c = child;
+    if (c != null) context.paintChild(c, offset + Offset(_left, 0));
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final c = child;
+    if (c == null) return false;
+    return result.addWithPaintOffset(
+      offset: Offset(_left, 0),
+      position: position,
+      hitTest: (result, at) => c.hitTest(result, position: at),
+    );
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) =>
+      transform.translateByDouble(_left, 0, 0, 1);
+}
+
+/// The value labels, in the **fixed right-hand gutter** the drawing gives
+/// them (§12A.2, §6.3): a [graphGutterWidth] strip of translucent ground at
+/// the right edge of the viewport, with each major grid line's number on it,
+/// as Blender names them. Drawn over the curves, which can be seen running
+/// under their own numbers, and pinned to the view by [_PinToViewport].
+class _GutterPainter extends CustomPainter {
+  final (double, double) range;
+  final TextStyle label;
+  final Color fill;
+  final String unit;
+
+  const _GutterPainter({
+    required this.range,
+    required this.label,
+    required this.fill,
+    required this.unit,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final left = size.width - graphGutterWidth;
+    canvas.drawRect(
+        Rect.fromLTWH(left, 0, graphGutterWidth, size.height), Paint()..color = fill);
+    final (lo, hi) = range;
+    final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
+    final (step, _) = gridSteps(span, size.height, 10);
+    for (final v in gridLines(lo, hi, step)) {
+      final y = size.height - (v - lo) / span * size.height;
+      final text = TextPainter(
+        text: TextSpan(text: '${gridStepLabel(v, step)}$unit', style: label),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(canvas,
+          Offset(left + 4, (y - text.height - 1).clamp(0, size.height - 12)));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GutterPainter old) =>
+      old.range != range ||
+      old.label != label ||
+      old.fill != fill ||
+      old.unit != unit;
 }

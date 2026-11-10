@@ -1375,6 +1375,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Whose curves the graph draws.
   GraphScope _graphScope = GraphScope.selected;
 
+  /// Whether the graph last showed a selected layer's curves because nothing
+  /// was picked ([_shownChannels]). A key clicked there then picks nothing:
+  /// picking its property ended the fallback, and the layer's other curves
+  /// went from the graph the moment one of their neighbours' keys was taken.
+  bool _graphLayerFallback = false;
+
   final GlobalKey<GraphEditorFrbState> _graphPane = GlobalKey();
 
   /// The property rows currently on screen, in display order — what a
@@ -4062,6 +4068,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ui.selectedLayerIds.isNotEmpty
         ? GraphScope.layer
         : _graphScope;
+    _graphLayerFallback = scope != _graphScope;
     if (scope == GraphScope.selected) return picked;
     final layers = {
       ...ui.selectedLayerIds.map((id) => '$id'),
@@ -4098,6 +4105,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Keys picked on dashed curves pick those curves' properties too.
   void _pickKeyRows(List<GraphChannel> shown) {
+    if (_graphLayerFallback) return;
     for (final id in _graphKeySelection) {
       final hash = id.lastIndexOf('#');
       if (hash <= 0) continue;
@@ -4156,6 +4164,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   void _zoomDragEnd() {
     _zoomAnchorHeld = false;
+  }
+
+  /// The graph's `Ctrl`+middle-button drag: the time axis zoomed by [factor],
+  /// at once, about the frame under the drag's start, which [anchorX] names in
+  /// content pixels on the drag's first call.
+  void _zoomGraphTime(double factor, double? anchorX, TimelineAxis axis) {
+    if (anchorX != null) {
+      _zoomAnchorViewportX = anchorX - (_hLane.hasClients ? _hLane.offset : 0);
+      _zoomAnchorFrame = axis.frameAtExact(anchorX);
+      _zoomAnchorHeld = true;
+    }
+    _zoomMotion.goTo((_zoomMotion.target * factor).clamp(1.0, _maxZoom),
+        motion: MotionSpec.still);
   }
 
   /// Point the flight's anchor at the playhead — held where it is if it is on
@@ -5582,6 +5603,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     },
                                     onChanged: ui.model.refresh,
                                     onWheelTime: (e, x) => _wheel(e, x, axis),
+                                    onPanTime: (dx) => _scrollBy(_hLane, dx),
+                                    onZoomTime: (f, x) =>
+                                        _zoomGraphTime(f, x, axis),
+                                    onZoomTimeEnd: _zoomDragEnd,
                                     scope: _graphScope,
                                     onLens: (lens) => setState(() {
                                       _graphLens = lens;
