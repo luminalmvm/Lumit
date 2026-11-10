@@ -75,6 +75,8 @@ import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/app_icon.dart';
 import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/background.dart';
+import 'package:lumit_flutter/state/caption_selection.dart';
+import 'package:lumit_flutter/state/caption_tracks.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -2038,6 +2040,16 @@ class LumitUiState extends ChangeNotifier {
   /// commands, the Timeline's fold-out. The *primary* of the selection below.
   ValueNotifier<LayerReference?> selectedLayer = ValueNotifier(null);
 
+  /// The captions picked in the Captions panel and the Timeline's captions
+  /// row, which share it.
+  final CaptionSelection captionSelection = CaptionSelection();
+
+  /// Every caption layer's captions in the fronted comp, for the Timeline and
+  /// the Viewer to draw from.
+  CaptionTracks get captionTracks =>
+      _captionTracks ??= CaptionTracks(this, _app.onChange);
+  CaptionTracks? _captionTracks;
+
   /// Which box the Graph panel has picked, or null for none.
   ///
   /// Session state at the shell level for the same reason the armed tool is:
@@ -3525,6 +3537,8 @@ class LumitUiState extends ChangeNotifier {
     cutClips.dispose();
     cutOverlap.dispose();
     presetsChanged.dispose();
+    captionSelection.dispose();
+    _captionTracks?.dispose();
     _lifecycle.dispose();
     _clock.dispose();
     reviews.dispose();

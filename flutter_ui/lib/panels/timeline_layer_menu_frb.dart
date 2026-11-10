@@ -3,6 +3,8 @@
 // picture. Built from the menu bar's own rows, so a row here runs the same
 // code as the Layer and Edit menus and wears the same chord.
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -16,6 +18,7 @@ import '../l10n/engine_labels.dart' show deleteStepName;
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart';
 import '../shell/menu_layer_frb.dart';
+import '../shell/create_captions_dialog_frb.dart' show createCaptionsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
 import 'layer_source_menu.dart';
@@ -136,7 +139,10 @@ List<MenuEntry> layerMenuEntries(
     if (_styled(kind))
       MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
     if (_sounds(kind))
-      MenuEntry.submenu(l10n.menuAudio, audioRows(app, ui, entry)),
+      MenuEntry.submenu(
+          l10n.menuAudio,
+          audioRows(app, ui, entry,
+              createCaptions: (l) => unawaited(createCaptionsFrb(context, l)))),
     if (kind != BridgeLayerKind.sequence)
       MenuEntry.submenu(l10n.retime, [
         MenuEntry(
@@ -401,7 +407,8 @@ MenuEntry _switchRow(
 /// file it plays, and whether a retimed sound keeps its pitch. The Audio
 /// heading in the fold has the same rows.
 List<MenuEntry> audioRows(
-    LumitState app, LumitUiState ui, BridgeLayerEntry entry) {
+    LumitState app, LumitUiState ui, BridgeLayerEntry entry,
+    {void Function(LayerReference layer)? createCaptions}) {
   final layer = entry.layer;
   final locked = entry.info.switches.locked;
   final entries = selectedEntries(ui);
@@ -499,6 +506,10 @@ List<MenuEntry> audioRows(
           locked ? null : () => _streams(app, entries, split: true)),
       MenuEntry(l10n.menuMergeAudioStreams,
           locked ? null : () => _streams(app, entries, split: false)),
+    ],
+    if (createCaptions != null) ...[
+      MenuEntry.divider(),
+      MenuEntry(l10n.menuCreateCaptions, () => createCaptions(layer)),
     ],
   ];
 }

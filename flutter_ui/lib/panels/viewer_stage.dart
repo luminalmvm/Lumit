@@ -358,7 +358,7 @@ class ViewerStage extends StatelessWidget {
           frame: uiState.playheadFrame.value,
           revision: revision,
           generation: uiState.solveLanded.value);
-      final map = layerMapOf(entry, byId, transformOf, read,
+      final placed = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
           view: rows,
@@ -369,6 +369,17 @@ class ViewerStage extends StatelessWidget {
               frame: uiState.playheadFrame.value,
               revision: revision,
               generation: uiState.solveLanded.value));
+      // A caption raised off the layer's place is drawn moved, so its box and
+      // its click follow it there.
+      final raised = entry.info.kind == BridgeLayerKind.text
+          ? uiState.captionTracks.offsetAt(
+              entry.layer.internallayerId.toString(),
+              uiState.playheadFrame.value)
+          : null;
+      final map = raised == null
+          ? placed
+          : placed.pivotedAt(placed.ax - raised.dx, placed.ay - raised.dy,
+              position: Offset(placed.px, placed.py));
       final rotation =
           read(tf.rotation, entry.layer, BridgeTransformProp.rotation);
       final live = uiState.liveText.value[entry.layer.internallayerId];

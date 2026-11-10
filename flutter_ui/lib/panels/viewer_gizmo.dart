@@ -54,6 +54,7 @@ import '../widgets/share_marks.dart';
 import '../shell/menu_bar_frb.dart' show menuEntriesFlyout;
 import '../shell/menu_layer_frb.dart' show transformRows;
 import '../shell/theme_name_dialog.dart' show askThemeName;
+import 'timeline_captions_frb.dart' show typeCaptionAtPlayhead;
 import 'timeline_extras_frb.dart' show DoubleTap, showMenuAt;
 import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
@@ -2820,6 +2821,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       if (entry.layer.internallayerId == hit.id) kind = entry.info.kind;
     }
     if (kind == BridgeLayerKind.text) {
+      // A caption layer shows its captions, not its own words: the one under
+      // the playhead opens for typing in the Captions panel.
+      if (typeCaptionAtPlayhead(ui, hit.layer)) return;
       // The Type layer of this view takes the request as the tool arms. If
       // nothing took it by the end of the frame it is dropped, so it cannot
       // open an edit the next time the tool is picked up.
