@@ -6,8 +6,10 @@
 import '../api.dart';
 import '../frb_generated.dart';
 import 'blender.dart';
+import 'cut/transcript.dart';
 import 'effect.dart';
 import 'interpret.dart';
+import 'layer.dart';
 import 'multicam.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
@@ -671,6 +673,36 @@ class FootageReference {
       BridgeLib.instance.api.crateApiFootageFootageReferenceShareState(
         that: this,
       );
+
+  /// What this footage item says, on its own clock and frames, laid out as
+  /// [`CompositionReference::cut_transcript`] lays a composition's: a
+  /// pause between any two words, and no rows, clips or removed words. An
+  /// item with no transcript yet comes back in `untranscribed`. Not sync:
+  /// it may read the file to learn its rate.
+  Future<BridgeCutTranscript> sourceTranscript(
+          {required BridgeSpokenLook look}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSourceTranscript(
+          that: this, look: look);
+
+  /// Write this item's words to `path`, as
+  /// [`CompositionReference::cut_transcript_export`] writes a
+  /// composition's, its frames counted on its own clock.
+  Future<void> sourceTranscriptExport(
+          {required String path,
+          required BridgeSpokenLook look,
+          required BridgeTranscriptExport how}) =>
+      BridgeLib.instance.api
+          .crateApiFootageFootageReferenceSourceTranscriptExport(
+              that: this, path: path, look: look, how: how);
+
+  /// The words of this item under `spans`, on its own frames, as plain
+  /// text.
+  Future<String> sourceTranscriptText(
+          {required BridgeSpokenLook look,
+          required List<BridgeFrameSpan> spans}) =>
+      BridgeLib.instance.api
+          .crateApiFootageFootageReferenceSourceTranscriptText(
+              that: this, look: look, spans: spans);
 
   /// Stop this file's conversion.
   void stopBlender() =>

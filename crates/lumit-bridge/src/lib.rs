@@ -121,6 +121,7 @@ mod speech;
 mod streams;
 #[cfg(test)]
 mod test_files;
+mod transcript_export;
 mod turns;
 mod vector_host;
 #[cfg(target_arch = "wasm32")]

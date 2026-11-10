@@ -95,6 +95,19 @@ void main() {
       viewerGuidesLocked: true,
       viewerRulerPercent: true,
       alignToFirstPicked: true,
+      transcriptPauseMs: 800,
+      transcriptFollow: false,
+      transcriptShowRemoved: true,
+      transcriptShowPauses: false,
+      transcriptTextSize: 16,
+      transcriptHesitations: false,
+      transcriptPhrases: true,
+      transcriptRepeats: false,
+      transcriptRetakes: true,
+      transcriptSkipTight: false,
+      transcriptLongerThanMs: 1500,
+      transcriptShortenToMs: 400,
+      transcriptLift: true,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -148,9 +161,22 @@ void main() {
     expect(back.viewerGuidesLocked, isTrue);
     expect(back.viewerRulerPercent, isTrue);
     expect(back.alignToFirstPicked, isTrue);
+    expect(back.transcriptPauseMs, 800);
+    expect(back.transcriptFollow, isFalse);
+    expect(back.transcriptShowRemoved, isTrue);
+    expect(back.transcriptShowPauses, isFalse);
+    expect(back.transcriptTextSize, 16);
+    expect(back.transcriptHesitations, isFalse);
+    expect(back.transcriptPhrases, isTrue);
+    expect(back.transcriptRepeats, isFalse);
+    expect(back.transcriptRetakes, isTrue);
+    expect(back.transcriptSkipTight, isFalse);
+    expect(back.transcriptLongerThanMs, 1500);
+    expect(back.transcriptShortenToMs, 400);
+    expect(back.transcriptLift, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 54);
+    expect(all.toJson().keys.length, 67);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

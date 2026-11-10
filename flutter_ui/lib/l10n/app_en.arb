@@ -18580,6 +18580,187 @@
       }
     }
   },
+  "transcriptSpeakerName": "Speaker name",
+  "@transcriptSpeakerName": {
+    "description": "Title of the window asking for a new speaker's name."
+  },
+  "histDeleteWords": "Delete words",
+  "@histDeleteWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words removed from the composition through the Transcript panel, the gap closed."
+  },
+  "histLiftWords": "Lift words",
+  "@histLiftWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words removed through the Transcript panel, the gap left."
+  },
+  "histPasteWords": "Paste words",
+  "@histPasteWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words pasted through the Transcript panel."
+  },
+  "histMoveWords": "Move words",
+  "@histMoveWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words dragged to another place in the Transcript panel."
+  },
+  "histRestoreWords": "Restore words",
+  "@histRestoreWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: cut-out words put back through the Transcript panel."
+  },
+  "histShortenPauses": "Shorten pauses",
+  "@histShortenPauses": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: pauses shortened in the Transcript panel's review."
+  },
+  "histDeleteFillerWords": "Delete filler words",
+  "@histDeleteFillerWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: filler words removed in the Transcript panel's review."
+  },
+  "histCorrectWords": "Correct words",
+  "@histCorrectWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a transcript's words retyped in the Transcript panel."
+  },
+  "histChangeSpeaker": "Change speaker",
+  "@histChangeSpeaker": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words assigned to another speaker in the Transcript panel."
+  },
+  "histRenameSpeaker": "Rename speaker",
+  "@histRenameSpeaker": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a speaker given another name in the Transcript panel."
+  },
+  "histInsertWords": "Insert words",
+  "@histInsertWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words from the source inserted into the composition through the Transcript panel."
+  },
+  "histOverwriteWithWords": "Overwrite with words",
+  "@histOverwriteWithWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words from the source put over the composition through the Transcript panel."
+  },
+  "histAppendWords": "Append words",
+  "@histAppendWords": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: words from the source put at the end of the composition through the Transcript panel."
+  },
+  "histMarkAsWorkArea": "Mark as work area",
+  "@histMarkAsWorkArea": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: the work area set to the selected words' stretch in the Transcript panel."
+  },
+  "histAssembleFromScript": "Assemble from script",
+  "@histAssembleFromScript": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a composition built from a script's lines found in the footage."
+  },
+  "transcriptFormatText": "Plain text",
+  "@transcriptFormatText": {
+    "description": "Export transcript window, Format: a .txt file of the words."
+  },
+  "transcriptFormatWord": "Word document",
+  "@transcriptFormatWord": {
+    "description": "Export transcript window, Format: a .docx file."
+  },
+  "transcriptFormatRichText": "Rich text",
+  "@transcriptFormatRichText": {
+    "description": "Export transcript window, Format: an .rtf file."
+  },
+  "transcriptFormatMarkdown": "Markdown",
+  "@transcriptFormatMarkdown": {
+    "description": "Export transcript window, Format: a .md file."
+  },
+  "transcriptFormatHtml": "HTML",
+  "@transcriptFormatHtml": {
+    "description": "Export transcript window, Format: a web page."
+  },
+  "transcriptFormatCsv": "CSV",
+  "@transcriptFormatCsv": {
+    "description": "Export transcript window, Format: a table of words and times."
+  },
+  "transcriptFormatSubRip": "SubRip",
+  "@transcriptFormatSubRip": {
+    "description": "Export transcript window, Format: an .srt subtitle file."
+  },
+  "transcriptFormatWebVtt": "WebVTT",
+  "@transcriptFormatWebVtt": {
+    "description": "Export transcript window, Format: a .vtt subtitle file."
+  },
+  "transcriptCharsPerLine": "Characters a line",
+  "@transcriptCharsPerLine": {
+    "description": "Export transcript window, shown for subtitle formats: the most characters a subtitle line holds."
+  },
+  "transcriptSubtitleLines": "Lines",
+  "@transcriptSubtitleLines": {
+    "description": "Export transcript window, shown for subtitle formats: how many lines a subtitle holds at once."
+  },
+  "keyDeleteTheSelectedWordsAndCloseTheGap": "Delete the selected words and close the gap",
+  "@keyDeleteTheSelectedWordsAndCloseTheGap": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. The words go out of the composition and what follows moves up."
+  },
+  "keyDeleteTheSelectedWordsAndLeaveAGap": "Delete the selected words and leave a gap",
+  "@keyDeleteTheSelectedWordsAndLeaveAGap": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. The words go out of the composition and their room stays empty."
+  },
+  "keyPutBackTheSelectedRemovedWords": "Put back the selected removed words",
+  "@keyPutBackTheSelectedRemovedWords": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. Words that were deleted return to the composition."
+  },
+  "keyCorrectTheSelectedWords": "Correct the selected words",
+  "@keyCorrectTheSelectedWords": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. Retype the words' text without changing the footage."
+  },
+  "keyInsertTheSelectedWordsAtThePlayhead": "Insert the selected words at the playhead",
+  "@keyInsertTheSelectedWordsAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. With the source showing, the selected words go into the composition, pushing what follows along."
+  },
+  "keyOverwriteWithTheSelectedWordsAtThePlayhead": "Overwrite with the selected words at the playhead",
+  "@keyOverwriteWithTheSelectedWordsAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. With the source showing, the selected words go into the composition over what is there."
+  },
+  "keyNextResult": "Next result",
+  "@keyNextResult": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. Move to the next result in the panel's results bar."
+  },
+  "keyPreviousResult": "Previous result",
+  "@keyPreviousResult": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. Move to the previous result in the panel's results bar."
+  },
+  "keyMarkTheSelectedWordsAsTheWorkArea": "Mark the selected words as the work area",
+  "@keyMarkTheSelectedWordsAsTheWorkArea": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. The work area becomes the stretch the words cover."
+  },
+  "keyReviewFillerWords": "Review filler words",
+  "@keyReviewFillerWords": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. Open the results bar listing um, er and repeated words."
+  },
+  "keyReviewPauses": "Review pauses",
+  "@keyReviewPauses": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Transcript panel shortcut. Open the results bar listing long pauses between words."
+  },
+  "keyTranscriptPanel": "Transcript panel",
+  "@keyTranscriptPanel": {
+    "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Transcript panel shows the words spoken in the footage."
+  },
+  "transcriptTranscribe": "Transcribe",
+  "@transcriptTranscribe": {
+    "description": "Transcript panel button: start transcribing the heard footage. On the empty state and on the row over a partly transcribed composition."
+  },
+  "transcriptStageLoading": "Loading",
+  "@transcriptStageLoading": {
+    "description": "Transcript panel progress bar: the transcription is opening the speech model."
+  },
+  "transcriptStageListening": "Listening",
+  "@transcriptStageListening": {
+    "description": "Transcript panel progress bar: the transcription is hearing a file."
+  },
+  "transcriptStageSpeakers": "Speakers",
+  "@transcriptStageSpeakers": {
+    "description": "Transcript panel progress bar: the transcription is telling the voices apart."
+  },
+  "transcriptNotTranscribedNamed": "{name} not transcribed",
+  "@transcriptNotTranscribedNamed": {
+    "description": "Transcript panel: the row at the top when one heard footage item has no transcript yet. {name} is the item's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transcriptRetakes": "Retakes",
+  "@transcriptRetakes": {
+    "description": "Transcript panel fillers review: tick listing earlier attempts at a sentence the speaker then said again."
+  },
   "captionsLayerName": "Captions",
   "@captionsLayerName": {
     "description": "The name a new caption layer is given when its language is not known."
@@ -26998,6 +27179,343 @@
   "fxFaceBevel": "Bevel",
   "@fxFaceBevel": {
     "description": "Name of a Text or Shape layer's material for its bevel, beside Front, Side and Back."
+  },
+  "panelTranscript": "Transcript",
+  "@panelTranscript": {
+    "description": "Name of the panel showing the words spoken in the fronted composition's footage, or in the source view's footage, as a page of text that can be selected and cut. Shown on its tab and in the Window menu."
+  },
+  "transcriptComposition": "Composition",
+  "@transcriptComposition": {
+    "description": "Transcript panel strip: the first of two buttons choosing what the panel shows. This one shows the words of the fronted composition."
+  },
+  "transcriptSource": "Source",
+  "@transcriptSource": {
+    "description": "Transcript panel strip: the second of two buttons choosing what the panel shows. This one shows the words of the footage open in the Viewer's source view."
+  },
+  "transcriptFillers": "Fillers",
+  "@transcriptFillers": {
+    "description": "Transcript panel strip: button opening the review of filler words (um, er, repeated words). A count follows it."
+  },
+  "transcriptPauses": "Pauses",
+  "@transcriptPauses": {
+    "description": "Transcript panel strip: button opening the review of long pauses between words. A count follows it."
+  },
+  "transcriptFollow": "Follow",
+  "@transcriptFollow": {
+    "description": "Transcript panel strip: toggle keeping the word being played in view while the composition plays."
+  },
+  "transcriptMore": "More",
+  "@transcriptMore": {
+    "description": "Tooltip on the Transcript panel strip's three-dot mark, which opens the panel's menu."
+  },
+  "transcriptShowRemoved": "Show removed words",
+  "@transcriptShowRemoved": {
+    "description": "Transcript panel menu: tick showing the words that were cut out of the composition, struck through."
+  },
+  "transcriptShowPauses": "Show pauses",
+  "@transcriptShowPauses": {
+    "description": "Transcript panel menu: tick showing the pauses between words as small chips."
+  },
+  "transcriptPauseLength": "Pause length",
+  "@transcriptPauseLength": {
+    "description": "Transcript panel menu: the row with a value in seconds; a silence shorter than it is not shown as a pause."
+  },
+  "transcriptTextSize": "Text size",
+  "@transcriptTextSize": {
+    "description": "Transcript panel menu: the submenu holding Smaller, Larger and Reset for the reading size."
+  },
+  "transcriptTextSmaller": "Smaller",
+  "@transcriptTextSmaller": {
+    "description": "Transcript panel menu, Text size submenu: make the words smaller."
+  },
+  "transcriptTextLarger": "Larger",
+  "@transcriptTextLarger": {
+    "description": "Transcript panel menu, Text size submenu: make the words larger."
+  },
+  "transcriptSpeakersMenu": "Speakers…",
+  "@transcriptSpeakersMenu": {
+    "description": "Transcript panel menu: opens the small window listing the speakers with a field to rename each."
+  },
+  "transcriptTranscribeMissing": "Transcribe missing",
+  "@transcriptTranscribeMissing": {
+    "description": "Transcript panel menu and button: start transcribing the footage that has no transcript yet."
+  },
+  "transcriptTranscribeAgain": "Transcribe again",
+  "@transcriptTranscribeAgain": {
+    "description": "Transcript panel menu: transcribe every heard footage item afresh, replacing what it has."
+  },
+  "transcriptAssembleMenu": "Assemble from script…",
+  "@transcriptAssembleMenu": {
+    "description": "Transcript panel menu: opens the window that builds a composition from a pasted or opened script by finding its lines in the footage."
+  },
+  "transcriptExportMenu": "Export transcript…",
+  "@transcriptExportMenu": {
+    "description": "Transcript panel menu: opens the window that writes the transcript to a file."
+  },
+  "transcriptCopyAllText": "Copy all as text",
+  "@transcriptCopyAllText": {
+    "description": "Transcript panel menu: put the whole transcript's words on the clipboard as plain text."
+  },
+  "transcriptLift": "Lift",
+  "@transcriptLift": {
+    "description": "Transcript panel: remove the selected words from the composition and leave the gap where they were. A menu row and a button."
+  },
+  "transcriptExtract": "Extract",
+  "@transcriptExtract": {
+    "description": "Transcript panel: remove the selected words from the composition and close the gap. The button paired with Lift at the end of the results bar."
+  },
+  "transcriptCorrect": "Correct",
+  "@transcriptCorrect": {
+    "description": "Transcript panel menu: edit the selected words' text in place, without changing the footage."
+  },
+  "transcriptSpeaker": "Speaker",
+  "@transcriptSpeaker": {
+    "description": "Transcript panel menu: the submenu assigning who says the selected words."
+  },
+  "transcriptNewSpeaker": "New speaker…",
+  "@transcriptNewSpeaker": {
+    "description": "Transcript panel menu, Speaker submenu: ask for a name, add that speaker and assign the selected words to them."
+  },
+  "transcriptMarkWorkArea": "Mark as work area",
+  "@transcriptMarkWorkArea": {
+    "description": "Transcript panel menu: set the composition's work area to the stretch the selected words cover."
+  },
+  "transcriptSelectParagraph": "Select paragraph",
+  "@transcriptSelectParagraph": {
+    "description": "Transcript panel menu: select every word of the paragraph the caret is in."
+  },
+  "transcriptCopyAsText": "Copy as text",
+  "@transcriptCopyAsText": {
+    "description": "Transcript panel menu: put the selected words on the clipboard as plain text."
+  },
+  "transcriptRestore": "Restore",
+  "@transcriptRestore": {
+    "description": "Transcript panel menu, on words that were cut out: put them back into the composition."
+  },
+  "transcriptAppend": "Append",
+  "@transcriptAppend": {
+    "description": "Transcript panel menu, source subject: put the selected words at the end of the composition's last clip."
+  },
+  "transcriptNewCompositionFrom": "New composition from selection",
+  "@transcriptNewCompositionFrom": {
+    "description": "Transcript panel menu, source subject: make a composition sized like the footage holding the selected words."
+  },
+  "transcriptCountOf": "{n} of {m}",
+  "@transcriptCountOf": {
+    "description": "Transcript panel results bar: which result is in hand out of how many. {n} is the current one, {m} the count.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "transcriptPrevious": "Previous",
+  "@transcriptPrevious": {
+    "description": "Tooltip on the Transcript panel results bar's back arrow: go to the previous result."
+  },
+  "transcriptNext": "Next",
+  "@transcriptNext": {
+    "description": "Tooltip on the Transcript panel results bar's forward arrow: go to the next result."
+  },
+  "transcriptDeleteAll": "Delete all",
+  "@transcriptDeleteAll": {
+    "description": "Transcript panel results bar: remove every result from the composition."
+  },
+  "transcriptReplaceHint": "Replace with",
+  "@transcriptReplaceHint": {
+    "description": "Hint in the Transcript panel results bar's second field, where the text that replaces the found words is typed."
+  },
+  "transcriptFind": "Find",
+  "@transcriptFind": {
+    "description": "Tooltip on the search button beside each name in the Transcript panel's Speakers window: close the window and step through that speaker's words."
+  },
+  "transcriptNoSpeech": "No speech",
+  "@transcriptNoSpeech": {
+    "description": "Transcript panel: the one line shown when the footage has been transcribed and no words were heard in it."
+  },
+  "transcriptReplace": "Replace",
+  "@transcriptReplace": {
+    "description": "Transcript panel results bar button: correct the found words in hand to the replacement text."
+  },
+  "transcriptReplaceAll": "Replace all",
+  "@transcriptReplaceAll": {
+    "description": "Transcript panel results bar button: correct every found run to the replacement text."
+  },
+  "transcriptHesitations": "Hesitations",
+  "@transcriptHesitations": {
+    "description": "Transcript panel fillers review: tick listing um, er and the like."
+  },
+  "transcriptPhrases": "Phrases",
+  "@transcriptPhrases": {
+    "description": "Transcript panel fillers review: tick listing filler phrases such as you know and sort of."
+  },
+  "transcriptRepeats": "Repeats",
+  "@transcriptRepeats": {
+    "description": "Transcript panel fillers review: tick listing words said twice in a row."
+  },
+  "transcriptSkipTight": "Skip tight",
+  "@transcriptSkipTight": {
+    "description": "Transcript panel fillers review: tick leaving out the fillers too close to the words round them to cut cleanly."
+  },
+  "transcriptKeep": "Keep",
+  "@transcriptKeep": {
+    "description": "Transcript panel fillers review button: leave this filler in and move on to the next."
+  },
+  "transcriptLongerThan": "Longer than",
+  "@transcriptLongerThan": {
+    "description": "Transcript panel pauses review: the field saying how long a pause has to be to be listed, in seconds."
+  },
+  "transcriptShortenTo": "Shorten to",
+  "@transcriptShortenTo": {
+    "description": "Transcript panel pauses review: the field saying how long a pause is left after Shorten, in seconds."
+  },
+  "transcriptShorten": "Shorten",
+  "@transcriptShorten": {
+    "description": "Transcript panel pauses review button: shorten the pause in hand."
+  },
+  "transcriptShortenAll": "Shorten all",
+  "@transcriptShortenAll": {
+    "description": "Transcript panel pauses review button: shorten every listed pause."
+  },
+  "transcriptNotTranscribedCount": "{count} not transcribed",
+  "@transcriptNotTranscribedCount": {
+    "description": "Transcript panel: the row at the top when some heard footage has no transcript yet. {count} is how many items.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "transcriptNotTranscribed": "Not transcribed",
+  "@transcriptNotTranscribed": {
+    "description": "Transcript panel empty state: the composition has heard footage but none of it has a transcript yet."
+  },
+  "transcriptDetectLanguage": "Detect language",
+  "@transcriptDetectLanguage": {
+    "description": "Transcript panel empty state: the language dropdown's first option, leaving it to the transcription to hear which language is spoken. The dropdown has no label beside it, so the option names what it is about."
+  },
+  "transcriptDetectSpeakers": "Detect speakers",
+  "@transcriptDetectSpeakers": {
+    "description": "Transcript panel empty state: the speakers dropdown's first option, leaving it to the transcription to hear how many people speak. The dropdown has no label beside it, so the option names what it is about."
+  },
+  "transcriptSpeakersOne": "One speaker",
+  "@transcriptSpeakersOne": {
+    "description": "Transcript panel empty state, speakers dropdown: one speaker."
+  },
+  "transcriptSpeakersTwo": "Two speakers",
+  "@transcriptSpeakersTwo": {
+    "description": "Transcript panel empty state, speakers dropdown: two speakers."
+  },
+  "transcriptSpeakersThree": "Three speakers",
+  "@transcriptSpeakersThree": {
+    "description": "Transcript panel empty state, speakers dropdown: three speakers."
+  },
+  "transcriptSpeakersFour": "Four speakers",
+  "@transcriptSpeakersFour": {
+    "description": "Transcript panel empty state, speakers dropdown: four speakers."
+  },
+  "transcriptFailed": "Transcription failed",
+  "@transcriptFailed": {
+    "description": "Transcript panel: the one line shown when the transcription job stopped with an error."
+  },
+  "transcriptTryAgain": "Try again",
+  "@transcriptTryAgain": {
+    "description": "Transcript panel button beside the failure line: start the transcription again."
+  },
+  "transcriptRangesSummary": "{count} ranges · {length}",
+  "@transcriptRangesSummary": {
+    "description": "Transcript panel strip with several separate runs of words selected: how many runs and their total length. {count} is the number of runs, {length} a timecode.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "length": {
+        "type": "String"
+      }
+    }
+  },
+  "transcriptExportTitle": "Export transcript",
+  "@transcriptExportTitle": {
+    "description": "Title of the window that writes the transcript to a file."
+  },
+  "transcriptExportSpeakerNames": "Speaker names",
+  "@transcriptExportSpeakerNames": {
+    "description": "Export transcript window: tick writing each speaker's name before their words."
+  },
+  "transcriptExportTimecodes": "Timecodes",
+  "@transcriptExportTimecodes": {
+    "description": "Export transcript window: tick writing the time of each paragraph."
+  },
+  "transcriptExportFillers": "Filler words",
+  "@transcriptExportFillers": {
+    "description": "Export transcript window: tick keeping filler words in the file."
+  },
+  "transcriptExportRange": "Range",
+  "@transcriptExportRange": {
+    "description": "Export transcript window: the row choosing how much of the transcript to write."
+  },
+  "transcriptRangeWhole": "Whole",
+  "@transcriptRangeWhole": {
+    "description": "Export transcript window, Range: the whole transcript."
+  },
+  "transcriptRangeSelection": "Selection",
+  "@transcriptRangeSelection": {
+    "description": "Export transcript window, Range: the selected words only."
+  },
+  "transcriptRangeWorkArea": "Work area",
+  "@transcriptRangeWorkArea": {
+    "description": "Export transcript window, Range: the words inside the composition's work area."
+  },
+  "transcriptExportAction": "Export",
+  "@transcriptExportAction": {
+    "description": "Export transcript window: the button that asks where to save and writes the file."
+  },
+  "transcriptAssembleTitle": "Assemble from script",
+  "@transcriptAssembleTitle": {
+    "description": "Title of the window that builds a composition from a script by finding its lines in the transcribed footage."
+  },
+  "transcriptAssembleOpen": "Open…",
+  "@transcriptAssembleOpen": {
+    "description": "Assemble from script window: button that picks a script file to read into the text area."
+  },
+  "transcriptAssembleSearch": "Search",
+  "@transcriptAssembleSearch": {
+    "description": "Assemble from script window: the row choosing which footage the script's lines are looked for in."
+  },
+  "transcriptAssembleAllFootage": "All transcribed footage",
+  "@transcriptAssembleAllFootage": {
+    "description": "Assemble from script window, Search: every footage item with a transcript."
+  },
+  "transcriptAssembleSelectedItems": "Selected items",
+  "@transcriptAssembleSelectedItems": {
+    "description": "Assemble from script window, Search: the items selected in the Project panel."
+  },
+  "transcriptAssembleInto": "Into",
+  "@transcriptAssembleInto": {
+    "description": "Assemble from script window: the row choosing where the found pieces go."
+  },
+  "transcriptAssembleThisComposition": "This composition at the playhead",
+  "@transcriptAssembleThisComposition": {
+    "description": "Assemble from script window, Into: the fronted composition, from the playhead."
+  },
+  "transcriptAssembleAction": "Assemble",
+  "@transcriptAssembleAction": {
+    "description": "Assemble from script window: the button that finds the lines and places them."
+  },
+  "transcriptAssembleDefaultName": "Script",
+  "@transcriptAssembleDefaultName": {
+    "description": "Assemble from script window: the name a new composition takes when the script was pasted rather than opened from a file."
+  },
+  "transcriptLinesNotFound": "Lines not found",
+  "@transcriptLinesNotFound": {
+    "description": "Title of the small window listing the script lines that were found in no footage after Assemble from script."
+  },
+  "transcriptSpeakersTitle": "Speakers",
+  "@transcriptSpeakersTitle": {
+    "description": "Title of the small window listing the transcript's speakers with a field to rename each."
   },
   "menuExportVector": "Export as Lottie or SVG…",
   "@menuExportVector": {

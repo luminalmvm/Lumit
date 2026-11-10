@@ -37,6 +37,7 @@ import 'stagger_panel_frb.dart';
 import 'extension_panel.dart';
 import 'text_panel_frb.dart';
 import 'timeline_panel_frb.dart';
+import 'transcript_panel_frb.dart';
 import 'viewer_panel_frb.dart';
 
 /// The panels whose whole business is changing the project. The Viewer,
@@ -138,6 +139,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.retime => const RetimePanelFrb(),
       Panel.notes => const NotesPanelFrb(),
       Panel.captions => const CaptionsPanelFrb(),
+      Panel.transcript => const TranscriptPanelFrb(),
       Panel.align => const AlignPanel(),
       Panel.debug => const DebugPanel(),
       Panel.extension => ExtensionPanel(slot: pane.instance),

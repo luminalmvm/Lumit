@@ -37,6 +37,36 @@ impl Edit<'_> {
         arrival: BridgeStreamsArrival,
         span: Option<(Rational, Rational)>,
     ) -> Cut {
+        self.place_only(
+            target,
+            footage,
+            source_in,
+            source_out,
+            at_frame,
+            insert,
+            linked,
+            with_picture,
+            arrival,
+            span,
+        )?;
+        self.commit()
+    }
+
+    /// [`Self::place`] without the commit, so several go in one edit.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn place_only(
+        &mut self,
+        target: Option<Uuid>,
+        footage: &FootageReference,
+        source_in: BridgeRational,
+        source_out: BridgeRational,
+        at_frame: i64,
+        insert: bool,
+        linked: bool,
+        with_picture: bool,
+        arrival: BridgeStreamsArrival,
+        span: Option<(Rational, Rational)>,
+    ) -> Cut {
         let source_in = Rational::new(source_in.num, source_in.den)?;
         let source_out = Rational::new(source_out.num, source_out.den)?;
         let length = source_out.checked_sub(source_in)?;
@@ -215,7 +245,7 @@ impl Edit<'_> {
             row.clips.push(clip);
             row.clips = placed(std::mem::take(&mut row.clips), dropped, false);
         }
-        self.commit()
+        Ok(())
     }
 
     /// Put the whole of a composition down at `at_frame` as one clip, its

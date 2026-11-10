@@ -27,6 +27,7 @@ use uuid::Uuid;
 
 mod clip_opacity;
 mod freeze_auto;
+pub mod spoken;
 pub mod takes;
 pub mod transition;
 

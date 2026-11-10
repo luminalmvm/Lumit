@@ -442,8 +442,9 @@ impl FootageReference {
         self.write_markers(Vec::new())
     }
 
+    /// The document this item is in, as it stands.
     #[frb(ignore)]
-    fn document(&self) -> Result<std::sync::Arc<Document>, BridgeError> {
+    pub(crate) fn document(&self) -> Result<std::sync::Arc<Document>, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(proj.store.snapshot())

@@ -2134,6 +2134,24 @@ Map<String, String> get _built => {
       "Add a caption at the playhead": l10n.keyAddACaptionAtThePlayhead,
       "Go to the previous caption": l10n.keyGoToThePreviousCaption,
       "Go to the next caption": l10n.keyGoToTheNextCaption,
+      "Transcript panel": l10n.keyTranscriptPanel,
+      "Delete the selected words and close the gap":
+          l10n.keyDeleteTheSelectedWordsAndCloseTheGap,
+      "Delete the selected words and leave a gap":
+          l10n.keyDeleteTheSelectedWordsAndLeaveAGap,
+      "Put back the selected removed words":
+          l10n.keyPutBackTheSelectedRemovedWords,
+      "Correct the selected words": l10n.keyCorrectTheSelectedWords,
+      "Insert the selected words at the playhead":
+          l10n.keyInsertTheSelectedWordsAtThePlayhead,
+      "Overwrite with the selected words at the playhead":
+          l10n.keyOverwriteWithTheSelectedWordsAtThePlayhead,
+      "Next result": l10n.keyNextResult,
+      "Previous result": l10n.keyPreviousResult,
+      "Mark the selected words as the work area":
+          l10n.keyMarkTheSelectedWordsAsTheWorkArea,
+      "Review filler words": l10n.keyReviewFillerWords,
+      "Review pauses": l10n.keyReviewPauses,
       "Copy the selection": l10n.keyCopyTheSelection,
       "Cut the selection": l10n.keyCutTheSelection,
       "Paste": l10n.keyPaste,
@@ -2238,6 +2256,21 @@ Map<String, String> get _built => {
       "Grade": l10n.histGrade,
       "Paste grade": l10n.histPasteGrade,
       "Apply look": l10n.histApplyLook,
+      "Delete words": l10n.histDeleteWords,
+      "Lift words": l10n.histLiftWords,
+      "Paste words": l10n.histPasteWords,
+      "Move words": l10n.histMoveWords,
+      "Restore words": l10n.histRestoreWords,
+      "Shorten pauses": l10n.histShortenPauses,
+      "Delete filler words": l10n.histDeleteFillerWords,
+      "Correct words": l10n.histCorrectWords,
+      "Change speaker": l10n.histChangeSpeaker,
+      "Rename speaker": l10n.histRenameSpeaker,
+      "Insert words": l10n.histInsertWords,
+      "Overwrite with words": l10n.histOverwriteWithWords,
+      "Append words": l10n.histAppendWords,
+      "Mark as work area": l10n.histMarkAsWorkArea,
+      "Assemble from script": l10n.histAssembleFromScript,
       // Named by the interface for its commonest commands. "Split" is the
       // effect's own word above; a step naming its thing ("Delete Glow")
       // arrives already in the reader's words, since no table could hold it.

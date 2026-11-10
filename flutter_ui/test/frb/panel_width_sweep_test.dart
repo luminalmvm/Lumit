@@ -32,6 +32,8 @@ import 'package:lumit_flutter/panels/node_panel.dart';
 import 'package:lumit_flutter/panels/paragraph_panel_frb.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/text_panel_frb.dart';
+import 'package:lumit_flutter/panels/transcript_find.dart';
+import 'package:lumit_flutter/panels/transcript_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
@@ -284,6 +286,28 @@ void main() {
           state: p.state,
           uiState: p.uiState);
     });
+
+    testWidgets('Transcript', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.transcript,
+          build: () => const TranscriptPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    // The results bar in each of its modes: a tight panel lays it out in
+    // two rows and wraps, and never clips.
+    for (final mode in TranscriptFindMode.values) {
+      testWidgets('Transcript, ${mode.name} review', (tester) async {
+        final p = populated();
+        await sweepWidths(tester,
+            panel: Panel.transcript,
+            build: () => TranscriptPanelFrb(initialReview: mode),
+            state: p.state,
+            uiState: p.uiState);
+      });
+    }
 
     testWidgets('Audio timeline', (tester) async {
       final p = populated();
