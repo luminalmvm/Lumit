@@ -863,6 +863,7 @@ mod tests {
             animators: Vec::new(),
             style: Default::default(),
             paragraph: Default::default(),
+            captions: None,
             extra: serde_json::Map::new(),
         }
     }

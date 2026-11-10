@@ -16,7 +16,9 @@ rayon = "1"
 arc-swap = "1"
 parking_lot = "0.12"
 rhai = { version = "1.25.1", features=["metadata", "sync"] }
-serde = { version = "1", features = ["derive"] }
+# `rc`: transcripts sit behind an `Arc` in the document, so an edit's copy of
+# it copies a pointer.
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 thiserror = "2"
 uuid = { version = "1", features = ["v7", "serde"] }

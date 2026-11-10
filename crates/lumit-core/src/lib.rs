@@ -8,6 +8,8 @@ extern crate self as lumit_core;
 
 pub mod anim;
 pub mod camera;
+/// Captions: a Text layer whose words change with the speech.
+pub mod captions;
 /// The node graph composition: what a comp holds instead of a layer stack.
 pub mod comp_graph;
 /// The layer and asset defaults every front end builds from.
@@ -65,5 +67,7 @@ pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
+/// What was said in a footage item's sound, word by word.
+pub mod transcript;
 pub mod view_camera;
 pub mod wire_tie;

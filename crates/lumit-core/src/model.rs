@@ -2352,6 +2352,9 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
     }
 }
 
+// ponytail: Text is the widest kind by far. Boxing its document is the
+// upgrade if a layer's size ever matters.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayerKind {
     /// One footage item as the layer's source. Retiming lives on the layer
@@ -3017,6 +3020,10 @@ pub struct TextDocument {
         skip_serializing_if = "crate::text::ParagraphStyle::is_default"
     )]
     pub paragraph: crate::text::ParagraphStyle,
+    /// Timed captions, on a caption layer. Only [`crate::ops::Op::EditCaptions`]
+    /// changes them ([`crate::captions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captions: Option<Arc<crate::captions::Captions>>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -3033,6 +3040,9 @@ impl TextDocument {
     /// rasteriser and the cache key can never disagree about what the layer
     /// says — a disagreement that would serve a cached frame of the old words.
     pub fn resolved_text(&self, context: Arc<ExpressionContext>) -> std::borrow::Cow<'_, str> {
+        if let Some(captions) = &self.captions {
+            return std::borrow::Cow::Owned(crate::captions::show::at(captions, &context).text);
+        }
         match &self.expression {
             None => std::borrow::Cow::Borrowed(&self.text),
             Some(e) => std::borrow::Cow::Owned(crate::expression::evaluate_text(e, Some(context))),
@@ -4073,6 +4083,10 @@ pub struct Document {
     /// beside the items for the reason `proxies` above is one.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub footage_trims: std::collections::BTreeMap<Uuid, FootageTrim>,
+    /// Footage items' transcripts, by item id. Each behind an `Arc`, so the
+    /// copy every edit makes copies a pointer ([`crate::transcript`]).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub transcripts: std::collections::BTreeMap<Uuid, Arc<crate::transcript::Transcript>>,
     /// The project-wide *use proxies* master switch (docs/03 §3a).
     ///
     /// On — the default, and what a file written before proxies existed loads
@@ -4513,6 +4527,7 @@ impl Document {
             item_comments: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
             footage_trims: std::collections::BTreeMap::new(),
+            transcripts: std::collections::BTreeMap::new(),
             use_proxies: true,
             packed: std::collections::BTreeMap::new(),
             auto_pack: false,
@@ -5415,6 +5430,7 @@ mod tests {
                 animators: Vec::new(),
                 style: Default::default(),
                 paragraph: Default::default(),
+                captions: None,
                 extra: serde_json::Map::new(),
             },
         };

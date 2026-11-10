@@ -104,6 +104,11 @@ pub enum Op {
         id: Uuid,
         trim: Option<Box<crate::model::FootageTrim>>,
     },
+    /// Land, correct or take away a footage item's transcript.
+    EditTranscript {
+        item: Uuid,
+        edit: Box<crate::transcript::TranscriptEdit>,
+    },
     /// Flip one item's *use proxy* switch, leaving the proxy attached. Refuses
     /// on an item with no proxy: a switch on nothing would sit in the document
     /// meaning nothing, and the panel would have asked about a control it is
@@ -492,6 +497,12 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         document: crate::model::TextDocument,
+    },
+    /// Change a Text layer's captions ([`crate::captions::CaptionsEdit`]).
+    EditCaptions {
+        comp: Uuid,
+        layer: Uuid,
+        edit: Box<crate::captions::CaptionsEdit>,
     },
     SetWorkArea {
         comp: Uuid,
@@ -928,6 +939,7 @@ impl Op {
             Op::SetItemLabel { .. } => "Set item colour",
             Op::SetItemComment { .. } => "Set item comment",
             Op::SetFootageTrim { .. } => "Mark In and Out",
+            Op::EditTranscript { edit, .. } => edit.name(),
             Op::AddLayer { .. } => "Add layer",
             Op::RemoveLayer { .. } => "Delete layer",
             Op::ReorderLayer { .. } => "Move layer",
@@ -970,6 +982,7 @@ impl Op {
             Op::SetCompMotionBlur { .. } => "Composition motion blur",
             Op::SetCompBackground { .. } => "Composition background",
             Op::SetTextDocument { .. } => "Edit text",
+            Op::EditCaptions { edit, .. } => edit.name(),
             Op::SetWorkArea { .. } => "Set work area",
             Op::SetCompMarkers { .. } => "Edit composition markers",
             Op::SetLayerMarkers { .. } => "Edit layer markers",
@@ -1073,6 +1086,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerAcceptsLights { comp, layer, .. }
         | Op::SetLayerCollapse { comp, layer, .. }
         | Op::SetTextDocument { comp, layer, .. }
+        | Op::EditCaptions { comp, layer, .. }
         | Op::SetLayerMarkers { comp, layer, .. }
         | Op::SetLayerBlend { comp, layer, .. }
         | Op::SetLayerMatte { comp, layer, .. }
@@ -1147,6 +1161,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetLayerLabel { comp, .. }
         | Op::SetLayerCollapse { comp, .. }
         | Op::SetTextDocument { comp, .. }
+        | Op::EditCaptions { comp, .. }
         | Op::SetLayerMarkers { comp, .. }
         | Op::SetLayerBlend { comp, .. }
         | Op::SetLayerMatte { comp, .. }
@@ -1307,6 +1322,8 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 name: previous,
             })
         }
+        Op::EditTranscript { item, edit } => crate::transcript::apply(doc, *item, edit),
+        Op::EditCaptions { comp, layer, edit } => crate::captions::apply(doc, *comp, *layer, edit),
         Op::SetFootageTrim { id, trim } => {
             if !matches!(doc.item(*id), Some(crate::model::ProjectItem::Footage(_))) {
                 return Err(OpError::UnknownItem);
@@ -2058,7 +2075,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let crate::model::LayerKind::Text { document: current } = &mut l.kind else {
                 return Err(OpError::UnknownLayer);
             };
-            let previous = std::mem::replace(current, document.clone());
+            // Captions stay as they are: only EditCaptions changes them, so a
+            // restyle never carries, or journals, every cue.
+            let captions = current.captions.clone();
+            let mut previous = std::mem::replace(current, document.clone());
+            current.captions = captions;
+            previous.captions = None;
             Ok(Op::SetTextDocument {
                 comp: *comp,
                 layer: *layer,

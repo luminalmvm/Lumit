@@ -76,6 +76,7 @@ pub(super) fn fresh(comp: &Composition, kind: AddKind) -> Option<Layer> {
                         ..Default::default()
                     }),
                     paragraph: Default::default(),
+                    captions: None,
                     extra: Map::new(),
                 },
             },
