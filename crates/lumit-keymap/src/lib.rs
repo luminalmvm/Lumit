@@ -230,6 +230,11 @@ impl ActionId {
             "layer.trim.in" => "Trim the layer's in point to the playhead",
             "layer.trim.out" => "Trim the layer's out point to the playhead",
             "layer.split" => "Split the layer at the playhead",
+            "captions.split" => "Split the caption at the playhead",
+            "captions.merge" => "Join the selected captions",
+            "captions.add" => "Add a caption at the playhead",
+            "captions.prev" => "Go to the previous caption",
+            "captions.next" => "Go to the next caption",
             "layer.duplicate" => "Duplicate the layer",
             "effect.apply.last" => "Apply the last effect again",
             "effect.remove.all" => "Remove every effect from the selected layers",
@@ -383,12 +388,14 @@ pub enum KeyContext {
     /// The Cut workspace's timeline, where the editor's own letters shadow
     /// the app-wide ones.
     Cut,
+    /// The Captions panel's list.
+    Captions,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 10] = [
+    pub const ALL: [KeyContext; 11] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -399,6 +406,7 @@ impl KeyContext {
         KeyContext::Panels,
         KeyContext::Effects,
         KeyContext::Cut,
+        KeyContext::Captions,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -418,6 +426,7 @@ impl KeyContext {
             KeyContext::Panels => "Panels",
             KeyContext::Effects => "Effect controls",
             KeyContext::Cut => "Cut timeline",
+            KeyContext::Captions => "Captions panel",
         }
     }
 }

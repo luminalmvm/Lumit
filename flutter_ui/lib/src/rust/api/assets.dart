@@ -8,8 +8,8 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `paragraph_of`, `read_paragraph`, `read_style`, `reference_point`, `restyle_shift`, `shift_property`, `style_of`, `text_document_of`, `with_camera_at`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `reference_point`, `restyle_shift`, `shift_property`, `text_document_of`, `with_camera_at`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The style a text layer has before anything is styled.
 BridgeTextStyle defaultTextStyle() =>
@@ -30,19 +30,22 @@ Future<List<String>> textFontFaces({required String family}) =>
     BridgeLib.instance.api.crateApiAssetsTextFontFaces(family: family);
 
 /// Lay out `text` the way the engine draws it in this style, with or without
-/// the room animators get round it. The first call with a font loads it.
+/// the room animators get round it, and `boxed` when an animator draws boxes.
+/// The first call with a font loads it.
 BridgeTextBlock measureText(
         {required String text,
         required double size,
         required BridgeTextStyle style,
         required BridgeParagraphStyle paragraph,
-        required bool animated}) =>
+        required bool animated,
+        required bool boxed}) =>
     BridgeLib.instance.api.crateApiAssetsMeasureText(
         text: text,
         size: size,
         style: style,
         paragraph: paragraph,
-        animated: animated);
+        animated: animated,
+        boxed: boxed);
 
 /// Capitals: as typed, all capitals, or small capitals for the lower case.
 enum BridgeCaps {
@@ -103,6 +106,10 @@ class BridgeParagraphStyle {
   final double spaceBefore;
   final double spaceAfter;
 
+  /// Px the block is tall. Unset grows it with its lines.
+  final double? boxHeight;
+  final BridgeVerticalAlign vertical;
+
   const BridgeParagraphStyle({
     required this.align,
     this.boxWidth,
@@ -112,6 +119,8 @@ class BridgeParagraphStyle {
     required this.indentFirst,
     required this.spaceBefore,
     required this.spaceAfter,
+    this.boxHeight,
+    required this.vertical,
   });
 
   @override
@@ -123,7 +132,9 @@ class BridgeParagraphStyle {
       indentRight.hashCode ^
       indentFirst.hashCode ^
       spaceBefore.hashCode ^
-      spaceAfter.hashCode;
+      spaceAfter.hashCode ^
+      boxHeight.hashCode ^
+      vertical.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -137,7 +148,9 @@ class BridgeParagraphStyle {
           indentRight == other.indentRight &&
           indentFirst == other.indentFirst &&
           spaceBefore == other.spaceBefore &&
-          spaceAfter == other.spaceAfter;
+          spaceAfter == other.spaceAfter &&
+          boxHeight == other.boxHeight &&
+          vertical == other.vertical;
 }
 
 /// Which stretch of the words an animator reaches, in per cent of the run.
@@ -147,6 +160,10 @@ class BridgeRangeSelector {
   final BridgeScalar offset;
   final BridgeSelectorBasis basis;
   final BridgeSelectorShape shape;
+  final BridgeSelectorMode mode;
+
+  /// Seconds a spoken word takes to change.
+  final double ease;
 
   const BridgeRangeSelector({
     required this.start,
@@ -154,6 +171,8 @@ class BridgeRangeSelector {
     required this.offset,
     required this.basis,
     required this.shape,
+    required this.mode,
+    required this.ease,
   });
 
   @override
@@ -162,7 +181,9 @@ class BridgeRangeSelector {
       end.hashCode ^
       offset.hashCode ^
       basis.hashCode ^
-      shape.hashCode;
+      shape.hashCode ^
+      mode.hashCode ^
+      ease.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -173,7 +194,9 @@ class BridgeRangeSelector {
           end == other.end &&
           offset == other.offset &&
           basis == other.basis &&
-          shape == other.shape;
+          shape == other.shape &&
+          mode == other.mode &&
+          ease == other.ease;
 }
 
 /// Where the letters sit against the baseline.
@@ -191,10 +214,22 @@ enum BridgeSelectorBasis {
   ;
 }
 
+/// What a range selector follows: its own range, or the spoken words.
+enum BridgeSelectorMode {
+  range,
+  current,
+  said,
+  unsaid,
+  emphasis,
+  ;
+}
+
 /// How a range selector's weight falls off across its range.
 enum BridgeSelectorShape {
   square,
   ramp,
+  smooth,
+  bounce,
   ;
 }
 
@@ -257,6 +292,12 @@ class BridgeTextAnimator {
   final BridgeScalar fillG;
   final BridgeScalar fillB;
 
+  /// Per cent, the box behind the reached letters, and its colour.
+  final BridgeScalar boxOpacity;
+  final BridgeScalar boxR;
+  final BridgeScalar boxG;
+  final BridgeScalar boxB;
+
   const BridgeTextAnimator({
     required this.name,
     required this.selector,
@@ -272,6 +313,10 @@ class BridgeTextAnimator {
     required this.fillR,
     required this.fillG,
     required this.fillB,
+    required this.boxOpacity,
+    required this.boxR,
+    required this.boxG,
+    required this.boxB,
   });
 
   @override
@@ -289,7 +334,11 @@ class BridgeTextAnimator {
       opacity.hashCode ^
       fillR.hashCode ^
       fillG.hashCode ^
-      fillB.hashCode;
+      fillB.hashCode ^
+      boxOpacity.hashCode ^
+      boxR.hashCode ^
+      boxG.hashCode ^
+      boxB.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -309,7 +358,11 @@ class BridgeTextAnimator {
           opacity == other.opacity &&
           fillR == other.fillR &&
           fillG == other.fillG &&
-          fillB == other.fillB;
+          fillB == other.fillB &&
+          boxOpacity == other.boxOpacity &&
+          boxR == other.boxR &&
+          boxG == other.boxG &&
+          boxB == other.boxB;
 }
 
 /// Where a block of text sits inside its layer, in layer pixels. Styled or
@@ -511,6 +564,19 @@ class BridgeTextStyle {
   /// Every fill, then every outline (or the other way round), not letter by letter.
   final bool strokesTogether;
 
+  /// A plate behind the words, in its colour with alpha.
+  final bool plateOn;
+  final BridgeColourRgba plate;
+
+  /// Px of plate round the words.
+  final double platePadding;
+
+  /// Px, the plate's corners.
+  final double plateRadius;
+
+  /// One plate per line rather than one round the block.
+  final bool plateLines;
+
   const BridgeTextStyle({
     required this.family,
     required this.face,
@@ -531,6 +597,11 @@ class BridgeTextStyle {
     required this.strokeWidth,
     required this.strokeOver,
     required this.strokesTogether,
+    required this.plateOn,
+    required this.plate,
+    required this.platePadding,
+    required this.plateRadius,
+    required this.plateLines,
   });
 
   @override
@@ -553,7 +624,12 @@ class BridgeTextStyle {
       stroke.hashCode ^
       strokeWidth.hashCode ^
       strokeOver.hashCode ^
-      strokesTogether.hashCode;
+      strokesTogether.hashCode ^
+      plateOn.hashCode ^
+      plate.hashCode ^
+      platePadding.hashCode ^
+      plateRadius.hashCode ^
+      plateLines.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -578,5 +654,18 @@ class BridgeTextStyle {
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
           strokeOver == other.strokeOver &&
-          strokesTogether == other.strokesTogether;
+          strokesTogether == other.strokesTogether &&
+          plateOn == other.plateOn &&
+          plate == other.plate &&
+          platePadding == other.platePadding &&
+          plateRadius == other.plateRadius &&
+          plateLines == other.plateLines;
+}
+
+/// Where the lines sit in a box of fixed height.
+enum BridgeVerticalAlign {
+  top,
+  middle,
+  bottom,
+  ;
 }

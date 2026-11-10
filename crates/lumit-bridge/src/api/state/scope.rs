@@ -162,10 +162,14 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetLayerRoutes { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
-        | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
+        | Op::SetRetimeProperty { comp, layer, .. }
+        | Op::EditCaptions { comp, layer, .. } => (Some(*comp), Some(*layer), false),
 
         // The Notes panel rereads on this. No item or layer changed.
         Op::SetNotes { .. } => (None, None, false),
+        // A transcript is named by its footage item, which the change carries
+        // on its own (see `handle_change_callback`). The item list is as it was.
+        Op::EditTranscript { .. } => (None, None, false),
 
         // A batch is as broad as its members: the item flag is the union, and
         // the reference scope widens to "no one subtree" rather than picking a

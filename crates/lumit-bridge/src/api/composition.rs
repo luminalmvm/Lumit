@@ -1337,6 +1337,7 @@ impl CompositionReference {
                 ..Default::default()
             }),
             paragraph: Default::default(),
+            captions: None,
             extra: serde_json::Map::new(),
         };
         // The anchor sits in the middle of the line as the engine lays it out,

@@ -30,6 +30,7 @@ use lumit_core::ops::Op;
 use uuid::Uuid;
 
 mod animator_tests;
+mod caption_tests;
 mod effect_duplicate_tests;
 mod paint_tests;
 
@@ -4018,13 +4019,13 @@ fn a_restyle_moves_the_anchor_so_the_words_stay_put() {
             d.style.clone(),
             d.paragraph.clone(),
             false,
+            false,
         )
     };
     let plain = text.get_text().expect("text").expect("it is text");
     let start = anchor(&text);
 
-    // An outline grows the box round the words, so the baseline moves inside
-    // it and the anchor follows by the same amount.
+    // An outline grows the box, so the baseline moves inside it and the anchor follows.
     let mut outlined = plain.clone();
     outlined.style.stroke_on = true;
     outlined.style.stroke_width = 20.0;

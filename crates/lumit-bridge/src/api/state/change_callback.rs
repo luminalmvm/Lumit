@@ -52,10 +52,19 @@ impl LumitBridgeState {
         // stays addressable. An undo asks for the names it asked for before and
         // finds them still held. There is no invalidation step left to get right.
 
+        // A transcript's change names the footage item it belongs to, so a
+        // panel showing that item's words knows to read them again.
+        let transcript = match &document_change.op {
+            lumit_core::ops::Op::EditTranscript { item, .. } => Some(ItemReference::Footage(
+                crate::api::footage::FootageReference::new(project_id, *item),
+            )),
+            _ => None,
+        };
         let change = ScopedChange {
             project: ProjectReference::new(project_id),
-            item: comp
-                .map(|c| ItemReference::Composition(CompositionReference::new(project_id, c))),
+            item: transcript.or_else(|| {
+                comp.map(|c| ItemReference::Composition(CompositionReference::new(project_id, c)))
+            }),
             layer: comp
                 .zip(layer)
                 .map(|(c, l)| LayerReference::new(project_id, c, l)),

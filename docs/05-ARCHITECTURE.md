@@ -27,6 +27,7 @@ One process, plus a sandbox process per third-party plugin bundle.
 | Decode | One per active stream, never on the pool, because a long-GOP seek would stall it |
 | IO | Disk cache, journal, export files |
 | Analysis | Camera tracking, one at a time |
+| Speech | Transcription: decodes a file's sound and runs the speech model, one job at a time |
 | Audio pair | The cpal callback (lock-free reads only) and a thread that fills ahead of it: decodes the two-second blocks of sound the playhead is coming to |
 | GPU submit | The only thread that submits to the wgpu queue |
 | Share | While a project is shared: one accepting, and a reader and a writer per connection. The readers apply other people's edits. A host that asked its router to open the port has one more keeping it open |
