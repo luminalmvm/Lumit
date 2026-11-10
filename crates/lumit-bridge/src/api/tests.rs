@@ -33,6 +33,7 @@ mod animator_tests;
 mod caption_tests;
 mod effect_duplicate_tests;
 mod paint_tests;
+mod transcript_tests;
 
 /// A project holding a folder that lists one footage item, plus a second
 /// footage item at the root. Returns the project and the three references.

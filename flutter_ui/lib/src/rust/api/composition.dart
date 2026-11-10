@@ -11,6 +11,7 @@ import 'beats.dart';
 import 'captions.dart';
 import 'comp_graph.dart';
 import 'cut.dart';
+import 'cut/transcript.dart';
 import 'effect.dart';
 import 'export.dart';
 import 'folder.dart';
@@ -1304,6 +1305,30 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutPlaceSolid(
               that: this, target: target, solid: solid, atFrame: atFrame);
 
+  /// The rough cut from a source's words: each of `spans` of `footage` put
+  /// down one after another from `at_frame`, as [`Self::cut_place`] puts
+  /// one, in one undo step. `end_frame` is where the last ends.
+  BridgeCutPaste cutPlaceWords(
+          {LayerReference? target,
+          required FootageReference footage,
+          required List<BridgeSourceSpan> spans,
+          required int atFrame,
+          required bool insert,
+          required bool linked,
+          required bool withPicture,
+          BridgeStreamsArrival? arrival}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceWords(
+              that: this,
+              target: target,
+              footage: footage,
+              spans: spans,
+              atFrame: atFrame,
+              insert: insert,
+              linked: linked,
+              withPicture: withPicture,
+              arrival: arrival);
+
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
   /// linked to one that was cut is cut too, and the later halves are
@@ -1399,6 +1424,24 @@ class CompositionReference {
               kind: kind,
               linked: linked);
 
+  /// Shorten every pause longer than `longer_than_ms` to `keep_ms`, or only
+  /// the pauses whose stretches lie in `only`, by taking out the middle of
+  /// each, latest first, in one undo step. With `ripple` the cut closes up.
+  BridgeCutResult cutShortenPauses(
+          {required BridgeSpokenLook look,
+          required int longerThanMs,
+          required int keepMs,
+          List<BridgeFrameSpan>? only,
+          required bool ripple}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutShortenPauses(
+              that: this,
+              look: look,
+              longerThanMs: longerThanMs,
+              keepMs: keepMs,
+              only: only,
+              ripple: ripple);
+
   /// Slide a clip between its neighbours by `by_frames`: it keeps its
   /// length and its frames, and the clips either side trim and extend to
   /// stay against it. With `linked` its linked clips slide the same way on
@@ -1447,6 +1490,93 @@ class CompositionReference {
           endFrame: endFrame,
           ripple: ripple,
           linked: linked);
+
+  /// What this composition says, laid out for the Transcript panel: every
+  /// heard word, with the pauses and breaks between them, tiled on this
+  /// composition's frames. Not sync: it reads a snapshot off the UI
+  /// thread.
+  Future<BridgeCutTranscript> cutTranscript({required BridgeSpokenLook look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscript(
+              that: this, look: look);
+
+  /// Copy what every layer holds under `spans` for a paste, here or in the
+  /// Cut timeline: the stretches one after another from nought. The
+  /// document is not touched.
+  BridgeCutResult cutTranscriptCopy({required List<BridgeFrameSpan> spans}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptCopy(
+              that: this, spans: spans);
+
+  /// Write the words of the frames `how` names to `path`, in the format it
+  /// names. Removed words are never written. Not sync: it writes a file.
+  Future<void> cutTranscriptExport(
+          {required String path,
+          required BridgeSpokenLook look,
+          required BridgeTranscriptExport how}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptExport(
+              that: this, path: path, look: look, how: how);
+
+  /// Make `span` the work area, as one undo step.
+  void cutTranscriptMark({required BridgeFrameSpan span}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptMark(
+              that: this, span: span);
+
+  /// A drag of words: what lies under `spans` inserted at `to_frame`. With
+  /// `copy` the spans stay where they are. Without, they are taken out and
+  /// the rest closes up first. `Nothing` when `to_frame` is inside a span,
+  /// or without `copy` on the edge of the only one.
+  BridgeCutPaste cutTranscriptMove(
+          {required List<BridgeFrameSpan> spans,
+          required int toFrame,
+          required bool copy}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptMove(
+              that: this, spans: spans, toFrame: toFrame, copy: copy);
+
+  /// Insert what was copied at `at_frame`, a word's edge: every unlocked
+  /// layer is cut there and opened by the copy's length, and each piece
+  /// lands on the layer it came from, counted among layers of its kind.
+  /// `end_frame` is where the copy ends.
+  BridgeCutPaste cutTranscriptPaste({required int atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptPaste(
+              that: this, atFrame: atFrame);
+
+  /// Extract or lift the frames under `spans`: with `ripple` every unlocked
+  /// layer closes up and other layers are carried as a Cut ripple carries
+  /// them, without it the gaps stay. A transcribed Footage layer whose bar
+  /// meets a span is made a Sequence layer first, in the same undo step. A sound clip's edge
+  /// this makes gets a 2 ms fade where it has none, so the cut does not
+  /// click.
+  BridgeCutResult cutTranscriptRemove(
+          {required List<BridgeFrameSpan> spans, required bool ripple}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptRemove(
+              that: this, spans: spans, ripple: ripple);
+
+  /// Put each run of removed words back after its clip, the clip before
+  /// their edit point: a copy of it, and of the clips linked to it there,
+  /// trimmed to the words, from halfway into the silence before the first
+  /// to halfway into the silence after the last. Inserted with a ripple, or
+  /// where they were in the gap a lift left when there is room. Every run
+  /// in one undo step.
+  BridgeCutResult cutTranscriptRestore(
+          {required List<BridgeRemovedRun> runs}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptRestore(
+              that: this, runs: runs);
+
+  /// The words under `spans` as plain text, a blank line between
+  /// paragraphs: Copy as text. Not sync: it lays out every word.
+  Future<String> cutTranscriptText(
+          {required BridgeSpokenLook look,
+          required List<BridgeFrameSpan> spans}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptText(
+              that: this, look: look, spans: spans);
 
   /// Put a transition of `frames` on one edge of a clip: its end when
   /// `end_edge` is set, and its start otherwise.

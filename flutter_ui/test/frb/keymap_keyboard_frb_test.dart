@@ -92,7 +92,7 @@ void main() {
       expect(inReadout('Timeline'), findsOneWidget);
 
       // A key with nothing on it says so.
-      await pointAt(tester, gesture, 'F2');
+      await pointAt(tester, gesture, 'F4');
       expect(inReadout('Not set'), findsOneWidget);
     });
 

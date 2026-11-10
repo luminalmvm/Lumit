@@ -120,6 +120,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v5", "v7", "serde"] }
 flutter_rust_bridge = { version = "=2.12.0", features = ["uuid"] }
+# A transcript exported as a Word document is a zip of three XML parts.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# The dialogue of a Final Draft script.
+roxmltree = "0.21"
 
 # What the machine has, for the cache budgets that spend it:
 # `GlobalMemoryStatusEx` for installed RAM and the first DXGI adapter's

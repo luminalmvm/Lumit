@@ -2646,6 +2646,7 @@ dependencies = [
  "lumit-text",
  "lumit-track",
  "png",
+ "roxmltree",
  "serde",
  "serde_json",
  "tempfile",
@@ -2654,6 +2655,7 @@ dependencies = [
  "web-sys",
  "web-time",
  "windows 0.58.0",
+ "zip",
 ]
 
 [[package]]

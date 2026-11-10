@@ -24,7 +24,8 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 #[must_use]
 pub fn default_keymap() -> Keymap {
     use KeyContext::{
-        Captions, Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Viewer,
+        Captions, Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Transcript,
+        Viewer,
     };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
@@ -428,6 +429,25 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "\\", "timeline.zoom.fit"),
         row(Cut, "ArrowUp", "edit.point.prev"),
         row(Cut, "ArrowDown", "edit.point.next"),
+        // --- Transcript panel ---
+        // Delete, the keyframe keys, Shift+F3 and Mod+Shift+F act on the
+        // words while the panel has focus. The command palette's
+        // Mod+Shift+P has to keep working here, so the pauses take
+        // Mod+Alt+P.
+        row(Transcript, "Delete", "transcript.extract"),
+        row(Transcript, "Backspace", "transcript.extract"),
+        row(Transcript, "'", "transcript.extract"),
+        row(Transcript, ";", "transcript.lift"),
+        row(Transcript, "R", "transcript.restore"),
+        row(Transcript, "Enter", "transcript.correct"),
+        row(Transcript, "F2", "transcript.correct"),
+        row(Transcript, ",", "transcript.insert"),
+        row(Transcript, ".", "transcript.overwrite"),
+        row(Transcript, "F3", "transcript.find.next"),
+        row(Transcript, "Shift+F3", "transcript.find.prev"),
+        row(Transcript, "X", "transcript.mark"),
+        row(Transcript, "Mod+Shift+F", "transcript.fillers"),
+        row(Transcript, "Mod+Alt+P", "transcript.pauses"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
     // Alt+Shift+1…9 switch workspace.
@@ -496,11 +516,15 @@ pub fn with_new_defaults(stored: Keymap) -> Keymap {
             out.unbound.push((*context, (*action).into()));
         }
     }
+    // Read against the file as it was, so an action with several chords
+    // gains every one of them, not just the first.
+    let stored: Vec<_> = out
+        .bindings
+        .iter()
+        .map(|b| (b.context, b.action.clone()))
+        .collect();
     for binding in default_keymap().bindings {
-        let known = out
-            .bindings
-            .iter()
-            .any(|b| b.context == binding.context && b.action == binding.action)
+        let known = stored.contains(&(binding.context, binding.action.clone()))
             || out
                 .unbound
                 .iter()

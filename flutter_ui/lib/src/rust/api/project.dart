@@ -9,6 +9,8 @@ import '../lib.dart';
 import 'cache.dart';
 import 'colour.dart';
 import 'composition.dart';
+import 'cut.dart';
+import 'cut/transcript.dart';
 import 'effect.dart';
 import 'extensions.dart';
 import 'folder.dart';
@@ -341,6 +343,21 @@ class ProjectReference {
         that: this,
       );
 
+  /// Put a cut together from what [`Self::find_script`] found: the best
+  /// take of each line laid down in the script's order, with a little room
+  /// either side of its words, as a picture clip and its linked sound. A
+  /// line's other good takes go on its clips, so T steps through them.
+  /// Into `into` at `at_frame` as an insert, or into a new composition
+  /// called `name`. The lines nobody said come back in `missing`. One undo
+  /// step, taken back whole when the cut is refused.
+  BridgeAssembled assembleFromScript(
+          {required BridgeScriptFound found,
+          CompositionReference? into,
+          required int atFrame,
+          required String name}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceAssembleFromScript(
+          that: this, found: found, into: into, atFrame: atFrame, name: name);
+
   /// Write a rotating autosave beside `project_path`, keeping `keep` slots.
   ///
   /// Deliberately does **not** move the project's own path: an autosave is a
@@ -514,6 +531,16 @@ class ProjectReference {
         that: this,
       );
 
+  /// Correct words, across any number of items, as one undo step. Each
+  /// edit puts `texts` where `remove` words from `at` were: the same number
+  /// keep their times, speaker and paragraph, any other number is spread
+  /// over the old words' stretch, and no texts takes the words out of the
+  /// transcript. The media is never touched. Several edits to one item are
+  /// read against the transcript as it stands, so they must not overlap.
+  void correctWords({required List<BridgeWordsEdit> edits}) => BridgeLib
+      .instance.api
+      .crateApiProjectProjectReferenceCorrectWords(that: this, edits: edits);
+
   /// Throw away the edits a crash left in the journal, for somebody who was
   /// offered them and said no.
   void discardJournal() =>
@@ -553,6 +580,15 @@ class ProjectReference {
           import_: import_,
           command: command,
           args: args);
+
+  /// Find `script`'s lines in `footage`'s words, for
+  /// [`Self::assemble_from_script`] to lay down. Changes nothing. Not sync:
+  /// it reads every word, and the first footage found to size a new
+  /// composition by.
+  Future<BridgeScriptFound> findScript(
+          {required String script, required List<FootageReference> footage}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceFindScript(
+          that: this, script: script, footage: footage);
 
   List<ItemReference> getItems() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceGetItems(
@@ -1000,6 +1036,13 @@ class ProjectReference {
   void setProjectSwatches({required List<BridgeSwatch> swatches}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetProjectSwatches(
           that: this, swatches: swatches);
+
+  /// Say who said each run of words, or nobody with `None`, as one undo
+  /// step. A speaker another item's transcript knows is added to this
+  /// one's list first.
+  void setSpokenSpeaker({required List<BridgeWordRun> runs, String? speaker}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetSpokenSpeaker(
+          that: this, runs: runs, speaker: speaker);
 
   /// Record the arrangement to be written into the file on the next save.
   /// `None`, or JSON that does not parse, clears it rather than failing: a

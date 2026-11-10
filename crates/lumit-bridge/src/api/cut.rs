@@ -38,6 +38,7 @@ pub(crate) mod place;
 mod solids;
 mod streams;
 mod takes;
+pub mod transcript;
 pub(crate) mod transition;
 
 /// How a Cut edit ended. Anything but `Done` left the document untouched, and
@@ -915,15 +916,7 @@ impl<'a> Edit<'a> {
         if ripple {
             // Spans that touch close as one, and the latest closes first so
             // an earlier one is still where it was read.
-            spans.sort();
-            let mut merged: Vec<(Rational, Rational)> = Vec::new();
-            for (start, end) in spans {
-                match merged.last_mut() {
-                    Some(last) if start <= last.1 => last.1 = last.1.max(end),
-                    _ => merged.push((start, end)),
-                }
-            }
-            for (start, end) in merged.into_iter().rev() {
+            for (start, end) in sequence::spoken::merged(spans).into_iter().rev() {
                 self.ripple(end, start.checked_sub(end)?)?;
             }
         }
@@ -1280,22 +1273,36 @@ impl<'a> Edit<'a> {
         if rows.iter().any(|r| self.rows[*r].locked) {
             return Err(BridgeCutResult::Locked.into());
         }
+        let gone = self.take_span(start, end, &rows, ripple)?;
+        if !ripple && gone == 0 {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        self.commit()
+    }
+
+    /// Cut `rows` at both ends of a span and delete what lies between, and
+    /// with `ripple` close it. Answers how many clips went.
+    fn take_span(
+        &mut self,
+        start: Rational,
+        end: Rational,
+        rows: &[usize],
+        ripple: bool,
+    ) -> Cut<usize> {
         // Cut at both ends, and what still shares the span lies inside it.
-        self.razor(&rows, start, false)?;
-        self.razor(&rows, end, false)?;
+        self.razor(rows, start, false)?;
+        self.razor(rows, end, false)?;
         let mut gone = 0;
         for r in rows {
-            let clips = &mut self.rows[r].clips;
+            let clips = &mut self.rows[*r].clips;
             let had = clips.len();
             clips.retain(|c| !covers(c, start, end));
             gone += had - clips.len();
         }
         if ripple {
             self.ripple(end, start.checked_sub(end)?)?;
-        } else if gone == 0 {
-            return Err(BridgeCutResult::Nothing.into());
         }
-        self.commit()
+        Ok(gone)
     }
 
     fn copy(self, clips: &[Uuid], linked: bool) -> Cut {

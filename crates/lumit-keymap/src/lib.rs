@@ -133,6 +133,17 @@ impl ActionId {
             "cut.nudge.up" => "Move clips up a track",
             "cut.nudge.down" => "Move clips down a track",
             "cut.select.at.playhead" => "Select the clip at the playhead",
+            "transcript.extract" => "Delete the selected words and close the gap",
+            "transcript.lift" => "Delete the selected words and leave a gap",
+            "transcript.restore" => "Put back the selected removed words",
+            "transcript.correct" => "Correct the selected words",
+            "transcript.insert" => "Insert the selected words at the playhead",
+            "transcript.overwrite" => "Overwrite with the selected words at the playhead",
+            "transcript.find.next" => "Next result",
+            "transcript.find.prev" => "Previous result",
+            "transcript.mark" => "Mark the selected words as the work area",
+            "transcript.fillers" => "Review filler words",
+            "transcript.pauses" => "Review pauses",
             "cut.snap.toggle" => "Turn snapping on or off",
             "cut.linked.toggle" => "Turn linked selection on or off",
             "cut.ripple.toggle" => "Turn auto ripple on or off",
@@ -390,12 +401,14 @@ pub enum KeyContext {
     Cut,
     /// The Captions panel's list.
     Captions,
+    /// The Transcript panel, where keys act on the selected words.
+    Transcript,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 11] = [
+    pub const ALL: [KeyContext; 12] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -407,6 +420,7 @@ impl KeyContext {
         KeyContext::Effects,
         KeyContext::Cut,
         KeyContext::Captions,
+        KeyContext::Transcript,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -427,6 +441,7 @@ impl KeyContext {
             KeyContext::Effects => "Effect controls",
             KeyContext::Cut => "Cut timeline",
             KeyContext::Captions => "Captions panel",
+            KeyContext::Transcript => "Transcript panel",
         }
     }
 }
