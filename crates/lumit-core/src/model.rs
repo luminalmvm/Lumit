@@ -17,6 +17,7 @@ mod blend_mode;
 mod light;
 mod light_file;
 mod material;
+mod parent_placement;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -3622,33 +3623,13 @@ pub fn parent_placements(
         .rev()
         .filter_map(|id| comp.layers.iter().find(|l| l.id == *id));
     ancestors
-        .map(|a| (a.id, parent_placement(comp, a, t, read, solves)))
+        .map(|a| {
+            (
+                a.id,
+                parent_placement::parent_placement(comp, a, t, read, solves),
+            )
+        })
         .collect()
-}
-
-/// `layer`'s placement as a parent: a solved camera is placed by its solve.
-fn parent_placement(
-    comp: &Composition,
-    layer: &Layer,
-    t: f64,
-    read: &Read<'_>,
-    solves: Solves<'_>,
-) -> Placement {
-    let mut p = crate::orient::placed_in(comp, layer, t, read, solves);
-    let solved = matches!(
-        layer.kind,
-        LayerKind::Camera {
-            solve_link: Some(_),
-            ..
-        }
-    );
-    if let Some((doc, store)) = solves.filter(|_| solved) {
-        if let Some(own) = crate::track::own_camera_pose_of(doc, comp, layer, t, store) {
-            p.position = own.pose.position;
-            p.rotation_deg = own.pose.rotation_deg;
-        }
-    }
-    p
 }
 
 /// The space `layer`'s parents put it in at comp time `t`. `None` with no
@@ -3720,7 +3701,7 @@ pub fn layer_space(
     read: &Read<'_>,
     solves: Solves<'_>,
 ) -> crate::camera::Place {
-    let own = parent_placement(comp, layer, t, read, solves).place();
+    let own = parent_placement::parent_placement(comp, layer, t, read, solves).place();
     parent_space(comp, layer, t, read, solves).map_or(own, |outer| own.within(&outer))
 }
 
@@ -4087,6 +4068,11 @@ pub struct Document {
     /// copy every edit makes copies a pointer ([`crate::transcript`]).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub transcripts: std::collections::BTreeMap<Uuid, Arc<crate::transcript::Transcript>>,
+    /// Footage items' markers, by item id, in seconds of the item's own time.
+    /// What a multicam comp can be synced by. A map beside the items for the
+    /// reason `proxies` is one.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub footage_markers: std::collections::BTreeMap<Uuid, Vec<crate::markers::Marker>>,
     /// The project-wide *use proxies* master switch (docs/03 §3a).
     ///
     /// On — the default, and what a file written before proxies existed loads
@@ -4528,6 +4514,7 @@ impl Document {
             proxies: std::collections::BTreeMap::new(),
             footage_trims: std::collections::BTreeMap::new(),
             transcripts: std::collections::BTreeMap::new(),
+            footage_markers: std::collections::BTreeMap::new(),
             use_proxies: true,
             packed: std::collections::BTreeMap::new(),
             auto_pack: false,

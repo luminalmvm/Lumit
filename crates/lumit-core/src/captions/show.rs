@@ -227,7 +227,18 @@ fn heard_in(
                         clip.source_time(lt),
                         speed(clip.retime.as_ref(), lt - clip.place_start.to_f64()),
                     ),
-                    ClipSource::Comp(_) | ClipSource::Solid(_) => None,
+                    // A multicam clip is heard as its angle's own file. Any
+                    // other clip of a comp is not followed.
+                    ClipSource::Comp(_) => {
+                        let at = crate::time::Rational::from_f64_on_grid(lt, 1000).ok()?;
+                        let shown = crate::multicam::heard_at(doc, clip, at)?;
+                        heard(
+                            shown.item,
+                            shown.source_time.to_f64(),
+                            speed(clip.retime.as_ref(), lt - clip.place_start.to_f64()),
+                        )
+                    }
+                    ClipSource::Solid(_) => None,
                 })
         }
         LayerKind::Precomp { comp } => {

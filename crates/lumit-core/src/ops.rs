@@ -11,6 +11,7 @@ use crate::time::{CompTime, Duration, FrameRate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod guards;
 mod reshape;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -108,6 +109,12 @@ pub enum Op {
     EditTranscript {
         item: Uuid,
         edit: Box<crate::transcript::TranscriptEdit>,
+    },
+    /// A footage item's markers, the whole list. Refused on anything but
+    /// footage. An empty list leaves no entry.
+    SetFootageMarkers {
+        id: Uuid,
+        markers: Vec<crate::markers::Marker>,
     },
     /// Flip one item's *use proxy* switch, leaving the proxy attached. Refuses
     /// on an item with no proxy: a switch on nothing would sit in the document
@@ -878,6 +885,12 @@ pub enum Op {
         comp: Uuid,
         start: CompTime,
     },
+    /// Make a composition a multicam comp, change the angles its clips start
+    /// on, or make it an ordinary comp again (`None`).
+    SetCompMulticam {
+        comp: Uuid,
+        multicam: Option<Box<crate::multicam::Multicam>>,
+    },
     TrimCompToWorkArea {
         comp: Uuid,
     },
@@ -1025,6 +1038,8 @@ impl Op {
             Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
+            Op::SetCompMulticam { .. } => "Set multicam",
+            Op::SetFootageMarkers { .. } => "Edit footage markers",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
             // Unreachable: the loop above leaves no batch behind.
@@ -1115,78 +1130,6 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
     }
 }
 
-/// The composition an op edits **the layers of**, or `None` when the op has
-/// nothing to do with a layer stack.
-///
-/// **A node graph has no layers, and the engine says so** (docs/impl/
-/// node-graph-comp.md §1.1). One guard beside the lock's covers every op that
-/// adds, removes, reorders or edits a layer or a group of them, so a present or
-/// future layer op cannot forget to check, and a `Batch` is covered through its
-/// members.
-///
-/// The comp-wide settings are deliberately not here: size, rate, duration, the
-/// work area, a trim, a crop, markers, motion blur and the master fader are all
-/// legal on a node graph, because a node graph is a composition.
-#[must_use]
-fn comp_guards(op: &Op) -> Option<Uuid> {
-    match op {
-        Op::AddLayer { comp, .. }
-        | Op::RemoveLayer { comp, .. }
-        | Op::ReorderLayer { comp, .. }
-        | Op::SetLayerSpan { comp, .. }
-        | Op::RenameLayer { comp, .. }
-        | Op::SetLayerMasks { comp, .. }
-        | Op::SetLayerPaint { comp, .. }
-        | Op::SetLayerPuppet { comp, .. }
-        | Op::SetShapeContents { comp, .. }
-        | Op::SetLayerEffects { comp, .. }
-        | Op::SetLayerStyles { comp, .. }
-        | Op::SetLayerGraphInputs { comp, .. }
-        | Op::SetLayerGraph { comp, .. }
-        | Op::SetLayerFx { comp, .. }
-        | Op::SetLayerThreeD { comp, .. }
-        | Op::SetSequenceClips { comp, .. }
-        | Op::SetLayerKind { comp, .. }
-        | Op::SetLayerOrient { comp, .. }
-        | Op::SetLayerAdjustment { comp, .. }
-        | Op::SetLayerPitchFollowsSpeed { comp, .. }
-        | Op::SetLayerAudible { comp, .. }
-        | Op::SetLayerVisible { comp, .. }
-        | Op::SetLayerSolo { comp, .. }
-        | Op::SetLayerMotionBlur { comp, .. }
-        | Op::SetLayerAcceptsLights { comp, .. }
-        | Op::SetLayerShy { comp, .. }
-        | Op::SetLayerGuide { comp, .. }
-        | Op::SetLayerLocked { comp, .. }
-        | Op::SetLayerLabel { comp, .. }
-        | Op::SetLayerCollapse { comp, .. }
-        | Op::SetTextDocument { comp, .. }
-        | Op::EditCaptions { comp, .. }
-        | Op::SetLayerMarkers { comp, .. }
-        | Op::SetLayerBlend { comp, .. }
-        | Op::SetLayerMatte { comp, .. }
-        | Op::SetLayerParent { comp, .. }
-        | Op::SetTransformProperty { comp, .. }
-        | Op::SetTransformExpressionSlot { comp, .. }
-        | Op::SetTransformAxisMode { comp, .. }
-        | Op::SetRotationOrder { comp, .. }
-        | Op::SetCameraZoom { comp, .. }
-        | Op::SetCameraSolveLink { comp, .. }
-        | Op::SetLayerVolume { comp, .. }
-        | Op::SetLayerPan { comp, .. }
-        | Op::SetLayerRoutes { comp, .. }
-        | Op::SetLayerAudioStreams { comp, .. }
-        | Op::SetRetimeProperty { comp, .. }
-        | Op::SetLayerInterpolation { comp, .. }
-        | Op::GroupLayers { comp, .. }
-        | Op::UngroupLayers { comp, .. }
-        | Op::SetGroupName { comp, .. }
-        | Op::SetGroupLabel { comp, .. }
-        | Op::SetGroupEffects { comp, .. } => Some(*comp),
-        _ => None,
-    }
-}
-
 /// Whether `comp` is a node graph, and so holds boxes instead of layers.
 #[must_use]
 fn is_node_graph(doc: &Document, comp: Uuid) -> bool {
@@ -1223,7 +1166,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     // And a node graph has no layers to edit, by the same road and for the
     // same reason: one guard here covers every layer op there is and every one
     // there will be.
-    if let Some(comp) = comp_guards(op) {
+    if let Some(comp) = guards::comp_guards(op) {
         if is_node_graph(doc, comp) {
             return Err(OpError::CompIsNodeGraph);
         }
@@ -2739,6 +2682,8 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 start: previous,
             })
         }
+        Op::SetCompMulticam { comp, multicam } => crate::multicam::set_mark(doc, *comp, multicam),
+        Op::SetFootageMarkers { id, markers } => crate::markers::set_on_footage(doc, *id, markers),
         Op::TrimCompToWorkArea { comp } => {
             let batch = reshape::trim_comp_to_work_area(doc, *comp)?;
             apply(doc, &batch)

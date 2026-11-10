@@ -29,7 +29,7 @@ use uuid::Uuid;
 
 /// The namespace every scratch composition id is minted inside, so one can
 /// never collide with a composition the document actually has.
-const SCRATCH_NAMESPACE: Uuid = Uuid::from_bytes([
+pub(crate) const SCRATCH_NAMESPACE: Uuid = Uuid::from_bytes([
     0x6c, 0x75, 0x6d, 0x69, 0x74, 0x00, 0x50, 0x00, 0x80, 0x00, 0x73, 0x63, 0x72, 0x61, 0x74, 0x63,
 ]);
 
@@ -40,6 +40,8 @@ pub enum ScratchOf {
     Footage(Uuid),
     /// One layer's source before its transform, with its masks.
     Layer { comp: Uuid, layer: Uuid },
+    /// A page of a multicam comp's angles side by side, for the angle viewer.
+    Angles { comp: Uuid, page: u32 },
 }
 
 impl ScratchOf {
@@ -56,6 +58,7 @@ impl ScratchOf {
         let name = match self {
             ScratchOf::Footage(item) => format!("footage/{item}"),
             ScratchOf::Layer { comp, layer } => format!("layer/{comp}/{layer}"),
+            ScratchOf::Angles { comp, page } => format!("angles/{comp}/{page}"),
         };
         Uuid::new_v5(&SCRATCH_NAMESPACE, name.as_bytes())
     }
@@ -77,7 +80,19 @@ pub fn document_with(
     rate: FrameRate,
     duration: Duration,
 ) -> Option<Arc<Document>> {
+    if let ScratchOf::Angles { comp, page } = of {
+        return crate::api::multicam::grid::document(
+            document,
+            of.comp_id(),
+            comp,
+            page,
+            size,
+            rate,
+            duration,
+        );
+    }
     let (name, layer) = match of {
+        ScratchOf::Angles { .. } => return None,
         ScratchOf::Footage(item) => {
             let Some(ProjectItem::Footage(f)) = document.item(item) else {
                 return None;

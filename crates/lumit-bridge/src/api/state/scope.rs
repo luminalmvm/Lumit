@@ -26,6 +26,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetItemComment { .. }
         // The marks are organisation like a colour tag: no picture changes.
         | Op::SetFootageTrim { .. }
+        | Op::SetFootageMarkers { .. }
         | Op::SetMediaRef { .. }
         // A run of stills read at another rate is another picture at every
         // frame that reads it, and the panel's rate column says so, so the
@@ -76,6 +77,8 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         // so they report the widest scope the settings do.
         Op::SetCompSettings { comp, .. }
         | Op::SetCompStart { comp, .. }
+        // The Project panel's row wears the multicam mark.
+        | Op::SetCompMulticam { comp, .. }
         | Op::TrimCompToWorkArea { comp }
         | Op::CropCompToRegion { comp, .. } => (Some(*comp), None, true),
 

@@ -225,6 +225,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         proxies: Default::default(),
         footage_trims: Default::default(),
         transcripts: Default::default(),
+        footage_markers: Default::default(),
         use_proxies: true,
         // Nothing packed: the fixture names its media by path.
         packed: Default::default(),

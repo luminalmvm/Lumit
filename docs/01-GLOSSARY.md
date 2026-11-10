@@ -25,6 +25,8 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Comment** | A line of text kept on an asset. Scripts set and read it, as After Effects' item comment |
 | **Composition (comp)** | Resolution, frame rate, duration, background, and a layer stack or a node graph |
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
+| **Multicam comp** | A comp whose Sequence layers are the **angles** of one shoot, each holding one camera's or recorder's files at the moments they were filmed. Made from footage by **New multicam comp**, which **syncs** the files by their sound, their timecode, their In marks or their first markers |
+| **Angle** | One Sequence layer of a multicam comp, numbered from the top. A **sound angle** is an audio-only one, such as a recorder |
 
 ## 2. Layers
 
@@ -61,6 +63,10 @@ composites over it.
   runs to transparent, or to silence. A cut between clips is an **edit point**.
 - **Linked clips**: a picture clip and its sound clip, on two Sequence layers, that move,
   trim and cut together while Linked is on.
+- **Multicam clip**: a clip that plays one angle of a multicam comp, its picture on a picture
+  layer and its sound on an audio-only one. To **cut to** an angle cuts the clip at the
+  playhead and switches the piece after it. To **switch** changes a clip's angle without a
+  cut. To **flatten** puts the angle's own footage clips in the clip's place.
 - **Ripple**: an edit that moves everything after it by the same amount. **Insert** places
   a clip and ripples, **overwrite** places it over what is there. **Roll** moves one edit
   point, **slip** changes which source a clip shows, **slide** moves a clip between its
@@ -82,7 +88,7 @@ composites over it.
 | **Graph editor** | Edits curves as a **value graph**, a **speed graph** or an **acceleration graph**. Three views of the same data |
 | **Expression** | A per-property script that computes the value each frame. Written in **JavaScript** or **Rhai**, which the expression's own language choice says |
 | **Custom controls** | An effect holding a named set of controls for expressions to read. What an After Effects pseudo effect imports as |
-| **Marker** | A labelled point or span. **Beat markers** come from audio onset detection |
+| **Marker** | A labelled point or span. **Beat markers** come from audio onset detection. Footage items carry markers too, set in the source view |
 | **Motion blur** | Three things: the layer switch, the **Motion blur** effect (optical flow), and **Accumulation motion blur** (re-renders and averages) |
 
 ## 4. Time and Retime
@@ -169,6 +175,7 @@ Not interchangeable.
 | **Timeline** | A comp's layers against time |
 | **Cut timeline** | The same layers as tracks of clips, for cutting |
 | **Source view** | A Viewer view of one footage item, with **In** and **Out** marks on the stretch to place |
+| **Angle viewer** | The source view showing every angle of a multicam comp at once, in a grid. Clicking an angle cuts to it |
 | **Work area** | The span used for preview and default export |
 | **Playhead** | The current time. Not *CTI* |
 | **Scopes** | Waveform, RGB parade, vectorscope, histogram |

@@ -47,6 +47,8 @@ import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart'
     show BridgeFootageTrim, BridgeMediaInfo, FootageReference;
+import 'package:lumit_flutter/src/rust/api/multicam.dart'
+    show BridgeFootageMarker, BridgeMulticam, BridgeMulticamAt;
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -64,6 +66,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
+import 'package:lumit_flutter/state/multicam.dart';
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
@@ -943,6 +946,11 @@ class LumitUiState extends ChangeNotifier {
   /// ring it used to fall through to. Null with nothing picked there.
   final ValueNotifier<ItemReference?> selectedProjectItem = ValueNotifier(null);
 
+  /// Everything selected in the Project panel, in the panel's order. What the
+  /// Composition menu makes a multicam comp of.
+  final ValueNotifier<List<ItemReference>> selectedProjectItems =
+      ValueNotifier(const []);
+
   /// An item the Project panel is asked to select and show, by something
   /// outside it that has just made one: a composition brought in from another
   /// project file. Asked for like [selectPropertyRequest], since the panel's
@@ -1361,6 +1369,10 @@ class LumitUiState extends ChangeNotifier {
   /// stamp carries the document revision, because relinking a clip or changing
   /// how it is read is exactly what makes the picture different.
   void _askForItem(ViewerSurface view, {bool force = false}) {
+    if (view.angles) {
+      _askForAngles(view, force: force);
+      return;
+    }
     final footage = footageOf(view);
     if (footage == null) return;
     final facts = itemFacts(footage);
@@ -3046,6 +3058,11 @@ class LumitUiState extends ChangeNotifier {
     this.workspace.presetApplied.addListener(_onPresetApplied);
     _app.addListener(_sourceNames.clear);
     _app.addListener(_followTrims);
+    _app.addListener(_sourceMarkers.clear);
+    // The angle viewer follows the multicam clip under the playhead, so it
+    // looks again whenever the playhead or the document moves.
+    _app.addListener(_followMulticam);
+    playheadFrame.addListener(_followMulticam);
     // A layer that has gone must leave the selection with it. The
     // model is the one place that knows which layers exist, so the pruning
     // hangs off its refresh rather than off each of the several ways a layer
@@ -3377,12 +3394,17 @@ class LumitUiState extends ChangeNotifier {
   /// registration is a round trip to the runner, and the playhead, the loop's
   /// turn and everything listening for a frame waited behind it.
   ///
-  /// **Only the active view moves the playhead.** A frame arriving for a
-  /// background view says nothing about where the user is standing, and
-  /// letting one drive the transport would make a locked view's first frame
-  /// drag the playhead somewhere nobody asked for.
+  /// **Only one view moves the playhead**: the active view, or while playing
+  /// the view the transport plays into, which is another one when the source
+  /// side is active. A frame arriving for any other view says nothing about
+  /// where the user is standing, and letting one drive the transport would
+  /// make a locked view's first frame drag the playhead somewhere nobody
+  /// asked for.
   void _followFrame(int frame, int engineId, int tier) {
-    if (engineId != activeViewId) return;
+    final leads = playing.value
+        ? views.previewing?.engineId ?? activeViewId
+        : activeViewId;
+    if (engineId != leads) return;
     _arrived(frame);
     _playAlong(tier);
   }
@@ -3531,6 +3553,9 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(refreshColourSummary);
     _app.removeListener(_sourceNames.clear);
     _app.removeListener(_followTrims);
+    _app.removeListener(_sourceMarkers.clear);
+    _app.removeListener(_followMulticam);
+    playheadFrame.removeListener(_followMulticam);
     workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
     cutClip.dispose();
@@ -3721,6 +3746,7 @@ class LumitUiState extends ChangeNotifier {
     final into = _viewForOpening(prefer: ViewMode.footage);
     if (into == null) return;
     into.mode = ViewMode.footage;
+    into.angles = false;
     into.itemId = footage.internalid.toString();
     into.compId = null;
     into.sourceFrame = 0;
@@ -3757,6 +3783,7 @@ class LumitUiState extends ChangeNotifier {
     final view = sourceView;
     if (view == null) return;
     final id = footage.internalid.toString();
+    view.angles = false;
     view.itemId = id;
     view.compId = null;
     view.sourceFrame = 0;
@@ -3845,7 +3872,8 @@ class LumitUiState extends ChangeNotifier {
   FootageReference? footageOf(ViewerSurface view) {
     final project = _app.project;
     final id = view.itemId;
-    if (project == null || id == null) return null;
+    // An angle viewer's item is a comp, which is nobody's footage.
+    if (project == null || id == null || view.angles) return null;
     return FootageReference(
       internalproject: project.internalid,
       internalid: UuidValue.withValidation(id),
@@ -3883,10 +3911,19 @@ class LumitUiState extends ChangeNotifier {
       sourcePlayToggle?.call();
       return sourcePlayToggle != null;
     }
-    final footage = footageOf(view);
-    final facts = footage == null ? null : itemFacts(footage);
-    if (facts == null) return false;
-    final last = framesOf(facts) - 1;
+    final int last;
+    if (view.angles) {
+      // Following a clip, its time is the program's, which the keys drive.
+      if (anglesFollowing(view) != null) return false;
+      final frames = _anglesFrames(view);
+      if (frames == null) return false;
+      last = frames - 1;
+    } else {
+      final footage = footageOf(view);
+      final facts = footage == null ? null : itemFacts(footage);
+      if (facts == null) return false;
+      last = framesOf(facts) - 1;
+    }
     final at = view.sourceFrame;
     final to = switch (action) {
       'playback.frame.prev' => at - 1,
@@ -3964,6 +4001,9 @@ class LumitUiState extends ChangeNotifier {
   /// composition beside it has the pane again.
   void clearSourceView(ViewerSurface view) {
     view.itemId = null;
+    view.angles = false;
+    view.anglePicture = null;
+    view.angleSound = null;
     view.sourceFrame = 0;
     view.sourceIn = null;
     view.sourceOut = null;
@@ -4089,6 +4129,242 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutOverlap =
       ValueNotifier(null);
 
+  /// Multicam editing: the switch mode, the angle viewer's page, the multicam
+  /// clip under the playhead, and the job that makes or syncs a multicam comp.
+  late final MulticamState multicam = MulticamState(
+    project: () => _app.project,
+    comp: () => _selectedComp,
+    playhead: () => playheadFrame.value,
+    linked: () => cutLinked.value,
+    notice: (message, {error = false}) =>
+        _app.postNotice(message, error: error),
+    edited: _app.notifyDocumentChanged,
+    refused: reportCut,
+  );
+
+  // --- The angle viewer ----------------------------------------------------
+
+  /// The multicam comp an angle viewer shows, or null for any other view.
+  CompositionReference? multicamOf(ViewerSurface view) {
+    final project = _app.project;
+    final id = view.itemId;
+    if (project == null || id == null || !view.angles) return null;
+    return CompositionReference(
+      internalproject: project.internalid,
+      internalid: UuidValue.withValidation(id),
+    );
+  }
+
+  /// Show every angle of [multicam] in the source side, putting one up if
+  /// there is none. Footage the source side showed goes.
+  void showAngles(CompositionReference multicam) {
+    showSourceView();
+    final view = sourceView;
+    if (view == null) return;
+    _standOnAngles(view, multicam.internalid);
+    views.front(view.id);
+    notifyListeners();
+    rememberSession();
+  }
+
+  /// Stand [view] on the start of the multicam comp [comp], marks and picks
+  /// cleared, and ask for its picture.
+  void _standOnAngles(ViewerSurface view, UuidValue comp) {
+    view.angles = true;
+    view.itemId = comp.toString();
+    view.compId = null;
+    view.sourceFrame = 0;
+    view.sourceIn = null;
+    view.sourceOut = null;
+    view.anglePicture = null;
+    view.angleSound = null;
+    _askForView(view, force: true);
+    views.touch();
+  }
+
+  /// The multicam clip under the playhead whose comp [view] shows, which the
+  /// angle viewer then follows, or null while it stands on its own time.
+  BridgeMulticamAt? anglesFollowing(ViewerSurface view) {
+    final at = multicam.under.value;
+    if (at == null || !view.angles || at.multicam.comp.toString() != view.itemId) {
+      return null;
+    }
+    return at;
+  }
+
+  /// The playhead or the document moved: which multicam clip is under the
+  /// playhead decides what the source side shows. An empty source side takes
+  /// the clip's angles; footage someone loaded stays. While playing the
+  /// engine draws the grid beside every frame itself, and only the marks and
+  /// timecodes over it follow.
+  void _followMulticam() {
+    final source = sourceView;
+    if (source == null) return;
+    if (playing.value) {
+      if (source.angles) multicam.follow();
+      return;
+    }
+    multicam.follow();
+    final at = multicam.under.value;
+    if (at == null) return;
+    final shown = source.itemId;
+    if (shown == null || (source.angles && shown != at.multicam.comp.toString())) {
+      _standOnAngles(source, at.multicam.comp);
+    }
+  }
+
+  /// An angle viewer's picture: page of the comp's angles, drawn by the
+  /// engine as one grid at the size the stage measured, at the frame of the
+  /// clip it follows or its own. Nothing is asked for twice, as for footage.
+  void _askForAngles(ViewerSurface view, {bool force = false}) {
+    final comp = multicamOf(view);
+    if (comp == null) return;
+    final (width, height) = view.canvas;
+    // Not measured yet: the stage asks once it is.
+    if (width <= 0 || height <= 0) return;
+    final frame = anglesFollowing(view)?.frame ?? view.sourceFrame;
+    final page = multicam.page.value;
+    final scale = viewerScale;
+    final stamp = 'angles/${view.itemId}/$frame/$page/$scale/$width/$height/'
+        '${model.heldRevision}';
+    if (!force && _askedFor[view.engineId] == stamp) return;
+    _askedFor[view.engineId] = stamp;
+    try {
+      comp.renderAngles(
+        frame: frame,
+        page: page,
+        scale: scale,
+        width: width,
+        height: height,
+        view: view.engineId,
+      );
+    } catch (_) {
+      // No worker yet, or a comp that has gone away.
+      _askedFor.remove(view.engineId);
+    }
+  }
+
+  /// The angle viewer's picture area in screen pixels, as its stage measured
+  /// it. A new size is a new picture to ask for.
+  void reportAnglesCanvas(ViewerSurface view, int width, int height) {
+    if (view.canvas == (width, height)) return;
+    view.canvas = (width, height);
+    _askForView(view);
+  }
+
+  /// Ask for an angle viewer's picture again: the page turned, or playback
+  /// stopped and the engine's own grid stops coming.
+  void askAngles(ViewerSurface view, {bool force = false}) {
+    if (view.angles) _askForView(view, force: force);
+  }
+
+  /// How many frames the multicam comp an angle viewer shows has, or null
+  /// when it has gone.
+  int? _anglesFrames(ViewerSurface view) {
+    try {
+      final frames = multicamOf(view)?.multicam()?.frames;
+      return frames == null ? null : (frames < 1 ? 1 : frames);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The angle viewer's Insert and Overwrite: its marked stretch of the
+  /// multicam comp, on the angles picked there, placed as [placeSource]
+  /// places footage.
+  void _placeAngles(ViewerSurface view, {required bool insert}) {
+    final comp = _selectedComp;
+    final mc = multicamOf(view);
+    if (comp == null || mc == null) return;
+    final BridgeMulticam? info;
+    try {
+      info = mc.multicam();
+    } catch (_) {
+      return;
+    }
+    if (info == null || info.rateNum <= 0) return;
+    final frames = info.frames < 1 ? 1 : info.frames;
+    final first = (view.sourceIn ?? 0).clamp(0, frames - 1);
+    final last = (view.sourceOut ?? frames - 1).clamp(first, frames - 1);
+    BridgeRational seconds(int frame) =>
+        BridgeRational(num: frame * info!.rateDen, den: info.rateNum);
+    final at = playheadFrame.value;
+    final done = _sourceEdit(() => comp.cutPlaceMulticam(
+          target: _sourceTarget(),
+          comp: mc,
+          sourceIn: seconds(first),
+          sourceOut: seconds(last + 1),
+          atFrame: at,
+          insert: insert,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          picture: view.anglePicture,
+          sound: view.angleSound,
+        ));
+    if (!done) return;
+    final placed =
+        ((last + 1 - first) * info.rateDen / info.rateNum * model.fps).round();
+    final end = model.durationFrames - 1;
+    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+  }
+
+  // --- Markers on footage ---------------------------------------------------
+
+  /// Each item's markers as its source view last read them, by item id,
+  /// dropped when the document changes.
+  final Map<String, List<BridgeFootageMarker>> _sourceMarkers = {};
+
+  /// The markers on a footage view's item, in the item's own frames.
+  List<({UuidValue id, int frame})> sourceMarkers(
+      ViewerSurface view, BridgeMediaInfo facts) {
+    final footage = footageOf(view);
+    if (footage == null || facts.fpsNum <= 0) return const [];
+    final markers = _sourceMarkers[view.itemId!] ??= () {
+      try {
+        return footage.markers();
+      } catch (_) {
+        return const <BridgeFootageMarker>[];
+      }
+    }();
+    return [
+      for (final m in markers)
+        if (m.time.den > 0)
+          (
+            id: m.id,
+            frame: (m.time.num * facts.fpsNum) ~/ (m.time.den * facts.fpsDen),
+          ),
+    ];
+  }
+
+  /// Put a marker on a footage view's item at the frame it stands on.
+  void addSourceMarker(ViewerSurface view) {
+    final footage = footageOf(view);
+    final facts = footage == null ? null : itemFacts(footage);
+    if (footage == null || facts == null || facts.fpsNum <= 0) return;
+    _footageEdit(() => footage.addMarker(
+        at: BridgeRational(
+            num: view.sourceFrame * facts.fpsDen, den: facts.fpsNum)));
+  }
+
+  void removeSourceMarker(ViewerSurface view, UuidValue id) {
+    final footage = footageOf(view);
+    if (footage != null) _footageEdit(() => footage.removeMarker(id: id));
+  }
+
+  void clearSourceMarkers(ViewerSurface view) {
+    final footage = footageOf(view);
+    if (footage != null) _footageEdit(footage.clearMarkers);
+  }
+
+  void _footageEdit(void Function() edit) {
+    try {
+      edit();
+    } catch (_) {
+      // The item went away under the press.
+      return;
+    }
+    _app.notifyDocumentChanged();
+  }
+
   /// Bumped when a preset file has been written, so the Effects & presets
   /// panel reads its folder again.
   final ValueNotifier<int> presetsChanged = ValueNotifier(0);
@@ -4153,6 +4429,10 @@ class LumitUiState extends ChangeNotifier {
   /// else on the lowest one the composition has, else on a new one. The
   /// playhead moves to the end of what was placed, ready for the next.
   void placeSource(ViewerSurface view, {required bool insert}) {
+    if (view.angles) {
+      _placeAngles(view, insert: insert);
+      return;
+    }
     final comp = _selectedComp;
     final marked = _marked(view);
     if (comp == null || marked == null) return;

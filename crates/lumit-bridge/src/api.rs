@@ -43,6 +43,7 @@ pub mod lens;
 pub mod mask_clipboard;
 pub mod model;
 pub mod model_rows;
+pub mod multicam;
 pub mod notes;
 pub mod orient;
 pub mod place;

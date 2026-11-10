@@ -11,6 +11,7 @@ import 'beats.dart';
 import 'captions.dart';
 import 'comp_graph.dart';
 import 'cut.dart';
+import 'cut/multicam.dart';
 import 'effect.dart';
 import 'export.dart';
 import 'folder.dart';
@@ -21,6 +22,7 @@ import 'import.dart';
 import 'layer.dart';
 import 'model.dart';
 import 'model_rows.dart';
+import 'multicam.dart';
 import 'orient.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
@@ -1136,6 +1138,13 @@ class CompositionReference {
               withPicture: withPicture,
               arrival: arrival);
 
+  /// **Flatten**: each named multicam clip, and with `linked` its other
+  /// half, becomes the footage clips its angle plays across its span.
+  BridgeCutResult cutFlatten(
+          {required List<UuidValue> clips, required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutFlatten(
+          that: this, clips: clips, linked: linked);
+
   /// **Freeze frame** on a clip: hold the frame it shows at `at_frame` for
   /// `hold_frames`, as a clip of its own between its two halves, with what
   /// follows moved later on every unlocked Sequence layer. With `linked` the
@@ -1153,12 +1162,34 @@ class CompositionReference {
           holdFrames: holdFrames,
           linked: linked);
 
+  /// **Hear an angle as well**: a sound clip of `angle` under the multicam
+  /// clip `clip`, linked to it, which switching leaves on its angle; with
+  /// `on` off, the one added goes. `Nothing` where it is already heard, or
+  /// was never added.
+  BridgeCutResult cutHearAngle(
+          {required UuidValue clip,
+          required UuidValue angle,
+          required bool on_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutHearAngle(
+              that: this, clip: clip, angle: angle, on_: on_);
+
+  /// **Join**: wherever two named clips meet and the later carries
+  /// straight on from the earlier, they become one clip, as before a cut
+  /// that changed nothing. A multicam clip takes the earlier piece's angle.
+  /// With `linked` their linked clips join too. `Nothing` where none can.
+  BridgeCutResult cutJoin(
+          {required List<UuidValue> clips, required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutJoin(
+          that: this, clips: clips, linked: linked);
+
   /// Match frame: the footage item and the moment of it that the clip
   /// under `frame` is showing, read through the clip's Retime.
   ///
   /// The clip is the one on `layer`, or without one on the top-most
-  /// unlocked picture Sequence layer that has a clip there. `None` over a
-  /// gap, and for a clip that plays a composition.
+  /// unlocked picture Sequence layer that has a clip there. A multicam
+  /// clip answers for its angle's footage. `None` over a gap, and for a
+  /// clip that plays any other composition.
   BridgeMatchFrame? cutMatchFrame(
           {required int frame, LayerReference? layer}) =>
       BridgeLib.instance.api
@@ -1204,6 +1235,36 @@ class CompositionReference {
           {required List<UuidValue> clips, required bool back}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutNextTake(
           that: this, clips: clips, back: back);
+
+  /// **Overwrite in step**: `angle` of the multicam comp holding the footage
+  /// under `at_frame`, in step with it, on the picture row above, from
+  /// there to `to_frame`, or to the end of the footage's clip when
+  /// `to_frame` is not after `at_frame`. `Nothing` where no footage a
+  /// multicam comp holds is, or for a sound angle.
+  BridgeCutResult cutOverwriteAngle(
+          {required int atFrame,
+          required int toFrame,
+          required UuidValue angle}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutOverwriteAngle(
+              that: this, atFrame: atFrame, toFrame: toFrame, angle: angle);
+
+  /// Show `angle` from `from_frame` to `to_frame` on the multicam clip
+  /// there: a cut at each end and the stretch between switched.
+  BridgeCutResult cutPaintAngle(
+          {required int fromFrame,
+          required int toFrame,
+          required UuidValue angle,
+          required BridgeAngleSwitch switch_,
+          required bool linked}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPaintAngle(
+              that: this,
+              fromFrame: fromFrame,
+              toFrame: toFrame,
+              angle: angle,
+              switch_: switch_,
+              linked: linked);
 
   /// Paste the copied clips with the earliest of them at `at_frame`,
   /// overwriting what they land on. They arrive as clips of their own,
@@ -1293,6 +1354,34 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutPlaceComp(
               that: this, target: target, comp: comp, atFrame: atFrame);
+
+  /// Put a multicam comp's stretch from `source_in` to `source_out` down at
+  /// `at_frame`, overwriting or with `insert` moving everything after it
+  /// later: its picture on `target` or a new picture row, its sound on a
+  /// sound row, linked. `picture` and `sound` are the angles they start on,
+  /// unset for the ones the comp names.
+  BridgeCutResult cutPlaceMulticam(
+          {LayerReference? target,
+          required CompositionReference comp,
+          required BridgeRational sourceIn,
+          required BridgeRational sourceOut,
+          required int atFrame,
+          required bool insert,
+          required bool withPicture,
+          UuidValue? picture,
+          UuidValue? sound}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceMulticam(
+              that: this,
+              target: target,
+              comp: comp,
+              sourceIn: sourceIn,
+              sourceOut: sourceOut,
+              atFrame: atFrame,
+              insert: insert,
+              withPicture: withPicture,
+              picture: picture,
+              sound: sound);
 
   /// Put a solid down at `at_frame` as one clip, as long as a still, on
   /// `target` or a new picture Sequence layer at the top.
@@ -1429,6 +1518,16 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutSplitAudioStreams(
               that: this, clips: clips);
 
+  /// Switch the multicam clip under `at_frame` to the next angle, or the
+  /// one before with `forward` off, round the comp's angles. No cut.
+  BridgeCutResult cutStepAngle(
+          {required int atFrame,
+          required bool forward,
+          required BridgeAngleSwitch switch_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutStepAngle(
+              that: this, atFrame: atFrame, forward: forward, switch_: switch_);
+
   /// Stretch a clip so its edges land on `start_frame` and `end_frame`: it
   /// plays the same stretch of source at whatever speed that takes. With
   /// `ripple` everything after it follows its change of length, and with
@@ -1446,6 +1545,40 @@ class CompositionReference {
           startFrame: startFrame,
           endFrame: endFrame,
           ripple: ripple,
+          linked: linked);
+
+  /// **Switch angle**: the named multicam clips switch to `angle` whole, or
+  /// with none named the one under `at_frame`. No cut.
+  BridgeCutResult cutSwitchAngle(
+          {required List<UuidValue> clips,
+          required int atFrame,
+          required UuidValue angle,
+          required BridgeAngleSwitch switch_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutSwitchAngle(
+              that: this,
+              clips: clips,
+              atFrame: atFrame,
+              angle: angle,
+              switch_: switch_);
+
+  /// **Cut to an angle**: cut the multicam clip under `at_frame` there, with
+  /// its linked halves, and switch the piece after the cut to `angle`. The
+  /// clip is the one on `row` when given, else on the top picture row with
+  /// one. At a clip's own start nothing is cut and the whole clip switches.
+  /// `Nothing` where no multicam clip is, or the angle already shows.
+  BridgeCutResult cutToAngle(
+          {required int atFrame,
+          required UuidValue angle,
+          required BridgeAngleSwitch switch_,
+          LayerReference? row,
+          required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutToAngle(
+          that: this,
+          atFrame: atFrame,
+          angle: angle,
+          switch_: switch_,
+          row: row,
           linked: linked);
 
   /// Put a transition of `frames` on one edge of a clip: its end when
@@ -1895,6 +2028,12 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceInsertGraphGroup(
               that: this, text: text, x: x, y: y);
 
+  /// Whether this is a multicam comp: what the Project panel marks it by.
+  bool isMulticam() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceIsMulticam(
+        that: this,
+      );
+
   /// Whether the comp's lights fall as After Effects' do, lighting a layer
   /// from black, rather than adding to the picture.
   bool lightingLikeAfterEffects() => BridgeLib.instance.api
@@ -1908,6 +2047,30 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceMasterVolumeDb(
         that: this,
       );
+
+  /// This comp's angles, when it is a multicam comp.
+  BridgeMulticam? multicam() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMulticam(
+        that: this,
+      );
+
+  /// The multicam clip under `frame` of this comp: on the top picture row
+  /// with one, else on the top sound row with one, else footage a multicam
+  /// comp's angle holds. `None` where there is none, which is what the angle
+  /// viewer stands still for. With `timecodes` each angle's timecode comes
+  /// too.
+  BridgeMulticamAt? multicamAt({required int frame, required bool timecodes}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMulticamAt(
+          that: this, frame: frame, timecodes: timecodes);
+
+  /// **Sync to angle**: line `layer`'s files up again by their sound
+  /// against `to`'s, inside this multicam comp. It runs as the job
+  /// [`ProjectReference::multicam_poll`] reports on, and moves `layer`'s
+  /// clips in one undo step when it lands.
+  void multicamSyncAngle({required UuidValue layer, required UuidValue to}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMulticamSyncAngle(
+              that: this, layer: layer, to: to);
 
   /// The frame **nearest** `time` — the same inverse as
   /// [`Self::frame_at_time`], rounded instead of floored.
@@ -2163,6 +2326,26 @@ class CompositionReference {
           required bool start}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceQueueExport(
           that: this, spec: spec, path: path, start: start);
+
+  /// Ask for the angle viewer's picture: page `page` of this multicam
+  /// comp's angles at its `frame`, drawn `width` by `height` at `scale` for
+  /// `view`. It arrives down the same transport as every other picture.
+  void renderAngles(
+          {required int frame,
+          required int page,
+          required double scale,
+          required int width,
+          required int height,
+          required int view}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderAngles(
+              that: this,
+              frame: frame,
+              page: page,
+              scale: scale,
+              width: width,
+              height: height,
+              view: view);
 
   /// Ask for `frame` at `scale` — 1.0 meaning "shown at comp resolution".
   /// Below 1.0 the engine decodes and composites smaller, which is how a
@@ -2598,6 +2781,19 @@ class CompositionReference {
   void setMotionBlurEnabled({required bool on_}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceSetMotionBlurEnabled(
           that: this, on_: on_);
+
+  /// Make this comp a multicam comp, its Sequence layers its angles, or an
+  /// ordinary comp again. One undo step.
+  void setMulticam({required bool on_}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetMulticam(that: this, on_: on_);
+
+  /// The angles a new clip of this multicam comp starts on, one undo step.
+  /// An unset picture is the first angle with one, and an unset sound
+  /// follows the picture.
+  void setMulticamStarts({UuidValue? picture, UuidValue? sound}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetMulticamStarts(
+              that: this, picture: picture, sound: sound);
 
   /// Commit a whole graph: the staged Fx boxes and the edited wiring, as one
   /// [`lumit_core::ops::Op::SetCompGraph`].

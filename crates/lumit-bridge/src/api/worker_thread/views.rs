@@ -203,6 +203,13 @@ pub(super) fn close_view(state: &mut WorkerState, view: u32) {
     state.grounds.remove(&view);
     state.names.forget_view(view);
     state.stand_ins.retain(|(v, ..)| *v != view);
+    if state
+        .angles
+        .as_ref()
+        .is_some_and(|latch| latch.view == view)
+    {
+        state.angles = None;
+    }
     state.renderer.drop_view_targets(view);
 }
 

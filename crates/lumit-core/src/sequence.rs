@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod clip_opacity;
+mod freeze_auto;
 pub mod takes;
 pub mod transition;
 
@@ -166,6 +167,11 @@ impl Fade {
 pub struct Clip {
     pub id: Uuid,
     pub source: ClipSource,
+    /// The angle a multicam clip plays: one Sequence layer of the comp it
+    /// plays, by id ([`crate::multicam`]). Unset on every other clip, and left
+    /// out of the file then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub angle: Option<Uuid>,
     /// Trim into the source (seconds).
     pub source_in: Rational,
     /// Exclusive trim end (seconds).
@@ -278,6 +284,7 @@ impl Clip {
         Self {
             id: Uuid::now_v7(),
             source,
+            angle: None,
             source_in,
             source_out,
             place_start,
@@ -712,7 +719,7 @@ impl Clip {
         let on_grid = |v: f64| Rational::from_f64_on_grid(v, Rational::FLICK_DEN).ok();
 
         let mut whole = map.clone();
-        freeze_auto_around(&mut whole, tau);
+        freeze_auto::freeze_auto_around(&mut whole, tau);
         whole.insert_key_preserving_shape(tau);
         let Animation::Keyframed(keys) = &whole.animation else {
             // A static map holds one source moment throughout, so both halves
@@ -769,6 +776,7 @@ impl Clip {
         let left = Clip {
             id: Uuid::now_v7(),
             source: self.source,
+            angle: self.angle,
             source_in: self.source_in,
             source_out: s_cut,
             place_start: self.place_start,
@@ -797,6 +805,7 @@ impl Clip {
         let right = Clip {
             id: Uuid::now_v7(),
             source: self.source,
+            angle: self.angle,
             source_in: s_cut,
             source_out: self.source_out,
             place_start: at,
@@ -1022,53 +1031,6 @@ impl Clip {
     }
 }
 
-/// Write down the **automatic** tangents either side of `tau` as the beziers
-/// they currently resolve to, so a cut there can keep the curve.
-///
-/// In plain terms: an automatic tangent does not store a direction, it works
-/// one out from the keys on either side of it. A cut changes exactly
-/// those neighbours — the key before the cut gains the cut as its new
-/// neighbour, and the key after it ends up first in a clip of its own with
-/// nothing to its left — so an automatic side would quietly re-aim itself and
-/// the two halves would stop playing what the whole clip played. Said out loud
-/// as the bezier it already was, the tangent cannot drift.
-///
-/// Only the pair the cut lands between is touched: every other key goes on
-/// aiming itself, because nothing about its neighbours changed. An automatic
-/// speed depends on its neighbours' *times and values*, never on their sides,
-/// so writing these two down does not disturb the ones left automatic.
-///
-/// A no-op when the property is not keyframed, or when `tau` is outside the
-/// keyed range — there is no span for the cut to land in.
-fn freeze_auto_around(map: &mut Property, tau: Rational) {
-    let Animation::Keyframed(keys) = &mut map.animation else {
-        return;
-    };
-    let t = tau.to_f64();
-    let Some(i) = keys
-        .windows(2)
-        .position(|w| t > w[0].time.to_f64() && t < w[1].time.to_f64())
-    else {
-        return;
-    };
-    // Both keys read before either is written: each side is resolved against
-    // the map as it stands, not against a half-frozen one.
-    let sides = [
-        (
-            crate::anim::resolved_side(keys, i, false),
-            crate::anim::resolved_side(keys, i, true),
-        ),
-        (
-            crate::anim::resolved_side(keys, i + 1, false),
-            crate::anim::resolved_side(keys, i + 1, true),
-        ),
-    ];
-    for (offset, (interp_in, interp_out)) in sides.into_iter().enumerate() {
-        keys[i + offset].interp_in = interp_in;
-        keys[i + offset].interp_out = interp_out;
-    }
-}
-
 /// The *shape* of a Sequence layer, apart from what it plays: where its cuts
 /// fall, where its gaps are, and how each piece is ramped.
 ///
@@ -1178,7 +1140,7 @@ impl SequenceShape {
 /// A copy of a clip's stack with fresh instance ids, for the piece of a split
 /// that is a new clip. An effect is found by its id alone, so two pieces
 /// sharing one would answer for each other.
-fn respawn(effects: &[EffectInstance]) -> Vec<EffectInstance> {
+pub(crate) fn respawn(effects: &[EffectInstance]) -> Vec<EffectInstance> {
     effects
         .iter()
         .map(|e| EffectInstance {
