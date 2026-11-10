@@ -975,7 +975,8 @@ class _Swatch extends StatelessWidget {
           height: 20,
           decoration: BoxDecoration(
             color: on
-                ? PickedColour(colour.r, colour.g, colour.b).clipped
+                // Shown as the Viewer shows it: the colour is linear light.
+                ? PickedColour(colour.r, colour.g, colour.b).onScreen.clipped
                 : t.surface1,
             border: Border.all(
                 color:
