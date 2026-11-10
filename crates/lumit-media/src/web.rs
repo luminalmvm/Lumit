@@ -15,9 +15,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::decode::DecodedFrame;
+use crate::encode::gif::{GifEncoder, GifOptions};
 use crate::encode::{
-    AudioSettings, BitDepth, ColourTags, Encoder, GifEncoder, GifOptions, ImageFormat,
-    ImageSequenceEncoder, Metadata, VideoSettings,
+    AudioSettings, BitDepth, ColourTags, Encoder, ImageFormat, ImageSequenceEncoder, Metadata,
+    VideoSettings,
 };
 use crate::index::{FrameIndex, IndexEntry};
 use crate::probe::MediaProbe;

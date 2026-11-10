@@ -64,6 +64,7 @@ pub mod streams;
 pub mod styles;
 pub mod system;
 pub mod track;
+pub mod vector;
 pub mod web_files;
 pub mod wire_tie;
 pub mod wireframes;

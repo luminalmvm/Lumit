@@ -32,6 +32,11 @@ impl Span {
         // frame over the same wall-clock span, so a 60 fps comp exported at 30
         // shows every other frame and lasts exactly as long.
         let out_fps = spec.fps.unwrap_or(fps).clamp(1.0, 1000.0);
+        let out_fps = spec
+            .format
+            .caps()
+            .max_fps
+            .map_or(out_fps, |max| out_fps.min(f64::from(max)));
         let span_seconds = (end - first) as f64 / fps;
         let total = ((span_seconds * out_fps).round() as usize).max(1);
         Self {

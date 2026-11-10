@@ -13,6 +13,7 @@ import 'effect.dart';
 import 'extensions.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'import.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
@@ -22,6 +23,7 @@ import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'vector.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bin_folder`, `file_footage`, `file_into`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
@@ -637,6 +639,13 @@ class ProjectReference {
   /// Not sync: reading the layer list of a big file takes a while.
   Future<int?> importLayers({required String path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceImportLayers(that: this, path: path);
+
+  /// Bring the Lottie at `path` into this project as a comp (its precomps as
+  /// comps in a folder named after the file), as one undo step. Its pictures
+  /// are written beside the file, in a folder named after it.
+  Future<BridgeLottieImport> importLottie({required String path}) =>
+      BridgeLib.instance.api
+          .crateApiProjectProjectReferenceImportLottie(that: this, path: path);
 
   /// Whether the document has moved since it was last saved (or opened).
   /// The status bar's saved/unsaved readout. An undo after a save reads as

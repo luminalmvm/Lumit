@@ -71,6 +71,69 @@ pub trait Host {
     /// Stop export `job`. Stopping one that has finished does nothing.
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError>;
 
+    /// Bring the Lottie at `path` (a `.json` or a `.lottie`) in as comps, as
+    /// one step: its precomps go in a folder named after the file, and its
+    /// pictures are written beside it. Answers the main comp and what didn't
+    /// come across, a line each.
+    fn import_lottie(&self, path: &Path) -> Result<(Uuid, Vec<String>), ScriptError> {
+        let bytes = lumit_ingress::read_capped(path, lumit_lottie::import::LIMITS.bytes)
+            .map_err(|e| match e {
+                lumit_ingress::IngressError::Io { .. } => format!("{e}."),
+                e => lumit_lottie::LottieError::from(e).to_string(),
+            })
+            .map_err(ScriptError::Failed)?;
+        let imported = lumit_lottie::import::import(&bytes, path)
+            .map_err(|e| ScriptError::Failed(e.to_string()))?;
+        for (file, data) in &imported.files {
+            // The same picture from an earlier import of the same file is
+            // left as it is.
+            if lumit_ingress::files::read(file).is_ok_and(|old| old == *data) {
+                continue;
+            }
+            let written = file
+                .parent()
+                .map_or(Ok(()), lumit_ingress::files::create_dir_all)
+                .and_then(|()| lumit_ingress::files::write(file, data));
+            written.map_err(|e| {
+                ScriptError::Failed(format!("{} could not be written: {e}.", file.display()))
+            })?;
+        }
+        let base = self.store().snapshot().items.len();
+        let ops = imported
+            .items
+            .into_iter()
+            .enumerate()
+            .map(|(n, item)| Op::AddItem {
+                index: base + n,
+                item: Box::new(item),
+            })
+            .collect();
+        self.store()
+            .commit(Op::Batch { ops })
+            .map_err(|e| ScriptError::Failed(e.to_string()))?;
+        let lines = imported
+            .report
+            .iter()
+            .map(|row| format!("{}: {}", row.path, row.reason))
+            .collect();
+        Ok((imported.main, lines))
+    }
+
+    /// Write `comp` to `out` as a Lottie, a dotLottie or an animated SVG.
+    /// Answers what won't come across, a line each. A host that does not say
+    /// otherwise writes nothing.
+    fn export_vector(
+        &self,
+        comp: Uuid,
+        out: &Path,
+        settings: &lumit_lottie::settings::Settings,
+    ) -> Result<Vec<String>, ScriptError> {
+        let _ = (comp, out, settings);
+        Err(ScriptError::Failed(
+            "Lottie and SVG files cannot be written here.".into(),
+        ))
+    }
+
     /// Render frame `frame` of `comp` at `scale` of its size to a new PNG at
     /// `out`, never over a file. Answers the picture's width and height. A
     /// host that does not say otherwise renders nothing.

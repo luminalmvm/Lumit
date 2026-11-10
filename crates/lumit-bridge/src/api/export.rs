@@ -269,6 +269,10 @@ pub struct BridgeFormatCaps {
     /// arrived, exactly as a codec name is.
     #[frb(default = [])]
     pub colour_spaces: Vec<String>,
+    /// The fastest the file plays, frames a second: 50 for a GIF, whose
+    /// frames count in hundredths of a second. Zero is no limit.
+    #[frb(default = 0)]
+    pub max_fps: u32,
 }
 
 /// The crop an export actually applies, and the frame it leaves — the answer

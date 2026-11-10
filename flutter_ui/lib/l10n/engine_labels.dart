@@ -1963,6 +1963,7 @@ Map<String, String> get _built => {
       "Save a version with a name": l10n.backupKeySaveVersion,
       "Import footage": l10n.keyImportFootage,
       "Export the composition": l10n.keyExportTheComposition,
+      "Export as Lottie or SVG": l10n.keyExportAsLottieOrSvg,
       "New composition": l10n.keyNewComposition,
       "Open Settings": l10n.keyOpenSettings,
       "Open Project settings": l10n.keyOpenProjectSettings,
@@ -2450,6 +2451,108 @@ String? importReason(String key, Map<String, String> args) {
 
 /// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasImportReason(String key) => importReason(key, const {}) != null;
+
+/// The one-line reason for a line of the Lottie and SVG window's check
+/// (`crates/lumit-lottie/src/check.rs`), or null when this build has no
+/// sentence for [key] and the engine's own English stands in. The same shape
+/// as [importReason]: a stable id and its facts by name. [somePlayers] is the
+/// line's outcome, for the one id whose sentence differs by it.
+String? vectorReason(String key, Map<String, String> args,
+    {bool somePlayers = false}) {
+  String a(String name) => engineLabel(args[name] ?? '');
+  switch (key) {
+    case 'effect' || 'style' || 'modifier_animated':
+      return somePlayers
+          ? l10n.vectorReasonEffectPlayers(a('label'))
+          : l10n.vectorReasonEffect(a('label'));
+    case 'camera_layer':
+      return l10n.vectorReasonCameraLayer;
+    case 'light_layer':
+      return l10n.vectorReasonLightLayer;
+    case 'model_layer':
+      return l10n.vectorReasonModelLayer;
+    case 'shape_3d_layer':
+      return l10n.vectorReasonShape3dLayer;
+    case 'adjustment_layer':
+      return l10n.vectorReasonAdjustmentLayer;
+    case 'sequence_layer':
+      return l10n.vectorReasonSequenceLayer;
+    case 'node_graph':
+      return l10n.vectorReasonNodeGraph;
+    case 'matte_source':
+      return l10n.vectorReasonMatteSource;
+    case 'matte_chain':
+      return l10n.vectorReasonMatteChain;
+    case 'video_footage':
+      return l10n.vectorReasonVideoFootage;
+    case 'missing_footage':
+      return l10n.vectorReasonMissingFootage;
+    case 'three_d_flat':
+      return l10n.vectorReasonThreeDFlat;
+    case 'motion_blur':
+      return l10n.vectorReasonMotionBlur;
+    case 'paint':
+      return l10n.vectorReasonPaint;
+    case 'puppet':
+      return l10n.vectorReasonPuppet;
+    case 'mask_feather':
+      return l10n.vectorReasonMaskFeather;
+    case 'mask_mode':
+      return l10n.vectorReasonMaskMode(a('mode'));
+    case 'mask_expansion':
+      return l10n.vectorReasonMaskExpansion;
+    case 'blend_mode':
+      return somePlayers
+          ? l10n.vectorReasonBlendModePlayers(a('mode'))
+          : l10n.vectorReasonBlendModeLeftOut(a('mode'));
+    case 'baked_outline':
+      return l10n.vectorReasonBakedOutline(a('label'));
+    case 'merge':
+      return l10n.vectorReasonMerge(a('label'));
+    case 'expression_baked':
+      return l10n.vectorReasonExpressionBaked;
+    case 'text_needs_font':
+      return l10n.vectorReasonTextNeedsFont(a('font'));
+    case 'text_animators':
+      return l10n.vectorReasonTextAnimators;
+    case 'luma_matte':
+      return l10n.vectorReasonLumaMatte;
+    case 'split_easing':
+      return l10n.vectorReasonSplitEasing;
+    case 'mask_opacity':
+      return l10n.vectorReasonMaskOpacity;
+    case 'offset_paths':
+      return l10n.vectorReasonOffsetPaths;
+    case 'taper':
+      return l10n.vectorReasonTaper;
+    case 'text_on_path_still':
+      return l10n.vectorReasonTextOnPathStill;
+    case 'text_on_path':
+      return l10n.vectorReasonTextOnPath;
+    case 'text_fill_animator':
+      return l10n.vectorReasonTextFillAnimator;
+    case 'text_held':
+      return l10n.vectorReasonTextHeld;
+    case 'precomp_cycle':
+      return l10n.vectorReasonPrecompCycle;
+    case 'effect_mix':
+      return l10n.vectorReasonEffectMix(a('label'));
+    case 'effect_option':
+      return l10n.vectorReasonEffectShadowOnly(a('label'));
+    case 'effect_hard_edge':
+      return l10n.vectorReasonEffectHardEdge(a('label'));
+    case 'effect_repeat_edge':
+      return l10n.vectorReasonEffectRepeatEdge(a('label'));
+    case 'combined_trim':
+      return l10n.vectorReasonCombinedTrim;
+    case 'set_matte_channel':
+      return l10n.vectorReasonSetMatteChannel(a('label'));
+    case 'set_matte_hidden':
+      return l10n.vectorReasonSetMatteHidden(a('label'));
+    default:
+      return null;
+  }
+}
 
 // --- The colour config's refusals (docs/impl/ocio.md §6.1) ----------------
 //

@@ -16,6 +16,7 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'graph_looks.dart';
+import 'import.dart';
 import 'layer.dart';
 import 'model.dart';
 import 'model_rows.dart';
@@ -32,6 +33,7 @@ import 'solid.dart';
 import 'state.dart';
 import 'state/prefix.dart';
 import 'streams.dart';
+import 'vector.dart';
 import 'wire_tie.dart';
 import 'wireframes.dart';
 
@@ -2921,6 +2923,39 @@ class CompositionReference {
   /// build.
   List<String> unreadModels() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceUnreadModels(
+        that: this,
+      );
+
+  /// Write this comp to `path` as `settings` ask, with any pictures set to
+  /// go beside it, and remember both for the next time. Answers the files
+  /// written.
+  Future<List<String>> vectorExport(
+          {required BridgeVectorSettings settings, required String path}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceVectorExport(
+              that: this, settings: settings, path: path);
+
+  /// Where this comp's `format` file goes unless somebody says otherwise:
+  /// where it went last time, with the format's extension; else where the
+  /// export defaults put a file, named after the comp. `None` when the
+  /// defaults ask every time.
+  String? vectorPath({required String format}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceVectorPath(
+          that: this, format: format);
+
+  /// This comp exported in memory as `settings` ask. `epoch` names this
+  /// request: a newer one stops it, and the window drops any answer older
+  /// than the newest it asked for.
+  Future<BridgeVectorPreview> vectorPreview(
+          {required BridgeVectorSettings settings, required int epoch}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceVectorPreview(
+              that: this, settings: settings, epoch: epoch);
+
+  /// The settings this comp was last exported with, or the window's own
+  /// defaults when it never has been.
+  BridgeVectorSettings vectorSettings() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceVectorSettings(
         that: this,
       );
 

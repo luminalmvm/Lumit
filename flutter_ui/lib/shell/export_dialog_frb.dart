@@ -674,13 +674,23 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  double get _rate => _fps <= 0 ? _compFps : _fps;
+  /// The rate the file is written at: the one chosen, held to the fastest the
+  /// format plays.
+  double get _rate {
+    final rate = _fps <= 0 ? _compFps : _fps;
+    final most = _caps.maxFps;
+    return most > 0 && rate > most ? most.toDouble() : rate;
+  }
 
   /// The footer's line: what pressing the button would produce.
   String get _summary {
     final (start, end) = _range;
-    final frames = (end - start).clamp(0, 1 << 30);
-    final seconds = _rate <= 0 ? 0.0 : frames / _rate;
+    final span = (end - start).clamp(0, 1 << 30);
+    final seconds = _compFps <= 0 ? 0.0 : span / _compFps;
+    // The span's own frames at the rate the file is written, counted as the
+    // engine counts them.
+    final frames =
+        _rate == _compFps ? span : (seconds * _rate).round().clamp(1, 1 << 30);
     final (width, height) = _outputSize;
     final line = l10n.exportSummary(
       '$frames',
@@ -917,7 +927,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             _Span.custom => l10n.custom,
           },
           '${_formatRate(_rate)} ${l10n.unitFps}',
-          _timecode(end - start, _rate),
+          _timecode(end - start, _compFps),
         ],
       ExportSection.picture => [
           _alphaChannel ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
@@ -1431,15 +1441,15 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: _ownRate
                     ? DragValueField(
                         key: const ValueKey('export-fps'),
-                        value: _fps,
+                        value: _rate,
                         min: 1,
-                        max: 240,
+                        max: _caps.maxFps > 0 ? _caps.maxFps.toDouble() : 240,
                         decimals: 2,
                         resetTo: _compFps,
                         fill: t.surface0,
                         onChanged: (v) => _edit(() => _fps = v.toDouble()),
                       )
-                    : _well(t, _formatRate(_compFps),
+                    : _well(t, _formatRate(_rate),
                         key: const ValueKey('export-fps'),
                         tone: t.textDisabled),
               ),
@@ -1529,9 +1539,9 @@ class _ExportDialogState extends State<_ExportDialog> {
         _reading(
           t,
           l10n.exportTimeReading(
-            _timecode(start, _rate),
-            _timecode(end, _rate),
-            _timecode(end - start, _rate),
+            _timecode(start, _compFps),
+            _timecode(end, _compFps),
+            _timecode(end - start, _compFps),
           ),
           key: const ValueKey('export-time-reading'),
         ),

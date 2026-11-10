@@ -2342,6 +2342,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-lottie"
+version = "0.11.1"
+dependencies = [
+ "base64",
+ "image",
+ "lumit-core",
+ "lumit-import",
+ "lumit-ingress",
+ "lumit-text",
+ "png",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "lumit-media"
 version = "0.11.1"
 dependencies = [
@@ -2533,6 +2551,7 @@ dependencies = [
  "lumit-core",
  "lumit-import",
  "lumit-ingress",
+ "lumit-lottie",
  "lumit-peer",
  "lumit-text",
  "rquickjs",
@@ -2603,6 +2622,7 @@ dependencies = [
  "lumit-audio",
  "lumit-budget",
  "lumit-cache",
+ "lumit-colour",
  "lumit-core",
  "lumit-eval",
  "lumit-extensions",
@@ -2610,6 +2630,7 @@ dependencies = [
  "lumit-import",
  "lumit-ingress",
  "lumit-keymap",
+ "lumit-lottie",
  "lumit-media",
  "lumit-ml",
  "lumit-ofx",

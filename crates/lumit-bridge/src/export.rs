@@ -250,12 +250,12 @@ pub(crate) fn preset_delete(name: &str) -> Result<(), String> {
     library.save_default()
 }
 
-/// The format key an [`ExportFormat`](lumit_render::export::ExportFormat) is
+/// The format key an [`ExportFormat`](lumit_render::export::format::ExportFormat) is
 /// named by over the seam, and back again.
 #[cfg(feature = "media")]
-fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, String> {
+fn export_format(codec: &str) -> Result<lumit_render::export::format::ExportFormat, String> {
     use lumit_media::encode::{ImageFormat, VideoCodec};
-    use lumit_render::export::{AudioFormat, ExportFormat};
+    use lumit_render::export::format::{AudioFormat, ExportFormat};
     Ok(match codec {
         "h264" => ExportFormat::Video(VideoCodec::H264),
         #[cfg(target_arch = "wasm32")]
@@ -273,6 +273,8 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
         "m4a" => ExportFormat::Audio(AudioFormat::M4a),
         "wav" => ExportFormat::Audio(AudioFormat::Wav),
         "gif" => ExportFormat::Gif,
+        "webp" => ExportFormat::Webp { lossless: false },
+        "webp_lossless" => ExportFormat::Webp { lossless: true },
         other => return Err(format!("export: unknown format '{other}'")),
     })
 }
@@ -306,9 +308,9 @@ pub(crate) fn with_format_extension(out_path: &str, _codec: &str) -> String {
 }
 
 #[cfg(feature = "media")]
-fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
+fn format_key(format: lumit_render::export::format::ExportFormat) -> &'static str {
     use lumit_media::encode::{ImageFormat, VideoCodec};
-    use lumit_render::export::{AudioFormat, ExportFormat};
+    use lumit_render::export::format::{AudioFormat, ExportFormat};
     match format {
         ExportFormat::Video(VideoCodec::H264) => "h264",
         ExportFormat::Video(VideoCodec::Hevc) => "hevc",
@@ -324,6 +326,8 @@ fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
         ExportFormat::Audio(AudioFormat::M4a) => "m4a",
         ExportFormat::Audio(AudioFormat::Wav) => "wav",
         ExportFormat::Gif => "gif",
+        ExportFormat::Webp { lossless: false } => "webp",
+        ExportFormat::Webp { lossless: true } => "webp_lossless",
     }
 }
 
@@ -378,6 +382,7 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
             .take(if web { 1 } else { usize::MAX })
             .map(lumit_render::export::ColourSpace::stored_name)
             .collect(),
+        max_fps: caps.max_fps.unwrap_or(0),
     }
 }
 
@@ -477,7 +482,9 @@ pub(crate) fn to_export_spec(
         // refused, which is what the caps row already told the dialogue.
         depth: match (export_format(&spec.codec)?, spec.depth) {
             (
-                lumit_render::export::ExportFormat::Images(lumit_media::encode::ImageFormat::Exr),
+                lumit_render::export::format::ExportFormat::Images(
+                    lumit_media::encode::ImageFormat::Exr,
+                ),
                 d,
             ) => {
                 if d >= 32 {
@@ -545,11 +552,11 @@ pub(crate) fn to_export_spec(
         } else {
             WhenDone::Nothing
         },
-        gif: lumit_media::encode::GifOptions {
+        gif: lumit_media::encode::gif::GifOptions {
             dither: match spec.gif_dither {
-                1 => lumit_media::encode::GifDither::Pattern,
-                2 => lumit_media::encode::GifDither::None,
-                _ => lumit_media::encode::GifDither::Diffusion,
+                1 => lumit_media::encode::gif::GifDither::Pattern,
+                2 => lumit_media::encode::gif::GifDither::None,
+                _ => lumit_media::encode::gif::GifDither::Diffusion,
             },
             palette_per_frame: spec.gif_palette_per_frame,
             plays: (spec.gif_plays > 0).then_some(spec.gif_plays),
@@ -646,9 +653,9 @@ pub(crate) fn from_export_spec(
         make_a_noise: false,
         open_folder: false,
         gif_dither: match spec.gif.dither {
-            lumit_media::encode::GifDither::Diffusion => 0,
-            lumit_media::encode::GifDither::Pattern => 1,
-            lumit_media::encode::GifDither::None => 2,
+            lumit_media::encode::gif::GifDither::Diffusion => 0,
+            lumit_media::encode::gif::GifDither::Pattern => 1,
+            lumit_media::encode::gif::GifDither::None => 2,
         },
         gif_palette_per_frame: spec.gif.palette_per_frame,
         gif_plays: spec.gif.plays.unwrap_or(0),
@@ -865,7 +872,7 @@ pub(crate) fn queue_update(id: u32, spec: &BridgeExportSpec, out_path: &str) -> 
 /// of an image sequence, which is the one to ask about for the whole run.
 fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
     #[cfg(feature = "media")]
-    if let Ok(lumit_render::export::ExportFormat::Images(_)) = export_format(codec) {
+    if let Ok(lumit_render::export::format::ExportFormat::Images(_)) = export_format(codec) {
         return lumit_media::encode::sequence_frame_path(std::path::Path::new(path), 1);
     }
     let _ = codec;

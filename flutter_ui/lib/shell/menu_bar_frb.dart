@@ -121,6 +121,8 @@ import 'pro_window.dart';
 import 'profile_chip.dart' show ProBadge;
 import 'project_history_window.dart';
 import 'export_dialog_frb.dart';
+import 'lottie_import_frb.dart';
+import 'vector_export_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
 import 'review_links_window.dart';
@@ -1278,6 +1280,9 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
+            MenuEntry(l10n.menuExportVector,
+                comp == null ? null : () => showVectorExportFrb(context),
+                action: 'file.export.vector'),
             // Scripts, sharing this project and joining somebody else's, and
             // exports sent out for comments. A page runs and sends nothing.
             if (!kIsWeb) ...[
@@ -2752,7 +2757,9 @@ Future<void> openProjectFrb(LumitState app,
 /// brought in, chosen from a list.
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
-  final picked = await (picker ?? () => pickFootage(projects: true))();
+  var picked = await (picker ?? () => pickFootage(projects: true))();
+  if (!context.mounted) return false;
+  picked = await importLottieFrb(context, app, picked);
   final projects = [
     for (final path in picked)
       if (path.toLowerCase().endsWith('.lum')) path,
@@ -3856,9 +3863,9 @@ class _MenuListState extends State<_MenuList> {
 
   /// One row's contents: the tick column where the menu has toggles, the name,
   /// and the chord it answers to on the right. A row for Lumit Pro, to an
-  /// account without it, wears the badge beside its name, so the chords keep
-  /// their column, faded to about the chord's weight so a menu of them
-  /// doesn't shout.
+  /// account without it, wears the badge on the right too, just before any
+  /// chord so the chords keep their column, faded to about the chord's weight
+  /// so a menu of them doesn't shout.
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
@@ -3874,21 +3881,18 @@ class _MenuListState extends State<_MenuList> {
           const SizedBox(width: 8),
         ],
         Expanded(
-          child: Row(
-            children: [
-              Flexible(
-                child: item.tip == null
-                    ? text
-                    : LumitTooltip(message: item.tip!, child: text),
-              ),
-              if (item.needsPro)
-                const Padding(
-                  padding: EdgeInsetsDirectional.only(start: 8),
-                  child: Opacity(opacity: 0.6, child: ProBadge()),
+          child: item.tip == null
+              ? text
+              : Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: LumitTooltip(message: item.tip!, child: text),
                 ),
-            ],
-          ),
         ),
+        if (item.needsPro)
+          const Padding(
+            padding: EdgeInsetsDirectional.only(start: 16),
+            child: Opacity(opacity: 0.6, child: ProBadge()),
+          ),
         if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),

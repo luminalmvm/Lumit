@@ -283,6 +283,40 @@ impl Reach {
         self.new_file(host, out, "mp4", "Exports go", "an export never writes")
     }
 
+    /// A Lottie to import, read where footage may be, and its pictures written
+    /// beside it in a folder named after it, which has to be somewhere a script
+    /// may write.
+    pub(crate) fn lottie(&self, host: &dyn Host, path: &Path) -> Result<PathBuf, ScriptError> {
+        let full = self.footage(host, path)?;
+        let folders = self.writes(host)?;
+        if !full.parent().is_some_and(|dir| inside(dir, &folders)) {
+            return Err(ScriptError::BadArgs(format!(
+                "{} is out of reach. Its pictures would be written beside it, and a script writes only into {}.",
+                full.display(),
+                self.write_places()
+            )));
+        }
+        Ok(full)
+    }
+
+    /// Where a Lottie or an SVG may go, by the rules an export keeps to, with
+    /// `extension` when the name has none.
+    pub(crate) fn vector(
+        &self,
+        host: &dyn Host,
+        out: &Path,
+        extension: &str,
+    ) -> Result<PathBuf, ScriptError> {
+        self.new_file(
+            host,
+            Some(out),
+            extension,
+            "Exports go",
+            "an export never writes",
+        )?
+        .ok_or_else(|| ScriptError::BadArgs("An export needs a file to write.".into()))
+    }
+
     /// Where a frame's PNG may go, by the rules an export keeps to. Only a
     /// `.png` file is written.
     pub(crate) fn frame(

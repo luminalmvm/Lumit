@@ -459,6 +459,18 @@ impl Host for AppHost<'_> {
         Ok(std::iter::once(layer).chain(beside).collect())
     }
 
+    fn export_vector(
+        &self,
+        comp: Uuid,
+        out: &Path,
+        settings: &lumit_lottie::settings::Settings,
+    ) -> Result<Vec<String>, ScriptError> {
+        let doc = self.store().snapshot();
+        let path = self.path();
+        crate::vector_host::write_to(&doc, path.as_deref(), comp, settings, out)
+            .map_err(ScriptError::Failed)
+    }
+
     fn export_start(&self, comp: Uuid, out: Option<&Path>) -> Result<u64, ScriptError> {
         let spec = crate::export::from_export_spec(&lumit_render::export::ExportSpec::default())
             .ok_or_else(|| failed("This build of Lumit cannot export."))?;

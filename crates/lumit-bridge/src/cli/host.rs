@@ -358,6 +358,17 @@ impl Host for Headless {
         &self.store
     }
 
+    fn export_vector(
+        &self,
+        comp: Uuid,
+        out: &Path,
+        settings: &lumit_lottie::settings::Settings,
+    ) -> Result<Vec<String>, ScriptError> {
+        let path = self.path.borrow().clone();
+        crate::vector_host::write_to(&self.store.snapshot(), path.as_deref(), comp, settings, out)
+            .map_err(ScriptError::Failed)
+    }
+
     fn path(&self) -> Option<PathBuf> {
         self.path.borrow().clone()
     }

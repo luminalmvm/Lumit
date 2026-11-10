@@ -57,6 +57,7 @@ import 'api/streams.dart';
 import 'api/styles.dart';
 import 'api/system.dart';
 import 'api/track.dart';
+import 'api/vector.dart';
 import 'api/web_files.dart';
 import 'api/wire_tie.dart';
 import 'api/wireframes.dart';
@@ -506,6 +507,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTransform dco_decode_box_autoadd_bridge_transform(dynamic raw);
+
+  @protected
+  BridgeVectorSettings dco_decode_box_autoadd_bridge_vector_settings(
+      dynamic raw);
 
   @protected
   CompositionReference dco_decode_box_autoadd_composition_reference(
@@ -1052,6 +1057,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeLiveEvent dco_decode_bridge_live_event(dynamic raw);
 
   @protected
+  BridgeLottieImport dco_decode_bridge_lottie_import(dynamic raw);
+
+  @protected
   BridgeMarker dco_decode_bridge_marker(dynamic raw);
 
   @protected
@@ -1549,6 +1557,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeUpAxis dco_decode_bridge_up_axis(dynamic raw);
 
   @protected
+  BridgeVectorIssue dco_decode_bridge_vector_issue(dynamic raw);
+
+  @protected
+  BridgeVectorPreview dco_decode_bridge_vector_preview(dynamic raw);
+
+  @protected
+  BridgeVectorSettings dco_decode_bridge_vector_settings(dynamic raw);
+
+  @protected
   BridgeVertex dco_decode_bridge_vertex(dynamic raw);
 
   @protected
@@ -1967,6 +1984,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeUnusedParam> dco_decode_list_bridge_unused_param(dynamic raw);
+
+  @protected
+  List<BridgeVectorIssue> dco_decode_list_bridge_vector_issue(dynamic raw);
 
   @protected
   List<BridgeVertex> dco_decode_list_bridge_vertex(dynamic raw);
@@ -2885,6 +2905,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeVectorSettings sse_decode_box_autoadd_bridge_vector_settings(
+      SseDeserializer deserializer);
+
+  @protected
   CompositionReference sse_decode_box_autoadd_composition_reference(
       SseDeserializer deserializer);
 
@@ -3518,6 +3542,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeLiveEvent sse_decode_bridge_live_event(SseDeserializer deserializer);
 
   @protected
+  BridgeLottieImport sse_decode_bridge_lottie_import(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMarker sse_decode_bridge_marker(SseDeserializer deserializer);
 
   @protected
@@ -4092,6 +4120,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeUpAxis sse_decode_bridge_up_axis(SseDeserializer deserializer);
 
   @protected
+  BridgeVectorIssue sse_decode_bridge_vector_issue(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeVectorPreview sse_decode_bridge_vector_preview(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeVectorSettings sse_decode_bridge_vector_settings(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeVertex sse_decode_bridge_vertex(SseDeserializer deserializer);
 
   @protected
@@ -4604,6 +4644,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeUnusedParam> sse_decode_list_bridge_unused_param(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeVectorIssue> sse_decode_list_bridge_vector_issue(
       SseDeserializer deserializer);
 
   @protected
@@ -5584,6 +5628,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeTransform self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_vector_settings(
+      BridgeVectorSettings self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_composition_reference(
       CompositionReference self, SseSerializer serializer);
 
@@ -6291,6 +6339,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeLiveEvent self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_lottie_import(
+      BridgeLottieImport self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_marker(BridgeMarker self, SseSerializer serializer);
 
   @protected
@@ -6933,6 +6985,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_up_axis(BridgeUpAxis self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_vector_issue(
+      BridgeVectorIssue self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_vector_preview(
+      BridgeVectorPreview self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_vector_settings(
+      BridgeVectorSettings self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_vertex(BridgeVertex self, SseSerializer serializer);
 
   @protected
@@ -7460,6 +7524,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_unused_param(
       List<BridgeUnusedParam> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_vector_issue(
+      List<BridgeVectorIssue> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_vertex(

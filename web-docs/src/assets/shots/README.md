@@ -59,6 +59,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `viewer-menu.png` | [/panels/viewer/](/panels/viewer/) | The Viewer picture's right-click menu, with Select open on the layers under the pointer. |
 | `effect-compositing.png` | [/use/effects/](/use/effects/) | Effect Controls with Compositing shut on one effect, reading its mix, and open on the next. |
 | `command-palette.png` | [/use/workspaces/](/use/workspaces/) | The command palette with a search typed, a badge on each row. |
+| `lottie-and-svg.png` | [/use/lottie-and-svg/](/use/lottie-and-svg/) | The Lottie and SVG window, with a line of its check open to its layers. |
 
 ## Waiting on the feature
 

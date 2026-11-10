@@ -67,6 +67,7 @@ import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../shell/interpret_footage_frb.dart';
+import '../shell/lottie_import_frb.dart';
 import '../shell/menu_bar_frb.dart' show importFootageFrb;
 import '../shell/run_script_frb.dart' show isScriptFile, runDroppedScripts;
 import '../state/file_dialogs.dart';
@@ -1090,7 +1091,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
 
   Future<void> _dropped(List<String> paths) async {
     final state = Provider.of<LumitState>(context, listen: false);
-    final footage = paths.where((path) => !isScriptFile(path)).toList();
+    // A Lottie makes a composition of its own, and the rest are footage.
+    final rest = await importLottieFrb(context, state, paths);
+    if (!mounted) return;
+    final footage = rest.where((path) => !isScriptFile(path)).toList();
     if (await importDroppedPaths(state, footage)) _documentChanged();
     if (mounted) await runDroppedScripts(context, paths);
   }

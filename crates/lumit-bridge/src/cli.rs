@@ -27,6 +27,7 @@ macro_rules! out {
 mod host;
 mod interrupt;
 mod relay;
+mod vector;
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -48,6 +49,7 @@ Lumit on the command line.
 Usage:
   lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>]
                    [--range <in>-<out>] [--out <file>]
+                   [--format lottie|dotlottie|svg] [--text shapes|text] [--minify]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
   lumit-cli mcp [--project <project.lum>]
@@ -64,6 +66,12 @@ export     Export comps of a project, by default as an H.264 mp4 with sound.
   --out        The file to write. With several comps, the folder they go in.
                Without it, beside the project, named as Lumit's Export window
                names them, never over a file.
+  --format     Write a Lottie (.json), a dotLottie (.lottie) or an animated SVG
+               instead of a video. An --out ending in one of those does the same.
+               What won't come across is listed on standard error.
+  --text       How a Lottie writes text: as outlines (shapes, the default) or
+               as text naming its font.
+  --minify     The smallest Lottie or SVG: no names, fewer decimals.
 
 run        Run a JavaScript or After Effects (.jsx) script on a project, or on a
            new empty one.
@@ -114,6 +122,11 @@ struct Export {
     range: Option<(u64, u64)>,
     /// The file, or with several comps the folder.
     out: Option<PathBuf>,
+    /// A vector format key (`lottie`, `dotlottie`, `svg`) in place of a video.
+    format: Option<String>,
+    /// Text as text naming its font rather than as outlines.
+    text_as_text: bool,
+    minify: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -272,6 +285,23 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 how.range = Some(frames);
             }
             ("export", "--out") => how.out = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("export", "--format") => {
+                let key = text(wants(&flag, rest.pop())?)?;
+                if lumit_lottie::settings::Format::from_key(&key).is_none() {
+                    return Err(format!(
+                        "--format takes lottie, dotlottie or svg, not {key}."
+                    ));
+                }
+                how.format = Some(key);
+            }
+            ("export", "--text") => {
+                how.text_as_text = match text(wants(&flag, rest.pop())?)?.as_str() {
+                    "shapes" => false,
+                    "text" => true,
+                    other => return Err(format!("--text takes shapes or text, not {other}.")),
+                }
+            }
+            ("export", "--minify") => how.minify = true,
             ("run" | "mcp", "--project") => {
                 project = Some(PathBuf::from(wants(&flag, rest.pop())?))
             }
@@ -367,6 +397,9 @@ fn note_unreadable_frames() {
 }
 
 fn export(project: &Path, how: Export) -> Result<(), String> {
+    if let Some(format) = vector::format_of(&how) {
+        return vector::export(project, &how, format);
+    }
     let stop = interrupt::stop_flag();
     // The preset first, so a misspelt name is heard before the project opens.
     let settings = match &how.preset {
@@ -386,19 +419,7 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
     let host = open(project)?;
     // Extension effects draw in an export as they do in Lumit.
     crate::api::extensions::register_effects();
-    let comps = if how.all {
-        host.comps()
-    } else if how.comps.is_empty() {
-        vec![host.find_comp(None)?]
-    } else {
-        how.comps
-            .iter()
-            .map(|key| host.find_comp(Some(key)))
-            .collect::<Result<_, _>>()?
-    };
-    if comps.is_empty() {
-        return Err("The project has no comp.".into());
-    }
+    let comps = chosen_comps(&host, &how)?;
     let beside = host
         .path()
         .and_then(|p| p.parent().map(Path::to_path_buf))
@@ -446,6 +467,24 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
         0 => Ok(()),
         n => Err(format!("{n} of {} exports failed.", comps.len())),
     }
+}
+
+/// The comps `how` names, or the project's only one.
+fn chosen_comps(host: &Headless, how: &Export) -> Result<Vec<(Uuid, String)>, String> {
+    let comps = if how.all {
+        host.comps()
+    } else if how.comps.is_empty() {
+        vec![host.find_comp(None)?]
+    } else {
+        how.comps
+            .iter()
+            .map(|key| host.find_comp(Some(key)))
+            .collect::<Result<_, _>>()?
+    };
+    if comps.is_empty() {
+        return Err("The project has no comp.".into());
+    }
+    Ok(comps)
 }
 
 /// Where comp `name` exports to in `dir` when nobody says: named as the

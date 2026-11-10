@@ -421,12 +421,26 @@ pub const COMMANDS: &[Command] = &[
         schema: r#"{"type":"object","properties":{"paths":{"type":"array","items":{"type":"string"},"minItems":1}},"required":["paths"],"additionalProperties":false}"#,
     },
     Command {
+        name: "lottie.import",
+        summary: "Import a Lottie (.json or .lottie) as comps, and say what didn't come across",
+        schema: r#"{"type":"object","properties":{"path":{"type":"string","description":"The .json or .lottie file"}},"required":["path"],"additionalProperties":false}"#,
+    },
+    Command {
         name: "export.start",
         summary: "Start exporting a comp",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
             r#","out":{"type":"string","description":"The file to write"}},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "export.vector",
+        summary: "Export a comp as a Lottie, a dotLottie or an animated SVG, and say what won't come across",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","out":{"type":"string","description":"The file to write: .json, .lottie or .svg"},"format":{"enum":["lottie","dotlottie","svg"],"description":"Without it, from the file's extension"},"text":{"enum":["shapes","text"],"description":"Text as outlines (the default) or as text naming its font"},"minify":{"type":"boolean"}},"required":["comp","out"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -480,7 +494,9 @@ pub(crate) fn run(
         "effect.add" => effects::add(host, parse(args)?),
         "effect.set" => effects::set(host, parse(args)?),
         "footage.import" => items::footage_import(host, reach, parse(args)?),
+        "lottie.import" => items::lottie_import(host, reach, parse(args)?),
         "export.start" => items::export_start(host, reach, parse(args)?),
+        "export.vector" => items::export_vector(host, reach, parse(args)?),
         "export.status" => items::export_status(host, parse(args)?),
         "export.cancel" => items::export_cancel(host, parse(args)?),
         _ => Err(ScriptError::UnknownCommand(name.to_owned())),

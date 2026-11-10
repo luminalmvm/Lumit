@@ -173,13 +173,19 @@ Widget dialogSurface(BuildContext context, LumitTheme t, Widget child) {
 /// A shape whose titles sit centred (Lantern) puts the name and the subject
 /// in the middle of the strip with the header dot before them, and the close
 /// mark stays in its corner.
+///
+/// [subjectWidget] stands where the subject's words would, for a window whose
+/// subject can be changed from the strip: the Lottie and SVG window's
+/// composition picker.
 Widget dialogTitleBar(
   LumitTheme t, {
   required String title,
   String subject = '',
+  Widget? subjectWidget,
   required VoidCallback onClose,
   required String keyPrefix,
 }) {
+  final hasSubject = subject.isNotEmpty || subjectWidget != null;
   final name = Row(
     mainAxisSize: MainAxisSize.min,
     children: [
@@ -199,7 +205,8 @@ Widget dialogTitleBar(
   );
   final about = Padding(
     padding: const EdgeInsetsDirectional.only(start: 10),
-    child: MiddleEllipsis(subject, style: t.body.copyWith(color: t.textMuted)),
+    child: subjectWidget ??
+        MiddleEllipsis(subject, style: t.body.copyWith(color: t.textMuted)),
   );
   final close = LumitTooltip(
     message: l10n.close,
@@ -249,7 +256,7 @@ Widget dialogTitleBar(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   name,
-                  if (subject.isNotEmpty) Flexible(child: about),
+                  if (hasSubject) Flexible(child: about),
                 ],
               ),
               Align(alignment: AlignmentDirectional.centerEnd, child: close),
@@ -259,7 +266,7 @@ Widget dialogTitleBar(
             children: [
               // A question for a title can be long, and is cut before the
               // close mark is.
-              if (subject.isEmpty)
+              if (!hasSubject)
                 Expanded(
                     child: Align(
                         alignment: AlignmentDirectional.centerStart,

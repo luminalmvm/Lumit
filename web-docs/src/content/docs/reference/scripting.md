@@ -430,6 +430,16 @@ Script: `lumit.footage.import({ ... })`. MCP tool: `footage_import`.
 | --- | --- | --- | --- |
 | `paths` | list of strings | yes |  |
 
+## lottie.import
+
+Import a Lottie (.json or .lottie) as comps, and say what didn't come across.
+
+Script: `lumit.lottie.import({ ... })`. MCP tool: `lottie_import`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `path` | string | yes | The .json or .lottie file |
+
 ## export.start
 
 Start exporting a comp.
@@ -440,6 +450,20 @@ Script: `lumit.export.start({ ... })`. MCP tool: `export_start`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `out` | string |  | The file to write |
+
+## export.vector
+
+Export a comp as a Lottie, a dotLottie or an animated SVG, and say what won't come across.
+
+Script: `lumit.export.vector({ ... })`. MCP tool: `export_vector`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `out` | string | yes | The file to write: .json, .lottie or .svg |
+| `format` | `"lottie"`, `"dotlottie"`, `"svg"` |  | Without it, from the file's extension |
+| `text` | `"shapes"`, `"text"` |  | Text as outlines (the default) or as text naming its font |
+| `minify` | boolean |  |  |
 
 ## export.status
 

@@ -181,6 +181,7 @@ impl ActionId {
             "file.save.version" => "Save a version with a name",
             "file.import" => "Import footage",
             "file.export" => "Export the composition",
+            "file.export.vector" => "Export as Lottie or SVG",
             "comp.new" => "New composition",
             "app.settings" => "Open Settings",
             "project.settings" => "Open Project settings",
