@@ -22,6 +22,7 @@ use web::{sample_pixels, trace_scope};
 
 mod cut;
 mod dropper;
+mod item;
 mod panics;
 mod views;
 #[cfg(target_arch = "wasm32")]
@@ -99,6 +100,8 @@ pub struct WorkerState {
     /// The same for every other view, so a picture made before a model was
     /// read or a lens baked is made again in each of them.
     beside_shown: Vec<(u32, CompositionReference, u64, f32)>,
+    /// The angle viewer, drawn beside the program while it plays.
+    angles: Option<item::AnglesLatch>,
     /// How each Viewer view is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
@@ -3221,6 +3224,7 @@ fn worker_loop(
         prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
         beside_shown: Vec::new(),
+        angles: None,
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
         // which is what it already held.
@@ -3549,16 +3553,24 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 chase_audio(playback, frame, late);
             }
             let present_started = web_time::Instant::now();
+            // The time the angle viewer may take: up to half a frame past
+            // the program's next picture, which the present grid takes up.
+            // None while this picture was that late itself or the ring is
+            // under half: the program comes first.
+            let period = 1.0 / playback.fps.max(1.0);
+            let room = (playback.ring.len() * 2 >= playback.capacity())
+                .then(|| period * 1.5 - late.map_or(0.0, |l| l.as_secs_f64()))
+                .filter(|room| *room > period);
+            let program = playback.comp.id;
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
             // rebuilding (docs/TODO.md, "measure first").
-            let Some(playback) = &mut state.playback else {
-                return;
-            };
             playback
                 .present_costs
                 .push(present_started.elapsed().as_secs_f64());
+            // The angle viewer moves with the program.
+            item::follow(state, stream, program, frame, room);
             if let Some(req) = state.scope_waiting.take() {
                 if let Err(err) = trace_scope(req, state, stream) {
                     note!("Dropping the trace: {err}");
@@ -4302,7 +4314,7 @@ fn handle_requests(
                     set_view(state, view, latch, ground);
                     Ok(())
                 }
-                WorkerRequest::RenderItem(req) => render_item(req, state, stream),
+                WorkerRequest::RenderItem(req) => item::render_item(req, state, stream),
                 WorkerRequest::CloseView(view) => {
                     close_view(state, view);
                     Ok(())
@@ -4616,71 +4628,6 @@ fn render_comp(
         state.set_view_id(playing);
         look_at(state, playing);
     }
-    Ok(())
-}
-
-/// Draw one item on its own: the footage view and the layer view
-/// (docs/impl/multi-viewer.md §3.6).
-///
-/// **No second render path.** A scratch composition is built around the item
-/// on a clone of the document and composited by the ordinary walk, so the
-/// picture arrives down the same zero-copy transport at the same quality, and
-/// the frame names itself the way every other frame does. Nothing is
-/// committed: the composition never reaches the document, the journal, the
-/// undo stack or the Project panel.
-#[frb(ignore)]
-fn render_item(
-    req: RenderItemRequest,
-    state: &mut WorkerState,
-    stream: &mut WorkerResponseStream,
-) -> Result<(), BridgeError> {
-    let document = {
-        let document = req.project.state()?;
-        let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot()
-    };
-    // A nonsense rate reads as 25, which is a rate rather than a division by
-    // zero: a view of a still needs one only to have a clock at all.
-    let Ok(rate) = lumit_core::time::FrameRate::new(req.rate.0, req.rate.1)
-        .or_else(|_| lumit_core::time::FrameRate::new(25, 1))
-    else {
-        return Ok(());
-    };
-    // The item's own length, as a time: frames over the rate, exactly.
-    let Ok(duration) = lumit_core::time::Rational::from_i128(
-        i128::from(req.frames.max(1)) * i128::from(req.rate.1.max(1)),
-        i128::from(req.rate.0.max(1)),
-    ) else {
-        return Ok(());
-    };
-    let duration = lumit_core::time::Duration(duration);
-    let Some(document) =
-        crate::scratch::document_with(&document, req.of, req.effects, req.size, rate, duration)
-    else {
-        // The item has gone, or the layer has. The view shows its empty state
-        // rather than a picture of something else.
-        return Ok(());
-    };
-    state.set_view_id(req.view);
-    look_at(state, req.view);
-    // Not `last_shown`: the fill, the cache bar and the drags follow the
-    // active composition view, and this item's scratch comp is none of those.
-    let comp = req.of.comp_id();
-    watched(state, stream, req.frame, |state, stream| {
-        publish_frame(
-            state,
-            comp,
-            req.frame,
-            req.scale,
-            &document,
-            stream,
-            BridgePlaybackMode::Adaptive,
-            // A scratch composition is not the document, so its frames are not
-            // banked against one: cacheable would file a picture under a
-            // composition nothing else can ever ask for.
-            false,
-        );
-    });
     Ok(())
 }
 
@@ -6005,6 +5952,7 @@ mod tests {
             prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
             beside_shown: Vec::new(),
+            angles: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),
             applied_look: (0, super::ViewerLook::default()),

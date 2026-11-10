@@ -292,6 +292,11 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   /// first frame otherwise, with the In and Out marks on the clip's own span.
   void _openClip(LumitUiState ui, CompositionReference comp, CutTrack track,
       BridgeClip clip) {
+    // A multicam clip shows its angles rather than opening its comp.
+    if (clip.angle != null) {
+      ui.showAngles(cutMulticamOf(comp, clip));
+      return;
+    }
     if (clip.sourceIsComp) {
       _openAsComposition(ui, comp, clip);
       return;
@@ -588,8 +593,19 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     final endEdge = frame - start > end - frame;
     final across = cutClipAcross(track, clip, endEdge: endEdge) != null;
     final dissolved = across && cutEdgeOverlaps(track, clip, endEdge: endEdge);
-    final fadesIn = cutClipAcross(track, clip, endEdge: false) == null;
+    final before = cutClipAcross(track, clip, endEdge: false);
+    final after = cutClipAfter(track, clip);
+    final fadesIn = before == null;
     final fadesOut = cutClipAcross(track, clip, endEdge: true) == null;
+    // A through edit, a cut with nothing changed across it: the one at the
+    // nearer end where that is one, else the one at the other end.
+    final atStart = before != null && cutThroughEdit(before, clip)
+        ? (before, clip)
+        : null;
+    final atEnd =
+        after != null && cutThroughEdit(clip, after) ? (clip, after) : null;
+    final seam = endEdge ? atEnd ?? atStart : atStart ?? atEnd;
+    final joins = seam != null;
     // The audio streams of the clip's file, for the rows that choose among
     // them. The item was probed when it was placed, so this opens nothing.
     BridgeAudioStreams? streams;
@@ -721,6 +737,17 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
           _cell(close, 'ctl-menu-split', l10n.cutMenuSplit,
               () => _addEdit(ui, comp, all: false),
               action: 'cut.add.edit', enabled: inside),
+          // The cut taken away again, where a neighbour carries straight on.
+          if (joins)
+            _cell(
+                close,
+                'ctl-menu-join',
+                l10n.cutJoin,
+                // One clip joins across that cut, several across the cuts
+                // between them.
+                () => _afterCut(_cut(() => comp.cutJoin(
+                    clips: one ? [seam.$1.id, seam.$2.id] : _selectedIds(),
+                    linked: _linked)))),
           _flyout(close, 'ctl-menu-trim', l10n.cutTrimMenu, [
             _cell(
                 close,
@@ -901,6 +928,10 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                       _cut(() => comp.cutDeleteTake(clip: clip.id, take: 0))),
                   ticked: false),
             ], width: 240),
+          if (clip.angle != null) ...[
+            const MenuDivider(),
+            ..._multicamRows(close, ui, comp, clip),
+          ],
           const MenuDivider(),
           // What opens or looks at the clip. A solid has nothing inside it to
           // open, and making a composition of a clip changes the document, so
@@ -921,7 +952,8 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
           if (!one)
             _cell(close, 'ctl-menu-fold', l10n.cutNewCompositionFromSelection,
                 () => _foldPicked(ui, comp))
-          else if (!clip.sourceIsSolid)
+          // A multicam clip's comp is opened from its own rows.
+          else if (!clip.sourceIsSolid && clip.angle == null)
             _cell(
                 close,
                 'ctl-menu-open-comp',

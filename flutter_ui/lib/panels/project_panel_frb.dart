@@ -614,6 +614,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// the rows are rebuilt on every hover.
   final Map<String, bool> _nodeGraphs = {};
 
+  /// Which comps are multicam comps, for the row's glyph. Cached as
+  /// [_nodeGraphs] is, for the same reason.
+  final Map<String, bool> _multicams = {};
+
   /// A rebuild is already booked for the end of this frame.
   ///
   /// The three probes this panel fires - the poster frame, the container's
@@ -814,6 +818,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     final ui = Provider.of<LumitUiState>(context, listen: false);
     ui.selectedProjectItem.value =
         _selectedIds.contains(_anchorId) ? _itemById[_anchorId] : null;
+    ui.selectedProjectItems.value = _picked;
   }
 
   /// The row being renamed in place, by id.
@@ -1395,6 +1400,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
         nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        multicam: _multicams[id] ??= _isMulticam(item),
         model: _models[id] ??= _isModel(item),
         inUse: _used[id] ??= _isUsed(item),
         proxy: _proxies.putIfAbsent(
@@ -2009,6 +2015,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     return false;
   }
 
+  bool _isMulticam(ItemReference item) {
+    if (item case ItemReference_Composition(:final field0)) {
+      try {
+        return field0.isMulticam();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   /// What a row menu's command acts on: the whole selection when the row is
   /// part of it, and that row alone when it is not. The menu is about what is
   /// picked, and a right-click on an unpicked row is about that row.
@@ -2158,6 +2175,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       _labels.clear();
       _names.clear();
       _nodeGraphs.clear();
+      _multicams.clear();
       _proxies.clear();
       _models.clear();
       _useProxies = null;

@@ -46,6 +46,7 @@ import 'dart:typed_data';
 // `ui`, and a local of that name would shadow the prefix where it is needed.
 import 'dart:ui' as dartui;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 // For [RenderRepaintBoundary], which is what a snapshot is photographed from.
 import 'package:flutter/rendering.dart';
@@ -91,6 +92,8 @@ import 'viewer_picture.dart'
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
 import 'viewer_zoom.dart';
+import 'angle_viewer_frb.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 // The Viewer used to be one file, and every panel, test and tool that wanted a
 // piece of it imported this one. Re-exported rather than made to chase the
@@ -1489,6 +1492,8 @@ class FootageStageFrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Every angle of a multicam comp, on the same surface.
+    if (view.angles) return AngleStageFrb(view: view);
     final ui = Provider.of<LumitUiState>(context);
     final footage = ui.footageOf(view);
     final facts = footage == null ? null : ui.itemFacts(footage);
@@ -1576,18 +1581,45 @@ class FootageStageFrb extends StatelessWidget {
         },
       ),
     );
-    final strip = _SourceStrip(
+    // The same rows from anywhere on the source view, and the item's markers.
+    final markers = ui.sourceMarkers(view, facts);
+    List<Widget> rows(VoidCallback close) => [
+          ...viewerSourceRows(ui, view, close),
+          const MenuDivider(),
+          viewerRow(l10n.sourceAddMarker, () => ui.addSourceMarker(view),
+              close,
+              id: 'source-menu-add-marker'),
+          viewerRow(
+              l10n.sourceClearMarkers,
+              markers.isEmpty ? null : () => ui.clearSourceMarkers(view),
+              close,
+              id: 'source-menu-clear-markers'),
+        ];
+    final strip = SourceStrip(
       view: view,
       frames: frames,
       detached: round,
+      markers: [for (final m in markers) m.frame],
       onSeek: (frame) => ui.seekFootageView(view, frame),
+      // Near a tick the menu offers that marker first.
+      onMenu: (at, near) => showMenuAt<void>(
+        context: context,
+        position: at,
+        rows: (close) => [
+          if (near != null) ...[
+            viewerRow(
+                l10n.deleteMarker,
+                () => ui.removeSourceMarker(view, markers[near].id),
+                () => close(null),
+                id: 'source-menu-delete-marker'),
+            const MenuDivider(),
+          ],
+          ...rows(() => close(null)),
+        ],
+      ),
     );
-    final bar = _SourceBar(view: view, facts: facts, detached: round);
-    // The same rows from anywhere on the source view.
-    Widget menu(Widget child) => ViewerRightClick(
-          rows: (close) => viewerSourceRows(ui, view, close),
-          child: child,
-        );
+    final bar = SourceBar(view: view, facts: facts, detached: round);
+    Widget menu(Widget child) => ViewerRightClick(rows: rows, child: child);
     if (!round) {
       return menu(Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1654,18 +1686,28 @@ class _FootagePicture extends StatelessWidget {
 ///
 /// The stretch between the In and Out marks is tinted, and the frame the view
 /// stands on is a line across it.
-class _SourceStrip extends StatelessWidget {
+class SourceStrip extends StatelessWidget {
   final ViewerSurface view;
   final int frames;
   final ValueChanged<int> onSeek;
 
+  /// The item's markers, in its own frames, drawn as ticks.
+  final List<int> markers;
+
+  /// A right-click on the strip, with the index of the marker under the
+  /// pointer when one is. Null leaves the menu to whatever is round the strip.
+  final void Function(Offset at, int? near)? onMenu;
+
   /// Standing apart as a pill of its own, as the strips do in a roomed pane.
   final bool detached;
 
-  const _SourceStrip({
+  const SourceStrip({
+    super.key,
     required this.view,
     required this.frames,
     required this.onSeek,
+    this.markers = const [],
+    this.onMenu,
     this.detached = false,
   });
 
@@ -1679,11 +1721,24 @@ class _SourceStrip extends StatelessWidget {
           onSeek((x / box.maxWidth * frames).floor().clamp(0, frames - 1));
         }
 
+        int? near(double x) {
+          if (box.maxWidth <= 0) return null;
+          for (var i = 0; i < markers.length; i++) {
+            final tick = box.maxWidth * markers[i] / (frames < 1 ? 1 : frames);
+            if ((tick - x).abs() <= 4) return i;
+          }
+          return null;
+        }
+
+        final menu = onMenu;
         return GestureDetector(
           key: const ValueKey('footage-source-strip'),
           behavior: HitTestBehavior.opaque,
           onTapDown: (down) => seekTo(down.localPosition.dx),
           onHorizontalDragUpdate: (drag) => seekTo(drag.localPosition.dx),
+          onSecondaryTapUp: menu == null
+              ? null
+              : (up) => menu(up.globalPosition, near(up.localPosition.dx)),
           child: Container(
             height: viewerStripHeight,
             decoration: viewerStripDecoration(t, detached),
@@ -1696,7 +1751,9 @@ class _SourceStrip extends StatelessWidget {
                 at: view.sourceFrame,
                 markIn: view.sourceIn,
                 markOut: view.sourceOut,
+                markers: markers,
                 colour: t.accent,
+                markerColour: t.marker,
               ),
             ),
           ),
@@ -1711,14 +1768,18 @@ class _SourceStripPainter extends CustomPainter {
   final int at;
   final int? markIn;
   final int? markOut;
+  final List<int> markers;
   final Color colour;
+  final Color markerColour;
 
   const _SourceStripPainter({
     required this.frames,
     required this.at,
     required this.markIn,
     required this.markOut,
+    required this.markers,
     required this.colour,
+    required this.markerColour,
   });
 
   @override
@@ -1733,6 +1794,14 @@ class _SourceStripPainter extends CustomPainter {
         Paint()..color = colour.withValues(alpha: 0.35),
       );
     }
+    // A marker is a short tick from the top, as the ruler's are.
+    final tick = Paint()..color = markerColour;
+    for (final marker in markers) {
+      canvas.drawRect(
+        Rect.fromLTWH(x(marker).clamp(0, size.width - 1), 0, 1, size.height / 2),
+        tick,
+      );
+    }
     canvas.drawRect(
       Rect.fromLTWH(x(at).clamp(0, size.width - 2), 0, 2, size.height),
       Paint()..color = colour,
@@ -1745,7 +1814,9 @@ class _SourceStripPainter extends CustomPainter {
       old.at != at ||
       old.markIn != markIn ||
       old.markOut != markOut ||
-      old.colour != colour;
+      !listEquals(old.markers, markers) ||
+      old.colour != colour ||
+      old.markerColour != markerColour;
 }
 
 /// The source side's own bar: mark the stretch to take, then put it in the
@@ -1755,24 +1826,25 @@ class _SourceStripPainter extends CustomPainter {
 /// Play runs the item from the frame it stands on. With sound in the file the
 /// sound is the clock, as it is for a composition, and the picture follows it.
 /// A silent file is counted on at its own rate.
-class _SourceBar extends StatefulWidget {
+class SourceBar extends StatefulWidget {
   final ViewerSurface view;
   final BridgeMediaInfo facts;
 
   /// Standing apart as a pill of its own, as the bars do in a roomed pane.
   final bool detached;
 
-  const _SourceBar({
+  const SourceBar({
+    super.key,
     required this.view,
     required this.facts,
     this.detached = false,
   });
 
   @override
-  State<_SourceBar> createState() => _SourceBarState();
+  State<SourceBar> createState() => _SourceBarState();
 }
 
-class _SourceBarState extends State<_SourceBar>
+class _SourceBarState extends State<SourceBar>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   LumitUiState? _ui;
@@ -1819,7 +1891,7 @@ class _SourceBarState extends State<_SourceBar>
   }
 
   @override
-  void didUpdateWidget(_SourceBar old) {
+  void didUpdateWidget(SourceBar old) {
     super.didUpdateWidget(old);
     // Another clip was loaded under a run: the run was the old clip's.
     if (old.view.itemId != view.itemId) _stop();
@@ -1847,7 +1919,7 @@ class _SourceBarState extends State<_SourceBar>
   void _start() {
     final ui = _ui;
     final footage = ui?.footageOf(view);
-    if (ui == null || footage == null || facts.fpsNum <= 0) return;
+    if (ui == null || facts.fpsNum <= 0) return;
     if (ui.playing.value) ui.requestTogglePlay();
     final frames = LumitUiState.framesOf(facts);
     // From the top when it stands on the last frame, as a transport does.
@@ -1855,7 +1927,8 @@ class _SourceBarState extends State<_SourceBar>
     _from = view.sourceFrame;
     _heard = false;
     _sound = false;
-    if (facts.audioCodec != null) {
+    // An angle viewer has no footage of its own to hear: counted on silent.
+    if (footage != null && facts.audioCodec != null) {
       try {
         // A file with several audio streams is heard as it would be placed.
         _sound = footage.previewAudioFrom(
@@ -2038,8 +2111,8 @@ class _SourceBarState extends State<_SourceBar>
               canPlace ? () => ui.placeSource(view, insert: false) : null,
               action: 'cut.overwrite'),
           // The other two edits, while the bar has room. The menu and the
-          // keys have them at any width.
-          if (wide)
+          // keys have them at any width. Neither places angles.
+          if (wide && !view.angles)
             ListenableBuilder(
               listenable: Listenable.merge([ui.model, ui.cutClip]),
               builder: (context, _) {

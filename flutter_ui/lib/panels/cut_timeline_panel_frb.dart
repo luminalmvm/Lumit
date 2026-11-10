@@ -22,6 +22,8 @@ import 'package:flutter_svg/flutter_svg.dart' show SvgStringLoader, SvgTheme, vg
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart';
+import 'package:lumit_flutter/src/rust/api/cut/multicam.dart';
+import 'package:lumit_flutter/src/rust/api/multicam.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeRational, BridgeScalar, BridgeScalar_Static;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -107,6 +109,7 @@ import 'volume_band_frb.dart'
 import 'waveform_frb.dart';
 
 part 'cut_clip_menu.dart';
+part 'cut_multicam.dart';
 
 /// How wide the header column stands: a name and three switches.
 const double cutTimelineOutlineWidth = 180;
@@ -417,6 +420,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _ui!.selectedLayer.addListener(_onLayerPicked);
     _ui!.selectAllRequest.addListener(_onSelectAll);
     _ui!.cutPickRequest.addListener(_onPickRequest);
+    _ui!.multicam.divided.addListener(_onAngleCut);
     // The playhead stays on screen while the transport runs, as it does in
     // the Timeline.
     _ui!.playheadFrame.addListener(_edgeFollow);
@@ -436,6 +440,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _ui?.selectedLayer.removeListener(_onLayerPicked);
     _ui?.selectAllRequest.removeListener(_onSelectAll);
     _ui?.cutPickRequest.removeListener(_onPickRequest);
+    _ui?.multicam.divided.removeListener(_onAngleCut);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     // After the frame: letting go of the clip tells Effect controls, which
     // must not be told to rebuild while the tree is being taken down.
@@ -476,6 +481,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   void _onToolChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// A cut to an angle lets the selection go, so its pieces are not all
+  /// picked for the next Angle on a clip's menu.
+  void _onAngleCut() {
+    if (mounted && _selected.isNotEmpty) setState(() => _selected = {});
   }
 
   /// Select all, asked of this panel: every clip on every track.
@@ -1581,7 +1592,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           final heard = track.entry.info.switches.audible &&
               clip.audible &&
               !clip.retimed &&
-              !clip.sourceIsComp &&
+              (!clip.sourceIsComp || clip.angle != null) &&
               !clip.sourceIsSolid;
           if (!heard) continue;
         }
@@ -1672,8 +1683,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// read through its speed, so a ramp shows in its pictures.
   void _wantFilm(CutTrack track, BridgeClip clip, TimelineAxis axis,
       double fps, double viewLeft, double viewRight, Set<String> wanted) {
-    if (clip.sourceIsComp || clip.sourceIsSolid || fps <= 0) return;
-    if (axis.perFrame <= 0) return;
+    // A multicam clip's frames are its angle's footage, so it has a strip.
+    if (clip.sourceIsComp && clip.angle == null) return;
+    if (clip.sourceIsSolid || fps <= 0 || axis.perFrame <= 0) return;
     final start = clip.startFrame.toInt();
     final length = clip.endFrame.toInt() - start;
     final (left, _) = cutClipBox(axis, start, clip.endFrame.toInt());
@@ -3051,17 +3063,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             _afterSound();
           },
           duplicateAction: null,
-          extra: soundHeadRows(
-            close: () => close(null),
-            envelopeShown: (kind) => _bandShown(track, kind),
-            toggleEnvelope: (kind) => _toggleEnvelope(kind, on: [track]),
-            select: track.clips.isEmpty ? null : () => _selectTrack(track),
-            moveUp: _canLand(at, at - 1) ? () => _moveTrack(at, at - 1) : null,
-            moveDown:
-                _canLand(at, at + 1) ? () => _moveTrack(at, at + 1) : null,
-            minimise: _minimiseTracks,
-            resetHeight: tall ? () => _resetTrack(track) : null,
-          ),
+          extra: [
+            ...soundHeadRows(
+              close: () => close(null),
+              envelopeShown: (kind) => _bandShown(track, kind),
+              toggleEnvelope: (kind) => _toggleEnvelope(kind, on: [track]),
+              select: track.clips.isEmpty ? null : () => _selectTrack(track),
+              moveUp:
+                  _canLand(at, at - 1) ? () => _moveTrack(at, at - 1) : null,
+              moveDown:
+                  _canLand(at, at + 1) ? () => _moveTrack(at, at + 1) : null,
+              minimise: _minimiseTracks,
+              resetHeight: tall ? () => _resetTrack(track) : null,
+            ),
+            ..._syncAngleRows(close, ui, comp, track),
+          ],
         ),
       );
     }
@@ -3118,6 +3134,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             _row(close, 'ctl-head-to-footage', l10n.menuConvertToFootageLayer,
                 () => convert(layer.convertFromSequenced),
                 ticked: false),
+          if (ui != null && comp != null)
+            ..._syncAngleRows(close, ui, comp, track),
           const MenuDivider(),
         ],
         if (track.kind == CutTrackKind.picture || track.below)

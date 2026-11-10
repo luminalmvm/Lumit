@@ -118,6 +118,7 @@ import '../panels/cut_insert.dart'
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
+import 'multicam_dialog_frb.dart' show newMulticamAction;
 import 'precompose_dialog_frb.dart';
 import 'pro_window.dart';
 import 'profile_chip.dart' show ProBadge;
@@ -1447,6 +1448,7 @@ List<MenuSection> lumitMenus(
             // none to teach.
             MenuEntry(l10n.menuNewNodeGraph,
                 project == null ? null : () => app.newNodeGraph(context)),
+            MenuEntry(l10n.multicamNew, newMulticamAction(context, ui)),
             MenuEntry.divider(),
             MenuEntry(l10n.compositionSettingsEllipsis,
                 comp == null ? null : () => compSettingsFrb(context, app),

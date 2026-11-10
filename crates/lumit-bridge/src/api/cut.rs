@@ -33,8 +33,11 @@ use crate::api::{
 mod attributes;
 pub(crate) mod fold;
 pub(crate) mod freeze;
+pub(crate) mod join;
+pub(crate) mod multicam;
 mod paste;
 pub(crate) mod place;
+mod relink;
 mod solids;
 mod streams;
 mod takes;
@@ -334,51 +337,6 @@ fn retrimmed(clip: &Clip, by_start: Rational, by_end: Rational, ripple: bool) ->
     }
 }
 
-/// Give the later pieces of a divided link an id of their own.
-///
-/// A cut or an overwrite leaves both pieces of a clip carrying its link, so a
-/// razor through a picture clip and its sound leaves four clips sharing one
-/// id. On each row the first clip of a link keeps it and the second, third
-/// and so on take a fresh one each, the same fresh one on every row, so the
-/// later halves pair up with each other and with nothing else.
-#[frb(ignore)]
-fn relink(rows: &mut [Row]) {
-    // A link, and the ids its later pieces have been given so far.
-    let mut fresh: Vec<(Uuid, Vec<Uuid>)> = Vec::new();
-    for row in rows {
-        let mut order: Vec<usize> = (0..row.clips.len()).collect();
-        order.sort_by_key(|i| row.clips[*i].place_start);
-        let mut seen: Vec<(Uuid, usize)> = Vec::new();
-        for i in order {
-            let Some(link) = row.clips[i].link else {
-                continue;
-            };
-            let nth = match seen.iter_mut().find(|(l, _)| *l == link) {
-                Some((_, count)) => {
-                    *count += 1;
-                    *count
-                }
-                None => {
-                    seen.push((link, 0));
-                    continue;
-                }
-            };
-            let at = match fresh.iter().position(|(l, _)| *l == link) {
-                Some(at) => at,
-                None => {
-                    fresh.push((link, Vec::new()));
-                    fresh.len() - 1
-                }
-            };
-            let ids = &mut fresh[at].1;
-            while ids.len() < nth {
-                ids.push(Uuid::now_v7());
-            }
-            row.clips[i].link = Some(ids[nth - 1]);
-        }
-    }
-}
-
 impl<'a> Edit<'a> {
     fn open(of: &'a CompositionReference) -> Cut<Self> {
         let comp = of.composition()?;
@@ -637,7 +595,7 @@ impl<'a> Edit<'a> {
     /// ripple carried and every layer made. Nothing changed writes nothing.
     fn commit(mut self) -> Cut {
         self.settle_transitions()?;
-        relink(&mut self.rows);
+        relink::relink(&mut self.rows);
         let (project, comp) = (self.of.project_id(), self.comp.id);
         let ends = self.rows.iter().flat_map(|row| &row.clips);
         let last = ends.map(Clip::place_end).max();
@@ -1790,14 +1748,21 @@ impl CompositionReference {
     /// under `frame` is showing, read through the clip's Retime.
     ///
     /// The clip is the one on `layer`, or without one on the top-most
-    /// unlocked picture Sequence layer that has a clip there. `None` over a
-    /// gap, and for a clip that plays a composition.
+    /// unlocked picture Sequence layer that has a clip there. A multicam
+    /// clip answers for its angle's footage. `None` over a gap, and for a
+    /// clip that plays any other composition.
     #[frb(sync)]
     pub fn cut_match_frame(
         &self,
         frame: i64,
         layer: Option<LayerReference>,
     ) -> Result<Option<BridgeMatchFrame>, BridgeError> {
+        let doc = self
+            .project()?
+            .read()
+            .map_err(|_| BridgeError::ReadFailed)?
+            .store
+            .snapshot();
         let comp = self.composition()?;
         let at = comp.frame_rate.time_of_frame(frame);
         let at = at.map_err(|_| BridgeError::InvalidTime)?.0;
@@ -1809,7 +1774,7 @@ impl CompositionReference {
             let local = at.checked_sub(l.start_offset.0).ok()?;
             let there = |c: &&Clip| c.place_start <= local && local < c.place_end();
             let clip = clips.iter().filter(there).max_by_key(|c| c.place_start)?;
-            Some((clip.source, clip.source_at(local)?))
+            lumit_core::multicam::footage_at(&doc, clip, local)
         };
         let found = match layer {
             Some(layer) => comp
@@ -1825,17 +1790,17 @@ impl CompositionReference {
                 open.find_map(under)
             }
         };
-        let Some((ClipSource::Footage(item), shown)) = found else {
+        let Some(shown) = found else {
             return Ok(None);
         };
         Ok(Some(BridgeMatchFrame {
             footage: FootageReference {
                 project: self.project_id(),
-                id: item,
+                id: shown.item,
             },
             source_time: BridgeRational {
-                num: shown.num(),
-                den: shown.den(),
+                num: shown.source_time.num(),
+                den: shown.source_time.den(),
             },
         }))
     }

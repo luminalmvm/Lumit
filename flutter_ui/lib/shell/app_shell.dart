@@ -759,6 +759,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.driveSource(front, action)) {
       return KeyEventResult.handled;
     }
+    // Multicam keys, from the Cut timeline or either side of the Viewer. A
+    // digit with no multicam clip under the playhead goes to its marker.
+    if (action.startsWith('multicam.')) {
+      if (ui.multicam.handle(action)) return KeyEventResult.handled;
+      if (!action.startsWith('multicam.cut.')) return KeyEventResult.ignored;
+      action = 'marker.goto.${action.substring('multicam.cut.'.length)}';
+    }
 
     var handled = true;
     switch (action) {
@@ -1266,7 +1273,14 @@ class _LumitAppViewState extends State<LumitAppView> {
       // returns to it. The numbered pair is the whole point — the key that
       // marks a moment is the key that goes back to it.
       case 'marker.add':
-        if (comp == null) {
+        // With the source side in front the marker goes on its footage, at
+        // the frame shown.
+        if (ui.activePanel == Panel.viewer &&
+            front != null &&
+            front.mode == ViewMode.footage &&
+            !front.angles) {
+          ui.addSourceMarker(front);
+        } else if (comp == null) {
           handled = false;
         } else {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);

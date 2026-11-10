@@ -851,14 +851,6 @@ impl FootageReference {
         let start = StartTimecode::default();
         write_out(&path, &name, &language, &words, &how, rate, start)
     }
-
-    /// The document this item is in, as it stands.
-    #[frb(ignore)]
-    fn document(&self) -> Result<std::sync::Arc<Document>, BridgeError> {
-        let proj = self.project()?;
-        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-        Ok(proj.store.snapshot())
-    }
 }
 
 impl ProjectReference {

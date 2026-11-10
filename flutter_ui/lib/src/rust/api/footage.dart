@@ -10,6 +10,7 @@ import 'cut/transcript.dart';
 import 'effect.dart';
 import 'interpret.dart';
 import 'layer.dart';
+import 'multicam.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -268,6 +269,11 @@ class FootageReference {
     required this.internalid,
   });
 
+  /// Put a marker on this footage at `at`, seconds of its own time, one
+  /// undo step. Nothing where one is already there.
+  void addMarker({required BridgeRational at}) => BridgeLib.instance.api
+      .crateApiFootageFootageReferenceAddMarker(that: this, at: at);
+
   /// A new speaker on this transcript, and their id. One undo step.
   String addSpeaker({required String name}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceAddSpeaker(that: this, name: name);
@@ -283,6 +289,12 @@ class FootageReference {
   /// needs none or is done. Cheap: it reads nothing.
   BridgeBlenderState? blenderState() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceBlenderState(
+        that: this,
+      );
+
+  /// Take every marker off this footage, one undo step.
+  void clearMarkers() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceClearMarkers(
         that: this,
       );
 
@@ -389,6 +401,12 @@ class FootageReference {
   /// transcodes share one disk, and starts when the one before it lands.
   void makeProxy() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceMakeProxy(
+        that: this,
+      );
+
+  /// This footage's markers, earliest first.
+  List<BridgeFootageMarker> markers() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceMarkers(
         that: this,
       );
 
@@ -506,6 +524,10 @@ class FootageReference {
   void reload() => BridgeLib.instance.api.crateApiFootageFootageReferenceReload(
         that: this,
       );
+
+  /// Take one marker off this footage, one undo step.
+  void removeMarker({required UuidValue id}) => BridgeLib.instance.api
+      .crateApiFootageFootageReferenceRemoveMarker(that: this, id: id);
 
   /// Take this item's transcript away. One undo step.
   void removeTranscript() =>

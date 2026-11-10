@@ -1961,9 +1961,12 @@ impl HeadlessRenderer {
                     // plays.
                     let items = match clip.source {
                         lumit_core::sequence::ClipSource::Footage(item) => vec![item],
+                        // A multicam clip opens its angle's files only.
                         lumit_core::sequence::ClipSource::Comp(nested) => {
-                            doc.comp(nested).map_or_else(Vec::new, |c| {
-                                lumit_core::model::comp_footage_items(doc, c)
+                            lumit_core::multicam::angle_items(doc, clip).unwrap_or_else(|| {
+                                doc.comp(nested).map_or_else(Vec::new, |c| {
+                                    lumit_core::model::comp_footage_items(doc, c)
+                                })
                             })
                         }
                         lumit_core::sequence::ClipSource::Solid(_) => Vec::new(),
@@ -3693,12 +3696,13 @@ impl AudioJobsBuilder {
                 let lumit_core::sequence::ClipSource::Comp(nested_id) = clip.source else {
                     continue;
                 };
-                let Some(nested) = doc
-                    .comp(nested_id)
+                // A multicam clip hears its comp through its angle.
+                let Some(nested) = lumit_core::multicam::nested_for(doc, clip)
                     .filter(|_| !visited.contains(&nested_id))
                 else {
                     continue;
                 };
+                let nested = nested.as_ref();
                 // The comp's own time 0 sits where the clip's source time 0
                 // does: the clip's start, less how far it is trimmed in.
                 let nested_s = start_s - clip.source_in.to_f64();
@@ -5598,30 +5602,9 @@ mod tests {
         let shot = push_footage_item(&mut doc, "shot.mp4");
         let comp = push_comp(&mut doc, "cut", 32, 32);
         // 0..1, 1..2 (butt cut), 1.5..2.5 (overlaps the second by 0.5).
-        let clip = |start: Rational, dur: Rational, src_in: Rational| Clip {
-            id: Uuid::now_v7(),
-            source: ClipSource::Footage(shot),
-            source_in: src_in,
-            source_out: src_in.checked_add(dur).expect("out"),
-            place_start: start,
-            place_duration: dur,
-            retime: None,
-            interpolation: Default::default(),
-            fade_in: Default::default(),
-            fade_out: Default::default(),
-            effects: Vec::new(),
-            fx: true,
-            gain_db: 0.0,
-            link: None,
-            audio_streams: Default::default(),
-            audible: true,
-            blend: None,
-            label: None,
-            group: None,
-            opacity: 1.0,
-            takes: Vec::new(),
-            transition: None,
-            extra: serde_json::Map::new(),
+        let clip = |start: Rational, dur: Rational, src_in: Rational| {
+            let out = src_in.checked_add(dur).expect("out");
+            Clip::new(ClipSource::Footage(shot), src_in, out, start, dur)
         };
         push_layer(
             &mut doc,

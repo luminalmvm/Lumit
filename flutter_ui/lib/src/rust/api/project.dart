@@ -17,6 +17,7 @@ import 'folder.dart';
 import 'footage.dart';
 import 'import.dart';
 import 'layer.dart';
+import 'multicam/make.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
@@ -705,6 +706,27 @@ class ProjectReference {
   /// could; a number past either end stops at that end rather than failing.
   void jumpHistory({required int applied}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceJumpHistory(that: this, applied: applied);
+
+  /// Stop making the multicam comp. Nothing is made.
+  void multicamCancel() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceMulticamCancel(
+        that: this,
+      );
+
+  /// Start making a multicam comp of the footage `items`, in that order.
+  /// Refused while another is being made, and with no footage among them.
+  void multicamNew(
+          {required List<UuidValue> items,
+          required BridgeMulticamNew settings}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceMulticamNew(
+          that: this, items: items, settings: settings);
+
+  /// How the multicam comp being made is getting on. Once its files are
+  /// placed, this makes the comp, one undo step, and says so.
+  BridgeMulticamJob multicamPoll() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceMulticamPoll(
+        that: this,
+      );
 
   /// Call the step the open undo group folds into `name` in the History
   /// list, rather than after the first thing done in it. English, translated

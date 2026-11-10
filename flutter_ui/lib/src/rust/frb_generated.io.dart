@@ -16,6 +16,7 @@ import 'api/colour.dart';
 import 'api/comp_graph.dart';
 import 'api/composition.dart';
 import 'api/cut.dart';
+import 'api/cut/multicam.dart';
 import 'api/cut/transcript.dart';
 import 'api/drive.dart';
 import 'api/effect.dart';
@@ -35,6 +36,9 @@ import 'api/layer.dart';
 import 'api/lens.dart';
 import 'api/model.dart';
 import 'api/model_rows.dart';
+import 'api/multicam.dart';
+import 'api/multicam/grid.dart';
+import 'api/multicam/make.dart';
 import 'api/orient.dart';
 import 'api/planes.dart';
 import 'api/presets.dart';
@@ -211,6 +215,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAlphaGuess dco_decode_box_autoadd_bridge_alpha_guess(dynamic raw);
 
   @protected
+  BridgeAngleTime dco_decode_box_autoadd_bridge_angle_time(dynamic raw);
+
+  @protected
   BridgeAutoSide dco_decode_box_autoadd_bridge_auto_side(dynamic raw);
 
   @protected
@@ -251,6 +258,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCaptions dco_decode_box_autoadd_bridge_captions(dynamic raw);
+
+  @protected
+  BridgeClipAngle dco_decode_box_autoadd_bridge_clip_angle(dynamic raw);
 
   @protected
   BridgeClipFade dco_decode_box_autoadd_bridge_clip_fade(dynamic raw);
@@ -375,6 +385,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMotionPath dco_decode_box_autoadd_bridge_motion_path(dynamic raw);
+
+  @protected
+  BridgeMulticam dco_decode_box_autoadd_bridge_multicam(dynamic raw);
+
+  @protected
+  BridgeMulticamAt dco_decode_box_autoadd_bridge_multicam_at(dynamic raw);
+
+  @protected
+  BridgeMulticamNew dco_decode_box_autoadd_bridge_multicam_new(dynamic raw);
 
   @protected
   BridgeNodeRef dco_decode_box_autoadd_bridge_node_ref(dynamic raw);
@@ -610,6 +629,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAlphaMode dco_decode_bridge_alpha_mode(dynamic raw);
 
   @protected
+  BridgeAngle dco_decode_bridge_angle(dynamic raw);
+
+  @protected
+  BridgeAngleGrid dco_decode_bridge_angle_grid(dynamic raw);
+
+  @protected
+  BridgeAngleSwitch dco_decode_bridge_angle_switch(dynamic raw);
+
+  @protected
+  BridgeAngleTime dco_decode_bridge_angle_time(dynamic raw);
+
+  @protected
   BridgeAnimatedMaskPath dco_decode_bridge_animated_mask_path(dynamic raw);
 
   @protected
@@ -722,6 +753,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeClip dco_decode_bridge_clip(dynamic raw);
+
+  @protected
+  BridgeClipAngle dco_decode_bridge_clip_angle(dynamic raw);
 
   @protected
   BridgeClipFade dco_decode_bridge_clip_fade(dynamic raw);
@@ -947,6 +981,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFootageLack dco_decode_bridge_footage_lack(dynamic raw);
+
+  @protected
+  BridgeFootageMarker dco_decode_bridge_footage_marker(dynamic raw);
 
   @protected
   BridgeFootageReading dco_decode_bridge_footage_reading(dynamic raw);
@@ -1190,6 +1227,24 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMotionPath dco_decode_bridge_motion_path(dynamic raw);
+
+  @protected
+  BridgeMulticam dco_decode_bridge_multicam(dynamic raw);
+
+  @protected
+  BridgeMulticamAngles dco_decode_bridge_multicam_angles(dynamic raw);
+
+  @protected
+  BridgeMulticamAt dco_decode_bridge_multicam_at(dynamic raw);
+
+  @protected
+  BridgeMulticamJob dco_decode_bridge_multicam_job(dynamic raw);
+
+  @protected
+  BridgeMulticamNew dco_decode_bridge_multicam_new(dynamic raw);
+
+  @protected
+  BridgeMulticamSync dco_decode_bridge_multicam_sync(dynamic raw);
 
   @protected
   BridgeNodeColour dco_decode_bridge_node_colour(dynamic raw);
@@ -1805,6 +1860,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeAddon> dco_decode_list_bridge_addon(dynamic raw);
 
   @protected
+  List<BridgeAngle> dco_decode_list_bridge_angle(dynamic raw);
+
+  @protected
   List<BridgeAnimatedMaskPath> dco_decode_list_bridge_animated_mask_path(
       dynamic raw);
 
@@ -1917,6 +1975,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFootageLack> dco_decode_list_bridge_footage_lack(dynamic raw);
+
+  @protected
+  List<BridgeFootageMarker> dco_decode_list_bridge_footage_marker(dynamic raw);
 
   @protected
   List<BridgeFrameSpan> dco_decode_list_bridge_frame_span(dynamic raw);
@@ -2208,6 +2269,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<BridgeAngleTime?> dco_decode_list_opt_box_autoadd_bridge_angle_time(
+      dynamic raw);
+
+  @protected
   List<double> dco_decode_list_prim_f_32_loose(dynamic raw);
 
   @protected
@@ -2295,6 +2360,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAlphaGuess? dco_decode_opt_box_autoadd_bridge_alpha_guess(dynamic raw);
 
   @protected
+  BridgeAngleTime? dco_decode_opt_box_autoadd_bridge_angle_time(dynamic raw);
+
+  @protected
   BridgeBeatGrid? dco_decode_opt_box_autoadd_bridge_beat_grid(dynamic raw);
 
   @protected
@@ -2320,6 +2388,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCaptions? dco_decode_opt_box_autoadd_bridge_captions(dynamic raw);
+
+  @protected
+  BridgeClipAngle? dco_decode_opt_box_autoadd_bridge_clip_angle(dynamic raw);
 
   @protected
   BridgeClipFade? dco_decode_opt_box_autoadd_bridge_clip_fade(dynamic raw);
@@ -2406,6 +2477,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMotionPath? dco_decode_opt_box_autoadd_bridge_motion_path(dynamic raw);
+
+  @protected
+  BridgeMulticam? dco_decode_opt_box_autoadd_bridge_multicam(dynamic raw);
+
+  @protected
+  BridgeMulticamAt? dco_decode_opt_box_autoadd_bridge_multicam_at(dynamic raw);
 
   @protected
   BridgeOnlineMove? dco_decode_opt_box_autoadd_bridge_online_move(dynamic raw);
@@ -2734,6 +2811,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeAngleTime sse_decode_box_autoadd_bridge_angle_time(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeAutoSide sse_decode_box_autoadd_bridge_auto_side(
       SseDeserializer deserializer);
 
@@ -2783,6 +2864,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCaptions sse_decode_box_autoadd_bridge_captions(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeClipAngle sse_decode_box_autoadd_bridge_clip_angle(
       SseDeserializer deserializer);
 
   @protected
@@ -2936,6 +3021,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMotionPath sse_decode_box_autoadd_bridge_motion_path(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticam sse_decode_box_autoadd_bridge_multicam(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamAt sse_decode_box_autoadd_bridge_multicam_at(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamNew sse_decode_box_autoadd_bridge_multicam_new(
       SseDeserializer deserializer);
 
   @protected
@@ -3222,6 +3319,19 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAlphaMode sse_decode_bridge_alpha_mode(SseDeserializer deserializer);
 
   @protected
+  BridgeAngle sse_decode_bridge_angle(SseDeserializer deserializer);
+
+  @protected
+  BridgeAngleGrid sse_decode_bridge_angle_grid(SseDeserializer deserializer);
+
+  @protected
+  BridgeAngleSwitch sse_decode_bridge_angle_switch(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeAngleTime sse_decode_bridge_angle_time(SseDeserializer deserializer);
+
+  @protected
   BridgeAnimatedMaskPath sse_decode_bridge_animated_mask_path(
       SseDeserializer deserializer);
 
@@ -3350,6 +3460,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeClip sse_decode_bridge_clip(SseDeserializer deserializer);
+
+  @protected
+  BridgeClipAngle sse_decode_bridge_clip_angle(SseDeserializer deserializer);
 
   @protected
   BridgeClipFade sse_decode_bridge_clip_fade(SseDeserializer deserializer);
@@ -3616,6 +3729,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFootageLack sse_decode_bridge_footage_lack(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeFootageMarker sse_decode_bridge_footage_marker(
       SseDeserializer deserializer);
 
   @protected
@@ -3894,6 +4011,28 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMotionPath sse_decode_bridge_motion_path(SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticam sse_decode_bridge_multicam(SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamAngles sse_decode_bridge_multicam_angles(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamAt sse_decode_bridge_multicam_at(SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamJob sse_decode_bridge_multicam_job(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamNew sse_decode_bridge_multicam_new(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamSync sse_decode_bridge_multicam_sync(
+      SseDeserializer deserializer);
 
   @protected
   BridgeNodeColour sse_decode_bridge_node_colour(SseDeserializer deserializer);
@@ -4602,6 +4741,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeAddon> sse_decode_list_bridge_addon(SseDeserializer deserializer);
 
   @protected
+  List<BridgeAngle> sse_decode_list_bridge_angle(SseDeserializer deserializer);
+
+  @protected
   List<BridgeAnimatedMaskPath> sse_decode_list_bridge_animated_mask_path(
       SseDeserializer deserializer);
 
@@ -4737,6 +4879,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFootageLack> sse_decode_list_bridge_footage_lack(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFootageMarker> sse_decode_list_bridge_footage_marker(
       SseDeserializer deserializer);
 
   @protected
@@ -5116,6 +5262,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeAngleTime?> sse_decode_list_opt_box_autoadd_bridge_angle_time(
+      SseDeserializer deserializer);
+
+  @protected
   List<double> sse_decode_list_prim_f_32_loose(SseDeserializer deserializer);
 
   @protected
@@ -5211,6 +5361,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeAngleTime? sse_decode_opt_box_autoadd_bridge_angle_time(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeBeatGrid? sse_decode_opt_box_autoadd_bridge_beat_grid(
       SseDeserializer deserializer);
 
@@ -5240,6 +5394,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCaptions? sse_decode_opt_box_autoadd_bridge_captions(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeClipAngle? sse_decode_opt_box_autoadd_bridge_clip_angle(
       SseDeserializer deserializer);
 
   @protected
@@ -5341,6 +5499,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMotionPath? sse_decode_opt_box_autoadd_bridge_motion_path(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticam? sse_decode_opt_box_autoadd_bridge_multicam(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMulticamAt? sse_decode_opt_box_autoadd_bridge_multicam_at(
       SseDeserializer deserializer);
 
   @protected
@@ -5690,6 +5856,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAlphaGuess self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_angle_time(
+      BridgeAngleTime self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_auto_side(
       BridgeAutoSide self, SseSerializer serializer);
 
@@ -5740,6 +5910,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_captions(
       BridgeCaptions self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_clip_angle(
+      BridgeClipAngle self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_clip_fade(
@@ -5896,6 +6070,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_motion_path(
       BridgeMotionPath self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_multicam(
+      BridgeMulticam self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_multicam_at(
+      BridgeMulticamAt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_multicam_new(
+      BridgeMulticamNew self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_node_ref(
@@ -6185,6 +6371,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAlphaMode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_angle(BridgeAngle self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_angle_grid(
+      BridgeAngleGrid self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_angle_switch(
+      BridgeAngleSwitch self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_angle_time(
+      BridgeAngleTime self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_animated_mask_path(
       BridgeAnimatedMaskPath self, SseSerializer serializer);
 
@@ -6332,6 +6533,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_clip(BridgeClip self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_clip_angle(
+      BridgeClipAngle self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_clip_fade(
@@ -6625,6 +6830,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_footage_lack(
       BridgeFootageLack self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_footage_marker(
+      BridgeFootageMarker self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_footage_reading(
@@ -6941,6 +7150,30 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_motion_path(
       BridgeMotionPath self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_multicam(
+      BridgeMulticam self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_multicam_angles(
+      BridgeMulticamAngles self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_multicam_at(
+      BridgeMulticamAt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_multicam_job(
+      BridgeMulticamJob self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_multicam_new(
+      BridgeMulticamNew self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_multicam_sync(
+      BridgeMulticamSync self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_node_colour(
@@ -7725,6 +7958,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeAddon> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_angle(
+      List<BridgeAngle> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_animated_mask_path(
       List<BridgeAnimatedMaskPath> self, SseSerializer serializer);
 
@@ -7863,6 +8100,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_footage_lack(
       List<BridgeFootageLack> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_footage_marker(
+      List<BridgeFootageMarker> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_frame_span(
@@ -8245,6 +8486,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<Uint8List> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_opt_box_autoadd_bridge_angle_time(
+      List<BridgeAngleTime?> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_prim_f_32_loose(
       List<double> self, SseSerializer serializer);
 
@@ -8343,6 +8588,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAlphaGuess? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_bridge_angle_time(
+      BridgeAngleTime? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_box_autoadd_bridge_beat_grid(
       BridgeBeatGrid? self, SseSerializer serializer);
 
@@ -8373,6 +8622,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_captions(
       BridgeCaptions? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_clip_angle(
+      BridgeClipAngle? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_clip_fade(
@@ -8473,6 +8726,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_motion_path(
       BridgeMotionPath? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_multicam(
+      BridgeMulticam? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_multicam_at(
+      BridgeMulticamAt? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_online_move(

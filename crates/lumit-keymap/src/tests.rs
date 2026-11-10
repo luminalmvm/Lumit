@@ -106,7 +106,8 @@ fn conflicts_flag_same_context_and_global_overlap_but_not_disjoint_contexts() {
 
 /// `L` reveals a layer's Audio in the Timeline and shuttles forward
 /// everywhere else. That, the Cut timeline's editing keys, the Transcript
-/// panel's and a camera tool's Look at all are the shadows the default ships
+/// panel's, a camera tool's Look at and the digits that cut to a multicam
+/// clip's angles in Cut and the Viewer are all the shadows the default ships
 /// with, and they are deliberate.
 #[test]
 fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
@@ -125,29 +126,37 @@ fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         Some(&ActionId::from("reveal.audio"))
     );
     let shadows = km.shadows();
+    let mut expected: Vec<String> = [
+        "Mod+Shift+F",
+        "L",
+        "I",
+        "O",
+        ",",
+        ".",
+        "B",
+        "N",
+        "Mod+K",
+        "Mod+Shift+K",
+        "Delete",
+        "Backspace",
+        ",",
+        ".",
+        "Shift+F3",
+        "Mod+Shift+F",
+    ]
+    .map(String::from)
+    .to_vec();
+    // Each digit goes to its marker everywhere else, and in Cut and in the
+    // Viewer where no multicam clip is under the playhead.
+    for d in 1..=9 {
+        expected.extend([d.to_string(), d.to_string()]);
+    }
     assert_eq!(
         shadows
             .iter()
             .map(|s| s.chord.to_string())
             .collect::<Vec<_>>(),
-        [
-            "Mod+Shift+F",
-            "L",
-            "I",
-            "O",
-            ",",
-            ".",
-            "B",
-            "N",
-            "Mod+K",
-            "Mod+Shift+K",
-            "Delete",
-            "Backspace",
-            ",",
-            ".",
-            "Shift+F3",
-            "Mod+Shift+F"
-        ],
+        expected,
         "the deliberate shadows, and no others"
     );
 }

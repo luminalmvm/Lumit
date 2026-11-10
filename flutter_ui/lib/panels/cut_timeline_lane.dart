@@ -203,21 +203,37 @@ class CutTrackPainter extends CustomPainter {
       // Each visible clip's span with the drag in it, read again by the
       // joins and the fades below; null for a clip crossing to another
       // track, which has left this one.
-      final spans = <(int, int)?>[];
+      final spans = <(int, int)?>[
+        for (var i = lo; i < hi; i++)
+          crossing && held.clips.contains(track.clips[i].id.toString())
+              ? null
+              : cutDraggedSpan(track.clips[i], held, locked: locked),
+      ];
+      // Where the right clip carries straight on from the left in the same
+      // source, the join is a through edit, a cut with nothing changed
+      // across it: a seam, with no corners rounded at it. While a drag has
+      // parted them there is no seam.
+      bool seam(int i) {
+        if (i < lo || i + 1 >= hi) return false;
+        final (a, b) = (spans[i - lo], spans[i - lo + 1]);
+        return a != null &&
+            b != null &&
+            a.$2 == b.$1 &&
+            cutThroughEdit(track.clips[i], track.clips[i + 1]);
+      }
+
       for (var i = lo; i < hi; i++) {
         final clip = track.clips[i];
-        if (crossing && held.clips.contains(clip.id.toString())) {
-          spans.add(null);
-          continue;
-        }
-        final span = cutDraggedSpan(clip, held, locked: locked);
-        spans.add(span);
+        final span = spans[i - lo];
+        if (span == null) continue;
         final sound = _isSound(track, clip);
         final (left, width) = _boxOf(clip, span, held, sound: sound);
         if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
         final box = Rect.fromLTWH(
             left, cutClipInset, width, size.height - cutClipInset * 2);
-        _clipBox(canvas, clip, box, held, mark, sound: sound);
+        _clipBox(canvas, clip, box, held, mark,
+            sound: sound, seamLeft: seam(i - 1), seamRight: seam(i));
+        if (seam(i - 1)) _seam(canvas, box);
       }
       // Where two clips overlap the overlap is the transition, a dissolve
       // on a picture track and a crossfade on a sound track: the join,
@@ -484,8 +500,13 @@ class CutTrackPainter extends CustomPainter {
     );
   }
 
-  void _fill(Canvas canvas, Rect box, Color label, {required bool picked}) {
-    final rrect = RRect.fromRectAndRadius(box, Radius.circular(radius));
+  void _fill(Canvas canvas, Rect box, Color label,
+      {required bool picked, bool seamLeft = false, bool seamRight = false}) {
+    final round = Radius.circular(radius);
+    final left = seamLeft ? Radius.zero : round;
+    final right = seamRight ? Radius.zero : round;
+    final rrect = RRect.fromRectAndCorners(box,
+        topLeft: left, bottomLeft: left, topRight: right, bottomRight: right);
     canvas.drawRRect(
         rrect,
         Paint()
@@ -556,15 +577,20 @@ class CutTrackPainter extends CustomPainter {
 
   void _clipBox(Canvas canvas, BridgeClip clip, Rect box, CutDrag? held,
       CutHover? mark,
-      {required bool sound}) {
+      {required bool sound, bool seamLeft = false, bool seamRight = false}) {
     final id = clip.id.toString();
-    // The clip's own colour where it has one, its track's where not.
-    final label = switch (clip.label) {
+    // The clip's own colour where it has one, else its angle's, else its
+    // track's.
+    final label = switch (clip.label ?? clip.angle?.label) {
       final own? => colours.labels[own % colours.labels.length],
       null => colours.label,
     };
+    final name = clip.angle?.name ?? clip.sourceName;
     if (held != null) _reach(canvas, clip, box, held);
-    _fill(canvas, box, label, picked: selected.contains(id));
+    _fill(canvas, box, label,
+        picked: selected.contains(id),
+        seamLeft: seamLeft,
+        seamRight: seamRight);
     if (mark != null && mark.fade == null && mark.clips.contains(id)) {
       _hoverEdge(canvas, box, mark, label);
     }
@@ -589,7 +615,7 @@ class CutTrackPainter extends CustomPainter {
       _gainLine(canvas, clip, box);
       final chips = _chips(canvas, clip, box,
           band: header > 0 ? header : null, badges: badges);
-      _name(canvas, clip.sourceName, box,
+      _name(canvas, name, box,
           gainDb: clip.gainDb,
           band: header > 0 ? header : null,
           ground: true,
@@ -672,7 +698,7 @@ class CutTrackPainter extends CustomPainter {
     // stays put as the pointer comes and goes.
     final nameBand = min(above.height, 20.0);
     final chips = _chips(canvas, clip, box, band: nameBand, badges: badges);
-    _name(canvas, clip.sourceName, box,
+    _name(canvas, name, box,
         gainDb: clip.gainDb,
         band: nameBand,
         room: chips,
@@ -825,7 +851,11 @@ class CutTrackPainter extends CustomPainter {
   double _glyph(Canvas canvas, BridgeClip clip, Rect box,
       {required double from, double? band, bool ground = false}) {
     if (clipHolds(clip)) {
-      return _holdMark(canvas, clip, box, from, band, ground: ground);
+      return _mark(canvas, clip, box, from, band, ground: ground, draw: _bars);
+    }
+    if (clip.angle != null) {
+      return _mark(canvas, clip, box, from, band,
+          ground: ground, draw: _squares);
     }
     final glyph = compGlyph;
     if (!clip.sourceIsComp || glyph == null || glyph.size.isEmpty) return from;
@@ -846,11 +876,13 @@ class CutTrackPainter extends CustomPainter {
     return from + side + 3;
   }
 
-  /// A hold says so before its name: the pause mark, two bars in the name's
-  /// colour, on the name's ground where it has one.
-  double _holdMark(
+  /// A mark before the name, drawn by [draw] on a 16-unit grid in the name's
+  /// colour, on the name's ground where it has one: a hold's pause bars, a
+  /// multicam clip's squares. Answers where the name then starts.
+  double _mark(
       Canvas canvas, BridgeClip clip, Rect box, double from, double? band,
-      {required bool ground}) {
+      {required bool ground,
+      required void Function(Canvas canvas, double side, Paint paint) draw}) {
     final tall = band ?? box.height;
     final side = min(iconSize, tall - 4);
     if (box.width - from < side + 12) return from;
@@ -872,12 +904,45 @@ class CutTrackPainter extends CustomPainter {
       ..color = colour
       ..strokeWidth = side * 1.5 / 16
       ..strokeCap = StrokeCap.round;
-    for (final x in [5.0, 11.0]) {
-      final at = box.left + from + side * x / 16;
-      canvas.drawLine(Offset(at, top + side * 3 / 16),
-          Offset(at, top + side * 13 / 16), paint);
-    }
+    canvas.save();
+    canvas.translate(box.left + from, top);
+    draw(canvas, side, paint);
+    canvas.restore();
     return from + side + 3;
+  }
+
+  /// The pause mark: two bars.
+  static void _bars(Canvas canvas, double side, Paint paint) {
+    for (final x in [5.0, 11.0]) {
+      final at = side * x / 16;
+      canvas.drawLine(
+          Offset(at, side * 3 / 16), Offset(at, side * 13 / 16), paint);
+    }
+  }
+
+  /// The multicam mark: four squares in a two by two.
+  static void _squares(Canvas canvas, double side, Paint paint) {
+    final square = side * 5 / 16;
+    for (final x in [2.5, 8.5]) {
+      for (final y in [2.5, 8.5]) {
+        canvas.drawRect(
+            Rect.fromLTWH(side * x / 16, side * y / 16, square, square), paint);
+      }
+    }
+  }
+
+  /// The join at a through edit: a dotted line down the left edge of the box
+  /// after the cut. Between two angles of a multicam clip their colours
+  /// change across it.
+  void _seam(Canvas canvas, Rect box) {
+    final paint = Paint()
+      ..color = colours.cross
+      ..strokeWidth = 1;
+    const dot = 2.0;
+    for (var y = box.top + 2; y < box.bottom - 1; y += dot * 2) {
+      canvas.drawLine(Offset(box.left, y),
+          Offset(box.left, min(y + dot, box.bottom - 1)), paint);
+    }
   }
 
   /// The clip's own sound across its box. The peaks are bucketed on the

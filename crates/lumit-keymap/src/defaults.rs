@@ -448,8 +448,33 @@ pub fn default_keymap() -> Keymap {
         row(Transcript, "X", "transcript.mark"),
         row(Transcript, "Mod+Shift+F", "transcript.fillers"),
         row(Transcript, "Mod+Alt+P", "transcript.pauses"),
+        // A multicam clip's angles. The digits cut, with Alt they switch.
+        row(Cut, "Mod+Shift+ArrowRight", "multicam.angle.next"),
+        row(Cut, "Mod+Shift+ArrowLeft", "multicam.angle.prev"),
+        row(Viewer, "Mod+Shift+ArrowRight", "multicam.angle.next"),
+        row(Viewer, "Mod+Shift+ArrowLeft", "multicam.angle.prev"),
+        row(Cut, "Mod+Alt+1", "multicam.mode.both"),
+        row(Cut, "Mod+Alt+2", "multicam.mode.picture"),
+        row(Cut, "Mod+Alt+3", "multicam.mode.sound"),
+        row(Cut, "Mod+Shift+ArrowDown", "multicam.page.next"),
+        row(Cut, "Mod+Shift+ArrowUp", "multicam.page.prev"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
+    // A multicam clip's angles: the digit cuts to one, with Alt it switches
+    // to one without a cut. From the program side of the Viewer the digits
+    // cut too. Where no multicam clip is under the playhead a digit still
+    // goes to its marker.
+    for d in 1..=9u8 {
+        for (context, chord, action) in [
+            (Cut, format!("{d}"), format!("multicam.cut.{d}")),
+            (Cut, format!("Alt+{d}"), format!("multicam.switch.{d}")),
+            (Viewer, format!("{d}"), format!("multicam.cut.{d}")),
+        ] {
+            if let Some(b) = row(context, &chord, &action) {
+                bindings.push(b);
+            }
+        }
+    }
     // Alt+Shift+1…9 switch workspace.
     for d in 1..=9u8 {
         if let Some(b) = row(
