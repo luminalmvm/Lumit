@@ -3377,12 +3377,17 @@ class LumitUiState extends ChangeNotifier {
   /// registration is a round trip to the runner, and the playhead, the loop's
   /// turn and everything listening for a frame waited behind it.
   ///
-  /// **Only the active view moves the playhead.** A frame arriving for a
-  /// background view says nothing about where the user is standing, and
-  /// letting one drive the transport would make a locked view's first frame
-  /// drag the playhead somewhere nobody asked for.
+  /// **Only one view moves the playhead**: the active view, or while playing
+  /// the view the transport plays into, which is another one when the source
+  /// side is active. A frame arriving for any other view says nothing about
+  /// where the user is standing, and letting one drive the transport would
+  /// make a locked view's first frame drag the playhead somewhere nobody
+  /// asked for.
   void _followFrame(int frame, int engineId, int tier) {
-    if (engineId != activeViewId) return;
+    final leads = playing.value
+        ? views.previewing?.engineId ?? activeViewId
+        : activeViewId;
+    if (engineId != leads) return;
     _arrived(frame);
     _playAlong(tier);
   }
