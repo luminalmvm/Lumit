@@ -254,6 +254,7 @@ enum BridgeKeyContext {
   panels,
   effects,
   cut,
+  captions,
   ;
 }
 

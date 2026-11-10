@@ -54,6 +54,8 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
+import 'create_captions_dialog_frb.dart'
+    show createCaptionsFrb, importCaptionsFrb;
 import '../panels/grade_clipboard.dart'
     show canCopyGrade, canPasteGrade, copyGrade, pasteGrade;
 import '../panels/layer_source_menu.dart';
@@ -1267,6 +1269,10 @@ List<MenuSection> lumitMenus(
                           await importDroppedPaths(app, [folder]);
                         }
                       }),
+            // A caption layer from a subtitle file, in the open composition.
+            MenuEntry(
+                l10n.captionsImportEllipsis,
+                comp == null ? null : () => unawaited(importCaptionsFrb(context))),
             // The After Effects route, a row of its own now it is the only
             // one. The Bridge-bundle entry is gone (owner, repeatedly): the
             // bundle format itself remains supported for anything that
@@ -1650,6 +1656,11 @@ List<MenuSection> lumitMenus(
                           then: app.notifyDocumentChanged,
                         ),
               ),
+              // A caption layer from what the layer says. A layer that turns
+              // out to make no sound says so in the status line, as Detach does.
+              MenuEntry.divider(),
+              MenuEntry(l10n.menuCreateCaptions,
+                  onLayer((l) => unawaited(createCaptionsFrb(context, l)))),
             ]),
             // The selected layer's Retime. In the menu as well as on the keyboard
             // (a command whose only route is a chord has no route the day

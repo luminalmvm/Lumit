@@ -30,6 +30,8 @@ use std::path::Path;
 pub mod gif;
 #[cfg(not(target_arch = "wasm32"))]
 mod planes;
+#[cfg(not(target_arch = "wasm32"))]
+mod subtitles;
 pub mod webp;
 #[cfg(not(target_arch = "wasm32"))]
 use planes::{
@@ -825,6 +827,8 @@ pub struct Encoder {
     /// The audio streams after the first, in a file opened to carry several
     /// ([`Self::open_with_sound`]). Empty for every export.
     more_audio: Vec<AudioTrack>,
+    /// The subtitle streams ([`Self::open_with_subtitles`]).
+    subtitles: Vec<subtitles::SubtitleStream>,
     finished: bool,
 }
 
@@ -862,53 +866,7 @@ impl Encoder {
         more_sound: usize,
         metadata: &Metadata,
     ) -> Result<Self, MediaError> {
-        if video.is_none() && audio.is_none() {
-            return Err(MediaError::Ffmpeg(
-                "an export must carry a video or an audio stream".into(),
-            ));
-        }
-        let cpath = CString::new(path.to_str().ok_or(MediaError::BadPath)?)
-            .map_err(|_| MediaError::BadPath)?;
-        let mut output = AVFormatContextOutput::create(&cpath).map_err(at("opening the file"))?;
-        let global_header = (output.oformat().flags & ffi::AVFMT_GLOBALHEADER as i32) != 0;
-
-        let video_track = match video {
-            Some(v) => Some(open_video(&mut output, v, global_header)?),
-            None => None,
-        };
-        let audio_track = match audio {
-            Some(a) => Some(open_audio(&mut output, a, global_header)?),
-            None => None,
-        };
-        let mut more_audio = Vec::new();
-        if let Some(a) = audio {
-            for _ in 0..more_sound {
-                more_audio.push(open_audio(&mut output, a, global_header)?);
-            }
-        }
-
-        set_container_metadata(&mut output, metadata);
-
-        // +faststart moves the index to the front of the file when the
-        // trailer is written, so exports stream straight away (media-io §7).
-        // Only the mp4/mov family understands it — which is exactly the family
-        // that wants a global header — and a stray option would sit unread in
-        // the dictionary rather than being an error, so the guard is honesty
-        // rather than necessity.
-        let mut header_opts = global_header
-            .then(|| dict_set(None, "movflags", "+faststart"))
-            .flatten();
-        output
-            .write_header(&mut header_opts)
-            .map_err(at("writing the header"))?;
-
-        Ok(Self {
-            output,
-            video: video_track,
-            audio: audio_track,
-            more_audio,
-            finished: false,
-        })
+        subtitles::open(path, video, audio, more_sound, &[], metadata)
     }
 
     /// The FFmpeg name of the video encoder actually in use (e.g.

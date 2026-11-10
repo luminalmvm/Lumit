@@ -54,6 +54,8 @@ import 'project_history_window.dart';
 import 'review_links_window.dart';
 import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'share_dialog_frb.dart';
+import 'speech_install_dialog_frb.dart'
+    show footageItemName, transcriptionStep, transcriptionTimeLeft;
 import 'update_chip.dart';
 import 'welcome_frb.dart' show projectDisplayName;
 
@@ -138,6 +140,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     _export = (widget.poll ?? exportPoll)();
     _exportsLanded();
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
+    _app.transcription.progress.addListener(_heard);
     statusLineExportStarted.addListener(_tick);
     proxyJobChanged.addListener(_tick);
     // Playback fills the caches, so the meter ticks while it runs.
@@ -298,6 +301,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     }
     statusLineExportStarted.removeListener(_tick);
     proxyJobChanged.removeListener(_tick);
+    _app.transcription.progress.removeListener(_heard);
     _ui.playing.removeListener(_tick);
     _ui.cacheChanged.removeListener(_bumped);
     _ui.frameArrived.removeListener(_bumped);
@@ -410,6 +414,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 // The spacer that stood here is the hint's now ([_line]), so
                 // a job follows the notice across a plain gap.
                 if (!roomed) const SizedBox(width: 8),
+                ..._job(t, _transcriptionSection(t)),
                 ..._job(t, _proxySection(t)),
                 ..._job(t, _exportSection(t)),
                 if (_outputPeakDb case final db?) ...[
@@ -997,6 +1002,51 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             const SizedBox(width: 8),
           ],
       };
+
+  /// The file whose speech is being written down, by its id and name, so the
+  /// name is looked up once per file rather than on every step.
+  (String, String)? _heardFile;
+
+  void _heard() {
+    final event = _app.transcription.progress.value;
+    if (event != null && _heardFile?.$1 != event.item) {
+      _heardFile = (event.item, footageItemName(_app.project, event.item));
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// A transcription running, drawn as the proxy job is: what it is hearing,
+  /// how far along, how long is left, and a Cancel that works from anywhere.
+  List<Widget> _transcriptionSection(LumitTheme t) {
+    final event = _app.transcription.progress.value;
+    if (event == null) return const [];
+    final left = transcriptionTimeLeft(event);
+    return [
+      Flexible(
+        child: Text(
+          transcriptionStep(event, _heardFile?.$2 ?? ''),
+          key: const ValueKey('status-transcribe-progress'),
+          style: t.small,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      const SizedBox(width: 8),
+      SizedBox(width: 120, child: HouseProgressBar(fraction: event.fraction)),
+      if (left != null) ...[
+        const SizedBox(width: 8),
+        Text(left, style: t.small.copyWith(color: t.textMuted)),
+      ],
+      const SizedBox(width: 8),
+      HouseButton(
+        key: const ValueKey('status-transcribe-cancel'),
+        small: true,
+        frameless: true,
+        onPressed: _app.transcription.cancel,
+        child: Text(l10n.cancel, style: t.small),
+      ),
+      const SizedBox(width: 8),
+    ];
+  }
 
   List<Widget> _exportSection(LumitTheme t) => switch (_export) {
         BridgeExportState_Idle() => const [],

@@ -3,7 +3,8 @@
 //
 // Text is point text until it is given a box width, so each line the user
 // breaks is a paragraph of its own. With a box the words wrap to it, and
-// Justify stretches every line but a paragraph's last across it.
+// Justify stretches every line but a paragraph's last across it. A box height
+// holds the block at one size, its lines at its top, middle or bottom.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -53,11 +54,33 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
           );
         }
 
+        Widget vertical(BridgeVerticalAlign side, LumitIcon icon, String tip) {
+          final on = paragraph.vertical == side;
+          return LumitTooltip(
+            message: tip,
+            child: HouseButton(
+              key: ValueKey<String>('paragraph-vertical-${side.name}'),
+              small: true,
+              frameless: !on,
+              active: on,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              // There is nowhere to move the lines to without a height.
+              onPressed: paragraph.boxHeight == null
+                  ? null
+                  : () => commitText(
+                      ui, target, reflow((p) => p.copyWith(vertical: side))),
+              child: lumitIcon(icon,
+                  size: iconSize, color: on ? t.textPrimary : t.textMuted),
+            ),
+          );
+        }
+
         Widget px(
           String keyName,
           double value,
           BridgeParagraphStyle Function(BridgeParagraphStyle, double) set, {
           double min = -8000,
+          String? zeroLabel,
         }) =>
             SizedBox(
               width: 72,
@@ -68,6 +91,7 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                 max: 8000,
                 decimals: 1,
                 suffix: ' px',
+                zeroLabel: zeroLabel,
                 resetTo: 0,
                 onChangeLive: (v) => previewText(
                     ui, target, reflow((p) => set(p, v.toDouble()))),
@@ -118,6 +142,15 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                                 : t.textMuted),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    vertical(BridgeVerticalAlign.top, LumitIcon.textAlignTop,
+                        l10n.tipParagraphAlignTop),
+                    vertical(BridgeVerticalAlign.middle,
+                        LumitIcon.textAlignMiddle,
+                        l10n.tipParagraphAlignMiddle),
+                    vertical(BridgeVerticalAlign.bottom,
+                        LumitIcon.textAlignBottom,
+                        l10n.tipParagraphAlignBottom),
                   ],
                 ),
               ),
@@ -131,6 +164,17 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                           ? p.copyWith(boxWidth: v)
                           : p.copyWith(noBox: true),
                       min: 0),
+                ),
+                textCell(
+                  t,
+                  l10n.paragraphBoxHeight,
+                  // Nought is no height, which grows the block with its lines.
+                  px('paragraph-box-height', paragraph.boxHeight ?? 0,
+                      (p, v) => v > 0
+                          ? p.copyWith(boxHeight: v)
+                          : p.copyWith(autoHeight: true),
+                      min: 0,
+                      zeroLabel: l10n.paragraphBoxHeightAuto),
                 ),
                 textCell(
                   t,

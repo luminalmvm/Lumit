@@ -21,7 +21,8 @@
 //!
 //! Nothing generative lives here and nothing ever will: a model in Lumit makes
 //! a plane of depth, a plane of coverage or an in-between frame, never a
-//! picture from a description.
+//! picture from a description. A model can also write down the words someone
+//! said, with when they said each one.
 //!
 //! # Thread role and contract
 //!
@@ -34,7 +35,9 @@
 //! the GPU (14-ENGINEERING-RULES §1.3). [`synthesis`] is one such model, wired
 //! to the one task that runs inside a render rather than as a baked analysis,
 //! [`depth`] and [`matte`] are two of the baked ones, and [`segment`] is the
-//! one a tap on the picture asks a question of.
+//! one a tap on the picture asks a question of. [`speech`] is the one that
+//! listens: it streams a recording through three models and hands back its
+//! words.
 
 pub mod depth;
 pub mod error;
@@ -43,6 +46,7 @@ pub mod matte;
 pub mod runtime;
 pub mod segment;
 pub mod session;
+pub mod speech;
 pub mod store;
 pub mod synthesis;
 pub mod tensor;

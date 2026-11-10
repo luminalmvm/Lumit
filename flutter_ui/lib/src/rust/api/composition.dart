@@ -8,6 +8,7 @@ import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
 import 'beats.dart';
+import 'captions.dart';
 import 'comp_graph.dart';
 import 'cut.dart';
 import 'effect.dart';
@@ -37,7 +38,7 @@ import 'vector.dart';
 import 'wire_tie.dart';
 import 'wireframes.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -956,6 +957,18 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCachedFrames(
               that: this, frames: frames, scale: scale);
 
+  /// The composition's caption layers, top first.
+  List<LayerReference> captionLayers() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCaptionLayers(
+        that: this,
+      );
+
+  /// The usual caption limits for `language`, for a dialog to start from.
+  BridgeCaptionLimits captionLimitsFor({required String language}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCaptionLimitsFor(
+              that: this, language: language);
+
   /// Remove every detected beat marker, keeping the ones a person made —
   /// and the confirmed grid with them, since it described the set that went.
   ///
@@ -965,6 +978,17 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceClearBeatMarkers(
         that: this,
       );
+
+  /// A caption layer showing what `source` says, at the top of the stack,
+  /// styled as `look`. The source's footage must be transcribed first. One
+  /// undo step.
+  LayerReference createCaptions(
+          {required LayerReference source,
+          required BridgeCaptionOptions options,
+          required BridgeTextDocument look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCreateCaptions(
+              that: this, source: source, options: options, look: look);
 
   /// **Crop comp to region of interest**: the comp's frame becomes
   /// `region`, and every unparented layer moves back by its corner so the
@@ -1827,6 +1851,13 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGroupLayers(
           that: this, layerIds: layerIds, name: name);
 
+  /// Whether this composition has a caption layer of its own, which is
+  /// when the export dialogue asks what to do with captions.
+  bool hasCaptions() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceHasCaptions(
+        that: this,
+      );
+
   /// Whether this comp nests another composition, which is when Duplicate
   /// asks whether the copy shares it or gets its own.
   bool hasNestedComps() => BridgeLib.instance.api
@@ -1839,6 +1870,16 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceHoldsModels(
         that: this,
       );
+
+  /// A caption layer from an `.srt` or `.vtt` file, styled as `look`. One
+  /// undo step.
+  LayerReference importCaptions(
+          {required String path,
+          required String name,
+          required BridgeTextDocument look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceImportCaptions(
+              that: this, path: path, name: name, look: look);
 
   /// Insert a saved graph group at canvas point `(x, y)`: **one commit**, so
   /// one undo step however many boxes and wires it carries.

@@ -13,6 +13,7 @@ pub mod audio;
 pub mod beats;
 pub mod blender;
 pub mod cache;
+pub mod captions;
 pub mod clip_edits;
 pub mod clip_group;
 pub mod colour;
@@ -64,6 +65,7 @@ pub mod streams;
 pub mod styles;
 pub mod system;
 pub mod track;
+pub mod transcript;
 pub mod vector;
 pub mod web_files;
 pub mod wire_tie;
@@ -233,6 +235,17 @@ pub enum BridgeError {
     ReadFailed,
     WriteFailed,
     InvalidWorkerState,
+    /// A footage item was asked for words it has not been given yet.
+    NoTranscript,
+    /// A transcription was asked for while another is running. One at a time.
+    TranscriptionBusy,
+    /// The edit named a caption layer and the layer is not one.
+    NotCaptions,
+    /// The transcripts hold no words in the stretch the layer plays.
+    NoSpeech,
+    /// A subtitle file stops making sense at this line, or nought when it
+    /// could not be read at all or held no captions.
+    CaptionsUnreadable(u32),
     OpError(OpError),
 }
 
@@ -297,6 +310,13 @@ impl fmt::Display for BridgeError {
                 write!(f, "That layer's speed varies; edit it in the Retime graph")
             }
             BridgeError::NotText => write!(f, "That is not a text layer"),
+            BridgeError::NoTranscript => write!(f, "That footage has no transcript yet"),
+            BridgeError::TranscriptionBusy => write!(f, "A transcription is already running"),
+            BridgeError::NotCaptions => write!(f, "That is not a caption layer"),
+            BridgeError::NoSpeech => write!(f, "No words are heard in that layer"),
+            BridgeError::CaptionsUnreadable(line) => {
+                write!(f, "That subtitle file could not be read at line {line}")
+            }
             BridgeError::NotCamera => write!(f, "That is not a camera layer"),
             BridgeError::NothingToConvert => {
                 write!(f, "That layer has no words to convert")

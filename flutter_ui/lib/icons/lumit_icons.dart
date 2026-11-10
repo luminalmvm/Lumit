@@ -465,6 +465,12 @@ abstract final class LumitIcons {
   /// A capital T beside a shorter one standing on the same baseline, which is what small capitals are.
   static const String smallCaps =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9.5 7.5h4M11.5 7.5v4"/></svg>';
+  /// A word held between two brackets: a find that matches whole words only.
+  static const String wholeWord =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4h-2v8h2M11.5 4h2v8h-2"/><path d="M5.5 9.5h5"/></svg>';
+  /// Two arrows passing each other: what was found going out and what replaces it coming in.
+  static const String replace =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h8.5M8.5 3l2.5 2.5L8.5 8"/><path d="M13.5 10.5H5M7.5 8L5 10.5 7.5 13"/></svg>';
   static const String superscript =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h6M5.5 5.5v7M11 4l1.5-1v4"/></svg>';
   static const String subscript =
@@ -689,6 +695,8 @@ abstract final class LumitIcons {
     'Faux italic': fauxItalic,
     'All caps': allCaps,
     'Small caps': smallCaps,
+    'Whole word': wholeWord,
+    'Replace': replace,
     'Superscript': superscript,
     'Subscript': subscript,
     'Window minimise': windowMinimise,

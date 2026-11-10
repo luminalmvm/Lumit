@@ -24,7 +24,7 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 #[must_use]
 pub fn default_keymap() -> Keymap {
     use KeyContext::{
-        Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Viewer,
+        Captions, Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Viewer,
     };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
@@ -56,6 +56,8 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+.", "edit.point.next"),
         row(Global, "Mod+Alt+ArrowLeft", "marker.prev"),
         row(Global, "Mod+Alt+ArrowRight", "marker.next"),
+        row(Global, "Mod+Alt+ArrowUp", "captions.prev"),
+        row(Global, "Mod+Alt+ArrowDown", "captions.next"),
         // A keyframe at the playhead on whichever property rows are picked, or
         // the one already there taken away. After Effects has no key for this,
         // only the per-property five below, so the chord is Lumit's own.
@@ -417,6 +419,9 @@ pub fn default_keymap() -> Keymap {
         // one modifier along.
         row(Cut, "Mod+D", "cut.duplicate"),
         row(Cut, "Mod+Shift+D", "cut.transition.default"),
+        row(Captions, "Mod+Shift+D", "captions.split"),
+        row(Captions, "Mod+J", "captions.merge"),
+        row(Captions, "Mod+Alt+C", "captions.add"),
         row(Cut, "Mod+T", "cut.insert.title"),
         row(Cut, "=", "timeline.zoom.in"),
         row(Cut, "-", "timeline.zoom.out"),

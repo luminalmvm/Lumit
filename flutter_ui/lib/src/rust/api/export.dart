@@ -11,7 +11,7 @@ import 'package:uuid/uuid.dart';
 part 'export.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// What one output format can and cannot carry. The dialogue asks this
 /// of every format key it offers and disables what the answer refuses.
@@ -162,15 +162,38 @@ void exportQueueUpdate(
 
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
-/// sequence the file asked about is frame one.
-bool exportPathTaken({required String path, required String codec}) =>
-    BridgeLib.instance.api
-        .crateApiExportExportPathTaken(path: path, codec: codec);
+/// sequence the file asked about is frame one. The caption files `captions`
+/// writes beside it count too.
+bool exportPathTaken(
+        {required String path,
+        required String codec,
+        required BridgeCaptionsOut captions}) =>
+    BridgeLib.instance.api.crateApiExportExportPathTaken(
+        path: path, codec: codec, captions: captions);
 
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
-String exportFreePath({required String path, required String codec}) =>
-    BridgeLib.instance.api
-        .crateApiExportExportFreePath(path: path, codec: codec);
+String exportFreePath(
+        {required String path,
+        required String codec,
+        required BridgeCaptionsOut captions}) =>
+    BridgeLib.instance.api.crateApiExportExportFreePath(
+        path: path, codec: codec, captions: captions);
+
+/// What an export does with the composition's own caption layers.
+enum BridgeCaptionsOut {
+  /// Drawn into the picture.
+  burn,
+
+  /// Left out of the picture and written beside the file as SubRip.
+  srt,
+
+  /// Left out of the picture and written beside the file as WebVTT.
+  vtt,
+
+  /// Left out of the picture and carried inside the file as subtitles.
+  embed,
+  ;
+}
 
 /// The crop an export actually applies, and the frame it leaves — the answer
 /// `crop_for` gives for the typed insets and the Viewer's region together.
@@ -597,6 +620,9 @@ class BridgeExportSpec {
   /// How many times a GIF plays, `0` for forever.
   final int gifPlays;
 
+  /// What happens to the composition's own caption layers.
+  final BridgeCaptionsOut captions;
+
   const BridgeExportSpec({
     required this.preset,
     required this.codec,
@@ -638,6 +664,7 @@ class BridgeExportSpec {
     this.gifDither = 0,
     this.gifPalettePerFrame = false,
     this.gifPlays = 0,
+    this.captions = BridgeCaptionsOut.burn,
   });
 
   /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
@@ -686,7 +713,8 @@ class BridgeExportSpec {
       openFolder.hashCode ^
       gifDither.hashCode ^
       gifPalettePerFrame.hashCode ^
-      gifPlays.hashCode;
+      gifPlays.hashCode ^
+      captions.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -732,7 +760,8 @@ class BridgeExportSpec {
           openFolder == other.openFolder &&
           gifDither == other.gifDither &&
           gifPalettePerFrame == other.gifPalettePerFrame &&
-          gifPlays == other.gifPlays;
+          gifPlays == other.gifPlays &&
+          captions == other.captions;
 }
 
 @freezed
@@ -823,6 +852,9 @@ class BridgeFormatCaps {
   /// frames count in hundredths of a second. Zero is no limit.
   final int maxFps;
 
+  /// Can carry captions inside the file as subtitles.
+  final bool subtitles;
+
   const BridgeFormatCaps({
     required this.video,
     required this.audio,
@@ -836,6 +868,7 @@ class BridgeFormatCaps {
     required this.metadata,
     this.colourSpaces = const [],
     this.maxFps = 0,
+    this.subtitles = false,
   });
 
   static Future<BridgeFormatCaps> default_() =>
@@ -854,7 +887,8 @@ class BridgeFormatCaps {
       audio24Bit.hashCode ^
       metadata.hashCode ^
       colourSpaces.hashCode ^
-      maxFps.hashCode;
+      maxFps.hashCode ^
+      subtitles.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -872,7 +906,8 @@ class BridgeFormatCaps {
           audio24Bit == other.audio24Bit &&
           metadata == other.metadata &&
           colourSpaces == other.colourSpaces &&
-          maxFps == other.maxFps;
+          maxFps == other.maxFps &&
+          subtitles == other.subtitles;
 }
 
 /// One key/value pair written into the container.

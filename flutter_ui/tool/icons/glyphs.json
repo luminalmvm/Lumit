@@ -863,6 +863,16 @@
      "comment": "A capital T beside a shorter one standing on the same baseline, which is what small capitals are."
     },
     {
+     "name": "Whole word",
+     "body": "<path d=\"M4.5 4h-2v8h2M11.5 4h2v8h-2\"/><path d=\"M5.5 9.5h5\"/>",
+     "comment": "A word held between two brackets: a find that matches whole words only."
+    },
+    {
+     "name": "Replace",
+     "body": "<path d=\"M2.5 5.5h8.5M8.5 3l2.5 2.5L8.5 8\"/><path d=\"M13.5 10.5H5M7.5 8L5 10.5 7.5 13\"/>",
+     "comment": "Two arrows passing each other: what was found going out and what replaces it coming in."
+    },
+    {
      "name": "Superscript",
      "body": "<path d=\"M2.5 5.5h6M5.5 5.5v7M11 4l1.5-1v4\"/>"
     },

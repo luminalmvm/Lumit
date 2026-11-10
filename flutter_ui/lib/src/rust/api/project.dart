@@ -23,9 +23,10 @@ import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'transcript.dart';
 import 'vector.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bin_folder`, `file_footage`, `file_into`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
+// These functions are ignored because they are not marked as `pub`: `bin_folder`, `file_footage`, `file_into`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `place_layers`, `save_with`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
@@ -442,6 +443,12 @@ class ProjectReference {
         that: this,
       );
 
+  /// Stop this project's transcription, if one is running.
+  void cancelTranscription() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceCancelTranscription(
+        that: this,
+      );
+
   /// Drop every undo and redo step and leave the document as it is. Under
   /// the project's lock, as undo and redo are.
   void clearHistory() =>
@@ -831,6 +838,12 @@ class ProjectReference {
   void redo() => BridgeLib.instance.api.crateApiProjectProjectReferenceRedo(
         that: this,
       );
+
+  /// Rename a speaker in every transcript and caption layer that has them.
+  /// One undo step.
+  void renameSpeaker({required String speaker, required String name}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceRenameSpeaker(
+          that: this, speaker: speaker, name: name);
 
   /// Open `project_path` and replay its crash journal on top of it.
   ///
@@ -1449,6 +1462,25 @@ class ProjectReference {
         that: this,
       );
 
+  /// Hear `items` and give each its transcript, as each one finishes.
+  ///
+  /// Returns when the job is over. One job runs at a time across Lumit, and
+  /// a second call while one runs is refused. Cancelling keeps every item
+  /// already finished.
+  Future<BridgeTranscribeOutcome> transcribe(
+          {required List<FootageReference> items,
+          required BridgeTranscribeOptions options,
+          RustStreamSink<BridgeTranscribeEvent>? events}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceTranscribe(
+          that: this, items: items, options: options, events: events);
+
+  /// Where this project's transcription has got to, or `None` while none
+  /// runs.
+  BridgeTranscribeEvent? transcriptionProgress() => BridgeLib.instance.api
+          .crateApiProjectProjectReferenceTranscriptionProgress(
+        that: this,
+      );
+
   /// How the interface was arranged when this project was last saved, as the
   /// JSON the frontend itself wrote, or `None` for a project that has
   /// never carried one.
@@ -1491,6 +1523,13 @@ class ProjectReference {
   /// to work cannot quietly ship the small picture.
   bool useProxies() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceUseProxies(
+        that: this,
+      );
+
+  /// Every step of every transcription of this project, whoever started it,
+  /// until the project closes.
+  Stream<BridgeTranscribeEvent> watchTranscription() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceWatchTranscription(
         that: this,
       );
 

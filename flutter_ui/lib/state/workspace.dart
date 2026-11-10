@@ -972,6 +972,12 @@ class Workspace extends ChangeNotifier {
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
+  /// The Create captions dialogue's last answers, as it wrote them.
+  Map<String, dynamic> captionSettings = {};
+
+  /// Caption looks kept with Save style, in the order they were kept.
+  List<Map<String, dynamic>> captionStyles = [];
+
   /// The Stagger panel's frames between layers, and the order its button and
   /// a stagger drag take the layers in.
   int staggerStep = 1;
@@ -1793,6 +1799,16 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setCaptionSettings(Map<String, dynamic> settings) {
+    captionSettings = settings;
+    settingsChanged();
+  }
+
+  void setCaptionStyles(List<Map<String, dynamic>> styles) {
+    captionStyles = styles;
+    settingsChanged();
+  }
+
   void setStagger(
       {int? step, LayerStaggerOrder? order, int? overlap, bool? crossfade}) {
     staggerStep = step ?? staggerStep;
@@ -2330,6 +2346,8 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'caption_settings': captionSettings,
+        'caption_styles': captionStyles,
         'stagger_step': staggerStep,
         'stagger_order': staggerOrder.name,
         'stagger_overlap': staggerOverlap,
@@ -2562,6 +2580,13 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    captionSettings = j['caption_settings'] is Map<String, dynamic>
+        ? j['caption_settings'] as Map<String, dynamic>
+        : {};
+    captionStyles = [
+      if (j['caption_styles'] case final List<dynamic> styles)
+        ...styles.whereType<Map<String, dynamic>>(),
+    ];
     staggerStep = (j['stagger_step'] as num?)?.toInt() ?? 1;
     staggerOrder = LayerStaggerOrder.values.asNameMap()[j['stagger_order']] ??
         LayerStaggerOrder.topDown;

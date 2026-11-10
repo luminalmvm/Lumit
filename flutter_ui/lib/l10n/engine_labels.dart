@@ -2121,6 +2121,12 @@ Map<String, String> get _built => {
       "Panels": l10n.keyPanels,
       "Effect controls": l10n.keyEffectControls,
       "Cut timeline": l10n.keyCutTimeline,
+      "Captions panel": l10n.keyCaptionsPanel,
+      "Split the caption at the playhead": l10n.keySplitTheCaptionAtThePlayhead,
+      "Join the selected captions": l10n.keyJoinTheSelectedCaptions,
+      "Add a caption at the playhead": l10n.keyAddACaptionAtThePlayhead,
+      "Go to the previous caption": l10n.keyGoToThePreviousCaption,
+      "Go to the next caption": l10n.keyGoToTheNextCaption,
       "Copy the selection": l10n.keyCopyTheSelection,
       "Cut the selection": l10n.keyCutTheSelection,
       "Paste": l10n.keyPaste,
@@ -2184,6 +2190,12 @@ Map<String, String> get _built => {
       "Relink footage": l10n.histRelinkFootage,
       "Set sequence rate": l10n.histSetSequenceRate,
       "Mark In and Out": l10n.histMarkInAndOut,
+      "Transcribe": l10n.histTranscribe,
+      "Delete transcript": l10n.histDeleteTranscript,
+      "Edit transcript": l10n.histEditTranscript,
+      "Edit speakers": l10n.histEditSpeakers,
+      "Edit captions": l10n.histEditCaptions,
+      "Remove captions": l10n.histRemoveCaptions,
       "Set proxy": l10n.histSetProxy,
       "Use proxy": l10n.useProxy,
       "Use proxies": l10n.histUseProxies,
@@ -2732,6 +2744,8 @@ String addonTask(String task) {
       return l10n.addonTaskMatte;
     case 'segmentation':
       return l10n.addonTaskSegmentation;
+    case 'speech':
+      return l10n.addonTaskSpeech;
     default:
       return task;
   }

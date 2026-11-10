@@ -448,6 +448,17 @@ function exportFinish(id) {
   })().catch((e) => fail(job, e));
 }
 
+// A text file that goes with an export, such as its captions, downloaded
+// beside it.
+function exportText(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 // Stop, and leave no file behind.
 function exportCancel(id) {
   const job = exports.get(id);
@@ -462,5 +473,5 @@ function exportCancel(id) {
 
 globalThis.lumitMedia = {
   open, holds: (path) => files.has(path), want, exportCodecs, exportOpen, exportState,
-  exportFrame, exportSound, exportFinish, exportCancel,
+  exportFrame, exportSound, exportFinish, exportCancel, exportText,
 };

@@ -386,10 +386,14 @@ class _ExportPickState extends State<_ExportPick> {
   Future<void> _queue({required bool start}) async {
     final rows = [for (final r in _rows) if (r.file.isNotEmpty) r];
     if (rows.isEmpty) return;
-    final codecs = {for (final r in rows) r: _spec(r)?.codec ?? 'h264'};
+    final specs = {for (final r in rows) r: _spec(r)};
     final taken = [
       for (final r in rows)
-        if (exportPathTaken(path: r.file, codec: codecs[r]!)) r
+        if (exportPathTaken(
+            path: r.file,
+            codec: specs[r]?.codec ?? 'h264',
+            captions: specs[r]?.captions ?? BridgeCaptionsOut.burn))
+          r
     ];
     var keepBoth = false;
     if (taken.isNotEmpty) {
@@ -418,8 +422,10 @@ class _ExportPickState extends State<_ExportPick> {
       }
       var path = row.file;
       if ((keepBoth || queued.contains(path)) &&
-          exportPathTaken(path: path, codec: spec.codec)) {
-        path = exportFreePath(path: path, codec: spec.codec);
+          exportPathTaken(
+              path: path, codec: spec.codec, captions: spec.captions)) {
+        path = exportFreePath(
+            path: path, codec: spec.codec, captions: spec.captions);
       }
       try {
         // Held until the last one is in, so the queue runs them in the

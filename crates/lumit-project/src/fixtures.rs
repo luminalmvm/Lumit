@@ -224,6 +224,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         // switch is on like any new project.
         proxies: Default::default(),
         footage_trims: Default::default(),
+        transcripts: Default::default(),
         use_proxies: true,
         // Nothing packed: the fixture names its media by path.
         packed: Default::default(),

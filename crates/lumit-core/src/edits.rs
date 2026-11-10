@@ -859,6 +859,10 @@ pub fn precompose_ops(
                 });
             }
         }
+        // Captions made from a packed layer now hear it through the Precomp.
+        ops.extend(lumit_core::captions::repointed(
+            comp.id, layer, &ids, layer_id,
+        ));
     }
     Ok((ops, layer_id))
 }
@@ -956,7 +960,13 @@ pub fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
                             .or_insert_with(|| Uuid::now_v7().to_string());
                     }
                 }
-                fields.values().for_each(|v| collect(v, fresh));
+                // A speaker is the same person in the copy, so a rename
+                // reaches both.
+                let kept = |(k, _): &(&String, &Value)| k.as_str() != "speakers";
+                fields
+                    .iter()
+                    .filter(kept)
+                    .for_each(|(_, v)| collect(v, fresh));
             }
             Value::Array(list) => list.iter().for_each(|v| collect(v, fresh)),
             _ => {}

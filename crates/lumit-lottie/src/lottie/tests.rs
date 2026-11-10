@@ -282,6 +282,7 @@ fn fixture() -> (Arc<Document>, Uuid) {
         path: None,
         path_offset: Property::zero(),
         animators: vec![animator],
+        captions: None,
         style: Box::default(),
         paragraph: Default::default(),
         extra: serde_json::Map::new(),

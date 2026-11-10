@@ -22,6 +22,7 @@ use web::{sample_pixels, trace_scope};
 
 mod cut;
 mod dropper;
+mod panics;
 mod views;
 #[cfg(target_arch = "wasm32")]
 mod web;
@@ -3308,7 +3309,7 @@ fn worker_loop(
                 let said = format!(
                     "The render worker faulted ({}); rebuilding the renderer: {}",
                     faults_in_a_row,
-                    panic_message(&*payload),
+                    panics::panic_message(&*payload),
                 );
                 note!("{said}");
                 crate::faults::record(&said);
@@ -3350,20 +3351,6 @@ const MAX_FAULTS_IN_A_ROW: u32 = 3;
 enum Turn {
     Continue,
     Stop,
-}
-
-/// Whatever a panic payload has to say for itself. Panics carry a `&str` or a
-/// `String` in practice; anything else is nameless, and saying so is better
-/// than saying nothing.
-#[frb(ignore)]
-fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
-    if let Some(s) = payload.downcast_ref::<&'static str>() {
-        s
-    } else if let Some(s) = payload.downcast_ref::<String>() {
-        s
-    } else {
-        "no message"
-    }
 }
 
 /// One turn of the worker loop: recover, sync, take a request if there is one,
@@ -4716,8 +4703,10 @@ fn apply_text_preview(
         // caption fell back to the typed words mid-keystroke.
         // Keys the seam cannot read are a preview nobody can draw, so the
         // layer keeps the document it has rather than the frame failing.
-        if let Ok(written) = crate::api::assets::text_document_of(document, offset) {
+        if let Ok(mut written) = crate::api::assets::text_document_of(document, offset) {
             let shift = crate::api::assets::restyle_shift(existing, &written);
+            // The preview leaves captions as they are, as the committed write does.
+            written.captions = existing.captions.clone();
             *existing = written;
             return shift;
         }
@@ -5980,7 +5969,7 @@ mod tests {
         }));
         let payload = outcome.err().expect("the net catches the fault");
         assert_eq!(
-            super::panic_message(&*payload),
+            super::panics::panic_message(&*payload),
             "an effect kernel gave up mid-frame",
             "a caught fault must reach the log with its own words, or it is unfindable"
         );

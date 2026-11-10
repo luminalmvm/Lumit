@@ -8300,11 +8300,8 @@ impl LayerReference {
                 .zip(&document.animators)
                 .filter(|(_, a)| {
                     kind == BridgeRevealKind::Modified
-                        || [&a.selector.start, &a.selector.end, &a.selector.offset]
+                        || lumit_core::preset_parts::animator_values(a)
                             .into_iter()
-                            .chain([&a.position_x, &a.position_y, &a.rotation, &a.scale_x])
-                            .chain([&a.position_z, &a.rotation_x, &a.rotation_y])
-                            .chain([&a.scale_y, &a.opacity, &a.fill_r, &a.fill_g, &a.fill_b])
                             .any(animated)
                 })
                 .map(|(i, _)| i)

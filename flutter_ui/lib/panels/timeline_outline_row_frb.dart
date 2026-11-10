@@ -86,8 +86,8 @@ class OutlineRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
 
-  /// Open or close this layer's sequence view — what a double-click
-  /// on a Sequence layer means, where on other kinds it opens the source.
+  /// Open or close this layer's view in place: a Sequence layer's clips, or
+  /// a caption layer's captions. Null on a layer with no such view.
   final VoidCallback? onOpenSequence;
 
   /// Every layer in the comp, for the parent picker's menu — from the same
@@ -926,14 +926,15 @@ class _OutlineRowState extends State<OutlineRow> {
   /// Double-clicking a layer opens it. A **Sequence** layer opens its
   /// own view in place — its clips and their speed envelope, inside its row —
   /// because cutting is done against the beat you can see, so the
-  /// music and the ruler have to stay on screen. A Precomp opens the comp it
+  /// music and the ruler have to stay on screen. A caption layer opens its
+  /// captions under its bar the same way. A Precomp opens the comp it
   /// draws, the way it does in the Project panel and the Hierarchy. Every
   /// other kind has nothing to open, so the double-click renames it, the same
   /// rename `Enter` starts.
   void _openLayer() {
     final kind = widget.entry.info.kind;
-    if (kind == BridgeLayerKind.sequence) {
-      widget.onOpenSequence?.call();
+    if (widget.onOpenSequence case final open?) {
+      open();
       return;
     }
     if (kind != BridgeLayerKind.precomp) {

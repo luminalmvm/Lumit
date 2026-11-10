@@ -198,6 +198,7 @@ void main() {
         paragraph:
             plainParagraphStyle.copyWith(align: BridgeTextAlign.right),
         animated: false,
+        boxed: false,
       );
       expect(anchorX(text) - before, closeTo(block.right - block.left, 12),
           reason: 'the anchor moved from the left edge to the right one');

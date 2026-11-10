@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod axis_modes;
+mod blend_mode;
 mod light;
 mod light_file;
 mod material;
@@ -2351,6 +2352,9 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
     }
 }
 
+// ponytail: Text is the widest kind by far. Boxing its document is the
+// upgrade if a layer's size ever matters.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayerKind {
     /// One footage item as the layer's source. Retiming lives on the layer
@@ -3016,6 +3020,10 @@ pub struct TextDocument {
         skip_serializing_if = "crate::text::ParagraphStyle::is_default"
     )]
     pub paragraph: crate::text::ParagraphStyle,
+    /// Timed captions, on a caption layer. Only [`crate::ops::Op::EditCaptions`]
+    /// changes them ([`crate::captions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captions: Option<Arc<crate::captions::Captions>>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -3032,6 +3040,9 @@ impl TextDocument {
     /// rasteriser and the cache key can never disagree about what the layer
     /// says — a disagreement that would serve a cached frame of the old words.
     pub fn resolved_text(&self, context: Arc<ExpressionContext>) -> std::borrow::Cow<'_, str> {
+        if let Some(captions) = &self.captions {
+            return std::borrow::Cow::Owned(crate::captions::show::at(captions, &context).text);
+        }
         match &self.expression {
             None => std::borrow::Cow::Borrowed(&self.text),
             Some(e) => std::borrow::Cow::Owned(crate::expression::evaluate_text(e, Some(context))),
@@ -3080,107 +3091,6 @@ pub enum BlendMode {
     Saturation,
     Colour,
     Luminosity,
-}
-
-impl BlendMode {
-    /// Every blend mode in After Effects' menu order, grouped
-    /// darken → lighten → contrast → comparative → component. The
-    /// single source of truth for the layer dropdown and the effect Mode
-    /// param (T21), so the two never drift.
-    pub const ALL: &'static [BlendMode] = &[
-        BlendMode::Normal,
-        BlendMode::Darken,
-        BlendMode::Multiply,
-        BlendMode::ColourBurn,
-        BlendMode::LinearBurn,
-        BlendMode::DarkerColour,
-        BlendMode::Add,
-        BlendMode::Lighten,
-        BlendMode::Screen,
-        BlendMode::ColourDodge,
-        BlendMode::LighterColour,
-        BlendMode::Overlay,
-        BlendMode::SoftLight,
-        BlendMode::HardLight,
-        BlendMode::LinearLight,
-        BlendMode::VividLight,
-        BlendMode::PinLight,
-        BlendMode::HardMix,
-        BlendMode::Difference,
-        BlendMode::Exclusion,
-        BlendMode::Subtract,
-        BlendMode::Divide,
-        BlendMode::Hue,
-        BlendMode::Saturation,
-        BlendMode::Colour,
-        BlendMode::Luminosity,
-    ];
-
-    /// Every mode's display name, in [`Self::ALL`]'s order — the same words
-    /// [`Self::name`] returns, as one `'static` list so a schema's Choice
-    /// parameter can offer the layer modes verbatim (the injected effect
-    /// Blend row). `blend_mode_all_is_complete_and_named` holds the two
-    /// in step.
-    pub const NAMES: &'static [&'static str] = &[
-        "Normal",
-        "Darken",
-        "Multiply",
-        "Colour burn",
-        "Linear burn",
-        "Darker colour",
-        "Add",
-        "Lighten",
-        "Screen",
-        "Colour dodge",
-        "Lighter colour",
-        "Overlay",
-        "Soft light",
-        "Hard light",
-        "Linear light",
-        "Vivid light",
-        "Pin light",
-        "Hard mix",
-        "Difference",
-        "Exclusion",
-        "Subtract",
-        "Divide",
-        "Hue",
-        "Saturation",
-        "Colour",
-        "Luminosity",
-    ];
-
-    /// The mode's display name (British English, sentence case — docs/15).
-    pub fn name(self) -> &'static str {
-        match self {
-            BlendMode::Normal => "Normal",
-            BlendMode::Darken => "Darken",
-            BlendMode::Multiply => "Multiply",
-            BlendMode::ColourBurn => "Colour burn",
-            BlendMode::LinearBurn => "Linear burn",
-            BlendMode::DarkerColour => "Darker colour",
-            BlendMode::Add => "Add",
-            BlendMode::Lighten => "Lighten",
-            BlendMode::Screen => "Screen",
-            BlendMode::ColourDodge => "Colour dodge",
-            BlendMode::LighterColour => "Lighter colour",
-            BlendMode::Overlay => "Overlay",
-            BlendMode::SoftLight => "Soft light",
-            BlendMode::HardLight => "Hard light",
-            BlendMode::LinearLight => "Linear light",
-            BlendMode::VividLight => "Vivid light",
-            BlendMode::PinLight => "Pin light",
-            BlendMode::HardMix => "Hard mix",
-            BlendMode::Difference => "Difference",
-            BlendMode::Exclusion => "Exclusion",
-            BlendMode::Subtract => "Subtract",
-            BlendMode::Divide => "Divide",
-            BlendMode::Hue => "Hue",
-            BlendMode::Saturation => "Saturation",
-            BlendMode::Colour => "Colour",
-            BlendMode::Luminosity => "Luminosity",
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4173,6 +4083,10 @@ pub struct Document {
     /// beside the items for the reason `proxies` above is one.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub footage_trims: std::collections::BTreeMap<Uuid, FootageTrim>,
+    /// Footage items' transcripts, by item id. Each behind an `Arc`, so the
+    /// copy every edit makes copies a pointer ([`crate::transcript`]).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub transcripts: std::collections::BTreeMap<Uuid, Arc<crate::transcript::Transcript>>,
     /// The project-wide *use proxies* master switch (docs/03 §3a).
     ///
     /// On — the default, and what a file written before proxies existed loads
@@ -4613,6 +4527,7 @@ impl Document {
             item_comments: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
             footage_trims: std::collections::BTreeMap::new(),
+            transcripts: std::collections::BTreeMap::new(),
             use_proxies: true,
             packed: std::collections::BTreeMap::new(),
             auto_pack: false,
@@ -5515,6 +5430,7 @@ mod tests {
                 animators: Vec::new(),
                 style: Default::default(),
                 paragraph: Default::default(),
+                captions: None,
                 extra: serde_json::Map::new(),
             },
         };

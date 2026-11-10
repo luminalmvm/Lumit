@@ -1,6 +1,6 @@
 ---
 title: Addons and models
-description: The optional models behind Flow, Depth, Remove background and the Roto brush, and how to install them.
+description: The optional models behind Flow, Depth, Remove background, the Roto brush and captions, and how to install them.
 sidebar:
   order: 9.9
 ---
@@ -8,10 +8,10 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 import Clip from "../../../components/Clip.astro";
 
-An **addon** is an optional download: the model runtime, or a model pack. Each pack is one
-trained model that reads your footage and hands back one thing: an in-between frame, a
-depth map, a matte, or the outline of what you clicked. They run on your own graphics card.
-Lumit works without any of them.
+An **addon** is an optional download: the model runtime, or a model pack. Each pack reads
+your footage and hands back one thing: an in-between frame, a depth map, a matte, the outline
+of what you clicked, or the words said. They run on your own graphics card. Lumit works
+without any of them.
 
 <Shot file="models-installed.png" caption="Settings ▸ Addons with the runtime and all five packs installed." eager/>
 
@@ -25,6 +25,8 @@ Lumit works without any of them.
 | **Robust Video Matting** | 14 MB | A matte for a person, carried frame to frame. | [Remove background](#remove-background) |
 | **BiRefNet Lite** | 214 MB | A matte for the main subject of a frame. | [Remove background](#remove-background) |
 | **SAM 2.1 Hiera Tiny** | 111 MB | The outline of the thing you click on. | [Roto brush](#roto-brush) |
+| **Whisper large-v3 turbo** | 1.1 GB | The words said, when, and who says them. | [Captions](#captions-whisper) |
+| **Whisper small** | 280 MB | The same from a smaller model, which can also write it in English. | [Captions](#captions-whisper) |
 
 Every addon is an analysis model. Nothing generative is listed.
 
@@ -102,6 +104,13 @@ the outline, and `Alt`-click marks what is not the subject. Then press **Propaga
 <Shot file="models-roto.jpg" caption="Three clicks on the runner, propagated through the shot. View is Boundary."/>
 
 Without SAM 2.1, a propagation seeded by **Segment** is **refused**.
+
+### Captions: Whisper
+
+[Create captions](/use/captions/#make-captions) hears speech with a Whisper pack. Both packs
+hear about a hundred languages, tell voices apart and find where speech starts and stops.
+With both installed, **Whisper large-v3 turbo** is used, and **Whisper small** for **Into
+English**.
 
 ## Licences
 

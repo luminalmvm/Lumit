@@ -277,6 +277,10 @@ class LayerRow {
   /// height on the two sides.
   final double? sequenceExtra;
 
+  /// A caption layer: [sequenceExtra], when set, is its row of captions
+  /// under the bar rather than a Sequence view standing in for the bar.
+  final bool captions;
+
   /// Whether this layer's source carries sound, and whether it has a picture
   /// to show. What the switches column reads to draw only the switches
   /// this layer can actually use: no audible switch on a solid that has never
@@ -334,6 +338,7 @@ class LayerRow {
     required this.rowHeight,
     this.summaryKeys = const [],
     required this.sequenceExtra,
+    this.captions = false,
     this.hasAudio = false,
     this.hasPicture = true,
     this.groupHeader,
@@ -520,6 +525,7 @@ List<LayerRow> layerRows({
   required Map<String, bool> hasAudio,
   Map<String, bool> hasPicture = const {},
   Map<String, double> sequenceExtra = const {},
+  Set<String> captionLayers = const {},
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
   Map<String, Map<String, DrivenParam>> driven = const {},
@@ -566,6 +572,7 @@ List<LayerRow> layerRows({
               volumeDb: volumeDb[id],
             ),
       sequenceExtra: sequenceExtra[id],
+      captions: captionLayers.contains(id),
       hasAudio: hasAudio[id] ?? false,
       // Until the probe has answered, a layer is assumed to have a picture:
       // the visibility switch is the one every layer but a music track uses,

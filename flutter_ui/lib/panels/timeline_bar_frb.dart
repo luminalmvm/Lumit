@@ -18,6 +18,8 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/share_marks.dart';
+import '../state/caption_tracks.dart';
+import 'timeline_captions_frb.dart' show CaptionMarksPainter;
 import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
@@ -387,6 +389,9 @@ class Bar extends StatefulWidget {
   /// moment the hand closes, not the one the panel last built with.
   final SelectionMove Function()? selectionMove;
 
+  /// A shut caption layer's captions, marked faintly along its bar.
+  final CaptionTrack? captions;
+
   const Bar({
     super.key,
     required this.comp,
@@ -409,6 +414,7 @@ class Bar extends StatefulWidget {
     this.showName = false,
     this.quantiseSound = true,
     this.selectionMove,
+    this.captions,
   });
 
   @override
@@ -1077,6 +1083,19 @@ class _BarState extends State<Bar> {
                               child: CustomPaint(
                                 painter: SequenceGapsPainter(
                                   clips: info.clips,
+                                  axis: widget.axis,
+                                  left: left,
+                                  ink: t.surface0,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (widget.captions case final track?)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: CaptionMarksPainter(
+                                  track: track,
                                   axis: widget.axis,
                                   left: left,
                                   ink: t.surface0,

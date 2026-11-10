@@ -19,6 +19,7 @@ project over MCP.
 
 ```
 lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>] [--range <in>-<out>] [--out <file>]
+                 [--captions burn|srt|vtt|embed]
                  [--format lottie|dotlottie|svg] [--text shapes|text] [--minify]
 ```
 
@@ -28,6 +29,9 @@ lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>
 - **--preset**: a saved export preset, by the name the **Export** window shows.
 - **--range**: the first and last frame to export, such as `0-119`.
 - **--out**: the file to write, or with several compositions the folder they go in.
+- **--captions**: what happens to caption layers. `burn` draws them into the picture, `srt`
+  or `vtt` writes them as a file beside it, and `embed` carries them inside an MP4 or MOV.
+  Without it, the preset's choice. See [Captions](/use/captions/#subtitle-files).
 - **--format**: write a Lottie, a dotLottie or an animated SVG instead of a video. An
   **--out** ending in `.json`, `.lottie` or `.svg` does the same. See
   [Lottie and SVG](/use/lottie-and-svg/).

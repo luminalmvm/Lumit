@@ -14,6 +14,8 @@ use crate::api::{
 };
 use crate::frb_generated::StreamSink;
 
+mod swatch;
+
 /// Whether undo and redo have anything to do, for greying the menu items.
 #[frb(non_opaque)]
 pub struct BridgeHistory {
@@ -45,28 +47,6 @@ pub struct BridgeSwatch {
     pub b: f32,
     pub a: f32,
     pub name: String,
-}
-
-impl BridgeSwatch {
-    #[frb(ignore)]
-    fn of(swatch: &lumit_core::model::Swatch) -> Self {
-        let [r, g, b, a] = swatch.colour.0;
-        Self {
-            r,
-            g,
-            b,
-            a,
-            name: swatch.name.clone().unwrap_or_default(),
-        }
-    }
-
-    #[frb(ignore)]
-    fn to_model(&self) -> lumit_core::model::Swatch {
-        lumit_core::model::Swatch {
-            colour: lumit_core::model::LinearColour([self.r, self.g, self.b, self.a]),
-            name: (!self.name.is_empty()).then(|| self.name.clone()),
-        }
-    }
 }
 
 /// How much of the project's footage its `.lum` carries, for the File menu's
@@ -255,6 +235,8 @@ impl ProjectReference {
             // are not this one's to drop. The `planes/` sidecar is untouched,
             // so reopening reads them back.
             lumit_render::planes::forget(&lumit_render::planes::owned_ids(&doc));
+            // A transcription of the project going stops, and its watchers go.
+            crate::speech::forget(self.id);
             // And so do the puppet wireframes the render left for the overlay,
             // by layer for the same reason: another project's are still on
             // screen.

@@ -35,6 +35,7 @@ import 'dart:math';
 import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -100,6 +101,8 @@ import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
 import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
+import '../state/caption_tracks.dart';
+import 'timeline_captions_frb.dart';
 import 'sound_mix_row_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'stagger.dart';
@@ -1305,13 +1308,44 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   Map<String, double> get _sequenceGraph => _ui!.sequenceGraph;
 
   /// How much taller each open view makes its layer's row.
-  Map<String, double> get _sequenceExtra => {
-        for (final id in _sequenceOpen)
-          // The clips' top row *is* the layer's own bar row, so opening adds
-          // only the two under it — which is what keeps the layer's row
-          // looking exactly as it did when the view is shut.
-          id: sequenceClipExtra + (_sequenceGraph[id] ?? sequenceEnvelopeStrip),
-      };
+  Map<String, double> get _sequenceExtra {
+    final sequences = {
+      for (final e in _ui!.model.heldLayers)
+        if (e.info.kind == BridgeLayerKind.sequence)
+          e.layer.internallayerId.toString(),
+    };
+    final captions = captionRowHeight(ThemeScope.of(context).theme);
+    return {
+      for (final id in _sequenceOpen)
+        // A caption layer keeps its bar and opens one row of captions under
+        // it.
+        if (_captions.has(id))
+          id: captions
+        // The clips' top row *is* the layer's own bar row, so opening adds
+        // only the two under it, which is what keeps the layer's row
+        // looking exactly as it did when the view is shut.
+        else if (sequences.contains(id))
+          id: sequenceClipExtra +
+              (_sequenceGraph[id] ?? sequenceEnvelopeStrip),
+    };
+  }
+
+  /// Every caption layer in the comp, read when its layer changes.
+  CaptionTracks get _captions => _ui!.captionTracks;
+
+  /// Captions read again: a layer may have become a caption layer, or its
+  /// marks moved. After the frame when the read came in mid-build.
+  void _onCaptions() {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    setState(() {});
+  }
 
   /// Where each open sequence view sits down the table, as (top, bottom) in
   /// the rows' own coordinates — what the row seams skip over, so an open view
@@ -1328,7 +1362,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // as a single block. The seams that *bound* the whole view are left
         // alone: the range is exclusive at both ends, so the layer still has a
         // line above it and the fold-out below still has one over it.
-        out.add((y, y + row.rowHeight + extra));
+        // A caption layer's row of captions sits under its bar, so the seam
+        // under the bar stays.
+        out.add((row.captions ? y + row.rowHeight : y,
+            y + row.rowHeight + extra));
       }
       y += row.height;
     }
@@ -1355,8 +1392,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           .openNestedComp(entry.layer, source.field0);
       return;
     }
-    if (entry.info.kind != BridgeLayerKind.sequence) return;
     final id = entry.layer.internallayerId.toString();
+    if (entry.info.kind != BridgeLayerKind.sequence && !_captions.has(id)) {
+      return;
+    }
     setState(() {
       if (!_sequenceOpen.remove(id)) _sequenceOpen.add(id);
     });
@@ -2269,6 +2308,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _itemChanges =Provider.of<LumitState>(context, listen: false)
         .onChange
         .listen(_onItemsChanged);
+    _captions.addListener(_onCaptions);
     // Someone else selecting a layer marks its row. The roster, not the whole
     // notifier, which also fires for every playhead and pointer move.
     _share = Provider.of<LumitState>(context, listen: false).share
@@ -2687,7 +2727,31 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _deleteSelectedMasks() ||
         _deleteSelectedShapeEntries() ||
         _deleteSelectedEffects() ||
+        _deleteCaptions() ||
         _deleteSequenceClip();
+  }
+
+  /// The captions picked in a caption layer's open row go, and the layer
+  /// stays.
+  bool _deleteCaptions() {
+    final layer = captionRowPick.value;
+    final ui = _ui;
+    if (layer == null || ui == null) return false;
+    final picked = ui.captionSelection;
+    if (picked.layer != layer.internallayerId || picked.cues.isEmpty) {
+      return false;
+    }
+    try {
+      layer.removeCues(cues: picked.cues.toList());
+    } catch (_) {
+      Provider.of<LumitState>(context, listen: false)
+          .postNotice(l10n.captionsEditFailed, error: true);
+      return true;
+    }
+    picked.choose(layer.internallayerId, const {});
+    _captions.reread(layer);
+    ui.model.refresh();
+    return true;
   }
 
   /// The clip picked in an open sequence view goes, and leaves a gap: what
@@ -3677,6 +3741,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         hasAudio: _hasAudio,
         hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
+        captionLayers: _captions.ids,
         flowParams: _flowParams,
         volumeDb: _volumeDb,
         driven: _driven,
@@ -3768,6 +3833,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (renameLayerInView == _renameInView) renameLayerInView = null;
     _mixRetry?.cancel();
     _itemChanges?.cancel();
+    _captions.removeListener(_onCaptions);
     _share.roster.removeListener(_onRoster);
     sayInHand(_keyStretch, const []);
     sayInHand(_barDrag, const []);
@@ -4556,6 +4622,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         hasAudio: _hasAudio,
         hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
+        captionLayers: _captions.ids,
         flowParams: _flowParams,
         volumeDb: _volumeDb,
         driven: _driven,
@@ -5760,6 +5827,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       blockHeights: blockHeights,
                       groupActions: _groupActions(ui, comp),
                       onOpenSequence: _openLayerView,
+                      captions: _captions,
                       onGraphHeight: (entry, h) => setState(() =>
                           _sequenceGraph[
                               entry.layer.internallayerId.toString()] = h),

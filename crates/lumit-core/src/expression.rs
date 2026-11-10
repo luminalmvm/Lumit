@@ -33,6 +33,7 @@ use uuid::Uuid;
 mod comp;
 mod layer;
 mod math;
+mod point_row;
 pub mod script;
 pub(crate) mod space;
 
@@ -375,40 +376,6 @@ pub enum Row<'a> {
     Effect { effect: Uuid, param: &'a str },
 }
 
-/// The properties of the point `row` is one number of on `layer`, in order,
-/// and which of them it is.
-fn point_of_row<'l>(
-    layer: &'l crate::model::Layer,
-    row: Row<'_>,
-) -> Option<(Vec<&'l crate::anim::Property>, usize)> {
-    use crate::model::EffectValue;
-    match row {
-        Row::Transform(prop) => {
-            let (rows, axis) = layer.point_rows(prop);
-            let props = rows
-                .iter()
-                .map(|r| layer.prop(*r))
-                .collect::<Option<Vec<_>>>()?;
-            Some((props, axis))
-        }
-        Row::Effect { effect, param } => {
-            let inst = layer.effects.iter().find(|e| e.id == effect)?;
-            let float = |id: &str| match inst.params.iter().find(|p| p.id == id)?.value {
-                EffectValue::Float(ref p) => Some(p),
-                _ => None,
-            };
-            let pair = crate::fx::builtins::schema(&inst.effect.match_name)
-                .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param));
-            if let Some(pair) = pair {
-                if let (Some(x), Some(y)) = (float(pair.x), float(pair.y)) {
-                    return Some((vec![x, y], usize::from(pair.y == param)));
-                }
-            }
-            Some((vec![float(param)?], 0))
-        }
-    }
-}
-
 /// What `value` reads on a property: the number under its expression, or
 /// what it holds at nought.
 #[must_use]
@@ -495,7 +462,7 @@ pub fn slot_of_row(context: &ExpressionContext, row: Row<'_>, own: Option<f64>) 
     let Some(layer) = layer else {
         return Slot::default();
     };
-    let Some((props, axis)) = point_of_row(layer, row) else {
+    let Some((props, axis)) = point_row::point_of_row(layer, row) else {
         return Slot::default();
     };
     let Some(this) = props.get(axis) else {
@@ -896,6 +863,7 @@ mod tests {
             animators: Vec::new(),
             style: Default::default(),
             paragraph: Default::default(),
+            captions: None,
             extra: serde_json::Map::new(),
         }
     }

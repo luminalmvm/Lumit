@@ -531,3 +531,40 @@ Future<String?> pickEffectInputFile(
   );
   return file?.path;
 }
+
+/// The subtitle files File ▸ Import ▸ Captions… reads.
+XTypeGroup _captionsGroup() => XTypeGroup(
+      label: l10n.fileTypeCaptions,
+      extensions: const [
+        'srt',
+        'vtt',
+        'ttml',
+        'dfxp',
+        'xml',
+        'ass',
+        'ssa',
+        'lrc'
+      ],
+    );
+
+/// Pick a subtitle file to make a caption layer from, or null when cancelled.
+Future<String?> pickCaptionsToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_captionsGroup()]);
+  return file == null ? null : keepPicked(file);
+}
+
+/// Where to write captions as a file ending [extension], or null when
+/// cancelled. In the browser build the file is then given [handOver].
+Future<String?> pickCaptionsSaveLocation(
+    String suggestedName, String extension) async {
+  if (kIsWeb) return pickSaveTarget('$suggestedName.$extension');
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.fileTypeCaptions, extensions: [extension]),
+    ],
+    suggestedName: '$suggestedName.$extension',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.$extension')) return path;
+  return '$path.$extension';
+}

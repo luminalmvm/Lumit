@@ -8,6 +8,7 @@ import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
 import 'audio.dart';
+import 'captions.dart';
 import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
@@ -28,6 +29,7 @@ import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'transcript.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
@@ -2879,6 +2881,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceAddClipEffect(
           that: this, clip: clip, name: name);
 
+  /// A new caption saying `text` at comp time `at`, and its index.
+  int addCue({required BridgeRational at, required String text}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceAddCue(that: this, at: at, text: text);
+
   /// Append the built-in effect named `name` to this layer's stack — or, when
   /// `name` is a **driver**, to this layer's graph.
   ///
@@ -3147,6 +3154,12 @@ class LayerReference {
   /// opens.
   bool canTakeSource({required ItemReference item}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCanTakeSource(that: this, item: item);
+
+  /// This layer's captions, or `None` when it is not a caption layer.
+  BridgeCaptions? captions() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCaptions(
+        that: this,
+      );
 
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
@@ -3506,6 +3519,13 @@ class LayerReference {
           required bool intoLayers}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceExpandShapeCopies(
           that: this, repeater: repeater, time: time, intoLayers: intoLayers);
+
+  /// Write the captions this layer shows to `path` as `format`, on the
+  /// comp's clock.
+  Future<void> exportCaptions(
+          {required BridgeCaptionFormat format, required String path}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceExportCaptions(
+          that: this, format: format, path: path);
 
   /// **Fade the layer's sound up from silence** over `seconds` from its in
   /// point (docs/09 §6).
@@ -4003,6 +4023,13 @@ class LayerReference {
         that: this,
       );
 
+  /// The footage this layer plays sound from, down through any Precomp
+  /// layers, each once: what has to be heard to caption it.
+  List<FootageReference> heardItems() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceHeardItems(
+        that: this,
+      );
+
   /// Insert a saved node group at canvas point `(x, y)` — **one commit**, so
   /// one undo step however many boxes and wires it carries.
   ///
@@ -4069,6 +4096,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceMergeAudioStreams(
         that: this,
       );
+
+  /// Join `count` captions from `first` into one.
+  void mergeCues({required int first, required int count}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceMergeCues(
+          that: this, first: first, count: count);
 
   /// This layer's **motion path** (docs/07 §2.4), or `None` while its
   /// Position is still — see [`motion_path_of`].
@@ -4260,6 +4292,16 @@ class LayerReference {
         that: this,
       );
 
+  /// Raise `cues` to the top of the picture, or put them back down. One
+  /// undo step.
+  void raiseCues({required List<int> cues, required bool raised}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceRaiseCues(
+          that: this, cues: cues, raised: raised);
+
+  /// Delete these captions.
+  void removeCues({required List<int> cues}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceRemoveCues(that: this, cues: cues);
+
   /// Remove `effect` from this layer's stack — **or from its style list**,
   /// whichever holds it ([`Self::is_style`]). An effect that is no longer
   /// there is an error rather than a silent success, so a double-click on
@@ -4342,6 +4384,19 @@ class LayerReference {
           {required BridgeEffectInstance effect, required int newIndex}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceReorderEffect(
           that: this, effect: effect, newIndex: newIndex);
+
+  /// Swap every `find` for `with` across the captions, and say how many.
+  int replaceInCaptions(
+          {required String find,
+          required String with_,
+          required bool matchCase,
+          required bool wholeWord}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceReplaceInCaptions(
+          that: this,
+          find: find,
+          with_: with_,
+          matchCase: matchCase,
+          wholeWord: wholeWord);
 
   /// Put row `param` of `material` back to its file's value, as one undo
   /// step.
@@ -4513,6 +4568,17 @@ class LayerReference {
   void setCameraZoom({required BridgeScalar zoom}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetCameraZoom(that: this, zoom: zoom);
 
+  /// The language the captions are in, for the files written from them.
+  void setCaptionLanguage({required String language}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCaptionLanguage(
+          that: this, language: language);
+
+  /// New limits; with `rebuild`, every caption is cut again from its words.
+  void setCaptionLimits(
+          {required BridgeCaptionLimits limits, required bool rebuild}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCaptionLimits(
+          that: this, limits: limits, rebuild: rebuild);
+
   /// Choose which audio streams one clip of this Sequence layer sounds,
   /// mixed. One undo step.
   void setClipAudioStreams(
@@ -4604,6 +4670,30 @@ class LayerReference {
           required double endPercent}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipSpeed(
           that: this, clip: clip, percent: percent, endPercent: endPercent);
+
+  /// Where caption `cue`'s lines break, by the words that start them.
+  void setCueBreaks({required int cue, required List<int> breaks}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCueBreaks(
+          that: this, cue: cue, breaks: breaks);
+
+  /// Move caption `cue` this far from where the layer puts it, in comp
+  /// pixels; nought both ways puts it back.
+  void setCueOffset({required int cue, required double x, required double y}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCueOffset(
+          that: this, cue: cue, x: x, y: y);
+
+  /// Show caption `cue` from `start` to `end`, in comp time.
+  void setCueSpan(
+          {required int cue,
+          required BridgeRational start,
+          required BridgeRational end}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCueSpan(
+          that: this, cue: cue, start: start, end: end);
+
+  /// Give caption `cue` new text. Words that stay keep their times.
+  void setCueText({required int cue, required String text}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceSetCueText(that: this, cue: cue, text: text);
 
   /// Enable or bypass `effect` — **or a style**, whichever list holds it
   /// ([`Self::is_style`]), which is what makes a style row's own on/off tick
@@ -5009,6 +5099,12 @@ class LayerReference {
   void setVolumeDb({required BridgeScalar value}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetVolumeDb(that: this, value: value);
 
+  /// Pick a word out for emphasis, or put it back.
+  void setWordEmphasis(
+          {required int cue, required int word, required bool on_}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetWordEmphasis(
+          that: this, cue: cue, word: word, on_: on_);
+
   /// Slide a clip along the row so it starts at `to_frame` (docs/04 §8.2).
   ///
   /// Its length, its trim and its map are untouched — the same frames play,
@@ -5075,6 +5171,15 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSplitAudioStreams(
         that: this,
       );
+
+  /// Cut caption `cue` in two before its word `at_word`.
+  void splitCue({required int cue, required int atWord}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSplitCue(
+          that: this, cue: cue, atWord: atWord);
+
+  /// Cut the caption showing at comp time `at` in two there.
+  void splitCueAt({required BridgeRational at}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSplitCueAt(that: this, at: at);
 
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half

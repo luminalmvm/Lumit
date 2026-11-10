@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 import 'share.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'transcript.dart';
 part 'footage.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `resolve_source`, `source_path`, `stored_path`
@@ -265,6 +266,10 @@ class FootageReference {
     required this.internalid,
   });
 
+  /// A new speaker on this transcript, and their id. One undo step.
+  String addSpeaker({required String name}) => BridgeLib.instance.api
+      .crateApiFootageFootageReferenceAddSpeaker(that: this, name: name);
+
   /// Every audio stream this item's file carries, in the file's own order.
   /// Empty for a file with no sound and for one that will not open.
   List<BridgeAudioStream> audioStreams() =>
@@ -350,6 +355,12 @@ class FootageReference {
   /// stands out.
   Future<BridgePulldownGuess?> guessPulldown() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceGuessPulldown(
+        that: this,
+      );
+
+  /// Whether this item has a transcript, without copying its words.
+  bool hasTranscript() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceHasTranscript(
         that: this,
       );
 
@@ -494,6 +505,12 @@ class FootageReference {
         that: this,
       );
 
+  /// Take this item's transcript away. One undo step.
+  void removeTranscript() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceRemoveTranscript(
+        that: this,
+      );
+
   /// Draw this footage item on its own, into Viewer view `view`
   /// (docs/impl/multi-viewer.md §3.6) — the footage view.
   ///
@@ -579,6 +596,19 @@ class FootageReference {
       BridgeLib.instance.api.crateApiFootageFootageReferenceSetSequenceRate(
           that: this, fpsNum: fpsNum, fpsDen: fpsDen);
 
+  /// Give this item a whole transcript, replacing any it has. One undo step.
+  void setTranscript({required BridgeTranscript transcript}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSetTranscript(
+          that: this, transcript: transcript);
+
+  /// Put `words` where the `remove` words from `at` were. One undo step.
+  void setTranscriptWords(
+          {required int at,
+          required int remove,
+          required List<BridgeWord> words}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSetTranscriptWords(
+          that: this, at: at, remove: remove, words: words);
+
   /// Mark the stretch this item brings into a composition, one undo step a
   /// press. Both ends `None` clears the marks, and marks the item already
   /// has are not written again.
@@ -593,6 +623,17 @@ class FootageReference {
   /// row that has nothing to tick.
   void setUseProxy({required bool on_}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceSetUseProxy(that: this, on_: on_);
+
+  /// Correct one word's text, keeping its time. One undo step.
+  void setWordText({required int index, required String text}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSetWordText(
+          that: this, index: index, text: text);
+
+  /// Put the words from `from` up to `to` to `speaker`, or to nobody. One
+  /// undo step.
+  void setWordsSpeaker({required int from, required int to, String? speaker}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSetWordsSpeaker(
+          that: this, from: from, to: to, speaker: speaker);
 
   /// Ask the others for this footage item: a stand-in of it, or with
   /// `original` the file itself. Does nothing when the project is not
@@ -619,6 +660,12 @@ class FootageReference {
           {required int maxEdge, required int frame}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceThumbnail(
           that: this, maxEdge: maxEdge, frame: frame);
+
+  /// This item's transcript, or `None` before it has one.
+  BridgeTranscript? transcript() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceTranscript(
+        that: this,
+      );
 
   /// The stretch marked with In and Out on the source side, which is what
   /// this item brings into a composition.

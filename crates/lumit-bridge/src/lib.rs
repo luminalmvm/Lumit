@@ -84,6 +84,7 @@ mod project_cache;
 mod audio;
 mod autosave;
 mod beats;
+mod captioning;
 mod claim;
 mod closing;
 // The command line, which the browser build has none of.
@@ -116,6 +117,7 @@ mod render;
 mod scratch;
 mod script;
 mod shape_paint;
+mod speech;
 mod streams;
 #[cfg(test)]
 mod test_files;

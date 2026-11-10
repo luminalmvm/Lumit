@@ -18,6 +18,9 @@ use uuid::Uuid;
 use crate::api::{effect::BridgeScalar, layer::LayerReference, solid::SolidReference, BridgeError};
 
 pub(crate) mod animators;
+mod style;
+
+use style::{paragraph_of, read_paragraph, read_style, style_of};
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -127,6 +130,15 @@ pub struct BridgeTextStyle {
     pub stroke_over: bool,
     /// Every fill, then every outline (or the other way round), not letter by letter.
     pub strokes_together: bool,
+    /// A plate behind the words, in its colour with alpha.
+    pub plate_on: bool,
+    pub plate: BridgeColourRgba,
+    /// Px of plate round the words.
+    pub plate_padding: f64,
+    /// Px, the plate's corners.
+    pub plate_radius: f64,
+    /// One plate per line rather than one round the block.
+    pub plate_lines: bool,
 }
 
 /// How the lines of a text layer are laid out against each other. All px.
@@ -143,6 +155,18 @@ pub struct BridgeParagraphStyle {
     pub indent_first: f64,
     pub space_before: f64,
     pub space_after: f64,
+    /// Px the block is tall. Unset grows it with its lines.
+    pub box_height: Option<f64>,
+    pub vertical: BridgeVerticalAlign,
+}
+
+/// Where the lines sit in a box of fixed height.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeVerticalAlign {
+    Top,
+    Middle,
+    Bottom,
 }
 
 /// The style a text layer has before anything is styled.
@@ -188,6 +212,19 @@ pub enum BridgeSelectorBasis {
 pub enum BridgeSelectorShape {
     Square,
     Ramp,
+    Smooth,
+    Bounce,
+}
+
+/// What a range selector follows: its own range, or the spoken words.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorMode {
+    Range,
+    Current,
+    Said,
+    Unsaid,
+    Emphasis,
 }
 
 /// Which stretch of the words an animator reaches, in per cent of the run.
@@ -199,6 +236,9 @@ pub struct BridgeRangeSelector {
     pub offset: BridgeScalar,
     pub basis: BridgeSelectorBasis,
     pub shape: BridgeSelectorShape,
+    pub mode: BridgeSelectorMode,
+    /// Seconds a spoken word takes to change.
+    pub ease: f64,
 }
 
 /// One animator group: what a reached letter is asked to do, and the range
@@ -224,6 +264,11 @@ pub struct BridgeTextAnimator {
     pub fill_r: BridgeScalar,
     pub fill_g: BridgeScalar,
     pub fill_b: BridgeScalar,
+    /// Per cent, the box behind the reached letters, and its colour.
+    pub box_opacity: BridgeScalar,
+    pub box_r: BridgeScalar,
+    pub box_g: BridgeScalar,
+    pub box_b: BridgeScalar,
 }
 
 /// A solid asset's definition.
@@ -269,7 +314,8 @@ pub struct BridgeTextBlock {
 }
 
 /// Lay out `text` the way the engine draws it in this style, with or without
-/// the room animators get round it. The first call with a font loads it.
+/// the room animators get round it, and `boxed` when an animator draws boxes.
+/// The first call with a font loads it.
 #[frb(sync)]
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::needless_pass_by_value)]
@@ -279,6 +325,7 @@ pub fn measure_text(
     style: BridgeTextStyle,
     paragraph: BridgeParagraphStyle,
     animated: bool,
+    boxed: bool,
 ) -> BridgeTextBlock {
     let (style, paragraph) = (style_of(style), paragraph_of(paragraph));
     let l = lumit_text::layout(
@@ -289,6 +336,7 @@ pub fn measure_text(
             fill: lumit_core::model::LinearColour::BLACK,
             style: &style,
             paragraph: &paragraph,
+            boxed,
         },
         animated,
     );
@@ -810,6 +858,7 @@ pub(crate) fn text_document_of(
             .collect::<Result<Vec<_>, _>>()?,
         style: Box::new(style_of(document.style)),
         paragraph: paragraph_of(document.paragraph),
+        captions: None,
         extra: serde_json::Map::new(),
     })
 }
@@ -826,10 +875,16 @@ pub(crate) fn restyle_shift(
     // origin, so nothing there moves.
     let straight = before.path.is_none() && after.path.is_none();
     // Retyping the words alone leaves the anchor where it is.
+    let boxed = |d: &lumit_core::model::TextDocument| {
+        d.animators
+            .iter()
+            .any(lumit_core::text::TextAnimator::has_box)
+    };
     let restyled = before.size != after.size
         || before.style != after.style
         || before.paragraph != after.paragraph
-        || before.animators.is_empty() != after.animators.is_empty();
+        || before.animators.is_empty() != after.animators.is_empty()
+        || boxed(before) != boxed(after);
     if !(straight && restyled) {
         return (0.0, 0.0);
     }
@@ -852,119 +907,6 @@ fn reference_point(document: &lumit_core::model::TextDocument) -> (f64, f64) {
     };
     let y = l.lines.first().map_or(0.0, |line| line.baseline);
     (f64::from(x), f64::from(y))
-}
-
-fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
-    use lumit_core::text::{Caps, Kerning, Script};
-    BridgeTextStyle {
-        family: style.family.clone(),
-        face: style.face.clone(),
-        leading: style.leading,
-        kerning: match style.kerning {
-            Kerning::Off => BridgeKerning::Off,
-            Kerning::Metrics => BridgeKerning::Metrics,
-        },
-        tracking: style.tracking,
-        scale_x: style.scale_x,
-        scale_y: style.scale_y,
-        baseline_shift: style.baseline_shift,
-        caps: match style.caps {
-            Caps::Normal => BridgeCaps::Normal,
-            Caps::All => BridgeCaps::All,
-            Caps::Small => BridgeCaps::Small,
-        },
-        script: match style.script {
-            Script::Normal => BridgeScript::Normal,
-            Script::Superscript => BridgeScript::Superscript,
-            Script::Subscript => BridgeScript::Subscript,
-        },
-        faux_bold: style.faux_bold,
-        faux_italic: style.faux_italic,
-        ligatures: style.ligatures,
-        fill_on: style.fill_on,
-        stroke_on: style.stroke_on,
-        stroke: colour_of(style.stroke),
-        stroke_width: style.stroke_width,
-        stroke_over: style.stroke_over,
-        strokes_together: style.strokes_together,
-    }
-}
-
-fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
-    use lumit_core::text::{Caps, Kerning, Script};
-    lumit_core::text::TextStyle {
-        family: style.family,
-        face: style.face,
-        leading: style.leading.filter(|l| l.is_finite() && *l >= 0.0),
-        kerning: match style.kerning {
-            BridgeKerning::Off => Kerning::Off,
-            BridgeKerning::Metrics => Kerning::Metrics,
-        },
-        tracking: style.tracking,
-        scale_x: style.scale_x,
-        scale_y: style.scale_y,
-        baseline_shift: style.baseline_shift,
-        caps: match style.caps {
-            BridgeCaps::Normal => Caps::Normal,
-            BridgeCaps::All => Caps::All,
-            BridgeCaps::Small => Caps::Small,
-        },
-        script: match style.script {
-            BridgeScript::Normal => Script::Normal,
-            BridgeScript::Superscript => Script::Superscript,
-            BridgeScript::Subscript => Script::Subscript,
-        },
-        faux_bold: style.faux_bold,
-        faux_italic: style.faux_italic,
-        ligatures: style.ligatures,
-        fill_on: style.fill_on,
-        stroke_on: style.stroke_on,
-        stroke: linear_of(style.stroke),
-        stroke_width: style.stroke_width,
-        stroke_over: style.stroke_over,
-        strokes_together: style.strokes_together,
-        extra: serde_json::Map::new(),
-    }
-}
-
-fn read_paragraph(paragraph: &lumit_core::text::ParagraphStyle) -> BridgeParagraphStyle {
-    use lumit_core::text::TextAlign;
-    BridgeParagraphStyle {
-        align: match paragraph.align {
-            TextAlign::Left => BridgeTextAlign::Left,
-            TextAlign::Centre => BridgeTextAlign::Centre,
-            TextAlign::Right => BridgeTextAlign::Right,
-        },
-        box_width: Some(paragraph.box_width).filter(|w| *w > 0.0),
-        justify: paragraph.justify,
-        indent_left: paragraph.indent_left,
-        indent_right: paragraph.indent_right,
-        indent_first: paragraph.indent_first,
-        space_before: paragraph.space_before,
-        space_after: paragraph.space_after,
-    }
-}
-
-fn paragraph_of(paragraph: BridgeParagraphStyle) -> lumit_core::text::ParagraphStyle {
-    use lumit_core::text::TextAlign;
-    lumit_core::text::ParagraphStyle {
-        align: match paragraph.align {
-            BridgeTextAlign::Left => TextAlign::Left,
-            BridgeTextAlign::Centre => TextAlign::Centre,
-            BridgeTextAlign::Right => TextAlign::Right,
-        },
-        box_width: paragraph
-            .box_width
-            .filter(|w| w.is_finite() && *w > 0.0)
-            .unwrap_or(0.0),
-        justify: paragraph.justify,
-        indent_left: paragraph.indent_left,
-        indent_right: paragraph.indent_right,
-        indent_first: paragraph.indent_first,
-        space_before: paragraph.space_before,
-        space_after: paragraph.space_after,
-        extra: serde_json::Map::new(),
-    }
 }
 
 /// Slide an animatable number by `delta` without changing its shape — every

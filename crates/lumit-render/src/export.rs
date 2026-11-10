@@ -21,8 +21,10 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use uuid::Uuid;
 
+pub mod captions;
 pub mod format;
 mod frame;
+mod sound_only;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
 
@@ -2223,6 +2225,8 @@ pub struct ExportSpec {
     pub when_done: WhenDone,
     /// Dither, palette and plays. Unread by every format but GIF.
     pub gif: lumit_media::encode::gif::GifOptions,
+    /// What happens to the comp's caption layers.
+    pub captions: captions::CaptionsOut,
 }
 
 impl Default for ExportSpec {
@@ -2250,6 +2254,7 @@ impl Default for ExportSpec {
             render: RenderOptions::default(),
             when_done: WhenDone::default(),
             gif: lumit_media::encode::gif::GifOptions::default(),
+            captions: captions::CaptionsOut::default(),
         }
     }
 }
@@ -2336,7 +2341,7 @@ impl ExportSpec {
         if !caps.video && !caps.audio {
             return Err("this format can carry neither picture nor sound".to_owned());
         }
-        Ok(())
+        captions::check(self)
     }
 
     /// The render settings this export actually runs with.
@@ -2439,7 +2444,14 @@ pub fn start(
     std::thread::spawn(move || {
         crate::model::stop_reads_with(Arc::clone(&flag));
         let opened = AtomicBool::new(false);
-        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened);
+        let mut sidecars = Vec::new();
+        // The caption files go beside the file, and go first: one that
+        // cannot be written stops the export before the picture starts, not
+        // after it, when failing would take the finished file with it.
+        let stop = || flag.load(Ordering::Relaxed);
+        let result = captions::write_files(&doc, comp_id, &out_path, &spec, &stop)
+            .map(|written| sidecars = written)
+            .and_then(|()| run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened));
         // No half files, but only a file this export began. One that failed
         // before it opened anything has written nothing, and an image
         // sequence never writes to the name it was given, so whatever is
@@ -2447,6 +2459,9 @@ pub fn start(
         let unfinished = || {
             if opened.load(Ordering::Relaxed) {
                 let _ = std::fs::remove_file(&out_path);
+            }
+            for sidecar in &sidecars {
+                let _ = std::fs::remove_file(sidecar);
             }
         };
         let _ = match result {
@@ -2977,6 +2992,10 @@ fn run(
     // throwaway snapshot, never on the project (docs/06 §7.2).
     let overridden = apply_render_overrides(doc, &spec.render_options());
     let doc = overridden.as_ref().unwrap_or(doc);
+    let mut subtitles =
+        captions::Embedded::of(doc, comp_id, spec, &|| cancel.load(Ordering::Relaxed));
+    let hidden = captions::leave_out(doc, comp_id, spec);
+    let doc = hidden.as_ref().unwrap_or(doc);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
     let span = frame::Span::of(comp, spec);
     let (out_fps, total) = (span.out_fps, span.total);
@@ -2993,7 +3012,7 @@ fn run(
     // the mix is already made, and there is nothing to render.
     if let ExportFormat::Audio(format) = spec.format {
         opened.store(true, Ordering::Relaxed);
-        return run_audio_only(
+        return sound_only::run_audio_only(
             out_path,
             format,
             spec,
@@ -3052,7 +3071,7 @@ fn run(
                 None => (None, None),
             };
             opened.store(true, Ordering::Relaxed);
-            let encoder = lumit_media::encode::Encoder::open(
+            let encoder = lumit_media::encode::Encoder::open_with_subtitles(
                 out_path,
                 Some(&lumit_media::encode::VideoSettings {
                     codec,
@@ -3066,6 +3085,7 @@ fn run(
                     depth: spec.depth,
                 }),
                 audio_settings.as_ref(),
+                &subtitles.languages(),
                 &spec.metadata,
             )
             .map_err(|e| e.to_string())?;
@@ -3135,7 +3155,7 @@ fn run(
     // two, so this holds a frame or two more than a loop that took turns.
     let (rendered, written) = std::thread::scope(|s| {
         let (frames, queued) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
-        let sink = &mut sink;
+        let (sink, subtitles) = (&mut sink, &mut subtitles);
         let writer = std::thread::Builder::new()
             .name("lumit-export-writer".into())
             .spawn_scoped(s, move || -> Result<usize, String> {
@@ -3154,6 +3174,7 @@ fn run(
                             audio_fed = upto;
                         }
                     }
+                    subtitles.feed(sink, (frame_n + 1) as f64 / out_fps)?;
                     let _ = tx.send(ExportEvent::Progress {
                         frame: frame_n + 1,
                         total,
@@ -3380,70 +3401,8 @@ fn run(
                 .map_err(|e| e.to_string())?;
         }
     }
+    subtitles.feed(&mut sink, f64::INFINITY)?;
     sink.finish()
-}
-
-/// Write the comp's mix with no picture at all (docs/06 §7.4). No compositor,
-/// no graphics card: the mixdown above is the whole export, so this feeds it
-/// to the muxer in one-second helpings and reports progress against the same
-/// frame count a video export would have written.
-fn run_audio_only(
-    out_path: &std::path::Path,
-    format: AudioFormat,
-    spec: &ExportSpec,
-    mix: Option<&[f32]>,
-    total: usize,
-    tx: &Sender<ExportEvent>,
-    cancel: &AtomicBool,
-) -> Result<(), String> {
-    let rate = spec.audio_rate;
-    let chans = usize::from(spec.audio_layout.channels());
-    let mut encoder = lumit_media::encode::Encoder::open(
-        out_path,
-        None,
-        Some(&lumit_media::encode::AudioSettings {
-            rate,
-            bit_rate: spec.audio_bit_rate,
-            codec: format.codec(spec.audio_depth),
-            channels: spec.audio_layout.channels(),
-        }),
-        &spec.metadata,
-    )
-    .map_err(|e| e.to_string())?;
-    let _ = tx.send(ExportEvent::Encoder(encoder.encoder_label()));
-
-    // A comp with no audible layer still exports a file — of silence, of the
-    // right length. An empty .wav would look like a failure that wasn't one.
-    let silence;
-    let mix = match mix {
-        Some(m) => m,
-        None => {
-            silence = Vec::new();
-            &silence
-        }
-    };
-    let chunk = rate as usize * chans;
-    for (n, block) in mix.chunks(chunk).enumerate() {
-        if cancel.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-        encoder.write_audio(block).map_err(|e| e.to_string())?;
-        // Progress against the picture's own clock, so the queue row reads
-        // the same way whatever an item writes.
-        let done = ((n + 1) * chunk / chans).min(mix.len() / chans);
-        let frame = if mix.is_empty() {
-            total
-        } else {
-            (done * total / (mix.len() / chans).max(1)).min(total)
-        };
-        let _ = tx.send(ExportEvent::Progress { frame, total });
-    }
-    encoder.finish().map_err(|e| e.to_string())?;
-    let _ = tx.send(ExportEvent::Progress {
-        frame: total,
-        total,
-    });
-    Ok(())
 }
 
 /// Where the rendered frames go: the mp4 muxer, a GIF, or the numbered stills. One
@@ -3616,7 +3575,7 @@ mod tests {
     /// A 30 fps, 5 s solid comp — the smallest document a real export can run
     /// against (mirrors the headless tests' builder; modules cannot share test
     /// helpers without exporting them, and exporting a test helper is worse).
-    fn solid_doc(w: u32, h: u32) -> (Arc<Document>, Uuid) {
+    pub(super) fn solid_doc(w: u32, h: u32) -> (Arc<Document>, Uuid) {
         use lumit_core::model::{
             Composition, LayerKind, LinearColour, ProjectItem, SolidDef, Switches,
         };

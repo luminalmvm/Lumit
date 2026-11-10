@@ -32,6 +32,7 @@ use uuid::Uuid;
 use algo::ALGO_VERSION;
 
 mod algo;
+mod edge_key;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
@@ -602,70 +603,6 @@ fn feed_comp_graph(
     Some(())
 }
 
-/// Fold one wire into the frame key.
-///
-/// Where it comes from and where it goes, tag byte first so two shapes cannot
-/// hash alike, and every port id length-prefixed so `a` into `bc` and `ab` into
-/// `c` are different wires. Node **ids** are hashed here — unlike a mask, where
-/// the position is what counts — because a wire has no position: the id is the
-/// only thing that says which of two identical drivers is feeding the socket.
-fn feed_edge(h: &mut blake3::Hasher, edge: &lumit_core::graph::Edge) {
-    use lumit_core::graph::{InputRef, NodeRef, OutputRef};
-    let name = |h: &mut blake3::Hasher, s: &str| {
-        h.update(&(s.len() as u64).to_le_bytes());
-        h.update(s.as_bytes());
-    };
-    match &edge.from {
-        OutputRef::SourceMatte => {
-            h.update(&[0]);
-        }
-        OutputRef::Driver { node, port } => {
-            h.update(&[1]);
-            h.update(node.as_bytes());
-            name(h, port);
-        }
-        // A points wire is an edge like any other, so it folds like one
-        // (points-stream.md §3.4): cutting it names a different frame, and no
-        // new term is needed to say so. A fresh tag byte, so the two id-and-port
-        // shapes above cannot hash alike with it.
-        OutputRef::EffectData { effect, port } => {
-            h.update(&[2]);
-            h.update(effect.as_bytes());
-            name(h, port);
-        }
-        OutputRef::EffectOutput { effect } => {
-            h.update(&[3]);
-            h.update(effect.as_bytes());
-        }
-    }
-    match &edge.to {
-        InputRef::Matte { effect } => {
-            h.update(&[0]);
-            h.update(effect.as_bytes());
-        }
-        InputRef::Param { node, port } => {
-            h.update(&[1]);
-            match node {
-                NodeRef::Source => {
-                    h.update(&[0]);
-                }
-                NodeRef::Effect(id) => {
-                    h.update(&[1]);
-                    h.update(id.as_bytes());
-                }
-                NodeRef::Driver(id) => {
-                    h.update(&[2]);
-                    h.update(id.as_bytes());
-                }
-                NodeRef::Out => {
-                    h.update(&[3]);
-                }
-            }
-            name(h, port);
-        }
-    }
-}
-
 /// Fold an effect stack into the frame key (docs/08): each live effect's
 /// identity, version and evaluated parameters, plus the local time for seeded
 /// and marker-driven effects (their pixels depend on time even when parameters
@@ -750,7 +687,7 @@ fn feed_effect_stack(
             lumit_core::fx::drivers::temporal_window(&l.graph, lt, context.clone()),
         );
         for edge in &l.graph.edges {
-            feed_edge(h, edge);
+            edge_key::feed_edge(h, edge);
         }
     }
 
@@ -2273,15 +2210,15 @@ fn feed_source(
             // caption says something different at every frame, and hashing the
             // stored text would key them all the same and freeze the first
             // frame it rendered on screen for the rest of the comp.
-            let context = ExpressionContext {
+            let context = Arc::new(ExpressionContext {
                 document: doc.clone(),
                 comp: Some(owner.id),
                 layer: Some(layer.id),
                 comp_time,
                 current_depth: 0,
                 inputs: None,
-            };
-            let line = document.resolved_text(Arc::new(context));
+            });
+            let (line, spoken, [x, y]) = lumit_core::captions::show::spoken(document, context);
             h.update(line.as_bytes());
             h.update(&[0]); // length delimiter: text then size never collide
             feed_f64(h, document.size);
@@ -2328,24 +2265,23 @@ fn feed_source(
                 }
             }
             // Text animators. What is fed is what actually reaches the
-            // picture — each letter's resolved push, turn, size, opacity and
-            // tint — rather than the animators' settings: two different
+            // picture — each letter's resolved push, turn, size, opacity, tint
+            // and box — rather than the animators' settings: two different
             // selectors that happen to move the same letters the same way draw
             // the same frame and may share it, and a swept range keys per frame
             // because its weights change per frame. A layer with no animators
             // feeds nothing at all and keeps the key it has always had.
-            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt) {
-                for v in [
-                    x.position[0],
-                    x.position[1],
-                    x.rotation,
-                    x.scale[0],
-                    x.scale[1],
-                    x.opacity,
-                    x.fill[0],
-                    x.fill[1],
-                    x.fill[2],
-                ] {
+            // A caption moved off where the layer puts it, resolved with its
+            // words above. One that is not feeds nothing.
+            if x != 0.0 || y != 0.0 {
+                h.update(b"moved/");
+                feed_f64(h, x);
+                feed_f64(h, y);
+            }
+            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken) {
+                let lone = [x.rotation, x.opacity, x.depth];
+                let pairs = x.position.into_iter().chain(x.scale).chain(x.turn);
+                for v in pairs.chain(lone).chain(x.fill).chain(x.plate) {
                     h.update(&v.to_le_bytes());
                 }
             }
@@ -2986,6 +2922,7 @@ mod tests {
                     animators: Vec::new(),
                     style: Default::default(),
                     paragraph: Default::default(),
+                    captions: None,
                     extra: serde_json::Map::new(),
                 },
             },

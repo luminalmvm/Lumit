@@ -154,6 +154,23 @@ pub struct BridgeExportSpec {
     /// How many times a GIF plays, `0` for forever.
     #[frb(default = 0)]
     pub gif_plays: u32,
+    /// What happens to the composition's own caption layers.
+    #[frb(default = "BridgeCaptionsOut.burn")]
+    pub captions: BridgeCaptionsOut,
+}
+
+/// What an export does with the composition's own caption layers.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeCaptionsOut {
+    /// Drawn into the picture.
+    Burn,
+    /// Left out of the picture and written beside the file as SubRip.
+    Srt,
+    /// Left out of the picture and written beside the file as WebVTT.
+    Vtt,
+    /// Left out of the picture and carried inside the file as subtitles.
+    Embed,
 }
 
 /// One key/value pair written into the container.
@@ -211,6 +228,7 @@ impl Default for BridgeExportSpec {
             gif_dither: 0,
             gif_palette_per_frame: false,
             gif_plays: 0,
+            captions: BridgeCaptionsOut::Burn,
         }
     }
 }
@@ -273,6 +291,9 @@ pub struct BridgeFormatCaps {
     /// frames count in hundredths of a second. Zero is no limit.
     #[frb(default = 0)]
     pub max_fps: u32,
+    /// Can carry captions inside the file as subtitles.
+    #[frb(default = false)]
+    pub subtitles: bool,
 }
 
 /// The crop an export actually applies, and the frame it leaves — the answer
@@ -402,6 +423,19 @@ impl CompositionReference {
         let state = self.project()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
         crate::api::colour::with_colour(&state, |colour| crate::export::spec_check(&spec, colour))
+    }
+
+    /// Whether this composition has a caption layer of its own, which is
+    /// when the export dialogue asks what to do with captions.
+    #[frb(sync)]
+    pub fn has_captions(&self) -> Result<bool, BridgeError> {
+        let state = self.project()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state
+            .store
+            .snapshot()
+            .comp(self.id)
+            .is_some_and(lumit_render::export::captions::has_caption_layer))
     }
 }
 
@@ -796,16 +830,17 @@ pub fn export_queue_update(
 
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
-/// sequence the file asked about is frame one.
+/// sequence the file asked about is frame one. The caption files `captions`
+/// writes beside it count too.
 #[frb(sync)]
-pub fn export_path_taken(path: String, codec: String) -> bool {
-    crate::export::path_taken(&path, &codec)
+pub fn export_path_taken(path: String, codec: String, captions: BridgeCaptionsOut) -> bool {
+    crate::export::path_taken(&path, &codec, captions)
 }
 
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
 #[frb(sync)]
-pub fn export_free_path(path: String, codec: String) -> String {
-    crate::export::free_path(&path, &codec)
+pub fn export_free_path(path: String, codec: String, captions: BridgeCaptionsOut) -> String {
+    crate::export::free_path(&path, &codec, captions)
 }
 
 #[frb(ignore)]

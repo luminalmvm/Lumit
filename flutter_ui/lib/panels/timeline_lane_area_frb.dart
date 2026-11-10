@@ -25,6 +25,8 @@ import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
+import '../state/caption_tracks.dart';
+import 'timeline_captions_row_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'spectral_lane_frb.dart';
@@ -170,8 +172,11 @@ class LayerArea extends StatelessWidget {
   /// click that lights a bar must not rebuild the fifty-six it did not touch.
   final ValueListenable<TimelineSelection> selection;
 
-  /// Open or close a Sequence layer's view.
+  /// Open or close a Sequence layer's view, or a caption layer's captions.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
+
+  /// Every caption layer's captions, for its open row and its bar's marks.
+  final CaptionTracks? captions;
 
   /// What a group's combined bar can be asked to do — the panel's own
   /// set, shared with the outline's header row so the two halves of a group
@@ -354,6 +359,7 @@ class LayerArea extends StatelessWidget {
     required this.staggerOrdered,
     required this.selection,
     this.onOpenSequence,
+    this.captions,
     this.onGraphHeight,
     this.sequenceBlanks = const [],
     this.hScroll,
@@ -932,7 +938,8 @@ class LayerArea extends StatelessWidget {
                                           ),
                                         ),
                                       if (rows[i].bodyDrawn &&
-                                          rows[i].sequenceExtra == null)
+                                          (rows[i].sequenceExtra == null ||
+                                              rows[i].captions))
                                         LayerBlock(
                                           selection: selection,
                                           layerId: rows[i].id,
@@ -976,9 +983,18 @@ class LayerArea extends StatelessWidget {
                                                         BridgeLayerKind
                                                             .sequence ||
                                                     rows[i].entry.info.kind ==
-                                                        BridgeLayerKind.precomp
+                                                        BridgeLayerKind
+                                                            .precomp ||
+                                                    rows[i].captions
                                                 ? () => onOpenSequence
                                                     ?.call(rows[i].entry)
+                                                : null,
+                                            // Shut, a caption layer's bar
+                                            // marks where its captions are.
+                                            captions: rows[i].captions &&
+                                                    rows[i].sequenceExtra ==
+                                                        null
+                                                ? captions?.track(rows[i].id)
                                                 : null,
                                             onChanged: onChanged,
                                             dragPreview: dragPreview,
@@ -999,7 +1015,38 @@ class LayerArea extends StatelessWidget {
                                       // the same `sequenceExtra` the
                                       // outline left the gap for, so the
                                       // view and its room are one answer.
-                                      if (rows[i].sequenceExtra != null)
+                                      if (rows[i].sequenceExtra != null &&
+                                          rows[i].captions)
+                                        if (captions?.track(rows[i].id)
+                                            case final track?)
+                                          SizedBox(
+                                            height: rows[i].sequenceExtra,
+                                            child: CaptionsRowFrb(
+                                              key: ValueKey<String>(
+                                                  'tl-captions-row-${rows[i].id}'),
+                                              entry: rows[i].entry,
+                                              track: track,
+                                              axis: axis,
+                                              fpsNum: fpsNum,
+                                              fpsDen: fpsDen,
+                                              hScroll: hScroll,
+                                              snapTargets: snap,
+                                              magnet: magnet,
+                                              razor: razor,
+                                              razorFrameAt: razorFrameAt,
+                                              onSelect: () =>
+                                                  onSelect(rows[i].entry.layer),
+                                              onClose: () => onOpenSequence
+                                                  ?.call(rows[i].entry),
+                                              onChanged: () {
+                                                captions?.reread(
+                                                    rows[i].entry.layer);
+                                                onChanged();
+                                              },
+                                            ),
+                                          ),
+                                      if (rows[i].sequenceExtra != null &&
+                                          !rows[i].captions)
                                         SequenceViewFrb(
                                           key: ValueKey<String>(
                                               'tl-seq-${rows[i].id}'),

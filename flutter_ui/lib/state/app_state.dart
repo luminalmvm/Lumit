@@ -25,6 +25,7 @@ import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/file_dialogs.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
+import 'package:lumit_flutter/state/transcription.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:provider/provider.dart';
@@ -109,6 +110,9 @@ String? inviteFromArgs(List<String> args) {
 
 class LumitState extends ChangeNotifier {
   ProjectReference? project;
+
+  /// The open project's transcription, wherever it was started.
+  final TranscriptionState transcription = TranscriptionState();
 
   /// Closes an undo step left open across time, a camera's run of wheel
   /// notches, so Undo, Redo and the History window never land inside it.
@@ -1235,6 +1239,7 @@ class LumitState extends ChangeNotifier {
     // The engine stops sharing a project that is replaced or closed.
     _forgetShare();
     project = opened;
+    transcription.adopt(opened);
     // The comp list is cached per document and invalidated when the
     // item tree changes — but adopting another project is not a change to the
     // tree, it is a different tree. Left standing, every reader of `comps()`

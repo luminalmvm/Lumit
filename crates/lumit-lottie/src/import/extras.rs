@@ -200,6 +200,7 @@ pub(super) fn text_layer(
         path: None,
         path_offset: Property::zero(),
         animators: Vec::new(),
+        captions: None,
         style: Box::new(TextStyle {
             family,
             face,

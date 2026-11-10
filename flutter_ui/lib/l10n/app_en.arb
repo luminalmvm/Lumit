@@ -7227,6 +7227,30 @@
   "@keyCutTimeline": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Cut timeline is the panel for editing clips end to end."
   },
+  "keyCaptionsPanel": "Captions panel",
+  "@keyCaptionsPanel": {
+    "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Captions panel lists a caption layer's captions to edit."
+  },
+  "keySplitTheCaptionAtThePlayhead": "Split the caption at the playhead",
+  "@keySplitTheCaptionAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyJoinTheSelectedCaptions": "Join the selected captions",
+  "@keyJoinTheSelectedCaptions": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAddACaptionAtThePlayhead": "Add a caption at the playhead",
+  "@keyAddACaptionAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyGoToThePreviousCaption": "Go to the previous caption",
+  "@keyGoToThePreviousCaption": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Moves the playhead to where the caption before it starts."
+  },
+  "keyGoToTheNextCaption": "Go to the next caption",
+  "@keyGoToTheNextCaption": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Moves the playhead to where the next caption starts."
+  },
   "keyPreviousFrame": "Previous frame",
   "@keyPreviousFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -10511,6 +10535,66 @@
   "textAnimatorsSection": "Animators",
   "@textAnimatorsSection": {
     "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
+  },
+  "textAnimatorFollows": "Follows",
+  "@textAnimatorFollows": {
+    "description": "Row label in the Animators section for what picks the letters an animator reaches: its own range, or the words of a caption as they are said."
+  },
+  "textAnimatorFollowsRange": "Range",
+  "@textAnimatorFollowsRange": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the letters its range start, end and offset mark out."
+  },
+  "textAnimatorFollowsCurrent": "Word being said",
+  "@textAnimatorFollowsCurrent": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the word of a caption that is being spoken at this moment."
+  },
+  "textAnimatorFollowsSaid": "Words said",
+  "@textAnimatorFollowsSaid": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches every word of a caption that has been spoken so far."
+  },
+  "textAnimatorFollowsUnsaid": "Words to come",
+  "@textAnimatorFollowsUnsaid": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the words of a caption that have not been spoken yet."
+  },
+  "textAnimatorFollowsEmphasis": "Emphasised words",
+  "@textAnimatorFollowsEmphasis": {
+    "description": "Option in the Animators section's Follows picker: the animator reaches the words of a caption that were picked out by hand for emphasis."
+  },
+  "textAnimatorEase": "Ease",
+  "@textAnimatorEase": {
+    "description": "Row label in the Animators section: how long, in seconds, a spoken word takes to change when the animator follows a caption's words."
+  },
+  "textAnimatorShapeSmooth": "Smooth",
+  "@textAnimatorShapeSmooth": {
+    "description": "Option in the Animators section's Shape picker: the movement eases in and out rather than rising evenly."
+  },
+  "textAnimatorShapeBounce": "Bounce",
+  "@textAnimatorShapeBounce": {
+    "description": "Option in the Animators section's Shape picker: the movement overshoots a little, then settles."
+  },
+  "textAnimatorBoxColour": "Box colour",
+  "@textAnimatorBoxColour": {
+    "description": "Row label in the Animators section: three numbers for the colour of a box drawn behind the letters the animator reaches."
+  },
+  "textAnimatorBoxOpacity": "Box opacity",
+  "@textAnimatorBoxOpacity": {
+    "description": "Row label in the Animators section: how solid the box behind the letters the animator reaches is, as a per cent. Nought draws no box."
+  },
+  "textPresetHighlightWord": "Highlight the word",
+  "@textPresetHighlightWord": {
+    "description": "Name of a caption animation preset: the word being said is tinted a warm yellow."
+  },
+  "textPresetKaraoke": "Karaoke",
+  "@textPresetKaraoke": {
+    "description": "Name of a caption animation preset: the letters are tinted one by one as each word is said, as a sing-along does."
+  },
+  "textPresetPopWordsIn": "Pop words in",
+  "@textPresetPopWordsIn": {
+    "description": "Name of a caption animation preset: each word grows in from nothing with a small bounce as it is said."
+  },
+  "textPresetBoxWord": "Box the word",
+  "@textPresetBoxWord": {
+    "description": "Name of a caption animation preset: a coloured box is drawn behind the word being said."
   },
   "themeCopySuffix": "{name} copy",
   "@themeCopySuffix": {
@@ -16088,6 +16172,26 @@
   "@exportGuideLayers": {
     "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
   },
+  "exportCaptions": "Captions",
+  "@exportCaptions": {
+    "description": "Export dialog, Composition group: the row label for what happens to the composition's caption layers. Shown only when the composition has one."
+  },
+  "exportCaptionsBurn": "Burn in",
+  "@exportCaptionsBurn": {
+    "description": "Export dialog, Captions row: the captions are drawn into the picture."
+  },
+  "exportCaptionsSrt": "SRT file",
+  "@exportCaptionsSrt": {
+    "description": "Export dialog, Captions row: the captions are left out of the picture and written beside the video as a SubRip (.srt) subtitle file."
+  },
+  "exportCaptionsVtt": "WebVTT file",
+  "@exportCaptionsVtt": {
+    "description": "Export dialog, Captions row: the captions are left out of the picture and written beside the video as a WebVTT (.vtt) subtitle file."
+  },
+  "exportCaptionsEmbed": "In the video file",
+  "@exportCaptionsEmbed": {
+    "description": "Export dialog, Captions row: the captions are left out of the picture and carried inside the video file as subtitles that can be switched on and off."
+  },
   "exportDiskCache": "Disk cache",
   "@exportDiskCache": {
     "description": "Export dialog, Composition group: whether the export reads frames already banked on disk."
@@ -18113,6 +18217,464 @@
   "@histSetSequenceRate": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histTranscribe": "Transcribe",
+  "@histTranscribe": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. The words heard in a piece of footage, written down."
+  },
+  "histDeleteTranscript": "Delete transcript",
+  "@histDeleteTranscript": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditTranscript": "Edit transcript",
+  "@histEditTranscript": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. A word of a transcript corrected or given to another speaker."
+  },
+  "histEditSpeakers": "Edit speakers",
+  "@histEditSpeakers": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. A speaker in a transcript renamed, added or taken away."
+  },
+  "histEditCaptions": "Edit captions",
+  "@histEditCaptions": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. Captions retyped, retimed, split, joined or restyled."
+  },
+  "histRemoveCaptions": "Remove captions",
+  "@histRemoveCaptions": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. A caption layer turned back into an ordinary Text layer."
+  },
+  "panelCaptions": "Captions",
+  "@panelCaptions": {
+    "description": "The name of the Captions panel, on its tab and in Window ▸ Panels. It lists a caption layer's captions to read and edit."
+  },
+  "captionsCreate": "Create captions",
+  "@captionsCreate": {
+    "description": "Button in the Captions panel's empty state and the Create captions dialog's own button: make a caption layer from what the selected layer says."
+  },
+  "captionsCreateTitle": "Create captions",
+  "@captionsCreateTitle": {
+    "description": "Title of the dialog that makes a caption layer from the speech in a layer."
+  },
+  "menuCreateCaptions": "Create captions…",
+  "@menuCreateCaptions": {
+    "description": "Layer ▸ Audio and the layer's right-click Audio rows: open the dialog that makes a caption layer from what the layer says."
+  },
+  "captionsImportEllipsis": "Import captions…",
+  "@captionsImportEllipsis": {
+    "description": "File menu, the Captions panel's empty state and its More menu: make a caption layer from a subtitle file (.srt, .vtt and others)."
+  },
+  "fileTypeCaptions": "Subtitle files",
+  "@fileTypeCaptions": {
+    "description": "The file type in the open and save dialogues for subtitle files (.srt, .vtt, .ttml and others)."
+  },
+  "captionsLanguage": "Language",
+  "@captionsLanguage": {
+    "description": "Create captions dialog and the Captions panel's More menu: the language that is spoken."
+  },
+  "captionsDetect": "Detect",
+  "@captionsDetect": {
+    "description": "An option in the Create captions dialog's Language and Speakers lists: let Lumit hear it."
+  },
+  "captionsSpeakers": "Speakers",
+  "@captionsSpeakers": {
+    "description": "Create captions dialog: how many people speak, so their words can be told apart."
+  },
+  "captionsSpeakersOne": "One",
+  "@captionsSpeakersOne": {
+    "description": "Create captions dialog, Speakers list: every word is put to one speaker."
+  },
+  "captionsAudioStream": "Audio stream",
+  "@captionsAudioStream": {
+    "description": "Create captions dialog: which of a file's several sounds to hear, for a file that carries more than one."
+  },
+  "captionsStyle": "Style",
+  "@captionsStyle": {
+    "description": "Create captions dialog row label, and the tooltip on the Captions panel's button that opens the grid of caption styles."
+  },
+  "captionsLines": "Lines",
+  "@captionsLines": {
+    "description": "Create captions dialog and the Captions panel's limits: how many lines a caption may have."
+  },
+  "captionsCharsPerLine": "Characters per line",
+  "@captionsCharsPerLine": {
+    "description": "Create captions dialog and the Captions panel's limits: the longest a caption's line may be, in characters."
+  },
+  "captionsMore": "More",
+  "@captionsMore": {
+    "description": "Create captions dialog: the fold holding the rest of the settings. Also the tooltip on the Captions panel's menu of further commands."
+  },
+  "captionsWords": "Words per caption",
+  "@captionsWords": {
+    "description": "Create captions dialog and the Captions panel's limits: the most words a caption holds."
+  },
+  "captionsWordsAny": "Any",
+  "@captionsWordsAny": {
+    "description": "Words per caption list: no limit on the number of words."
+  },
+  "captionsGap": "Gap",
+  "@captionsGap": {
+    "description": "Create captions dialog and the Captions panel's limits: frames left empty between two captions."
+  },
+  "captionsShortest": "Shortest",
+  "@captionsShortest": {
+    "description": "Create captions dialog and the Captions panel's limits: the least time a caption stays up, in seconds."
+  },
+  "captionsLongest": "Longest",
+  "@captionsLongest": {
+    "description": "Create captions dialog and the Captions panel's limits: the most time a caption stays up, in seconds."
+  },
+  "captionsReadingSpeed": "Reading speed",
+  "@captionsReadingSpeed": {
+    "description": "Create captions dialog and the Captions panel's limits: characters a second a caption should be readable at."
+  },
+  "captionsReadingSpeedTip": "{cps} characters a second",
+  "@captionsReadingSpeedTip": {
+    "description": "Tooltip on the figure beside each caption in the Captions panel: how fast it asks to be read.",
+    "placeholders": {
+      "cps": {
+        "type": "int"
+      }
+    }
+  },
+  "captionsUnitCps": "cps",
+  "@captionsUnitCps": {
+    "description": "The unit after a reading speed: characters a second. Short."
+  },
+  "captionsOff": "Off",
+  "@captionsOff": {
+    "description": "Speaker names list, and the reading speed field at nought: nothing is shown or checked."
+  },
+  "captionsSpeakerNames": "Speaker names",
+  "@captionsSpeakerNames": {
+    "description": "Create captions dialog and the Captions panel's More menu: how the speakers show in the captions."
+  },
+  "captionsSpeakerNamesNames": "Names",
+  "@captionsSpeakerNamesNames": {
+    "description": "Speaker names list: the speaker's name goes in front when the speaker changes."
+  },
+  "captionsSpeakerNamesDashes": "Dashes",
+  "@captionsSpeakerNamesDashes": {
+    "description": "Speaker names list: a dash goes in front of each speaker's line when two share a caption."
+  },
+  "captionsFillers": "Keep um and uh",
+  "@captionsFillers": {
+    "description": "Create captions dialog: keep the sounds people make between words."
+  },
+  "captionsVocabulary": "Words to expect",
+  "@captionsVocabulary": {
+    "description": "Create captions dialog: names and words the speakers use, typed so they are heard and spelt right."
+  },
+  "captionsTranslate": "Into English",
+  "@captionsTranslate": {
+    "description": "Create captions dialog: write what was said in English, whatever language it was said in."
+  },
+  "captionsSpeakerName": "Speaker {n}",
+  "@captionsSpeakerName": {
+    "description": "What a newly heard speaker is called until renamed. {n} is their number, filled in by Lumit.",
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "captionsLayerName": "Captions",
+  "@captionsLayerName": {
+    "description": "The name a new caption layer is given when its language is not known."
+  },
+  "captionsLayerNamed": "Captions ({language})",
+  "@captionsLayerNamed": {
+    "description": "The name a new caption layer is given. {language} is the language's own name for itself, such as Deutsch.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "captionsNoSound": "That layer makes no sound to caption.",
+  "@captionsNoSound": {
+    "description": "Status line, when Create captions is asked of a layer with no sound."
+  },
+  "captionsHearingBusy": "Another file is being transcribed.",
+  "@captionsHearingBusy": {
+    "description": "Status line, when captions are asked for while a transcription is already running."
+  },
+  "captionsHearingFailed": "The speech could not be heard.",
+  "@captionsHearingFailed": {
+    "description": "Status line, when a transcription ends without writing down every file that was asked for."
+  },
+  "captionsCreateFailed": "The captions could not be made.",
+  "@captionsCreateFailed": {
+    "description": "Status line, when making a caption layer fails."
+  },
+  "captionsImportFailed": "{file} could not be read as captions.",
+  "@captionsImportFailed": {
+    "description": "Status line, when a subtitle file cannot be made into a caption layer. {file} is the file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "captionsEditFailed": "That change could not be made to the captions.",
+  "@captionsEditFailed": {
+    "description": "Status line, when an edit in the Captions panel is turned down."
+  },
+  "captionsNothingToSplit": "No caption to split at the playhead.",
+  "@captionsNothingToSplit": {
+    "description": "Status line, when Split is asked for where there is no caption, or only one word."
+  },
+  "captionsNothingToJoin": "Those captions cannot be joined.",
+  "@captionsNothingToJoin": {
+    "description": "Status line, when Join is asked of captions that cannot be one, such as captions from two different files."
+  },
+  "captionsCannotAddHere": "No caption can go at the playhead.",
+  "@captionsCannotAddHere": {
+    "description": "Status line, when a caption is added where there is no room or no speech from the layer the captions follow."
+  },
+  "captionsFind": "Find",
+  "@captionsFind": {
+    "description": "Placeholder in the Captions panel's search field."
+  },
+  "captionsFoundNone": "None",
+  "@captionsFoundNone": {
+    "description": "Beside the Captions panel's search field: nothing was found."
+  },
+  "captionsFoundOf": "{at} of {count}",
+  "@captionsFoundOf": {
+    "description": "Beside the Captions panel's search field: which of the captions found is the one stepped to, and how many were found.",
+    "placeholders": {
+      "at": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "captionsFoundPrevious": "Previous",
+  "@captionsFoundPrevious": {
+    "description": "Tooltip on the Captions panel's button that steps to the previous caption found."
+  },
+  "captionsFoundNext": "Next",
+  "@captionsFoundNext": {
+    "description": "Tooltip on the Captions panel's button that steps to the next caption found."
+  },
+  "captionsReplace": "Replace",
+  "@captionsReplace": {
+    "description": "Captions panel: the tooltip on the button that shows the replace row, and the button that replaces what was found in one caption."
+  },
+  "captionsReplaceWith": "Replace with",
+  "@captionsReplaceWith": {
+    "description": "Placeholder in the Captions panel's replace field."
+  },
+  "captionsReplaceAll": "All",
+  "@captionsReplaceAll": {
+    "description": "Captions panel's replace row: replace what was found in every caption."
+  },
+  "captionsMatchCase": "Match case",
+  "@captionsMatchCase": {
+    "description": "Tooltip on the Captions panel's switch that finds only text with the same capitals."
+  },
+  "captionsWholeWord": "Whole word",
+  "@captionsWholeWord": {
+    "description": "Tooltip on the Captions panel's switch that finds only whole words."
+  },
+  "captionsReplaced": "{count, plural, =0{Nothing replaced.} =1{1 replaced.} other{{count} replaced.}}",
+  "@captionsReplaced": {
+    "description": "Status line after Replace all in the Captions panel.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "captionsAdd": "Add a caption at the playhead",
+  "@captionsAdd": {
+    "description": "Tooltip on the Captions panel's add button."
+  },
+  "captionsSplit": "Split at the playhead",
+  "@captionsSplit": {
+    "description": "Tooltip on the Captions panel's split button, and a row of a caption's right-click menu."
+  },
+  "captionsJoin": "Join the selected captions",
+  "@captionsJoin": {
+    "description": "Tooltip on the Captions panel's join button."
+  },
+  "captionsJoinNext": "Join with next",
+  "@captionsJoinNext": {
+    "description": "A row of a caption's right-click menu in the Captions panel: make it and the caption after it one."
+  },
+  "captionsRetype": "Retype",
+  "@captionsRetype": {
+    "description": "A row of a caption's right-click menu in the Captions panel: type into it."
+  },
+  "captionsRaise": "Raise to top",
+  "@captionsRaise": {
+    "description": "A row of a caption's right-click menu: show this caption at the top of the picture, off a title at the bottom."
+  },
+  "captionsPutDown": "Put back down",
+  "@captionsPutDown": {
+    "description": "A row of a caption's right-click menu: show a raised caption where the others are again."
+  },
+  "captionsLimits": "Limits",
+  "@captionsLimits": {
+    "description": "Tooltip on the Captions panel's button that opens what a caption may hold and how long it stays."
+  },
+  "captionsMakeAgain": "Make captions again",
+  "@captionsMakeAgain": {
+    "description": "Captions panel: cut every caption again from its words, to the limits as they are set now."
+  },
+  "captionsFormatSrt": "SRT",
+  "@captionsFormatSrt": {
+    "description": "Captions panel's Export menu: write a SubRip subtitle file."
+  },
+  "captionsFormatVtt": "WebVTT",
+  "@captionsFormatVtt": {
+    "description": "Captions panel's Export menu: write a WebVTT subtitle file."
+  },
+  "captionsFormatTtml": "Timed Text",
+  "@captionsFormatTtml": {
+    "description": "Captions panel's Export menu: write a Timed Text (TTML) subtitle file."
+  },
+  "captionsFormatText": "Text",
+  "@captionsFormatText": {
+    "description": "Captions panel's Export menu: write the captions' words alone, one caption a line."
+  },
+  "captionsExported": "{file} written.",
+  "@captionsExported": {
+    "description": "Status line after captions are exported. {file} is the file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "captionsExportFailed": "The captions could not be written.",
+  "@captionsExportFailed": {
+    "description": "Status line when exporting captions to a file fails."
+  },
+  "captionsSaveStyle": "Save style…",
+  "@captionsSaveStyle": {
+    "description": "Button under the caption styles grid: keep the current caption layer's look in the list."
+  },
+  "captionsSaveStyleTitle": "Save style",
+  "@captionsSaveStyleTitle": {
+    "description": "Title of the small dialog that names a saved caption style."
+  },
+  "captionsStyleName": "Style {n}",
+  "@captionsStyleName": {
+    "description": "The name suggested for a saved caption style. {n} is a number.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "captionStylePlain": "Plain",
+  "@captionStylePlain": {
+    "description": "A caption style: white words with a thin dark outline."
+  },
+  "captionStyleBox": "Box",
+  "@captionStyleBox": {
+    "description": "A caption style: white words on a dark box, a line at a time."
+  },
+  "captionStyleHighlight": "Highlight",
+  "@captionStyleHighlight": {
+    "description": "A caption style: the word being said turns yellow."
+  },
+  "captionStyleKaraoke": "Karaoke",
+  "@captionStyleKaraoke": {
+    "description": "A caption style: the words fill with colour as they are said."
+  },
+  "captionStylePop": "Pop",
+  "@captionStylePop": {
+    "description": "A caption style: each word pops in as it is said."
+  },
+  "captionStyleWordBox": "Word box",
+  "@captionStyleWordBox": {
+    "description": "A caption style: bold capitals, with a box round the word being said."
+  },
+  "captionStyleOneWord": "One word",
+  "@captionStyleOneWord": {
+    "description": "A caption style: one large word at a time."
+  },
+  "captionStyleSample": "Every word counts",
+  "@captionStyleSample": {
+    "description": "Three short words drawn in each caption style's tile, to show the look. The second word is drawn as the one being said. Keep it to three short words."
+  },
+  "speechInstallTitle": "Speech model",
+  "@speechInstallTitle": {
+    "description": "Title of the dialog that installs what Lumit needs to hear speech."
+  },
+  "speechInstallChecking": "Looking for the speech model…",
+  "@speechInstallChecking": {
+    "description": "The speech model dialog while the list of addons is fetched."
+  },
+  "speechInstallNoneOffered": "No speech model is offered for this computer.",
+  "@speechInstallNoneOffered": {
+    "description": "The speech model dialog when the list of addons has none to install."
+  },
+  "transcribeLoading": "Loading the speech model",
+  "@transcribeLoading": {
+    "description": "Status line and Captions panel while a transcription opens the speech model."
+  },
+  "transcribeListening": "Transcribing {file}",
+  "@transcribeListening": {
+    "description": "Status line and Captions panel while a file's speech is written down. {file} is the file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "transcribeSpeakers": "Finding the speakers in {file}",
+  "@transcribeSpeakers": {
+    "description": "Status line and Captions panel while the voices in a file are told apart. {file} is the file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "transcribeSpeed": "{speed}× speed",
+  "@transcribeSpeed": {
+    "description": "Captions panel while a transcription runs: how many times faster than it plays the sound is being heard.",
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "projectTranscribe": "Transcribe",
+  "@projectTranscribe": {
+    "description": "Project panel's right-click menu on footage with sound: write down what is said in it."
+  },
+  "projectRemoveTranscript": "Remove transcript",
+  "@projectRemoveTranscript": {
+    "description": "Project panel's right-click menu on footage that has been transcribed: take the written-down words away."
+  },
+  "addonTaskSpeech": "Speech",
+  "@addonTaskSpeech": {
+    "description": "Settings ▸ Addons: what a model pack does, for a pack that hears speech."
+  },
+  "captionsEmphasise": "Emphasise",
+  "@captionsEmphasise": {
+    "description": "Captions panel, right-click on a word in a caption: show that word in the style's emphasis colour."
+  },
+  "captionsStopEmphasising": "Stop emphasising",
+  "@captionsStopEmphasising": {
+    "description": "Captions panel, right-click on an emphasised word in a caption: show it like the other words again."
+  },
+  "captionsPosition": "Position…",
+  "@captionsPosition": {
+    "description": "Captions panel, a caption's right-click menu: opens a small box to move the caption, or every selected caption, across and up or down."
+  },
+  "captionsPositionX": "X",
+  "@captionsPositionX": {
+    "description": "Captions panel, the Position box: how far a caption is moved across, in pixels."
+  },
+  "captionsPositionY": "Y",
+  "@captionsPositionY": {
+    "description": "Captions panel, the Position box: how far a caption is moved down, in pixels."
+  },
   "histMarkInAndOut": "Mark In and Out",
   "@histMarkInAndOut": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. The In and Out marks set on a piece of footage in the Viewer's source side."
@@ -19665,6 +20227,26 @@
   "@textAllStrokesOverAllFills": {
     "description": "Text panel, Fill and stroke choice: every letter's fill is drawn first and every outline on top. After Effects' name for it."
   },
+  "textBackground": "Background",
+  "@textBackground": {
+    "description": "Text panel: label beside the switch and colour of a plate drawn behind the words."
+  },
+  "textBackgroundOpacity": "Opacity",
+  "@textBackgroundOpacity": {
+    "description": "Text panel: label beside how solid the plate behind the words is, as a per cent."
+  },
+  "textBackgroundPadding": "Padding",
+  "@textBackgroundPadding": {
+    "description": "Text panel: label beside how far the plate behind the words reaches past them, in pixels."
+  },
+  "textBackgroundRadius": "Corner radius",
+  "@textBackgroundRadius": {
+    "description": "Text panel: label beside how round the plate's corners are, in pixels."
+  },
+  "textBackgroundLines": "Per line",
+  "@textBackgroundLines": {
+    "description": "Text panel: label beside the switch that draws one plate behind each line rather than one round the whole block."
+  },
   "textScaleY": "Vertical scale",
   "@textScaleY": {
     "description": "Text panel: label beside how far the letters are stretched upwards, in per cent."
@@ -19756,6 +20338,26 @@
   "paragraphSpaceAfter": "Space after",
   "@paragraphSpaceAfter": {
     "description": "Paragraph panel: label beside the room added below each paragraph, in pixels."
+  },
+  "paragraphBoxHeight": "Box height",
+  "@paragraphBoxHeight": {
+    "description": "Paragraph panel: label beside how tall the block of words is, in pixels. Nought lets the block grow with its lines."
+  },
+  "paragraphBoxHeightAuto": "Auto",
+  "@paragraphBoxHeightAuto": {
+    "description": "Paragraph panel: what the box height field reads at nought, where the block grows with its lines. One word."
+  },
+  "tipParagraphAlignTop": "Align top",
+  "@tipParagraphAlignTop": {
+    "description": "Tooltip on the Paragraph panel button that sets the lines at the top of a box of fixed height."
+  },
+  "tipParagraphAlignMiddle": "Align middle",
+  "@tipParagraphAlignMiddle": {
+    "description": "Tooltip on the Paragraph panel button that sets the lines in the middle of a box of fixed height."
+  },
+  "tipParagraphAlignBottom": "Align bottom",
+  "@tipParagraphAlignBottom": {
+    "description": "Tooltip on the Paragraph panel button that sets the lines at the bottom of a box of fixed height, so new lines grow upwards."
   },
   "panelGroupStacked": "Stacked group",
   "@panelGroupStacked": {
