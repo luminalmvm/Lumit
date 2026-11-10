@@ -17,6 +17,7 @@ mod blend_mode;
 mod light;
 mod light_file;
 mod material;
+mod parent_placement;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -3622,33 +3623,13 @@ pub fn parent_placements(
         .rev()
         .filter_map(|id| comp.layers.iter().find(|l| l.id == *id));
     ancestors
-        .map(|a| (a.id, parent_placement(comp, a, t, read, solves)))
+        .map(|a| {
+            (
+                a.id,
+                parent_placement::parent_placement(comp, a, t, read, solves),
+            )
+        })
         .collect()
-}
-
-/// `layer`'s placement as a parent: a solved camera is placed by its solve.
-fn parent_placement(
-    comp: &Composition,
-    layer: &Layer,
-    t: f64,
-    read: &Read<'_>,
-    solves: Solves<'_>,
-) -> Placement {
-    let mut p = crate::orient::placed_in(comp, layer, t, read, solves);
-    let solved = matches!(
-        layer.kind,
-        LayerKind::Camera {
-            solve_link: Some(_),
-            ..
-        }
-    );
-    if let Some((doc, store)) = solves.filter(|_| solved) {
-        if let Some(own) = crate::track::own_camera_pose_of(doc, comp, layer, t, store) {
-            p.position = own.pose.position;
-            p.rotation_deg = own.pose.rotation_deg;
-        }
-    }
-    p
 }
 
 /// The space `layer`'s parents put it in at comp time `t`. `None` with no
@@ -3720,7 +3701,7 @@ pub fn layer_space(
     read: &Read<'_>,
     solves: Solves<'_>,
 ) -> crate::camera::Place {
-    let own = parent_placement(comp, layer, t, read, solves).place();
+    let own = parent_placement::parent_placement(comp, layer, t, read, solves).place();
     parent_space(comp, layer, t, read, solves).map_or(own, |outer| own.within(&outer))
 }
 

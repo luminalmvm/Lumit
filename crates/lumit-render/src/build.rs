@@ -33,6 +33,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub(crate) mod fx_key;
+mod raster_scale;
 pub(crate) mod shading;
 
 /// One layer's source pixels ready for a draw: `(rgba, tex_w, tex_h, natural
@@ -164,18 +165,6 @@ fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
 // ponytail: the whole art is drawn, seen or not. Draw only the part in frame
 // if a scaled-up shape is still too slow.
 const SHAPE_RASTER_PIXELS: f64 = 4096.0 * 4096.0;
-
-/// How many comp pixels one of the layer's own pixels covers at most, read
-/// off its world placement: the longest of the two axes' lengths, whichever
-/// way round the matrix is laid out, so a turned or skewed layer is never
-/// drawn short.
-fn shape_raster_scale(m: [[f32; 4]; 4]) -> f32 {
-    let len = |a: f32, b: f32| a.hypot(b);
-    len(m[0][0], m[1][0])
-        .max(len(m[0][1], m[1][1]))
-        .max(len(m[0][0], m[0][1]))
-        .max(len(m[1][0], m[1][1]))
-}
 
 /// What the compositor draws `layer`'s own picture with at layer time `lt`,
 /// each property read under `context`: any Orientation turned into the
@@ -2087,8 +2076,12 @@ fn comp_walk(
                     // its parents show it, so scaling it up never blurs it.
                     // The effects read the raster factor off the texture, so
                     // they keep their size.
-                    let shown =
-                        shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
+                    let shown = raster_scale::shape_raster_scale(world_placement(
+                        comp,
+                        layer,
+                        t_comp,
+                        context.clone(),
+                    ));
                     let most = (SHAPE_RASTER_PIXELS / (natural_w * natural_h))
                         .sqrt()
                         .max(1.0);

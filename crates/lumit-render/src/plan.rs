@@ -27,6 +27,7 @@ use crate::source::SourceProbes;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
 use uuid::Uuid;
+mod synthesis_key;
 
 /// While the user is actively scrubbing or dragging, footage decodes at most
 /// this wide so a frame comes back fast (the specified resolution reloads the
@@ -1463,7 +1464,7 @@ impl CompJob {
         if let Some(flow) = &self.flow {
             h.update(b"flow/");
             h.update(&bincode::serialize(flow).unwrap_or_default());
-            feed_synthesis(&mut h, flow);
+            synthesis_key::feed_synthesis(&mut h, flow);
         }
         for (offset, frame) in &self.temporal {
             h.update(&offset.to_le_bytes());
@@ -1503,7 +1504,7 @@ impl CompJob {
         if let Some(flow) = &self.shutter_flow {
             h.update(b"shutter-flow/");
             h.update(&bincode::serialize(flow).unwrap_or_default());
-            feed_synthesis(&mut h, flow);
+            synthesis_key::feed_synthesis(&mut h, flow);
         }
         // Another clip's frame is content too, and so is a gap.
         for (kind, offset, clip) in self.cuts.iter().map(Cut::name) {
@@ -1515,22 +1516,6 @@ impl CompJob {
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);
         u128::from_le_bytes(k)
-    }
-}
-
-/// Which model paints this job's in-between frames, for a job that asks one to.
-///
-/// The pack is not in the document, so serialising the Flow group cannot say
-/// which one it is. Without this the pixels change when a pack is installed and
-/// their name does not, and every effect on the layer hands back the picture it
-/// worked out from the built-in engine's frames (docs/impl/addons.md §7).
-fn feed_synthesis(h: &mut blake3::Hasher, flow: &lumit_core::retime::FlowParams) {
-    if flow.engine != lumit_core::retime::FlowEngineChoice::Rife {
-        return;
-    }
-    if let Some(identity) = lumit_ml::synthesis::installed_identity() {
-        h.update(b"synth/");
-        h.update(&identity);
     }
 }
 
