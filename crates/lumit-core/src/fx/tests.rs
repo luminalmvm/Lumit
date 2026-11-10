@@ -11581,7 +11581,7 @@ fn round_corners_closes_a_nicked_corner() {
     // A strip's end and a wedge's tip are sides of their own.
     let strip = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 4.0], [0.0, 4.0]];
     assert_eq!(without_nicks(&strip, 5.0).len(), 4);
-    let wedge = vec![[0.0, 0.0], [200.0, -1.5], [200.0, 1.5]];
+    let wedge = [[0.0, 0.0], [200.0, -1.5], [200.0, 1.5]];
     let wedge = vec![wedge[0], wedge[1], wedge[2], [0.0, 3.0]];
     assert_eq!(without_nicks(&wedge, 5.0).len(), 4);
     // A point a cut left on a straight side goes, so the corner beside it
@@ -11600,7 +11600,7 @@ fn round_corners_closes_a_nicked_corner() {
         .any(|p| (p[0] - 100.0).abs() < 0.2 && (p[1] - 80.0).abs() < 0.6));
     // A thin ray's end keeps its corners, though they sit within a pixel of
     // the line through their neighbours.
-    let ray = vec![[0.0, 0.0], [200.0, -0.8], [200.0, 0.8]];
+    let ray = [[0.0, 0.0], [200.0, -0.8], [200.0, 0.8]];
     assert_eq!(
         without_nicks(&[ray[0], ray[1], ray[2], [0.0, 1.2]], 20.0).len(),
         4

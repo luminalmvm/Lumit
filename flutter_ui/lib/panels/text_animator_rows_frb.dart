@@ -123,7 +123,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
       // Animators row: it adds an animator, where an animator's Add adds to
       // that animator.
       actions: [
-        RowButton(
+        Flexible(
+            child: RowButton(
           key: const ValueKey('text-animator-add'),
           label: l10n.textAnimatorAdd,
           arrow: true,
@@ -147,7 +148,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
               ),
             );
           },
-        ),
+        )),
       ],
       rows: rows,
     );

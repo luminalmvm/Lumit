@@ -1109,7 +1109,13 @@ class RowButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label, style: t.small.copyWith(color: colour)),
+              // A narrow heading shortens the label rather than overflowing.
+              Flexible(
+                child: Text(label,
+                    style: t.small.copyWith(color: colour),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
               if (arrow) ...[
                 const SizedBox(width: 2),
                 glyph.LumitIcon(LumitIcons.expand,

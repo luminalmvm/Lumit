@@ -223,7 +223,7 @@ pub fn rasterise_at(
     xforms: &[GlyphXform],
     zoom: f32,
 ) -> (RasterText, (u32, u32)) {
-    if !(zoom > 1.0 + 1e-3) || !zoom.is_finite() {
+    if !zoom.is_finite() || zoom <= 1.0 + 1e-3 {
         let plain = rasterise(block, xforms);
         let size = (plain.width, plain.height);
         return (plain, size);
@@ -262,7 +262,7 @@ pub fn rasterise_along_at(
     xforms: &[GlyphXform],
     zoom: f32,
 ) -> RasterText {
-    if !(zoom > 1.0 + 1e-3) || !zoom.is_finite() {
+    if !zoom.is_finite() || zoom <= 1.0 + 1e-3 {
         return rasterise_along(block, path, offset, width, height, xforms);
     }
     styled::rasterise_on_path(block, path, offset, width, height, xforms, zoom)
