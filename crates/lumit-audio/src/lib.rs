@@ -32,6 +32,7 @@ pub mod spectra;
 pub mod speed;
 pub mod stereo_peaks;
 pub mod stream;
+pub mod sync;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
