@@ -1446,7 +1446,7 @@ impl HeadlessRenderer {
                         w.decoded(done as u32, total);
                     }
                 })
-                .map_err(|e| format!("headless preview: {e}"))?;
+                .map_err(|e| crate::cancel::or_fault(e, "headless preview"))?;
             self.retained = Some(Retained {
                 comp: comp_id,
                 frame,

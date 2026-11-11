@@ -24,6 +24,7 @@
 use crate::decode::{CompJob, Cut};
 use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
+use lumit_core::fx::temporal::FlowWant;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -235,18 +236,19 @@ fn media_source(
 /// its own frame.
 ///
 /// The second half of each entry is the flow offset a field measured against
-/// that picture is filed under, `None` when nothing measures it. On the frame
-/// before a cut (`crosses`, asked per offset) Motion blur is measured a frame
-/// back and filed under its own `1`, so the next shot is never read as motion.
+/// that picture is filed under and how it is wanted, `None` when nothing
+/// measures it. On the frame before a cut (`crosses`, asked per offset) Motion
+/// blur is measured a frame back and filed under its own `1`, so the next shot
+/// is never read as motion.
 pub(crate) fn rebuild_offsets(
     layer: &lumit_core::model::Layer,
     lt: f64,
     comp_dt: f64,
     crosses: impl Fn(i32) -> bool,
-) -> Vec<(i32, Option<i32>)> {
+) -> Vec<(i32, Option<(i32, FlowWant)>)> {
     let fx_on = layer.switches.fx;
-    let flow = lumit_core::fx::temporal::stack_flow_sides(&layer.effects, fx_on, crosses);
-    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side)| side).collect();
+    let flow = lumit_core::fx::temporal::stack_flow_sides_wanted(&layer.effects, fx_on, crosses);
+    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side, _)| side).collect();
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, fx_on) {
         // Asked at the layer's frame, as a footage layer's window is.
         offsets.extend(lumit_core::fx::temporal::stack_temporal_window(
@@ -263,10 +265,8 @@ pub(crate) fn rebuild_offsets(
     offsets
         .into_iter()
         .map(|o| {
-            (
-                o,
-                flow.iter().find(|&&(_, side)| side == o).map(|&(f, _)| f),
-            )
+            let measure = flow.iter().find(|&&(_, side, _)| side == o);
+            (o, measure.map(|&(f, _, want)| (f, want)))
         })
         .collect()
 }
@@ -631,10 +631,8 @@ pub fn collect_comp_jobs(
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {
-                let flow_neighbours = lumit_core::fx::temporal::stack_flow_neighbours(
-                    &layer.effects,
-                    layer.switches.fx,
-                );
+                let flow_neighbours =
+                    lumit_core::fx::temporal::stack_flow_wants(&layer.effects, layer.switches.fx);
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 // The job for one clip at layer time `lt`, alone (a clip
                 // whose source is a comp has no job). `whole` asks for
@@ -991,10 +989,8 @@ pub fn collect_comp_jobs(
                 let interp = &layer.interpolation;
                 let blend_on = matches!(interp, Interpolation::Blend) || flow.is_some();
                 let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
-                let flow_neighbours = lumit_core::fx::temporal::stack_flow_neighbours(
-                    &layer.effects,
-                    layer.switches.fx,
-                );
+                let flow_neighbours =
+                    lumit_core::fx::temporal::stack_flow_wants(&layer.effects, layer.switches.fx);
                 // A layer that needs flow decodes at its own width whatever the
                 // preview tier says: flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
@@ -1477,8 +1473,9 @@ impl CompJob {
         if self.flow_neighbours.is_empty() {
             h.update(&i32::MIN.to_le_bytes());
         }
-        for offset in &self.flow_neighbours {
+        for (offset, want) in &self.flow_neighbours {
             h.update(&offset.to_le_bytes());
+            h.update(want.name_tag());
         }
         // The extracted channels name the pixels as surely as the frame number
         // does: the same file at the same frame is a different picture read as

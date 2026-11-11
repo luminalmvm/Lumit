@@ -1806,8 +1806,23 @@ impl Realiser<'_> {
             // Only an offset a flow consumer asked for is measured. An Echo
             // or a plugin reads the neighbour picture and nothing more. A
             // field measured on the other side of the frame is turned round.
-            if let Some(under) = *measure {
-                if let Some(field) = self.measure_flow(now, &then, under != *offset) {
+            // Follow motion off is handed one of no motion at full trust,
+            // which says only that the neighbour is usable where it is.
+            if let Some((under, want)) = *measure {
+                let field = match want {
+                    lumit_core::fx::temporal::FlowWant::Still => Some(
+                        lumit_gpu::fx::common::upload_flow_field(
+                            &self.ctx,
+                            &[0.0],
+                            &[0.0],
+                            &[1.0],
+                            1,
+                            1,
+                        ),
+                    ),
+                    _ => self.measure_flow(now, &then, under != *offset),
+                };
+                if let Some(field) = field {
                     fields.push((under, field));
                 }
             }

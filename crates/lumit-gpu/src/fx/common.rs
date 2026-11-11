@@ -123,6 +123,9 @@ pub fn upload_flow_field(
     w: u32,
     h: u32,
 ) -> wgpu::Texture {
+    // Charged to the frame, as a work texture is: a frame of Denoise uploads
+    // one for every neighbour.
+    ctx.charge_vram(crate::texture_bytes(wgpu::TextureFormat::Rgba32Float, w, h));
     let tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("fx-flow-field"),
         size: wgpu::Extent3d {

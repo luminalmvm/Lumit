@@ -162,18 +162,20 @@ impl Realiser<'_> {
                         .collect();
                     // The dense motion fields, one per offset a
                     // flow-consuming effect asked for, each uploaded
-                    // as its own texture (only when it matches the layer's
-                    // raster). The confidence rides in the .z channel
+                    // as its own texture at the size it was filed at: the
+                    // layer's raster for Motion blur and Datamosh, which
+                    // only bind one that matches it, the measured size for
+                    // Denoise. The confidence rides in the .z channel
                     // (FX-19).
                     let flow: Vec<(i32, wgpu::Texture)> = l
                         .flow_fields
                         .iter()
-                        .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
-                        .map(|(offset, u, v, conf, _, _)| {
+                        .filter(|(_, _, _, _, fw, fh)| *fw > 0 && *fh > 0)
+                        .map(|(offset, u, v, conf, fw, fh)| {
                             (
                                 *offset,
                                 lumit_gpu::fx::common::upload_flow_field(
-                                    &self.ctx, u, v, conf, w, h,
+                                    &self.ctx, u, v, conf, *fw, *fh,
                                 ),
                             )
                         })

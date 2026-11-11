@@ -50,7 +50,7 @@ fn a_float_plates_motion_is_measured_on_its_floats() {
         blend: None,
         flow: None,
         temporal: vec![(1, 1)],
-        flow_neighbours: vec![1],
+        flow_neighbours: vec![(1, lumit_core::fx::temporal::FlowWant::Full)],
         slate: false,
         channels: None,
         shutter: Vec::new(),
@@ -60,11 +60,12 @@ fn a_float_plates_motion_is_measured_on_its_floats() {
     let frame = pool
         .decode_comp(Uuid::now_v7(), 0, &[job], 0, &|_| {})
         .unwrap();
-    let (_, (u, v, _)) = frame.layers[0]
+    let (_, (u, v, _, size)) = frame.layers[0]
         .flow_fields
         .iter()
         .find(|(o, _)| *o == 1)
         .expect("the field asked for");
+    assert_eq!(*size, (w, h), "at the frame's own size");
     // The middle of the frame, away from the edges the content slid in at.
     let mut us: Vec<f32> = Vec::new();
     let mut vs: Vec<f32> = Vec::new();

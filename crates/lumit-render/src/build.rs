@@ -4401,7 +4401,10 @@ fn comp_walk(
                 };
                 let crosses =
                     |o| lumit_core::fx::temporal::cut_between(&nested.layers, st, nested_at(o));
-                flow_below = crate::plan::rebuild_offsets(layer, lt, dt, crosses)
+                let mut offsets = crate::plan::rebuild_offsets(layer, lt, dt, crosses);
+                let names = keys.filter(|_| !driven_inputs(layer));
+                repeats::in_nested(&mut offsets, names, layer, nested, nested_at);
+                flow_below = offsets
                     .into_iter()
                     // None inside a walk that is itself a neighbour.
                     .filter(|_| !with.rebuild)
@@ -4889,22 +4892,15 @@ fn comp_walk(
             .unwrap_or_default();
         // The dense motion fields, one per offset a flow-consuming effect
         // asked for, carried from the same decode job (their
-        // `(u, v, conf)` are at the layer's decoded size).
+        // `(u, v, conf)` at the size each was filed at).
         let flow_fields = pixels_by_layer
             .get(&layer.id)
             .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.flow_fields
                     .iter()
-                    .map(|(offset, (u, v, conf))| {
-                        (
-                            *offset,
-                            u.clone(),
-                            v.clone(),
-                            conf.clone(),
-                            lp.width,
-                            lp.height,
-                        )
+                    .map(|(offset, (u, v, conf, (fw, fh)))| {
+                        (*offset, u.clone(), v.clone(), conf.clone(), *fw, *fh)
                     })
                     .collect()
             })
@@ -6819,7 +6815,7 @@ fn adjustment_flow_below(
     i32,
     Vec<CompLayerDraw>,
     Option<lumit_core::model::CameraPose>,
-    Option<i32>,
+    Option<(i32, lumit_core::fx::temporal::FlowWant)>,
 )> {
     // The comp's own frame interval: the shutter this effect smears over is a
     // frame of the render, not a frame of some source nobody here has.
@@ -6833,7 +6829,10 @@ fn adjustment_flow_below(
             lumit_core::time::frames_on(t_comp, o, dt),
         )
     };
-    crate::plan::rebuild_offsets(layer, lt, dt, crosses)
+    let mut offsets = crate::plan::rebuild_offsets(layer, lt, dt, crosses);
+    let at = |o| lumit_core::time::frames_on(t_comp, o, dt);
+    repeats::below(&mut offsets, keys, comp, idx, at);
+    offsets
         .into_iter()
         .map(|(offset, measure)| {
             let (draws, camera) = below_draws_cloned(
@@ -7128,6 +7127,7 @@ mod energy_line_path;
 mod moments;
 pub(crate) mod motion_blur;
 mod puppet_warp;
+mod repeats;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -9607,6 +9607,7 @@ mod render_below_at_tests {
     // window, and only a flow consumer's offset is measured.
     #[test]
     fn only_a_temporal_stack_on_a_precomp_pays_for_neighbours() {
+        use lumit_core::fx::temporal::FlowWant;
         use lumit_core::model::ProjectItem;
         let mut doc = Document::new();
         let (footage, probes) = clip(&mut doc);
@@ -9633,7 +9634,7 @@ mod render_below_at_tests {
                 Some(&|_, _, _| held),
             )
         };
-        let rebuilds = |comp: &Composition| -> Vec<(i32, Option<i32>)> {
+        let rebuilds = |comp: &Composition| -> Vec<(i32, Option<(i32, FlowWant)>)> {
             let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
             let mut v = vec![comp.id];
             build_comp_draws(
@@ -9685,7 +9686,11 @@ mod render_below_at_tests {
         assert!(!job.shutter.is_empty());
 
         // Motion blur still gets its measurement.
-        assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, Some(1))]);
+        let full = FlowWant::Full;
+        assert_eq!(
+            rebuilds(&precomp(&["motion_blur"])),
+            vec![(1, Some((1, full)))]
+        );
     }
 
     // Echo on a Precomp layer had the same fault as the plugin: every tap

@@ -73,9 +73,10 @@ pub struct CompJob {
     /// deduplicated: the decode worker measures the dense motion from this frame
     /// to the neighbour at each offset (already fetched via `temporal`) and
     /// stamps them onto [`CompLayerPixels::flow_fields`]. Empty for a stack that
-    /// consumes no flow. See [`lumit_core::fx::temporal::stack_flow_neighbours`] - a list
-    /// rather than the one slot it used to be.
-    pub flow_neighbours: Vec<i32>,
+    /// consumes no flow. See [`lumit_core::fx::temporal::stack_flow_wants`] - a list
+    /// rather than the one slot it used to be. Beside each offset, how its
+    /// consumers want the field handed over.
+    pub flow_neighbours: Vec<(i32, lumit_core::fx::temporal::FlowWant)>,
     /// The file could not be found (docs/07 §3.3): the worker synthesises the
     /// test-bar slate at the layer's size instead of decoding, so a comp with
     /// missing footage shows unmistakably-absent bars rather than silent
@@ -151,9 +152,11 @@ pub struct ShutterSample {
     pub blend: Option<(usize, f32)>,
 }
 
-/// One measured motion field at a layer's decoded size: per-pixel `u` and `v` in
-/// pixels, then the per-pixel confidence in 0..1 (FX-19), each `width × height`.
-pub type FlowFieldData = (Vec<f32>, Vec<f32>, Vec<f32>);
+/// One measured motion field: per-pixel `u` and `v` in its own pixels, then the
+/// per-pixel confidence in 0..1 (FX-19), each `width × height`, and that size.
+/// At the layer's decoded size for a consumer that wants it there, otherwise
+/// at the size it was measured at.
+pub type FlowFieldData = (Vec<f32>, Vec<f32>, Vec<f32>, (u32, u32));
 
 pub struct CompLayerPixels {
     pub layer: Uuid,
@@ -274,7 +277,7 @@ fn weigh(layers: &[CompLayerPixels]) -> u64 {
             let flow: u64 = l
                 .flow_fields
                 .iter()
-                .map(|(_, (u, v, c))| ((u.len() + v.len() + c.len()) * 4) as u64)
+                .map(|(_, (u, v, c, _))| ((u.len() + v.len() + c.len()) * 4) as u64)
                 .sum();
             // A moment is a whole layer-pixels of its own, so it is weighed by
             // the same rule rather than a second one that could drift.
@@ -1528,90 +1531,10 @@ fn decode_comp(
                     .map(|p| (offset, p.rgba))
             })
             .collect();
-        // Flow motion blur (docs/08 §3.2, offset +1) and Datamosh
-        // (§3.12, offset -1) both need a dense motion field: the forward
-        // flow from this frame to the requested neighbour (already
-        // decoded above). Computed from the raw current frame before it
-        // is consumed into `rgba` below, where both frames live as RGBA —
-        // exactly as the Flow retiming policy computes its flow, on the
-        // shared engine that reuses the GPU when one is present. A
-        // dropped neighbour just leaves that offset absent, degrading its
-        // flow-consuming effect to a passthrough.
-        //
-        // **One measurement per offset asked for**. The two effects
-        // want opposite directions — forward to the next frame, back to the
-        // previous — so a single shared field was never something both could
-        // read; the layer used to carry one and the first effect in stack order
-        // silently took it. They are separate entries in `flow_cache` below,
-        // keyed by the frame pair, so a stack with only one of them measures
-        // exactly once, as it always did.
-        let flow_fields: Vec<(i32, FlowFieldData)> = job
-            .flow_neighbours
-            .iter()
-            .filter_map(|&offset| {
-                let (_, other) = temporal.iter().find(|(o, _)| *o == offset)?;
-                Some((offset, {
-                    let (w, h) = (px.width as usize, px.height as usize);
-                    // An effect asking for motion has no parameters of its own,
-                    // and sharing the retime policy's settings would make one
-                    // layer's blur depend on the other's retime.
-                    //
-                    // Half resolution, though, not the retime default of
-                    // native. Retime measures natively so that preview and
-                    // export agree about the picture; an effect has no
-                    // such argument, and a smaller working size is *better*
-                    // here rather than merely cheaper. Between consecutive
-                    // frames of a fast camera move the displacement is large,
-                    // and an 8×8 patch on a 1080p frame is a tiny window on
-                    // content that is often periodic — container ribs, railings,
-                    // brickwork — where the patch matches many positions
-                    // equally well and picks one. Halving doubles what each
-                    // patch spans relative to that repeat, which is the
-                    // difference between disambiguating it and guessing. It is
-                    // also the working resolution docs/impl/optical-flow.md §1
-                    // names as the default, and a quarter of the cost.
-                    let set = lumit_flow::FlowSettings {
-                        divisor: 2,
-                        ..lumit_flow::FlowSettings::default()
-                    };
-                    // Read as the samples are: a float plate's bytes are not
-                    // eight-bit colour, and measured as if they were the
-                    // motion is noise.
-                    let (ga, gb, _) =
-                        if px.format == lumit_media::decode::PixelFormat::LinearF32 {
-                            lumit_flow::flow_grays_f32(&px.rgba, other, w, h, &set)
-                        } else {
-                            lumit_flow::flow_grays(&px.rgba, other, w, h, &set)
-                        };
-                    let nb = job
-                        .temporal
-                        .iter()
-                        .find(|(o, _)| *o == offset)
-                        .map_or(job.source_frame, |(_, f)| *f);
-                    let (fwd, bwd) = flow_for(
-                        flow_engine,
-                        flow_cache,
-                        gpu,
-                        job.item,
-                        job.source_frame,
-                        nb,
-                        &ga,
-                        &gb,
-                        &set,
-                        false,
-                    );
-                    // The per-pixel confidence Motion blur tapers the streak
-                    // by (FX-19); the same deterministic function export runs, so
-                    // the two match. Datamosh ignores it.
-                    let conf = lumit_flow::confidence(&fwd, &bwd);
-                    // The consumers want a field at the frame's own size. The
-                    // vectors scale with the image — a 3 px move at half res is
-                    // 6 px at full — while the confidence is a 0..1 weight and
-                    // must not be touched by that scaling.
-                    lumit_flow::field_to_size(&fwd, &conf, w, h)
-                }))
-            })
-            .collect();
+        // The motion fields the stack's flow readers want, measured from the
+        // raw current frame before it is consumed into `rgba` below.
+        let flow_fields =
+            neighbour_fields::neighbour_fields(flow_engine, flow_cache, gpu, job, &px, &temporal)?;
         // The moments an accumulation motion blur above wants this clip at
         // (empty for a plain layer, so this loop does nothing then). Each is
         // made the way the primary frame is made under a Blend or Flow retime,
@@ -1808,6 +1731,8 @@ fn decode_comp(
     })
 }
 
+mod neighbour_fields;
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod float_flow_tests;
@@ -1856,7 +1781,7 @@ mod tests {
         );
 
         // Three planes of f32 — u, v and the confidence — at four bytes each.
-        layer.flow_fields = vec![(1, (vec![0.0; 10], vec![0.0; 10], vec![0.0; 10]))];
+        layer.flow_fields = vec![(1, (vec![0.0; 10], vec![0.0; 10], vec![0.0; 10], (10, 1)))];
         assert_eq!(
             weigh(std::slice::from_ref(&layer)),
             300 + 120,
