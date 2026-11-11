@@ -679,6 +679,7 @@ impl LumitBridgeState {
     ) -> Result<BridgeOpened, BridgeError> {
         let progress = on_progress_stream.as_ref();
         crate::packing::begin();
+        crate::api::template::library::register_fonts();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
         // Claimed before anything is read. It is let go again by itself if
@@ -768,6 +769,7 @@ impl LumitBridgeState {
     ) -> Result<BridgeOpened, BridgeError> {
         let progress = on_progress_stream.as_ref();
         crate::packing::begin();
+        crate::api::template::library::register_fonts();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
         let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {

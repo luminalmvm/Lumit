@@ -26,6 +26,7 @@ import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'template/library.dart';
 import 'transcript.dart';
 import 'vector.dart';
 
@@ -883,6 +884,18 @@ class ProjectReference {
         that: this,
       );
 
+  /// Bring the library template at `path` into this project, answering its
+  /// composition. A project that already holds that version of it answers
+  /// the one it has. The composition is filed in a folder called `folder`,
+  /// made if the project has none of that name.
+  ///
+  /// Placing it on a timeline is the caller's next step, as placing any
+  /// composition is.
+  Future<CompositionReference> placeTemplate(
+          {required String path, required String folder}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferencePlaceTemplate(
+          that: this, path: path, folder: folder);
+
   /// The project's colour shelf, in the order the colours were kept.
   ///
   /// Empty for a project nobody has kept a colour in. The picker reads this
@@ -1527,6 +1540,12 @@ class ProjectReference {
         that: this,
       );
 
+  /// The templates in this project that the library has a newer version of.
+  List<BridgeTemplateUpdate> templateUpdates() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceTemplateUpdates(
+        that: this,
+      );
+
   /// Hear `items` and give each its transcript, as each one finishes.
   ///
   /// Returns when the job is over. One job runs at a time across Lumit, and
@@ -1575,6 +1594,15 @@ class ProjectReference {
   Future<BridgeUnpackResult> unpack({RustStreamSink<double>? onProgress}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceUnpack(
           that: this, onProgress: onProgress);
+
+  /// **Update**: put the library's newest version of a template in the
+  /// place of the one this project has. The composition keeps its id, so
+  /// every copy still places it, and every copy keeps the values it set, by
+  /// control. One undo step.
+  Future<void> updateTemplate(
+          {required UuidValue comp, required String folder}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceUpdateTemplate(
+          that: this, comp: comp, folder: folder);
 
   /// The project-wide *use proxies* master switch.
   ///

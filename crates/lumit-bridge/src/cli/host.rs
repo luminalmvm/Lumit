@@ -18,13 +18,14 @@ use lumit_core::time::CompTime;
 use lumit_core::{ops::Op, store::DocumentStore};
 use lumit_project::OpenClaim;
 use lumit_render::export::{ExportEvent, ExportHandle, ExportSpec};
-use lumit_script::{ExportState, ExportStatus, Host, ScriptError};
+use lumit_script::{ExportState, ExportStatus, Host, LibraryTemplate, ScriptError};
 use uuid::Uuid;
 
 use crate::api::composition::CompositionReference;
 use crate::api::project::ProjectReference;
 use crate::api::state::LumitBridgeState;
 use crate::api::streams::BridgeStreamsArrival;
+use crate::api::template::library;
 use crate::api::BridgeError;
 
 /// How long `export.status` waits for news of a running export, so a
@@ -45,6 +46,9 @@ pub struct Headless {
     /// them meanwhile. Let go when the program ends.
     claims: RefCell<Vec<OpenClaim>>,
     exports: RefCell<Vec<Export>>,
+    /// The graphics template's own comp, for a project opened from a
+    /// `.lumt` file. The comp chosen when nobody names one.
+    main: Option<Uuid>,
     plugins_scanned: Cell<bool>,
     /// Keeps the folder packed footage was read out to from being cleared
     /// by a Lumit tidying up.
@@ -52,7 +56,11 @@ pub struct Headless {
 }
 
 struct Export {
-    handle: ExportHandle,
+    /// `None` while it waits its turn.
+    handle: Option<ExportHandle>,
+    /// A row's version waiting its turn: the project to export it from, and
+    /// the comp.
+    waiting: Option<(Arc<Document>, Uuid)>,
     status: ExportStatus,
 }
 
@@ -62,10 +70,31 @@ impl Headless {
         Self::with(Document::new(), None, None)
     }
 
-    /// Open the project saved at `path`. Also answers the names of the
+    /// Open the project saved at `path`, or the graphics template in a
+    /// `.lumt` file as a project of its own. Also answers the names of the
     /// footage items whose files could not be found.
     pub fn open(path: &Path) -> Result<(Self, Vec<String>), String> {
         let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        library::register_fonts();
+        let template = lumit_project::template_file::EXTENSION;
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(template))
+        {
+            // Its footage is read out where Lumit reads it out to. It has no
+            // project file, so a save needs a path and is never over it.
+            let (mut doc, info) = library::opened(&path).map_err(|_| {
+                format!(
+                    "{} could not be opened as a graphics template.",
+                    path.display()
+                )
+            })?;
+            let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let (_, missing) = lumit_project::resolve_all_media(&mut doc, &dir, &[]);
+            let mut host = Self::with(doc, None, None);
+            host.main = Some(info.comp);
+            return Ok((host, missing));
+        }
         let (mut doc, _) = lumit_project::open(&path)
             .map_err(|e| format!("{} could not be opened: {e}.", path.display()))?;
         let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
@@ -83,6 +112,7 @@ impl Headless {
             path: RefCell::new(path),
             claims: RefCell::default(),
             exports: RefCell::default(),
+            main: None,
             plugins_scanned: Cell::new(false),
             _read_out: read_out,
         }
@@ -159,6 +189,10 @@ impl Headless {
                     .ok_or_else(|| format!("There is no comp called \"{key}\"."))?
             }
             None => match comps.as_slice() {
+                _ if self.main.is_some() => comps
+                    .iter()
+                    .find(|c| Some(c.id) == self.main)
+                    .ok_or("The graphics template has no comp of its own.")?,
                 [only] => only,
                 [] => return Err("The project has no comp.".into()),
                 more => {
@@ -174,18 +208,37 @@ impl Headless {
         Ok((found.id, found.name.clone()))
     }
 
-    /// Whether any export is still running.
+    /// Whether any export is still running or waiting its turn.
     pub fn exporting(&self) -> bool {
+        self.next_in_turn();
         self.exports
             .borrow_mut()
             .iter_mut()
             .any(|e| drain(e, Duration::ZERO).state == ExportState::Running)
     }
 
-    /// Stop every running export.
+    /// Stop every running export, and every one waiting its turn.
     pub fn cancel_exports(&self) {
-        for export in self.exports.borrow().iter() {
-            export.handle.cancel();
+        for export in self.exports.borrow_mut().iter_mut() {
+            cancel(export);
+        }
+    }
+
+    /// Start the first export waiting its turn, once none is running.
+    fn next_in_turn(&self) {
+        let mut exports = self.exports.borrow_mut();
+        let running = exports
+            .iter_mut()
+            .any(|e| e.handle.is_some() && drain(e, Duration::ZERO).state == ExportState::Running);
+        if running {
+            return;
+        }
+        let Some(export) = exports.iter_mut().find(|e| e.waiting.is_some()) else {
+            return;
+        };
+        if let Some((doc, comp)) = export.waiting.take() {
+            let out = export.status.path.clone();
+            export.handle = Some(self.launch(doc, comp, out, ExportSpec::default()));
         }
     }
 
@@ -206,19 +259,11 @@ impl Headless {
         if doc.comp(comp).is_none() {
             return Err(ScriptError::NotFound("There is no such comp.".into()));
         }
-        self.load_plugins(&doc);
-        // The sound comes from what is delivered, as in Lumit: a guide
-        // layer's is no more exported than its picture.
-        let delivery = lumit_render::export::apply_render_overrides(&doc, &spec.render_options());
-        let doc = delivery.unwrap_or(doc);
-        let audio = doc
-            .comp(comp)
-            .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
-            .unwrap_or_default();
-        let handle = lumit_render::export::start(doc, comp, audio, out.clone(), spec);
+        let handle = self.launch(doc, comp, out.clone(), spec);
         let mut exports = self.exports.borrow_mut();
         exports.push(Export {
-            handle,
+            handle: Some(handle),
+            waiting: None,
             status: ExportStatus {
                 state: ExportState::Running,
                 done: 0,
@@ -228,6 +273,49 @@ impl Headless {
             },
         });
         Ok(exports.len() as u64)
+    }
+
+    /// Start the exporter on `comp` of `doc`.
+    fn launch(
+        &self,
+        doc: Arc<Document>,
+        comp: Uuid,
+        out: PathBuf,
+        spec: ExportSpec,
+    ) -> ExportHandle {
+        self.load_plugins(&doc);
+        // The sound comes from what is delivered, as in Lumit: a guide
+        // layer's is no more exported than its picture.
+        let delivery = lumit_render::export::apply_render_overrides(&doc, &spec.render_options());
+        let doc = delivery.unwrap_or(doc);
+        let audio = doc
+            .comp(comp)
+            .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
+            .unwrap_or_default();
+        lumit_render::export::start(doc, comp, audio, out, spec)
+    }
+
+    /// `path` as an mp4, or the first of `name 2.mp4`, `name 3.mp4` and on
+    /// that is neither on disk nor an export this program has started.
+    fn free_mp4(&self, path: &Path) -> PathBuf {
+        let mut file = path.as_os_str().to_owned();
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("mp4"))
+        {
+            file.push(".mp4");
+        }
+        let first = PathBuf::from(file);
+        let exports = self.exports.borrow();
+        let taken = |p: &Path| p.exists() || exports.iter().any(|e| e.status.path == p);
+        let stem = first.file_stem().unwrap_or_default().to_string_lossy();
+        let mut next = first.clone();
+        let mut n = 2;
+        while taken(&next) {
+            next = first.with_file_name(format!("{stem} {n}.mp4"));
+            n += 1;
+        }
+        next
     }
 
     /// Scan for plugin effects once, when the project uses an effect Lumit
@@ -320,11 +408,14 @@ fn read_out_packed(doc: &mut Document, archive: &Path, dir: &Path) -> Option<Fil
 /// Take in whatever `export` has said since it was last asked, waiting up
 /// to `wait` for something when it is running.
 fn drain(export: &mut Export, wait: Duration) -> &ExportStatus {
+    let Some(handle) = &export.handle else {
+        return &export.status;
+    };
     let mut wait = (export.status.state == ExportState::Running).then_some(wait);
     loop {
         let event = match wait.take() {
-            Some(wait) if !wait.is_zero() => export.handle.events.recv_timeout(wait).ok(),
-            _ => export.handle.events.try_recv().ok(),
+            Some(wait) if !wait.is_zero() => handle.events.recv_timeout(wait).ok(),
+            _ => handle.events.try_recv().ok(),
         };
         let Some(event) = event else {
             break;
@@ -351,6 +442,16 @@ fn drain(export: &mut Export, wait: Duration) -> &ExportStatus {
         }
     }
     &export.status
+}
+
+/// Stop `export`, or take it out of its turn when it is waiting.
+fn cancel(export: &mut Export) {
+    if let Some(handle) = &export.handle {
+        handle.cancel();
+    }
+    if export.waiting.take().is_some() {
+        export.status.state = ExportState::Cancelled;
+    }
 }
 
 impl Host for Headless {
@@ -493,15 +594,103 @@ impl Host for Headless {
     }
 
     fn export_status(&self, job: u64) -> Result<ExportStatus, ScriptError> {
+        self.next_in_turn();
         let mut exports = self.exports.borrow_mut();
         let export = job_of(&mut exports, job)?;
+        if export.waiting.is_some() {
+            // Not spinning a script that asks in a loop.
+            std::thread::sleep(STATUS_WAIT);
+        }
         Ok(drain(export, STATUS_WAIT).clone())
     }
 
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError> {
         let mut exports = self.exports.borrow_mut();
-        job_of(&mut exports, job)?.handle.cancel();
+        cancel(job_of(&mut exports, job)?);
         Ok(())
+    }
+
+    // Made in a private copy of the project, which is never saved, and
+    // exported in turn after the exports started before it.
+    fn export_version(
+        &self,
+        comp: Uuid,
+        ops: Vec<Op>,
+        out: &Path,
+    ) -> Result<(u64, PathBuf), ScriptError> {
+        let mut doc = Document::clone(&self.store.snapshot());
+        for op in &ops {
+            lumit_core::ops::apply(&mut doc, op)
+                .map_err(|_| ScriptError::Failed("That row's version could not be made.".into()))?;
+        }
+        if doc.comp(comp).is_none() {
+            return Err(ScriptError::NotFound("There is no such comp.".into()));
+        }
+        let out = std::path::absolute(out).unwrap_or_else(|_| out.to_path_buf());
+        if let Some(dir) = out.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| {
+                ScriptError::Failed(format!("{} could not be made: {e}.", dir.display()))
+            })?;
+        }
+        let path = self.free_mp4(&out);
+        let mut exports = self.exports.borrow_mut();
+        exports.push(Export {
+            handle: None,
+            waiting: Some((Arc::new(doc), comp)),
+            status: ExportStatus {
+                state: ExportState::Running,
+                done: 0,
+                total: 0,
+                path: path.clone(),
+                message: None,
+            },
+        });
+        let job = exports.len() as u64;
+        drop(exports);
+        self.next_in_turn();
+        Ok((job, path))
+    }
+
+    fn template_library(&self) -> Vec<LibraryTemplate> {
+        crate::script::template_library()
+    }
+
+    fn template_bring(&self, path: &Path) -> Result<Uuid, ScriptError> {
+        let (from, info) = library::opened(path).map_err(|_| crate::script::not_brought(path))?;
+        let doc = self.store.snapshot();
+        if let Some(have) = library::in_project(&doc, info.id, Some(info.version)) {
+            return Ok(have);
+        }
+        let (comp, ops, _) = library::brought(&doc, &from, &info, crate::script::TEMPLATES_FOLDER)
+            .map_err(|_| crate::script::not_brought(path))?;
+        self.store.commit(Op::Batch { ops })?;
+        Ok(comp)
+    }
+
+    fn template_save(
+        &self,
+        comp: Uuid,
+        name: &str,
+        group: &str,
+        pack_fonts: bool,
+    ) -> Result<PathBuf, ScriptError> {
+        let doc = self.store.snapshot();
+        let beside = self
+            .path
+            .borrow()
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let (file, template) =
+            library::save_to_library(&doc, comp, name, group, pack_fonts, &beside)
+                .map_err(crate::script::not_saved)?;
+        // The project's copy wears the marks of the save, as in Lumit.
+        self.store.commit(Op::SetCompTemplate {
+            comp,
+            template: Some(Box::new(template)),
+        })?;
+        Ok(file)
     }
 
     fn render_frame(

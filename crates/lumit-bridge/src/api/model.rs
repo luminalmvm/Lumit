@@ -558,13 +558,31 @@ impl LayerReference {
             // that empties the list clears the Inputs, which is what removing
             // them means.
             InstanceHome::GraphInputs => {
-                let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
+                let before = self.item()?.graph_inputs;
+                let mut list: Vec<EffectInstance> = before.clone().into_iter().collect();
                 edit(&mut list)?;
+                // A copy of a graphics template stores only what it has set.
+                let inputs = list
+                    .into_iter()
+                    .next()
+                    .and_then(|inst| crate::api::template::copy::stored(inst, before.as_ref()));
                 lumit_core::ops::Op::SetLayerGraphInputs {
                     comp: self.comp_id,
                     layer: self.layer_id,
-                    inputs: list.into_iter().next().map(Box::new),
+                    inputs: inputs.map(Box::new),
                 }
+            }
+            // The same on a clip, through `commit_clips` like every clip write.
+            InstanceHome::ClipInputs(clip) => {
+                let (mut clips, index) = self.clips_and_index(clip)?;
+                let before = clips[index].inputs.take();
+                let mut list: Vec<EffectInstance> = before.clone().into_iter().collect();
+                edit(&mut list)?;
+                clips[index].inputs = list
+                    .into_iter()
+                    .next()
+                    .and_then(|inst| crate::api::template::copy::stored(inst, before.as_ref()));
+                return self.commit_clips(clips);
             }
             InstanceHome::Materials => self.materials_op(edit, light_names)?,
         };

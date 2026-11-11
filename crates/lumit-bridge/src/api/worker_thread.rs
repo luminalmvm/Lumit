@@ -4743,7 +4743,30 @@ fn render_comp_with_preview(
         // **Which list this is, read off the ids** (docs/impl/layer-styles.md
         // §5). What is dragged arrives as one whole list, and the layer says which.
         let layer = &mut comp.layers[index];
-        if staged_graph_inputs {
+        if let Some(first) = effects
+            .first()
+            .filter(|f| lumit_core::fx::effects::template::comp_of(f).is_some())
+        {
+            // A copy of a graphics template: the rows that moved are the
+            // copy's own from here, as the commit will store them, on the
+            // clip they belong to or on the layer.
+            let first = first.clone();
+            match crate::api::template::copy::clip_of_inputs(layer, &first) {
+                Some(id) => {
+                    if let lumit_core::model::LayerKind::Sequence { clips } = &mut layer.kind {
+                        if let Some(clip) = clips.iter_mut().find(|c| c.id == id) {
+                            let before = clip.inputs.take();
+                            clip.inputs =
+                                crate::api::template::copy::stored(first, before.as_ref());
+                        }
+                    }
+                }
+                None => {
+                    let before = layer.graph_inputs.take();
+                    layer.graph_inputs = crate::api::template::copy::stored(first, before.as_ref());
+                }
+            }
+        } else if staged_graph_inputs {
             // A placed graph's Inputs are one instance, staged as a list of
             // one (docs/impl/node-graph-comp.md §5.3).
             layer.graph_inputs = effects.into_iter().next();

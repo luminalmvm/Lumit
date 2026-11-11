@@ -1762,6 +1762,12 @@ impl CompositionReference {
         for id in &order {
             let mut comp = doc.comp(*id).ok_or(BridgeError::InvalidComp)?.clone();
             comp.id = copies[id];
+            // A duplicate of a graphics template is a template of its own,
+            // no longer the library's.
+            if let Some(mut template) = comp.template().map(|t| (*t).clone()) {
+                (template.library, template.version, template.saved) = (None, 0, None);
+                comp.set_template(Some(&template));
+            }
             let base = format!("{} copy", comp.name);
             comp.name = (1..)
                 .map(|n| {

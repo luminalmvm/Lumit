@@ -60,6 +60,11 @@ fn sanitise_windows_filename(raw: &str) -> String {
     }
 }
 
+/// [`today_utc_date`], for a row's file name.
+pub(super) fn today() -> String {
+    today_utc_date()
+}
+
 /// Today's UTC date as `YYYY-MM-DD` (the `{date}` token) — a faithful port
 /// of `shell::today_utc_date` and its `civil_from_days`.
 fn today_utc_date() -> String {
