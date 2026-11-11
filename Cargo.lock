@@ -2224,6 +2224,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "rayon",
+ "realfft",
  "rhai",
  "serde",
  "serde_json",
