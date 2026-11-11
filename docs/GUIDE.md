@@ -92,6 +92,9 @@ flutter analyze
    adding another.
 3. `.\scripts\check.ps1` before a commit.
 4. If the change breaks a rule in these docs, change the doc in the same commit.
+5. If the change adds or alters something a user can do, see or set, update the manual in
+   `web-docs/` in the same pull request. The manual covers every feature. One that's hard
+   to work out from its page also gets a walkthrough under `tutorials/`.
 
 ### Testing notes
 
