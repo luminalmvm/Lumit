@@ -54,33 +54,7 @@ pub fn bring(
     comps: &[Uuid],
     source: &str,
 ) -> Result<Brought, ProjectError> {
-    if comps.iter().any(|id| from.comp(*id).is_none()) {
-        return Err(ProjectError::UnknownComposition);
-    }
-    // A folder is where an item is filed, never something a composition needs.
-    let theirs: BTreeMap<String, &ProjectItem> = from
-        .items
-        .iter()
-        .filter(|item| !matches!(item, ProjectItem::Folder(_)))
-        .map(|item| (item.id().to_string(), item))
-        .collect();
-
-    // The compositions asked for, and every item one of them names, however
-    // deep the nesting goes. Each is looked at once, so a loop ends.
-    let mut wanted: BTreeMap<String, Value> = BTreeMap::new();
-    let mut queue: Vec<String> = comps.iter().map(Uuid::to_string).collect();
-    while let Some(id) = queue.pop() {
-        let Some(item) = theirs.get(&id).filter(|_| !wanted.contains_key(&id)) else {
-            continue;
-        };
-        let value = serde_json::to_value(item)?;
-        strings(&value, &mut |text| {
-            if theirs.contains_key(text) {
-                queue.push(text.to_owned());
-            }
-        });
-        wanted.insert(id, value);
-    }
+    let mut wanted = needed(from, comps)?;
 
     // Old id to new, as each is written. Footage the project has keeps the id
     // it has there, and is not added again.
@@ -141,6 +115,42 @@ pub fn bring(
         .collect::<Option<Vec<Uuid>>>()
         .ok_or(ProjectError::UnknownComposition)?;
     Ok(Brought { comps, ops })
+}
+
+/// The items of `from` that `comps` need, by id, each as what it serialises
+/// to: the compositions themselves and every item one of them names, however
+/// deep the nesting goes. An id that names no composition refuses the call.
+pub(crate) fn needed(
+    from: &Document,
+    comps: &[Uuid],
+) -> Result<BTreeMap<String, Value>, ProjectError> {
+    if comps.iter().any(|id| from.comp(*id).is_none()) {
+        return Err(ProjectError::UnknownComposition);
+    }
+    // A folder is where an item is filed, never something a composition needs.
+    let theirs: BTreeMap<String, &ProjectItem> = from
+        .items
+        .iter()
+        .filter(|item| !matches!(item, ProjectItem::Folder(_)))
+        .map(|item| (item.id().to_string(), item))
+        .collect();
+
+    // Each is looked at once, so a loop ends.
+    let mut wanted: BTreeMap<String, Value> = BTreeMap::new();
+    let mut queue: Vec<String> = comps.iter().map(Uuid::to_string).collect();
+    while let Some(id) = queue.pop() {
+        let Some(item) = theirs.get(&id).filter(|_| !wanted.contains_key(&id)) else {
+            continue;
+        };
+        let value = serde_json::to_value(item)?;
+        strings(&value, &mut |text| {
+            if theirs.contains_key(text) {
+                queue.push(text.to_owned());
+            }
+        });
+        wanted.insert(id, value);
+    }
+    Ok(wanted)
 }
 
 /// The name a composition arrives under: its own, unless the project has one
