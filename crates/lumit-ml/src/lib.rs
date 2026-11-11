@@ -49,6 +49,7 @@ pub mod session;
 pub mod speech;
 pub mod store;
 pub mod synthesis;
+mod tarball;
 pub mod tensor;
 
 /// Where the tests find a real runtime and real packs, on the one machine

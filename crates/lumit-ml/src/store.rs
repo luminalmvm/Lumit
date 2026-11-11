@@ -15,7 +15,7 @@
 
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, TryLockError},
 };
@@ -23,7 +23,7 @@ use std::{
 use crate::{
     error::MlError,
     manifest::{self, Manifest, Task, Unpack},
-    runtime,
+    runtime, tarball,
 };
 
 /// The file every addon folder holds.
@@ -32,6 +32,13 @@ pub const MANIFEST_FILE: &str = "addon.json";
 /// Where an install is assembled before it is renamed into place. Swept on
 /// every [`scan`], so a build that died halfway leaves nothing behind.
 pub const STAGING: &str = ".staging";
+
+/// The most one file taken out of a zip or a tar may unpack to: 4 GiB. The
+/// largest file in the catalogue today is about 220 MB and one ONNX graph
+/// cannot pass 2 GiB, so this is room for a much larger model's weights. A
+/// manifest gives no unpacked size, and without a ceiling a small download
+/// that unpacks to zeros would fill the disk before anything refused it.
+pub(crate) const MOST_UNPACKED: u64 = 4 << 30;
 
 /// The one install in flight. A `Mutex<()>` rather than a flag so the slot is
 /// released even when the installing thread unwinds.
@@ -398,6 +405,7 @@ pub fn install(manifest_text: &str, files: &[PathBuf]) -> Result<Installed, MlEr
         let placed = match download.unpack {
             Unpack::File => copy_file(file, download.size, &staging.join(&download.dest)),
             Unpack::Zip => take_from_zip(file, download.size, &download.entries, &staging),
+            Unpack::TarGz => tarball::take(file, download.size, &download.entries, &staging),
         };
         if let Err(why) = placed {
             return Err(abandon(&staging, why));
@@ -513,12 +521,28 @@ fn take_from_zip(
         let mut entry = zip
             .by_name(inside)
             .map_err(|_| MlError::Invalid(format!("the download has no \"{inside}\" in it")))?;
+        if entry.size() > MOST_UNPACKED {
+            return Err(too_large(inside));
+        }
         let mut out =
             fs::File::create(into.join(dest)).map_err(|e| MlError::Invalid(e.to_string()))?;
-        std::io::copy(&mut entry, &mut out).map_err(|e| MlError::Invalid(e.to_string()))?;
+        // Bounded as well, because the size the zip declares is only its word.
+        let copied = std::io::copy(&mut (&mut entry).take(MOST_UNPACKED + 1), &mut out)
+            .map_err(|e| MlError::Invalid(e.to_string()))?;
+        if copied > MOST_UNPACKED {
+            return Err(too_large(inside));
+        }
         out.flush().map_err(|e| MlError::Invalid(e.to_string()))?;
     }
     Ok(())
+}
+
+/// The refusal for a file inside a download that unpacks past
+/// [`MOST_UNPACKED`].
+pub(crate) fn too_large(inside: &str) -> MlError {
+    MlError::Invalid(format!(
+        "\"{inside}\" unpacks to more than an addon file may hold"
+    ))
 }
 
 /// Write the catalogue's own text into the folder, unchanged, so the

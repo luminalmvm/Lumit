@@ -97,6 +97,10 @@ pub enum Unpack {
     File,
     /// The download is a zip, and only the named entries are taken out of it.
     Zip,
+    /// The download is a gzipped tar, and only the named entries are taken
+    /// out of it.
+    #[serde(rename = "tar.gz")]
+    TarGz,
 }
 
 /// One file the installer fetches and places.
@@ -110,13 +114,13 @@ pub struct Download {
     pub sha256: String,
     /// The size in bytes, checked with the digest and again on every scan.
     pub size: u64,
-    /// Copied whole, or opened as a zip.
+    /// Copied whole, or opened as an archive.
     pub unpack: Unpack,
     /// The file name inside the addon folder, for `unpack: file`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dest: String,
-    /// Path inside the zip to file name inside the addon folder, for
-    /// `unpack: zip`. Only these entries are taken.
+    /// Path inside the archive to file name inside the addon folder, for
+    /// `unpack: zip` and `unpack: tar.gz`. Only these entries are taken.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub entries: BTreeMap<String, String>,
 }
@@ -566,8 +570,8 @@ impl Manifest {
     }
 
     /// What the addon folder should hold once installed, with the size of
-    /// each file that is a whole download. A zip entry's unpacked size is not
-    /// in the manifest, so only its presence can be checked.
+    /// each file that is a whole download. An archive entry's unpacked size is
+    /// not in the manifest, so only its presence can be checked.
     #[must_use]
     pub fn expected(&self) -> Vec<(String, Option<u64>)> {
         let Some(platform) = self.platform() else {
@@ -577,7 +581,7 @@ impl Manifest {
         for download in &platform.downloads {
             match download.unpack {
                 Unpack::File => out.push((download.dest.clone(), Some(download.size))),
-                Unpack::Zip => out.extend(
+                Unpack::Zip | Unpack::TarGz => out.extend(
                     download
                         .entries
                         .values()
@@ -703,15 +707,15 @@ fn check_download(download: &Download) -> Result<(), MlError> {
                 )));
             }
         }
-        Unpack::Zip => {
+        Unpack::Zip | Unpack::TarGz => {
             if download.entries.is_empty() {
                 return Err(MlError::Invalid(
-                    "a zip download that takes nothing out of the zip".into(),
+                    "an archive download that takes nothing out of the archive".into(),
                 ));
             }
             for (inside, dest) in &download.entries {
                 if inside.is_empty() {
-                    return Err(MlError::Invalid("a zip entry with no path".into()));
+                    return Err(MlError::Invalid("an archive entry with no path".into()));
                 }
                 if !is_plain_name(dest) {
                     return Err(MlError::Invalid(format!(
@@ -739,7 +743,7 @@ pub fn is_id(id: &str) -> bool {
 /// over the network, and this is what stops one writing outside the addon's
 /// own folder.
 #[must_use]
-fn is_plain_name(name: &str) -> bool {
+pub(crate) fn is_plain_name(name: &str) -> bool {
     !name.is_empty()
         && name != "."
         && name != ".."

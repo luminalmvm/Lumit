@@ -714,7 +714,7 @@ List<Map<String, dynamic>>? downloadsFor(
 }
 
 /// The files a manifest puts in the addon's folder: every download's `dest`,
-/// and every name a zip download takes out of its archive.
+/// and every name a zip or tar.gz download takes out of its archive.
 List<String> packFileNames(Map<String, dynamic> manifest, String platformKey) {
   final out = <String>[];
   for (final download in downloadsFor(manifest, platformKey) ?? const []) {

@@ -105,6 +105,10 @@ fn every_rule_in_the_format_refuses_by_name() {
             "zip with no entries",
         ),
         (
+            with(r#""unpack": "file""#, r#""unpack": "tar.gz""#),
+            "tar.gz with no entries",
+        ),
+        (
             with(r#""kind": "model""#, r#""kind": "runtime""#),
             "runtime with a model block",
         ),
