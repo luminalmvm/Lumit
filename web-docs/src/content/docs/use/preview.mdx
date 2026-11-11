@@ -20,6 +20,63 @@ Press play, or `space` by default. The playhead will begin moving and the Viewer
 eight times, and a press the other way steps back down. Sound plays at normal speed
 forwards only.
 
+Playback starts at the playhead and runs to the end of the **work area**, which is the
+whole composition until it is narrowed. Started from past the work area's end, it plays on
+to the end of the composition and stops.
+
+When playback stops, the playhead goes back to where it started. **Edit ▸ Settings ▸
+Timeline ▸ Playhead stays where playback stopped** leaves it where the picture stopped.
+Dragging the playhead in the Timeline stops playback and leaves the playhead where it was
+dragged.
+
+A `J` or `L` shuttle leaves the playhead where it stops. A backwards shuttle stops at the
+start of the work area.
+
+### At the end of the work area
+
+The loop mark on the [Viewer bar](/panels/viewer/#the-strip-below) sets what happens there.
+Click it to step through the three, or right-click it to pick one.
+
+| Mode | Does |
+| --- | --- |
+| **Loop** | Starts again from the work area's start. |
+| **Play once** | Stops. |
+| **Ping-pong** | Plays the work area backwards, then forwards again. The backward pass has no sound. |
+
+### Moving the playhead
+
+| Key | Does |
+| --- | --- |
+| `Ctrl+→`, `Page Down` | Next frame. |
+| `Ctrl+←`, `Page Up` | Previous frame. |
+| `Shift+Page Down`, `Shift+Page Up` | Forward or back ten frames. |
+| `Home`, `End` | The first or the last frame of the composition. |
+| `Shift+Home`, `Shift+End` | The start or the end of the work area. |
+| `I`, `O` | The selected layer's in or out point. |
+| `B`, `N` | Set the work area's start or end at the playhead. |
+
+The transport buttons on the Viewer bar go to the first frame, step a frame either way,
+play or pause, and go to the last frame. Click the clock beside them to type a time.
+
+### Playback speed
+
+The **Playback speed** picker on the [Viewer](/panels/viewer/#the-strip-above) plays at
+**1×**, **0.5×** or **0.25×** of the composition's rate. Every frame is shown, and the sound is slowed with its
+pitch kept. The picker reads in the warning colour while it is not 1×.
+
+The speed is not saved, and never reaches an export. A `J` or `L` shuttle plays at its own
+speed.
+
+### Sound
+
+Sound plays with the picture. Under **Every frame** it pauses while the picture is behind.
+**Mute**, in the transport's right-click menu and on the Viewer's
+[deck](/panels/viewer/#the-deck), silences the output. It is not remembered between
+launches.
+
+With several views in the Viewer, one view plays. See
+[Several views](/panels/viewer/#several-views).
+
 ## The cache
 
 The cache has three tiers: VRAM, RAM and disk. You can alter the memory allocated to each of 
@@ -29,10 +86,31 @@ Lumit stores rendered frames to help speed up playback. Frames that are cached a
 the **cache bar** under the time ruler: VRAM and RAM display as a green line, and frames
 stored on the disk are blue.
 
+Either colour drawn dimmed is a frame cached at a lower resolution than the Viewer is
+showing. Nothing drawn is a frame that is not cached.
+
+While nothing is playing, Lumit goes on rendering the work area into the cache, starting
+at the playhead. It does not do this while the Viewer's exposure is off zero or tone
+mapping is on, or while a [3D viewport](/use/camera/#3d-viewport) is the active view.
+
+The [status line](/use/workspaces/#the-status-line) shows how full each tier is, and the
+Viewer's [deck](/panels/viewer/#the-deck) shows how much of the work area is cached.
+
 ## Preview resolution
 
 Lower the preview resolution to render previews faster: full, half, third, quarter, or auto. 
 Changing the preview resolution has no impact when exporting.
+
+| Resolution | Renders |
+| --- | --- |
+| **Auto** | Only as many pixels as the panel can show at its size. |
+| **Full** | The composition's own size. This is what a composition starts on. |
+| **Half**, **Third**, **Quarter** | That fraction of the composition's width and height. |
+
+The resolution is kept for each composition. `Ctrl+J`, `Ctrl+Shift+J` and `Ctrl+Alt+J`
+choose Full, Half and Quarter, and **View ▸ Resolution** lists all five.
+
+Zooming the picture does not change the resolution it is rendered at.
 
 Lumit also has two preview resolution options in the Viewer bar. **Every frame** will
 render each frame in the composition, pausing audio if playback isn't realtime.
@@ -42,15 +120,37 @@ manages to render in time.
 
 Personally I'd normally recommend **Every frame** as the default option to use.
 
+The same choice is **Edit ▸ Settings ▸ Preview and cache ▸ When the machine cannot keep
+up**. **Quality tier** beside it reads the resolution adaptive playback has settled on, and
+**Reset** restarts it.
+
+While the preview is rendered smaller than the composition, the reading at the right of
+the Viewer bar shows both sizes, as `1920×1080 → 960×540`.
+
 ## The progress bar
 
 While waiting on a slow frame, a progress bar appears on the Viewer's bottom bar, to the left
 of the reading, and fills as the frame passes through decoding, building, and compositing.
 
+It names the stage it is on: *Preparing*, *Reading media*, *Reading the composition*,
+*Simulating*, *Compositing*, *Showing* or *Rendering*. It does not appear during playback,
+or for a frame that arrives within 150 milliseconds.
+
 ## Adaptive degradation
 
 Under load, Lumit reduces quality on its own to keep responding. It may drop resolution
 while scrubbing effect values as you change them.
+
+While a value is dragged, the picture is rendered at the first of full, half, third and
+quarter resolution that has no more pixels than 640×360, and at quarter where none does.
+Lens flares draw at **Draft** quality. The picture is rendered at the Viewer's own
+resolution again on release. **Edit ▸ Settings ▸ Preview and cache ▸ Full resolution while
+dragging** renders a drag at the Viewer's own resolution.
+
+## The region of interest
+
+A [region of interest](/panels/viewer/#region-of-interest) renders one rectangle of the
+frame and leaves the rest.
 
 ## If playback is slow
 
@@ -61,5 +161,7 @@ while scrubbing effect values as you change them.
 
 ## Related
 
+- [Viewer](/panels/viewer/)
+- [Render times](/panels/timeline/#render-times)
 - [Exporting](/use/export/)
 - [Caching](/engine/cache/)

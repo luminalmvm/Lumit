@@ -14,22 +14,95 @@ affected by it.
 
 ## Set up
 
-1. Choose **Layer ▸ New ▸ Camera**.
+1. Choose **Layer ▸ New ▸ Camera** (`Ctrl+Alt+Shift+C`).
 2. Turn on the 3D switch for layers you want the camera to see.
 
-If you have multiple cameras in your scene, the topmost visible camera is the active one.
+A new camera stands in front of the middle of the composition, at the distance of a 50 mm
+lens on 36 mm film. The picture is the same with it as without it.
+
 With no camera layer, 3D layers are seen through a default 50 mm camera at the centre of
 the composition, with no depth of field, as in After Effects.
 
-## Position in depth
+## The active camera
 
-A 3D layer gains a Z position. Adjusting this moves the layer forwards and backwards in the composition space.
+If you have multiple cameras in your scene, the topmost visible camera is the active one.
+A camera counts while the playhead is inside its bar and its visibility switch is on.
+
+## 3D layers
+
+The **3D switch**, in the Modes column of the Timeline or as **Layer ▸ 3D layer**, places a
+layer in depth. The layer gains a z box on **Anchor point**, **Position** and **Scale**, the
+rows **Orientation**, **Rotation x** and **Rotation y**, and
+[Material options](/use/layers/#light-layers). Adjusting Position z moves the layer forwards
+and backwards in the composition space. See [Transforming layers](/use/transform/).
+
+Camera and [Light](/use/layers/#light-layers) layers,
+[Model layers](/use/importing/#3d-models) and [3D shapes](/use/layers/#3d-shapes) are
+always 3D and have no switch. A Text or Shape layer's
+[Geometry options](/use/text/#give-it-depth) make its outline a solid.
 
 Nearer 3D layers draw in front of farther ones, whatever their stack order, and 3D layers
 that pass through each other cut where they meet. A 2D layer or an adjustment layer between
 3D layers splits them into groups, which stack in timeline order. A 2D layer inside a
 collapsed 3D precomp lies on the precomp's plane and splits groups the same way. Two
 motion-blurred 3D layers do not cut each other.
+
+## The camera's rows
+
+A Camera layer has no anchor point, scale or opacity. Twirled open in the Timeline it
+carries:
+
+| Row | What it is |
+| --- | --- |
+| **Point of interest** | Where a two-node camera looks. Only on a two-node camera. |
+| **Position** | Where the camera stands. |
+| **Orientation**, **Rotation x**, **Rotation y**, **Rotation** | Which way it faces. |
+| **Zoom** | The distance, in pixels, from the camera to the plane that draws at its own size. |
+| **Focus distance** | The distance from the camera to the plane in focus. |
+| **Aperture** | The size of the depth-of-field blur. |
+| **Blur level** | Scales the depth-of-field blur, from 0 to 100%. |
+
+The last four sit under a **Camera options** heading. Every row can be keyframed.
+
+## Camera settings
+
+**Layer ▸ 3D ▸ Camera settings** opens with a Camera layer selected, as does **Layer ▸
+Layer settings…** (`Ctrl+Shift+Y`). Nothing is written until **Apply**.
+
+| Row | Does |
+| --- | --- |
+| **Type** | **One-node** aims the camera by its rotation rows. **Two-node** aims it at its **Point of interest**, and the rotation rows turn it from there. |
+| **Preset** | A focal length: 15, 20, 24, 28, 35, 50, 80, 135 or 200 mm. It reads **Custom** at any other. |
+| **Units** | Shows Zoom, Focus distance and Aperture in pixels, millimetres or inches. |
+| **Zoom** | The same value as the Zoom row. |
+| **Angle of view** | The lens as an angle, from 0.1° to 179.9°. |
+| **Film size** | The width of the film in millimetres. It starts at 36. Changing it changes Focal length and leaves the picture as it is. |
+| **Focal length** | The lens in millimetres. |
+| **Pixels per metre** | How many composition pixels make a metre. It starts at 1000. See [Distance](#distance). |
+| **Depth of field** | Turns [depth of field](#depth-of-field) on. |
+| **Focus distance** | The same value as the Focus distance row. |
+| **Lock to zoom** | Sets Focus distance to Zoom, and keeps it there while Zoom is changed in this window. |
+| **Aperture** | The same value as the Aperture row. |
+| **F-stop** | The aperture as an f-number. |
+| **Blur level** | The same value as the Blur level row. |
+
+Zoom, Angle of view and Focal length are one value read three ways, and Aperture and F-stop
+one value read two ways: changing one moves the others. A row whose value is keyframed
+reads *animated* and is not edited here.
+
+A camera keeps its point of interest when it is switched to one-node.
+
+## Depth of field
+
+With **Depth of field** on in the camera's settings, each part of a 3D layer is blurred by
+how far it is from **Focus distance**. Layers without the 3D switch stay sharp.
+
+A new camera has depth of field off, its focus on the plane at Zoom and an aperture of
+f/5.6.
+
+:::note[Partly built]
+The camera's depth of field is a soft round blur, with no iris settings.
+:::
 
 ## In the Viewer
 
@@ -50,9 +123,17 @@ on, and through the active camera only **3D axes** does.
 
 ## Camera tools
 
-The camera tools move the active camera, or the view the Viewer is looking through.
+The **Camera** tools on the [toolbar](/panels/toolbar/) (`Shift+C`) move the active camera,
+or the view the Viewer is looking through, whatever is selected.
 
-- **Unified camera**: the left button orbits, the middle button tracks, the right button dollies.
+| Tool | A drag |
+| --- | --- |
+| **Unified camera** | Orbits with the left button, tracks with the middle button and dollies with the right. |
+| **Orbit camera** | Swings the camera round the point it is looking at. |
+| **Track camera** | Slides the camera sideways and up and down. A two-node camera's point of interest goes with it. |
+| **Dolly camera** | Moves the camera in and out along its line of sight. |
+
+- `Shift` keeps an orbit or a track to one axis.
 - A track keeps what is under the pointer under it. A dolly goes toward it.
 - The wheel, or two fingers on a trackpad, dollies while a camera tool is in hand.
 - **Orbit around** on the toolbar sets what an orbit swings round: the **Point of interest**,
@@ -71,7 +152,16 @@ The drawing, painting, Roto, Puppet and Zoom tools keep `Alt` for themselves.
 
 ## 3D views
 
-**View ▸ Switch 3D view** picks what the Viewer looks through. Each view keeps its own.
+**View ▸ Switch 3D view**, or the **3D view** mark on the Viewer's bar, picks what the
+Viewer looks through. Each view keeps its own.
+
+| View | Shows |
+| --- | --- |
+| **Active camera** | What the composition's own camera sees. |
+| **Front**, **Back**, **Left**, **Right**, **Top**, **Bottom** | The composition from one side, without perspective. |
+| **Custom view 1** to **Custom view 3** | A view of its own, which the camera tools move. |
+
+An export is made through the active camera.
 
 | Command | Keys | What it does |
 | --- | --- | --- |
@@ -173,18 +263,14 @@ a group of 3D layers covers the groups below it.
 positions and parts, and [Part matte](/effects/utility/part-matte/) keeps the parts picked in
 the Viewer.
 
-## Depth of field
+## A tracked camera
 
-With **Depth of field** on in the camera's settings, each part of a 3D layer is blurred by
-how far it is from **Focus distance**.
-
-:::note[Partly built]
-The wider 3D feature set is not built. Layers are planes in space; there is no geometry.
-The camera's depth of field is a soft round blur, with no iris settings.
-:::
+[Camera track](/use/tracking/#the-camera) makes a Camera layer that follows a solved shot.
 
 ## Related
 
+- [Moving a camera through layers](/tutorials/camera-move/)
 - [Transforming layers](/use/transform/)
 - [Depth of field pro](/effects/blur-sharpen/depth-of-field-pro/)
 - [Layers](/use/layers/)
+- [Tracking](/use/tracking/)

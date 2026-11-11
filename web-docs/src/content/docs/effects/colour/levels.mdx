@@ -60,6 +60,14 @@ In the Effect Controls panel:
 
 {/* END GENERATED */}
 
+## The histogram
+
+The effect's card in Effect controls draws the frame's histogram. Three handles under it
+set **Input black**, **Gamma** and **Input white**, and two on the bar beneath set
+**Output black** and **Output white**. The buttons beside it choose which of **Master**,
+**Red**, **Green** and **Blue** the handles set. A handle whose row is driven by an
+expression does not move.
+
 ## What each control does
 
 - **Input black**: the input value that comes out as Output black. Raise it to
@@ -72,7 +80,9 @@ In the Effect Controls panel:
 - **Master** applies to all three channels, while **Red**, **Green** and **Blue**
   apply to individual channels.
 - **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 

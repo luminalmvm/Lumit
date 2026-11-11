@@ -5,11 +5,11 @@ description: "Moves, scales and turns a whole stream of points about an anchor."
 
 import Compare from "../../../../components/Compare.astro";
 
-Transform points is a **Generate** effect.
+Transform points is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Transform points" category="generate" slug="transform-points" />
+<Compare label="Transform points" category="points" slug="transform-points" />
 
 {/* END GENERATED */}
 
@@ -82,7 +82,7 @@ In the Effect Controls panel:
 
 - **Apply to**: which points are moved. The rest pass through as they came.
 - **Group**: the group Picked and Not picked go by, as a name. Left empty, they go by the
-  points a Pick points picked. See [Names](/effects/generate/vary-points/#names).
+  points a Pick points picked. See [Names](/effects/points/vary-points/#names).
 - **Threshold**: what a point's Group must read above to be in it. It is read only with a
   Group named.
 - **Anchor to points**: puts the anchor on the box round the points being moved, in place
@@ -115,14 +115,16 @@ In the Effect Controls panel:
 - **Feather**: how soft the edge of a drawn disc is.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   handed on.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
-- [Vary points](/effects/generate/vary-points/)
-- [Pick points](/effects/generate/pick-points/)
-- [Merge points](/effects/generate/merge-points/)
+- [Vary points](/effects/points/vary-points/)
+- [Pick points](/effects/points/pick-points/)
+- [Merge points](/effects/points/merge-points/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

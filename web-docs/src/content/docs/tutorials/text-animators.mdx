@@ -1,0 +1,51 @@
+---
+title: Animating a title letter by letter
+description: Bring a title on with a ready-made text animation, then build one from a blank animator.
+sidebar:
+  order: 10
+---
+
+A text [animator](/use/text/#animators) changes the letters of a text layer one after
+another.
+
+## Use a ready-made animation
+
+**1. Add the title.** Press `Ctrl+T` for the Type tool, click in the Viewer, type the words
+and press `Enter`.
+
+**2. Go to where the title should start.** Move the playhead there.
+
+**3. Add the animation.** With the text layer selected, choose **Animation ▸ Animate text ▸
+Fade in by letter**. The letters fade in one after another over the next second.
+
+**4. Show its keyframes.** Click in the Timeline and press `U`. The animator's **Range
+offset** row appears, with a keyframe at the playhead and another a second later.
+
+**5. Change how long it takes.** Drag the second keyframe along its lane.
+
+**6. Turn it into an exit.** In [Effect controls](/panels/effect-controls/), open
+**Animators** and press **Reverse** on the animator's heading. The letters fade out over the
+same keyframes.
+
+## Build one from a blank animator
+
+**1. Add a blank animator.** Select the text layer and choose **Animation ▸ Animate text ▸
+Blank animator**. It appears under **Animators** in Effect controls, with every row at a
+value that changes nothing.
+
+**2. Say what the letters do.** Set **Opacity** to 0 and the second **Position** number to
+60. Every letter is hidden, and 60 pixels lower.
+
+**3. Give the range a soft edge.** Set **Shape** to **Ramp** and **Range end** to 25.
+
+**4. Key the start.** Set **Range offset** to −25 and click its stopwatch. The range sits
+before the first letter, and every letter is still hidden.
+
+**5. Key the end.** Move the playhead a second later and set **Range offset** to 100. The
+range passes over the words, and each letter rises into place as it goes by.
+
+## Related
+
+- [Text](/use/text/)
+- [Keyframes](/use/keyframes/)
+- [The graph editor](/panels/graph-editor/)

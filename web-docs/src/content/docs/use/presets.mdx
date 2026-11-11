@@ -14,8 +14,9 @@ keyframes. It can also hold a layer's transform keys and a text layer's animator
 
 ## The .lumfx file
 
-A preset is saved as a `.lumfx` file. The Windows and macOS installers register the extension, 
-so double-clicking one opens Lumit.
+A preset is saved as a `.lumfx` file. The Windows and macOS installers register the extension,
+so double-clicking one opens Lumit. With Lumit running, a double-clicked preset is applied
+to the selected layer, and with none selected the bottom strip reads **Select a layer**.
 
 A preset that uses effects your copy of Lumit doesn't have will still load. Unknown effects come
 in as placeholders with their parameters preserved, so if you later install the effect, it will
@@ -30,18 +31,33 @@ begin to work.
 4. **Save** puts it in the preset library, under **Saved presets**. A name already there asks
    before it is replaced.
 
-To save one effect alone, right-click its heading in
-[Effect controls](/panels/effect-controls/) and choose **Save preset…**. The same heading's
-**Presets ▸** lists the saved presets of that effect's kind, and applies one to it.
+The preset is listed under the file's name.
+
+**Save preset…** is also on the right-click menu of
+[Effect controls](/panels/effect-controls/), where it saves the whole stack.
+**Animation ▸ Save animation preset…** asks for the parts in the same way, and then for
+where to write the file.
+
+To save one effect alone, right-click its heading in Effect controls and choose
+**Save preset…**. The bottom strip reads **Preset saved**. An effect on a layer group's
+header has no **Save preset…**.
 
 ## Apply a preset
 
 - Double-click a preset under **Saved presets** at the top of the Effects & presets
-  panel. Its whole stack is applied to the selected layer, or to the clip selected in the
+  panel, or right-click it and choose **Add to selected**. Its whole stack is applied to
+  every selected layer, or to the clip selected in the
   [Cut timeline](/use/cutting/#effects-and-blend-mode-on-a-clip).
 - Or drag it onto a layer in the Timeline, onto Effect controls, or onto a clip in the Cut
   timeline.
-- Or choose **Load preset…** to apply a `.lumfx` file from anywhere on disk.
+- Or choose **Load preset…**, or **Animation ▸ Apply animation preset…**, to apply a
+  `.lumfx` file from anywhere on disk to the primary selected layer. Both also open an
+  After Effects `.ffx`. See [Effects & presets](/panels/effects-presets/#after-effects-presets).
+- Or press `Ctrl+Space` and pick it from the [Effects console](/use/fx-console/), where
+  saved presets are listed under **Presets**. It goes on the primary selected layer.
+
+A preset's effects are added to the end of the stack that is already there, as one undo
+step.
 
 The first key lands at the playhead and the rest keep their spacing. Transform keys replace the
 row's own, and text animators join the layer's. A preset's transform keys are skipped on a
@@ -49,12 +65,20 @@ layer with no picture, its animators on anything but a text layer, and both on a
 
 A preset that carries transform keys or animators wears a key mark in the panel.
 
+## Presets of one effect
+
+**Presets ▸** on an effect's heading menu in Effect controls lists the presets that effect
+comes with, then the saved presets that hold that effect alone. Choosing one sets the
+effect, and any other picked effect of the same kind, to it. Keyframes start at the
+playhead.
+
 :::note
 Files saved outside the default preset library folder don't appear within the Effects and
-presets panel.
+presets panel. A file in the folder that is not a preset is not listed.
 :::
 
 ## Related
 
 - [Effects](/use/effects/)
+- [Effects & presets](/panels/effects-presets/)
 - [Layers](/use/layers/)

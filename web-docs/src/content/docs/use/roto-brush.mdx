@@ -1,0 +1,131 @@
+---
+title: Roto brush
+description: Cut a moving subject out of a shot from strokes on a few frames.
+sidebar:
+  order: 13.4
+---
+
+The **Roto brush** builds a matte from strokes drawn on a shot and carries it from frame
+to frame. The matte belongs to a [Roto brush](/effects/utility/roto-brush/) effect on the
+layer, and that page lists the effect's controls.
+
+For a walkthrough, see
+[Cutting out a subject with the Roto brush](/tutorials/roto-brush/).
+
+## The tools
+
+Two tools share one toolbar button. `Alt+W` arms it, and pressing again steps to the
+other.
+
+| Tool | Gesture | What the stroke marks |
+| --- | --- | --- |
+| **Roto brush** | Drag | The subject. |
+| **Roto brush** | `Alt`-drag | The background. |
+| **Refine edge** | Drag | Where the matte's edge may be soft. |
+
+**Size** on the toolbar is the stroke's width in the footage's own pixels, from 1 to
+2,000. It starts at 40. `Escape` abandons a stroke in progress.
+
+Strokes go on the selected layer, which is a footage layer or a Precomp layer. The first
+Roto brush stroke on a layer without the effect adds the effect with it, as one undo step.
+Refine edge needs the effect to be there already.
+
+A stroke belongs to the frame of the footage it was drawn on, and is stored in the
+footage's own pixels, so the matte stays in place under a transform or a
+[Retime](/use/retime/). Releasing a stroke solves that frame's matte at once.
+
+## The base frame
+
+The first stroke sets the **base frame**, the frame the matte is carried outward from.
+Once the brush has strokes, the effect's card reads **Base frame** and its number, and
+**Set to current frame** moves it to the frame at the playhead. A move sets the propagated
+matte aside, and Propagate starts again from the new frame.
+
+With no background stroke on the base frame, the frame's border counts as background.
+
+## Propagate
+
+**Propagate** on the effect's card carries the matte from the base frame in both
+directions, in the background, through the frames the effect's **Frames** row allows. The
+card counts the frames as they are solved, then says how far the matte reaches: a span of
+frames, or the whole shot. **Cancel** keeps the frames already solved, and a later
+Propagate carries on from them.
+
+One propagation runs at a time. Frames it has not reached render untouched.
+
+The line under the buttons reads:
+
+| Line | When |
+| --- | --- |
+| **Not stroked yet** | The effect has no base frame. |
+| **Based on frame _n_** | There is a base frame and nothing has been propagated. With **Seed from** on **Segment** it also counts the taps. |
+| **Waiting to start** | Propagate has been pressed and the job has not begun. |
+| **Frame _n_ of _m_** | The job is running. **_k_ kept** is added when frames from an earlier run are reused. |
+| **Frames _a_ to _b_** | The job finished or was cancelled, and the matte covers part of the shot. |
+| **The whole shot, _n_ frames** | The matte covers every frame. |
+| **No matte yet** | The job ended with no frame solved. |
+
+The bar above it shows how much of the shot the matte covers.
+
+## Corrections
+
+A stroke on any other frame is a correction. It changes the matte from that frame
+outward, away from the base frame. The next Propagate solves those frames again and keeps
+the rest.
+
+## Taps
+
+With **Seed from** set to **Segment**, a click with the Roto brush on the base frame is a
+prompt for a segmentation model. A click marks the subject, and an `Alt`-click marks what
+is not. Every tap on the frame is read together, as one subject. A drag is still a
+stroke, and strokes overrule the model.
+
+A click on any other frame is a stroke of one point. Moving the base frame drops the taps
+on the old one.
+
+The model is a **Segmentation** model pack, which needs the model runtime. Both are
+[addons](/use/addons/), installed from **Settings ▸ Addons**. Without them Propagate is
+refused, and the card offers **Open addons**.
+
+## In a node graph
+
+In a [node graph composition](/use/node-graphs/) the tools stroke on the Roto brush box
+selected on the canvas, over the footage wired into it.
+
+## Refusals
+
+A stroke that cannot be placed says why in the status line. A Propagate that cannot run
+says why on the effect's card.
+
+| Message | When |
+| --- | --- |
+| **Select a layer to stroke on** | No layer is selected. |
+| **This layer shows no footage frame to stroke on** | The layer is not footage or a precomp, or its media cannot be read. |
+| **No Roto brush on this layer** | Refine edge on a layer without the effect. |
+| **No Roto brush box picked** | In a node graph, no Roto brush box is selected. |
+| **Wire footage into this box first** | The selected box has no footage wired in. |
+| **Stroke the subject on a frame first** | Propagate with no base frame. |
+| **The strokes do not describe a subject yet** | The base frame's strokes do not separate a subject from its background. |
+| **Another propagation is already running** | A second Propagate. |
+| **This device has no optical flow to propagate with** | The graphics card cannot measure the shot's motion. |
+| **The media is offline**, **The media could not be read** | The footage file is missing, cannot be opened, or carries no video. |
+| **There are no frames to propagate through** | The footage has no frames. |
+| **The segmentation model is not installed**, **The segmentation model would not run here** | **Seed from** is **Segment** and the addon is missing or failed. |
+
+## What is saved
+
+The strokes, the taps and the base frame are saved in the project, and undo like any
+other edit. The mattes are worked out from them and are not in the project file.
+
+:::note[Not built yet]
+A stroke cannot be picked or deleted on its own. Undo takes back the last one.
+:::
+
+## Related
+
+- [Roto brush](/effects/utility/roto-brush/)
+- [Cutting out a subject with the Roto brush](/tutorials/roto-brush/)
+- [Addons and model packs](/use/addons/)
+- [The toolbar](/panels/toolbar/)
+- [Masks](/use/masks/)
+- [Mattes](/use/mattes/)

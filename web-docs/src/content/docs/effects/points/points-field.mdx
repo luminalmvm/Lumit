@@ -5,11 +5,11 @@ description: "Draws a picture of where a stream's points are, for other effects 
 
 import Compare from "../../../../components/Compare.astro";
 
-Points field is a **Generate** effect.
+Points field is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Points field" category="generate" slug="points-field" />
+<Compare label="Points field" category="points" slug="points-field" />
 
 {/* END GENERATED */}
 
@@ -20,8 +20,8 @@ Every pixel finds the point nearest to it on the frame, and **Output** says what
 from that point.
 
 Other effects read the picture through their **Matte** row or a layer row. The **Image**
-pattern of [Vary points](/effects/generate/vary-points/) and
-[Pick points](/effects/generate/pick-points/) reads it the same way.
+pattern of [Vary points](/effects/points/vary-points/) and
+[Pick points](/effects/points/pick-points/) reads it the same way.
 
 ## Parameters
 
@@ -66,21 +66,23 @@ In the Effect Controls panel:
 - **Invert**: turns Distance over, 0 at a point and rising to 1 at Radius away.
 - **Number range**: the number that draws as white when Output is Number.
 - **Name**: which of a point's numbers Number draws. Left empty, it is the number the point
-  carries. See [Names](/effects/generate/vary-points/#names).
+  carries. See [Names](/effects/points/vary-points/#names).
 - **Colour name**: the name Colour draws, where the points carry a colour under one. A
   number or an offset under the name draws as a grey. Left empty, it is the point's own
   colour.
 - **Max points**: the most points the field is made from. A longer stream is trimmed to its
   newest.
 - **Mix**: how much of the result replaces the picture underneath.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and its **Invert** drive the strength of the effect from another layer's
   brightness. See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
-- [Vary points](/effects/generate/vary-points/)
-- [Pick points](/effects/generate/pick-points/)
+- [Vary points](/effects/points/vary-points/)
+- [Pick points](/effects/points/pick-points/)
 - [Displacement map](/effects/distortion/displacement-map/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

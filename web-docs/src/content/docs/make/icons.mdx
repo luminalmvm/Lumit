@@ -29,9 +29,13 @@ reads the folder again when its window comes back to the front.
   and selection like the words beside it.
 - An icon drawn in several colours, or with a gradient or a picture, keeps its colours. Its
   `currentColor` parts follow the words beside it, and `var(--accent)` or any other colour of
-  the colour scheme takes the scheme's. It is drawn grey on a control that can't be pressed.
+  the colour scheme takes the scheme's. `var(--name, #rrggbb)` gives the colour to use when
+  the scheme has none of that name. It is drawn grey on a control that can't be pressed.
 - **Icon set** in Settings draws the strokes thinner or heavier by changing
-  `stroke-width="1.5"`. Other widths are left as they are.
+  `stroke-width="1.5"`: **Regular** is 1.5, **Engraved** 1.25, **Bold** 2, and **Style's
+  choice** the style's own. Other widths are left as they are. A file from the folder is
+  drawn as it is.
+- A file has to be UTF-8 text with an `<svg` in it.
 
 Lumit's own icons are in the repository at `flutter_ui/tool/icons/glyphs.json`, each as the
 inside of a 16 by 16 SVG.
@@ -50,13 +54,14 @@ Case, spaces and hyphens are ignored: `direct-select.svg`, `directSelect.svg` an
 
 | Group | Names |
 | --- | --- |
-| Tools | `select`, `direct-select`, `pan`, `zoom`, `rectangle`, `ellipse`, `polygon`, `pen`, `text`, `razor`, `anchor`, `camera`, `mask`, `paint`, `point-picker`, `eyedropper`, `rotate`, `star`, `vertical-type`, `vertex-add`, `vertex-delete`, `vertex-convert`, `mask-feather`, `clone-stamp`, `eraser`, `roto-brush`, `refine-edge`, `puppet-pin`, `puppet-starch`, `puppet-overlap`, `puppet-bend`, `camera-orbit`, `camera-pan`, `camera-dolly`, `local-axes`, `world-axes`, `view-axes` |
+| Tools | `select`, `direct-select`, `pan`, `zoom`, `rectangle`, `ellipse`, `polygon`, `sphere`, `cylinder`, `cone`, `torus`, `plane`, `pyramid`, `pen`, `text`, `razor`, `anchor`, `camera`, `mask`, `paint`, `point-picker`, `eyedropper`, `rotate`, `star`, `vertical-type`, `vertex-add`, `vertex-delete`, `vertex-convert`, `mask-feather`, `clone-stamp`, `eraser`, `roto-brush`, `refine-edge`, `puppet-pin`, `puppet-starch`, `puppet-overlap`, `puppet-bend`, `camera-orbit`, `camera-pan`, `camera-dolly`, `local-axes`, `world-axes`, `view-axes` |
+| Cutting | `ripple-trim`, `roll`, `slip`, `slide`, `auto-ripple`, `crossfade`, `quantise` |
 | Layer switches | `visible`, `hidden`, `audio`, `muted`, `solo`, `lock`, `unlocked`, `shy`, `shy-on`, `guide`, `effects-switch`, `motion-blur`, `flow`, `3d`, `adjustment`, `collapse`, `expand`, `switches`, `modes`, `parent`, `matte`, `label`, `collapse-transformations` |
 | Transport | `to-start`, `previous-frame`, `play`, `pause`, `next-frame`, `to-end`, `loop`, `work-area` |
 | Timeline and graph | `layers`, `graph`, `animated`, `all`, `value`, `speed`, `auto`, `clamp`, `free`, `linear`, `ease-in`, `ease-out`, `ease-in-out`, `hold`, `ease`, `bezier`, `fit`, `normalise`, `zoom-in`, `zoom-out`, `snap`, `render-time` |
 | Keyframes and values | `stopwatch`, `stopwatch-round`, `previous-key`, `add-key`, `next-key`, `reset`, `link`, `unlink`, `invert`, `separate-axes`, `selected-key` |
 | Effects | `add-effect`, `bypass`, `expose`, `driven`, `rename`, `delete` |
-| Viewer bar | `fit-to-view`, `actual-size`, `transparency`, `grid`, `safe-zones`, `channels`, `exposure`, `snapshot`, `colour-space`, `quality`, `scopes`, `tone-map` |
+| Viewer bar | `fit-to-view`, `actual-size`, `transparency`, `grid`, `safe-zones`, `channels`, `exposure`, `snapshot`, `colour-space`, `quality`, `scopes`, `tone-map`, `align-edge-left`, `align-edge-centre`, `align-edge-right`, `align-edge-top`, `align-edge-middle`, `align-edge-bottom`, `distribute-across`, `distribute-down`, `fit-to-comp`, `fit-to-comp-width`, `fit-to-comp-height` |
 | Project | `folder`, `new-folder`, `composition`, `new-composition`, `footage`, `still`, `sequence`, `audio-file`, `search`, `import`, `relink`, `missing`, `in-use`, `proxy`, `solid` |
 | Graph panel | `auto-wire`, `heal`, `frame-all`, `note`, `comment`, `group`, `nodes` |
 | Application | `export`, `add-to-queue`, `settings`, `undo`, `redo`, `close`, `more`, `help`, `manual`, `workspace`, `tick`, `check-for-updates`, `download-update`, `restart-to-update` |

@@ -20,7 +20,8 @@ layer and the depth is what they read.
 The numbers have no unit. Each frame's plane is scaled to that frame's own nearest and
 furthest, and nearer is brighter.
 
-The model is an **addon**, installed from **Settings ▸ Addons**. Without it the effect
+The model is a **Depth** model pack, an [addon](/use/addons/) installed from
+**Settings ▸ Addons**. Without it the effect
 wears a badge naming the pack to install and leaves the picture alone.
 
 The planes are kept at the model's own size, a few hundred pixels on the long side.
@@ -57,6 +58,30 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
   model's own size, named by source frame (`depth_000123.png`). Frames already in the
   folder are read back rather than analysed again.
 
+## The status line
+
+Under **Analyse** and **Cancel**, a bar shows how much of the shot has been read, and a
+line says where the analysis stands.
+
+| Line | Means |
+| --- | --- |
+| **Not analysed yet** | Analyse has not been pressed. |
+| **Waiting to start** | The analysis is accepted and has not begun. |
+| **Frame**, a count, **of** the total | The model is reading the shot. |
+| **The whole shot** and a frame count | Every frame is read. |
+| **Frames**, the first, **to** the last | Part of the shot is read. A cancelled run that kept frames reads this way. |
+| **No depth yet** | The run kept no frames, as after a Cancel before the first frame. |
+| **The model runtime is not installed** | Refused. The runtime is missing. |
+| **The model this effect asks for is not installed** | Refused. The runtime is installed and the pack **Model** names is not. |
+| **The model would not run here** | Refused. The pack would not open, or the model turned the run down on this machine. |
+| **Another analysis is already running** | Refused. One model analysis runs at a time. |
+| **The media could not be read** | Refused. The file would not open, or carries no video. |
+| **There are no frames to read** | Refused. The file opened and holds no pictures. |
+| **Analysis stopped** | The run stopped before it read anything to keep. |
+
+Once something has been read, a second line reads **Read by** and what ran the model:
+DirectML, CoreML or CPU.
+
 ## Notes
 
 Frames the analysis has not reached render untouched.
@@ -66,6 +91,7 @@ Frames the analysis has not reached render untouched.
 - [Depth of field](/effects/blur-sharpen/depth-of-field/)
 - [Depth points](/effects/generate/depth-points/)
 - [Set matte](/effects/utility/set-matte/)
+- [Addons and model packs](/use/addons/)
 - [Mattes](/use/mattes/)
 - [Utility](/effects/#utility)
 - [Effects](/use/effects/)

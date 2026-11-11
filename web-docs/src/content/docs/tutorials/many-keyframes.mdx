@@ -11,7 +11,8 @@ import Clip from "../../../components/Clip.astro";
 Lumit treats a selection of keyframes as a **block**,
 so stretching its timing or easing the selection is a single drag or click.
 
-Work in the Timeline's **Layers** mode. Everything below is the same in Graph mode.
+Work in the Timeline's **Layers** mode. Graph mode has a selection box of its own, see
+[Graph editor](/panels/graph-editor/#the-selection-box).
 
 ## 1. Get the keyframes on screen
 
@@ -26,13 +27,15 @@ Drag on empty space in the lane and a selection will extend from where you began
 
 - **Hold `Shift` or `Ctrl` as the drag begins** and the selection adds to what you already have.
 - **Click empty lane space** to select nothing/deselect.
+- **Click a property's name** in the outline to select every keyframe on its row.
 
 Two or more keys become a block: a box with a small handle at each end, and a badge saying
 how many keys it holds and how many frames it spans — `12 keys · 48 f`.
 
 ## 3. Slide the whole run
 
-Drag any keyframe in the selection and the whole block moves with it.
+Drag any keyframe in the selection, or the ground inside the box, and the whole block
+moves with it.
 
 The **magnet** on the bar under the lanes decides whether the run lands on whole frames.
 With it on, the key in your hand snaps and the rest follow.
@@ -52,12 +55,12 @@ the playhead, a key on another row.
 
 ## 5. Shape the movement
 
-Click the block's **badge**, or **Ease** on the bar under the lanes, and the Ease popover
+Click the block's **badge**, or **Ease** on the bottom bar, and the Ease popover
 opens on the selection.
 
 | Row | What it asks |
 | --- | --- |
-| **Curve** | A named shape — easy ease, slow start, slow finish, anticipate, overshoot, snap, heavy ease, or one you saved. |
+| **Curve** | A named shape: easy ease, slow start, slow finish, heavy ease, snap, and the sine, quad, cubic, quart, expo and back families. |
 | **Influence** | How far each side of the curve reaches, in per cent, in and out separately. |
 | **Stagger** | Frames between one row's keys and the next, top down or bottom up. Zero leaves every row where it is. |
 
@@ -70,6 +73,10 @@ chosen.
 The bar at the bottom of the timeline carries the commands that act on whatever keys are selected:
 
 - **Linear**, **Easy ease**, **Hold**, **Ease** — Adjusts interpolation of every selected key.
+
+`F9` is Easy ease. Right-click a key in the block for the same commands, **Reverse** and
+**Delete keyframes**. `Ctrl+C` copies the block, and `Ctrl+V` pastes it with its first key
+on the playhead.
 
 ## 7. When one axis needs its own timing
 

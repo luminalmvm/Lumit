@@ -17,23 +17,38 @@ A [packed project](#packed-projects) also carries the files themselves.
 
 ## Save and open
 
-- **File ▸ Save** saves the project.
-- **File ▸ Save as…** saves to a new path. If already saved, it creates a new copy at the location.
+- **File ▸ Save**, `Ctrl+S` by default, saves the project. A project that has never been
+  saved asks where.
+- **File ▸ Save as…**, `Ctrl+Shift+S`, saves to a new path. If already saved, it creates a
+  new copy at the location.
 - **File ▸ Revert to saved…** throws away every change since the last save, after asking.
-- **File ▸ Open project…** opens a `.lum` file, **Open recent** lists the last few, and
-  **Clear recent projects** at its foot empties the list.
-- **File ▸ New** starts an empty project, or a copy of the template chosen in
+- **File ▸ Open project…**, `Ctrl+O`, opens a `.lum` file. **Open recent** lists the last
+  ten, and **Clear recent projects** at its foot empties the list.
+- **File ▸ New**, `Ctrl+Alt+N`, starts an empty project, or a copy of the template chosen in
   [Settings](/use/settings/). Footage packed inside a template is not unpacked. The copy is
   unsaved and is a new project of its own. A template that cannot be read gives an empty
-  project and the notice *The project template would not open, so the new project is
-  empty*. **Close project** never uses the template.
-
-Opening a project that another Lumit has open brings that Lumit's window forward.
+  project and the notice *The project template would not open*.
+- **File ▸ Close project** puts an empty project in place of the open one. It never uses
+  the template.
+- **File ▸ Open from backup…** and **Save a version…** are part of
+  [Backup and history](/use/backup/).
 
 With unsaved changes, Lumit asks before the project goes: on **New**, **Open project…**,
 **Open recent**, **Close project**, an After Effects import, joining a shared project, and on
 quitting. **Save** saves first, **Discard** drops the changes, and **Cancel** keeps the
 project open. If the save is cancelled or fails, the project stays open.
+
+One project is open at a time. While a project opens, a card shows how far it has got,
+with **Cancel**. It names each stage: reading the project file, reading the packed footage,
+finding the media, preparing the project, starting the preview. A project that does not
+open leaves the open one as it was.
+
+Lumit refuses to open:
+
+- A project saved by a newer Lumit that this one cannot read.
+- A project holding a composition over 65,536 pixels a side, or over 1,073,741,824
+  pixels in all.
+- A project that another Lumit window has open. That window comes forward.
 
 ## Packed projects
 
@@ -46,6 +61,11 @@ none of the original files. The commands are under **File ▸ Packed project fil
 - **Unpack project file** writes the packed footage into a `media` folder beside the project
   and saves the project without it. A footage item whose original file is still on disk
   goes back to reading that file, and nothing is written for it.
+
+Packing and unpacking show a card with **Cancel**. A cancelled pack leaves the project file
+as it was, and a cancelled unpack leaves the footage packed. A footage item whose file
+cannot be found is left out of the pack, and the bottom strip says how many were. One that
+cannot be written out by an unpack stays packed.
 
 A packed footage item reads its original file while that file is on disk and unchanged.
 Otherwise it reads the packed copy, which is copied into Lumit's cache when the project opens.
@@ -62,7 +82,9 @@ only, and an autosave reads its footage from the project file it was written bes
 A shared project is edited by several people at once. One person, the **host**, shares it
 from their computer and the others join as **guests**. Guests connect to the host's
 computer directly, over a local network, the internet or a VPN, or through a relay. A
-shared project can also be [kept online](#keeping-a-shared-project-online).
+shared project can also be [kept online](#keeping-a-shared-project-online). For a
+step-by-step guide, see
+[Working on a project with someone else](/tutorials/shared-project/).
 
 **File ▸ Multi-edit…** opens the **Multi-edit** window, which has two pages.
 
@@ -71,6 +93,9 @@ shared project can also be [kept online](#keeping-a-shared-project-online).
 - **Join a project**: an invite link is pasted, and **Join** opens the host's project in
   place of the open one.
 
+**Your name** on both pages is what the others see. It is kept for next time, and left
+empty it reads *Someone*.
+
 A click on an invite link in a browser opens Lumit on **Join a project** with the link
 filled in.
 
@@ -78,13 +103,26 @@ The host and its guests run the same version of Lumit. A nightly and a stable bu
 share a project. A shared project holds at most 16 people, the host included.
 
 While a project is shared, a **Shared** button sits on the bottom strip and opens the same
-window. It lists everyone in the project. The host can **Remove** a guest, and **Stop
-sharing** ends it for everyone. A guest has **Leave**.
+window. It lists everyone in the project. A click on the composition beside a person's
+name opens that composition. The host can **Remove** a guest, and **Stop sharing** ends it
+for everyone. A guest has **Leave**. A right-click on a person's row has **Open
+_composition_**, **Follow _name_** or **Stop following**, and for the host **Remove**.
 
-An invite link holds every address the host can be reached at and a key. Anyone who has it
-can join and edit until the host stops sharing. A link is not drawn until it is shown. The eye
-beside it asks before it shows one, and **Copy link** copies it without showing it. The part of
-the link after the `#` is not sent to lumitlab.com.
+Lumit refuses to join:
+
+- A project that is full.
+- A host on another version of Lumit.
+- A project holding something this computer will not open.
+
+An invite link holds up to eight addresses the host can be reached at and a key. Anyone
+who has it can join and edit until the host stops sharing. A link is not drawn until it is
+shown. The eye beside it asks before it shows one, and **Copy link** copies it without
+showing it. The part of the link after the `#` is not sent to lumitlab.com.
+
+**Send to a friend**, beside the eye, sends the invite to a
+[friend](/use/profiles/#friends), with the password when one is set. It waits for them at
+the top of **Join a project** as a row with **Join** and **Turn down**. A right-click on
+the link has **Copy link**, **Send to a friend** and **Show**.
 
 **Password** on **Share this project** sets a password that every guest types as well as
 having the link. It is drawn as dots until its eye is pressed. **Join a project** shows a
@@ -98,12 +136,15 @@ key. The line under the link says who it works for.
 | --- | --- |
 | Anyone with this link can join. | Anyone. The host's router opened the port, or a relay is in use. |
 | Only people on your network can join. | People on the host's network. The router refused, has no address of its own on the internet, or was not asked. |
+| Checking your connection… | Not known yet. The router or the relay has not answered. |
+| The relay isn't responding. | People on the host's network. A relay is set and cannot be reached, and the router did not open the port. |
 
 **Advanced** holds the rest.
 
 - **Internet**: when ticked, Lumit asks the host's router to open the port when sharing
   starts, and to close it when sharing stops. It is ticked by default.
-- **Port**: the port the host listens on, 47856 by default.
+- **Port**: the port the host listens on, 47856 by default. Sharing does not start on a
+  port something else on the computer is using.
 - **Relay**: the address of a relay, for guests the router does not let in. It is set
   before sharing starts.
 - **Extra address**, while sharing: one more address of the host's computer to add to the
@@ -118,7 +159,8 @@ how much was sent.
 
 **Lumit relay** on **Share this project** uses the relay Lumit itself runs. It is part of
 [Lumit Pro](/use/profiles/#lumit-pro): the host needs it, and guests do not. It is used when
-**Relay** is empty.
+**Relay** is empty. Without Lumit Pro, **Lumit relay** and **Keep online** show a Pro badge
+in place of the tick, and a press on it opens the Lumit Pro window.
 
 Any other relay is used only when its address is in **Relay**. It
 is the `lumit-relay` program from Lumit's source, run on a server its owner controls:
@@ -148,7 +190,9 @@ A row out of sight in a layer that is twirled shut is marked on the layer. Two p
 same row or keyframe both show.
 
 The eye on a person's row in the Multi-edit window follows them: the open composition
-and the playhead go where theirs go. **Esc**, or moving the playhead, stops it.
+and the playhead go where theirs go. **Esc**, or moving the playhead, stops it. The
+[Viewer](/panels/viewer/) wears a frame in their colour while it lasts, with their name and
+**Stop** at its top.
 
 A guest chooses a **Footage folder** when joining, and each footage item is matched to a
 file in it by name and then by content. An item with no match can be relinked, or fetched
@@ -210,7 +254,9 @@ of its bytes.
 A guest that loses the host keeps working. When the host is reachable again the guest's
 edits are merged into the host's project. An edit to something another person also changed
 is held back and listed in the **Conflicts** window, where each is settled with **Keep
-mine** or **Keep theirs**. An edit to something that no longer exists is dropped.
+mine** or **Keep theirs**. A right-click on one has **Keep mine for all** and **Keep theirs
+for all**. While any wait, the Multi-edit window counts them beside **Review…**, which
+opens the window again. An edit to something that no longer exists is dropped.
 
 A guest's saved copy that is closed while the host is away is still a guest when it is
 opened again. It opens with the edits made while away that were saved, or all of them if
@@ -253,9 +299,14 @@ need no account.
 | Stop | **Stop keeping online**, for the host. A guest has **Leave**. |
 | Stop one whose file is gone | **Stop keeping online** on **Settings ▸ Account**, for the host. |
 
+An account keeps a limited number of projects online. Past it, Lumit refuses to keep
+another until one is stopped.
+
 **Invite to look** lets someone see the project and follow people, and not edit. Up to
 eight people can look at once. It never asks for the password: with one set, either link
-shows the project, and editing still needs the password.
+shows the project, and editing still needs the password. With it on, the link that edits
+is labelled **Invite to edit**. With a password set, a lock marks the invite that needs it
+and the other is tagged *no password*.
 
 While someone changes a property, its row is held for them on every other computer. It is
 dimmed, with their name, until they let go.
@@ -266,7 +317,7 @@ strip says the same.
 | Line | Meaning |
 | --- | --- |
 | In step | Every edit is shared. |
-| Reconnecting | The server cannot be reached. Edits wait on the computer and are merged later. |
+| Reconnecting | The server cannot be reached. Edits wait on the computer and are merged later. **Have a new invite?** opens the **New invite** row, and **Reconnect** takes the invite pasted there. |
 | Invite replaced | The host made a new invite. Paste it under **New invite**. |
 | On hold | The host's Lumit Pro has ended. Edits wait on each computer. |
 | Nearly too large | The project is over 95 MB, footage not counted. Edits stop unless it gets smaller. |
@@ -274,14 +325,20 @@ strip says the same.
 | On Lumit 0.6.0, Waiting for the host, Update needed | See [After an update](#after-an-update). |
 
 **Activity** lists who edited the project and where, newest first. Edits made while the
-computer was away are listed first.
+computer was away are listed first. It shows the newest twelve entries until **Show all**
+is pressed.
+
+The bottom strip says what others edited while the computer was away, and when someone
+else leaves a note. A press on either opens **Activity**.
 
 A note is written on the line at the top of **Activity**. It carries the open composition
 and the playhead's time, and shows as a flag on that composition's time ruler. A note holds
 500 characters and cannot be changed. Its writer and the host can take it down.
 
 When edits made while away are dropped or left as conflicts, **Open my copy** opens the
-project as it was on the computer just before.
+project as it was on the computer just before. Where the computer came back more than
+once, each copy has its own **Open my copy from** with its time. The × on the row dismisses
+it and deletes the copies, after asking.
 
 **Remove** takes a person out and replaces the invite link. Anyone who is away needs the
 new one from the host.
@@ -295,9 +352,16 @@ with **Stop keeping online** for each.
 Stand-ins of the footage are kept online too.
 
 - **Keep the originals online**, in the host's window, also sends the original files.
-- **Fetch the original**, on a footage row's menu, fetches one.
+- **Fetch the original**, on a footage row's menu, fetches one. The row reads *Original not
+  online yet* while the server has no original of it.
 
-Footage counts against the host's Lumit Pro storage.
+Each file going to or from the server has a row in the window: waiting, the per cent sent
+or fetched, or why it failed. A failed row has **Try again**, and the × cancels one. An
+original is listed with *(original)* after its name.
+
+Footage counts against the host's Lumit Pro storage. With the storage full, no more
+footage is sent. The host's window says how much is used, **Manage…** opens
+**Settings ▸ Account**, and **Try again** sends again.
 
 The project and its footage are encrypted before they leave the computer. The key is in the
 invite link and is never sent to the server.
@@ -320,26 +384,66 @@ Edits made while waiting are kept and merged afterwards. A move cannot be undone
 ## Autosave
 
 Lumit keeps rotating autosave copies in an `autosaves/` folder beside the project. They
-are written on an interval while the project has unsaved changes, and again before risky
-operations such as starting an export. The interval and how many copies are kept are both
-under Settings, on the Autosave page; turning the interval to zero switches the timer off.
-A project that has not changed since its last save or autosave writes nothing.
+are written on an interval while the project has unsaved changes. The newest is named
+after the project with `.autosave-1.lum` on the end, and the oldest is dropped as a new one
+is written.
+
+The interval and how many copies are kept are both under Settings, on the Autosave page:
+every 5 minutes and 5 copies by default. Turning the interval to zero switches the timer
+off. A project that has not changed since its last save or autosave writes nothing, and a
+project that has never been saved has no autosaves.
 
 ## Crash recovery
 
 Between saves, Lumit also records every edit. After a crash, open the project and Lumit
-asks whether to restore them. **File ▸ Recover…** asks again later. The dialogue has
-three choices:
+asks whether to restore them, in a dialogue titled **Recover work**. **File ▸ Recover…**
+asks again later. The dialogue has three choices:
 
 | Choice | Recovers |
 | --- | --- |
 | **Restore all changes** | Everything up to the moment things stopped. |
-| **Restore latest autosave** | The project as it was at the last autosave. |
+| **Restore latest autosave** | The project as it was at the last autosave. Absent while there is no autosave. |
 | **Don't restore changes** | Nothing. The project stays as it was opened. |
 
 The command is live once the project has been saved to a file, and does nothing while
 there is no autosave beside it. After a crash, an answer other than **Restore all
 changes** throws the recorded edits away.
+
+**Restore all changes** shows a card while the edits are put back, with **Cancel**. A
+cancelled restore keeps the edits and asks again. Closing the dialogue after a crash
+counts as **Don't restore changes**.
+
+A project that has never been saved is not recovered after a crash.
+
+## Project settings
+
+**File ▸ Project settings…**, `Ctrl+Alt+Shift+K` by default, holds the settings that are
+saved in the project file. Changing one is an edit, and undo takes it back.
+
+| Setting | Does |
+| --- | --- |
+| **Colour depth** | How many bits a channel compositing works in: 8, 16 or 32 bpc. 16 by default. At 8 bpc nothing is brighter than white. |
+| **Anti-aliasing** | How many samples smooth the edges of transformed layers: *Off*, 2, 4 or 8. 8 by default. |
+| **Node graph overscan** | How far past the frame a node graph box keeps its picture: *One frame*, *Two frames* or *Maximum*. One frame by default. *Maximum* shows the most memory a box can take. |
+| **Configuration**, **Working space** | See [Colour management](/use/colour-management/). |
+
+Preview and export use the same values. Where the graphics card cannot manage the colour
+depth or anti-aliasing set, **In use on this machine** shows the value in use, and the
+project keeps the one set.
+
+## History
+
+**Edit ▸ History…** lists the edits undo can take back, oldest first. A click on a row takes
+the project to how it stood after that edit, and **Before the first step** takes back every
+one. The rows after the chosen one are dimmed, and a click on one redoes up to it. A new
+edit removes the dimmed rows.
+
+A right-click in the list has **Go to this step**, **Undo**, **Redo** and **Clear
+history…**. **Clear history…**, also **Edit ▸ Clear ▸ Undo history…**, drops every undo and
+redo step after asking, and leaves the project as it is.
+
+**Edit ▸ Undo**, `Ctrl+Z` by default, and **Redo**, `Ctrl+Shift+Z`, name the step they
+would take.
 
 ## Related
 

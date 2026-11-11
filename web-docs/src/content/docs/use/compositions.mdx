@@ -17,26 +17,69 @@ the Project panel.
 
 ## Make a composition
 
-1. Choose **Composition ▸ New composition**.
-2. Set the resolution, frame rate, and duration.
-3. Confirm.
+1. Choose **Composition ▸ New composition…**, `Ctrl+N` by default, or **New composition**
+   on the [Project panel](/panels/project/)'s bottom bar.
+2. Set [the settings](#the-settings).
+3. Press **Create**.
 
-**Duplicate** on a composition's right-click menu in the Project panel, or **Composition ▸
-Duplicate composition**, makes a copy beside it. When it nests other compositions, Lumit asks
-whether the copy shares them with the original or gets its own.
+The dialogue opens at 1920 × 1080, 60 fps and 30 seconds, named *Comp* and a number.
+Opened from footage, by a double-click on a footage row, a drop on **New composition** in
+the Project panel or **New composition from selection** on a row's menu, it opens at the
+footage's size and frame rate, and the footage lands in the new composition as a layer.
+Its length is that of the longest item, and never under 30 seconds. With several items
+the size and frame rate are those of the last one that has a picture.
+
+The new composition is fronted in the Viewer and Timeline, and filed in the project's
+*Compositions* folder.
+
+Each open composition has a tab at the top of the [Timeline](/panels/timeline/#the-header).
+
+## The settings
+
+| Setting | Does |
+| --- | --- |
+| **Name** | The composition's name. |
+| **Preset** | Sets the size and the frame rate together: HD 1080p at 25, 30 or 60, HD 720p at 25, UHD 4K at 25, Cinema 2K at 24, Vertical 1080 at 30. It reads *Custom* for anything else. |
+| **Size** | Width and height in pixels, each from 16 to 16384. The link between the two keeps the shape while one side is changed, and a click on it unlocks them. The ratio is shown beside them. |
+| **Frame rate** | A typed rate, or one from the list: 23.976, 24, 25, 29.97, 30, 50, 59.94, 60 and 120. 23.976, 29.97 and 59.94 are kept as the exact NTSC rates. |
+| **Start timecode** | The time the composition's first frame reads in the Timeline and the Viewer, as timecode at the frame rate above. In **Composition settings** only. |
+| **Duration** | Timecode at the frame rate above, with the length in frames and seconds beside it. A duration that cannot be read leaves the length as it was. |
+| **Background** | The composition's background colour. Black by default. |
+| **Shutter angle** | How long the shutter is open on layers with the motion blur switch on, from 0° to 720°. 180° by default. |
+| **Samples** | How many times a blurred layer is drawn across the open shutter, from the first count **to** the second, each from 1 to 256. 16 to 128 by default. See [Layers](/use/layers/). |
+| **Lights start from black** | Lights the composition's layers from black, with ambient lights as the base. Off by default, and on for a composition imported from an After Effects project. Absent from a node graph. |
 
 ## Change the settings
 
-Choose **Composition ▸ Composition settings**. Any of these settings can be changed at
-any time. Additionally, right-clicking a composition in the Timeline or Project panel
-brings up a popup menu with the composition settings as an option.
+Choose **Composition ▸ Composition settings…**, `Ctrl+K` by default. Any of these settings
+can be changed at any time. Additionally, right-clicking a composition in the Timeline or
+Project panel brings up a popup menu with the composition settings as an option.
 
 Changing the width or height keeps the picture centred: every layer without a parent moves
 by half the change.
 
 Changing the frame rate does not move your layers or keyframes. If they no longer line up
 with composition frames and snapping is enabled, the next time you move them they will
-align with the new frame rate.
+align with the new frame rate. The playhead stays on the same moment.
+
+## Duplicate a composition
+
+**Duplicate** on a composition's right-click menu in the Project panel, or **Composition ▸
+Duplicate composition**, makes a copy beside it. When it nests other compositions, Lumit
+asks whether to **Make separate copies** of them or **Share with the original**.
+
+## Trim and crop
+
+- **Composition ▸ Trim comp to work area**, `Ctrl+Shift+X` by default, makes the composition
+  as long as its work area. Everything slides back until the work area's start is the
+  composition's start. It is disabled while no work area is set.
+- **Composition ▸ Crop comp to region of interest** makes the composition's frame the
+  [region of interest](/panels/viewer/#region-of-interest). Every layer without a parent
+  moves until the picture is where it was, and the region is cleared. It is disabled while
+  no region is set, and a region under a pixel either way is refused.
+
+Neither deletes a layer. A layer left outside the shorter length or the smaller frame keeps
+everything it had.
 
 ## Nest one composition in another
 
@@ -55,23 +98,30 @@ opens the **Precompose** dialogue.
 
 | Option | Does |
 | --- | --- |
-| **New composition name** | The new composition's name. |
+| **New composition name** | The new composition's name. It starts as the first layer's name followed by *Comp*. |
 | **Leave all attributes in '*composition*'** | Moves the one layer in as its bare source, and keeps its transform, effects, masks, Retime, blend mode and switches on the Precomp layer. One layer only. |
 | **Move all attributes into the new composition** | Puts the selected layers and everything on them in the new composition. |
-| **Adjust the duration to the span of the selected layers** | Makes the new composition as long as the selection instead of the composition. |
+| **Trim to the layers' span** | Makes the new composition as long as the selection instead of the composition. |
 | **Open the new composition** | Opens it once it is made. |
 
-The choices are kept for next time. The row menu leaves locked layers out.
+The Precomp layer sits where the topmost of the layers was. `Enter` confirms, and the
+whole move is one undo step. The choices are kept for next time. The row menu leaves
+locked layers out. If the layers cannot be precomposed, the dialogue stays open and says
+so.
 
-When a parent or track matte links the selected layers to layers left outside, Lumit asks
+When a parent or matte links the selected layers to layers left outside, Lumit asks
 first, then duplicates the layer at the other end of each link, hidden, so both sides keep
 their links.
+
+**Precompose group**, on a [layer group](/use/layer-groups/)'s header menu in the
+Timeline, precomposes the group's layers. The group's effects move onto the new Precomp
+layer and the group is removed.
 
 A Precomp layer supports [Retime](/use/retime/), so the speed of a nested
 composition can be ramped.
 
 A composition holds a layer stack or a [node graph](/use/node-graphs/), never both.
-**Composition ▸ New node graph** makes the second kind. It nests the same way: as a
+**Composition ▸ New node graph…** makes the second kind. It nests the same way: as a
 Precomp layer in another composition, and as a Read box in another node graph.
 
 Lumit refuses to place a composition inside itself.
@@ -79,7 +129,8 @@ Lumit refuses to place a composition inside itself.
 ## The flowchart
 
 The flowchart draws the open composition between the compositions it is used in, on the
-left, and the compositions it contains, on the right. Press `Tab`, or choose
+left under **Used in**, and the compositions it contains, on the right under
+**Contains**. Press `Tab`, or choose
 **Composition ▸ Flowchart**. It opens at the pointer.
 
 | Gesture | Result |
@@ -94,6 +145,7 @@ left, and the compositions it contains, on the right. Press `Tab`, or choose
 ## Related
 
 - [Layers](/use/layers/)
+- [The Project panel](/panels/project/)
 - [Node graph compositions](/use/node-graphs/)
 - [Importing media](/use/importing/)
 - [Preview and playback](/use/preview/)

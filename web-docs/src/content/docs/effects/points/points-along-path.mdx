@@ -1,15 +1,15 @@
 ---
 title: Points along path
-description: "Evenly spaced points along one of the layer's masks."
+description: "Points along one of the layer's masks, or along a Shape layer's paths."
 ---
 
 import Compare from "../../../../components/Compare.astro";
 
-Points along path is a **Generate** effect.
+Points along path is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Points along path" category="generate" slug="points-along-path" />
+<Compare label="Points along path" category="points" slug="points-along-path" />
 
 {/* END GENERATED */}
 
@@ -22,7 +22,7 @@ On a Shape layer, **Follow** can take the outline the layer draws in place of a 
 
 **Placement** can put them at random places instead, or one on each of the mask's corners.
 Each point's number is how far along the path it sits, from 0 to 1. It carries the same
-under the name `progress`. See [Names](/effects/generate/vary-points/#names).
+under the name `progress`. See [Names](/effects/points/vary-points/#names).
 
 On a Shape or Text layer, a points effect that is last in the stack draws past the art's
 edges into the whole frame. With another effect or a layer style after it, the points are
@@ -43,6 +43,11 @@ cut at the art's box.
 | **Offset** | Slider | -100 to 100; any value by typing | 0 | Per cent |
 | **Wrap** | Checkbox | On or off | Off | - |
 | **Align to path** | Checkbox | On or off | On | - |
+| **Deform** | Dropdown | Off · Oscillator · Value noise | Off | - |
+| **Wave** | Dropdown | Sine · Triangle · Square · Sawtooth | Sine | - |
+| **Amplitude** | Slider | -500 to 500; any value by typing | 40 | Pixels at composition size |
+| **Frequency** | Slider | 0 to 20; higher | 2 | - |
+| **Phase** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Size** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
@@ -56,10 +61,15 @@ cut at the art's box.
 In the Effect Controls panel:
 
 - **Path** groups **Follow**, **Mask path**, **Placement**, **Count**, **Start**, **End**, **Offset**, **Wrap**, **Align to path**.
+- **Deform** groups **Deform**, **Wave**, **Amplitude**, **Frequency**, **Phase**.
 - **Point** groups **Size**, **Feather**, **Colour**.
 - **Count** is editable while **Placement** is anything but Corners.
 - **Offset** is editable while **Placement** is anything but Corners.
 - **Wrap** is editable while **Placement** is anything but Corners.
+- **Amplitude** is editable while **Deform** is anything but Off.
+- **Frequency** is editable while **Deform** is anything but Off.
+- **Phase** is editable while **Deform** is anything but Off.
+- **Wave** is editable while **Deform** is set to Oscillator.
 - **Mask path** is editable while **Follow** is anything but Shape.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
@@ -86,21 +96,29 @@ In the Effect Controls panel:
   stops at its ends, unless **Wrap** is on.
 - **Wrap**: on an open path, a point pushed past one end comes back in at the other.
 - **Align to path**: turns each point to face the way the path runs.
-- **Seed**: which random places. It shows for Random.
+- **Deform**: moves each point off the path, along the normal where it stands, by a wave
+  or by noise measured along the path. **Off** leaves the points on the path.
+- **Wave**: the Oscillator's shape.
+- **Amplitude**: how far a point moves off the path at most. Below 0 it moves the other way.
+- **Frequency**: how many waves, or cells of noise, fit along the whole path.
+- **Phase**: slides the wave or the noise along the path. 360 is one wave.
+- **Seed**: which random places Random makes, and which noise Value noise reads.
 - **Size**: the diameter of the disc a point is drawn as.
 - **Feather**: how soft that disc's edge is. At nought it is a hard circle.
 - **Colour**: what the discs are drawn in.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
-- [Grid](/effects/generate/grid/)
-- [Clone to points](/effects/generate/clone-to-points/)
-- [Connect points](/effects/generate/connect-points/)
-- [Trail](/effects/generate/trail/)
+- [Grid](/effects/points/grid/)
+- [Clone to points](/effects/points/clone-to-points/)
+- [Connect points](/effects/points/connect-points/)
+- [Trail](/effects/points/trail/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

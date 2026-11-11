@@ -5,11 +5,11 @@ description: "Follows things in the layer's footage and hands them out as points
 
 import Compare from "../../../../components/Compare.astro";
 
-Track points is a **Generate** effect.
+Track points is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Track points" category="generate" slug="track-points" />
+<Compare label="Track points" category="points" slug="track-points" />
 
 {/* END GENERATED */}
 
@@ -28,13 +28,13 @@ The analysis is kept in Lumit's cache on this machine and not in the project fil
 another machine it has to be run again.
 
 Every point keeps one identity for as long as it is followed, and a
-[Trail](/effects/generate/trail/) or a
-[Clone to points](/effects/generate/clone-to-points/) below stays attached to it. On a
+[Trail](/effects/points/trail/) or a
+[Clone to points](/effects/points/clone-to-points/) below stays attached to it. On a
 retimed layer the points stay on the picture.
 
 A feature's number is the tracker's confidence in it, from 0 to 1, and it carries the same
 under the name `confidence`. A blob carries its area under `area`, in pixels of the
-footage. See [Names](/effects/generate/vary-points/#names).
+footage. See [Names](/effects/points/vary-points/#names).
 
 Any points effect can read these points, and so can
 [Points sample](/effects/drivers/points-sample/) and
@@ -104,16 +104,18 @@ In the Effect Controls panel:
 - **Colour**: what the discs are drawn in.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte** and its **Invert** drive the strength of the effect from another layer's
   brightness. See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
 - [Camera track](/effects/utility/camera-track/)
 - [Planar track](/effects/utility/planar-track/)
 - [Tracking](/use/tracking/)
-- [Trail](/effects/generate/trail/)
-- [Clone to points](/effects/generate/clone-to-points/)
+- [Trail](/effects/points/trail/)
+- [Clone to points](/effects/points/clone-to-points/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

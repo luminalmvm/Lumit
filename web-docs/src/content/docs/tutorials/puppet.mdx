@@ -2,52 +2,48 @@
 title: Pinning a character with Puppet
 description: Place pins on a cutout, drag a limb, keyframe the wave, stiffen the torso.
 sidebar:
-  order: 4
+  order: 7
 ---
 
-Puppet bends a layer without cutting it: a mesh is laid over the layer, pins hold
-or move areas of it, and the picture bends between them.
+[Puppet](/use/puppet/) bends a layer without cutting it: a mesh is laid over the layer,
+pins hold or move areas of it, and the picture bends between them.
 
-## 1. Place pins
+The composition has a cutout on a layer of its own, with a transparent background.
 
-1. Select the layer.
-2. Pick the **Puppet position pin** tool (`Ctrl+P`). A wireframe appears over the
-   layer: the mesh, cut to the picture's opaque shape.
-3. Click to place a pin. Put one on each part that should hold still, and one on each
-   part that will move.
+**1. Select the layer.** Click it in the Timeline.
 
-**Density** and **Expansion** on the options bar set how fine the mesh is and how far past the edge it
-reaches.
+**2. Pick the Puppet position pin tool.** Press `Ctrl+P`. A wireframe appears over the
+layer: the mesh, cut to the picture's opaque shape. **Density** and **Expansion** on the
+toolbar set how fine the mesh is and how far past the edge it reaches.
 
-## 2. Drag
+**3. Pin what holds still.** Click the mesh once on each part that should stay where it is.
 
-Drag a pin. The wireframe follows the pointer, and the picture retains the deformation
-when you release. Everything between the pins bends rather than stretches, and the pins
-you don't adjust remain in plkace.
+**4. Pin what moves.** Click the part that will move.
 
-## 3. Keyframe
+**5. Drag that pin.** The wireframe follows the pointer, and the picture bends when you
+release.
 
-A layer with pins has a **Puppet** heading in the Timeline, a row per pin. 
-Animate a pin like any other property:
+**6. Turn on the pin's stopwatches.** Twirl the layer open in the Timeline, then **Puppet**,
+then the pin, and click the stopwatch on **Position x** and on **Position y**.
 
-1. Turn on the stopwatch on the pin's position.
-2. Move the playhead, drag the pin, repeat.
+**7. Set the next pose.** Move the playhead and drag the pin again. A keyframe is set at the
+playhead. Repeat for each pose.
 
-The keyframes take the same interpolation, easing and graph editing as everything else.
-Rename a pin on its row, or delete it from the row's right-click menu.
+**8. Stiffen a part.** Press `Ctrl+P` again for the **Puppet starch pin** tool and click the
+part. Raise the pin's **Amount** in the Timeline. The number on the pin's own row is how far
+it reaches, in pixels.
 
-## 4. Starch, overlap and bend
+**9. Put one part in front of another.** Press `Ctrl+P` again for the **Puppet overlap pin**
+tool and click the part. Set its **Amount** above 0 to draw it in front, or below 0 to draw
+it behind.
 
-The other three pin tools share the strip slot with the first:
+**10. Turn a part in place.** Press `Ctrl+P` again for the **Puppet bend pin** tool and
+click to place a pin. Drag the pin to turn the mesh round it, or `Alt`-drag to scale it.
 
-- **Starch pin**: stiffens the region round it. **Amount** sets how strongly; the pin
-  row's value column sets how far it reaches.
-- **Overlap pin**: says which part draws in front when the picture folds over itself.
-- **Bend pin**: dragging around the pin turns the region about it, and `Alt`-dragging
-  resizes it.
+`Delete` removes the pin under the pointer.
 
 ## Related
 
+- [Puppet](/use/puppet/)
 - [Keyframes](/use/keyframes/)
-- [The graph editor](/use/graph-editor/)
 - [Layers](/use/layers/)

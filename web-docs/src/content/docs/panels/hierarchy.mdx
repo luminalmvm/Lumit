@@ -8,14 +8,20 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 The **Hierarchy** panel draws the active composition as an indented tree of its layers,
-top to bottom. Use it to see what a comp contains without opening anything.
+top to bottom. Use it to see what a comp contains without opening anything. Open it with
+**Window ▸ Panels ▸ Hierarchy**.
 
 <Shot file="hierarchy.png" caption="The Hierarchy panel, with a precomp twirled open." eager/>
+
+Each row is one layer: an icon for its kind, in the layer's label colour, and its name.
 
 ## Precomps expand
 
 A [Precomp layer](/use/compositions/) can be opened to view the layers of the composition
-nested within.
+nested within. Its row carries a twirl arrow at the left.
+
+A Precomp layer inside a nested composition opens the same way. The tree stops ten levels
+down.
 
 ## What clicking does
 
@@ -25,18 +31,21 @@ nested within.
 | `Ctrl`+click | Add or remove it from the selection. |
 | Click the twirl arrow | Show or hide what a precomp contains. |
 | Double-click a precomp row | Front that composition in the Viewer and Timeline. |
-| Right-click a row | The [row menu](/use/layers/#the-row-menu). Inside a precomp: **Open**, **Expand** and **Reveal in Project panel**. |
+| `Delete`, with the panel active | Delete the selected layers. |
+| Right-click a row | The [row menu](/use/layers/#the-row-menu), with **Expand** or **Collapse** on a precomp. Inside a precomp: **Open**, **Expand** or **Collapse**, and **Reveal in Project panel**. |
 | Right-click below the rows | **Select all**, **Deselect all**, **Expand all** and **Collapse all**. |
 
 Selection is shared with the Timeline, so a layer selected here is selected there.
 
-## Read-only
+## What stays in the Timeline
 
-The panel is for navigation. Renaming, reordering and deleting stay in the [Timeline](/panels/timeline/).
+Layers are not reordered here. **Rename** on the row menu opens the name on the layer's row
+in the [Timeline](/panels/timeline/).
 
-A second view drawing the same nesting as a graph was designed and is not built.
+The [flowchart](/use/compositions/#the-flowchart) draws the nesting as a graph.
 
 ## Related
 
 - [The Timeline](/panels/timeline/)
 - [Compositions](/use/compositions/)
+- [Layers](/use/layers/)

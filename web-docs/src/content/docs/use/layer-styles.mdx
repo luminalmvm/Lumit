@@ -1,0 +1,134 @@
+---
+title: Layer styles
+description: Shadows, glows, overlays and a stroke that a layer wears, drawn from its own alpha.
+sidebar:
+  order: 11.5
+---
+
+A **layer style** is drawn from a layer's own shape: a shadow behind it, a glow round it, a
+colour over it, a stroke on its edge. A layer holds one of each style at most, and the
+styles draw in a fixed order after the layer's [effects](/use/effects/).
+
+## Add a style
+
+- **Layer ▸ Layer styles** adds the chosen style to every selected layer. A style the
+  layer already has is greyed.
+- **Layer styles ▸** on the [row menu](/use/layers/#the-row-menu) of a Footage, Solid,
+  Precomp, Text, Shape or Sequence layer holds the same list.
+- Once a layer has a style, the **+** on the **Styles** heading in
+  [Effect controls](/panels/effect-controls/) lists the styles it has not got.
+
+## The styles
+
+In the order they draw, back to front:
+
+| Style | Draws |
+| --- | --- |
+| **Drop shadow** | The layer's shape, softened, tinted and offset, behind the layer. |
+| **Outer glow** | The layer's shape, softened and tinted, behind the layer and in front of its shadow. |
+| **Gradient overlay** | A two-colour gradient over the layer, inside its alpha. |
+| **Colour overlay** | One colour over the layer, inside its alpha. |
+| **Inner glow** | A glow inside the layer, from its edge or from its centre. |
+| **Inner shadow** | A shadow inside the layer's edge. |
+| **Stroke** | A line along the edge of the layer's alpha. |
+
+The order cannot be changed.
+
+## Edit a style
+
+A layer's styles sit under a **Styles** heading, below its effects, in Effect controls and
+in the layer's rows in the Timeline. Every row keyframes as an effect's does.
+
+A style's heading in Effect controls has the tick, **Reset** and the **×** of an effect.
+Right-click it for **Bypass**, **Rename**, **Reset** and **Delete**. A style is not
+dragged, copied, duplicated or saved as a preset.
+
+Each style ends with **Blend** and **Mix**, as an effect does. On the two overlays the Mix
+row is named **Opacity**. A style has no Matte row.
+
+Angles are measured clockwise from straight up. Distances and sizes are in composition
+pixels.
+
+## Drop shadow
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Shadow colour** | The shadow's colour. | Black |
+| **Opacity** | How dark the shadow is. | 75% |
+| **Direction** | The angle the shadow is offset along. | 135° |
+| **Distance** | How far the shadow is offset. | 12 |
+| **Softness** | How far the shadow's edge is blurred. | 8 |
+| **Spread** | Hardens the blurred edge outwards. At 100% the edge is hard. | 0% |
+| **Layer knocks out shadow** | Removes the shadow from behind the layer. Off, the shadow shows through a layer that is partly transparent. | On |
+
+## Outer glow
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Glow colour** | The glow's colour. | A warm white |
+| **Opacity** | How strong the glow is. | 75% |
+| **Softness** | How far the glow reaches. | 12 |
+| **Spread** | Hardens the glow's edge outwards. | 0% |
+
+## Gradient overlay
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Colour A**, **Colour B** | The colours at the start and the end of the gradient. | White, black |
+| **Gradient type** | **Linear** runs the gradient along the angle. **Radial** runs it out from the middle of the layer. | Linear |
+| **Angle** | Which way a linear gradient runs. | 180° |
+| **Scale** | How far the gradient is stretched across the layer. 100% spans the layer. | 100% |
+| **Reverse** | Swaps the two colours. | Off |
+| **Opacity** | How much of the overlay is taken. | 100% |
+
+## Colour overlay
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Colour** | The colour laid over the layer. | White |
+| **Opacity** | How much of the overlay is taken. | 100% |
+
+## Inner glow
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Glow colour** | The glow's colour. | A warm white |
+| **Opacity** | How strong the glow is. | 75% |
+| **Softness** | How far the glow reaches. | 12 |
+| **Choke** | Hardens the glow's edge inwards. | 0% |
+| **Source** | **Edge** glows in from the layer's edge. **Centre** glows out from its middle. | Edge |
+
+## Inner shadow
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Shadow colour** | The shadow's colour. | Black |
+| **Opacity** | How dark the shadow is. | 75% |
+| **Direction** | The angle the shadow is offset along. | 135° |
+| **Distance** | How far the shadow is offset inwards. | 8 |
+| **Softness** | How far the shadow's edge is blurred. | 8 |
+| **Choke** | Hardens the blurred edge inwards. | 0% |
+
+## Stroke
+
+| Control | Does | Starts at |
+| --- | --- | --- |
+| **Stroke colour** | The stroke's colour. | Red |
+| **Opacity** | How solid the stroke is. | 100% |
+| **Size** | How thick the stroke is. | 3 |
+| **Position** | **Outside**, **Inside** or **Centre**: which side of the layer's edge the stroke sits on. | Outside |
+
+The Stroke style follows the layer's alpha. The [Stroke](/effects/generate/stroke/) effect
+draws along a mask's path.
+
+:::note[Not built yet]
+**Satin** and **Bevel and emboss**. Neither can be added. A project that carries one keeps
+its values, and the style draws nothing.
+:::
+
+## Related
+
+- [Importing media](/use/importing/)
+- [Effects](/use/effects/)
+- [Blend modes](/use/blend-modes/)
+- [Layers](/use/layers/)

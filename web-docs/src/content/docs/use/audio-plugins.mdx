@@ -1,0 +1,82 @@
+---
+title: Audio plugins
+description: Where Lumit finds CLAP and VST3 plugins, how they are used, and what happens when one fails.
+sidebar:
+  order: 15.5
+---
+
+Lumit hosts **CLAP** and **VST3** audio effect plugins. Those installed on the machine are
+found on start-up and offered beside the built-in [audio effects](/effects/#audio).
+
+## Where Lumit looks
+
+The standard folders of each format, read at start-up:
+
+| Platform | Directories |
+| --- | --- |
+| Windows | `C:\Program Files\Common Files\CLAP` and `%LOCALAPPDATA%\Programs\Common\CLAP`<br/>`C:\Program Files\Common Files\VST3` and `%LOCALAPPDATA%\Programs\Common\VST3` |
+| macOS | `/Library/Audio/Plug-Ins/CLAP` and `~/Library/Audio/Plug-Ins/CLAP`<br/>`/Library/Audio/Plug-Ins/VST3` and `~/Library/Audio/Plug-Ins/VST3` |
+| Linux | `/usr/lib/clap` and `~/.clap`<br/>`/usr/lib/vst3` and `~/.vst3` |
+
+Anything on the `CLAP_PATH` and `VST3_PATH` environment variables is read too.
+
+Only the folder itself is read. A plugin kept in a folder inside it, such as one named
+after its maker, is not found.
+
+A plugin installed while Lumit is running appears at the next launch.
+
+## What is hosted
+
+Stereo effects. These are left out:
+
+- An instrument, which has no audio input.
+- A plugin whose main input and output are not both two channels.
+- A plugin that declares no audio ports.
+- A file that will not load. The other plugins in the folder are unaffected.
+
+## Where they appear
+
+In the [Effects & presets](/panels/effects-presets/) panel under **Audio plugins**, and
+under the same heading in the Add effect menu of
+[Effect controls](/panels/effect-controls/).
+
+A plugin is added to a layer's effect stack like any effect. In the
+[Audio timeline](/panels/audio/#a-clips-header) it can also go on one clip. A clip's
+effects run first, then its layer's, then the layer's Volume and Pan.
+
+A plugin's parameters are rows in Effect controls and take keyframes. A layer's strip in the
+[Mixer](/panels/audio/#mixer) has an **fx** switch while audio effects are on in its stack.
+
+A plugin that delays its output is lined up with the unprocessed sound.
+
+## Switch one off
+
+**Switch this plugin off**, on the plugin's right-click menu in Effects & presets. It stops
+being offered and stops processing, and the choice is kept after a restart. See
+[Plugins](/use/plugins/#switch-one-off).
+
+An effect already in a project using a switched-off plugin is kept as it was saved, and
+the sound passes through it unchanged.
+
+## When something goes wrong
+
+Each plugin file runs in a **process of its own**. A plugin that crashes or hangs passes
+the sound through unprocessed for that moment and is started again. After three failures in
+a row every plugin in that file is left off until Lumit is restarted.
+
+The effect's card in Effect controls says why a plugin is not working:
+
+| Badge | Means |
+| --- | --- |
+| **This plugin is switched off** | You switched it off. |
+| **This plugin is not installed on this machine** | The project uses it and this machine has no plugin for it. The sound passes through unchanged. |
+
+:::note[Not built yet]
+A plugin's own window. Sidechain and other extra inputs. VST2 is not hosted.
+:::
+
+## Related
+
+- [Audio](/use/audio/)
+- [Plugins](/use/plugins/)
+- [Effects & presets](/panels/effects-presets/)
