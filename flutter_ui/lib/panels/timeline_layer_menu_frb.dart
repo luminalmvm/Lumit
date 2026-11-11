@@ -11,6 +11,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart';
+import 'package:lumit_flutter/src/rust/api/template.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -28,6 +29,7 @@ import '../state/dock.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
+import 'control_rows.dart' show layerControlRow;
 import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
 import 'retime_commands.dart' show reverseRow;
 import 'sequence_view_frb.dart';
@@ -182,6 +184,9 @@ List<MenuEntry> layerMenuEntries(
     if (canReplaceSource(entry))
       ReplaceSourceEntry(() => replaceSourceRows(app, ui)),
     if (creates.isNotEmpty) MenuEntry.submenu(l10n.menuCreate, creates),
+    // Not inside a node graph, whose rows the engine cannot name.
+    if (ui.templateControls.offers(comp))
+      MenuEntry.submenu(l10n.controlsAdd, _controlRows(ui, entry, entries)),
     if (kind == BridgeLayerKind.footage)
       MenuEntry(
           l10n.menuConvertToSequenceLayer,
@@ -335,6 +340,47 @@ List<MenuEntry> layerMenuEntries(
           app.notifyDocumentChanged();
         }),
         action: 'edit.delete.selection'),
+  ];
+}
+
+/// Add to controls ▸: the layer's own rows a control of the composition's
+/// graphics template can name. One that is a control is ticked, and choosing
+/// it removes the control. Every selected layer that has the row goes with
+/// the one clicked, as one undo step.
+List<MenuEntry> _controlRows(LumitUiState ui, BridgeLayerEntry entry,
+    List<BridgeLayerEntry> entries) {
+  final controls = ui.templateControls;
+  bool pictured(BridgeLayerKind kind) =>
+      kind == BridgeLayerKind.footage || kind == BridgeLayerKind.precomp;
+  MenuEntry row(
+      String label, BridgeRowKind kind, bool Function(BridgeLayerKind) has) {
+    BridgeRowRef of(BridgeLayerEntry e) =>
+        layerControlRow(kind, e.layer.internallayerId, label);
+    final on = controls.controlFor(of(entry)) != null;
+    return MenuEntry(
+      label,
+      () {
+        final rows = [
+          of(entry),
+          for (final e in entries)
+            if (e.layer.internallayerId != entry.layer.internallayerId &&
+                has(e.info.kind))
+              of(e),
+        ];
+        on ? controls.remove(rows) : controls.add(rows);
+      },
+      checked: on,
+    );
+  }
+
+  final kind = entry.info.kind;
+  return [
+    if (kind == BridgeLayerKind.text)
+      row(l10n.controlsWords, BridgeRowKind.text,
+          (k) => k == BridgeLayerKind.text),
+    if (pictured(kind))
+      row(l10n.controlsFootage, BridgeRowKind.source, pictured),
+    row(l10n.controlsVisibility, BridgeRowKind.visible, (_) => true),
   ];
 }
 

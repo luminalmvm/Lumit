@@ -283,6 +283,9 @@ pub fn default_keymap() -> Keymap {
         row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
         row(Effects, "Mod+D", "effect.duplicate"),
+        // The selected rows become controls of the graphics template.
+        row(Timeline, "Mod+Alt+A", "template.controls.add"),
+        row(Effects, "Mod+Alt+A", "template.controls.add"),
         // The Effect menu's two rows above its categories, from anywhere.
         row(Global, "Mod+Alt+Shift+E", "effect.apply.last"),
         row(Global, "Mod+Shift+E", "effect.remove.all"),

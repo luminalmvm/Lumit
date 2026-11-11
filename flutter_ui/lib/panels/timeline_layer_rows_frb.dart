@@ -21,6 +21,7 @@ import '../state/clipboard.dart' show ClipboardKind;
 import '../state/tools.dart' show ToolMode;
 import '../state/comp_time.dart';
 import '../state/drag_payloads.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
@@ -28,6 +29,8 @@ import '../widgets/controls.dart';
 import 'audio_routes_frb.dart' show writeSend;
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
+import 'control_rows.dart'
+    show ControlMark, effectControlRow, volumeControlRow;
 import 'effect_commands.dart';
 import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
@@ -46,6 +49,7 @@ import 'timeline_mask_rows_frb.dart';
 import 'timeline_puppet_rows_frb.dart';
 import 'timeline_shape_rows_frb.dart';
 import 'shape_entries.dart';
+import 'template_place.dart' show openTemplate;
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'timeline_retime_row_frb.dart';
 import 'timeline_layer_menu_frb.dart' show audioRows, showMenuEntriesAt;
@@ -67,7 +71,9 @@ class EmptyTimelineDrop extends StatelessWidget {
   Widget build(BuildContext context) {
     return DragTarget<Object>(
       onWillAcceptWithDetails: (details) =>
-          details.data is FootageDragData || details.data is CompDragData,
+          details.data is FootageDragData ||
+          details.data is CompDragData ||
+          details.data is TemplateDragData,
       onAcceptWithDetails: (details) async {
         switch (details.data) {
           case FootageDragData(:final footage):
@@ -81,6 +87,10 @@ class EmptyTimelineDrop extends StatelessWidget {
           case CompDragData(comp: final dropped):
             Provider.of<LumitUiState>(context, listen: false)
                 .setSelectedComp(dropped);
+          // A graphics template is brought in and opened, as a comp is.
+          case TemplateDragData(:final path):
+            await openTemplate(state,
+                Provider.of<LumitUiState>(context, listen: false), path);
         }
       },
       builder: (context, candidate, _) => Container(
@@ -1163,8 +1173,30 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
           widget.layer.getClipEffects(clip: c, onCompClock: false),
       null => null,
     };
+    final owner = widget.layer.internallayerId;
     return EffectParamRowFrb(
       key: ValueKey<String>('tl-fx-${row.info.id}-${row.param.id}'),
+      // A row of the layer's own stack or styles, or on a copy the control
+      // of the template placed there. A clip's, a group's, a material's, a
+      // model's and a driver's rows are not the template's to name.
+      controlRow: effectControlRow(
+        owner,
+        row.info.id,
+        row.param,
+        inputs: row.inputs,
+        copy: row.inputs
+            ? ui.model.heldLayers
+                .where((e) => e.layer.internallayerId == owner)
+                .firstOrNull
+                ?.info
+                .copy
+            : null,
+        elsewhere: row.group != null ||
+            row.clip != null ||
+            row.material ||
+            row.model ||
+            row.driver,
+      ),
       // A part's Visible row, which reads as a tick until it is keyed.
       asTick: row.model && row.param.id == 'visible',
       // A material row goes back to its file's value.
@@ -1472,15 +1504,28 @@ class _VolumeRowState extends State<_VolumeRow> {
             widget.onChanged();
           },
         );
+        // The layer's own Volume can be a control. A send's level cannot.
+        final control = widget.write != null
+            ? null
+            : volumeControlRow(widget.layer.internallayerId);
         return ParamRowMenu(
-          menu: scalarRowMenu(context, keys, defaults: const [0]),
+          menu: scalarRowMenu(context, keys,
+              defaults: const [0],
+              control: control == null
+                  ? null
+                  : ControlRow(widget.comp, control)),
           child: Row(
             children: [
               keys,
               const SizedBox(width: 4),
               Expanded(
-                  child: Text(widget.label ?? t.propertyCase(l10n.volume),
-                      style: t.body)),
+                child: Row(children: [
+                  Flexible(
+                      child: Text(widget.label ?? t.propertyCase(l10n.volume),
+                          style: t.body)),
+                  ControlMark(control),
+                ]),
+              ),
               if (keys.trailingNavigator case final nav?) nav,
               if (widget.trailing != null) widget.trailing!,
               SizedBox(

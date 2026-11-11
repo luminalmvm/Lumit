@@ -51,6 +51,7 @@ const BridgeParagraphStyle plainParagraphStyle = BridgeParagraphStyle(
   spaceBefore: 0,
   spaceAfter: 0,
   vertical: BridgeVerticalAlign.top,
+  shrink: false,
 );
 
 extension TextDocumentCopy on BridgeTextDocument {
@@ -155,6 +156,7 @@ extension ParagraphStyleCopy on BridgeParagraphStyle {
     double? boxHeight,
     bool autoHeight = false,
     BridgeVerticalAlign? vertical,
+    bool? shrink,
   }) =>
       BridgeParagraphStyle(
         align: align ?? this.align,
@@ -167,5 +169,6 @@ extension ParagraphStyleCopy on BridgeParagraphStyle {
         spaceAfter: spaceAfter ?? this.spaceAfter,
         boxHeight: autoHeight ? null : (boxHeight ?? this.boxHeight),
         vertical: vertical ?? this.vertical,
+        shrink: shrink ?? this.shrink,
       );
 }

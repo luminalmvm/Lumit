@@ -110,7 +110,7 @@ fn split_entry(entry: &str) -> Option<(&str, &str)> {
     (plain_name(folder) && plain_path(name)).then_some((folder, name))
 }
 
-fn plain_name(name: &str) -> bool {
+pub(crate) fn plain_name(name: &str) -> bool {
     // Windows drops a dot or a space off the end of a name, which would make
     // `.. ` the folder above.
     !name.is_empty()
@@ -292,6 +292,36 @@ pub fn save_packed(
     sources: &[PackSource],
     progress: Progress<'_>,
 ) -> Result<Packed, ProjectError> {
+    let manifest = Manifest::current();
+    save_packed_with(
+        doc,
+        path,
+        previous,
+        sources,
+        &manifest,
+        &mut |_, _| Ok(()),
+        progress,
+    )
+}
+
+/// Writes an archive's further entries, once its footage is in and it is
+/// known which items the archive holds.
+pub(crate) type MoreEntries<'a> = &'a mut dyn FnMut(
+    &mut ZipWriter<File>,
+    &BTreeMap<Uuid, PackedMedia>,
+) -> Result<(), ProjectError>;
+
+/// [`save_packed`] under another manifest, with entries of the caller's own
+/// written by `more`. What a graphics template's file is written by.
+pub(crate) fn save_packed_with(
+    doc: &Document,
+    path: &Path,
+    previous: Option<&Path>,
+    sources: &[PackSource],
+    manifest: &Manifest,
+    more: MoreEntries<'_>,
+    progress: Progress<'_>,
+) -> Result<Packed, ProjectError> {
     let dir = path.parent().unwrap_or(Path::new("."));
     let stem = path.file_name().map(|n| n.to_string_lossy().into_owned());
     // A number of its own as well as the process's, so two saves started
@@ -426,7 +456,7 @@ pub fn save_packed(
         let text = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
         // Manifest MUST be the first entry.
         zip.start_file("manifest.json", text)?;
-        zip.write_all(serde_json::to_string_pretty(&Manifest::current())?.as_bytes())?;
+        zip.write_all(serde_json::to_string_pretty(manifest)?.as_bytes())?;
 
         for (folder, files) in &plan {
             let mut failed = false;
@@ -486,6 +516,7 @@ pub fn save_packed(
             }
         }
 
+        more(&mut zip, &packed)?;
         // Last, because only now is it known what the archive really holds.
         let mut written = doc.clone();
         written.packed.clone_from(&packed);

@@ -22,12 +22,14 @@
 // $.global.LumitBridge.exportBundle(folder).
 
 var LumitBridge = (function () {
-    var BUNDLE_VERSION = "1.0.0";
-    var BRIDGE_VERSION = "1.0.0";
+    var BUNDLE_VERSION = "1.1.0";
+    var BRIDGE_VERSION = "1.1.0";
 
     // The walk's running state. Reset by exportBundle.
     var report = { unreadables: [] };
     var here = { comp: "", layer: "" };
+    // Above zero while the walk is inside a layer's Essential Properties.
+    var inOverrides = 0;
 
     // --- JSON encoding (ExtendScript has no JSON object) ------------------
     // Same escaper as tools/ae-audit/audit.jsx, plus a sweep for the remaining
@@ -111,6 +113,12 @@ var LumitBridge = (function () {
         if (a === undefined || a === null) return undefined;
         var out = [];
         for (var i = 0; i < a.length; i++) out.push(Number(a[i]));
+        return out;
+    }
+    function stringArray(a) {
+        if (a === undefined || a === null) return undefined;
+        var out = [];
+        for (var i = 0; i < a.length; i++) out.push(String(a[i]));
         return out;
     }
     function pointList(a) {
@@ -270,6 +278,148 @@ var LumitBridge = (function () {
         return out;
     }
 
+    // --- Essential Graphics ------------------------------------------------
+    var OVERRIDES = "ADBE Layer Overrides";
+    var ALTERNATE = "ADBE Layer Source Alternate";
+
+    // Whether an Essential Property holds what its source holds. The DOM has
+    // no flag for "this layer set it", so the two are compared.
+    function sameAsSource(prop, source, valueType) {
+        var keys = prop.numKeys;
+        if (keys !== source.numKeys) return false;
+        if ((prop.expression || "") !== (source.expression || "")) return false;
+        if (keys === 0) {
+            return jsonOf(coerce(prop.value, valueType), "") === jsonOf(coerce(source.value, valueType), "");
+        }
+        for (var k = 1; k <= keys; k++) {
+            if (jsonOf(keyAt(prop, k, valueType), "") !== jsonOf(keyAt(source, k, valueType), "")) return false;
+        }
+        return true;
+    }
+
+    // What one Essential Property of a layer adds to its node: whether the
+    // layer set it, and for replaceable media which item it put there.
+    function overrideFields(node, prop, valueType) {
+        var source = attempt(function () { return prop.essentialPropertySource; });
+        if (!source) return;
+        if (node.match_name === ALTERNATE) {
+            var item = attempt(function () { return prop.alternateSource; });
+            node.overridden = item ? true : false;
+            if (item) node.alternate_id = attempt(function () { return item.id; });
+            return;
+        }
+        var same = attempt(function () { return sameAsSource(prop, source, valueType); });
+        if (same !== undefined) node.overridden = !same;
+    }
+
+    // From a property up to its layer: each step's match name, and its place
+    // counting from 0 where its parent is a list (effects, masks, shapes).
+    function pathOf(prop) {
+        var steps = [];
+        var p = prop;
+        while (p && p.propertyDepth > 0) {
+            var parent = p.parentProperty;
+            var step = { match_name: p.matchName };
+            if (parent && parent.propertyType === PropertyType.INDEXED_GROUP) {
+                step.index = p.propertyIndex - 1;
+            }
+            steps.unshift(step);
+            p = parent;
+        }
+        return { layer: p, steps: steps };
+    }
+
+    function controllerKind(prop, valueType) {
+        if (prop.matchName === ALTERNATE) return "media";
+        if (valueType === "text") return "text";
+        if (valueType === "colour") return "colour";
+        if (attempt(function () { return prop.isDropdownEffect; }) === true) return "menu";
+        if (valueType === "point" || valueType === "point3") {
+            return prop.matchName === "ADBE Scale" ? "scale" : "point";
+        }
+        if (attempt(function () { return prop.unitsText; }) === "degrees") return "angle";
+        return "slider";
+    }
+
+    // The controllers under one Essential Properties group, in order. A group
+    // of them is a heading, and its members carry its name.
+    function controllersOf(group, heading, out) {
+        var count = attempt(function () { return group.numProperties; }) || 0;
+        for (var i = 1; i <= count; i++) {
+            var child = attempt(function () { return group.property(i); });
+            if (!child) continue;
+            if (child.propertyType !== PropertyType.PROPERTY) {
+                controllersOf(child, attempt(function () { return child.name; }), out);
+                continue;
+            }
+            var valueType = attempt(function () { return propType(child); });
+            var node = {
+                name: attempt(function () { return child.name; }),
+                kind: attempt(function () { return controllerKind(child, valueType); }),
+                group: heading
+            };
+            var source = attempt(function () { return child.essentialPropertySource; });
+            if (source) {
+                // Replaceable media names the layer itself, and only a layer
+                // has a composition it sits in.
+                var isLayer = attempt(function () { return source.containingComp; });
+                var found = isLayer ? { layer: source, steps: [] }
+                    : attempt(function () { return pathOf(source); });
+                if (found && found.layer) {
+                    node.comp_id = attempt(function () { return found.layer.containingComp.id; });
+                    node.layer_index = attempt(function () { return found.layer.index; });
+                    node.path = found.steps;
+                }
+            }
+            if (node.kind === "menu") {
+                node.options = attempt(function () { return stringArray(child.propertyParameters); });
+            }
+            out.push(node);
+        }
+    }
+
+    // A layer somewhere in the project that places this composition.
+    function placing(comp) {
+        var users = attempt(function () { return comp.usedIn; }) || [];
+        for (var u = 0; u < users.length; u++) {
+            var count = attempt(function () { return users[u].numLayers; }) || 0;
+            for (var i = 1; i <= count; i++) {
+                var layer = attempt(function () { return users[u].layer(i); });
+                if (layer && attempt(function () { return layer.source.id; }) === comp.id) return layer;
+            }
+        }
+        return null;
+    }
+
+    // A composition's Essential Graphics: its name and its controllers.
+    //
+    // The DOM lists a controller by name alone. What each one sets is only
+    // said on the Essential Properties of a layer placing the composition, so
+    // one is found. Where nothing places it, it is placed in a composition
+    // made for the read and removed again.
+    function essentialOf(comp) {
+        var count = attempt(function () { return comp.motionGraphicsTemplateControllerCount; });
+        if (!count) return undefined;
+        var out = {
+            name: attempt(function () { return comp.motionGraphicsTemplateName; }),
+            controllers: []
+        };
+        var layer = placing(comp);
+        var scratch = null;
+        try {
+            if (!layer) {
+                scratch = app.project.items.addComp("Lumit Bridge read", comp.width, comp.height,
+                    comp.pixelAspect, comp.duration, comp.frameRate);
+                layer = scratch.layers.add(comp);
+            }
+            controllersOf(layer.property(OVERRIDES), undefined, out.controllers);
+        } catch (err) {
+            addUnreadable("Essential Graphics", "", String(err));
+        }
+        if (scratch) attempt(function () { scratch.remove(); });
+        return out;
+    }
+
     function walkProperty(prop, parentPath) {
         var name = attempt(function () { return prop.name; });
         var matchName = attempt(function () { return prop.matchName; });
@@ -284,12 +434,26 @@ var LumitBridge = (function () {
             // effect's on/off switch, and the mask's (docs/11 section 2.2 item 9).
             node.enabled = attempt(function () { return prop.enabled; });
             node.mask = maskFields(prop);
+            var overrides = matchName === OVERRIDES;
+            if (overrides) inOverrides++;
             node.group = walkGroup(prop, path);
+            if (overrides) inOverrides--;
             return node;
         }
 
         var valueType = attempt(function () { return propType(prop); });
         node.value_type = valueType;
+
+        // A Dropdown Menu Control's menu: what its options are called.
+        if (attempt(function () { return prop.isDropdownEffect; }) === true) {
+            node.control = "popup";
+            node.options = attempt(function () { return stringArray(prop.propertyParameters); });
+        }
+        if (inOverrides > 0) {
+            overrideFields(node, prop, valueType);
+            // Replaceable media holds an item, not a value.
+            if (matchName === ALTERNATE) return node;
+        }
 
         if (attempt(function () { return prop.canSetExpression; })) {
             var ex = attempt(function () { return prop.expression; });
@@ -501,6 +665,7 @@ var LumitBridge = (function () {
             preserve_nested_fps: attempt(function () { return comp.preserveNestedFrameRate; }),
             preserve_nested_resolution: attempt(function () { return comp.preserveNestedResolution; }),
             markers: markersOf(attempt(function () { return comp.markerProperty; })),
+            essential: essentialOf(comp),
             layers: []
         };
         var count = attempt(function () { return comp.numLayers; }) || 0;
@@ -565,6 +730,7 @@ var LumitBridge = (function () {
     function exportBundle(bundleFolder) {
         report = { unreadables: [] };
         here = { comp: "", layer: "" };
+        inOverrides = 0;
         if (!bundleFolder.exists && !bundleFolder.create()) {
             throw new Error("could not create " + bundleFolder.fsName);
         }

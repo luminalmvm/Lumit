@@ -492,7 +492,7 @@ List<GraphChannel> graphChannels({
             path: path,
             id: channelId,
             label: '${entry.info.name} · '
-                '${inputs ? l10n.foldInputs : effectLabelOf(fx.name)} · '
+                '${inputs ? (entry.info.copy == null ? l10n.foldInputs : l10n.foldControls) : effectLabelOf(fx.name)} · '
                 '${param.label}',
             colourIndex: out.length,
             scalar: scalar,

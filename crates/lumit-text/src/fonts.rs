@@ -5,10 +5,16 @@
 //! a project opened on another machine still draws its words. Inter's Bold and
 //! Black are built in too, as the family "Inter", for when the system has none.
 //!
+//! A font file can also be handed over ([`register_file`]), which is how the
+//! fonts packed in a graphics template draw without being installed. Those are
+//! kept apart from the system's and looked in after them, so a packed file
+//! never stands in front of an installed family.
+//!
 //! ponytail: a missing glyph draws the font's own empty box, there is no
 //! fallback to a second font for a script the first doesn't cover.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use skrifa::string::StringId;
@@ -88,6 +94,10 @@ fn bundled(family: &str, face: &str) -> Option<Arc<Face>> {
 
 struct Registry {
     system: fontique::Collection,
+    /// The fonts of the files handed to [`register_file`].
+    registered: fontique::Collection,
+    /// Those files, so one is never added twice.
+    files: Vec<PathBuf>,
     loaded: HashMap<(String, String), Arc<Face>>,
 }
 
@@ -105,6 +115,11 @@ fn registry() -> &'static Mutex<Registry> {
                 shared: false,
                 system_fonts: true,
             }),
+            registered: fontique::Collection::new(fontique::CollectionOptions {
+                shared: false,
+                system_fonts: false,
+            }),
+            files: Vec::new(),
             loaded: HashMap::new(),
         })
     })
@@ -142,15 +157,134 @@ fn faces_in(font: &FontRef<'_>) -> Vec<(String, Option<usize>)> {
     }
 }
 
-/// The font families installed on this machine, sorted the way a menu reads.
+/// The font families installed on this machine or handed over as files,
+/// sorted the way a menu reads.
 #[must_use]
 pub fn families() -> Vec<String> {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     let mut names: Vec<String> = registry.system.family_names().map(str::to_owned).collect();
+    names.extend(registry.registered.family_names().map(str::to_owned));
     names.push(INTER.to_owned());
     names.sort_by_key(|n| n.to_lowercase());
     names.dedup();
     names
+}
+
+/// How many fonts each registered family holds.
+fn registered_counts(registered: &mut fontique::Collection) -> HashMap<String, usize> {
+    let names: Vec<String> = registered.family_names().map(str::to_owned).collect();
+    names
+        .into_iter()
+        .map(|name| {
+            let fonts = registered.family_by_name(&name);
+            let count = fonts.map_or(0, |info| info.fonts().len());
+            (name, count)
+        })
+        .collect()
+}
+
+/// Add the fonts in the file at `path` to the fonts Lumit knows, so a
+/// template's packed font draws without being installed. Answers the families
+/// it added. A face that had been substituted for one of those families is
+/// forgotten, so the next draw finds the real one.
+///
+/// A file that is not a font, or one already added, adds nothing.
+pub fn register_file(path: &Path) -> Vec<String> {
+    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    if !path.is_file() || registry.files.iter().any(|had| had == path) {
+        return Vec::new();
+    }
+    // Only the file's names are read under the lock, once a file. Its
+    // outlines are read when a face is first drawn, with the lock let go of.
+    let before = registered_counts(&mut registry.registered);
+    registry.registered.load_fonts_from_paths([path]);
+    let mut added: Vec<String> = registered_counts(&mut registry.registered)
+        .into_iter()
+        .filter(|(name, count)| before.get(name).is_none_or(|had| had < count))
+        .map(|(name, _)| name)
+        .collect();
+    if added.is_empty() {
+        return added;
+    }
+    added.sort();
+    registry.files.push(path.to_path_buf());
+    let named = |family: &str| added.iter().any(|a| a.eq_ignore_ascii_case(family));
+    registry.loaded.retain(|(family, _), _| !named(family));
+    added
+}
+
+/// Register every font file in `dir` (ttf, otf, ttc). What start-up calls for
+/// the templates' fonts folder.
+pub fn register_dir(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            let extension = path.extension().and_then(|e| e.to_str());
+            extension.is_some_and(|e| {
+                ["ttf", "otf", "ttc"]
+                    .iter()
+                    .any(|font| e.eq_ignore_ascii_case(font))
+            })
+        })
+        .collect();
+    files.sort();
+    let mut added: Vec<String> = Vec::new();
+    for family in files.iter().flat_map(|file| register_file(file)) {
+        if !added.contains(&family) {
+            added.push(family);
+        }
+    }
+    added
+}
+
+/// Whether `font` holds a face called `wanted`. An empty `wanted` is any face.
+fn holds(font: &fontique::FontInfo, wanted: &str) -> bool {
+    let Some(blob) = font.load(None) else {
+        return false;
+    };
+    FontRef::from_index(blob.as_ref(), font.index()).is_ok_and(|parsed| {
+        faces_in(&parsed)
+            .iter()
+            .any(|(name, _)| wanted.is_empty() || name.eq_ignore_ascii_case(wanted))
+    })
+}
+
+/// The file a face is read from, for packing it. `None` for a bundled face or
+/// one that is not installed.
+///
+/// An empty `face` is the family's regular, as a layer reads it. A face that
+/// would be drawn with a stand-in has no file.
+#[must_use]
+pub fn file_of(family: &str, face: &str) -> Option<PathBuf> {
+    let fonts = fonts_named(family);
+    let passes: &[&str] = if face.is_empty() {
+        &["Regular", ""]
+    } else {
+        &[face]
+    };
+    passes.iter().find_map(|wanted| {
+        fonts.iter().find_map(|font| {
+            let fontique::SourceKind::Path(path) = font.source().kind() else {
+                return None;
+            };
+            holds(font, wanted).then(|| path.to_path_buf())
+        })
+    })
+}
+
+/// Whether `family` (with `face`, or any face when `face` is empty) is known:
+/// installed, registered or bundled.
+#[must_use]
+pub fn installed(family: &str, face: &str) -> bool {
+    if family.is_empty() || bundled(family, face).is_some() {
+        return true;
+    }
+    let fonts = fonts_named(family);
+    !fonts.is_empty() && (face.is_empty() || has_face(&fonts, face))
 }
 
 /// The faces of one family, in the order the family lists them, with the
@@ -162,10 +296,7 @@ pub fn faces(family: &str) -> Vec<String> {
         out.push("Regular".to_owned());
         out.extend(BUNDLED.iter().map(|(name, _)| (*name).to_owned()));
     }
-    let Some(info) = family_named(family) else {
-        return out;
-    };
-    for font in info.fonts() {
+    for font in &fonts_named(family) {
         let Some(blob) = font.load(None) else {
             continue;
         };
@@ -200,8 +331,7 @@ pub fn by_postscript_name(postscript: &str) -> Option<(String, String)> {
         return found.clone();
     }
     let found = families().into_iter().find_map(|family| {
-        let info = family_named(&family)?;
-        info.fonts().iter().find_map(|font| {
+        fonts_named(&family).iter().find_map(|font| {
             let blob = font.load(None)?;
             let parsed = FontRef::from_index(blob.as_ref(), font.index()).ok()?;
             (name(&parsed, StringId::POSTSCRIPT_NAME)? == postscript)
@@ -229,42 +359,39 @@ pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
     drop(known);
     // Read with the lock let go of. Two threads after the same new face both
     // read it, and the first one in is the one kept.
-    let system = family_named(family);
-    let installed = |info: &fontique::FamilyInfo| has_face(info, face);
+    let fonts = fonts_named(family);
     let found = bundled(family, face)
-        .filter(|_| !system.as_ref().is_some_and(installed))
-        .or_else(|| system.and_then(|info| load(&info, face)))
+        .filter(|_| !has_face(&fonts, face))
+        .or_else(|| load(&fonts, face))
         .unwrap_or_else(builtin);
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     registry.loaded.entry(key).or_insert(found).clone()
 }
 
-/// The family of this name among the system's, looked up under the lock and
-/// handed back to read from without it.
-fn family_named(family: &str) -> Option<fontique::FamilyInfo> {
+/// The fonts of the family of this name, the system's first and then the
+/// registered files', looked up under the lock and handed back to read from
+/// without it.
+fn fonts_named(family: &str) -> Vec<fontique::FontInfo> {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
-    registry.system.family_by_name(family)
+    let system = registry.system.family_by_name(family);
+    let registered = registry.registered.family_by_name(family);
+    [system, registered]
+        .iter()
+        .flatten()
+        .flat_map(|info| info.fonts().iter().cloned())
+        .collect()
 }
 
 /// Whether the family holds a face of exactly this name.
-fn has_face(info: &fontique::FamilyInfo, face: &str) -> bool {
-    info.fonts().iter().any(|font| {
-        let Some(blob) = font.load(None) else {
-            return false;
-        };
-        FontRef::from_index(blob.as_ref(), font.index()).is_ok_and(|parsed| {
-            faces_in(&parsed)
-                .iter()
-                .any(|(name, _)| name.eq_ignore_ascii_case(face))
-        })
-    })
+fn has_face(fonts: &[fontique::FontInfo], face: &str) -> bool {
+    !face.is_empty() && fonts.iter().any(|font| holds(font, face))
 }
 
-fn load(info: &fontique::FamilyInfo, face: &str) -> Option<Arc<Face>> {
+fn load(fonts: &[fontique::FontInfo], face: &str) -> Option<Arc<Face>> {
     // The first pass looks for the face by name. The second takes the family's
     // regular, and the last whatever the family holds.
     for wanted in [face, "Regular", ""] {
-        for font in info.fonts() {
+        for font in fonts {
             let Some(blob) = font.load(None) else {
                 continue;
             };

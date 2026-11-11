@@ -25,14 +25,16 @@ pub(super) fn viewed_kept(
     revision: u64,
     document: std::sync::Arc<lumit_core::model::Document>,
 ) -> std::sync::Arc<lumit_core::model::Document> {
+    // A data row of a graphics template being looked at, which is a way of
+    // looking as the other two are.
+    let row = crate::api::template::rows::row_look();
     // Nothing is copied, so there is nothing to keep.
-    if prefix.is_none() && view.is_none() {
+    if prefix.is_none() && view.is_none() && row.is_none() {
         return document;
     }
-    if let Some(at) = kept
-        .iter()
-        .position(|was| (was.revision, was.prefix, was.view) == (revision, prefix, view))
-    {
+    if let Some(at) = kept.iter().position(|was| {
+        (was.revision, was.prefix, was.view, was.row) == (revision, prefix, view, row)
+    }) {
         let was = kept.remove(at);
         let document = was.document.clone();
         kept.insert(0, was);
@@ -47,6 +49,7 @@ pub(super) fn viewed_kept(
             revision,
             prefix,
             view,
+            row,
             document: document.clone(),
         },
     );
@@ -65,6 +68,7 @@ pub(super) struct Viewed {
     revision: u64,
     prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     view: Option<ViewLatch>,
+    row: Option<crate::api::template::rows::RowLook>,
     document: std::sync::Arc<lumit_core::model::Document>,
 }
 
@@ -83,6 +87,11 @@ pub(super) fn viewed_through(
     document: std::sync::Arc<lumit_core::model::Document>,
 ) -> std::sync::Arc<lumit_core::model::Document> {
     let document = viewed(prefix, document);
+    // The data row being looked at first, so the view's camera sees it.
+    let document = match crate::api::template::rows::row_look() {
+        Some(look) => crate::api::template::rows::looked(look, document),
+        None => document,
+    };
     let Some(ViewLatch {
         comp: comp_id,
         pose,

@@ -116,6 +116,8 @@ Future<void> _start(List<String> args) async {
   state.launchPackage = packagePathFromArgs(args);
   // And a double-clicked style asks to be used.
   state.launchStyle = stylePathFromArgs(args);
+  // And a double-clicked graphics template asks to join the library.
+  state.launchTemplate = templatePathFromArgs(args);
   final ui = LumitUiState(state);
   // A double-clicked theme is in use before anything is drawn.
   await openPresetOrTheme(state, ui, args);
@@ -165,7 +167,8 @@ Future<void> _start(List<String> args) async {
       welcome: fromArgs == null &&
           state.launchInvite == null &&
           state.launchPackage == null &&
-          state.launchStyle == null));
+          state.launchStyle == null &&
+          state.launchTemplate == null));
   // The probe drives the measured gestures and writes its table, only when
   // asked for by the define — an ordinary build compiles all of it out of reach.
   if (probeProjectPath.isNotEmpty) startPerfProbe(state, ui, probeBridge);

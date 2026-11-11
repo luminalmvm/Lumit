@@ -107,6 +107,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.notes => 160,
       // A caption's times, a few words and its reading speed.
       Panel.captions => 220,
+      // A parameter row, as Effect controls has: a copy shows these there.
+      Panel.graphicsTemplate => 240,
       // The strip's subject switch and its search well, before the buttons
       // fold into the overflow mark.
       Panel.transcript => 180,

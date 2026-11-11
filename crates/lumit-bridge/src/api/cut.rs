@@ -1360,6 +1360,26 @@ impl CompositionReference {
         cut(self, |edit| edit.place_comp(target, comp.id, at_frame))
     }
 
+    /// **Place rows** in Cut: one clip of the graphics template `template`
+    /// for each of `rows` of its data, one after another from `at_frame` on a
+    /// new track, each following its row and as long as its row says.
+    #[frb(sync)]
+    pub fn cut_place_rows(
+        &self,
+        template: &CompositionReference,
+        rows: Vec<u32>,
+        at_frame: i64,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        let doc = self.document()?;
+        let copies = rows
+            .into_iter()
+            .filter_map(|row| crate::api::template::rows::row_copy(template, &doc, row))
+            .collect();
+        cut(self, |edit| {
+            edit.place_copies(template.id, at_frame, copies)
+        })
+    }
+
     /// Put a solid down at `at_frame` as one clip, as long as a still, on
     /// `target` or a new picture Sequence layer at the top.
     #[frb(sync)]

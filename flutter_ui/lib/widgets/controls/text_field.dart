@@ -19,8 +19,12 @@ import 'popups.dart';
 /// it keeps it, so Copy takes what was showing as picked. Clicking a row must
 /// not count as clicking away from the field, which would commit an inline
 /// rename, hence the tap region.
+///
+/// [more] is rows the field's place adds under them: what its value can do
+/// besides being typed.
 Future<void> showTextFieldMenu(
-    BuildContext context, EditableTextState field, Offset at) async {
+    BuildContext context, EditableTextState field, Offset at,
+    {List<Widget> Function(VoidCallback close)? more}) async {
   final value = field.textEditingValue;
   final selection = value.selection;
   final under = field.renderEditable.getPositionForPoint(at).offset;
@@ -76,6 +80,10 @@ Future<void> showTextFieldMenu(
                   text.isNotEmpty && field.selectAllEnabled,
                   () => field.selectAll(SelectionChangedCause.toolbar),
                   shut),
+              if (more?.call(shut) case final rows? when rows.isNotEmpty) ...[
+                const MenuDivider(),
+                ...rows,
+              ],
             ],
           ),
         ),
@@ -86,9 +94,13 @@ Future<void> showTextFieldMenu(
 
 /// A text field's gestures, with the right press opening [showTextFieldMenu].
 class TextFieldGestures extends TextSelectionGestureDetectorBuilder {
-  TextFieldGestures({required super.delegate, required this.context});
+  TextFieldGestures(
+      {required super.delegate, required this.context, this.more});
 
   final BuildContext context;
+
+  /// The rows the field adds to its menu as it stands now, if it adds any.
+  final List<Widget> Function(VoidCallback close)? Function()? more;
   Offset _at = Offset.zero;
 
   @override
@@ -100,7 +112,9 @@ class TextFieldGestures extends TextSelectionGestureDetectorBuilder {
   @override
   void onSecondaryTap() {
     final field = delegate.editableTextKey.currentState;
-    if (field != null) showTextFieldMenu(context, field, _at);
+    if (field != null) {
+      showTextFieldMenu(context, field, _at, more: more?.call());
+    }
   }
 }
 
@@ -206,6 +220,10 @@ class HouseTextField extends StatefulWidget {
   /// untouched, and is kept out of the system's autofill and suggestions.
   final bool obscure;
 
+  /// Rows added to the field's right-click menu, under Cut, Copy, Paste and
+  /// Select all.
+  final List<Widget> Function(VoidCallback close)? menuRows;
+
   const HouseTextField({
     super.key,
     required this.controller,
@@ -230,6 +248,7 @@ class HouseTextField extends StatefulWidget {
     this.leadingInteractive = false,
     this.textAlign = TextAlign.start,
     this.obscure = false,
+    this.menuRows,
   });
 
   @override
@@ -245,7 +264,8 @@ class _HouseTextFieldState extends State<HouseTextField>
   // Made once, not per build: it keeps where a drag started, and the field
   // rebuilds on every selection change. A new one mid-drag forgot how far the
   // text had scrolled, so selecting in scrolled code jumped.
-  late final _gestures = TextFieldGestures(delegate: this, context: context);
+  late final _gestures = TextFieldGestures(
+      delegate: this, context: context, more: () => widget.menuRows);
   OverlayEntry? _overlay;
 
   @override

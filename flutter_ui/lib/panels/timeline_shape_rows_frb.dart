@@ -16,6 +16,7 @@ import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect;
@@ -23,6 +24,7 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
+import 'control_rows.dart' show ControlMark, shapeControlRow;
 import 'gradient_stops_popover.dart';
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
@@ -1301,15 +1303,27 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             navigatorApart: true,
           );
     final RowKeys lead = pathKeys ?? keys;
+    // An item's paint, and a parametric shape's size, corners and turn, can
+    // be controls. A modifier's rows and the rest cannot.
+    final control = switch (widget.item) {
+      final item? when widget.modifier == null => shapeControlRow(
+          widget.layer.internallayerId, item.id, widget.value),
+      _ => null,
+    };
     final row = Row(
       children: [
         pathKeys ?? keys,
         const SizedBox(width: 4),
         Expanded(
-          child: Text(
-              t.propertyCase(
-                  shapeValueLabel(widget.value, stop: widget.stop)),
-              style: t.body, overflow: TextOverflow.ellipsis),
+          child: Row(children: [
+            Flexible(
+              child: Text(
+                  t.propertyCase(
+                      shapeValueLabel(widget.value, stop: widget.stop)),
+                  style: t.body, overflow: TextOverflow.ellipsis),
+            ),
+            ControlMark(control),
+          ]),
         ),
         if (lead.trailingNavigator case final nav?) nav,
         SizedBox(
@@ -1330,7 +1344,12 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     );
     return _isPath
         ? row
-        : ParamRowMenu(menu: scalarRowMenu(context, keys), child: row);
+        : ParamRowMenu(
+            menu: scalarRowMenu(context, keys,
+                control: control == null
+                    ? null
+                    : ControlRow(widget.comp, control)),
+            child: row);
   }
 
   Widget _field() {

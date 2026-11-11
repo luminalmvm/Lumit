@@ -194,6 +194,7 @@ use super::effects::{
     stroke::{Stroke, StrokeDef},
     switch::{Switch, SwitchDef},
     temperature::{Temperature, TemperatureDef},
+    template::{TemplateValues, TemplateValuesDef},
     text_to_points::{TextToPoints, TextToPointsDef},
     texturize::{Texturize, TexturizeDef},
     threshold::{Threshold, ThresholdDef},
@@ -498,6 +499,9 @@ crate::catalogue![
     ColourControlDef => ColourControl,
     PointControlDef => PointControl,
     CustomControlsDef => CustomControls,
+    // What a placed copy of a graphics template keeps: its own values for
+    // the template's controls. Never in the Add-effect menu.
+    TemplateValuesDef => TemplateValues,
     // The Drivers family, last of all: a driver is added from the Graph
     // panel's own search rather than from the Add-effect menu, and its entries
     // declare a data signature instead of an image kernel. The order inside it

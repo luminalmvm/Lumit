@@ -24,6 +24,8 @@ import 'graph_channels.dart' show graphChannels;
 import 'keyframe_controls_frb.dart';
 import 'property_link.dart';
 import '../state/expression_language.dart' show PropertyRef;
+import '../state/template_controls.dart' show ControlRow;
+import 'control_rows.dart' show withSelectedControlRows;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// What one property row can do from its menu. Anything left null is a row the
@@ -49,7 +51,12 @@ class ParamMenu {
     this.drive,
     this.linkTo,
     this.linkFrom,
+    this.control,
   });
+
+  /// This row as one a control of the composition's graphics template can
+  /// name, for Add to controls. Null on a row the engine cannot name.
+  final ControlRow? control;
 
   /// This row as something another row can follow, for Copy link: what the
   /// drop of a link drag on it would name.
@@ -176,6 +183,19 @@ class ParamRowPath extends InheritedWidget {
   bool updateShouldNotify(ParamRowPath old) => false;
 }
 
+/// Rows the place a property row is drawn in adds to its menu, after Reset:
+/// a copy's card adds Set as default to the rows of a control.
+class ParamRowExtras extends InheritedWidget {
+  final List<Widget> Function(VoidCallback close) rows;
+  const ParamRowExtras({super.key, required this.rows, required super.child});
+
+  static List<Widget> Function(VoidCallback close)? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ParamRowExtras>()?.rows;
+
+  @override
+  bool updateShouldNotify(ParamRowExtras old) => false;
+}
+
 /// The menu of a row whose value is simply the scalars under its stopwatch [keys]:
 /// a mask's opacity, a stroke's start, a volume. [defaults] is what Reset puts
 /// back, one per axis, on a row that has one.
@@ -184,6 +204,7 @@ ParamMenu scalarRowMenu(
   KeyframeControlsFrb keys, {
   List<double>? defaults,
   void Function(BuildContext, Offset, List<Widget> Function(VoidCallback))? host,
+  ControlRow? control,
 }) {
   final scalars = keys.scalars;
   final held = scalars.any((s) => s is BridgeScalar_Expression);
@@ -192,6 +213,7 @@ ParamMenu scalarRowMenu(
       Provider.of<LumitUiState>(context, listen: false).playheadFrame;
   return ParamMenu(
     host: host,
+    control: control,
     onCurves: true,
     keys: held ? null : keys,
     reset: defaults == null
@@ -329,6 +351,37 @@ List<Widget> paramLastRows(
         close();
         ui.requestRevealInGraph(path);
       }, tickColumn: tickColumn),
+  ];
+}
+
+/// Add to controls, or Remove from controls on a row that is one: a group of
+/// its own in the row's menu. Left out where the engine cannot name the row,
+/// and inside a node graph. In the Timeline the entry takes the other
+/// selected rows with it when the row is one of them, as one undo step.
+List<Widget> paramControlRows(
+    BuildContext context, ParamMenu menu, VoidCallback close,
+    {bool tickColumn = false}) {
+  final control = menu.control;
+  if (control == null) return const [];
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final controls = ui.templateControls;
+  if (!controls.offers(control.comp)) return const [];
+  final isControl = controls.controlFor(control.row) != null;
+  // Only the Timeline has rows selected. Elsewhere it is the row pressed.
+  final rows = ParamRowPath.of(context) == null
+      ? [control.row, ...control.also]
+      : withSelectedControlRows(ui, control.row);
+  return [
+    _row(
+      'param-menu-control',
+      isControl ? l10n.controlsRemove : l10n.controlsAdd,
+      () {
+        close();
+        isControl ? controls.remove(rows) : controls.add(rows);
+      },
+      action: isControl ? null : 'template.controls.add',
+      tickColumn: tickColumn,
+    ),
   ];
 }
 
@@ -553,6 +606,7 @@ List<Widget> _rows(
           done();
           reset();
         }, enabled: menu.canReset),
+      ...?ParamRowExtras.of(context)?.call(done),
     ],
     [
       ...paramCopyRows(context, menu, done, clip: clip ?? ''),
@@ -649,6 +703,7 @@ List<Widget> _rows(
           ui.requestRevealInGraph(path);
         }),
     ],
+    paramControlRows(context, menu, done),
   ]);
 }
 

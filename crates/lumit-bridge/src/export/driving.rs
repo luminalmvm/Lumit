@@ -35,6 +35,14 @@ struct Item {
     state: ItemState,
     /// When it started encoding, for how long it took.
     started: Option<std::time::Instant>,
+    /// Edits made to `doc` when the item starts, and not before: one row's
+    /// version of a graphics template. So many rows queued together share
+    /// one snapshot, and are not each a project in memory. Empty for every
+    /// other item.
+    version: Vec<lumit_core::ops::Op>,
+    /// The run of rows this item was queued with, which the queue folds
+    /// under one heading.
+    group: Option<u32>,
 }
 
 /// Where an item is in its life. Progress is not held here: the in-flight
@@ -61,6 +69,8 @@ struct Run {
     state: State,
     handle: Option<ExportHandle>,
     queue: Vec<Item>,
+    /// What each run of rows is called, by its number.
+    groups: Vec<(u32, String)>,
     next_id: u32,
     /// Whether the queue may start things. Adding holds by default —
     /// "Add to queue" is a list of work, not a start button — and Export
@@ -79,6 +89,7 @@ fn slot() -> &'static Mutex<Run> {
             state: State::Idle,
             handle: None,
             queue: Vec::new(),
+            groups: Vec::new(),
             next_id: 1,
             running: false,
             current: None,
@@ -184,6 +195,40 @@ pub(super) fn queue_add(
     out_path: &str,
     start: bool,
 ) -> Result<u32, String> {
+    queue_add_version(
+        doc,
+        comp,
+        comp_name,
+        spec,
+        out_path,
+        Vec::new(),
+        None,
+        start,
+    )
+}
+
+/// A number for a run of rows queued together, called `name`.
+pub(super) fn queue_group(name: String) -> u32 {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let id = guard.next_id;
+    guard.next_id += 1;
+    guard.groups.push((id, name));
+    id
+}
+
+/// [`queue_add`] for one row's version of a template: `version` is applied
+/// to `doc` when the item starts.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn queue_add_version(
+    doc: std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: &str,
+    version: Vec<lumit_core::ops::Op>,
+    group: Option<u32>,
+    start: bool,
+) -> Result<u32, String> {
     if out_path.trim().is_empty() {
         return Err("export: no output path".to_owned());
     }
@@ -200,6 +245,8 @@ pub(super) fn queue_add(
         out_path: with_format_extension(out_path, &spec.codec),
         state: ItemState::Waiting,
         started: None,
+        version,
+        group,
     });
     if start {
         guard.running = true;
@@ -225,6 +272,12 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
         .iter()
         .map(|item| super::QueueRow {
             id: item.id,
+            group: item.group,
+            group_name: item
+                .group
+                .and_then(|g| guard.groups.iter().find(|(id, _)| *id == g))
+                .map(|(_, name)| name.clone())
+                .unwrap_or_default(),
             comp: item.comp,
             comp_name: item.comp_name.clone(),
             out_path: item.out_path.clone(),
@@ -378,14 +431,15 @@ fn pump(run: &mut Run) {
         let (doc, comp, spec, out_path, id) = {
             let item = &run.queue[index];
             (
-                item.doc.clone(),
+                versioned(item),
                 item.comp,
                 item.spec.clone(),
                 item.out_path.clone(),
                 item.id,
             )
         };
-        match launch(run, &doc, comp, &spec, &out_path) {
+        let started = doc.and_then(|doc| launch(run, &doc, comp, &spec, &out_path));
+        match started {
             Ok(()) => {
                 run.queue[index].state = ItemState::Running;
                 run.queue[index].started = Some(std::time::Instant::now());
@@ -394,6 +448,43 @@ fn pump(run: &mut Run) {
             Err(error) => run.queue[index].state = ItemState::Failed(error),
         }
     }
+}
+
+/// The document an item renders: its snapshot, with its row's edits made.
+fn versioned(item: &Item) -> Result<std::sync::Arc<lumit_core::model::Document>, String> {
+    if item.version.is_empty() {
+        return Ok(item.doc.clone());
+    }
+    let mut doc = lumit_core::model::Document::clone(&item.doc);
+    for op in &item.version {
+        lumit_core::ops::apply(&mut doc, op)
+            .map_err(|e| format!("export: the row could not be made: {e}"))?;
+    }
+    Ok(std::sync::Arc::new(doc))
+}
+
+/// Queue a finished or failed item again as it was: the same snapshot, the
+/// same row. Answers the new item's id, or `None` for an id that has gone.
+pub(super) fn queue_again(id: u32) -> Option<u32> {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let at = guard.queue.iter().position(|item| item.id == id)?;
+    let new = guard.next_id;
+    guard.next_id += 1;
+    let was = &guard.queue[at];
+    let again = Item {
+        id: new,
+        comp_name: was.comp_name.clone(),
+        doc: was.doc.clone(),
+        comp: was.comp,
+        spec: was.spec.clone(),
+        out_path: was.out_path.clone(),
+        state: ItemState::Waiting,
+        started: None,
+        version: was.version.clone(),
+        group: was.group,
+    };
+    guard.queue.insert(at + 1, again);
+    Some(new)
 }
 
 pub(super) fn poll() -> String {

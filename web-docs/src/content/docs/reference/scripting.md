@@ -484,3 +484,88 @@ Script: `lumit.export.cancel({ ... })`. MCP tool: `export_cancel`.
 | Argument | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `job` | integer (at least 0) | yes |  |
+
+## comp.controls
+
+A comp's controls and their values, after setting the template's own values when told to.
+
+Script: `lumit.comp.controls({ ... })`. MCP tool: `comp_controls`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `set` | object |  | Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name |
+
+## layer.values
+
+The values a copy of a graphics template has: its own, set or fed by a data row, or the template's.
+
+Script: `lumit.layer.values({ ... })`. MCP tool: `layer_values`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `clip` | string |  | For a copy that is a clip on a Sequence layer: the clip's id |
+| `set` | object |  | Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name |
+| `reset` | boolean or list of strings |  | Controls that follow the template again, by id or label, or true for all |
+| `row` | integer (at least 1) or null |  | The data row to follow, counting from 1, or null to stop |
+
+## data.rows
+
+The data linked to a graphics template, after linking a CSV, TSV or JSON file or saying what its columns feed.
+
+Script: `lumit.data.rows({ ... })`. MCP tool: `data_rows`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `file` | string |  | A CSV, TSV or JSON file to link. Its columns feed the controls of their names |
+| `feeds` | object |  | Column name to what it feeds: a control's id or label, length, file name, or null for nothing |
+
+## data.export
+
+Export a graphics template once for each row of its data.
+
+Script: `lumit.data.export({ ... })`. MCP tool: `data_export`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `rows` | list of 2 integers (at least 1) |  | The first and last row, counting from 1. All of them if left out |
+| `out` | string |  | The files' name, which may hold {Column}, {row}, {comp} and {date} and a folder |
+| `layer` | string |  | A copy's layer, by id or name: the comp it sits in is exported with the copy following each row. The template on its own if left out |
+| `clip` | string |  | With layer, for a copy that is a clip: the clip's id |
+
+## template.list
+
+The graphics templates in the library.
+
+Script: `lumit.template.list()`. MCP tool: `template_list`.
+
+No arguments.
+
+## template.place
+
+Bring a graphics template into the project, and place it in a comp when told to.
+
+Script: `lumit.template.place({ ... })`. MCP tool: `template_place`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `template` | string | yes | Its name in the library, or a .lumt file |
+| `comp` | string |  | The comp to place it in, by id or name, as a Precomp layer |
+| `at` | integer or `{num, den}` |  | Where the layer starts. The start if left out |
+
+## template.save
+
+Save a comp to the library as a graphics template.
+
+Script: `lumit.template.save({ ... })`. MCP tool: `template_save`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `name` | string |  | The comp's name if left out |
+| `group` | string |  | The folder in the library, parted by /. The top if left out |
+| `pack_fonts` | boolean |  | Put the font files its text names in the file |

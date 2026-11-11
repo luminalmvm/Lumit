@@ -2616,6 +2616,7 @@ name = "lumit_bridge"
 version = "0.11.1"
 dependencies = [
  "flutter_rust_bridge",
+ "image",
  "interprocess",
  "js-sys",
  "libc",

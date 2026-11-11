@@ -1771,11 +1771,11 @@ enum Probe<'a> {
 /// them.
 #[must_use]
 pub fn late_clone_pictures(
-    doc: &Arc<lumit_core::model::Document>,
     spec: &crate::draw::LateClones,
     points: usize,
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
 ) -> Vec<LayerInputDraw> {
+    let doc = &spec.doc;
     let Some(comp) = doc.comp(spec.comp) else {
         return Vec::new();
     };
@@ -2287,6 +2287,18 @@ fn comp_walk(
                 return None;
             }
             let nested = doc.comp(*nested_id)?;
+            // A copy of a graphics template is read from the document its own
+            // values make, as the picture road reads it.
+            let placed = lumit_core::template::placed::for_layer(
+                doc,
+                comp,
+                src,
+                lumit_core::time::layer_time(t_comp, src.start_offset.0),
+                t_comp,
+                None,
+            );
+            let doc = placed.as_ref().unwrap_or(doc);
+            let nested = doc.comp(*nested_id).unwrap_or(nested);
             // The Retime map (§5.6): a matte source and a background plate read
             // the moment their layer shows, exactly as the picture road does.
             let slt = lumit_core::model::nested_source_time(
@@ -2330,9 +2342,14 @@ fn comp_walk(
                 background: [0.0, 0.0, 0.0, 0.0],
                 draws,
                 camera: Some(crate::track::camera_pose(doc, nested, slt)),
-                key: keys
-                    .filter(|_| !driven_inputs(src))
-                    .and_then(|k| k.nested_key_with(nested, slt, src.graph_inputs.as_ref())),
+                key: keys.filter(|_| !driven_inputs(src)).and_then(|k| {
+                    // A template's copy is named by its document alone.
+                    let inputs = src
+                        .graph_inputs
+                        .as_ref()
+                        .filter(|i| lumit_core::fx::effects::template::comp_of(i).is_none());
+                    k.nested_key_with(doc, nested, slt, inputs)
+                }),
                 px_per_metre: nested.px_per_metre(slt),
                 read: None,
                 trace_layers: false,
@@ -2909,6 +2926,7 @@ fn comp_walk(
                     // the card: the list waits for them.
                     0 if wired.from.first().copied().flatten().is_some() => {
                         return LayerInputDraw::Late(Box::new(crate::draw::LateClones {
+                            doc: doc.clone(),
                             comp: comp.id,
                             owner,
                             effect: e.id,
@@ -4154,6 +4172,11 @@ fn comp_walk(
                             ));
                         }
                     };
+                    // A clip that is a copy of a graphics template draws the
+                    // document its own values make.
+                    let placed =
+                        lumit_core::template::placed::for_clip(doc, comp, layer, clip, lt, t_comp);
+                    let doc = placed.as_ref().unwrap_or(doc);
                     // A multicam clip draws its comp seen through its angle.
                     let nested = lumit_core::multicam::nested_for(doc, clip)
                         .filter(|_| !visited.contains(&nested_id))?;
@@ -4180,7 +4203,7 @@ fn comp_walk(
                             background: [0.0, 0.0, 0.0, 0.0],
                             draws: nested_draws,
                             camera: Some(crate::track::camera_pose(doc, nested, st)),
-                            key: keys.and_then(|k| k.nested_key_with(nested, st, None)),
+                            key: keys.and_then(|k| k.nested_key_with(doc, nested, st, None)),
                             paint: Vec::new(),
                             paint_time: lt,
                             flow: None,
@@ -4242,6 +4265,16 @@ fn comp_walk(
                 let Some(nested) = doc.comp(*nested_id) else {
                     continue;
                 };
+                // **A copy of a graphics template** draws the document its own
+                // values make: the template with those values written into
+                // the rows they name. Everything below reads the nested comp
+                // out of that document, so its expressions, its footage and
+                // its name all follow the copy.
+                let project = doc;
+                let placed =
+                    lumit_core::template::placed::for_layer(project, comp, layer, lt, t_comp, None);
+                let doc = placed.as_ref().unwrap_or(project);
+                let nested = doc.comp(*nested_id).unwrap_or(nested);
                 // **The Retime map** (§5.6): which moment of the nested comp
                 // this layer shows. Every site that evaluates the comp reads
                 // `st`; the layer's own opacity, paint and collapse keep `lt`,
@@ -4410,6 +4443,19 @@ fn comp_walk(
                         // map (§5.6): a retimed Precomp measures its
                         // motion between the moments it actually shows.
                         let nt = nested_at(offset);
+                        // A template's copy, under the values it has at the
+                        // neighbour's moment.
+                        let at = t_comp + f64::from(offset) * dt;
+                        let placed = lumit_core::template::placed::for_layer(
+                            project,
+                            comp,
+                            layer,
+                            lumit_core::time::layer_time(at, layer.start_offset.0),
+                            at,
+                            None,
+                        );
+                        let doc = placed.as_ref().unwrap_or(project);
+                        let nested = doc.comp(*nested_id).unwrap_or(nested);
                         // Under the same Input values the frame itself is
                         // built under, read at the neighbour's moment. On
                         // the graph's defaults the neighbour was another
@@ -4503,7 +4549,11 @@ fn comp_walk(
                         // placed graph's own Input values are folded in so
                         // two hosts of one graph name two pictures (§5.3).
                         key: named.filter(|_| !driven_inputs(layer)).and_then(|k| {
-                            k.nested_key_with(nested, st, layer.graph_inputs.as_ref())
+                            // A template's copy is named by its document alone.
+                            let inputs = layer.graph_inputs.as_ref().filter(|i| {
+                                lumit_core::fx::effects::template::comp_of(i).is_none()
+                            });
+                            k.nested_key_with(doc, nested, st, inputs)
                         }),
                         // Paint on a Precomp: stamped into the nested
                         // picture by the realiser, because a comp has no
@@ -5984,7 +6034,9 @@ impl GraphLower<'_> {
                         // The comp's own name, whichever graph reads it - so a
                         // Read of a comp is cached exactly as a Precomp layer
                         // of it is.
-                        key: self.keys.and_then(|k| k.nested_key(nested, self.t)),
+                        key: self
+                            .keys
+                            .and_then(|k| k.nested_key(self.doc, nested, self.t)),
                         paint: Vec::new(),
                         paint_time: self.t,
                         flow: None,
@@ -9623,14 +9675,15 @@ mod render_below_at_tests {
                 .collect();
             comp_with(10, vec![l])
         };
+        let shared = Arc::new(doc.clone());
         let plan = |comp: &Composition, held: bool| {
             crate::plan::plan_comp_frame_held(
-                &doc,
+                &shared,
                 comp,
                 0.5,
                 crate::plan::Quality::default(),
                 &probes,
-                Some(&|_, _, _| held),
+                Some(&|_, _, _, _| held),
             )
         };
         let rebuilds = |comp: &Composition| -> Vec<(i32, Option<i32>)> {

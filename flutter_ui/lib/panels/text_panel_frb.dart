@@ -8,14 +8,18 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowKind;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/text_documents.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'control_rows.dart' show ControlMark, layerControlRow;
+import 'param_row_menu.dart';
 import 'text_target.dart';
 
 class TextPanelFrb extends StatefulWidget {
@@ -70,20 +74,38 @@ class _TextPanelFrbState extends State<TextPanelFrb>
         final target = targetOf(ui);
         final document = target.document;
         final style = document.style;
+        // A value of the selected Text layers as a control of the
+        // composition's graphics template can name it. Null while the panel
+        // edits what new text is set in, which is no layer's row.
+        ControlRow? named(BridgeRowKind kind, String label) {
+          final comp = ui.selectedComp;
+          if (comp == null || target.layers.isEmpty) return null;
+          final rows = [
+            for (final layer in target.layers)
+              layerControlRow(kind, layer.internallayerId, label),
+          ];
+          return ControlRow(comp, rows.first, also: rows.sublist(1));
+        }
+
+        final font = named(BridgeRowKind.font, l10n.textFont);
         return styleMenu(ui, target, Container(
           color: t.surface0,
           child: ListView(
             children: [
               textTargetHeading(t, target.name),
               textGrid([
-                textCell(t, l10n.textFont, _familyPicker(ui, target)),
-                textCell(t, l10n.textFace, _facePicker(ui, target)),
+                // The family and the face are the one font to a control.
+                textCell(t, l10n.textFont,
+                    _named(_familyPicker(ui, target), font, mark: true)),
+                textCell(
+                    t, l10n.textFace, _named(_facePicker(ui, target), font)),
                 textCell(
                   t,
                   l10n.size,
                   _number(
                     ui,
                     target,
+                    named: named(BridgeRowKind.textSize, l10n.size),
                     keyName: 'text-size',
                     value: document.size,
                     min: 1,
@@ -136,6 +158,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                   _number(
                     ui,
                     target,
+                    named: named(BridgeRowKind.textTracking, l10n.textTracking),
                     keyName: 'text-tracking',
                     value: style.tracking,
                     min: -1000,
@@ -158,6 +181,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       ),
                       const SizedBox(width: 8),
                       _swatch(
+                        named: named(BridgeRowKind.textFill, l10n.toolFill),
                         keyName: 'text-fill',
                         colour: document.fill,
                         // White, as a new Text layer is set.
@@ -182,6 +206,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       ),
                       const SizedBox(width: 8),
                       _swatch(
+                        named: named(BridgeRowKind.textStroke, l10n.toolStroke),
                         keyName: 'text-stroke',
                         colour: style.stroke,
                         resetTo: PickedColour(plainTextStyle.stroke.r,
@@ -202,6 +227,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                     _number(
                       ui,
                       target,
+                      named: named(
+                          BridgeRowKind.textStrokeWidth, l10n.textStrokeWidth),
                       keyName: 'text-stroke-width',
                       value: style.strokeWidth,
                       min: 0,
@@ -228,6 +255,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       ),
                       const SizedBox(width: 8),
                       _swatch(
+                        named: named(
+                            BridgeRowKind.textBackground, l10n.textBackground),
                         keyName: 'text-plate',
                         colour: style.plate,
                         resetTo: PickedColour(plainTextStyle.plate.r,
@@ -561,23 +590,73 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     int decimals = 0,
     String? suffix,
     double? resetTo,
+    ControlRow? named,
   }) =>
-      SizedBox(
-        width: 72,
-        child: DragValueField(
-          key: ValueKey<String>(keyName),
-          value: value,
-          min: min,
-          max: max,
-          decimals: decimals,
-          suffix: suffix,
-          resetTo: resetTo,
-          onChangeLive: (v) => previewText(ui, target, change(v.toDouble())),
-          onChangeEnd: (v) => commitText(ui, target, change(v.toDouble())),
-          onDragCancel: () => cancelTextPreview(ui, target),
-          onChanged: (v) => commitText(ui, target, change(v.toDouble())),
+      _named(
+        SizedBox(
+          width: 72,
+          child: DragValueField(
+            key: ValueKey<String>(keyName),
+            value: value,
+            min: min,
+            max: max,
+            decimals: decimals,
+            suffix: suffix,
+            resetTo: resetTo,
+            onChangeLive: (v) => previewText(ui, target, change(v.toDouble())),
+            onChangeEnd: (v) => commitText(ui, target, change(v.toDouble())),
+            onDragCancel: () => cancelTextPreview(ui, target),
+            onChanged: (v) => commitText(ui, target, change(v.toDouble())),
+          ),
         ),
+        named,
+        mark: true,
+        // What the well's own menu holds, which this one stands in for.
+        reset: resetTo == null
+            ? null
+            : () => commitText(ui, target, change(resetTo)),
+        canReset: resetTo == null || (value - resetTo).abs() > 1e-5,
+        copy: () => copiedAxes([value]),
+        paste: (text) {
+          final n = pastedAxes(text, 1);
+          if (n == null) return;
+          commitText(ui, target, change(n.first.clamp(min, max)));
+        },
       );
+
+  /// [control] with the menu of a value a control can name: Add to controls,
+  /// after the rows the well's own menu held. With [mark], the mark beside it
+  /// while it is a control. [control] alone when [named] is null.
+  Widget _named(
+    Widget control,
+    ControlRow? named, {
+    bool mark = false,
+    VoidCallback? reset,
+    bool canReset = true,
+    String Function()? copy,
+    void Function(String text)? paste,
+    PickedColour Function()? colour,
+    void Function(PickedColour colour)? pasteColour,
+  }) {
+    if (named == null) return control;
+    final menued = ParamRowMenu(
+      menu: ParamMenu(
+        control: named,
+        reset: reset,
+        canReset: canReset,
+        copy: copy,
+        paste: paste,
+        colour: colour,
+        pasteColour: pasteColour,
+      ),
+      child: control,
+    );
+    if (!mark) return menued;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [Flexible(child: menued), ControlMark(named.row)],
+    );
+  }
 
   /// A scene-linear colour as a chip that opens the picker. A text colour is
   /// chosen as a display colour, the same as a solid's.
@@ -586,19 +665,36 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     required BridgeColourRgba colour,
     required ValueChanged<BridgeColourRgba> onPicked,
     PickedColour? resetTo,
+    ControlRow? named,
   }) {
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
-    return ColourSwatchButton(
-      key: ValueKey<String>(keyName),
-      resetTo: resetTo,
-      colour:
-          documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255),
-      onPicked: (picked) => onPicked(BridgeColourRgba(
-        r: picked.r,
-        g: picked.g,
-        b: picked.b,
-        a: colour.a,
-      )),
+    final shown =
+        documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255);
+    void pick(PickedColour picked) => onPicked(BridgeColourRgba(
+          r: picked.r,
+          g: picked.g,
+          b: picked.b,
+          a: colour.a,
+        ));
+    final now = PickedColour.of(shown);
+    return _named(
+      ColourSwatchButton(
+        key: ValueKey<String>(keyName),
+        resetTo: resetTo,
+        // Named, the row's menu holds the chip's rows and Add to controls.
+        rowMenu: named != null,
+        colour: shown,
+        onPicked: pick,
+      ),
+      named,
+      mark: true,
+      reset: resetTo == null ? null : () => pick(resetTo),
+      canReset: resetTo == null ||
+          resetTo.r != now.r ||
+          resetTo.g != now.g ||
+          resetTo.b != now.b,
+      colour: () => now,
+      pasteColour: pick,
     );
   }
 

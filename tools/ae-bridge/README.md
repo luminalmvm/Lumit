@@ -23,6 +23,11 @@ MyProject.lum-bundle/
 Footage is not collected in v1: the capture records file paths, and Lumit relinks on
 import. Nothing is modified in your project.
 
+Essential Graphics comes too: each composition's controllers, and what each layer placing
+it set. Scripting lists a controller by name only, and what it sets is said on a layer
+that places the composition. A composition nothing places is placed in one made for the
+read, which is removed again before the walk goes on.
+
 Some unreadable entries are expected and not a fault: AE's own scripting DOM cannot read
 `CUSTOM_VALUE` data, so Curves' point list, Levels' histogram, Hue/Saturation's channel
 ranges and a shape layer's gradient stops arrive as unreadables. The report says so
@@ -49,6 +54,11 @@ counts to need updating alongside.
 Two things are not fixed by the fixture and should not be asserted on: the manifest's
 export date, and the captured font name of the text layer (the script deliberately does
 not name a font, so AE's default — whatever is installed — comes through).
+
+`make-essential-fixture.jsx` builds a second, smaller project the same way: a composition
+with an Essential Graphics controller of each kind and two layers placing it. It writes
+`essential-graphics.aep` and `essential-graphics.lum-bundle/` into
+`crates/lumit-import/tests/fixtures/`, which `tests/essential_graphics.rs` reads.
 
 ## Notes for editing the scripts
 

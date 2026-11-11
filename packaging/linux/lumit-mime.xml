@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- MIME declarations for Lumit's documents: .lum projects
      (docs/10-FILE-FORMAT.md §1), .lumfx presets (§5), .lumtheme colour
-     themes (§6), .lfx extension packages and .lumstyle styles. -->
+     themes (§6), .lfx extension packages, .lumstyle styles and .lumt
+     graphics templates. -->
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-lumit-project">
     <comment>Lumit project</comment>
@@ -26,5 +27,9 @@
   <mime-type type="application/x-lumit-extension">
     <comment>Lumit extension</comment>
     <glob pattern="*.lfx"/>
+  </mime-type>
+  <mime-type type="application/x-lumit-template">
+    <comment>Lumit graphics template</comment>
+    <glob pattern="*.lumt"/>
   </mime-type>
 </mime-info>

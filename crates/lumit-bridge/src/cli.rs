@@ -27,6 +27,7 @@ macro_rules! out {
 mod host;
 mod interrupt;
 mod relay;
+mod rows;
 mod vector;
 
 use std::collections::BTreeMap;
@@ -47,9 +48,10 @@ const HELP: &str = "\
 Lumit on the command line.
 
 Usage:
-  lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>]
-                   [--range <in>-<out>] [--captions <how>] [--out <file>]
-                   [--format lottie|dotlottie|svg] [--text shapes|text] [--minify]
+  lumit-cli export <project.lum|template.lumt> [--comp <name>]... [--all-comps]
+                   [--preset <name>] [--range <in>-<out>] [--captions <how>]
+                   [--out <file>] [--format lottie|dotlottie|svg] [--text shapes|text]
+                   [--minify] [--data <file>] [--rows <first>-<last>]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
   lumit-cli mcp [--project <project.lum>]
@@ -57,6 +59,8 @@ Usage:
   lumit-cli --version
 
 export     Export comps of a project, by default as an H.264 mp4 with sound.
+           The project may be a graphics template's .lumt file instead, and
+           its own comp is then the one exported.
   --comp       The comp, by name or id. Needed when the project has more than one.
                Repeat it for more comps, each to its own file.
   --all-comps  Every comp in the project.
@@ -75,6 +79,11 @@ export     Export comps of a project, by default as an H.264 mp4 with sound.
   --text       How a Lottie writes text: as outlines (shapes, the default) or
                as text naming its font.
   --minify     The smallest Lottie or SVG: no names, fewer decimals.
+  --data       A CSV, TSV or JSON file of rows for a graphics template: one
+               export for each row, its controls set from the columns of their
+               names. --comp names the template. --out is then the files' name,
+               which may hold {Column}, {row}, {comp} and {date}.
+  --rows       With --data, the rows to export, first and last, counting from 1.
 
 run        Run a JavaScript or After Effects (.jsx) script on a project, or on a
            new empty one.
@@ -132,6 +141,10 @@ struct Export {
     minify: bool,
     /// What happens to caption layers, when not the preset's choice.
     captions: Option<BridgeCaptionsOut>,
+    /// A file of rows to export a graphics template once for each of.
+    data: Option<PathBuf>,
+    /// With `data`, the first and last row, counting from 1.
+    rows: Option<(u32, u32)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -290,6 +303,19 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 how.range = Some(frames);
             }
             ("export", "--out") => how.out = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("export", "--data") => how.data = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("export", "--rows") => {
+                let range = text(wants(&flag, rest.pop())?)?;
+                let rows = range
+                    .split_once('-')
+                    .and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)))
+                    .or_else(|| range.trim().parse().ok().map(|one| (one, one)))
+                    .filter(|(a, b)| *a >= 1 && a <= b)
+                    .ok_or_else(|| {
+                        format!("--rows takes a first and last row, such as 1-20, not {range}.")
+                    })?;
+                how.rows = Some(rows);
+            }
             ("export", "--format") => {
                 let key = text(wants(&flag, rest.pop())?)?;
                 if lumit_lottie::settings::Format::from_key(&key).is_none() {
@@ -351,6 +377,12 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
         "export" => {
             if how.all && !how.comps.is_empty() {
                 return Err("--all-comps and --comp go one at a time.".into());
+            }
+            if how.rows.is_some() && how.data.is_none() {
+                return Err("--rows needs --data.".into());
+            }
+            if how.data.is_some() && how.all {
+                return Err("--data takes one comp, so not --all-comps.".into());
             }
             Ok(Command::Export {
                 project: one("a project")?,
@@ -435,13 +467,18 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
             .ok_or("This build of Lumit cannot export.")?,
     };
     settings.captions = how.captions.unwrap_or(settings.captions);
+    if let Some(data) = &how.data {
+        return rows::export(project, &how, data, &settings);
+    }
     let host = open(project)?;
     // Extension effects draw in an export as they do in Lumit.
     crate::api::extensions::register_effects();
     let comps = chosen_comps(&host, &how)?;
+    // Beside the project, or beside the template file it was opened from.
     let beside = host
         .path()
         .and_then(|p| p.parent().map(Path::to_path_buf))
+        .or_else(|| project.parent().map(Path::to_path_buf))
         .unwrap_or_default();
     // With several comps, --out is where they all go.
     let folder = match &how.out {

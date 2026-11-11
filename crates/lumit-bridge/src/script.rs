@@ -10,7 +10,7 @@
 //! While a script runs the interface sits behind a card with Stop on it, so
 //! nothing else commits into the run's undo step.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -18,16 +18,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 
-use lumit_core::model::{Composition, Layer};
+use lumit_core::model::{Composition, Document, Layer, ProjectItem};
+use lumit_core::ops::Op;
 use lumit_core::store::DocumentStore;
 use lumit_core::time::CompTime;
-use lumit_script::{script::RunOptions, ExportState, ExportStatus, Host, ScriptError};
+use lumit_script::{
+    script::RunOptions, ExportState, ExportStatus, Host, LibraryTemplate, ScriptError,
+};
 use uuid::Uuid;
 
 use crate::api::{
     composition::CompositionReference, export::BridgeExportState, project::ProjectReference,
     script::BridgeScriptEvent, streams::BridgeStreamsArrival, BridgeError,
 };
+use crate::export::QueueRowState;
 
 /// The longest script read, far past any written by hand.
 pub(crate) const MAX_SOURCE_BYTES: u64 = 16 << 20;
@@ -209,6 +213,12 @@ pub(crate) struct AppHost<'a> {
     store: Arc<DocumentStore>,
     /// The export this run started last. Lumit exports one thing at a time.
     export: RefCell<Option<Export>>,
+    /// The rows' versions this run put in the export queue.
+    queued: RefCell<Vec<Queued>>,
+    /// The queue's heading for each template's rows, by its name.
+    groups: RefCell<BTreeMap<String, u32>>,
+    /// The last number an export was given.
+    jobs: Cell<u64>,
     stop: Arc<AtomicBool>,
     /// The interface, which hears [`BridgeScriptEvent`]s.
     tell: &'a dyn Fn(BridgeScriptEvent) -> bool,
@@ -229,10 +239,20 @@ impl<'a> AppHost<'a> {
             project,
             store,
             export: RefCell::new(None),
+            queued: RefCell::default(),
+            groups: RefCell::default(),
+            jobs: Cell::new(0),
             stop,
             tell,
             active: None,
         }
+    }
+
+    /// A number for an export, never one given before in this run.
+    fn next_job(&self) -> u64 {
+        let job = self.jobs.get() + 1;
+        self.jobs.set(job);
+        job
     }
 
     /// Tell the interface something: a message to show, a comp to open in
@@ -288,6 +308,74 @@ struct Export {
     cancelled: bool,
     /// Frames to write, once the exporter has said.
     total: u64,
+}
+
+/// A row's version in the export queue.
+struct Queued {
+    job: u64,
+    /// The queue's own number for it.
+    id: u32,
+    path: PathBuf,
+    /// Whether the script asked it to stop.
+    cancelled: bool,
+    /// Frames to write, once the exporter has said.
+    total: u64,
+}
+
+/// The name of comp `comp` once `ops` are made: a row's version may export
+/// a comp the ops add.
+fn version_name(doc: &Document, comp: Uuid, ops: &[Op]) -> String {
+    doc.comp(comp)
+        .map(|c| c.name.clone())
+        .or_else(|| {
+            ops.iter().find_map(|op| match op {
+                Op::AddItem { item, .. } => match &**item {
+                    ProjectItem::Composition(c) if c.id == comp => Some(c.name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+        })
+        .unwrap_or_default()
+}
+
+/// The folder a graphics template a script brings in is filed in.
+pub(crate) const TEMPLATES_FOLDER: &str = "Graphics templates";
+
+/// The library, as `template.list` answers it.
+pub(crate) fn template_library() -> Vec<LibraryTemplate> {
+    crate::api::template::library::list_templates()
+        .into_iter()
+        .map(|t| LibraryTemplate {
+            name: t.name,
+            group: t.group,
+            path: PathBuf::from(t.path),
+            id: t.id,
+            version: t.version,
+            width: t.width,
+            height: t.height,
+            seconds: t.seconds,
+            controls: t.controls,
+            missing_fonts: t.missing_fonts,
+        })
+        .collect()
+}
+
+/// What a template that will not save to the library tells a script.
+pub(crate) fn not_saved(e: BridgeError) -> ScriptError {
+    match e {
+        BridgeError::EmptyName => ScriptError::BadArgs("A graphics template needs a name.".into()),
+        BridgeError::ExportFailed(why) => ScriptError::Failed(why),
+        _ => failed("The graphics template could not be saved."),
+    }
+}
+
+/// What a `.lumt` file that will not come in tells a script.
+pub(crate) fn not_brought(path: &Path) -> ScriptError {
+    ScriptError::Failed(format!(
+        "{} could not be opened as a graphics template.",
+        path.display()
+    ))
 }
 
 fn failed(message: &str) -> ScriptError {
@@ -508,9 +596,8 @@ impl Host for AppHost<'_> {
                 }
                 _ => failed("The export could not start."),
             })?;
-        let mut export = self.export.borrow_mut();
-        let job = export.as_ref().map_or(1, |e| e.job + 1);
-        *export = Some(Export {
+        let job = self.next_job();
+        *self.export.borrow_mut() = Some(Export {
             job,
             path: PathBuf::from(out),
             cancelled: false,
@@ -519,7 +606,104 @@ impl Host for AppHost<'_> {
         Ok(job)
     }
 
+    // Queued as Export rows queues them, from the project as it is now, so
+    // the project itself never holds a row's version.
+    fn export_version(
+        &self,
+        comp: Uuid,
+        ops: Vec<Op>,
+        out: &Path,
+    ) -> Result<(u64, PathBuf), ScriptError> {
+        let spec = crate::export::from_export_spec(&lumit_render::export::ExportSpec::default())
+            .ok_or_else(|| failed("This build of Lumit cannot export."))?;
+        let doc = self.store.snapshot();
+        if !lumit_render::decode::addon_needs(&doc).is_empty() {
+            return Err(failed("The comp needs an addon that is not installed."));
+        }
+        if let Some(dir) = out.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| {
+                ScriptError::Failed(format!("{} could not be made: {e}.", dir.display()))
+            })?;
+        }
+        // Never over a file that is there already.
+        let path = crate::export::with_format_extension(&out.to_string_lossy(), &spec.codec);
+        let path = if crate::export::path_taken(&path, &spec.codec, spec.captions) {
+            crate::export::free_path(&path, &spec.codec, spec.captions)
+        } else {
+            path
+        };
+        let name = version_name(&doc, comp, &ops);
+        let group = *self
+            .groups
+            .borrow_mut()
+            .entry(name.clone())
+            .or_insert_with(|| crate::export::queue_group(name.clone()));
+        let id = crate::export::queue_add_version(doc, comp, name, &spec, &path, ops, group)
+            .map_err(ScriptError::Failed)?;
+        crate::export::queue_start();
+        let job = self.next_job();
+        let path = PathBuf::from(path);
+        self.queued.borrow_mut().push(Queued {
+            job,
+            id,
+            path: path.clone(),
+            cancelled: false,
+            total: 0,
+        });
+        Ok((job, path))
+    }
+
+    fn template_library(&self) -> Vec<LibraryTemplate> {
+        template_library()
+    }
+
+    fn template_bring(&self, path: &Path) -> Result<Uuid, ScriptError> {
+        self.project
+            .place_template(path.to_string_lossy().into_owned(), TEMPLATES_FOLDER.into())
+            .map(|comp| comp.id)
+            .map_err(|_| not_brought(path))
+    }
+
+    fn template_save(
+        &self,
+        comp: Uuid,
+        name: &str,
+        group: &str,
+        pack_fonts: bool,
+    ) -> Result<PathBuf, ScriptError> {
+        CompositionReference::new(self.project.id, comp)
+            .save_template(name.into(), group.into(), pack_fonts)
+            .map(PathBuf::from)
+            .map_err(not_saved)
+    }
+
     fn export_status(&self, job: u64) -> Result<ExportStatus, ScriptError> {
+        if let Some(queued) = self.queued.borrow_mut().iter_mut().find(|q| q.job == job) {
+            let row = crate::export::queue_list()
+                .into_iter()
+                .find(|row| row.id == queued.id);
+            let (state, done, message) = match row.map(|row| row.state) {
+                Some(QueueRowState::Waiting) => (ExportState::Running, 0, None),
+                Some(QueueRowState::Running { frame, total, .. }) => {
+                    queued.total = total;
+                    (ExportState::Running, frame, None)
+                }
+                Some(QueueRowState::Done { .. }) => (ExportState::Done, queued.total, None),
+                // A waiting item that is cancelled leaves the queue.
+                None => (ExportState::Cancelled, 0, None),
+                Some(QueueRowState::Failed(_)) if queued.cancelled => {
+                    (ExportState::Cancelled, 0, None)
+                }
+                Some(QueueRowState::Failed(why)) => (ExportState::Failed, 0, Some(why)),
+            };
+            return Ok(ExportStatus {
+                state,
+                done,
+                total: queued.total,
+                path: queued.path.clone(),
+                message,
+            });
+        }
         let mut export = self.export.borrow_mut();
         let export = export
             .as_mut()
@@ -550,6 +734,11 @@ impl Host for AppHost<'_> {
     }
 
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError> {
+        if let Some(queued) = self.queued.borrow_mut().iter_mut().find(|q| q.job == job) {
+            queued.cancelled = true;
+            crate::export::queue_cancel(queued.id);
+            return Ok(());
+        }
         let mut export = self.export.borrow_mut();
         let export = export
             .as_mut()

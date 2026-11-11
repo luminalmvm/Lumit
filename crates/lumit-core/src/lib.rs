@@ -63,6 +63,8 @@ pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.
 pub mod shared;
 pub mod store;
+/// Graphics templates: a composition with controls a placed copy can set.
+pub mod template;
 /// Text animators: a Text layer's words moved a letter at a time.
 pub mod text;
 pub mod time;

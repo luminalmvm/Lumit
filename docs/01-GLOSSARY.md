@@ -27,6 +27,10 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Node graph** | A comp whose picture is made by nodes and wires instead of layers |
 | **Multicam comp** | A comp whose Sequence layers are the **angles** of one shoot, each holding one camera's or recorder's files at the moments they were filmed. Made from footage by **New multicam comp**, which **syncs** the files by their sound, their timecode, their In marks or their first markers |
 | **Angle** | One Sequence layer of a multicam comp, numbered from the top. A **sound angle** is an audio-only one, such as a recorder |
+| **Graphics template** | A comp with **controls**, saved to the library as a `.lumt` file to place in any project. Never just *template*, which Settings uses for the project a new one starts from |
+| **Control** | A row inside a comp that every Precomp layer or clip placing it can set for itself. To **add to controls** makes a row one. Each placing is a **copy**, and a copy that has not set a control follows the template |
+| **Data** | Rows from a CSV, TSV or JSON file feeding a graphics template's controls, one version for each row. A copy can **follow** a row |
+| **Intro**, **Outro** | The stretch at a graphics template's start and at its end that keeps its speed when a copy is made longer or shorter |
 
 ## 2. Layers
 

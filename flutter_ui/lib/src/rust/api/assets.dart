@@ -100,6 +100,10 @@ class BridgeParagraphStyle {
 
   /// Stretch every line but a paragraph's last to the box.
   final bool justify;
+
+  /// Shrink to fit: no line wraps, and the words are set smaller until the
+  /// longest line fits the box. Does nothing without a box.
+  final bool shrink;
   final double indentLeft;
   final double indentRight;
   final double indentFirst;
@@ -114,6 +118,7 @@ class BridgeParagraphStyle {
     required this.align,
     this.boxWidth,
     required this.justify,
+    required this.shrink,
     required this.indentLeft,
     required this.indentRight,
     required this.indentFirst,
@@ -128,6 +133,7 @@ class BridgeParagraphStyle {
       align.hashCode ^
       boxWidth.hashCode ^
       justify.hashCode ^
+      shrink.hashCode ^
       indentLeft.hashCode ^
       indentRight.hashCode ^
       indentFirst.hashCode ^
@@ -144,6 +150,7 @@ class BridgeParagraphStyle {
           align == other.align &&
           boxWidth == other.boxWidth &&
           justify == other.justify &&
+          shrink == other.shrink &&
           indentLeft == other.indentLeft &&
           indentRight == other.indentRight &&
           indentFirst == other.indentFirst &&

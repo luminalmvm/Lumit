@@ -34,6 +34,7 @@
 
 mod curves;
 pub mod effects;
+mod essential;
 mod fx_audio;
 mod fx_colour;
 mod fx_distort;
@@ -329,6 +330,10 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
             }
         }
     }
+
+    // Pass four: Essential Graphics, once every composition a layer can
+    // place has its layers and their ids.
+    essential::apply(&mut doc, &mut report, capture, &items);
 
     doc.extra = project_extra(&mut report, capture);
     doc.colour = project_colour(&mut report, capture);

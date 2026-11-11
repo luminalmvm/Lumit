@@ -31,6 +31,7 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../state/beats_notice.dart';
 import '../state/comp_time.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/ui_state.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
@@ -39,6 +40,7 @@ import 'audio_loudness.dart';
 import 'audio_meters_feed.dart';
 import 'audio_routes_frb.dart';
 import 'clip_fade_popover.dart' show FadeCurveGlyph;
+import 'control_rows.dart' show volumeControlRow;
 import 'drive_chain.dart' show stageAudioChain;
 import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
@@ -1071,7 +1073,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
             children: [
               if (widget.canSound) ...[
               ParamRowMenu(
-                  menu: scalarRowMenu(context, volumeKeys, defaults: const [0]),
+                  menu: scalarRowMenu(context, volumeKeys,
+                      defaults: const [0],
+                      control: ControlRow(widget.comp,
+                          volumeControlRow(layer.internallayerId))),
                   child: Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,

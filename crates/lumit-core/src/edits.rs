@@ -896,11 +896,21 @@ pub fn visit_comp_refs(comp: &mut lumit_core::model::Composition, f: &mut dyn Fn
 
     for layer in &mut comp.layers {
         match &mut layer.kind {
-            LayerKind::Precomp { comp } => f(comp),
+            LayerKind::Precomp { comp } => {
+                f(comp);
+                // A copy of a graphics template keeps its values for the
+                // composition it places, by id, so they follow it.
+                if let Some(inputs) = &mut layer.graph_inputs {
+                    lumit_core::fx::effects::template::rebind(inputs, *comp);
+                }
+            }
             LayerKind::Sequence { clips } => {
                 for clip in clips {
                     if let lumit_core::sequence::ClipSource::Comp(id) = &mut clip.source {
                         f(id);
+                        if let Some(inputs) = &mut clip.inputs {
+                            lumit_core::fx::effects::template::rebind(inputs, *id);
+                        }
                     }
                     for take in &mut clip.takes {
                         if let lumit_core::sequence::ClipSource::Comp(id) = &mut take.source {

@@ -142,6 +142,7 @@ pub mod srgb_curve;
 pub mod stroke;
 pub mod switch;
 pub mod temperature;
+pub mod template;
 pub mod text_to_points;
 pub mod texturize;
 pub mod threshold;

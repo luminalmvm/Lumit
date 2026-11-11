@@ -80,6 +80,15 @@ struct Laid {
     ascent: f32,
     descent: f32,
     size: f32,
+    /// The size before Shrink to fit. The room for animated letters is cut
+    /// from it, so it stays the room every other reader works out.
+    full: f32,
+    /// How much of the size Shrink to fit left. What the style measures in px
+    /// is drawn at this much of itself.
+    shrink: f32,
+    /// How much smaller again the words have to be set to fit their box. One
+    /// when they fit, and when Shrink to fit is off.
+    fit: f32,
     scale_x: f32,
     scale_y: f32,
 }
@@ -197,14 +206,37 @@ fn breaks(chars: &[char], carets: &[f32], room: f32, first_line: f32, tracking: 
     cuts
 }
 
+/// Lay the block out, set smaller when Shrink to fit is on and the words
+/// overrun their box.
 fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
+    if !(block.paragraph.shrink && block.paragraph.box_width > 0.0) {
+        return lay_at(block, face, None);
+    }
+    let laid = lay_at(block, face, Some(1.0));
+    if laid.fit >= 1.0 {
+        return laid;
+    }
+    // Widths and heights follow the size in step, so one measure gives the
+    // factor. A hair under it, so rounding can't leave a line just over.
+    lay_at(block, face, Some(laid.fit * 0.9999))
+}
+
+/// Lay the block out. `shrink` is how much of its size Shrink to fit sets it
+/// at, and with it no line wraps. `None` wraps to the box as ever.
+fn lay_at(block: &TextBlock<'_>, face: &Face, shrink: Option<f32>) -> Laid {
     let style = block.style;
     let paragraph = block.paragraph;
-    let size = if block.size.is_finite() {
+    let full = if block.size.is_finite() {
         block.size.clamp(1.0, MAX_SIZE)
     } else {
         72.0
     };
+    // Never under 1 px, however long the line.
+    let size = (full * shrink.unwrap_or(1.0)).max(1.0);
+    // What the style measures in px takes the same factor as the size, so
+    // the words look the same, only smaller. The box and its indents stay.
+    let k = size / full;
+    let px = |v: f64| finite(v) * k;
     let (scale_x, scale_y) = (clamped_scale(style.scale_x), clamped_scale(style.scale_y));
     let upem = f32::from(face.shaper.units_per_em()).max(1.0);
     let unit = size / upem;
@@ -221,7 +253,7 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         Script::Superscript | Script::Subscript => SCRIPT_SCALE,
     };
     // Up is positive here, the way the panel shows it.
-    let lift = finite(style.baseline_shift)
+    let lift = px(style.baseline_shift)
         + match style.script {
             Script::Normal => 0.0,
             Script::Superscript => size * SCRIPT_SHIFT * scale_y,
@@ -354,7 +386,7 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         // ponytail: a right-to-left paragraph isn't wrapped, its carets run
         // the other way.
         let cuts = match wrap {
-            Some(w) if !backwards => {
+            Some(w) if !backwards && shrink.is_none() => {
                 breaks(&chars, &carets, w - left - right, first_line, tracking)
             }
             _ => Vec::new(),
@@ -418,11 +450,18 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         .iter()
         .map(|row| indent(row) + row.width + right)
         .fold(wrap.unwrap_or(0.0), f32::max);
+    // How much of its size the longest line can keep and still fit the box.
+    let mut fit = 1.0f32;
+    if let (Some(_), Some(w)) = (shrink, wrap) {
+        for row in rows.iter().filter(|row| row.width > 0.0) {
+            fit = fit.min(((w - indent(row) - right) / row.width).max(0.0));
+        }
+    }
     let leading = style
         .leading
-        .map_or(size * 1.2, finite)
+        .map_or(size * 1.2, px)
         .clamp(0.0, MAX_SIZE * 4.0);
-    let between = finite(paragraph.space_before) + finite(paragraph.space_after);
+    let between = px(paragraph.space_before) + px(paragraph.space_after);
 
     let mut lines = Vec::with_capacity(rows.len());
     // How far each line's glyphs move: the line as a whole, then each space.
@@ -479,6 +518,9 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         .filter(|h| h.is_finite())
         .map_or(0.0, |h| h.min(crate::MAX_PATH_BOX_PX));
     if fixed > 0.0 {
+        if shrink.is_some() && height > fixed {
+            fit = fit.min(fixed / height);
+        }
         let drop = match paragraph.vertical {
             VerticalAlign::Top => 0.0,
             VerticalAlign::Middle => (fixed - height) * 0.5,
@@ -491,12 +533,12 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
     }
 
     let stroke = if style.stroke_on {
-        finite(style.stroke_width).max(0.0) * 0.5
+        px(style.stroke_width).max(0.0) * 0.5
     } else {
         0.0
     };
     let plate = if style.plate_on || block.boxed {
-        finite(style.plate_padding).clamp(0.0, MAX_SIZE)
+        px(style.plate_padding).clamp(0.0, MAX_SIZE)
     } else {
         0.0
     };
@@ -514,6 +556,9 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         ascent,
         descent,
         size,
+        full,
+        shrink: k,
+        fit,
         scale_x,
         scale_y,
     }
@@ -523,7 +568,7 @@ pub(crate) fn layout(block: &TextBlock<'_>, animated: bool) -> BlockLayout {
     let face = crate::fonts::face(&block.style.family, &block.style.face);
     let laid = lay(block, &face);
     let margin = if animated {
-        animator_margin(laid.size)
+        animator_margin(laid.full)
     } else {
         0.0
     };
@@ -754,7 +799,7 @@ fn draw(
     let location = LocationRef::new(face.shaper.normalized_coords());
     let mut paths: HashMap<u32, Vec<Command>> = HashMap::new();
     let stroke_colour = lumit_core::pixels::solid_rgba(style.stroke);
-    let stroke_width = finite(style.stroke_width).max(0.0);
+    let stroke_width = finite(style.stroke_width).max(0.0) * laid.shrink;
 
     let mut outline = Stroke::new(stroke_width);
     outline.join(Join::Miter).miter_limit(4.0).scale(false);
@@ -826,7 +871,7 @@ pub(crate) fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterT
     let margin = if xforms.is_empty() {
         0.0
     } else {
-        animator_margin(laid.size)
+        animator_margin(laid.full)
     };
     let (width, height) = laid.raster_size(margin);
     if laid.glyphs.is_empty() {
@@ -863,7 +908,10 @@ pub(crate) fn rasterise_on_path(
         };
     }
     let face = crate::fonts::face(&block.style.family, &block.style.face);
-    let laid = lay(block, &face);
+    // A path has no box to fit, so the words keep their size along one.
+    // ponytail: `layout` isn't told about the path, so it still measures a
+    // boxed block on one at its shrunk size. Hand it the path if that shows.
+    let laid = lay_at(block, &face, None);
     let run = Run::Along { path, offset };
     RasterText {
         width: w,
@@ -872,17 +920,23 @@ pub(crate) fn rasterise_on_path(
     }
 }
 
+/// The letters' outlines, and how much of the size Shrink to fit left, which
+/// an outline's width takes too.
 pub(crate) fn outlines(
     block: &TextBlock<'_>,
     path: Option<&MaskPolyline>,
     offset: f32,
-) -> Vec<GlyphOutline> {
+) -> (Vec<GlyphOutline>, f64) {
     let face = crate::fonts::face(&block.style.family, &block.style.face);
     let Some(font) = face.font() else {
-        return Vec::new();
+        return (Vec::new(), 1.0);
     };
-    let laid = lay(block, &face);
-    let run = match path.filter(|p| !p.is_empty()) {
+    let path = path.filter(|p| !p.is_empty());
+    let laid = match path {
+        Some(_) => lay_at(block, &face, None),
+        None => lay(block, &face),
+    };
+    let run = match path {
         Some(path) => Run::Along { path, offset },
         None => Run::Straight {
             origin: laid.origin(0.0),
@@ -917,7 +971,7 @@ pub(crate) fn outlines(
             });
         }
     }
-    out
+    (out, f64::from(laid.shrink))
 }
 
 #[cfg(test)]

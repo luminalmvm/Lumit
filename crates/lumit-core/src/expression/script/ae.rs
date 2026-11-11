@@ -859,6 +859,11 @@ impl<'a> Interp<'a> {
                 if CONVERSIONS.contains(&name) {
                     return self.convert(*comp, *layer, name, &args);
                 }
+                // Older projects call an Essential Property a master property.
+                if matches!(name, "essentialProperty" | "masterProperty") {
+                    let wanted = self.text(&first);
+                    return self.essential_property(*comp, *layer, &wanted);
+                }
                 if name != "effect" {
                     return fail(format!("'{name}' is not available on a layer yet"));
                 }
