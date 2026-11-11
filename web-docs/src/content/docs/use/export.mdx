@@ -15,11 +15,12 @@ queue does the writing.
 <Shot file="export.png" caption="The export dialogue." eager/>
 
 1. Front the composition, or select it in the Project panel.
-2. Choose **File ▸ Export**, or press `Ctrl+Alt+M`.
+2. Choose **File ▸ Export…**, or press `Ctrl+Alt+M`.
 3. Pick a preset, or set the fields yourself.
-4. Press **Export**. If you have not chosen where to write with **Browse**, it asks.
+4. Press **Export**, or `Enter`. If you have not chosen where to write with **Browse…**,
+   it asks.
 
-**Composition ▸ Add to export queue** (`Ctrl+M`) opens the same dialogue. **Export** sets
+**Composition ▸ Add to export queue…** (`Ctrl+M`) opens the same dialogue. **Export** sets
 the queue running; **Add to queue** leaves the item waiting for you to start it.
 
 When the file is already there, or the first frame of a sequence is, the dialogue asks
@@ -49,6 +50,11 @@ The footer states what pressing the button would produce — frames, length, siz
 an estimate of the file. When a setting is one the format cannot carry, the footer says so,
 and both buttons go quiet until it is fixed.
 
+An export that needs an addon the computer does not have is refused, and **Open addons**
+in the footer opens **Settings ▸ Addons**.
+
+The Composition section names any 3D model in the composition that cannot be read.
+
 ## Presets
 
 A **preset** fills in every section at once.
@@ -62,13 +68,21 @@ A **preset** fills in every section at once.
 | **Vertical 1080×1920p60** | H.264 for shorts and reels. |
 
 Those five ship with Lumit and cannot be changed. **Save as…** stores the settings in
-force under a name of your own. The three dots beside it hold **Edit…**, which renames the
-one showing, **Set as default**, and **Delete**. Edit and Delete grey for a shipped preset.
-Your presets live with the application rather than with the project.
+force under a name of your own. The three dots beside it hold **Edit…**, **Set as default**
+and **Delete**. **Edit…** opens the preset's name with **Save**, **Delete** and **Cancel**:
+**Save** stores the settings in force under the name typed, over a preset of that name.
+Edit and Delete grey for a shipped preset, and a shipped preset's name is refused. A
+right-click on the preset has the same rows and **Save as…**. Your presets live with the
+application rather than with the project.
+
+A preset does not hold the span, **Use region of interest**, where to write, the metadata
+or **When done**.
 
 **Set as default** remembers the preset and format showing as what the dialogue opens on
 next time. Where exports are written lives in **Edit ▸ Settings ▸ Export**: ask each time,
-beside the project, or always the same folder, with a filename template.
+beside the project, or always the same folder, with a filename template. The template
+takes `{comp}`, `{preset}` and `{date}`. Beside the project asks each time until the
+project has been saved.
 
 ## What each format can hold
 
@@ -84,6 +98,7 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | **GIF (.gif)** | Yes | No | Yes | 8 bit | No | None stated | No |
 | **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
+| **OpenEXR sequence** | Yes | No | Yes | 16 or 32 bit float | No | None stated | No |
 | **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
 | **WAV** | No | Yes | — | 16 or 24 bit | No | — | Yes |
 
@@ -97,59 +112,137 @@ A GIF holds 256 colours. Three rows in **Picture** apply to a GIF and nothing el
 - **Dither**: **Diffusion**, **Pattern** or **None**. Pattern holds still from frame to frame.
 - **Palette**: **Shared** is one set of colours for the whole GIF. **Per frame** gives each
   frame its own.
-- **Plays**: **Forever**, or a number of times.
+- **Plays**: **Forever**, or a number of times from 1 to 1000.
 
 A pixel under half alpha is clear and the rest are solid. **Alpha** is always **Straight**.
 
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
-has no container to carry metadata, so that section is disabled.
+has no container to carry metadata, so that section is disabled. A still is an image
+sequence with a span of one frame.
+
+An OpenEXR sequence is written scene-linear, with no colour transform and nothing clipped.
+
+Video is encoded by the graphics card where it has an encoder: NVENC, AMD AMF, Intel
+Quick Sync, or VAAPI on Linux. Otherwise it is encoded in software.
+
+## What each row does
+
+### Output
+
+- **Type**: **Video**, **Image sequence** or **Audio only**.
+- **Format**: the formats of that type.
+- **Write to**: the file, chosen with **Browse…**. A change of format changes its
+  extension. A right-click on the file has **Copy path**, **Browse…** and **Show in
+  folder**.
+- **When done**: **Make a noise** plays a sound, and **Open folder** opens the folder the
+  file was written to.
+
+### Composition
+
+| Row | What it sets |
+| --- | --- |
+| **Quality** | The resolution the composition is rendered at: *Full*, *Half*, *Third* or *Quarter*. |
+| **Resolution** | The size of the file: the composition's own, or a half, a third or a quarter of it. |
+| **Effects** | *Current settings*, or *All off*, which exports every layer without its effects. |
+| **Solo switches** | *Current settings*, or *All off*, which exports as if nothing were soloed. |
+| **Proxies** | *Use no proxies*, or *Use all proxies*. See [Proxies](/use/proxies/). |
+| **Guide layers** | *All off*, or *Current settings*, which writes the [guide layers](/use/layers/#guide-layers) too. |
+| **Disk cache** | *Off*, or *Read only*, which reads frames already on disk and stores none. |
+| **Colour depth** | The same setting as **Depth** in Picture. |
+
+An audio-only export takes none of these.
+
+### Time
+
+- **Span**: the work area, the whole composition, or *Custom*, which shows **Frames** for
+  the first and last frame.
+- **Frame rate**: the composition's, or *Custom*, from 1 to 240.
+- **Motion blur**: *Current settings*, *On for checked layers* or *Off for all layers*.
+- **Retime blend**: *Current settings* or *Off for all layers*.
+
+**Motion blur** and **Retime blend** are overrides on the export's own copy of the
+composition. Under the rows, **Start**, **End** and **Duration** read the span as timecode.
+
+### Picture
+
+| Row | What it sets |
+| --- | --- |
+| **Channels** | *RGB*, or *RGB + alpha*. |
+| **Alpha** | *Premultiplied* or *Straight*, where alpha is written. |
+| **Depth** | The bits in each channel. |
+| **Bit rate** | **Auto** works one out from the size and the rate. Unticked, it takes a number up to 400 Mb/s. |
+| **Resize** | A size in pixels, from 16 to 16384 each way. The picture is fitted whole inside it and centred on black. |
+| **Lock aspect** | Changes the other side with the one typed. |
+| *Fast*, *High* | The resampler a resized picture goes through. |
+| **Crop** | Pixels taken off the top, left, bottom and right, at the composition's size. *Cropped to* under the row reads the size that is left, and *Final* the size of the file. |
+| **Use region of interest** | Crops to the Viewer's region of interest. |
+
+### Audio
+
+**Sound** is *Auto*, which writes the composition's sound, or *Off*.
+
+The sound written is the composition's mix after the
+[Master strip](/panels/audio/#the-master-strip): the master volume, then the limiter at
+−0.3 dBFS.
+
+### Metadata
+
+**Title**, **Author**, **Copyright**, **Comment** and **Created** are written where they
+are filled in. **Add field** adds a field with a name of its own, and **Remove** takes one
+off. A field with no name or no value is not written.
 
 ## Audio only
 
 The third chip on the Output row writes sound and no picture — the composition's finished
 mix as an M4A or a WAV. The Audio section sets the sample rate (44.1, 48 or 96 kHz), the
 width (16 bit, or 24 for the uncompressed forms) and the layout (stereo, or folded down
-to mono).
+to mono). An AAC bit rate is 128, 192, 256 or 320 kb/s.
 
 ## Colour space
 
 The Colour section names the space the file is written and tagged in: sRGB / Rec. 709,
-Linear, Rec. 709, Rec. 2020 or Display P3.
+Linear, Rec. 709, Rec. 2020 or Display P3. An image sequence is offered sRGB / Rec. 709
+only.
 
 Where the project names a colour configuration, that configuration's own output spaces
 appear under a heading of their own. A file written through one of those is left
 **untagged**. A space the configuration cannot use is listed and disabled, with the reason on hover.
 
-## The render settings
+## Missing footage
 
-Two rows in the Composition group decide what the export reads:
+In a [shared project](/use/projects/#shared-projects), the dialogue shows **Missing
+footage** when the composition uses footage the computer has no original of. See
+[Exporting without the originals](/use/projects/#exporting-without-the-originals).
 
-- **Proxies** — *Use no proxies*. See [Proxies](/use/proxies/).
-- **Guide layers** — *All off*.
-
-**Motion blur** and **Retime blend** in the Time section are overrides on the export's own
-copy of the composition. Motion blur offers **Current settings**, **On for checked layers**
-or **Off for all layers**; Retime blend offers **Current settings** or **Off for all
-layers**.
+While footage is fetched, or someone else's computer exports, the footer says how far it
+has got, and **Cancel** stops waiting. An export asked of someone who declines, or who is
+missing footage too, does not run.
 
 ## The queue
 
 <Shot file="export-queue.png" caption="The export queue, with one composition waiting."/>
 
 Both buttons put the item in the queue, and the queue window opens on top. **Window ▸
-Export queue** reopens it later.
+Export queue…** (`Ctrl+Alt+0`) reopens it later.
 
 One export runs at a time and the rest wait. Each row says which composition it came
 from, its preset or format, the file it writes, and how it is getting on: *Waiting*, a
 bar with how much is done and about how long is left, *Done* with how long it took and the
-file's size, or the failure.
+file's size, or the failure. Pointing at the bar names the encoder, and pointing at a
+failure shows the whole of it. The footer counts the rows waiting and done.
 
+- **Start** sets the waiting rows running.
+- **Add compositions…** queues several compositions at once. See
+  [Add several compositions](#add-several-compositions).
 - **Drag a waiting row** to move it up or down. A row that is running, has run, or has
   failed cannot be picked up.
-- **The × on a row** cancels it while it is writing.
+- **The cog on a waiting or failed row** opens its settings in the export dialogue, where
+  **Save** keeps the changes. It shows while the pointer is on the row.
+- **The × on a row** cancels it while it is writing, and removes it otherwise.
 - **Click a finished row** to open the folder its file was written to.
 - **Right-click a row** for **Show in folder**, **Settings…**, **Duplicate**, **Queue again**,
-  **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it. On a
+  **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it. **Duplicate**
+  writes to a file of its own, and **Queue again** writes over the row's file. On a
   failed row, **Settings…** queues it again with the changes. On the running row,
   **Stop after this one** lets that export finish and starts nothing after it.
 - **Right-click around the rows**, or the count under them, for **Start**, **Stop after
@@ -157,7 +250,27 @@ file's size, or the failure.
   **Remove finished**.
 
 An item's settings are captured the moment it is queued, so working on the project 
-afterwards does not impact the export.
+afterwards does not impact the export. The queue is not saved with the project.
+
+A paired phone can follow the queue and start it. See [Devices](/use/profiles/#devices).
+
+## Add several compositions
+
+**Add compositions…** in the export queue opens a list with one row, for the composition
+in front.
+
+- **+** under the list adds a row for another composition, on the preset of the row above.
+- Each row has a **Composition** and a **Preset**, and reads the **File** it writes. The ×
+  takes a row off, and the last row stays.
+- **Write to** is one folder for every file, chosen with **Browse…**. It starts as the
+  folder set in **Edit ▸ Settings ▸ Export**.
+- A file takes its name from the filename template, or from its composition where the
+  template is empty.
+- **Add to queue** queues every row, and **Export** also starts the queue.
+
+Files that are already there are asked about once for all of them. Two rows that would
+write the same file are given different names. A composition that cannot be queued stays
+in the list, and the footer names it.
 
 ## Export does not block
 
@@ -165,13 +278,24 @@ You can carry on editing while an export writes. The status strip at the bottom 
 window says which frame it is on and about how long is left, and has a Cancel. When the
 export is done, click the file's path on the strip to open its folder.
 
+Closing Lumit while an export is writing asks **Stop the export and quit?**. **Quit** stops
+the export.
+
+## In the browser
+
+The browser version of Lumit offers the formats the browser has an encoder for. **VP9 video
+(.webm)** and **AV1 video (.webm)** are offered there and nowhere else. There is no
+**Browse…**: the browser asks where to save as the export starts.
+
 :::note[Not built yet]
-DNxHR, and an export priority control. The **Managed by**
-row reads back the configuration the project names and cannot be set from here.
+DNxHR, and an export priority control. The **Managed by** row reads back the configuration
+the project names, or *No OCIO configuration*, and cannot be set from here.
 :::
 
 ## Related
 
 - [Preview and playback](/use/preview/)
 - [Compositions](/use/compositions/)
+- [Colour management](/use/colour-management/)
+- [Previews](/use/review-links/)
 - [Settings](/use/settings/)

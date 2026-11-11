@@ -6,9 +6,14 @@ sidebar:
 ---
 
 An **extension** is a folder with an `extension.json` in it. It can add a panel showing a
-web page, and [LFX effects](/make/lfx-effects/).
+web page, and effects: [LFX effects](/make/lfx-effects/) and
+[OFX plugins](/make/ofx-plugins/).
 
-The smallest extension with a panel is two files:
+## Your first extension
+
+Hello is a panel with one button. It is two files in a folder.
+
+`extension.json`:
 
 ```json
 {
@@ -20,6 +25,8 @@ The smallest extension with a panel is two files:
 }
 ```
 
+`index.html`:
+
 ```html
 <!doctype html>
 <button id="hello">Say hello</button>
@@ -29,8 +36,14 @@ The smallest extension with a panel is two files:
 </script>
 ```
 
-**Settings ▸ Addons ▸ Extensions ▸ Install from a folder** installs it, and **Window ▸
-Extensions ▸ Hello** opens its panel. The button puts **Hello: Hello** on the bottom strip.
+**1. Choose Settings ▸ Addons ▸ Extensions ▸ Install from a folder** and pick the folder.
+A window lists what the extension can do.
+
+**2. Press Install.**
+
+**3. Choose Window ▸ Extensions ▸ Hello.** Its panel opens.
+
+**4. Press Say hello.** The bottom strip reads **Hello: Hello**.
 
 ## The folder
 
@@ -61,16 +74,20 @@ my-extension/
 | --- | --- |
 | `format` | `1`. |
 | `id` | Lower-case letters, digits and hyphens, at most 64. The installed folder's name. |
-| `name`, `version` | Shown in Settings, the Window menu and the panel's tab. |
-| `summary`, `author`, `homepage` | Optional. Shown before installing. |
-| `requires` | Optional. The oldest Lumit it works with. An older Lumit refuses to install it. |
+| `name`, `version` | Shown in Settings, the Window menu and the panel's tab. At most 64 and 32 characters. |
+| `summary`, `author`, `homepage` | Optional. Shown before installing. At most 300, 64 and 200 characters. |
+| `requires` | Optional. The oldest Lumit it works with, such as `0.7.0`. An older Lumit refuses to install it. |
 | `entry` | The page the panel shows, as a path inside the folder. Optional when the extension carries effects. |
-| `effects` | Optional. The [LFX effects](/make/lfx-effects/#the-manifest) it carries. |
-| `permissions` | What the page may ask. See below. |
-| `hosts` | The sites the page, `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
+| `effects` | Optional. The [LFX effects](/make/lfx-effects/#the-manifest) and [OFX plugins](/make/ofx-plugins/#the-manifest) it carries, 64 at most. |
+| `permissions` | Optional. What the page may ask: any of `project`, `activity`, `export`, `import`, `share` and `edit`. See below. |
+| `hosts` | Optional. The sites the page, `net.fetch` and `app.openExternal` may reach, as bare names with a dot in them, 16 at most. A name covers the sites under it. |
 
-A manifest with a permission Lumit does not know, an `entry` outside the folder, or a host
-that is not a bare name is refused. A folder holds at most 4,096 files and 512 MB.
+An extension has an `entry`, `effects` or both. A manifest with another `format`, a
+permission Lumit does not know, an `entry` outside the folder, or a host that is not a bare
+name is refused. A field Lumit does not know is ignored.
+
+A folder holds at most 4,096 files and 512 MB, 16 folders deep, and `extension.json` is at
+most 1 MB. Links in the folder are not copied.
 
 ## The page
 
@@ -78,9 +95,12 @@ The page is served from `https://<id>.lumit.example/` on Windows and from
 `lumit-extension://<id>/` on macOS and Linux, so relative paths to its own scripts, styles
 and pictures work. Lumit gives it `window.lumit` before its own scripts run.
 
-The page loads its own files and `https` and `wss` addresses on `hosts`, and nothing else.
-Any other request is refused, whether it comes from `fetch`, a tag, a form or a worker. A
-WebRTC connection is not limited.
+The page loads its own files, `data:` and `blob:` addresses, and `https` and `wss`
+addresses on `hosts`, and nothing else. Any other request is refused, whether it comes from
+`fetch`, a tag, a form or a worker. A WebRTC connection is not limited.
+
+Each extension is served under its own name, so what one page stores no other can read.
+What a page stores stays when the extension is installed again or removed.
 
 ```js
 const info = await lumit.call("app.info");
@@ -99,26 +119,26 @@ On Linux the page is a picture while a dialogue is open.
 A page can be inspected when Lumit is started with the environment variable
 `LUMIT_EXTENSION_DEVTOOLS=1`: from Safari's **Develop** menu on macOS, from **Inspect
 Element** on the page's own menu on Linux, and on Windows from `edge://inspect` in Microsoft
-Edge, which finds it at `localhost:9222`. A port number in place of `1` is used instead of
-9222. The port takes connections from this computer only, and any program on it can use
-the page through it.
+Edge, which finds it at `localhost:9222`. A port number from 1024 to 65535 in place of `1`
+is used instead of 9222. The port takes connections from this computer only, and any
+program on it can use the page through it.
 
 ## Permissions and calls
 
 | Permission | Call | What it does |
 | --- | --- | --- |
-| none | `app.info` | The API version, Lumit's version, and the extension's id, version, permissions and hosts. |
+| none | `app.info` | `{api, lumit, extension, permissions, hosts}`: the API version, which is 1, Lumit's version, the extension's `{id, version}`, and its permissions and hosts. |
 | none | `app.notice {text}` | A line on the bottom strip, after the extension's name. |
-| none | `app.status {text}` | A line that stays on the bottom strip, after the extension's name, until `text` is `null`. One line of at most 80 characters, shown while Lumit has no notice there. It goes when the page loads again or leaves, or the panel closes. |
+| none | `app.status {text}` | A line that stays on the bottom strip, after the extension's name, until `text` is `null`. One line of at most 80 characters, shown while Lumit has no notice there, and changed at most four times a second. It goes when the page loads again or leaves, or the panel closes. |
 | none | `app.openExternal {url}` | Opens an `https` address on one of `hosts` in the browser. |
-| none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. |
+| none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. `method` is `GET` unless given, `headers` is an object of text, and `body` is text. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. A site that does not connect in 15 seconds or answer in 30 fails. |
 | `project` | `project.info` | `{open, name, id, saved, dirty}`. `name` is the file's name without its folder. `id` is the project's own and stays when the file is renamed or moved. A copy of the file has the same `id`. A guest's copy of a shared project, or of a project kept online, has an `id` of its own. |
 | `export` | `export.state` | `{state}` as `idle`, `running` with `frame` and `total`, `done` with `path`, or `failed` with `error`. |
-| `export` | `export.fingerprint` | `{path, bytes, sha256}` of the file the last export made. |
-| `import` | `import.files {paths}` | Imports the files into the open project. |
-| `import` | `import.watch {folder}` | Watches a folder and imports each new file once it has stopped growing. With no `folder` the person picks one. A `folder` is accepted only if the person picked it for this extension before. Answers `{folder}`. |
+| `export` | `export.fingerprint` | `{path, bytes, sha256}` of the file the last export made. Fails until an export has finished since the panel opened. |
+| `import` | `import.files {paths}` | Imports the files into the open project, and answers `{imported}`, how many. A path with no file there is left out. |
+| `import` | `import.watch {folder}` | Watches a folder and imports each new file once it has stopped growing. Files there already are not imported. With no `folder` the person picks one. A `folder` is accepted only if the person picked it for this extension before. Answers `{folder}`, `null` when the person picks none. One folder is watched at a time. |
 | `import` | `import.unwatch` | Stops watching. |
-| `share` | `share.state` | `{role, away, open, people}`. `role` is `none`, `host` or `guest`. |
+| `share` | `share.state` | `{role, away, open, people}`. `role` is `none`, `host` or `guest`. `away` is whether a guest has lost its host. `open` is whether someone on another network can join. `people` is a list of `{id, name, me}`. |
 | `share` | `share.link` | The invite link while this computer hosts, otherwise `null`. |
 | `share` | `share.start {relay}` | Opens the **Multi-edit** window on **Share this project**, with `relay` offered if given. |
 | `share` | `share.host {password}` | Asks the person whether the extension may share the open project, and shares it with the name, relay and **Internet** choice they last used. Answers a new invite link, or `null` when they say no, it cannot start, no project is open, or this computer is a guest. While this computer hosts, the link at once. `password` is optional. |
@@ -149,7 +169,10 @@ await lumit.call("edit.layer.add", { comp: comps[0].id, kind: "null", name: "Con
 
 `project.save`, `undo`, `redo`, `comp.open` and the `export.` commands are refused.
 `footage.import` also needs `import`. A path in an answer is the file's name only, and
-`project.info` answers no `path`.
+`project.info` answers no `path`. `comp.frame` renders nothing and fails, and `comp.active`
+answers no comp. A call made while a script runs fails.
+
+[What commands answer](/make/scripts/#what-commands-answer) lists each command's answer.
 
 ## Events
 

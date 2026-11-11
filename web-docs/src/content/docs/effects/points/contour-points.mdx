@@ -1,0 +1,75 @@
+---
+title: Contour points
+description: "Puts one point in the middle of each closed piece of a path."
+---
+
+Contour points is a **Points** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Makes a point on the centre of area of each closed piece of a path: one of the layer's
+masks, or every path of the Shape layer the effect is on. A Shape layer's paths are read
+after its combines, so two shapes cut one from the other give a point on each piece the
+cut leaves.
+
+Each point carries its piece's place in the path as its number.
+
+The points go out on the **Points** socket and are drawn as discs.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Follow** | Dropdown | Mask · Shape | Shape | - |
+| **Mask path** | Masks | This layer's masks | First mask | - |
+| **Size from area** | Checkbox | On or off | Off | - |
+| **Size** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
+| **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Mask path** is editable while **Follow** is anything but Shape.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Follow**: whose pieces are read. **Mask** is one of the layer's masks. **Shape** is the
+  paths of the Shape layer the effect is on.
+- **Mask path**: which of the layer's masks.
+- **Size from area**: each point is as big as a circle of its piece's area, instead of
+  **Size**.
+- **Size**: the diameter of the disc a point is drawn as.
+- **Feather**: how soft the disc's edge is.
+- **Colour**: the colour a point is drawn in.
+- **Mix**: how much of the drawing lands on the picture. At nought the points are still
+  handed on.
+- **Blend**: the blend mode the drawing is laid over the picture with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Points along path](/effects/points/points-along-path/)
+- [Intersection points](/effects/points/intersection-points/)
+- [Clone to points](/effects/points/clone-to-points/)
+- [Shapes](/use/shapes/)
+- [Masks](/use/masks/)
+- [Points](/effects/#points)
+- [Effects](/use/effects/)

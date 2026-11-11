@@ -5,11 +5,11 @@ description: "Makes one point for each character, word or line of a Text layer."
 
 import Compare from "../../../../components/Compare.astro";
 
-Text to points is a **Generate** effect.
+Text to points is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Text to points" category="generate" slug="text-to-points" />
+<Compare label="Text to points" category="points" slug="text-to-points" />
 
 {/* END GENERATED */}
 
@@ -24,15 +24,15 @@ it turns to face the way the path runs.
 
 Every point carries four names as well. `character`, `word` and `line` are the counts of
 the character, word and line its piece starts with, and `width` is the width of its piece
-in pixels at composition size. See [Names](/effects/generate/vary-points/#names).
+in pixels at composition size. See [Names](/effects/points/vary-points/#names).
 
 The points effects below it in the same layer's stack can read its points.
 [Points sample](/effects/drivers/points-sample/) cannot, and neither can
 [Layer points](/effects/drivers/layer-points/) from another layer. A
-[Bake points](/effects/generate/bake-points/) below it makes its points readable by both.
+[Bake points](/effects/points/bake-points/) below it makes its points readable by both.
 
 On the Text layer itself its points are cut at the text's box unless it is at the end of the
-stack. See [Points along path](/effects/generate/points-along-path/).
+stack. See [Points along path](/effects/points/points-along-path/).
 
 ## Parameters
 
@@ -84,15 +84,17 @@ In the Effect Controls panel:
 - **Colour**: what the discs are drawn in.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
 - [Text](/use/text/)
-- [Label points](/effects/generate/label-points/)
-- [Clone to points](/effects/generate/clone-to-points/)
-- [Connect points](/effects/generate/connect-points/)
+- [Label points](/effects/points/label-points/)
+- [Clone to points](/effects/points/clone-to-points/)
+- [Connect points](/effects/points/connect-points/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

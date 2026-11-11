@@ -5,11 +5,11 @@ description: "Joins up to four streams of points into one."
 
 import Compare from "../../../../components/Compare.astro";
 
-Merge points is a **Generate** effect.
+Merge points is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Merge points" category="generate" slug="merge-points" />
+<Compare label="Merge points" category="points" slug="merge-points" />
 
 {/* END GENERATED */}
 
@@ -23,13 +23,13 @@ Added below two producers, it is wired to the nearest on Points and the next one
 Points B. A producer whose points already reach it through the first is skipped.
 
 The points are drawn as discs. No two share an identity, and a
-[Trail](/effects/generate/trail/) below still follows each of them. The merged stream holds
+[Trail](/effects/points/trail/) below still follows each of them. The merged stream holds
 at most 1,000,000 points, and past that the newest are kept.
 
 Every point carries the socket it came in on under the name `source`, 0 for Points to 3
 for Points D, whatever the two rows below say. An input that carries a `source` already
 keeps its own apart, and each input's count on from the one before. See
-[Names](/effects/generate/vary-points/#names).
+[Names](/effects/points/vary-points/#names).
 
 A name the inputs hold as different kinds, a number on one and a colour on another, is
 dropped from the merged stream.
@@ -67,14 +67,16 @@ In the Effect Controls panel:
 - **Feather**: how soft the edge of a drawn disc is.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   handed on.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
-- [Pick points](/effects/generate/pick-points/)
-- [Transform points](/effects/generate/transform-points/)
-- [Clone to points](/effects/generate/clone-to-points/)
+- [Pick points](/effects/points/pick-points/)
+- [Transform points](/effects/points/transform-points/)
+- [Clone to points](/effects/points/clone-to-points/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

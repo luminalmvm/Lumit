@@ -17,6 +17,33 @@ the top layer composites over everything below it.
   them all at the start.
 - Or choose **Layer ▸ New** and pick the type of layer you need.
 
+A layer made from the **Layer** menu lands directly above the selected layer, above the
+topmost of several, or at the top of the stack with nothing selected. It runs the length
+of the composition and arrives selected.
+
+| Layer ▸ New | Shortcut | Makes |
+| --- | --- | --- |
+| **Solid…** | `Ctrl+Y` | Opens **New solid** for a name, a size and a colour, then makes the solid. It starts at the composition's size and on the colour of the last solid made. Its item is filed in the project's **Solids** folder. |
+| **Text** | `Ctrl+Alt+Shift+T` | A [text layer](/use/text/) in the middle of the composition, open for typing. |
+| **Camera** | `Ctrl+Alt+Shift+C` | A [camera](/use/camera/). |
+| **Light…** | `Ctrl+Alt+Shift+L` | Opens **Light settings**, then makes the [light](#light-layers). |
+| **3D shape ▸** | | A [3D shape](#3d-shapes): **Cube**, **Sphere**, **Cylinder**, **Cone**, **Torus**, **Plane** or **Pyramid**. |
+| **Adjustment** | `Ctrl+Alt+Y` | An [adjustment layer](#adjustment). |
+| **Null** | `Ctrl+Alt+Shift+Y` | A null layer at the middle of the composition. |
+| **Card** | | A flat [Model layer](/use/importing/#3d-models) with no file, filling the camera's frame at the playhead. |
+| **Sequence** | `Ctrl+Alt+Shift+S` | An empty [Sequence layer](/use/sequence-layers/). |
+| **Audio** | `Ctrl+Alt+Shift+A` | An empty [Audio layer](/use/audio/). With nothing selected it goes to the bottom of the stack. |
+
+In a composition that holds clips, the submenu also carries **Insert title** and **Insert
+solid**. See [Cutting](/use/cutting/).
+
+**New layer** on the Timeline's [right-click menu](/panels/timeline/#right-click-menus)
+holds **Solid…**, **Text**, **Camera**, **Light…**, **Adjustment**, **Null** and
+**Sequence**.
+
+While a layer is soloed, a new layer that draws arrives soloed. A new Audio layer arrives
+soloed while another Audio layer is.
+
 ## The layer kinds
 
 | Kind | What it is |
@@ -30,9 +57,21 @@ the top layer composites over everything below it.
 | **Adjustment layer** | A comp-sized layer with nothing of its own to show, born with the adjustment switch on. |
 | **Null layer** | Invisible and transform-only. Used to drive other layers. |
 | **[Camera layer](/use/camera/)** | A 3D viewpoint. Affects layers with the 3D switch on. |
-| **Light layer** | A source of light: **Point**, **Spot** or **Area**. Shades layers with Accepts lights on. |
-| **[3D shape](#3d-shapes)** | A cube, sphere, cylinder, cone, torus, plane or pyramid, drawn in the comp's 3D space. |
+| **[Light layer](#light-layers)** | A source of light: **Point**, **Spot**, **Area**, **Parallel**, **Ambient** or **Environment**. Shades layers with Accepts lights on. |
+| **[Model layer](/use/importing/#3d-models)** | A 3D model, or a Card, drawn in the comp's 3D space. Always 3D. |
+| **[3D shape](#3d-shapes)** | A cube, sphere, cylinder, cone, torus, plane or pyramid, drawn in the comp's 3D space. Always 3D. |
 | **[Audio layer](/use/audio/)** | Sound with no picture. Made by placing an audio file, or by **Add audio only** on an item that has a picture too. |
+| **Bus layer** | Sound routed to it from other layers. Made by **Insert bus** on the ground of the Audio timeline or the Mixer. |
+
+## Layer settings
+
+**Layer ▸ Layer settings…** (`Ctrl+Shift+Y`) opens on the selected layer's **Name**. On a
+Solid layer it also holds **Solid size**, from 1 to 16384 pixels each way, and **Solid
+colour**. The solid's item in the Project panel takes the same name.
+
+On a Camera, a Light or a Model layer the command opens that layer's own window:
+[Camera settings](/use/camera/#camera-settings), [Light settings](#light-layers) or
+[Model settings](/use/importing/#3d-models).
 
 ## Order and selection
 
@@ -47,13 +86,18 @@ selects it everywhere.
 | `Ctrl+]` and `Ctrl+[` | Move the selected layers one place up or down the stack. |
 | `Ctrl+Shift+]` and `Ctrl+Shift+[` | Move them to the top or the bottom. |
 | `Ctrl+Up` and `Ctrl+Down` | Select the layer above or below. |
+| `Ctrl+A` and `Ctrl+Shift+A` | Select every layer, and deselect everything. |
 | `Alt+Page Up` and `Alt+Page Down` | Move the selected layers a frame earlier or later. With `Shift`, ten frames. |
 
-The first two are also under **Layer ▸ Arrange**.
+The first two are also under **Layer ▸ Arrange**, as **Bring forward**, **Send backward**,
+**Bring to front** and **Send to back**. Several layers moved together keep their order. A
+locked layer stays where it is.
 
 Double-click a layer's name in the Timeline to rename it. On a Precomp layer the
 double-click opens its composition, and on a [Sequence layer](/use/sequence-layers/) its
 clips. `Enter` renames either.
+
+A layer's bar is moved and trimmed in the [Timeline](/panels/timeline/#the-lanes).
 
 ## Stagger
 
@@ -99,7 +143,7 @@ masks, paint, effects, switches, markers, and retime values.
 
 **Edit ▸ Duplicate** (`Ctrl+D`) duplicates every selected layer.
 
-**Layer ▸ Split layer** (`Ctrl+Shift+D`) splits every selected layer at the playhead. A
+**Edit ▸ Split layer** (`Ctrl+Shift+D`) splits every selected layer at the playhead. A
 Sequence layer gains an edit point there, and any other layer becomes two.
 
 By default a pasted layer starts at the playhead. To paste at the time it was copied from
@@ -112,35 +156,37 @@ composition still contains that layer.
 Right-click a layer's row in the Timeline outline, its bar or its row in the Hierarchy for the
 row menu. A layer
 outside the selection is selected first. Its commands act on every selected layer and grey
-out on locked ones. Each row shows its shortcut where it has one.
+out on locked ones. Each row shows its shortcut where it has one. A row that could never
+apply to the layer is left out.
 
 | Item | Does |
 | --- | --- |
 | **Open** | Fronts the composition a Precomp layer draws. |
 | **Rename**, **Layer settings…** | Renames the layer in place; opens its settings. |
-| **Expand**, **Expand all**, **Collapse all** | In the Hierarchy: opens or shuts Precomp layers in the tree. |
+| **Expand** or **Collapse** | In the Hierarchy: opens or shuts a Precomp layer in the tree. |
 | **Effect ▸** | The Effect menu, onto the layer. |
-| **Audio ▸** | **Detach audio** moves the layer's sound onto an Audio layer directly below it and mutes the layer. **Keep pitch** holds the pitch of retimed sound. On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, **Split audio streams** and **Merge audio streams**. |
-| **Retime ▸** | **Enable Retime** or **Disable Retime**, **Stretch…** and **Freeze frame at playhead**. See [Retime](/use/retime/). Not on Sequence layers. |
+| **Layer styles ▸** | Adds a [layer style](/use/layer-styles/). |
+| **Audio ▸** | **Mute**. **Detach audio** moves the layer's sound onto an Audio layer directly below it and mutes the layer. **Keep pitch** holds the pitch of retimed sound. **Detect beats**. On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, **Split audio streams** and **Merge audio streams**. |
+| **Retime ▸** | **Enable Retime** or **Disable Retime**, **Stretch…**, **Freeze frame** and **Reverse**. See [Retime](/use/retime/). Not on Sequence layers. |
 | **Markers ▸** | **Add at playhead** and **Delete all markers**. |
+| **Animate text ▸** | On a text layer. See [Text](/use/text/#animators). |
+| **Replace source ▸** | See [Replace a layer's source](#replace-a-layers-source). |
 | **Create ▸** | Shapes or points from a text layer, shapes from a vector file, one layer per shape. On the layers that have something to make. |
-| **Convert to sequence layer**, **Convert to footage layer** | Turns a Footage layer into a [Sequence layer](/use/sequence-layers/), and back. A Sequence layer of several clips refuses. |
+| **Convert to sequence layer**, **Convert to footage layer** | Turns a Footage layer into a [Sequence layer](/use/sequence-layers/), and back. A retimed Footage layer and a Sequence layer of several clips are **refused**. |
 | **Copy sequence shape**, **Paste sequence shape** | On Sequence layers. See [Sequence layers](/use/sequence-layers/). |
 | **Cut**, **Copy**, **Paste**, **Duplicate**, **Split layer** | The Edit menu's commands. |
 | **Trim to work area** | Pulls the layers' ends in to the work area. |
+| **Transform ▸** | The [Layer ▸ Transform](/use/transform/#the-layer-menu) rows. |
 | **Arrange ▸** | **Bring to front**, **Bring forward**, **Send backward** and **Send to back**. |
 | **Parent ▸**, **Blending mode ▸**, **Matte ▸** | The layer's parent, blend mode and matte, ticked at the one in force. |
 | **Label colour…** | The label colour picker. |
-| **Hidden**, **Lock** | The visibility and lock switches. |
-| **Switches ▸** | **Solo**, **Shy**, **Guide**, **3D layer**, **Accepts lights** and **Flow**. |
-| **Select similar ▸** | Selects every layer of the same kind, or with the same label colour. |
+| **Switches ▸** | **Hidden**, **Lock**, **Solo**, **Shy**, **Guide**, **3D layer**, **Accepts lights** and **Flow**. |
+| **Select similar ▸** | **Same kind** or **Same label colour**: selects every such layer. |
 | **Group layers** or **Ungroup** | Folds the selected layers under a group header, or takes them out of their group. |
 | **Precompose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
 | **Stagger layers…** | See [Stagger](#stagger). With several layers selected. |
 | **Reveal in Project panel** | Selects the layer's footage or composition in the Project panel. |
 | **Delete** | Deletes the layers. |
-
-The same menu opens on a layer's bar.
 
 ## Label colours
 
@@ -152,14 +198,15 @@ Each new layer starts on its kind's colour:
 
 | Kind | Colour |
 | --- | --- |
-| Footage and Audio | Azure |
-| Solid | Amber |
+| Footage, Audio and Light | Azure |
+| Solid, Model and 3D shape | Amber |
 | Precomp | Violet |
 | Text | Mint |
 | Camera | Teal |
 | Sequence | Indigo |
 | Adjustment | Magenta |
 | Null | Coral |
+| Shape | Grey |
 
 ## Switches
 
@@ -174,14 +221,30 @@ disable effects, motion blur, 3D, and adjustment.
 The columns open on visibility, mute, solo and lock, and on disable effects, 3D and motion
 blur. Drag a column's seam wider to show the rest.
 
-`Ctrl+L` locks or unlocks the selected layers, and `Ctrl+Shift+L` unlocks every layer. A
-locked layer refuses every edit except its lock, shy switch and label colour. It cannot be
-clicked in the Viewer; the click goes to the layer behind it.
+| Switch | Does |
+| --- | --- |
+| **Visible** | Draws the layer. On a Camera layer it decides which camera is [active](/use/camera/#the-active-camera). With the Timeline active, `X` sets it on the selected layers. |
+| **Audible** | Plays the layer's sound. |
+| **Solo** | While a layer that draws is soloed, only the soloed layers draw. Sound is soloed apart from the picture. Camera, Light and Null layers work whatever is soloed. |
+| **Lock** | Refuses every edit to the layer except its lock, its shy switch and its label colour. |
+| **Shy** | Hides the row while the Timeline's shy filter is on. The picture is not changed. |
+| **Guide** | See [Guide layers](#guide-layers). |
+| **Disable effects** | Off, the layer's whole effect stack is bypassed. |
+| **3D** | Places the layer in depth. See [Cameras and 3D](/use/camera/#3d-layers). |
+| **Motion blur** | See [Motion blur](#motion-blur). |
+| **Adjustment** | See [Adjustment](#adjustment). |
+| **Flow** | Footage and Precomp layers. See [Retime](/use/retime/#frames-in-between). |
+| **Collapse** | Precomp layers. See [Collapse transformations](#collapse-transformations). |
+
+`Ctrl+L` locks or unlocks the selected layers, and `Ctrl+Shift+L` unlocks every layer.
+Both are in the **Layer** menu, as **Lock** and **Unlock all layers**. A locked layer
+cannot be clicked in the Viewer; the click goes to the layer behind it.
 
 A row shows only the switches its layer can use. An [Audio layer](/use/audio/) has no
-visibility switch, and a layer that can never be heard has no mute switch. A layer with
-sound and no picture has no box in the Viewer and cannot be picked there. Guide is drawn
-on every row.
+visibility switch, and a layer that can never be heard has no mute switch. A layer with no
+effects has no disable effects switch. Camera, Light and Model layers and 3D shapes have no
+3D switch. A layer with sound and no picture has no box in the Viewer and cannot be picked
+there. Guide is drawn on every row.
 
 - Click a switch on a selected layer and every selected layer takes the same state.
 - Press a switch and drag up or down its column, and every row the pointer crosses takes
@@ -190,11 +253,36 @@ on every row.
 
 A switch that is off is drawn dimmer than one that is on.
 
-The **motion blur switch** blurs a layer from its own animated transform. The Motion blur
-effect is different, see [Effects](/use/effects/).
+## Motion blur
 
-A blurred layer is drawn at more moments the faster it moves, its parents and the camera
-included, from **Samples** up to the count after **to** in **Composition settings**.
+The **motion blur switch** blurs a layer from its own animated transform. It acts while the
+composition's master motion blur is on, which is the motion blur mark on the
+[Timeline's](/panels/timeline/) bar.
+
+The shutter is the composition's: **Shutter angle** and **Samples**, in
+[Composition settings](/use/compositions/#the-settings). A blurred layer is drawn at more
+moments the faster it moves, its parents and the camera included, from **Samples** up to
+the count after **to**.
+
+The Motion blur effect is different, see
+[Effects](/use/effects/#the-three-kinds-of-motion-blur).
+
+## Collapse transformations
+
+**Collapse** is a switch on a Precomp layer. On, the layers of the nested composition are
+drawn straight into this one with the Precomp layer's transform applied to each. The nested
+composition is not drawn to a picture of its own first, and its layers are not cut off at
+its edges.
+
+The switch does nothing, and the layer draws as an ordinary Precomp layer, while any of
+these holds:
+
+- The Precomp layer has a mask, a paint stroke, an enabled effect, Flow on, a blend mode
+  other than Normal, or an opacity under 100%.
+- Another layer uses it as a [matte](/use/mattes/).
+- A visible layer in the nested composition uses a matte, is an adjustment layer with an
+  enabled effect, or carries [Smoke and fire](/effects/generate/smoke-and-fire/).
+- The nested composition is a [node graph](/use/node-graphs/).
 
 ## Adjustment
 
@@ -216,6 +304,16 @@ on their rows.
 Guide beats solo. A locked layer refuses the guide switch.
 
 The export dialogue can be told to write guide layers anyway.
+
+## Groups and precomposing
+
+A **layer group** folds a run of layers under one header row in the Timeline. **Layer ▸
+Group layers** (`Ctrl+G`) makes one from the selected layers, and **Layer ▸ Ungroup**
+(`Ctrl+Shift+G`) removes it. See [Layer groups](/use/layer-groups/).
+
+**Layer ▸ Precompose…** (`Ctrl+Shift+C`) moves the selected layers into a new composition
+and leaves a Precomp layer in their place. See
+[Compositions](/use/compositions/#nest-one-composition-in-another).
 
 ## Light layers
 
@@ -297,8 +395,8 @@ The 3D layers and models in a collapsed precomp take the lights of the compositi
   **Only** or a darker Solid.
 - **Light transmission**, while it casts: how much of the light passing through the layer
   takes its colour rather than stopping.
-- **Holdout**, on a Model layer: draws what is under its run of 3D layers in its place, with
-  any shadows it takes, hiding what is behind it.
+- **Holdout**, on a Model layer or a 3D shape: draws what is under its run of 3D layers in
+  its place, with any shadows it takes, hiding what is behind it.
 - **Accepts lights**: whether the lights shade it. Shadows still fall on it when this is off.
 - **Ambient**: how much of the ambient lights it takes.
 - **Diffuse**: how much of the other lights it takes.
@@ -309,6 +407,9 @@ The 3D layers and models in a collapsed precomp take the lights of the compositi
   as **Specular shininess**. At the default shininess a full reflection is nearly matte.
 
 Under an environment light, **Ambient** is how much of its light the layer takes.
+
+A Null layer has no Material options. A Model layer and a 3D shape have the four choice
+rows, and their materials in place of the percentages.
 
 A layer in a project saved before materials existed has no highlight until its **Specular
 intensity** is raised.
@@ -337,7 +438,7 @@ Its **Geometry options** are its size, in pixels, and key like any row:
 | Cube | **Width**, **Height**, **Depth**, **Bevel**, **Bevel segments** |
 | Sphere | **Radius**, **Segments**, **Slice start**, **Slice end** |
 | Cylinder | **Radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
-| Cone | **Top radius**, **Bottom radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
+| Cone, Pyramid | **Top radius**, **Bottom radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
 | Torus | **Radius**, **Pipe radius**, **Segments**, **Pipe segments**, **Slice start**, **Slice end** |
 | Plane | **Width**, **Height**, **Corner radius**, **Corner segments** |
 
@@ -351,11 +452,51 @@ parametric mesh imported from After Effects becomes a 3D shape.
 Parent a layer to another and it inherits the parent's transform and can apply its own
 on top of them. Cameras and lights follow their parents too. A two-node camera's point of
 interest is read in the parent's space, as its position is. A parent's scale moves a camera
-or a light but never stretches or mirrors it.
+or a light but never stretches or mirrors it. See
+[Transforming layers](/use/transform/#parenting).
+
+## The Layer menu
+
+| Row | Does |
+| --- | --- |
+| **New ▸** | [Adds a layer](#add-a-layer). |
+| **Layer settings…** | [Name, and a solid's size and colour](#layer-settings). |
+| **Mask ▸** | The mode, **Inverted**, **Feather…** and **Opacity…** of the [masks](/use/masks/#the-layer-menu) whose rows are selected. |
+| **Mask and shape path ▸** | **Add or remove keyframe at playhead** and **Closed**, on the selected mask or shape path. |
+| **Expand all copies ▸** | On a shape layer with a repeater. See [Shapes](/use/shapes/#expand-copies). |
+| **Transform ▸** | **Reset**, the flips, the centring, fitting and Orient rows, and the [axis rows](/use/transform/#the-layer-menu). |
+| **Replace source ▸** | [Points the layers at another item](#replace-a-layers-source). |
+| **Audio ▸** | **Detach audio** puts the layer's sound on a layer of its own directly below and mutes this one. **Split audio streams** and **Merge audio streams** are on [Audio](/use/audio/#audio-streams). **Normalise** brings every selected layer to **Normalise to** in [Settings](/use/settings/#audio). |
+| **Retime ▸** | **Enable Retime** or **Disable Retime** (`Ctrl+Alt+T`), **Reverse**, **Freeze frame** (`Ctrl+Shift+R`) and **Ramp…** (`Ctrl+Alt+R`). See [Retime](/use/retime/). The first is greyed on a Sequence layer. |
+| **Convert to sequence layer**, **Convert to footage layer** | Turns a Footage layer into a [Sequence layer](/use/sequence-layers/) holding it as one clip, and back. A retimed Footage layer and a Sequence layer of several clips are **refused**. |
+| **Flow** | The [Flow](/use/retime/#frames-in-between) switch of a Footage or Precomp layer. |
+| **3D layer** | The [3D switch](/use/camera/#3d-layers). |
+| **Lock**, **Unlock all layers** | The [lock switch](#switches). |
+| **Arrange ▸** | [Moves layers in the stack](#order-and-selection). |
+| **Stagger layers…** | Opens the [Stagger](#stagger) panel. |
+| **Markers ▸** | **Add at playhead** puts a [marker](/use/markers/) on each selected layer, in place of one already on that frame. **Delete all markers** clears them. |
+| **Blending mode ▸** | The [blend mode](/use/blend-modes/), with **Next blending mode** and **Previous blending mode** at its foot. |
+| **Matte ▸** | Gates the layer by [another layer](/use/mattes/#the-layer-menu). |
+| **Layer styles ▸** | Adds a [layer style](/use/layer-styles/). |
+| **Reveal ▸** | The Timeline's [reveal keys](/panels/timeline/#reveal-keys) as commands, with **Expand all** and **Collapse all**. |
+| **Create ▸** | **Shapes from text**, **Shapes from vector layer**, **Split into shape layers** and **Points from text**. See [Text](/use/text/#convert-it) and [Shapes](/use/shapes/). |
+| **3D ▸** | **Camera settings**, **Light settings** and **Model settings** for the selected layer of that kind, then **Project from camera**, **Edit in 3D app** and **Create cameras and lights**, on a [Model layer](/use/importing/#3d-models). |
+| **Precompose…** | [Precompose](#groups-and-precomposing). |
+| **New composition from selection** | In a composition that holds clips. See [Cutting](/use/cutting/#clips-as-compositions). |
+| **Group layers**, **Ungroup** | [Layer groups](/use/layer-groups/). |
+
+A row is greyed while the selection holds nothing it can act on. **Layer settings…**,
+**Detach audio**, the two stream rows, **Enable Retime**, the Convert row, **Create** and
+the three settings rows under **3D** act on one layer. Every other row acts on each
+selected layer that can take it, as one undo step.
 
 ## Related
 
 - [Transforming layers](/use/transform/)
 - [Keyframes](/use/keyframes/)
 - [Masks](/use/masks/) and [Mattes](/use/mattes/)
+- [Layer groups](/use/layer-groups/)
+- [Layer styles](/use/layer-styles/)
+- [Puppet](/use/puppet/) and [Roto brush](/use/roto-brush/)
+- [Moving a camera through layers](/tutorials/camera-move/)
 - [The Timeline](/panels/timeline/)

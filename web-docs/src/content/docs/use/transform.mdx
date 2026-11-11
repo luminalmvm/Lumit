@@ -23,14 +23,27 @@ work in the Viewer with the tools and the selected layer's gizmo.
 | **Orientation** | A 3D layer's turn, as in After Effects: three angles outside X, Y and Z Rotation, moving between keys by the shortest turn. |
 | **Opacity** | How opaque a layer is, as a percentage. |
 
-On a 3D layer Anchor point and Scale have a z too. Scale z stretches what is parented to the
-layer along its depth, and how far Anchor point z pushes the layer itself.
+**Rotation** is two boxes, whole turns and degrees: `1x +40°` is 400 degrees. Typing past
+360 in the degrees box carries into the turns.
+
+A layer with the [3D switch](/use/camera/#3d-layers) on gains a z box on **Anchor point**,
+**Position** and **Scale**, and the rows **Orientation**, **Rotation x** and **Rotation y**.
+Scale z stretches what is parented to the layer along its depth, and how far Anchor point z
+pushes the layer itself. Camera and Light layers have **Position**, **Orientation**,
+**Rotation x**, **Rotation y** and **Rotation**, and no anchor point, scale or opacity.
 
 Right-click a 3D layer's rotation rows for **Rotate X, then Y, then Z**: X, Y and Z
-Rotation turn in that order, as an imported layer's do, rather than Lumit's own Y, X, Z. Changing it keeps the layer
-where it is.
+Rotation turn in that order, as an imported layer's do, rather than Lumit's own Y, X, Z.
+Changing it keeps the layer where it is.
 
-Every property can be animated. See [Keyframes](/use/keyframes/).
+Every property can be animated. See [Keyframes](/use/keyframes/). A transform row's
+right-click menu is [a parameter's](/panels/effect-controls/#a-rows-menu). Its **Reset**
+puts Position back at the middle of the composition and Anchor point at the middle of the
+layer.
+
+With the Timeline active, `P`, `S`, `R`, `T` and `A` show Position, Scale, Rotation,
+Opacity or Anchor point alone under the selected layers. See the
+[reveal keys](/panels/timeline/#reveal-keys).
 
 ## Orient
 
@@ -43,7 +56,8 @@ itself. The layer's own Rotation adds to the turn.
 | **Along path** | The layer's x axis follows the way Position is heading at that frame. A camera looks that way. A layer stopped on its path keeps pointing the way it last went. |
 | **Towards camera** | A 3D layer faces the active camera. |
 
-What is parented to the layer turns with it, and motion blur sees the turn.
+What is parented to the layer turns with it, and motion blur sees the turn. A light, a
+two-node camera and an Audio layer have no Orient row.
 
 ## Fit to comp
 
@@ -57,16 +71,38 @@ frame, keeping its shape, as one undo step. A keyed row takes a key at the playh
 | **Fit to comp width** | `Ctrl+Alt+Shift+H` | Is as wide as the frame. |
 | **Fit to comp height** | `Ctrl+Alt+Shift+G` | Is as tall as the frame. |
 
-A 3D layer is fitted as if seen square on.
+A 3D layer is fitted as if seen square on. The rows are greyed on Camera, Light, Null and
+Audio layers, and on a layer whose Scale or Position an expression drives.
 
 ## Separate axes
 
 Anchor point, position and scale are each one row with a value box per axis. Right-click
 the row's name for **Separate axes**, and each axis gets a row of its own with its own
-keyframes. **Combine axes** on the same menu puts them back, with Scale linked.
+keyframes, named for the axis: **Anchor point x**, **Anchor point y**. **Combine axes** on
+the same menu puts them back, with Scale linked.
 
 Scale's menu also carries **Link axes** and **Unlink axes**:
 linked, one edit scales both by the same factor; unlinked, each box is edited on its own.
+Scale starts linked.
+
+**Animation ▸ Separate dimensions** holds a row for each of the three properties, and
+separates or combines it on every selected layer.
+
+## The Layer menu
+
+**Layer ▸ Transform** acts on every selected layer. The layer's
+[row menu](/use/layers/#the-row-menu) carries the same submenu.
+
+| Row | Does |
+| --- | --- |
+| **Reset** | Sets Scale and Opacity to 100, every rotation to 0, Position to the middle of the composition and Anchor point to the middle of the layer, and removes their keyframes. A camera or a light keeps its position and its options. |
+| **Flip horizontally** | Negates the scale's x axis, keyframes included. |
+| **Flip vertically** | Negates the scale's y axis, keyframes included. |
+| **Centre in view** | `Ctrl+Home`. Puts Position at the middle of the composition. On a keyframed Position it writes the keyframe at the playhead. |
+| **Centre anchor point** | `Ctrl+Alt+Home`. Moves the anchor point to the middle of the layer and leaves the picture where it is. Greyed on cameras and lights, and while Anchor point, Position, Scale or Rotation is keyed or driven by an expression. |
+| **Fit to comp** to **Fit to comp height** | See [Fit to comp](#fit-to-comp). |
+| **Orient ▸** | See [Orient](#orient). |
+| **Separate** … **axes** | The same rows as **Animation ▸ Separate dimensions**. |
 
 ## Move the anchor point
 
@@ -74,13 +110,50 @@ Use the anchor point tool in the Viewer to move it without moving the layer, or 
 anchor point directly with the selection tool. The [Align panel](/panels/align/) puts it on
 a corner, an edge or the centre of the layer.
 
+- `Shift` keeps the drag to one axis.
+- `Ctrl` lands the anchor point on the nearest corner, edge midpoint or centre of the
+  layer.
+
 ## The gizmo
 
 Select a layer and the Viewer draws its wireframe and a transform gizmo. Drag the handles
 to move, scale, and rotate.
 
-Hold `Shift` to keep a move to one axis, or a scale in proportion. The arrow keys nudge the
-selected layers one pixel, or ten with `Shift`. See [the Viewer](/panels/viewer/#moving-a-layer).
+| Part | Drag |
+| --- | --- |
+| **Inside the box** | Moves the layer. |
+| **The eight squares on the edges** | Scale it about its anchor point. |
+| **The bar standing off the top edge** | Rotates it about its anchor point. |
+| **The anchor point** | Moves the anchor point and leaves the picture where it is. |
+
+Hold `Shift` to keep a move to one axis, or a scale in proportion, or a rotation to steps of
+45°. The arrow keys nudge the selected layers one pixel, or ten with `Shift`. See [the
+Viewer](/panels/viewer/#moving-a-layer).
+
+- **Click** a layer to select it. `Shift`-click adds it to the selection, or takes it out.
+- **Drag from empty picture** to sweep a box. Every layer wholly inside it is selected,
+  and `Shift` adds them to the selection.
+- An unselected layer under the pointer shows its box faintly.
+
+The scale and rotation handles show while one layer is selected. A layer with a keyframed
+Scale or Rotation has neither.
+
+A 3D layer, a camera and a light have [3D handles](/use/camera/#3d-handles).
+
+### The Rotation tool
+
+With the **Rotation** tool (`W`), a drag anywhere on the picture turns the selected layers,
+each about its own anchor point. `Shift` turns in steps of 45°.
+
+### The motion path
+
+A selected layer with a keyframed Position draws its **motion path** over the picture: a
+line, a dot for each frame, a box for each keyframe, and each keyframe's handles. A 2D
+layer does not move under a drag.
+
+- Drag a keyframe's box to move that keyframe.
+- Drag a handle to bend the path. `Alt` breaks a smooth keyframe's handles apart.
+- Right-click a keyframe's box for **Go to keyframe** and **Delete keyframe**.
 
 ## Parenting
 
@@ -92,6 +165,12 @@ its Orientation.
 The Viewer draws a parented layer's outline, handles and motion path through the whole parent
 chain. Drags, nudges and **Align** move its Position in the parent's space.
 
+Set the parent in the **Parent** column of the
+[Timeline](/panels/timeline/#the-outline-columns), or under **Parent ▸** on the layer's
+[row menu](/use/layers/#the-row-menu). The picker lists every other layer in the
+composition, and **None**. A choice that would make a loop is **refused**. A layer whose
+parent is deleted has no parent.
+
 Use a **null layer** as the parent when you want a rig that never draws. One layer can
 parent many layers at once.
 
@@ -100,3 +179,4 @@ parent many layers at once.
 - [Layers](/use/layers/)
 - [Keyframes](/use/keyframes/)
 - [Cameras and 3D](/use/camera/)
+- [The Align panel](/panels/align/)

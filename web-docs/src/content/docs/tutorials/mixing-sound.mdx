@@ -1,0 +1,47 @@
+---
+title: Mixing a voice over music
+description: Set levels, fade and crossfade clips, and lower the music while the voice speaks.
+sidebar:
+  order: 13
+---
+
+The **Audio** workspace mixes a composition's sound: the [Mixer](/panels/audio/#mixer) sets
+levels, the [Audio timeline](/panels/audio/#audio-timeline) cuts and fades clips, and the
+[Audio panel](/panels/audio/#audio-panel) works on the selected layer.
+
+The project has a music file and two voice recordings, and a composition is open.
+
+**1. Open the Audio workspace.** Choose **Window ▸ Workspace ▸ Audio**.
+
+**2. Put the sound on tracks.** Click the **Project** tab beside the Mixer. Drag the music
+onto empty ground in the Audio timeline, then the first voice recording. Each becomes an
+Audio layer with a track of its own.
+
+**3. Set the levels.** Click the **Mixer** tab and press `Space` to play. Drag the music's
+fader down. If **LIM** lights on the Master strip, lower the faders and click **LIM** to put
+it out.
+
+**4. Trim the music.** In the Audio timeline, drag the right edge of the music's bar to the
+frame where it should stop.
+
+**5. Fade it out.** Drag the handle at the top right corner of the music clip to the left.
+The readout gives the fade's length in seconds. Right-click the fade and choose **Slow**.
+
+**6. Join the second recording.** Drag the second voice recording from the Project panel
+onto the voice track, so that it starts before the first one ends. The overlap is a
+crossfade. Drag the later clip's start to make it longer or shorter.
+
+**7. Lower the music behind the voice.** Click the music track's name to select it. In the
+Audio panel, click **Lower behind…** and choose the voice layer. The music drops by up to
+18 dB while the voice sounds.
+
+**8. Change how far it drops.** Open **Window ▸ Panels ▸ Node graph** with the music layer
+selected. The three boxes the button added are there. Set **Out high** on the
+[Remap](/effects/drivers/remap/) box to the level the music should fall to, in dB.
+
+## Related
+
+- [Audio](/use/audio/)
+- [Audio, Mixer and Audio timeline](/panels/audio/)
+- [The node graph](/use/nodes/)
+- [Working with the node graph](/tutorials/node-graph/)

@@ -5,11 +5,11 @@ description: "Joins points that are near each other with lines."
 
 import Compare from "../../../../components/Compare.astro";
 
-Connect points is a **Generate** effect.
+Connect points is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Connect points" category="generate" slug="connect-points" />
+<Compare label="Connect points" category="points" slug="connect-points" />
 
 {/* END GENERATED */}
 
@@ -75,10 +75,10 @@ In the Effect Controls panel:
   closest few, however far off they are, and runs Taper and Fade from its shortest line to
   its longest.
 - **Order by**: the name of the number In order sorts the points by. Left empty, it is the
-  number each point carries. See [Names](/effects/generate/vary-points/#names).
+  number each point carries. See [Names](/effects/points/vary-points/#names).
 - **Between**: which points a line may run between. **Picked** joins picked points only.
   **Picked and the rest** joins a picked point to one that is not. See
-  [Pick points](/effects/generate/pick-points/).
+  [Pick points](/effects/points/pick-points/).
 - **From group**: the group Picked reads, and the first of the two that Picked and the rest
   joins, as a name. Left empty, it is the picked points. A point is in a named group while
   the name reads above 0.5.
@@ -99,14 +99,16 @@ In the Effect Controls panel:
 - **Colour**: multiplies the colour each line inherits from its two ends.
 - **Max points**: the most points that this effect operates on, newest points first.
 - **Mix**: how much of the result replaces the picture underneath.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
 - [Particulate](/effects/generate/particulate/)
-- [Grid](/effects/generate/grid/)
-- [Trail](/effects/generate/trail/)
+- [Grid](/effects/points/grid/)
+- [Trail](/effects/points/trail/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

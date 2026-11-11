@@ -13,27 +13,56 @@ A **Text layer** holds editable text.
 
 ## Add text
 
-1. Pick the Type tool.
+1. Pick the Type tool (`Ctrl+T`).
 2. Click in the Viewer, or drag out a box for the words to wrap to.
 3. Type.
 
 `Shift+Enter` starts a new line. `Enter`, `Escape` or a click elsewhere ends the edit.
 
+New text takes the **Fill** and the size on the toolbar, and what the Text and Paragraph
+panels were last set to with no text layer selected. A new layer left empty is removed when
+the edit ends. A layer still named *Text* takes its first line as its name.
+
+**Layer ▸ New ▸ Text** (`Ctrl+Alt+Shift+T`) adds a layer reading *Text* in the middle of
+the composition and opens it for typing, with the word selected.
+
+## Edit text
+
+With the Type tool, click a text layer's words to put the caret there. With the Selection
+tool, double-click the layer, which arms the Type tool.
+
+| Gesture | What it does |
+| --- | --- |
+| **Drag** | Selects letters. |
+| **Double-click** | Selects a word. A drag on from it selects by whole words. |
+| **Triple-click** | Selects all the text. |
+| **Shift-click** | Stretches the selection to the click. |
+| `Up`, `Down` | Move the caret a line. Up from the first line goes to the start of the text, Down from the last to its end. |
+| `Home`, `End` | Move the caret to the start or the end of its line. |
+
+`Shift` with any of the four keys selects as the caret moves.
+
+One edit is one undo step, and `Ctrl+Z` during an edit ends it first. Typing into a layer
+whose words come from an expression removes the expression.
+
 ## Style it
 
-The **Text** panel sets the letters of every selected text layer. With no text layer
-selected it sets what the Type tool makes next, and its heading reads **New text**.
+The **Text** panel sets the letters of every selected text layer, and is headed with the
+first one's name. With no text layer selected it sets what the Type tool makes next. With
+several selected it shows the first layer's values, and a change is written to all of them
+as one undo step. `Ctrl+6` shows or hides the panel.
 
 | Control | What it does |
 | --- | --- |
-| **Font** | The font family, from the fonts installed on this computer, each listed in its own face. **Inter (built in)** is the one Lumit carries. |
+| **Font** | The font family, from the fonts installed on this computer, each listed in its own face. **Inter (built in)** is the one Lumit carries. The list has a search box. |
 | **Style** | The face inside the family: Regular, Bold, Italic. |
 | **Size** | The letter size in pixels. |
 | **Leading** | The distance from one baseline to the next, in pixels. |
 | **Kerning** | **Metrics** uses the pair spacing the font carries, and is what new text starts on. **Off** uses none. |
 | **Tracking** | Extra space after every letter, in thousandths of the size. |
 | **Fill** | The letters' colour. Unticked, only the stroke is drawn. |
-| **Stroke**, **Width** | An outline round the letters, its colour and its width in pixels. |
+| **Stroke** | An outline round the letters, and its colour. Unticked, no outline is drawn. |
+| **Width** | The outline's width in pixels. Shown while **Stroke** is ticked. |
 
 **More** shows the rest:
 
@@ -41,20 +70,26 @@ selected it sets what the Type tool makes next, and its heading reads **New text
 | --- | --- |
 | **Vertical scale**, **Horizontal scale** | Stretch the letters, in per cent. |
 | **Baseline shift** | Lift the letters off the line they stand on, in pixels. |
-| **Fill and stroke** | Which is drawn on top. **Fill over stroke** and **Stroke over fill** go a letter at a time, so a wide stroke can cover the next letter. **All fills over all strokes** and **All strokes over all fills** go across the whole layer. |
+| **Fill and stroke** | Which is drawn on top. **Fill over stroke** and **Stroke over fill** go a letter at a time, so a wide stroke can cover the next letter. **All fills over all strokes** and **All strokes over all fills** go across the whole layer. Shown while both are ticked. |
 | **Faux bold**, **Faux italic** | Thicken or slant a font that has no bold or italic of its own. |
 | **All caps**, **Small caps** | Set every letter as a capital, or the lower-case ones as small capitals. |
 | **Superscript**, **Subscript** | Set the letters small and raised, or small and lowered. |
 | **Ligatures** | Join pairs such as *fi* into the font's combined shape. |
 | **Auto leading** | Keep the leading at 120 % of the size. |
 
-Right-click the tracking, stroke width, scale or baseline shift box for **Reset**.
+Right-click a number for **Reset**. Right-click the panel itself for:
+
+- **Reset**: puts every control on the panel back.
+- **Copy style**: takes the style the panel shows.
+- **Paste style**: puts the copied style on every selected text layer.
+- **Animate text**: adds an [animator](#animators).
 
 A project opened on a computer without the layer's font draws that layer in Inter. The
 **Font** picker shows the missing name with **(not installed)**.
 
 A text layer is a layer, so it also takes [effects](/use/effects/),
-[masks](/use/masks/), and a [transform](/use/transform/) like any other.
+[layer styles](/use/layer-styles/), [masks](/use/masks/), and a
+[transform](/use/transform/) like any other.
 
 :::note[Limitation]
 A text layer has one style. Mixed styling within a single layer is planned.
@@ -64,7 +99,8 @@ wrongly. A character the font lacks draws as an empty box.
 
 ## Lay out the lines
 
-The **Paragraph** panel sets how the lines sit against each other.
+The **Paragraph** panel sets how the lines sit against each other. `Ctrl+7` shows or hides
+it.
 
 | Control | What it does |
 | --- | --- |
@@ -78,10 +114,34 @@ The **Paragraph** panel sets how the lines sit against each other.
 Each line you break is a paragraph of its own. In a box the words wrap at spaces, and a
 word wider than the box runs past it.
 
+Right-click the panel for **Reset**, **Copy style** and **Paste style**, which act on the
+paragraph alone.
+
 :::note[Not built yet]
 A box has a width and no height. Text without spaces, such as Chinese and Japanese,
-doesn't wrap. Vertical type is not built.
+doesn't wrap. A right-to-left paragraph doesn't wrap. Vertical type is not built.
 :::
+
+## The Source rows
+
+The **Source** section of [Effect controls](/panels/effect-controls/) carries a text
+layer's own rows.
+
+| Row | What it does |
+| --- | --- |
+| **Text** | The words. |
+| **Expression** | An expression that gives the words. |
+| **Size**, **Fill** | The size and colour the Text panel sets. |
+| **Path** | The mask the words run along. |
+| **Path offset** | How far along the mask they start. Shown once a path is chosen. |
+
+## Words from an expression
+
+With an expression on the **Expression** row, the layer shows what the expression returns
+at each frame in place of its words: a number as a number, a string as itself. The words
+in **Text** are kept, and come back when the row is emptied. An expression that fails
+shows nothing. The expression is written in Rhai. See [Expressions](/use/expressions/)
+and the [expression reference](/reference/expressions/).
 
 ## Run it along a path
 
@@ -89,7 +149,7 @@ Text can follow one of the layer's **own masks**.
 
 1. With the text layer selected, draw a path on it with the pen. Leave its mode as **None**
    if you only want the curve.
-2. In the **Source** section of Effect Controls, set **Path** to that mask.
+2. In the **Source** section of Effect controls, set **Path** to that mask.
 
 **Path offset** appears beside it and slides the whole line along the curve, in pixels. A
 closed path wraps; an open one drops the letters that fall off either end.
@@ -104,8 +164,27 @@ The Source rows are not keyable, so the path offset holds one value.
 ## Animators
 
 An **animator** offsets the letters of a line, and a **range selector** says which letters
-it reaches. **Add animator**, at the foot of the **Animators** section in Effect Controls,
-gives you one with every row already there, defaulted to values that change nothing.
+it reaches.
+
+- **Add animator**, at the foot of the **Animators** section in Effect controls, adds one
+  with every row at a value that changes nothing.
+- **Animation ▸ Animate text**, a text layer's right-click menu in the Timeline and the
+  Text panel's right-click menu add one to every selected text layer: a **Blank animator**,
+  or one of the animations below.
+
+Each animation is an animator with a second of keys from the playhead.
+
+| Animation | What the letters do |
+| --- | --- |
+| **Fade in by letter**, **Fade in by word** | Fade in one after another. |
+| **Type on** | Appear one at a time, with no fade. |
+| **Rise in by letter** | Fade in while rising 60 pixels. |
+| **Fall in by word** | Fade in while falling 60 pixels, a word at a time. |
+| **Scale in by letter** | Fade in while growing from nothing. |
+| **Tracking in** | Start spread apart and close up while fading in. It adds two animators. |
+
+On an animator's heading in Effect controls, **Remove** takes it off. **Reverse**, there
+once the animator has keys, plays its keys the other way round.
 
 | Row | What it does |
 | --- | --- |
@@ -114,7 +193,7 @@ gives you one with every row already there, defaulted to values that change noth
 | **Based on** | Whether the range counts **Characters** or **Words**. |
 | **Shape** | **Square** — inside the range or not — or **Ramp**, rising evenly across the range and holding past its end. |
 | **Position**, **Rotation**, **Scale**, **Opacity** | What a letter the range reaches does. |
-| **Fill offset** | Three numbers added to the layer's fill colour. |
+| **Fill offset** | Three numbers, red, green and blue, added to the layer's fill colour. |
 
 A letter half inside the range gets half the offset. A letter turns about its own middle
 on the baseline, and everything an animator does happens inside the letter's own frame.
@@ -122,10 +201,14 @@ on the baseline, and everything an animator does happens inside the letter's own
 Several animators on one layer **compose**: pushes, turns and tints add, scales and
 opacities multiply.
 
-**Animation ▸ Animate text**, the layer's row menu and the Text panel's menu add one with a
-second of keys from the playhead: **Fade in by letter**, **Fade in by word**, **Type on**,
-**Rise in by letter**, **Fall in by word**, **Scale in by letter** and **Tracking in**, or a
-**Blank animator**. **Reverse**, on an animator's heading, plays its keys the other way round.
+Every row but **Based on** and **Shape** has a stopwatch. In the Timeline a layer with
+animators has an **Animators** heading, a heading under it for each animator, and a row
+for each of its numbers. The rows draw as curves in the
+[graph editor](/panels/graph-editor/). Right-click a number for **Reset**.
+
+:::note[Not built yet]
+An animator has one range selector. Random order and wiggle are not built.
+:::
 
 ## Give it depth
 
@@ -149,22 +232,26 @@ all the way through draws the flat layer. Keyed or driven, a layer stays a solid
 
 Each letter is meshed once for each outline it has. On a solid, an animator also has **Position
 z**, **Rotation x** and **Rotation y**, and moves, turns and scales each letter about its own
-middle on the baseline. Letters on a path move in the picture's axes. Opacity hides letters, and a letter part way through it blends. With motion blur on, the
-letters blur as they move. An outline widens the solid. Masks and layer styles don't change a
-solid, and a shape's gradient fill draws as its flat colour.
+middle on the baseline. Letters on a path move in the picture's axes. Opacity hides letters,
+and a letter part way through it blends. With motion blur on, the letters blur as they move. An
+outline widens the solid. Masks and layer styles don't change a solid, and a shape's gradient
+fill draws as its flat colour.
 
 ## Convert it
 
-**Layer ▸ Create**, also on a layer's right-click, turns a selected text layer into
-something else, as a **copy directly above it**. The original stays a text layer.
+**Layer ▸ Create**, also on a layer's right-click, makes new layers from a selected text
+layer, directly above it.
 
 - **Shapes from text** makes a [shape layer](/use/shapes/) of the letters' outlines, taken
-  from the font, one group per letter, and switches the text layer off. Masks and paint do
-  not come across.
+  from the font, one group per letter, and switches the text layer off. The new layer is
+  named after the text layer with *outlines* added. It takes the words as they read at the
+  playhead, and a line on a path converts along its curve. Masks and paint do not come
+  across.
 - **Split into shape layers** does the same with one shape layer per letter, each where it
   sat.
-- **Points from text** makes a copy that emits a stream of points in the shape of the
-  words, through [Emit from image](/effects/generate/emit-from-image/).
+- **Points from text** makes a copy, named after the text layer with *points* added, that
+  emits a stream of points in the shape of the words, through
+  [Emit from image](/effects/points/emit-from-image/). The text layer stays on.
 
 :::note[Not built yet]
 Creating masks from text is not built.
@@ -172,6 +259,11 @@ Creating masks from text is not built.
 
 ## Related
 
+- [Animating a title letter by letter](/tutorials/text-animators/)
 - [Layers](/use/layers/)
 - [Shapes](/use/shapes/)
 - [Masks](/use/masks/)
+- [Layer styles](/use/layer-styles/)
+- [Text to points](/effects/points/text-to-points/)
+- [Expressions](/use/expressions/)
+- [Expression reference](/reference/expressions/)

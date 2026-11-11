@@ -1,0 +1,77 @@
+---
+title: Time loop
+description: "Plays a stretch of another layer over and over."
+---
+
+Time loop is a **Temporal** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Draws the **Source layer** as it is at a moment inside the loop, with its own effects and
+the drivers wired into them. The loop runs on the clock of the layer the effect is on:
+from **Start**, **Duration** long. The looped picture is laid over the layer's own.
+
+With **Map placement** on As placed in comp, the source's transform is read at the looped
+moment too, so its movement loops.
+
+**Crossfade Bastiuni** reads the source for Duration and **Fade length** together, and
+draws it twice while it fades.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source layer** | Layer | Any layer in the composition | None | - |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Type** | Dropdown | Cycle · Ping-pong · Crossfade Bastiuni | Cycle | - |
+| **Start** | Slider | 0 to 60; any value by typing | 0 | Seconds |
+| **Duration** | Slider | 0.1 to 60; down to 0.01 and higher | 2 | Seconds |
+| **Fade length** | Slider | 0 to 10; higher | 0.5 | Seconds |
+| **Fade curve** | Dropdown | Linear · Smooth | Linear | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Fade length** is editable while **Type** is set to Crossfade Bastiuni.
+- **Fade curve** is editable while **Type** is set to Crossfade Bastiuni.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Source layer**: the layer whose stretch is looped.
+- **Map placement**: where the source sits on this layer: as it sits in the composition,
+  stretched over the frame, or centred at its own size.
+- **Type**: how the loop comes round. **Cycle** starts again. **Ping-pong** plays forwards
+  and then backwards. **Crossfade Bastiuni** fades from the source one lap later into the
+  source now, over the first Fade length of each lap.
+- **Start**: where the looped stretch begins, on this layer's clock.
+- **Duration**: how long the looped stretch is.
+- **Fade length**: how long each lap's fade lasts, up to Duration.
+- **Fade curve**: **Linear** fades at an even pace. **Smooth** eases at both ends.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Timewarp](/effects/temporal/timewarp/)
+- [Echo](/effects/temporal/echo/)
+- [Time offset](/effects/compositing/time-offset/)
+- [Temporal](/effects/#temporal)
+- [Effects](/use/effects/)

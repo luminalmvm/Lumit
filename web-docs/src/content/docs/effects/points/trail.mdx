@@ -5,11 +5,11 @@ description: "Draws where every point of a stream has just been."
 
 import Compare from "../../../../components/Compare.astro";
 
-Trail is a **Generate** effect.
+Trail is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Trail" category="generate" slug="trail" />
+<Compare label="Trail" category="points" slug="trail" />
 
 {/* END GENERATED */}
 
@@ -62,14 +62,16 @@ In the Effect Controls panel:
 - **Colour**: the colour of every tail while Use point colour is off.
 - **Max trails**: the most points that may grow a tail.
 - **Mix**: how much of the result replaces the picture underneath.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
 - [Particulate](/effects/generate/particulate/)
 - [Echo](/effects/temporal/echo/)
-- [Clone to points](/effects/generate/clone-to-points/)
+- [Clone to points](/effects/points/clone-to-points/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

@@ -6,7 +6,8 @@ sidebar:
 ---
 
 An **extension** is a folder somebody else made that adds a panel, effects, or both. It
-holds an `extension.json`, and Lumit shows its web page in a panel of its own. Its effects are [LFX effects](/make/lfx-effects/). To make one, see
+holds an `extension.json`, and Lumit shows its web page in a panel of its own. Its effects
+are [LFX effects](/make/lfx-effects/) or an [OpenFX plugin](/use/plugins/). To make one, see
 [Make an extension](/make/extensions/).
 
 :::note
@@ -27,12 +28,86 @@ too.
 
 Double-clicking a package while Lumit is open sends it to the open Lumit.
 
+## The question before installing
+
+The window is headed **Install**, then the extension's name. It carries the extension's
+own summary, its version and the author it names, which Lumit does not check, and a list
+headed **It can**:
+
+| Line | Shown for |
+| --- | --- |
+| **Run its own code on this computer** | An extension that carries an OpenFX plugin. |
+| **Add effects**, then their names | An extension that carries effects. |
+| **See the project's file name, and when it opens, saves or closes** | The `project` permission. |
+| **See when you edit, the name of each edit, and when Lumit is in front** | The `activity` permission. |
+| **See when exports start and finish, and fingerprint the file** | The `export` permission. |
+| **Import files, and watch a folder you pick** | The `import` permission. |
+| **Open the Multi-edit window, see who's in a shared project, and read its invite link** | The `share` permission. |
+| **Edit your project** | The `edit` permission. |
+| **Send to and fetch from**, then the sites it named | An extension that names sites. |
+| **Show its own panel, and a line at the bottom of the window** | An extension with a panel. |
+
+An install that is refused says why on the bottom strip:
+
+- **No extension.json in that folder**
+- **Needs Lumit**, then a version, **or newer**
+- **That extension is too large**
+- **Another extension is being installed**
+- **Couldn't install the extension**
+- The rule its `extension.json` broke.
+
+## Using one
+
 **Window ▸ Extensions** lists every installed extension with a panel, ticked while its
 panel is in the arrangement. The panel docks, tabs and saves with a workspace like any
-other. An extension's effects are in the Effects menu under their categories.
+other. **Manage extensions…** at the foot of that menu opens the Addons page.
+
+An extension's effects are in the Effect menu under their categories, and their right-click
+menu in [Effects & presets](/panels/effects-presets/) reads **From an extension**. An effect
+with a page of its own has **Interface** on its heading in
+[Effect controls](/panels/effect-controls/), which opens the page in a window. The window
+reads **Select a layer with**, then the effect's name, until a selected layer has that
+effect.
+
+| The panel reads | Means |
+| --- | --- |
+| **Extension not installed** | The extension was removed while its panel was in the arrangement. **Settings…** opens the Addons page. |
+| **Couldn't show the extension**, **A file is missing.** | The installed folder has lost its page. |
+| **Couldn't show the extension**, **Couldn't load.** | The page failed to load. |
+| **Extensions need Microsoft WebView2, which isn't installed.** | On Windows. **Get WebView2** opens its download page. |
+| **This panel has left the extension's pages.** | The page went to another site. **Go back** loads the extension's own page again. |
+
+An effect in a project whose extension is not installed wears **Install the** extension's
+id **extension** in Effect controls, and passes its picture through unchanged.
+
+## An extension that shares the project
+
+An extension that wants to share the open project asks first, by name: **Let _name_
+share this project?**, with **Share** and **Don't share**. See
+[Shared projects](/use/projects/#shared-projects).
+
+## Removing one
+
+Each installed extension has a row on **Settings ▸ Addons** with its name and version,
+**Show panel** or **Hide panel**, and **Remove**. A row reads **Files are missing** when the
+installed folder has lost its page.
 
 **Remove** deletes the extension's folder. What its page stored is kept. An extension in the
-machine-wide folder or an added folder is left where it is.
+machine-wide folder or an added folder is left where it is, and the bottom strip says it is
+in a folder Lumit doesn't own.
+
+## Extension folders
+
+Under **Settings ▸ Addons ▸ Extension folders**:
+
+| Row | What it does |
+| --- | --- |
+| **Extensions folder** | The folder Lumit installs into. **Show** opens it. |
+| **Machine-wide folder** | The folders an installer may put extensions in, listed when the platform has one. |
+| **Add a folder** | **Choose…** names another folder to look in. Each added folder has **Remove**, which stops Lumit looking there. |
+
+**Make a package** on the same page saves an extension's folder as a `.lfx` file. See
+[Sharing what you make](/make/share/#making-one).
 
 ## Related
 

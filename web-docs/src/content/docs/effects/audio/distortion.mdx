@@ -13,8 +13,10 @@ Distortion is an **Audio** effect.
 
 ## What it does
 
-The shaping runs at four times the sample rate. Tone tilts the shaped sound darker or
-brighter.
+Reshapes the waveform in one of five ways. Soft clip rounds the peaks over, hard clip cuts
+them off and foldback turns them back down. Bit crush lowers the bit depth and rate reduce
+lowers the sample rate. The shaping runs at four times the sample rate. Tone tilts the shaped
+sound darker or brighter.
 
 ## Parameters
 
@@ -32,8 +34,9 @@ brighter.
 
 ## What each control does
 
-- **Drive**: how hard the sound is pushed into the shaper, in dB. On bit crush and rate
-  reduce it picks the bit depth and the hold length instead.
+- **Drive**: how hard the sound is pushed into the shaper, in dB. On bit crush it lowers the
+  bit depth instead, from 16 bits at 0 to 2 bits at the top. On rate reduce it lowers the
+  sample rate, to 3,000 Hz at the top.
 - **Shape**: 0 soft clip, 1 hard clip, 2 foldback, 3 bit crush, 4 rate reduce.
 - **Tone**: a tilt over the shaped sound, in dB. Below 0 is darker, above 0 brighter.
 - **Output**: the level on the way out, in dB.

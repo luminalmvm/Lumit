@@ -5,11 +5,11 @@ description: "Throws points at a layer and keeps the ones that land somewhere br
 
 import Compare from "../../../../components/Compare.astro";
 
-Emit from image is a **Generate** effect.
+Emit from image is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Emit from image" category="generate" slug="emit-from-image" />
+<Compare label="Emit from image" category="points" slug="emit-from-image" />
 
 {/* END GENERATED */}
 
@@ -21,7 +21,7 @@ These points depend on a picture, as Scatter's do. The points effects below it i
 layer's stack can read them.
 [Points sample](/effects/drivers/points-sample/) cannot, and neither can
 [Layer points](/effects/drivers/layer-points/) from another layer. A
-[Bake points](/effects/generate/bake-points/) below it makes its points readable by both.
+[Bake points](/effects/points/bake-points/) below it makes its points readable by both.
 
 ## Parameters
 
@@ -72,14 +72,16 @@ In the Effect Controls panel:
   the look, since only some of them stand. It does not animate.
 - **Mix**: how much of the drawing lands on the picture. At nought the points are still
   emitted on the socket.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
   See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 
-- [Scatter](/effects/generate/scatter/)
-- [Grid](/effects/generate/grid/)
-- [Clone to points](/effects/generate/clone-to-points/)
+- [Scatter](/effects/points/scatter/)
+- [Grid](/effects/points/grid/)
+- [Clone to points](/effects/points/clone-to-points/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

@@ -20,13 +20,14 @@ outside a timeline.
 | **[Node graph](/use/node-graphs/)** | A composition made of boxes and wires. Its row wears the nodes glyph and the type word *Node graph*. |
 | **Folder** | A grouping inside the panel. It creates no folder on your computer. |
 | **Solid** | A solid colour. |
+| **3D model** | A footage item pointing at a model file. Its row wears the cube. See [Importing media](/use/importing/#3d-models). |
 
 Top to bottom the panel is a search well with the colour filter inside it, a row of column
-headings, the tree, a preview card while one item is selected, and a bottom bar.
+headings, the tree, a preview card while one item is selected, and a bottom bar. `Ctrl+0`
+shows or hides the panel.
 
 Click a column heading to sort the tree by that column, and again to reverse the order. A
-folder keeps its own items. The sort lasts until the panel is closed. Right-click the empty
-space in the tree for **Sort by**, **Expand all**, **Collapse all**, and everything new.
+folder keeps its own items. The sort lasts until the panel is closed.
 
 A file or solid no composition uses has a muted name.
 
@@ -41,9 +42,11 @@ A file or solid no composition uses has a muted name.
 | **Date** | When a footage item's file was last changed. |
 | **Path** | The folder a footage item's file is in. |
 
-Columns leave as the panel narrows, Date first, then Path, then Duration. Dragging the seam
-between two headings widens the column on its left. Right-click a heading to hide a column,
-or **Reset columns**.
+Columns leave as the panel narrows: Date first, then Path, Duration, Items, FPS and Size.
+Below 180 pixels wide the tree scrolls sideways. Dragging the seam after **Name** or
+**Size** widens that column. Right-click a heading to hide a column, to **Sort by** a
+column or by **Project order**, or to **Reset columns**. Column widths and hidden columns
+last until the panel is closed.
 
 **Thumbnails on footage rows**, in **Settings ▸ Appearance ▸ Panels**, draws each footage
 row's first frame in place of its glyph, at the row's height. Off by default.
@@ -51,10 +54,14 @@ row's first frame in place of its glyph, at the row's height. Off by default.
 ## The preview card
 
 Select one item and the card under the tree shows what Lumit knows about it: a thumbnail, the
-name, the facts (resolution, frame rate, duration, codec) and how many times it is used.
-Sound reads its rate and channels; a folder reads how many items it holds. With nothing
-selected, or several, there is no card. Hover the count on the bottom bar for what the project
-holds.
+name, the facts (resolution, frame rate, duration, codec), how many times it is used, and
+the folder its file is in. Sound reads its rate and channels; a folder reads how many items
+it holds. A file with more than one audio stream reads how many. With nothing selected, or
+several, there is no card, and a panel under 300 pixels wide or 260 tall has none.
+
+A composition's thumbnail is the frame at the playhead when it is the open composition,
+and its middle frame otherwise. A right-click on the card opens the item's
+[menu](#the-row-menu).
 
 Move the pointer across the thumbnail to scrub the clip. Leaving it puts the first frame
 back. A still and a sound file have nothing to scrub.
@@ -71,54 +78,191 @@ selecting something else or playing a composition.
 - **Drop a folder** and the files Lumit can take come in from it and every folder inside it,
   filed in project folders of the same names.
 - **Double-click empty space** in the tree to open the import dialogue.
+- **Import footage** on the bottom bar opens the same dialogue.
+- An empty project shows **Import…** and **New composition** in place of the tree.
 
-Files dropped anywhere else on the Lumit window are imported the same way.
+Files dropped anywhere else on the Lumit window are imported the same way, and the
+Project panel comes to the front.
 
 A `.lum` project, or an After Effects `.aep` or `.zip`, is *not* opened by dropping it —
 import those from the menu.
 
-## Clicking and opening
+## Selecting
 
-A click selects. A double-click **opens** the row.
+| Gesture | Selects |
+| --- | --- |
+| Click | That row alone. |
+| `Ctrl`-click | Adds the row, or takes it out. |
+| `Shift`-click | Every row between the last row clicked and this one. |
+| `Ctrl+A` | Every row the tree is showing. |
+| `Up`, `Down` | The row above or below. With `Shift`, adds it. |
+| Click on empty space | Clears the selection. |
+
+A command from the row menu on a row that is part of the selection acts on the whole
+selection, and a footage row dragged from it takes the selected footage with it. On a row
+that is not, each takes that row alone. With several rows selected the count on the bottom
+bar reads how many, as `3 of 10`.
+
+**Reveal in Project panel**, on a layer's menu in the Timeline, the Hierarchy and the
+Viewer, selects the layer's source here and opens the folders it is filed in.
+
+## Opening
+
+A double-click **opens** the row.
 
 | Item | What opening does |
 | --- | --- |
 | **Composition** | Fronts it in the Viewer and Timeline. |
 | **Node graph** | Fronts it in the Node graph panel. |
-| **Footage** | Raises **New composition** with the resolution, frame rate and length already matched to it. |
+| **Footage** | Raises [New composition](/use/compositions/#make-a-composition) filled in from it. With a source view on screen, as in the Cut workspace, the footage loads into the source view instead. |
 | **Folder** | Shows or hides its children. |
 
+With several footage items selected, each of them lands in the new composition as a layer.
+
+## Into a composition
+
 Footage, composition and solid rows drag onto the Timeline, where a composition lands as a
-Precomp layer and a solid as a Solid layer. **Add to composition** on the row's menu does the
-same, and **Reveal in composition**, or a click on the card's uses line, opens the
-composition that uses the item with those layers selected. An item used in several lists
-them to pick from. Dropped onto **New composition** on the bottom bar instead, they raise the same New
-composition dialogue with the media's size, rate and length filled in, and every dropped item
-lands in the finished composition as a layer.
+Precomp layer and a solid as a Solid layer. With `Alt` held, the layer under the pointer
+takes the item as its source, see [Layers](/use/layers/#replace-a-layers-source).
 
-Renaming is `Enter`, or **Rename** on the row's own menu.
+**Add to composition** on the row's menu puts the selected items at the top of the open
+composition, footage end to end. Lumit refuses to place a composition inside itself.
 
-`Ctrl+D`, or `Ctrl+C` then `Ctrl+V`, duplicates the selected items. `Delete` removes them,
-along with everything inside a folder and any layers, effects or node graph boxes that use
-them, and asks first when any would go. The arrow keys move the selection, `Shift` with them adds to it, and the
-left and right arrows close and open a folder.
+**Reveal in composition**, or a click on the card's uses line, opens the composition that
+uses the item with those layers selected. An item used in several lists them to pick from.
+
+Footage rows dropped onto **New composition** on the bottom bar raise the
+[New composition](/use/compositions/#make-a-composition) dialogue filled in from the
+footage, and every dropped item lands in the finished composition as a layer. **New
+composition from selection** on the row's menu does the same.
+
+## Renaming
+
+Renaming is `Enter`, or **Rename** on the row's own menu. `Esc` leaves the name as it was,
+and an empty name is refused.
+
+## Search
+
+Typing in **Search project** narrows the tree to the rows whose names match. A folder whose
+name matches shows everything in it. Every folder is open while the tree is narrowed.
+`Ctrl+F` puts the cursor in the well.
+
+## Folders
+
+**New folder** on the bottom bar makes a folder, inside the selected folder when one is
+selected. It is named *Folder* and the next unused number.
+
+- Drag footage and composition rows onto a folder row to file them there.
+- **Move to folder** on the row menu lists every folder in the project.
+- **Move to root** takes a row out of its folder.
+
+Lumit refuses to file a folder inside itself. `Left` and `Right` close and open the
+folder the selection is on, and so does the twirl beside its name.
+
+New compositions are filed in a folder named *Compositions* and new solids in one named
+*Solids*. Each is made the first time it is needed, and is still the one used after it is
+renamed or moved.
+
+## Copies
+
+`Ctrl+D`, or `Ctrl+C` then `Ctrl+V`, duplicates the selected items, and so do **Copy**,
+**Paste** and **Duplicate** on the row menu. **Paste** on a folder's menu files the copies
+in that folder.
+
+- A copy is named after the original with *copy* on the end, and sits after it.
+- A copy keeps the original's colour label and proxy.
+- A folder's copy holds copies of everything inside it.
+- A composition that nests others asks whether the copy shares them or gets its own, see
+  [Compositions](/use/compositions/#duplicate-a-composition).
+
+## Deleting
+
+`Delete`, or **Delete** on the row menu, removes the selected items as one undo step. A
+folder takes everything inside it. The layers, effects and node graph boxes that use the
+items go too, and Lumit asks first when there are any, with how many.
 
 ## Colour labels
 
-Right-click a row and pick a chip from the **Label** strip. The tag tints the item's
-glyph.
+Right-click a row and pick a chip from the **Label** strip, or click the row's glyph and
+pick from the colours there. The tag tints the item's glyph. The neutral chip takes the tag
+off.
 
 **A folder hands its colour down.** A row with no tag of its own wears the colour of the
-nearest tagged folder above it. An explicit tag always wins over an inherited one.
+nearest tagged folder above it. An explicit tag always wins over an inherited one. A row
+with neither wears the colour of its kind.
 
-The square in the search well filters by colour: pick a colour to narrow the tree to the items
-wearing it, and the neutral chip to show everything.
+The square inside the search well filters by colour: click it and pick a colour to narrow
+the tree to the items wearing it, their kind's colour included. The neutral chip shows
+everything.
+
+## Badges
+
+| Badge | Meaning |
+| --- | --- |
+| `proxy` | The footage is read from its proxy. |
+| `stand-in` | In a shared project, the footage is read from a stand-in. |
+| `missing` | The file cannot be found. Click the badge to relink. On a 3D model, pictures it names are missing, and the badge's tooltip lists them. |
+| `unreadable` | The file is on disk and Lumit cannot read it. |
+| `converting` | A 3D model is being converted. Click the badge to stop. |
+| `stopped` | The conversion was stopped. Click the badge to start it again. |
+| `no 3D app` | No 3D app was found to convert the model. Click the badge for the row in Settings. |
+
+A row too narrow for its badges leaves some out. The name's tooltip lists them all.
+
+## The row menu
+
+Right-click a row. A command acts on every selected row it applies to, except where the
+table says one row.
+
+| Command | On | Does |
+| --- | --- | --- |
+| **Expand**, **Collapse** | Folders | Shows or hides what the folder holds. |
+| **New folder** | Folders | Makes a folder inside this one. |
+| **Make proxies** | Folders | Queues a proxy for every footage item in the folder. |
+| **Open** | One composition | Fronts it. |
+| **Composition settings…** | One composition | Opens the composition's [settings](/use/compositions/#the-settings). |
+| **Export…** | One composition | Opens the [export](/use/export/) dialogue on it. |
+| **Add to composition**, **Reveal in composition** | Footage, compositions, solids | See [Into a composition](#into-a-composition). |
+| **New composition from selection** | Footage | Raises **New composition** on the selected footage. |
+| **Add audio only** | Footage with sound, with a composition open | Adds the item's sound to the open composition as an Audio layer. |
+| **Open in source view** | One footage item, with a source view on screen | Loads it into the source view. |
+| **Relink…** | One missing footage item | Points the item at the file's new path. |
+| **Replace footage…** | One footage item that is found | Points the item at a different file. |
+| **Find missing footage** | Footage, while any is missing | Narrows the tree to the missing rows. |
+| **Reload footage** | Footage that is found | Reads the file again, as for an image sequence that has gained frames. |
+| **Show in folder** | One footage item that is found | Opens the folder the file is in. |
+| **Edit in 3D app** | A `.blend` file | Opens the file in the 3D app. |
+| **Interpret** | Footage that is found | **Interpret footage…**, **Remember interpretation** and **Apply interpretation**, see [Importing](/use/importing/#interpretation). **Apply interpretation** is disabled until one is remembered. |
+| **Proxy** | Footage | **Set proxy…**, **Make proxy**, **Use proxy** and **Clear proxy**, see [Proxies](/use/proxies/). |
+| **Frame rate** | Image sequences | The rate the stills play at. `Enter` sets it. |
+| **Get a stand-in**, **Fetch the original** | Footage in a shared project | See [Projects](/use/projects/#footage-someone-has-not-got). |
+| **Rename** | One row | Edits the name in place. |
+| **Copy**, **Paste**, **Duplicate** | Every row | See [Copies](#copies). |
+| **Move to folder**, **Move to root** | Every row | Files the row. **Move to folder** is absent from a project with no folders, and **Move to root** from rows already at the top level. |
+| **Label** | Every row | Tags the row with a colour. |
+| **Delete** | Every row | Deletes the items. See [Deleting](#deleting). |
+
+## The panel's own menu
+
+Right-click the empty space in the tree, or the bottom bar.
+
+| Command | Does |
+| --- | --- |
+| **New composition**, **New node graph**, **New folder** | Makes one. |
+| **Import…**, **Import folder…** | See [Importing media](/use/importing/#import-files). |
+| **Paste** | Pastes what was copied in the panel. |
+| **Select all** | Selects every row the tree is showing. |
+| **Sort by** | Sorts by a column, or goes back to **Project order**. |
+| **Expand all**, **Collapse all** | Opens or shuts every folder. |
+| **Find missing footage** | Narrows the tree to the missing rows. Absent while nothing is missing. |
+| **Use proxies** | The [proxies](#proxies) switch on the bottom bar. |
+| **Thumbnails on footage rows** | The switch in **Settings ▸ Appearance ▸ Panels**. |
 
 ## Proxies
 
 A **proxy** is a smaller copy that keeps previews fast. Attach one from **Proxy** on the
-row's menu: **Set proxy…** points at a file you already have, **Make proxy** transcodes one in the
-background, **Use proxy** decides whether this item reads from it, and **Clear proxy**
+row's menu: **Set proxy…** points at a file you already have, **Make proxy** transcodes one
+in the background, **Use proxy** decides whether this item reads from it, and **Clear proxy**
 forgets it. A row reading from its proxy wears a `proxy` badge.
 
 The proxies mark on the bottom bar is the master switch for the whole project, between using
@@ -129,14 +273,23 @@ proxies and using originals, and an export reads the originals whatever it is se
 
 If a file moves, its row has a `missing` badge and the glyph turns to a broken link. The
 badge *is* the relink control: click it and pick the new path, and every layer using the
-item recovers. **Find missing footage** on the row menu searches for it instead.
-
-**Replace footage…** on the row menu points a footage item whose file is not missing at a
-different file. **Show in folder** opens the folder the file is in. **Interpret ▸ Interpret
-footage…** sets how the file is read, see [Importing](/use/importing/#interpretation).
+item recovers. Other missing items whose files moved the same way are relinked with it.
 
 The count at the right of the bottom bar reads `1 missing · 10 items` when anything is
-broken, and clicking it filters the tree down to the broken rows alone.
+broken, and clicking it filters the tree down to the broken rows alone. **Find missing
+footage** on the row menu does the same. A second click on the count shows everything.
+
+## The bottom bar
+
+The bar's controls are marks, named by their tooltips.
+
+| Control | Does |
+| --- | --- |
+| **Import footage** | Opens the import dialogue. |
+| **New folder** | Makes a folder. |
+| **New composition** | Raises **New composition**. Footage dropped on it fills the dialogue in and lands in the composition. |
+| **Using proxies**, **Using originals** | Whether the project reads proxies at all. Absent from an empty project. |
+| The count | How many items the project holds, how many are missing, and how many are selected. Its tooltip counts the compositions, footage items, solids and folders. |
 
 ## Related
 

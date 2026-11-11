@@ -1,28 +1,45 @@
 ---
 title: Graph editor
-description: Customising keyframes.
+description: The value, speed and acceleration graphs, their controls, and every gesture on a curve.
 sidebar:
   order: 5
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-The graph editor draws a property's value as a line.
+The graph editor draws a property's value as a line. It is the Timeline's **Graph** mode,
+over the same ruler, zoom and scroll as the lanes. `Shift+F3` switches to it and back.
 
 <Shot file="graph-editor.png" caption="The graph editor, showing the value graph." eager/>
 
+A property's curve is drawn while its row is selected in the outline. A property with two
+axes draws a curve for each. With no row selected, the animated curves of the selected
+layers are drawn.
+
+## Controls
+
+In the graph's top right corner, **Value**, **Speed** and **Acceleration** pick the graph:
+value against time, rate of change against time, or how fast the speed changes. On a
+narrow graph the three fold into one word.
+
+Under the outline:
+
 | Control | Does |
 | --- | --- |
-| **Value** | Shows the value graph: value against time. |
-| **Speed** | Shows the speed graph: rate of change against time. |
-| **Acceleration** | Shows the acceleration graph: how fast the speed changes. |
-| **Linear**, **Easy ease**, **Hold** | Set the selected keyframes' interpolation. |
-| **Easing…** | Opens the easing editor on the selected keyframes. Value graph only. |
-| **Auto**, **Clamp**, **Free** | Set the selected keyframes' tangents: worked out from the neighbours, the same kept from swinging past them, or shaped by hand. |
+| **Linear**, **Easy ease**, **Hold** | Sets the interpolation of the selected keyframes. See [Altering keyframe types](#altering-keyframe-types). |
+| **Easing…** | Opens the [Easing panel](/panels/easing/), or a popup with **Settings ▸ Timeline ▸ Panels ▸ Shape eases in a popup** on. Value graph only. |
+| **Auto**, **Clamp**, **Free** | Puts the selected keyframes' handles in that tangent mode. See [Tangent modes](#tangent-modes). |
 | **Break handles** | Each handle of a keyframe moves without the other. Off each time Lumit starts. |
+
+Under the graph:
+
+| Control | Does |
+| --- | --- |
+| **Zoom** | Zooms time, as in Layers mode. |
+| **Magnet** | Turns snapping on and off. |
 | **Scope** | Steps through **Selected curves**, **Layer curves** and **Composition curves**. Curves shown but not selected are dashed; a click selects one, and `Shift`-click or `Ctrl`-click adds it. |
 | **Auto fit** | Automatically adjusts the vertical zoom to fit the curve on screen. Zooming the values with the wheel turns it off. |
-| **Fit selection** | Zooms time and value to the selected keyframes, or to every curve with none selected. `F` does the same. |
+| **Fit selection** | Zooms time and value to the selected keyframes, or to every curve with none selected. `F` does the same, and `Shift+F` frames every curve. |
 
 | Right-click on | Holds |
 | --- | --- |
@@ -50,7 +67,109 @@ keyframes.
 
 Altering keyframes in both the value and speed graph will reflect in the other.
 
+| Shortcut | Does |
+| --- | --- |
+| `F9` | Easy ease on both sides of the selected keyframes. |
+| `Shift+F9` | Easy ease on the side coming in. |
+| `Ctrl+Shift+F9` | Easy ease on the side going out. |
+
+The three work in Layers mode too.
+
+## Tangent modes
+
+| Mode | The handle |
+| --- | --- |
+| **Free** | Stays where it is dragged. |
+| **Auto** | Points along the line from the keyframe before to the keyframe after. On the first and last keyframe it lies flat. |
+| **Clamp** | As Auto, limited so the curve cannot pass beyond either neighbour's value. On a peak or a trough it lies flat. |
+
+A handle keeps its reach in every mode. Dragging an Auto or Clamp handle makes it Free. A
+handle sent to Auto or Clamp and back to Free returns to the shape it had.
+
+## Keyframes
+
+| Action | How |
+| --- | --- |
+| Select | Click a keyframe. `Shift`+click adds it to the selection, and `Ctrl`+click adds or drops it. |
+| Select several | Drag a box over empty pane. `Shift` or `Ctrl` as the drag begins adds to the selection. |
+| Deselect | Click empty pane. |
+| Move | Drag a selected keyframe. Every selected keyframe moves by the same amount. `Shift` keeps the drag to time or to value, whichever the pointer has moved further along. |
+| Add | Double-click the curve, or `Ctrl`+click it. The new keyframe holds the value the curve reads there. |
+| Remove | `Alt`+click a keyframe, select it and press `Delete`, or right-click it: **Delete keyframe**. |
+| Type exact numbers | Double-click a keyframe for its **Frame**, **Value**, and **In** and **Out** influence. |
+| Move the middle of an ease | Hold `Shift` and drag the curve between two keyframes sideways. Each keeps its speed. |
+| Abandon a drag | `Esc` while the button is down. |
+
+`Alt`+click does not remove a curve's last keyframe. Deleting it with `Delete` leaves the
+property at the value that keyframe held.
+
+With the **Pen** tool armed, a click on the curve adds a keyframe and a click on a keyframe
+removes it.
+
+One selected keyframe carries a readout of its frame, its value, and its in and out
+influence. Click the readout to type its speed and influence on each side. The foot of the
+outline shows the same frame and value, with its **In** and **Out** influence to type, and
+the [Easing panel](/panels/easing/#one-keyframes-numbers) shows its speed and influence.
+
+A dragged keyframe snaps to markers, the playhead, work-area edges, layer ends and edit
+points while the magnet is on. `Ctrl` suspends it.
+
+`Ctrl+C` and `Ctrl+V` copy and paste the selected keyframes. See
+[Keyframes](/use/keyframes/#copy-and-paste).
+
+## Handles
+
+A selected keyframe shows its handles, and so do the sides of its neighbours that face it.
+
+- Drag a handle to change the curve's shape.
+- Hold `Shift` while dragging to lay the handle flat.
+- Hold `Alt` as the drag begins to move that handle without its partner, or to join two that
+  were apart. **Break handles** does the first with no key held.
+- **Join handles**, on a keyframe's right-click menu, joins handles that were apart.
+- With several keyframes selected, dragging a handle on one moves the same handle on each
+  by the same amount.
+
+**Edit ▸ Settings ▸ Shortcuts ▸ Dragging** changes `Alt` to `Ctrl`.
+
+In the speed graph each keyframe is two points, one for the speed coming in and one for
+the speed going out. Drag a point up or down to set that side's speed, and sideways to move
+the keyframe in time. Each point has one handle, which sets that side's influence.
+
+In the acceleration graph each keyframe has an in dot and an out dot. See
+[the graph editor](/use/graph-editor/#the-acceleration-graph).
+
+## The selection box
+
+Two or more selected keyframes are drawn inside a box, with a badge reading how many it
+holds and how many frames it spans.
+
+- Drag the left or right edge to scale the keyframes in time about the opposite edge.
+- Drag the top or bottom edge to scale their values about the opposite edge.
+- Hold `Shift` to land the scale on whole frames and whole numbers.
+
+While an edge is dragged, a readout gives the frames the box spans and the values at its
+bottom and top.
+
+## Moving about
+
+- **Ctrl+wheel** zooms time, and **Shift+wheel** scrolls sideways, as in the lanes.
+- **Alt+wheel** zooms the values about the pointer.
+- With **Auto fit** off, **the wheel** scrolls the values.
+- A drag with the **Hand** tool pans the curves.
+
+**Edit ▸ Settings ▸ Shortcuts ▸ Scroll wheel** changes which key does which.
+
+## What else is drawn
+
+- A mask's **Path** row has no value to plot. It draws its rate of change in the value
+  graph too.
+- An [expression](/use/expressions/) draws as a curve with no keyframes.
+- A marker's [region](/use/markers/#regions) is shaded down the pane, and each marker draws
+  its line.
+
 ## Related
 
 - [The graph editor, in use](/use/graph-editor/)
+- [Keyframes](/use/keyframes/)
+- [The Easing panel](/panels/easing/)
 - [Retiming and speed](/use/retime/)

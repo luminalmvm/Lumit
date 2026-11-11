@@ -14,13 +14,42 @@ strip below it, and nothing on either of them changes what an export writes.
 
 ## The strip above
 
-The panel's name and the composition's sit at the left. Three pickers sit at the right.
+The panel's name and the composition's sit at the left. Four pickers sit at the right.
 
 | Picker | Sets |
 | --- | --- |
 | **Magnification** | How big the picture is drawn. Fit, with its percentage beside it, or a fixed step from 25% to 400%. The wheel zooms too, anchored on the pointer. |
 | **Preview quality** | The **preview resolution** — full, half, third, quarter or auto — and the **playback** behaviour, every frame or adaptive. |
+| **Playback speed** | How fast playback runs: **1×**, **0.5×** or **0.25×**. See [Preview and playback](/use/preview/#playback-speed). |
 | **Colour pipeline** | The display transform the picture is shown through. Where the project loads a colour configuration it grows a section per display, each of its views a row. **Project settings…** sits at its foot. |
+
+The magnification steps are **Fit**, 25%, 50%, 100%, 200% and 400%. Fit follows the panel
+as it is resized. After a wheel or Zoom tool step the picker reads the true percentage,
+from 2% to 3200%.
+
+Magnified, the picture is drawn in square pixels. **Edit ▸ Settings ▸ Viewer ▸ Smooth the
+picture when zoomed in** blends them.
+
+The preview quality menu stays open while rows are picked. See
+[Preview and playback](/use/preview/#preview-resolution) for what each row does, and
+[Colour management](/use/colour-management/) for the colour pipeline.
+
+The same commands are on the **View** menu and the keyboard.
+
+| Command | Shortcut |
+| --- | --- |
+| **View ▸ Zoom in** | `Ctrl+=` |
+| **View ▸ Zoom out** | `Ctrl+-` |
+| **View ▸ Fit** | `Shift+/` |
+| **View ▸ Resolution ▸ Full** | `Ctrl+J` |
+| **View ▸ Resolution ▸ Half** | `Ctrl+Shift+J` |
+| **View ▸ Resolution ▸ Quarter** | `Ctrl+Alt+J` |
+
+Zoom in and Zoom out double and halve the magnification about the middle of the panel.
+**Auto** and **Third** have no shortcut.
+
+A narrow strip drops the composition's name. A narrower one keeps the magnification and
+folds the other pickers into one mark.
 
 ## The strip below
 
@@ -36,7 +65,7 @@ The panel's name and the composition's sit at the left. Three pickers sit at the
 | **Show snapshot** | With a snapshot taken. Puts the photograph back over the live picture while it is held. |
 | **Exposure** | The number shows on hover, or while it isn't zero. Drag the number; click the mark to go back to zero. |
 | **Transport** | First frame, previous frame, play or pause, next frame, last frame. |
-| **Clock** | The playhead's time. Click it to type one; a time past either end clamps. |
+| **Clock** | The playhead's time, counted from the composition's [**Start timecode**](/use/compositions/). Click it to type one; a time past either end clamps. |
 | **Loop** | What playback does at the end of the work area: loop, play once, or ping-pong. Click to step through the three. |
 | **Reading** | The composition's size. While the preview is made smaller than the composition, the size reads as the pair, source → preview, in the warning colour. |
 
@@ -45,12 +74,41 @@ Show puts it back over exactly the part of the picture it came from.
 **View ▸ Compare ▸ Snapshot** wipes the live picture against it, the snapshot right of the
 line. **Compare ▸ Composition ▸** puts another composition on the far side instead.
 
-Every control on both strips has a right-click menu. Right-click an empty stretch of the
-bottom strip to arrange the strips.
+A view keeps one snapshot. Taking another replaces it.
 
 While a frame takes long enough to notice, a slim bar left of the reading fills as it
 is made, with a word for what the engine is doing. It goes when the frame arrives, and
 shows nothing during playback.
+
+A single channel is shown in grey. Alpha is shown as a greyscale matte. **Exposure** runs
+ten stops either way, in tenths. `Ctrl+'` switches the transparency board.
+
+The magnification, the pan and the channel belong to the view. The preview resolution, the
+exposure, the guides, the overlays and the region of interest belong to the composition.
+
+### Right-click menus on the strips
+
+Every control on both strips has a right-click menu. Right-click an empty stretch of the
+bottom strip to arrange the strips.
+
+| Right-click | Rows |
+| --- | --- |
+| The magnification | **Fit**, **Zoom in**, **Zoom out**, and the fixed steps. |
+| The preview quality | The preview resolutions and the two playback behaviours. |
+| The playback speed | **1×**, **0.5×**, **0.25×**. |
+| The transparency board | **Transparency grid**, **Composition background…**. |
+| **Guides** | The rows its click opens. |
+| The channel | **RGB**, **Red**, **Green**, **Blue**, **Alpha**. |
+| The 3D view | The rows its click opens. |
+| The snapshot marks | **Take snapshot**, **Show snapshot**, **Clear snapshot**. |
+| The exposure mark | **Reset exposure**. |
+| The transport | **Play** or **Pause**, **To start**, **To work area start**, **Previous frame**, **Next frame**, **To work area end**, **To end**, **Loop ▸**, **Playback speed ▸**, **Mute**. |
+| The clock | **Copy time**, **Copy frame number**, then the transport's rows. |
+| The loop mark | **Loop**, **Ping-pong**, **Play once**. |
+| The reading | **Composition background…**, **Composition settings…**. |
+| An empty stretch | **Style's choice**, **Split, top and bottom**, **One bar, at the top**, **One bar, at the bottom**, **Deck**. |
+
+**Show snapshot** in a menu keeps the snapshot up until it is chosen again.
 
 ### When the Viewer is narrow
 
@@ -58,17 +116,95 @@ A Viewer docked into a sidebar has less width than the bar wants, so pieces leav
 order: the reading, then the loop mark. The ways of looking then fold into one overflow
 mark, and the clock goes last. The five transport buttons are the last items remaining.
 
+The overflow mark is **More controls**. It opens the ways of looking in a floating strip.
+
 The two strips can also be gathered into one, at the top or at the bottom, under
 **Edit ▸ Settings ▸ Appearance ▸ Viewer**.
+
+### The deck
+
+**Viewer bars** in the same settings group also offers **Deck**, which the Desk and
+Lantern styles use unless told otherwise. The ways of looking, the magnification and the
+colour pipeline sit in one strip above the picture, and everything about playing sits in
+a strip under it:
+
+| Control | Does |
+| --- | --- |
+| **Transport** and **Clock** | As on the bar. |
+| **Frame count** | The playhead's frame out of the composition's length, as `F12/300`. |
+| **Playback** | Every frame, or adaptive resolution. |
+| **Preview resolution** | Auto, full, half, third or quarter. |
+| **Playback speed** | 1×, 0.5× or 0.25×. |
+| **Loop** | As on the bar. |
+| **Mute** | Silences the sound output. It is not remembered between launches. |
+| **Cache ready** | How much of the work area is cached at the size the Viewer shows, as a meter and a percentage. It shows once something is cached. |
+| **Progress** | The [progress bar](/use/preview/#the-progress-bar), at the right. |
+
+A deck too narrow for its row scrolls sideways.
+
+## Guides, grid and rulers
+
+The **Guides** menu on the bar lists the marks drawn over the picture. Its mark is lit
+while any of them is showing.
+
+| Row | Does |
+| --- | --- |
+| **Transparency grid** | The same switch as the transparency board. |
+| **Grid** | Divides the frame into eighths each way. |
+| **Title/action safe** | Two centred rectangles, at 90% and 80% of the frame. |
+| **Rulers** | Strips along the top and left edges, counting composition pixels. `Ctrl+R`. |
+| **Layer controls** | The wireframes, handles, motion paths, hover highlight and effect points. `Ctrl+Shift+H`. |
+| **Picture bounds** | In a node graph composition. |
+| **3D ground**, **3D axes** | With something in depth in the composition. See [Cameras and 3D](/use/camera/#in-the-viewer). |
+| **Snap to guides** | Whether a dragged layer lands on lines. The magnet on the [toolbar](/panels/toolbar/#snapping) is the same switch. |
+| **Snap to grid** | Adds the grid's lines to what a drag lands on. `Ctrl+Shift+'`. |
+| **Snap to layers** | Adds the edges and middles of the other layers. |
+| **Lock guides** | Stops guides being dragged. |
+| **Clear guides** | Removes every guide from the composition. |
+| **Region of interest** | Arms the next drag to sweep one. Reads **Clear region of interest** while one is set. |
+| **Composition background…** | Opens a colour picker for the composition's background. |
+
+**View ▸ Show grid**, **Show ruler** and **Show wireframe** are the same switches as
+Grid, Rulers and Layer controls. **View ▸ Snap to grid** and **Snap to layers** are the
+same switches as the rows here.
+
+With the layer controls off, layers still select and drag.
+
+The composition background is the one row that edits the document. It is an undo step and
+an export writes it.
+
+### Guides
+
+Press in a ruler and drag onto the picture to pull out a guide: a horizontal one from the
+top ruler, a vertical one from the left. Drag a guide to move it. Drop it back on a ruler,
+or off the picture, to remove it.
+
+Guides stay when the rulers are hidden. They are kept with the project, per composition.
+Undo does not touch them, and no export draws them. A locked guide still catches a dragged
+layer.
+
+The ruler's numbering steps with the magnification. **Units** in a ruler's right-click
+menu counts in pixels or in per cent of the frame.
+
+## Region of interest
+
+Choose **Guides ▸ Region of interest**, then drag a rectangle on the picture. Lumit
+composites that part of the frame only, and outlines it. A drag of a few pixels clears the
+region instead.
+
+**Guides ▸ Clear region of interest** goes back to the whole frame. The region is kept
+per composition and never reaches an export.
 
 ## In the picture
 
 Select a layer and the Viewer draws its wireframe with a transform gizmo. The handles move,
-scale and rotate it. See [Transforming layers](/use/transform/). The tag at the top left
-names what is selected.
+scale and rotate it. See [Transforming layers](/use/transform/#the-gizmo). The tag at the
+top left names what is selected, with a count of the other selected layers beside it.
 
 The outline, the handles and the motion path follow the layer's parents. A keyed shape path
 is outlined where it is at the playhead.
+
+A layer whose visibility switch is off, or that is locked, has no box and takes no click.
 
 ### Moving a layer
 
@@ -82,12 +218,15 @@ With the Selection tool armed:
   Viewer is the active panel.
 - **Double-click** a text layer to edit it, or a Precomp layer to open its composition.
 
+A press inside a selected layer drags that layer, even where another layer covers it.
+
 While **Snap to guides** is on, a moved layer lands on the guides and the edges and middle
 of the composition, with **Snap to layers** ticked on the edges and middles of the other layers,
 and with **View ▸ Snap to grid** ticked on the grid. A line across the picture marks what it
 landed on. `Ctrl` suspends snapping. A locked layer or a guide layer is not snapped to.
 
-A layer whose position is keyframed does not move under a drag or a nudge.
+A layer whose position is keyframed does not move under a drag. A nudge sets a keyframe
+at the playhead.
 
 ### Effect points
 
@@ -96,7 +235,8 @@ picture. Only points in pixels or per cent get a mark. **Guides ▸ Layer contro
 the marks.
 
 - Only the Selection tool drags a mark. **Shift** keeps it to one axis.
-- A point with a wire on either half does not drag.
+- A point with a wire on either half does not drag, and neither does one an expression
+  works out.
 - A keyed half takes a key at the playhead.
 - The drag is one undo step.
 
@@ -111,14 +251,15 @@ Right-click the picture, with any tool.
 | The layer's name | The layer on top under the pointer, which the click selects. Opens the menu the layer has in the Timeline. |
 | **New**, **Paste** | The **Layer ▸ New** rows, and the clipboard. |
 | **Select** | Lists every layer under the pointer, top to bottom. Choosing one selects it, which reaches a layer covered by another. |
-| **Align** | Moves each selected layer so an edge or the middle of its box meets the composition's: **Left**, **Centre**, **Right**, **Top**, **Middle**, **Bottom**. |
+| **Align** | Moves each selected layer so an edge or the middle of its box meets the composition's: **Left**, **Centre**, **Right**, **Top**, **Middle**, **Bottom**. **Selection ▸** lines the selected layers up with each other, and **Distribute across** and **Distribute down** space them evenly. See [Align](/panels/align/). |
 | **Add marker at playhead** | Adds a composition marker. |
 | **Guides** | **Add vertical guide** and **Add horizontal guide** at the pointer, **Snap to guides**, **Snap to grid**, **Snap to layers**, **Lock guides**, **Clear guides**. |
 | **Copy frame**, **Save frame as…** | The frame at the playhead at the composition's full size, on the clipboard or as a PNG. **Save frame as…** is also in the Composition menu, on `Ctrl`+`Alt`+`Shift`+`M`. On Linux, **Copy frame** needs `wl-copy` or `xclip`. |
 | **Snapshot** | **Take snapshot**, **Show snapshot**, **Clear snapshot**. |
 | **Zoom**, **Resolution**, **Channel view** | The same choices as the strips'. |
 | **Show** | The marks over the picture, ticked. |
-| **View layout**, **Compare**, **Region of interest** | As in the **View** menu. |
+| **View layout**, **Compare** | As in the **View** menu. |
+| **Region of interest** | As in the **Guides** menu. |
 | **Composition background…**, **Composition settings…** | The composition's own. |
 
 **Select** appears with more than one layer under the pointer, and **Align** with a layer
@@ -147,8 +288,13 @@ Other things on the picture have their own menus:
 - **The wheel** zooms, anchored on the pointer.
 - **A middle-button drag** pans the picture, whatever tool is armed.
 - **The Hand tool** pans on an ordinary drag.
+- **The Zoom tool** doubles the magnification on a click, about the pointer, and halves it
+  with `Alt`. Dragging a box makes that box the view. `Alt` with a box zooms out by the
+  same amount.
 
-A middle-button drag does not pan while a dropper is armed.
+A middle-button drag does not pan while a dropper is armed. In a
+[3D viewport](/use/camera/#3d-viewport), and with `Alt` held in a composition with
+something in depth, it moves the 3D view instead.
 
 ### At an effect
 
@@ -170,8 +316,107 @@ the pixels that will be sampled.
 - **The pick is a drag.** The value is previewed as you sweep; the release commits it, as
   one undo step. `Esc` puts back what the drag started from.
 
+## Several views
+
+A Viewer panel holds one, two or four **views**. Each view has its own magnification, pan
+and channel, and can show a different composition.
+
+| Command | Shortcut | Does |
+| --- | --- | --- |
+| **View ▸ View layout ▸ One view** | `Alt+1` | One picture. |
+| **View ▸ View layout ▸ Two views across** | `Alt+2` | Two, side by side. |
+| **View ▸ View layout ▸ Two views down** | | Two, one above the other. `Alt+3` turns a two-view layout between across and down. |
+| **View ▸ View layout ▸ Four views** | `Alt+4` | Four, two by two. |
+| **View ▸ Share view options across views** | | Every view takes the active view's magnification, pan and channel. |
+| **View ▸ Lock this view** | `Ctrl+Alt+L` | Keeps the view on what it shows when something else is opened. |
+| **View ▸ Always preview this view** | `Ctrl+Alt+P` | Names the active view as the one playback runs in, whichever view is active. Choosing it again takes the naming away. |
+| **View ▸ Fill the window with this view** | `Ctrl+Alt+F` | Shows the Viewer alone in the window, and puts the arrangement back. |
+| **Window ▸ New Viewer** | `Ctrl+Alt+V` | Adds another Viewer panel beside this one. |
+| **Window ▸ New 3D viewport** | | Adds a Viewer that looks at the composition through a free view. See [Cameras and 3D](/use/camera/#3d-viewport). |
+
+A new view starts on what the panel's first view shows. Click a view to make it the
+**active** one. It takes an accent edge, and the Timeline, Effect controls and the other
+panels follow its composition. `Ctrl+Shift+.` and `Ctrl+Shift+,` step to the next and
+previous view.
+
+One view plays. While the playhead is moved, every view of that composition follows it. A
+view of another composition holds the frame that composition was left on.
+
+An item opened from the Project panel lands in the active view. Where that is locked it
+takes another unlocked view, then an empty place in the layout. With every view locked and
+the layout full, it opens in a new Viewer panel.
+
+The layout is saved with the workspace. Locks, and what each view shows, are saved with
+the project.
+
+**Pop out**, in the menu on a right-click of the panel's name, moves the Viewer into a
+window of its own. See [Workspaces](/use/workspaces/#rearrange).
+
+### Compare
+
+**View ▸ Compare** puts the panel's first two views together, with a divider to drag.
+
+| Row | Does |
+| --- | --- |
+| **Off** | The views sit in their own places. |
+| **Wipe** | Both pictures are drawn at the whole panel's size, the first shown left of the divider and the second right of it. The second takes the first's magnification and pan. `Ctrl+Alt+C` switches it on and off. |
+| **Split screen** | Each picture is fitted into its own side of the divider. |
+| **Snapshot** | Wipes the active view against its own snapshot, the snapshot right of the divider. Greyed until a snapshot is taken. |
+| **Composition ▸** | Puts another composition on the second side and locks it there, as a wipe unless a split is up. |
+| **Swap sides** | Draws the second picture left of the divider. Listed while two views are compared. |
+
+Choosing a compare on a one-view layout makes it two views across, and **Off** puts the
+layout back. No export sees a compare.
+
+Double-click the divider to centre it. In a wipe, where the two sides differ in 3D view or
+channel, each side is named at its foot, and a second side showing another composition
+names it.
+
+### Footage in a view
+
+Double-click footage in the [Project panel](/panels/project/) and a view shows the file on
+its own: the **source view**, with a strip to drag through it, **In** and **Out** marks,
+and **Insert** and **Overwrite**. It has no layer controls or guides. See
+[Cutting](/use/cutting/#the-source-view).
+
+## 3D views
+
+The **3D view** mark on the bar picks what the view looks through. It is lit while the
+view is anything but **Active camera**, and the view names what it looks through at the
+top of the picture.
+
+Its menu lists the views, **Reset 3D view**, how Model layers are shown, and **Open in new
+3D viewport**. See [Cameras and 3D](/use/camera/#3d-views) for the views and their
+shortcuts, the [3D viewport](/use/camera/#3d-viewport) and the
+[3D handles](/use/camera/#3d-handles).
+
+## In a shared project
+
+In a [shared project](/use/projects/#shared-projects) the Viewer shows where the others
+are pointing: a dot in each person's colour, with their name.
+
+While following someone, the Viewer wears a frame in their colour and a tab at its top
+edge naming them. **Stop** on the tab, or `Esc`, ends it.
+
+## The surround
+
+The area round the picture is a neutral grey. **Edit ▸ Settings ▸ Appearance ▸ Viewer ▸
+Surround** sets it to **Theme colour**.
+
+## Notices
+
+- **Missing files**: a count at the bottom left of the picture, while footage in the
+  composition has lost its file. See [Importing](/use/importing/#missing-files).
+- **Cut to the largest picture**: at the bottom right, while the frame was cut to
+  **Largest picture**. A click opens that row in
+  [Settings ▸ Preview and cache](/use/settings/#preview-and-cache).
+- On Linux, a machine rendering on an NVIDIA card while drawing its window with another
+  shows a message in place of the picture. Switch to NVIDIA Performance mode, or start
+  Lumit with PRIME render offload.
+
 ## Related
 
 - [The toolbar](/panels/toolbar/)
 - [Preview and playback](/use/preview/)
 - [Effect controls](/panels/effect-controls/)
+- [Scopes](/panels/scopes/)

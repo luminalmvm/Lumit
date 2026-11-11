@@ -17,8 +17,13 @@ and saved easings, expressions and effect presets. A machine can hold several.
 The profile button is at the left of the bottom strip. It opens the **profile card**.
 
 - A click on a profile in the card switches to it.
-- **Add profile…** makes a profile from a name. It starts with the settings in force.
+- **Add profile…** makes a profile from a name and switches to it. It starts with the
+  settings in force.
+- **Account settings…** opens **Settings ▸ Account**.
 - **Settings ▸ Account** renames and removes profiles. The profile in use is not removed.
+
+Removing a profile deletes its settings on the machine. An account it was signed in to
+stays.
 
 A profile does not hold the cache settings, the audio device, recent projects, or where
 windows were left. Those stay with the machine.
@@ -27,46 +32,86 @@ windows were left. Those stay with the machine.
 
 An account is optional. **Sign in** in the profile card opens the sign-in window, which
 takes an email and a password, or **Continue with Apple**, Google or Discord where the
-server offers them. An Apple, Google or Discord sign-in finishes in the browser.
+server offers them. An Apple, Google or Discord sign-in finishes in the browser, and is
+given up after five minutes. **Cancel** stops waiting for it.
 
-- **Create an account** asks for a name, an email, and a password of at least 10
-  characters, and emails a six-digit code that confirms the address.
-- **Forgot password?** emails a code and takes a new password.
+- **Create an account** asks for a name, an email, a password of at least 10 characters
+  and a date of birth, and emails a six-digit code that confirms the address. **Send
+  another code** emails a new one.
+- A first sign-in with Apple, Google or Discord asks for the date of birth too.
+- Lumit refuses an account to someone too young for one.
+- **Forgot password?** emails a code to the address typed and takes a new password.
+- **Privacy** and **Terms** open those pages in the browser.
 
-The password is not sent to Lumit's server. Each profile signs in separately.
+The password is not sent to Lumit's server. Each profile signs in separately. A profile
+with no name takes the name of the account it signs in to.
 
-**Settings ▸ Account ▸ Delete account…** deletes the account, its synced settings, and any
-subscription.
+The profile card names the account's email under the profile, or *On this device only*.
+**Sign out** is in the card and on **Settings ▸ Account**.
+
+**Settings ▸ Account ▸ Name** is the name other people see on previews and replies.
+**Rename…** changes it, up to 40 characters.
+
+**Settings ▸ Account ▸ Delete account…** deletes the account, its synced settings, and
+any subscription. The settings on the machine stay.
 
 ## Friends
 
 Friends are other Lumit accounts, found by username. A
 [preview](/use/review-links/#the-previews-window) can be sent to a friend from the Previews
-window. Friends are free.
+window, and an invite to a [shared project](/use/projects/#shared-projects) from the
+Multi-edit window. Friends are free.
 
 - **Settings ▸ Account ▸ Username** sets the name friends find you by: 3 to 20 letters,
-  numbers, `_` or `.`.
+  numbers, `_` or `.`. A username another account has is refused.
 - **Add friend** asks someone by their username. They become a friend when they accept.
+  An ask that is waiting for them reads *Asked*, and **Cancel** takes it back.
 - An ask waiting for you shows **Accept** and **Decline**. The **Friends** row in the
-  profile card counts them.
+  profile card counts them, and opens **Settings ▸ Account**.
 - Friends are folded under their count, such as **Friends · 3**. A press opens the list,
-  and **×** beside a friend removes them.
+  and **×** beside a friend removes them, after asking.
+
+When a friend sends an invite to a shared project, the bottom strip says so, and **Open**
+opens the Multi-edit window. See [Shared projects](/use/projects/#shared-projects).
 
 ## Lumit Pro
 
 Lumit Pro is a subscription on a Lumit account. It adds:
 
 - Shared projects through Lumit's relay. See [Relays](/use/projects/#relays).
-- [Sync](#sync).
 - [Projects kept online](/use/projects/#keeping-a-shared-project-online).
 - [Previews](/use/review-links/).
 - [Backup and history](/use/backup/).
+- [Sync](#sync).
 - [Devices](#devices).
 
-**See what is in Pro** in the profile card opens the **Lumit Pro** window. **Get Lumit Pro**
-opens the payment page in the browser, and the window changes when the payment completes.
-**Manage subscription** opens the page that changes or cancels it. A subscription bought in
-the iPhone app shows **Managed on your iPhone** on **Settings ▸ Account** instead.
+**See what is in Pro** in the profile card, or **Help ▸ Lumit Pro…**, opens the **Lumit
+Pro** window. It lists what Pro adds. What it offers under that comes from Lumit's server.
+
+| The server says | The window shows |
+| --- | --- |
+| Pro is on sale | **Monthly** and **Yearly** with their prices, and what the year saves. The line under the button gives the price the plan renews at until it is cancelled. |
+| Pro is not on sale | *Pro is not on sale yet.* |
+| Pro is free to try | **Sign in to try Pro**, and *Pro is free while we test it.* The badge reads **Pro preview**. |
+
+| Action | How |
+| --- | --- |
+| Subscribe | Choose **Monthly** or **Yearly**, then **Get Lumit Pro**. The payment page opens in the browser, and the window changes when the payment completes. |
+| Subscribe when signed out | **Sign in to get Pro** opens the sign-in window first. |
+| Stop waiting for a payment | **Not now** |
+| Change or cancel | **Manage subscription**, in the window, in the profile card, or on **Settings ▸ Account**. It opens the page in the browser. |
+
+With Pro, the window says when the subscription renews, or when it ends. It says so when
+a payment has failed. A subscription bought in the iPhone app shows **Managed on your
+iPhone** in the window and on **Settings ▸ Account** instead.
+
+A profile with Pro wears a **Pro** badge and a ring round its picture. For an account
+without Pro, a menu row that needs it wears the badge, and a switch that needs it is
+dimmed.
+
+**Settings ▸ Account ▸ Plan** reads *Free* or **Pro**, and **Storage** says how much of
+the account's storage is used, and how much of that is backups. Backups, previews and
+footage kept online share it.
 
 ## Devices
 
@@ -89,6 +134,10 @@ export's file, never a path. It can:
   composition, and start it
 - send a finished export as a [preview](/use/review-links/)
 
+The bottom strip says what a phone did. **Keep running in the background**, in
+[Settings](/use/settings/#general), leaves Lumit running for paired phones after its
+window is closed.
+
 A phone's request is refused when **Phones can start exports** is off, when no project is
 open, when **Settings ▸ Export ▸ Destination** is **Ask every time**, **Beside the
 project** with an unsaved project, or **A folder I choose** with none chosen, and while a
@@ -105,7 +154,7 @@ After that, changes to different settings on two machines are both kept. Where t
 changed the same setting, the one that syncs last is kept.
 
 **Settings ▸ Account ▸ Keep this profile in sync** turns sync off for the profile. Under it
-is a switch for each kind of setting.
+is a switch for each kind of setting, and **Sync now**.
 
 | Kind | What it holds |
 | --- | --- |
@@ -116,16 +165,41 @@ is a switch for each kind of setting.
 | **Easings, expressions and favourites** | Saved easings and expressions, favourite effects, and recent colours. |
 | **Effect presets** | The files in the presets folder. |
 
+The profile card says where sync stands.
+
+| Line | Meaning |
+| --- | --- |
+| Settings in sync | The last sync finished. |
+| Syncing… | Settings are being sent or fetched. |
+| Couldn't sync. Trying again soon. | The last sync failed. The next is within two minutes. |
+| Sync is off | **Keep this profile in sync** is off. |
+
 :::note[Not synced]
 Interface scale, cache budgets and location, the audio device, **Audio offset**, recent
 projects, **Nightly builds**, **Nightly icon**, **Discord status**, the **New project
 template**, the shared projects **Upload limit**, **Download limit**, **Stand-in size** and
 **Stand-in frames**, **Phones can start exports**, and **Keyframes in Effect controls**.
-Effect presets are left out while they come to more than 900 KB together.
+A kind of setting is left out while it comes to more than 900 KB.
 :::
+
+## Settings ▸ Account
+
+| Section | What it holds |
+| --- | --- |
+| **Profiles** | Each profile, with **Rename…** and **Remove**, and **Add profile…**. The profile in use reads *In use*. |
+| **Lumit account** | **Sign in**, or the account's email with **Sign out** and **Delete account…**. **Name**, **Username**, **Plan**, **Storage**, and **Email me about new comments**, see [Previews](/use/review-links/#the-link-page). |
+| **Friends** | See [Friends](#friends). It shows for a signed-in profile. |
+| **Devices** | See [Devices](#devices). It shows with Lumit Pro. |
+| **Sync** | **Keep this profile in sync**, the kinds, and **Sync now**. |
+| **Backup** | **Back up projects when they are saved**, see [Backup and history](/use/backup/#settings). |
+| **Kept online** | The shared projects the account keeps online, each with its size and when it was last opened, and **Stop keeping online**. One the computer has no file for reads *Unnamed project*, with the day it was put online. After Lumit Pro ends, a **Lumit Pro has ended** row has **Lumit Pro…**. See [Projects](/use/projects/#keeping-a-shared-project-online). |
+
+**Plan** has **Manage subscription**, or **Lumit Pro…**, which opens the Lumit Pro window.
 
 ## Related
 
 - [Projects](/use/projects/)
+- [Previews](/use/review-links/)
+- [Backup and history](/use/backup/)
 - [Settings](/use/settings/)
 - [Workspaces and panels](/use/workspaces/)

@@ -5,11 +5,11 @@ description: "Throws points at the picture and keeps the ones that land on somet
 
 import Compare from "../../../../components/Compare.astro";
 
-Scatter is a **Generate** effect.
+Scatter is a **Points** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-<Compare label="Scatter" category="generate" slug="scatter" />
+<Compare label="Scatter" category="points" slug="scatter" />
 
 {/* END GENERATED */}
 
@@ -20,7 +20,7 @@ Throws points at random and keeps the ones that land inside the layer.
 The points effects below it on the same layer can read its points.
 [Points sample](/effects/drivers/points-sample/) cannot, and neither can
 [Layer points](/effects/drivers/layer-points/) from another layer. A
-[Bake points](/effects/generate/bake-points/) below it makes its points readable by both.
+[Bake points](/effects/points/bake-points/) below it makes its points readable by both.
 
 ## Parameters
 
@@ -56,15 +56,16 @@ In the Effect Controls panel:
 - **Colour**: what the points are drawn in.
 - **Max points**: the most points.
 - **Mix**: how much of the drawing lands on the picture.
+- **Blend**: the blend mode the drawing is laid over the picture with.
 - **Matte**: this is not a strength. It chooses the alpha the points land
   inside. Points take that layer's shape instead of this one's. **Invert**
   reads that matte the other way round, which fills everything the shape does not cover.
 
 ## Related
 
-- [Emit from image](/effects/generate/emit-from-image/)
-- [Grid](/effects/generate/grid/)
+- [Emit from image](/effects/points/emit-from-image/)
+- [Grid](/effects/points/grid/)
 - [Particulate](/effects/generate/particulate/)
 - [The node graph](/use/nodes/)
-- [Generate](/effects/#generate)
+- [Points](/effects/#points)
 - [Effects](/use/effects/)

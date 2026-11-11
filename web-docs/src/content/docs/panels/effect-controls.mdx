@@ -11,47 +11,246 @@ Effect Controls lists every effect on the selected layer in the order they are c
 
 <Shot file="effect-controls.png" caption="Effect Controls, with two effects on one layer." eager/>
 
+Open it from **Window ▸ Panels ▸ Effect controls**, or press `F3`.
+
+## What it shows
+
+| Selected | The panel shows |
+| --- | --- |
+| A layer | That layer's stack. Deselecting keeps it up until another layer is selected or the layer is deleted. |
+| One clip in the [Cut timeline](/use/cutting/#effects-and-blend-mode-on-a-clip) | That clip's own effects, marked **Clip**. **Blend mode** under the header sets the clip's own, and **From layer** hands it back to its layer's. |
+| An overlap between two clips | The [transition](/use/cutting/#fades-and-dissolves)'s rows, marked **Transition**. |
+| A layer group's header | The header's own stack. |
+| A box in a [node graph composition](/use/node-graphs/) | That box's rows, as the [Node panel](/use/nodes/#the-node-panel) does. |
+
+With no layer selected the panel reads **No layer selected**.
+
+Above the effects sit a text layer's **Animators**, a placed node graph's
+[**Inputs**](/use/node-graphs/#place-a-graph-as-a-layer) and a Model layer's **Materials**.
+[Audio effects](/effects/#audio) sit under an **Audio** heading at the foot of the stack,
+and the layer's styles under **Styles** below that. With **Transform in Effect controls**
+on in [Settings](/use/settings/), the layer's Source, Flow and Transform sections sit at
+the top. See [Layers](/use/layers/), [Text](/use/text/) and
+[Retiming and speed](/use/retime/).
+
+## The header
+
+The header carries the layer's name, the search mark, the keyframe strip's diamond and
+**Add effect**, which lists every effect by category. A layer with no effects shows an
+**Add effect** button in the stack's place. Dragging an effect or a preset from
+[Effects & presets](/panels/effects-presets/) onto the panel adds it.
+
+`Ctrl+F`, or the search mark, opens a filter that keeps the rows whose names match,
+Transform's included. An effect whose own name matches keeps all of its rows.
+
+Right-click the header or empty panel:
+
 | Item | What it does |
 | --- | --- |
-| **Parameter widgets** | Sliders, dials, colour pickers, dropdowns, point controls. |
-| **Stopwatch** | Start animating and keyframing a parameter. |
-| **Keyframe strip** | A small timeline at the right of the panel that spans the selected layer, or the selected clip, with a lane of keyframes beside each parameter. Keys select, drag and delete as they do in the Timeline, and a click on its ruler moves the playhead. The diamond in the header shows or hides it, and the divider sets its width. In a panel under 560 pixels wide the ruler runs across the top and each animated parameter has its lane beneath it. `Ctrl`-click on an animated parameter's lane adds a key, and right-clicking a key gives the [menu every keyframe has](/use/keyframes/), less **Ease…**, **Reverse**, **Copy** and **Paste**. An effect's heading shows every key the effect carries as marks. With the playhead past the layer's span, it stands dimmed at the edge with an arrow. **Edit ▸ Settings ▸ Timeline ▸ Panels ▸ Keyframes in Effect controls** is the same switch as the diamond, on by default. |
+| **Add effect ▸** | The same categories as the button. |
+| **Paste** | Adds the copied effects to the end of the stack. |
+| **Select all effects** | Picks the whole stack. |
+| **Expand all**, **Collapse all** | Twirls every effect open or shut. |
+| **Filter rows** | Opens the filter. |
+| **Keyframe strip** | Shows or hides the [keyframe strip](#the-keyframe-strip). |
+| **Save preset…**, **Load preset…** | Saves the whole stack as a [preset](/use/presets/), or applies one from disk. |
+| **Remove all effects** | Clears the stack. |
+
+A clip's and a group header's stack have **Add effect ▸**, the two folds and
+**Keyframe strip** alone.
+
+## An effect's heading
+
+| Item | What it does |
+| --- | --- |
+| **Tick** | Switches the effect off and on. Off, the picture passes through it and its values are kept. Dragging from one tick across others sets each to match the first. |
+| **Twirl** | Folds the effect's rows away. Twirling one of several picked effects twirls them all. |
+| **Interface** | On an [extension](/use/extensions/)'s effect with a page of its own. Opens the page. |
+| **Render time** | What the effect cost in the last measured frame, while the Timeline's render-time hourglass is on. See [the Timeline](/panels/timeline/). |
+| **Reset** | Under the pointer, once a parameter is off its default. Puts every parameter back to its default and removes its keyframes. |
+| **×** | Under the pointer. Removes the effect. |
+| **Drag** | Moves the effect up or down the stack. |
+
+Click a heading to pick the effect. `Ctrl`-click toggles one, `Shift`-click picks the run
+between, and `Ctrl+A` picks the whole stack. A click on empty panel clears the pick.
+`Enter` renames the one picked effect, `Delete` removes the picked effects, `Ctrl+C` and
+`Ctrl+V` copy and paste them, and `Ctrl+D` duplicates them. See
+[Effects](/use/effects/#copy-and-paste).
+
+Right-click a heading:
+
+| Item | What it does |
+| --- | --- |
+| **Bypass** | Ticked while the effect is off. |
+| **Rename** | Names the effect. An empty name puts its own back, and `Escape` leaves the name as it was. |
+| **Reset** | As the heading's own. Greyed while every parameter is at its default. |
+| **Cut**, **Copy** | The picked effects, with their values and keyframes. |
+| **Paste** | Puts the copied effects right below this one. |
+| **Duplicate** | Each copy sits right after its original, with its keys. |
+| **Move ▸** | **Move up**, **Move to top**, **Move down** and **Move to bottom**. A move the effect cannot make is not listed. Several picked effects move together. |
+| **Presets ▸** | The presets the effect comes with, and saved presets of its kind. See [Effect presets](/use/presets/#presets-of-one-effect). |
+| **Save preset…** | Saves that effect alone. |
+| **Manual page** | Opens the effect's page in this manual. |
+| **Reveal in node graph** | Shows the effect's box in the [Node graph](/use/nodes/). |
+| **Compositing** | Opens or shuts the effect's [Compositing](#compositing) fold. |
+| **Expand all**, **Collapse all** | Twirls every effect on the layer. |
+| **Delete** | Removes the picked effects. |
+
+An effect's row in the Timeline has the same menu. On a locked layer the items that would
+change it are greyed. A clip's and a group header's effects have no **Paste**,
+**Duplicate** or **Reveal in node graph**.
+
+Double-click a [Custom shader](/effects/utility/custom-shader/) heading to open its
+[shader graph](/use/shaders/#the-shader-graph).
+
+## Parameter rows
+
+Every row carries its name and its control. An animatable row carries a **stopwatch**,
+which starts keyframing it. See [Keyframes](/use/keyframes/). A parameter's reset arrow
+shows while its value differs from its default, and never on a keyed one.
+
+| Control | What it does |
+| --- | --- |
+| **Number** | A value box. Drag sideways to change it, or click to type a number or a sum. While dragging, `Shift` moves ten times as fast, `Ctrl` a tenth and `Alt` a hundredth. Text it cannot work out flashes the edge of the box and changes nothing. |
+| **Slider** | A number with a track beside it. **Range sliders** in [Settings ▸ Appearance](/use/settings/#appearance) shows or hides the track. |
+| **Angle** | A number and a dial. The dial winds past a full turn, and `Shift` snaps it to the parameter's step. |
+| **Colour** | A swatch that opens the [colour picker](#the-colour-picker), and a [dropper](#the-dropper) that samples from the Viewer. |
+| **Checkbox** | On or off. |
+| **Dropdown** | One of a list. A list of 40 or more is searchable. |
+| **Seed** | A whole number from 0 to 4,294,967,295. |
+| **Point** | X and Y on one row, and a dropper that picks the point on the Viewer. |
 | **Link** | The chain between the x and y boxes of some pairs. Linked, editing one scales the other by the same factor. Click it again to **Unlink**. |
-| **Drag to reorder** | Move an effect up or down the stack. |
-| **Preset save/load** | Store configured effects and apply them again later. |
-| **Text rows** | One line of text, up to 128 bytes. Enter or clicking away commits it, and `Esc` puts the stored text back. |
+| **Curve** | A plot. Click it to add a point, drag a point to move it, and drag one out of the plot to remove it. The two end points slide along their edges and are never removed. A curve holds 32 points at most. Neighbouring curves share one plot with a button per channel. Right-click the plot for **Add point** or **Delete point**, **Reset curve**, **Copy curve**, **Paste curve**, and the plot's size: **Small**, **Medium** or **Large**. |
+| **Layer** | A picker of the composition's layers. A row that reads a picture leaves out the layers with none. The effect's own layer is marked *(this layer)*. A **Matte** row carries its **Channel** and **Invert** beside it. |
+| **Mask path** | A picker of the layer's masks. **First mask** follows whichever mask is first. |
+| **Clip** | A picker of the clips on the layer named by the effect's layer row. It reads **Choose a layer first** until that row names a layer. |
 | **Points** | The row at the top of an effect with a Points input. It lists **None** and every effect above that hands out points, and picking one rewires it. Merge points has one for each of its four inputs. |
-| **Compositing** | The fold at the foot of an effect, holding its Mix and Matte. **Compositing** in the heading's menu opens it. See [Effects](/use/effects/#every-effect-has-a-matte). |
+| **Text** | One line of text, up to 128 bytes. Enter or clicking away commits it, and `Esc` puts the stored text back. |
+| **File** | **Choose…** opens a file dialogue, or a folder dialogue on a row that takes a folder. Once set the row shows the file's name, and **Clear** unsets it. |
+| **Button** | Runs the action named on it. |
 
-Order matters: the stack runs top to bottom. See [Effects](/use/effects/).
+A picker naming something since deleted reads **Missing layer**, **Missing mask** or
+**Missing clip**.
 
-With one clip selected in the [Cut timeline](/use/cutting/#effects-and-blend-mode-on-a-clip)
-the panel shows that clip's own effects, marked **Clip**. **Blend mode** under the header
-sets the clip's own, and **From layer** hands it back to its layer's.
+Some rows are folded into named groups with a twirl of their own. A row another parameter
+has taken over is greyed, and its tooltip names the control it waits on.
 
-Reset and Remove appear on an effect's heading under the pointer. Right-click the heading
-for everything else, including **Save preset…**, which saves that effect alone.
+Some effects draw a display of their own above their rows.
+[Levels](/effects/colour/levels/) draws the frame's histogram, with its input black, gamma
+and white handles over it, the output range beneath and a button per channel. The
+trackers, the [Roto brush](/effects/utility/roto-brush/),
+[Depth](/effects/utility/depth/) and
+[Remove background](/effects/utility/remove-background/) draw their status.
 
-A parameter's reset arrow shows while its value differs from its default, and never on a
-keyed one. Right-click its name, its stopwatch or its value for one menu: **Reset**,
-**Copy value**, **Paste value**, **Copy link**, **Paste link**, **Add keyframe**,
-**Stop animating**, **Set expression** and **Reveal in graph**. A row in the Timeline has
-the same menu.
+A row driven by a wire in the [node graph](/use/nodes/#drivers) shows a ring where its
+stopwatch was, the value the wire carries, and the word **driven**. The ring's tooltip
+names the driver, and a click on the word opens the driver in the Node panel. A row fed by
+a points effect with nothing wired into it reads **No stream**.
 
-`Ctrl+D`, or **Duplicate** on the same menu, copies the selected effects. Each copy sits
-right after its original, with its keys.
+A row holding an [expression](/use/expressions/) shows the expression's text and the value
+it works out in place of the value box, and a click opens the expression's editor.
 
-A value box takes a number or a sum. Text it cannot work out flashes the edge of the box
-and changes nothing.
+### A row's menu
 
-The colour picker keeps the last eight colours applied through it, newest first.
+Right-click a row's name, its stopwatch or its value for one menu. A row in the Timeline
+has the same menu.
 
-## Render times
+| Item | What it does |
+| --- | --- |
+| **Reset** | Puts the parameter back to its default. |
+| **Copy value**, **Paste value** | On a number. |
+| **Copy colour**, **Paste colour**, **Copy hex** | On a colour. **Paste colour** also takes a hex code copied from anywhere. |
+| **Copy link**, **Paste link** | Copies the row for another to follow, and writes that link as this row's expression. See [Expressions](/use/expressions/). |
+| **Add keyframe**, **Remove keyframe** | At the playhead. |
+| **Stop animating** | Removes the row's keyframes. |
+| **Add expression** | Then **Edit expression**, **Convert to keyframes** and **Remove expression** once it has one. |
+| **Reveal in graph** | Shows the row's curve in the [Graph editor](/use/graph-editor/). |
+| **Drive with ▸** | Wires a [driver](/use/effects/#edit-the-parameters) onto the row. |
 
-Switch the Timeline's render-time hourglass on and the effect render times will appear in
-the effect's name row, similar to how they appear in the Timeline per effect. See [the Timeline](/panels/timeline/).
+## The dropper
+
+A click on a dropper arms it, and the Viewer shows a magnifier of the pixels under the
+pointer. Press on the picture and drag: the parameter follows the pointer, and letting go
+is one undo step. `Escape` puts back what it was.
+
+`Shift` and the wheel set how many pixels are averaged, from one to a 9 by 9 block.
+
+| Dropper | Reads |
+| --- | --- |
+| On a colour | The colour under the pointer. |
+| On a point | The place under the pointer. |
+| On [Depth of field](/effects/blur-sharpen/depth-of-field/)'s **Focus distance** | The depth layer's depth at the pointer. Drawn once a depth layer is set. |
+
+## The colour picker
+
+A colour swatch anywhere in Lumit opens the same picker. The colour is applied as it
+changes: a drag previews, and each change that settles is one undo step.
+
+| Part | What it does |
+| --- | --- |
+| **R**, **G**, **B** | The three channels, each dragged or typed. A display colour reads 0 to 255. An effect's colour reads 0 to 1 and may go past either end, as far as the parameter's range allows. |
+| **The square** | Sets how vivid and how bright the colour is. |
+| **The strip** | Sets the hue. |
+| **The two swatches** | The colour the picker opened with, and the colour now. A click on the first goes back to it. |
+| **Hex** | Six hex digits, with or without `#`. A valid entry applies as it is typed. |
+| **Recent colours** | The last eight colours applied anywhere, newest first. A click applies one. |
+| **The project's colours** | The colours kept in this project. A click applies one. **+**, **Keep colour**, adds the colour being edited, and right-click ▸ **Forget this colour** removes one. Drawn only with a project open. |
+| **Cancel** | Puts back the colour the picker opened with and closes. |
+| **Apply** | Closes. `Escape` and a click away from the picker close it too, and keep the colour. |
+
+For a colour past 0 to 1 the picker reads **Outside 0–1**, and the swatch and the hex
+show the nearest colour a screen has.
+
+Right-click a swatch for **Reset**, **Copy colour**, **Paste colour** and **Copy hex**.
+
+## Compositing
+
+The fold at the foot of each effect holds its **Mix**, **Blend** and **Matte**.
+**Compositing** in the heading's menu opens it. Shut, it reads whatever is off its
+default. See [Effects](/use/effects/#matte).
+
+## The keyframe strip
+
+A small timeline at the right of the panel spans the selected layer, or the selected clip,
+with a lane of keyframes beside each parameter. Keys select, drag and delete as they do in
+the Timeline, and a click on its ruler moves the playhead. `Ctrl`-click on an animated
+parameter's lane adds a key, and right-clicking a key gives the
+[menu every keyframe has](/use/keyframes/), less **Ease…**, **Reverse**, **Copy** and
+**Paste**. A shut effect shows every key it carries on its heading's lane. With the
+playhead past the layer's span, it stands dimmed at the edge with an arrow.
+
+The diamond in the header shows or hides the strip, and the divider sets its width. In a
+panel under 560 pixels wide the ruler runs across the top and each animated parameter has
+its lane beneath it. **Edit ▸ Settings ▸ Timeline ▸ Panels ▸ Keyframes in Effect controls**
+is the same switch as the diamond, on by default.
+
+## Styles
+
+A layer's styles are listed under **Styles** once it has one. The first is added from
+**Layer ▸ Layer styles**, and the **+** on the heading adds the rest. A style is not
+dragged, copied or saved as a preset. See [Layer styles](/use/layer-styles/).
+
+## Badges
+
+An effect that is not drawing wears a line at the top of its card, and passes its picture
+through unchanged.
+
+| Badge | Means |
+| --- | --- |
+| **This plugin did not render this frame** | An [OpenFX plugin](/use/plugins/) crashed, hung or refused. |
+| **This plugin is switched off** | The plugin was switched off in Effects & presets. |
+| **This plugin is not installed on this machine** | The project uses a plugin this machine has not got. |
+| **This build does not know this effect** | The effect was saved by another version of Lumit. |
+| **This effect needs an addon that is not installed** | The effect asks for a [model pack](/use/addons/), named beneath. |
+| **Install the** id **extension** | The effect comes from an [extension](/use/extensions/) that is not installed. |
+| **This effect is switched off until Lumit restarts** | An extension's effect was running when the graphics card stopped responding twice. |
+| **This shader did not compile** | A [Custom shader](/use/shaders/)'s text has an error, given beneath. |
+
+The effect's values are kept as they were saved.
 
 ## Related
 
 - [Effects](/use/effects/)
 - [Effects & presets](/panels/effects-presets/)
+- [The node graph](/use/nodes/)
+- [Keyframes](/use/keyframes/)

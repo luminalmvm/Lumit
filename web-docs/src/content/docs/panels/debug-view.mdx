@@ -1,0 +1,36 @@
+---
+title: Debug
+description: The interface's frame rate, and readouts for hunting a fault.
+sidebar:
+  order: 12
+---
+
+The **Debug** panel shows how fast the interface is drawing. It is off until **Help ▸
+Enable debug panel** is ticked, and the same row takes it away. While it is on, **Window ▸
+Panels** lists it too.
+
+## Frame rate
+
+| Reading | Shows |
+| --- | --- |
+| **FPS** | The rate of the last frame the interface drew. |
+| **Average** | The average over the last 60 frames. |
+| **The bars** | One bar per frame for those 60, taller for a slower frame. |
+
+A frame slower than 17 milliseconds is drawn in the warning colour, and one slower than 30
+in the error colour. The readings stand still while nothing on screen is moving.
+
+This is the rate of the interface, not of playback.
+
+## The rest
+
+- **Show safe hover triangles** draws the area a menu keeps open while the pointer crosses
+  to a submenu.
+- **Statistics** and **Call log** list the calls the interface makes to the engine, with
+  how long each took. **Clear** empties the log. Both stay empty in a release build.
+
+## Related
+
+- [Preview and playback](/use/preview/)
+- [Render times](/panels/timeline/#render-times)
+- [Workspaces](/use/workspaces/)

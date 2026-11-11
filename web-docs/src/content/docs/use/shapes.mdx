@@ -7,28 +7,54 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **Shape layer** holds vector shape groups with fills, strokes, and path operations.
+A **Shape layer** holds vector shapes with fills, strokes, and path operations.
 
 <Shot file="shape-layer.png" caption="The contents of a shape layer in the Timeline." eager/>
 
 ## Draw a shape
 
-1. Deselect all layers.
-2. Pick a shape or pen tool.
+1. Deselect all layers (`Ctrl+Shift+A`).
+2. Pick a shape tool (`Q`) or the Pen (`G`).
 3. Draw in the Viewer.
+
+The new shape layer goes to the top of the composition and is selected. It is named after
+its shape, or **Path** when the Pen drew it.
 
 With a shape layer selected the tools add a shape to it. Hold `Alt` to draw a
 [mask](/use/masks/) on it instead. With any other layer selected the tools draw a mask.
 
-When using a shape tool while drawing, if you want to maintain the shape's proportions,
-hold `Shift` while creating the shape.
+| Tool | Draws |
+| --- | --- |
+| **Rectangle** | A rectangle between the two corners of the drag. |
+| **Rounded rectangle** | A rectangle with its corners rounded by a quarter of its shorter side. |
+| **Ellipse** | An ellipse inside the dragged box. |
+| **Polygon** | Five sides, with a point at the top. |
+| **Star** | Five points, with one at the top. |
+
+`Q` again steps to the next shape tool. `Shift` keeps the width and height equal. A drag
+under four pixels draws nothing.
+
+### The Pen
+
+- **Click** places a corner point.
+- **Drag** places a point and pulls out its two handles. `Alt` pulls out the leaving
+  handle alone.
+- `Backspace` or `Ctrl+Z` removes the last point.
+- **Click the first point** to close the path. The point grows a ring when the pointer is
+  near enough. A path closes once it has three points.
+- `Enter`, `Esc`, a click outside the Viewer or another tool ends the path and leaves it
+  open.
+- **Right-click** with a path under way for **Close path**, **Finish path**, **Remove last
+  point** and **Discard path**.
+
+A path of one point is dropped.
 
 ## Open paths
 
-The **Pen** closes a path when you click its first point again. `Enter`, `Esc`, a click
-outside the Viewer or another tool leaves it open. An open path's stroke stops at its ends,
-and its fill closes with a straight line. **Layer ▸ Mask and shape path ▸ Closed** opens or
-closes the picked path.
+An open path's stroke stops at its ends, and its fill closes with a straight line.
+**Layer ▸ Mask and shape path ▸ Closed** opens or closes the path whose row is selected in
+the Timeline, and **Close path** on the path's right-click menu in the Viewer does the same.
+A rectangle, ellipse, polygon or star is always closed.
 
 With the **Pen**, click either end of the selected layer's open path to carry it on, and its
 other end to close it.
@@ -48,32 +74,113 @@ A shape drawn with the **Rectangle**, **Rounded rectangle**, **Ellipse**, **Poly
 | Star | **Points**, **Position x**, **Position y**, **Rotation**, **Inner radius**, **Outer radius**, **Inner roundness**, **Outer roundness** |
 
 Every row is animatable. Roundness is in pixels; the roundness of a polygon or star is a
-percentage, and 100 makes a polygon a circle.
+percentage, and 100 makes a polygon a circle. **Points** runs from 3 to 100.
 
 **Convert to path** on the shape's menu turns it into a path, the shape it shows at the
 playhead. Dragging one of its points in the Viewer does the same.
 
 ## Fills and strokes
 
-Each shape group carries its own fill and stroke, set from the toolbar when the shape
-is drawn. Both are editable afterwards from the Timeline, on the group's own **Fill**,
-**Stroke** and **Stroke width** rows. **Add** and **Remove** on the shape's menu give it a
-fill or a stroke, or take one away.
+A shape takes the **Fill**, **Stroke** and **Width** on the toolbar as it is drawn. Click
+the word **Fill** or **Stroke** there for **Solid colour** or **None**. A **Width** of 0
+draws no stroke.
+
+Both are editable afterwards from the Timeline, on the shape's own **Fill**, **Stroke** and
+**Stroke width** rows, and all three are animatable. **Add** and **Remove** on the shape's
+menu give it a fill or a stroke, or take one away. A new fill is white and a new stroke
+black. The eye beside a **Fill** or **Stroke** row leaves it out of the picture and keeps
+its colour.
+
+## Contents in the Timeline
+
+Twirl the layer open and its shapes, modifiers and groups are listed under **Contents**,
+each with a twirl of its own.
+
+| On an entry's row | What it does |
+| --- | --- |
+| **Click the name** | Picks the entry. `Delete` removes the picked entries, and `Enter` renames one. |
+| **Double-click the name** | Renames it. |
+| **The eye** | Switches a shape, a modifier or a group off and keeps it. |
+| **Add** | On a shape or a group. Lists what can be added to it. |
+| **Remove** | On a modifier. Deletes it. |
+| **Right-click** | **Rename**, **Add**, **Move up**, **Move down** and **Delete shape**, **Delete modifier** or **Delete group**. A shape also has **Remove** and **Convert to path**, a group **Ungroup**, and a Repeater **Expand copies**. |
+
+Under a shape, in order:
+
+| Row | What it does |
+| --- | --- |
+| **Combine** | How the shape joins the one above it. On a shape with another directly above it. |
+| **Fill** | The colour inside the path. |
+| **Gradient** | Flat, Linear or Radial. |
+| **Gradient colour**, **Gradient stops** | The colour the ramp ends at, and the ramp's editor. With a ramp. |
+| **Stroke**, **Stroke width** | The outline's colour, and its width in pixels. |
+| **Opacity** | How opaque the shape is. |
+| **Gradient start opacity**, **Gradient end opacity** | How opaque each end of the ramp is. With a ramp. |
+| **Stop _n_ position**, **Stop _n_ opacity** | One pair for each stop between the ends. |
+| **Path** | The shape itself, or the rows of a rectangle, ellipse, polygon or star. |
+| **Gradient start x**, **Gradient start y**, **Gradient end x**, **Gradient end y** | The two points that aim the ramp. With a ramp. |
+| **Dash**, **Gap**, **Dash offset** | A dashed outline. On a shape with a stroke. |
+| **Taper scope** and the taper's rows | On a shape with a stroke taper. |
+
+## Edit a path
+
+With the Selection tool, a selected layer shows the points of its paths. Selecting a
+shape's **Path** row in the Timeline shows that path's points alone, and takes the layer's
+box away until another row is selected.
+
+| Gesture | What it does |
+| --- | --- |
+| **Click** a point | Selects it and shows its handles. `Shift`-click adds it to the selection or takes it out. |
+| **Drag** from empty picture | Selects the points inside the box. With a **Path** row selected, a drag from anywhere off a point does. |
+| **Drag** a selected point | Moves every selected point. |
+| **Drag** a handle | Moves it. On a smooth point the other handle turns with it, and `Alt` leaves the other where it is. |
+| `Ctrl+Alt`-click a point | Turns a smooth point into a corner, or a corner into a smooth point. |
+| `Ctrl+Alt`-drag a point | Pulls a pair of handles out of it. |
+| `Delete` | Removes the selected points. |
+| `Ctrl+Shift+T` | Puts a box round two or more selected points. A drag turns them about its middle, in 15° steps with `Shift`. `Esc`, `Enter` or a click takes the box down. With a **Path** row selected and fewer than two points selected, the box goes round the whole path. |
+
+On a path that is keyframed, an edit sets a keyframe at the playhead.
+
+Right-click a point or the path's line:
+
+| Row | Does |
+| --- | --- |
+| **Delete point** | Removes the selected points. |
+| **Corner point**, **Smooth point** | Sets what the selected points are. The one in force is ticked. |
+| **Set as first point** | Starts the path at this point. On a closed path with no keyframes. |
+| **Add point here** | On the path's line. Adds a point there. |
+| **Select all points** | Selects every point of the path. |
+| **Close path** | Closes or opens the path. Ticked on a closed one. |
+| **Reverse path** | Runs the path the other way. On a path with no keyframes. |
+| **Rename…**, **Delete shape** | Rename or delete the shape the path belongs to. |
+
+A rectangle, ellipse, polygon or star has no **Close path** or **Reverse path**.
+
+### The Pen's other tools
+
+`G` again steps through the tools that share the Pen's button: **Add vertex**, **Delete
+vertex**, **Convert vertex** and **Mask feather**. They edit a path that is already drawn.
+See [what the keys do](/panels/toolbar/#what-the-keys-do).
+
+With the **Pen** itself and a **Path** row selected in the Timeline, a click on that path's
+line adds a point, and `Alt` on a point converts it.
 
 ## Gradient fills
 
-A shape group's first rows are **Fill**, the colour inside its path, and **Gradient**,
-which is Flat, Linear or Radial. Choose a ramp and its rows appear: the **Gradient colour**
-it ends at, **Gradient stops**, an opacity for each end, and the two points that aim it.
+A shape's first rows are **Fill**, the colour inside its path, and **Gradient**, which is
+Flat, Linear or Radial. Choose a ramp and its rows appear: the **Gradient colour** it ends
+at, **Gradient stops**, an opacity for each end, and the two points that aim it.
 
 Linear ramps along the line between the points; radial ramps outwards from the first,
-with the second on the outer edge.
+with the second on the outer edge. A new ramp runs down the shape's box, or out from its
+middle.
 
 **Gradient start opacity** is how opaque the Fill end is and **Gradient end opacity** how
 opaque the Gradient colour end is, as a percentage. The ramp fades evenly between them, and
 an end at 0 is clear.
 
-The points and the opacities are animatable; the colours are not.
+The Fill, the points and the opacities are animatable. The Gradient colour and the stops'
+colours are not.
 
 ### Gradient stops
 
@@ -83,6 +190,7 @@ are the Fill and the Gradient colour.
 - Click the ramp to add a stop between them.
 - Drag a stop to move it. Drag it away from the ramp, or press **Remove**, to take it off.
 - **Colour**, **Opacity** and **Position** set the selected stop.
+- Right-click the ramp for **Add stop**, **Remove**, **Reverse** and **Space evenly**.
 
 Each stop also has two rows in the Timeline, **Stop 1 position** and **Stop 1 opacity** for
 the first, and both are animatable. Editing a keyed stop in the editor sets a keyframe at the
@@ -93,7 +201,7 @@ its ends.
 
 ## Combine two shapes
 
-Every shape group after the first in the list carries a **Combine** row, saying how it joins
+A shape with another shape directly above it carries a **Combine** row, saying how it joins
 the one **above** it: **Apart**, **Union**, **Subtract**, **Intersect** or **Exclude**. Apart
 is the default, and draws it on its own.
 
@@ -106,32 +214,39 @@ A shape fills the same way after a combine as before it.
 
 ## Animate the shape itself
 
-A shape group's **Path** row carries the shape, and its stopwatch animates it. Key one path,
-move the playhead, drag a vertex, and the shape morphs between the two.
+A shape's **Path** row carries the shape, and its stopwatch animates it. Key one path, move
+the playhead, drag a point, and the shape morphs between the two.
 
-Vertices are paired by **order**, not by feature; where one path has fewer points, it is
+**Layer ▸ Mask and shape path ▸ Add or remove keyframe at playhead** does the same for the
+shape whose row is selected in the Timeline.
+
+Points are paired by **order**, not by feature; where one path has fewer points, it is
 subdivided to match the denser one first. Whether a path is open or closed is held across
 the morph.
 
-:::note[Limitation]
-A shape group's **Path** row has no curve in the [graph editor](/panels/graph-editor/). Every
-number on a shape item has one.
-:::
+A **Path** row has no value to plot. In the [graph editor](/panels/graph-editor/) it draws
+its rate of change. Every number on a shape has a curve.
 
 ## Modifiers
 
 A shape layer's contents is an ordered list: shapes, modifiers and groups. A modifier acts
-on every shape above it in its group, in list order. Two modifiers of one kind stack: a
+on shapes above it, and where it is added decides which. Two modifiers of one kind stack: a
 repeater under a repeater repeats the copies.
 
-Right-click a row in the Timeline for **Add**, which lists **Repeater**, **Trim paths**,
-**Offset paths**, **Twist**, **Deform**, **Smooth**, **Fill**, **Stroke**, **Stroke taper**
-and **Group**. A
-modifier is added under the row and acts on it; on a group it is added inside the group. A
-modifier's rows sit under its own twirl, and every row is animatable. **Move up** and
-**Move down** reorder an entry; **Delete modifier** takes one off.
+| Added from | Acts on |
+| --- | --- |
+| **Add** on a shape's row | That shape alone. It moves and is deleted with the shape. |
+| **Add** on a group's row | Every shape in the group. It goes at the end of the group. |
+| **Global add** on the **Contents** heading | Every shape in the layer. It is listed under **Global modifiers**, below the shapes. |
+| **Add** on a modifier's right-click menu | The same shapes as that modifier. It goes under it. |
 
-The stroke taper is a setting of the shape itself, offered under **Add** and **Remove**.
+**Add** lists **Repeater**, **Trim paths**, **Offset paths**, **Twist**, **Deform** and
+**Smooth**. On a shape it also lists **Fill**, **Stroke** and **Stroke taper** where the
+shape has none, and on a shape or a group, **Group**.
+
+A modifier's rows sit under its own twirl, and every row is animatable. **Move up** and
+**Move down** swap an entry with its neighbour, and never move one into or out of the
+Global modifiers. **Remove** on a modifier's row deletes it, and its eye switches it off.
 
 ### Groups
 
@@ -143,9 +258,9 @@ each where it sat, and switches the original off.
 
 ### Smooth
 
-**Smooth** rounds off the whole path, jags and corners alike. Its one row, also **Smooth**,
-is how far along the path each point is averaged with its neighbours, in pixels. 0 leaves
-the path alone.
+**Smooth** rounds off the whole path, jags and corners alike. Its one row, **Amount**, is
+how far along the path each point is averaged with its neighbours, in pixels. 0 leaves the
+path alone.
 
 The path never bulges past its own points; a large smooth shrinks it a little instead. An
 open path's ends stay where they are.
@@ -179,8 +294,8 @@ each point's distance from the middle of the shape.
 
 ### Stroke taper
 
-**Stroke taper** narrows a shape's outline towards its ends, like a brush stroke. It is
-offered only for a shape with a stroke.
+**Stroke taper** narrows a shape's outline towards its ends, like a brush stroke. It is a
+setting of the shape itself, offered under **Add** and **Remove** on a shape with a stroke.
 
 - **Taper scope**: **Each path** tapers every path of the shape on its own; **Whole shape**
   runs one taper along all of them in order.
@@ -211,18 +326,18 @@ the path.
 ## Offset paths
 
 An **Offset paths** entry carries one **Amount**, in pixels. Positive pushes the outline
-outwards; negative pulls it in. Corners come out round.
+outwards; negative pulls it in. Corners come out round. A new one starts at 10.
 
 Pull the outline in by more than the shape is thick somewhere and it can cross itself,
 leaving a small loop.
 
 ## The repeater
 
-A **Repeater** entry draws the shapes above it **Copies** times, each copy one more step
+A **Repeater** entry draws the shapes it acts on **Copies** times, each copy one more step
 along than the last. Nine rows describe the step: **Repeater position x** and **y**,
 **Repeater rotation**, **Repeater scale**, the **Repeater anchor** the turn and the scale
 happen about, and **Start opacity** and **End opacity**, which the copies fade evenly
-between.
+between. A new repeater draws three copies.
 
 **Copy offset** says which copy the original art is, so a negative number puts copies
 behind it. A copy is a scaled drawing, not a scaled path: halve the scale and the outline
@@ -235,9 +350,17 @@ box's corner. One repeater stops at 100 copies, and stacked repeaters at 1,000 b
 
 Right-click a Repeater for **Expand copies**. **Into this layer** replaces the repeater with
 its copies as shapes of their own, named after the original. **Into layers** keeps the first
-copy here and makes one shape layer per further copy, below this one. **Expand all copies**
-on a shape layer's row does the same for every repeater it has. Both read keyed values at
-the playhead, and each is one undo step.
+copy here and makes one shape layer per further copy, below this one. **Layer ▸ Expand all
+copies** does the same for every repeater on the selected shape layer. Both read keyed
+values at the playhead, and each is one undo step.
+
+## Shapes from other layers
+
+**Layer ▸ Create ▸ Shapes from text** makes a shape layer of a
+[text layer's](/use/text/#convert-it) letters, one group per letter, where a letter's
+contours are a run joined by **Exclude**. **Shapes from vector layer** does the same for a
+layer of an [Illustrator document](/use/importing/#illustrator-documents), one group per
+path.
 
 ## Give it depth
 
@@ -247,5 +370,8 @@ made solid as the shape it paints. Repeater copies are solids of their own.
 
 ## Related
 
+- [A spinning arc from a circle](/tutorials/shape-modifiers/)
 - [Masks](/use/masks/)
 - [Text](/use/text/)
+- [Layer styles](/use/layer-styles/)
+- [The toolbar](/panels/toolbar/)

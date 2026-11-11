@@ -1,0 +1,70 @@
+---
+title: Bringing in an After Effects project
+description: Import an .aep, read the report, relink the footage, and use Lumit Bridge when the file cannot be read.
+sidebar:
+  order: 15
+---
+
+Lumit reads an After Effects project and makes a new Lumit project from it. The After
+Effects project is not changed. What comes across, and how, is listed under
+[Importing media](/use/importing/#after-effects-projects).
+
+## Import the project
+
+**1. Save the open project.** The import takes its place. With unsaved changes, Lumit asks
+first.
+
+**2. Pick the file.** Choose **File ▸ Import .aep project…** and pick the
+`.aep`. A card shows how far the import has got, with **Cancel import**.
+
+**3. Read the report.** **Import report** opens when the import ends. It lists what was
+**Skipped**, what came as a **Placeholder** and what was **Adjusted**. Click a line with a
+count to see the compositions, layers or effects it applies to. The report is shown once.
+
+**4. Keep the report.** Press **Copy report** and paste it somewhere.
+
+**5. Close the report and save.** The new project has no file yet. **File ▸ Save** asks
+where.
+
+## Find the footage
+
+Footage is looked for where After Effects had it. An item whose file is not on the
+computer arrives missing, with its interpretation kept.
+
+**6. List what is missing.** Click the count at the right of the
+[Project panel](/panels/project/#missing-files)'s bottom bar. The tree narrows to the
+missing rows.
+
+**7. Relink one file.** Click a row's `missing` badge and pick the file. Other missing
+items whose files moved the same way are relinked with it.
+
+**8. Relink the rest.** Repeat until the count no longer reads *missing*.
+
+## When the .aep cannot be read
+
+Lumit Bridge is a script that writes the project out from inside After Effects. It is
+`lumit-bridge.jsx`, in `tools/ae-bridge` of Lumit's source, and runs in After Effects 2024
+or later.
+
+**1. Open the project in After Effects.**
+
+**2. Allow scripts to write files.** In **Edit ▸ Preferences ▸ Scripting & Expressions**,
+tick **Allow Scripts to Write Files and Access Network**.
+
+**3. Run the script.** Choose **File ▸ Scripts ▸ Run Script File…** and pick
+`lumit-bridge.jsx`.
+
+**4. Choose where the bundle goes.** The script offers the project's own folder, and writes
+a folder there named after the project, ending `.lum-bundle`. Wait for the alert.
+
+**5. Zip the folder.**
+
+**6. Import the zip.** In Lumit, choose **File ▸ Import .aep project…** and
+pick the zip. The import carries on from step 3 above.
+
+## Related
+
+- [Importing media](/use/importing/)
+- [The Project panel](/panels/project/)
+- [Expressions](/use/expressions/)
+- [Plugins](/use/plugins/)

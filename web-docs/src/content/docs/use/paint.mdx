@@ -7,23 +7,51 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-**Paint** puts strokes straight onto a layer. There are three tools in the toolbar for this:
+**Paint** puts strokes straight onto the selected layer. Three tools share one button on
+the toolbar. `Ctrl+B` arms it, and pressing again steps through them.
 
 <Shot file="paint.png" caption="Brush strokes on a layer, with the Paint heading open in the Timeline." eager/>
 
 | Tool | Does |
 | --- | --- |
 | **Brush** | Paints the fill colour. |
-| **Clone stamp** | Copies pixels from elsewhere on the same layer. `Alt`-click sets the origin point it copies from, then paint. |
-| **Eraser** | Similar to Brush, but instead makes the area of the layer the stroke covers transparent. |
+| **Clone stamp** | Copies pixels from elsewhere on the same layer. `Alt`-click sets the point it copies from. |
+| **Eraser** | Makes the layer transparent where the stroke covers it. |
 
-Brush **size**, **shape** (round or square), **hardness**, **opacity** and **pressure**
-appear in the tool options while using a paint tool.
+A drag is one stroke, and a click is a single dab. The ring round the pointer is the size
+of the mark. `Escape` abandons a stroke in progress, and `Backspace` removes the layer's
+last stroke.
+
+With no layer selected nothing is painted, and the status line reads **Select a layer to
+paint on**.
+
+## Tool options
+
+These appear on the toolbar while a paint tool is armed, and set the next stroke.
+
+| Option | What it does |
+| --- | --- |
+| **Fill** | The colour the Brush paints. |
+| **Size** | The mark's width in the layer's pixels, from 1 to 2,000. Starts at 20. |
+| **Shape** | **Round** or **Square**. |
+| **Hardness** | How hard the mark's edge is. At 0 it fades all the way from its centre. Starts at 80 %. |
+| **Pressure** | Whether a stylus's pressure sets the width. Starts ticked. |
+| **Opacity** | How opaque the mark is. Starts at 100 %. |
+
+## The clone stamp
+
+`Alt`-click sets the point copied from, marked on the picture with a cross, and the
+status line reads **Clone source set**. The source keeps its distance from the brush
+through a stroke. With no source set, a stroke is refused and the status line reads
+**Alt-click to set the clone source first**.
+
+A clone copies the layer's picture as it was before any paint. Where the source falls off
+the layer, nothing is copied.
 
 ## Pressure
 
 With a graphics tablet, pressing harder makes a wider mark. The **Pressure** tick in the
-tool options turns it on and off per brush.
+tool options turns it on and off.
 
 Pressure sets the **width** of the mark and nothing else. The stroke carries the pressures
 it was drawn with.
@@ -34,30 +62,35 @@ Tilt is read by nothing.
 
 ## Strokes are paths
 
-What Lumit stores is the drag information (the path, colour, size, hardness, opacity), 
-which is composited into the layer each time the frame renders. This means painting at
-quarter-resolution preview will still export at full quality.
+Lumit stores a stroke as its path, colour, size, shape, hardness and opacity, and draws it
+into the layer at the resolution of each frame. A stroke painted at a quarter-resolution
+preview exports at full quality.
 
-Strokes are composited **before masks and effects**: a mask gates the painted picture, and
-effects will operate upon strokes as if they were part of the original layer's source.
+Strokes are drawn **before masks and effects**: a mask gates the painted picture, and
+effects read the strokes as part of the layer.
 
 ## Editing strokes
 
-- A layer's strokes are listed under a **Paint** heading in the Timeline when the
-  layer is twirled open.
-- Each stroke is a single undo.
-- A brush, clone or erase stroke's strength can be reduced later by lowering its opacity.
-- **Start** and **End** under each stroke trim it by a percentage of its own length, and
-  both are keyframable.
+A layer's strokes are listed under a **Paint** heading in the Timeline when the layer is
+twirled open, named after the tool that made them and numbered.
+
+- A stroke's row carries its **opacity**.
 - Each stroke picks a **blend mode** from the same list a layer does. An eraser ignores
   it.
+- **Start** and **End** under each stroke trim it by a percentage of its own length, and
+  both are keyframable.
+- Right-click a stroke for **Delete stroke**.
+
+Each stroke is one undo step.
 
 :::note[Limitation]
-A keyframed **Start**/**End** draws its diamonds on the Timeline lane but has no curve in the
-graph editor yet.
+A stroke's colour, size, shape and hardness cannot be changed after it is painted, and a
+stroke cannot be renamed. A keyframed **Start** or **End** draws its diamonds on the
+Timeline lane and has no curve in the graph editor.
 :::
 
 ## Related
 
 - [Masks](/use/masks/)
 - [Layers](/use/layers/)
+- [The toolbar](/panels/toolbar/)
