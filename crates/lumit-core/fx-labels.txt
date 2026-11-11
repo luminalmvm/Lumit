@@ -185,6 +185,7 @@ Boxes y
 Bright spots
 Brighter
 Brightness
+Broad
 Broadband, amber
 Broadband, blue
 Broadband, green
@@ -228,6 +229,12 @@ Chisel soft
 Choke
 Choose by
 Chorus
+Chroma
+Chroma broad
+Chroma coarse
+Chroma fine
+Chroma medium
+Chroma noise
 Chromatic aberration
 Chrome
 Circle
@@ -252,6 +259,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Coarse
 Coat
 Coat roughness
 Coating
@@ -370,6 +378,7 @@ Deep yellow
 Deform
 Deformer
 Delay
+Denoise
 Denominator
 Density
 Density layer
@@ -539,6 +548,8 @@ Filter
 Final
 Final result
 Find edges
+Fine
+Finish
 Fire
 Fire brightness
 Fire colour
@@ -572,6 +583,7 @@ Focus point x
 Focus point y
 Focus range
 Follow
+Follow motion
 Follow the vectors
 For
 Force on all layers
@@ -587,6 +599,7 @@ Fractal type
 Frame mix
 Frame rate
 Frames
+Frames blended
 Free
 Freeze
 Frequency
@@ -782,6 +795,7 @@ Layer size
 Layer time
 Layer's box
 Layout
+Learn
 Left
 Left and right
 Left bottom tangent x
@@ -844,8 +858,13 @@ Lower left y
 Lower right x
 Lower right y
 Luma
+Luma broad
+Luma coarse
 Luma fade
+Luma fine
 Luma hide
+Luma medium
+Luma noise
 Luma reveal
 Luminance
 Luminance only
@@ -892,6 +911,7 @@ Maximum signal
 Maximum span length
 Measure
 Median
+Medium
 Merge
 Merge points
 Metallic
@@ -934,6 +954,8 @@ Negative
 Neon
 Node graph
 Noise
+Noise by size
+Noise by tone
 Noise scale
 Noise size
 Noise speed
@@ -1168,6 +1190,7 @@ Remove edge leak
 Remove from picked
 Remove input
 Removed
+Removed noise
 Render
 Rendered
 Repeat
@@ -1229,6 +1252,9 @@ Rows/columns jitter
 Rubber
 Same
 Same as Per
+Sample size
+Sample x
+Sample y
 Samples
 Satin
 Satin colour
@@ -1360,6 +1386,8 @@ Spark size
 Spark speed
 Sparks
 Sparks from
+Spatial
+Spatial by size
 Speed
 Speed jitter
 Speed max
@@ -1444,6 +1472,7 @@ Technique
 Tele lens width
 Temperature
 Temporal
+Temporal strength
 Text
 Text layer
 Text step

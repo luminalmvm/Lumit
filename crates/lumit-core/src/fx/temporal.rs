@@ -369,7 +369,11 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64) -> Vec<i32> {
     let mut offsets = vec![0i32];
     if fx_on {
-        for e in effects.iter().filter(|e| e.enabled && is_catalogued(e)) {
+        let live = effects
+            .iter()
+            .enumerate()
+            .filter(|(i, e)| e.enabled && is_catalogued(e) && reads_neighbours(effects, *i));
+        for (_, e) in live {
             let Some(def) = super::catalogue::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
             };
@@ -630,25 +634,42 @@ impl FlowWant {
 
 /// Every offset **one instance** wants motion measured against, and how.
 /// Motion blur and Datamosh want one each, at the frame's size
-/// ([`effect_flow_neighbour`]).
+/// ([`effect_flow_neighbour`]); Denoise wants every frame it reads.
 #[must_use]
 pub fn effect_flow_neighbours(e: &EffectInstance) -> Vec<(i32, FlowWant)> {
+    if e.effect.match_name == "denoise" {
+        return super::effects::denoise::Denoise::flow_wants(e);
+    }
     effect_flow_neighbour(&e.effect.match_name)
         .map(|o| (o, FlowWant::Full))
         .into_iter()
         .collect()
 }
 
+/// Whether the effect at `i` in `effects` reads the frames either side. Every
+/// temporal effect does, except a Denoise that is not the first enabled
+/// effect: its neighbours are the raw frames, so an effect ahead of it runs on
+/// this frame and not on them, and averaging them in would undo it. Such a
+/// Denoise reads no neighbours, gets no field, and works as at Frames 0.
+fn reads_neighbours(effects: &[EffectInstance], i: usize) -> bool {
+    effects
+        .get(i)
+        .is_none_or(|e| e.effect.match_name != "denoise")
+        || effects.iter().position(|e| e.enabled) == Some(i)
+}
+
 /// [`stack_flow_neighbours`] with how each offset is wanted: the most any
-/// consumer of it asks for. Sorted by offset.
+/// consumer of it asks for. Sorted by offset. A Denoise that is not first
+/// wants nothing ([`reads_neighbours`]).
 #[must_use]
 pub fn stack_flow_wants(effects: &[EffectInstance], fx_on: bool) -> Vec<(i32, FlowWant)> {
     let mut wants: Vec<(i32, FlowWant)> = Vec::new();
     if fx_on {
-        for e in effects
-            .iter()
-            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-        {
+        for (_, e) in effects.iter().enumerate().filter(|(i, e)| {
+            e.enabled
+                && e.effect.namespace == EffectNamespace::Builtin
+                && reads_neighbours(effects, *i)
+        }) {
             for (o, want) in effect_flow_neighbours(e) {
                 match wants.iter_mut().find(|(w, _)| *w == o) {
                     Some(slot) => slot.1 = slot.1.max(want),
@@ -667,8 +688,8 @@ pub fn stack_flow_wants(effects: &[EffectInstance], fx_on: bool) -> Vec<(i32, Fl
 /// and the field is turned round. With a cut both ways there is no field, and
 /// the effect passes the picture through.
 ///
-/// Only a field wanted at the frame's size is turned round. One wanted any
-/// other way gets no field across a cut.
+/// Denoise's offsets are never turned round: a neighbour across a cut is
+/// another shot, so it gets no field and is left out.
 pub fn stack_flow_sides(
     effects: &[EffectInstance],
     fx_on: bool,
@@ -747,6 +768,22 @@ pub fn cut_between(layers: &[Layer], a: f64, b: f64) -> bool {
             };
             live(a) != live(b) || clip(a) != clip(b)
         })
+}
+
+/// Whether a Sequence layer of `clips` shows another clip at layer time `b`
+/// than at `a`, for a stack whose flow `wants` include Denoise's. Denoise
+/// averages only the clip's own frames: another clip, even of the same
+/// footage, is another shot, as [`cut_between`] has it. Motion blur and
+/// Datamosh read across as they always have.
+#[must_use]
+pub fn denoise_cut(
+    wants: &[(i32, FlowWant)],
+    clips: &[crate::sequence::Clip],
+    a: f64,
+    b: f64,
+) -> bool {
+    let clip = |t| crate::sequence::active_clip(clips, t).map(|c| c.id);
+    wants.iter().any(|(_, w)| *w != FlowWant::Full) && clip(a) != clip(b)
 }
 
 #[cfg(test)]

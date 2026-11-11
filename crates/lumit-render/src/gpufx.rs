@@ -456,6 +456,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_luma_fade::LumaFadeFx,
     &crate::gpufx_srgb_curve::SrgbCurveFx,
     &crate::gpufx_timewarp::TimewarpFx,
+    &crate::gpufx_denoise::DenoiseFx,
     &RadialWipe,
     &VenetianBlinds,
     &IrisWipe,

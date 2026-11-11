@@ -20029,6 +20029,122 @@
   "@fxParametricEq": {
     "description": "Effect controls: the name of an audio effect, five bands whose frequency, gain and width are all set by hand."
   },
+  "fxDenoise": "Denoise",
+  "@fxDenoise": {
+    "description": "Effect name: takes camera noise out of footage, measured first, using the frames either side."
+  },
+  "fxRemovedNoise": "Removed noise",
+  "@fxRemovedNoise": {
+    "description": "Effect controls, Denoise's View option: shows only what the effect takes away, brightened, so it can be checked for picture."
+  },
+  "fxFramesBlended": "Frames blended",
+  "@fxFramesBlended": {
+    "description": "Effect controls, Denoise's View option: a grey picture of how many neighbouring frames went into each pixel, black for none."
+  },
+  "fxLearn": "Learn",
+  "@fxLearn": {
+    "description": "Effect controls: a button on Denoise and on Noise reduction that measures the noise, in the picture at the playhead or in the sound of the work area, and sets the effect from it."
+  },
+  "fxSampleX": "Sample x",
+  "@fxSampleX": {
+    "description": "Effect controls, Denoise: the horizontal centre of the square the noise is measured in, in pixels."
+  },
+  "fxSampleY": "Sample y",
+  "@fxSampleY": {
+    "description": "Effect controls, Denoise: the vertical centre of the square the noise is measured in, in pixels."
+  },
+  "fxSampleSize": "Sample size",
+  "@fxSampleSize": {
+    "description": "Effect controls, Denoise: the side of the square the noise is measured in, in pixels."
+  },
+  "fxLumaNoise": "Luma noise",
+  "@fxLumaNoise": {
+    "description": "Effect controls, Denoise: how much noise there is in the brightness, in eight-bit code values. Learn sets it."
+  },
+  "fxChromaNoise": "Chroma noise",
+  "@fxChromaNoise": {
+    "description": "Effect controls, Denoise: how much noise there is in the colour, in eight-bit code values. Learn sets it."
+  },
+  "fxLumaFine": "Luma fine",
+  "@fxLumaFine": {
+    "description": "Effect controls, Denoise's Noise by size group: the finest brightness noise, as a per cent of Luma noise."
+  },
+  "fxLumaMedium": "Luma medium",
+  "@fxLumaMedium": {
+    "description": "Effect controls, Denoise's Noise by size group: brightness noise a little coarser than the finest, as a per cent of Luma noise."
+  },
+  "fxLumaCoarse": "Luma coarse",
+  "@fxLumaCoarse": {
+    "description": "Effect controls, Denoise's Noise by size group: coarse brightness noise, as a per cent of Luma noise."
+  },
+  "fxLumaBroad": "Luma broad",
+  "@fxLumaBroad": {
+    "description": "Effect controls, Denoise's Noise by size group: the broadest brightness noise, blotches rather than grain, as a per cent of Luma noise."
+  },
+  "fxChromaFine": "Chroma fine",
+  "@fxChromaFine": {
+    "description": "Effect controls, Denoise's Noise by size group: the finest colour noise, as a per cent of Chroma noise."
+  },
+  "fxChromaMedium": "Chroma medium",
+  "@fxChromaMedium": {
+    "description": "Effect controls, Denoise's Noise by size group: colour noise a little coarser than the finest, as a per cent of Chroma noise."
+  },
+  "fxChromaCoarse": "Chroma coarse",
+  "@fxChromaCoarse": {
+    "description": "Effect controls, Denoise's Noise by size group: coarse colour noise, as a per cent of Chroma noise."
+  },
+  "fxChromaBroad": "Chroma broad",
+  "@fxChromaBroad": {
+    "description": "Effect controls, Denoise's Noise by size group: the broadest colour noise, blotches rather than grain, as a per cent of Chroma noise."
+  },
+  "fxFollowMotion": "Follow motion",
+  "@fxFollowMotion": {
+    "description": "Effect controls, Denoise: a switch that lines the neighbouring frames up along the measured motion before they are averaged. Off suits a locked-off shot."
+  },
+  "fxTemporalStrength": "Temporal strength",
+  "@fxTemporalStrength": {
+    "description": "Effect controls, Denoise: how different a neighbouring frame may be and still be averaged in."
+  },
+  "fxChroma": "Chroma",
+  "@fxChroma": {
+    "description": "Effect controls, Denoise: how much of the colour noise is taken out."
+  },
+  "fxFine": "Fine",
+  "@fxFine": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the finest noise is taken out."
+  },
+  "fxMedium": "Medium",
+  "@fxMedium": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the noise a little coarser than the finest is taken out."
+  },
+  "fxCoarse": "Coarse",
+  "@fxCoarse": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the coarse noise is taken out."
+  },
+  "fxBroad": "Broad",
+  "@fxBroad": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the broadest noise, the blotches, is taken out."
+  },
+  "fxNoiseBySize": "Noise by size",
+  "@fxNoiseBySize": {
+    "description": "Effect controls, Denoise: the heading of the group that says how the measured noise splits between fine grain and broad blotches."
+  },
+  "fxNoiseByTone": "Noise by tone",
+  "@fxNoiseByTone": {
+    "description": "Effect controls, Denoise: the heading of the group that says how the noise changes between the shadows, the midtones and the highlights."
+  },
+  "fxSpatial": "Spatial",
+  "@fxSpatial": {
+    "description": "Effect controls, Denoise: the heading of the group that takes noise out within each frame."
+  },
+  "fxSpatialBySize": "Spatial by size",
+  "@fxSpatialBySize": {
+    "description": "Effect controls, Denoise: the heading of the group that sets how much noise of each size is taken out within each frame."
+  },
+  "fxFinish": "Finish",
+  "@fxFinish": {
+    "description": "Effect controls, Denoise: the heading of the group that gives back detail, sharpens and puts back grain after the noise is taken out."
+  },
   "fxPhaser": "Phaser",
   "@fxPhaser": {
     "description": "Effect controls: the name of an audio effect, which sweeps notches through the sound."

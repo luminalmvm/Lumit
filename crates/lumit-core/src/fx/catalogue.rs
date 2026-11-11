@@ -97,6 +97,7 @@ use super::effects::{
     custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
+    denoise::{Denoise, DenoiseDef},
     depth::{Depth, DepthDef},
     depth_points::{DepthPoints, DepthPointsDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
@@ -226,6 +227,8 @@ crate::catalogue![
     RadialBlurDef => RadialBlur,
     SharpenDef => Sharpen,
     SharpenSimpleDef => SharpenSimple,
+    // Noise measured and taken out, over the frames either side.
+    DenoiseDef => Denoise,
     SpriteFlareDef => SpriteFlare,
     LightWrapDef => LightWrap,
     RgbSplitDef => RgbSplit,

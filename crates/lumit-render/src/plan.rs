@@ -813,7 +813,9 @@ pub fn collect_comp_jobs(
                 // layer's are, through whichever clip is live then. A clip of
                 // this job's footage is one more frame of it, and any other
                 // is a job of its own, as is one inside a fade or a dissolve.
-                // A gap is no neighbour.
+                // A gap is no neighbour, and for Denoise nor is another clip.
+                let other =
+                    |at| lumit_core::fx::temporal::denoise_cut(&flow_neighbours, clips, lt, at);
                 if !in_gap
                     && lumit_core::fx::temporal::stack_is_temporal(
                         &layer.effects,
@@ -826,8 +828,9 @@ pub fn collect_comp_jobs(
                         lt / comp_dt,
                     );
                     for o in window.into_iter().filter(|&o| o != 0) {
-                        match clip_job(lumit_core::time::frames_on(lt, o, comp_dt), true) {
-                            Some(n) if n.item == job.item && n.cuts.is_empty() => {
+                        let at = lumit_core::time::frames_on(lt, o, comp_dt);
+                        match clip_job(at, true) {
+                            Some(n) if n.item == job.item && n.cuts.is_empty() && !other(at) => {
                                 job.temporal.push((o, n.source_frame));
                             }
                             Some(n) => job.cuts.push(Cut::Neighbour(o, n)),

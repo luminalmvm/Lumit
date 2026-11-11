@@ -680,6 +680,475 @@
       "matte_role": "own"
     },
     {
+      "slug": "denoise",
+      "match_name": "denoise",
+      "label": "Denoise",
+      "version": 1,
+      "category": "Blur & sharpen",
+      "category_slug": "blur-sharpen",
+      "params": [
+        {
+          "id": "view",
+          "label": "View",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Result",
+            "Removed noise",
+            "Frames blended"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "learn",
+          "label": "Learn",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "sample_x",
+          "label": "Sample x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "sample_y",
+          "label": "Sample y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "sample_size",
+          "label": "Sample size",
+          "kind": "float",
+          "unit": "px",
+          "default": 96.0,
+          "slider_min": 16.0,
+          "slider_max": 512.0,
+          "hard_min": 16.0,
+          "hard_max": 512.0
+        },
+        {
+          "id": "luma_noise",
+          "label": "Luma noise",
+          "kind": "float",
+          "unit": "raw",
+          "default": 3.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "chroma_noise",
+          "label": "Chroma noise",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "luma_fine",
+          "label": "Luma fine",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "luma_medium",
+          "label": "Luma medium",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "luma_coarse",
+          "label": "Luma coarse",
+          "kind": "float",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "luma_broad",
+          "label": "Luma broad",
+          "kind": "float",
+          "unit": "percent",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_fine",
+          "label": "Chroma fine",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_medium",
+          "label": "Chroma medium",
+          "kind": "float",
+          "unit": "percent",
+          "default": 80.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_coarse",
+          "label": "Chroma coarse",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_broad",
+          "label": "Chroma broad",
+          "kind": "float",
+          "unit": "percent",
+          "default": 45.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "shadows",
+          "label": "Shadows",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "midtones",
+          "label": "Midtones",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "highlights",
+          "label": "Highlights",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "int",
+          "unit": "frames",
+          "default": 2,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "motion",
+          "label": "Follow motion",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "temporal",
+          "label": "Temporal strength",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "luma",
+          "label": "Luma",
+          "kind": "float",
+          "unit": "percent",
+          "default": 75.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "chroma",
+          "label": "Chroma",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "fine",
+          "label": "Fine",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "medium",
+          "label": "Medium",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "coarse",
+          "label": "Coarse",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "broad",
+          "label": "Broad",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "detail",
+          "label": "Detail",
+          "kind": "float",
+          "unit": "percent",
+          "default": 25.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "sharpen",
+          "label": "Sharpen",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "grain",
+          "label": "Grain",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Noise by size",
+          "params": [
+            "luma_fine",
+            "luma_medium",
+            "luma_coarse",
+            "luma_broad",
+            "chroma_fine",
+            "chroma_medium",
+            "chroma_coarse",
+            "chroma_broad"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Noise by tone",
+          "params": [
+            "shadows",
+            "midtones",
+            "highlights"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Temporal",
+          "params": [
+            "frames",
+            "motion",
+            "temporal"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Spatial",
+          "params": [
+            "luma",
+            "chroma"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Spatial by size",
+          "params": [
+            "fine",
+            "medium",
+            "coarse",
+            "broad"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Finish",
+          "params": [
+            "detail",
+            "sharpen",
+            "grain"
+          ],
+          "collapsed": false
+        }
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the reduction per pixel: white takes all the noise the rows say, grey less, black none"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "sprite-flare",
       "match_name": "sprite_flare",
       "label": "Sprite flare",
