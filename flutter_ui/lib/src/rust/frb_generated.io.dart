@@ -18,6 +18,7 @@ import 'api/composition.dart';
 import 'api/cut.dart';
 import 'api/cut/multicam.dart';
 import 'api/cut/transcript.dart';
+import 'api/denoise.dart';
 import 'api/drive.dart';
 import 'api/effect.dart';
 import 'api/effect_presets.dart';
@@ -1262,6 +1263,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeNodeRef dco_decode_bridge_node_ref(dynamic raw);
 
   @protected
+  BridgeNoiseStatus dco_decode_bridge_noise_status(dynamic raw);
+
+  @protected
   BridgeOnlineFootage dco_decode_bridge_online_footage(dynamic raw);
 
   @protected
@@ -1399,6 +1403,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRenderedFrame dco_decode_bridge_rendered_frame(dynamic raw);
+
+  @protected
+  BridgeRepairView dco_decode_bridge_repair_view(dynamic raw);
 
   @protected
   BridgeRetimeInterp dco_decode_bridge_retime_interp(dynamic raw);
@@ -4051,6 +4058,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeNodeRef sse_decode_bridge_node_ref(SseDeserializer deserializer);
 
   @protected
+  BridgeNoiseStatus sse_decode_bridge_noise_status(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeOnlineFootage sse_decode_bridge_online_footage(
       SseDeserializer deserializer);
 
@@ -4204,6 +4215,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeRenderedFrame sse_decode_bridge_rendered_frame(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeRepairView sse_decode_bridge_repair_view(SseDeserializer deserializer);
 
   @protected
   BridgeRetimeInterp sse_decode_bridge_retime_interp(
@@ -7195,6 +7209,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_node_ref(BridgeNodeRef self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_noise_status(
+      BridgeNoiseStatus self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_online_footage(
       BridgeOnlineFootage self, SseSerializer serializer);
 
@@ -7371,6 +7389,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_rendered_frame(
       BridgeRenderedFrame self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_repair_view(
+      BridgeRepairView self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_retime_interp(

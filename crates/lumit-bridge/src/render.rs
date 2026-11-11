@@ -125,7 +125,9 @@ pub(crate) fn preview_rung(scale: f32) -> f32 {
 /// render or export prep never blocks an edit. Shared by the Viewer render path
 /// and the export-input builder ([`with_export_inputs`]) so both drive the one
 /// renderer and share its probe cache.
-fn with_ready<R>(f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -> R) -> Option<R> {
+pub(crate) fn with_ready<R>(
+    f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -> R,
+) -> Option<R> {
     let mutex = RENDERER.get_or_init(|| Mutex::new(Slot::Uninit));
     let mut guard = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
     // A device that has been lost takes this renderer with it. The
