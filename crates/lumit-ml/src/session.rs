@@ -122,17 +122,7 @@ impl Session {
     /// will not load.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open(pack_dir: &Path, file: &str, prefer: Prefer) -> Result<Self, MlError> {
-        let path = pack_dir.join(file);
-        if !path.is_file() {
-            return Err(MlError::PackUnreadable);
-        }
-        // Nothing below may run before the library is open: `ort` goes looking
-        // for it beside the executable on its own and `expect`s when it is not
-        // there, and that is a panic inside a library rather than a refusal
-        // this side can answer with (§13).
-        if !runtime::loaded() {
-            runtime::load_installed()?;
-        }
+        let path = located(pack_dir, file)?;
         if prefer == Prefer::Platform {
             if let Some(inner) = accelerated(&path) {
                 runtime::took(runtime::PROVIDER);
@@ -149,6 +139,36 @@ impl Session {
             // the processor and every key made from here on says so (§7).
             runtime::took(runtime::CPU);
         }
+        Ok(Session {
+            inner,
+            provider: runtime::CPU,
+        })
+    }
+
+    /// Open `file` on the processor with exactly `threads` threads inside each
+    /// node and one between them, so the same input gives the same numbers
+    /// bit for bit on every run. A result that is baked and cached needs
+    /// that, and the default thread count is whatever the machine has.
+    ///
+    /// # Errors
+    ///
+    /// As [`Session::open`].
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn open_on_cpu(pack_dir: &Path, file: &str, threads: usize) -> Result<Self, MlError> {
+        let path = located(pack_dir, file)?;
+        let mut builder = ort::session::Session::builder()
+            .map_err(failed)?
+            .with_intra_threads(threads.max(1))
+            .map_err(failed)?
+            .with_inter_threads(1)
+            .map_err(failed)?
+            // No arena and no planned buffers: both keep a run's peak for the
+            // life of the model, and a long signal's peak is large.
+            .with_execution_providers([ort::ep::CPU::default().build()])
+            .map_err(failed)?
+            .with_memory_pattern(false)
+            .map_err(failed)?;
+        let inner = builder.commit_from_file(&path).map_err(failed)?;
         Ok(Session {
             inner,
             provider: runtime::CPU,
@@ -325,6 +345,10 @@ impl Session {
         Err(MlError::RuntimeFailed(runtime::NOT_HERE.into()))
     }
 
+    pub fn open_on_cpu(_pack_dir: &Path, _file: &str, _threads: usize) -> Result<Self, MlError> {
+        Err(MlError::RuntimeFailed(runtime::NOT_HERE.into()))
+    }
+
     #[must_use]
     pub fn inputs(&self) -> Vec<(String, Vec<i64>)> {
         match self.inner {}
@@ -341,6 +365,23 @@ impl Session {
     ) -> Result<Vec<Held>, MlError> {
         match self.inner {}
     }
+}
+
+/// The model file inside a pack's folder, with the runtime open.
+#[cfg(not(target_arch = "wasm32"))]
+fn located(pack_dir: &Path, file: &str) -> Result<std::path::PathBuf, MlError> {
+    let path = pack_dir.join(file);
+    if !path.is_file() {
+        return Err(MlError::PackUnreadable);
+    }
+    // Nothing below may run before the library is open: `ort` goes looking
+    // for it beside the executable on its own and `expect`s when it is not
+    // there, and that is a panic inside a library rather than a refusal this
+    // side can answer with (§13).
+    if !runtime::loaded() {
+        runtime::load_installed()?;
+    }
+    Ok(path)
 }
 
 /// A session on the platform's accelerator, or `None` when it would not
