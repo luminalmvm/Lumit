@@ -222,3 +222,66 @@ fn a_plain_footage_layer_goes_straight_to_the_composite() {
         "the working-format copy is the texture that is no longer made (short {short} long {long})"
     );
 }
+
+/// **An Echo trail on a float plate is the plate's own colour.** The
+/// neighbour frames come out of the same decode as the frame they sit beside,
+/// so a float plate's neighbours are floats too, and they were uploaded as
+/// eight-bit bytes: the trail came out as static and the export with it.
+#[test]
+fn a_float_plates_neighbours_are_read_as_floats() {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+    let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
+    let realiser = realiser(&ctx, &lut_cache, &fx_cache);
+    // Above white, which eight bits could never have carried.
+    let colour = [2.0f32, 0.5, 0.25, 1.0];
+    let float_plate: Vec<u8> = (0..W * H)
+        .flat_map(|_| colour)
+        .flat_map(f32::to_le_bytes)
+        .collect();
+    let mut l = draw(&std::sync::Arc::new(float_plate.clone()));
+    if let DrawSource::Pixels { format, .. } = &mut l.source {
+        *format = lumit_media::decode::PixelFormat::LinearF32;
+    }
+    // A frame back, twice as bright.
+    let brighter: Vec<u8> = (0..W * H)
+        .flat_map(|_| [colour[0] * 2.0, colour[1] * 2.0, colour[2] * 2.0, 1.0])
+        .flat_map(f32::to_le_bytes)
+        .collect();
+    l.neighbours = vec![(-1, brighter, W, H)];
+    // One echo in front at 0.6 over the frame at 0.4: 1.2 + 0.4 of it.
+    let mut echo = lumit_core::fx::builtins::instantiate("echo").expect("echo is a built-in");
+    for p in &mut echo.params {
+        match p.id.as_str() {
+            "echoes" => {
+                p.value =
+                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(1.0))
+            }
+            "mode" => p.value = lumit_core::model::EffectValue::Choice(1),
+            _ => {}
+        }
+    }
+    l.fx = lumit_core::fx::resolved::resolve_stack(
+        std::slice::from_ref(&echo),
+        0.0,
+        1000.0,
+        1.0,
+        &lumit_core::fx::markers::MarkerContext::NONE,
+        std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+    );
+
+    let out = realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&l));
+    let px = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, W, H).expect("reads back");
+    let centre = ((H / 2 * W + W / 2) * 4) as usize;
+    for c in 0..3 {
+        let want = colour[c] * 1.6;
+        assert!(
+            (px[centre + c] - want).abs() < want * 0.01,
+            "channel {c}: {} where the trail should make {want}",
+            px[centre + c]
+        );
+    }
+}

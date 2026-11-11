@@ -138,12 +138,26 @@ impl Realiser<'_> {
                     self.measure_below_flow(l, &tex, *width, *height, *background)
                 }
                 _ => {
+                    // A neighbour is the same footage at another moment, so it
+                    // is read the way the frame it sits beside was: a float
+                    // plate stays float and a tagged one goes through its
+                    // input transform, or the trail is another colour.
+                    let (format, colour_space) = match &l.source {
+                        DrawSource::Pixels {
+                            format,
+                            colour_space,
+                            ..
+                        } => (*format, colour_space.clone()),
+                        _ => (lumit_media::decode::PixelFormat::Srgb8, None),
+                    };
                     let neighbours: Vec<(i32, wgpu::Texture)> = l
                         .neighbours
                         .iter()
                         .map(|(offset, rgba, nw, nh)| {
-                            let src = self.engine.upload_srgb8(&self.ctx, rgba, *nw, *nh);
-                            (*offset, self.engine.linearise(&self.ctx, &src))
+                            (
+                                *offset,
+                                self.upload_source(rgba, *nw, *nh, format, &colour_space),
+                            )
                         })
                         .collect();
                     // The dense motion fields, one per offset a
