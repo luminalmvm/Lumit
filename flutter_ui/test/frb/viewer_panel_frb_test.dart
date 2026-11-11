@@ -55,6 +55,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/widgets/dropper_overlay.dart';
+import 'package:lumit_flutter/widgets/ui_scale.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -920,6 +921,88 @@ void main() {
       expect(half('centre_x'), closeTo(want.dx, 0.01),
           reason: "a pick writes the layer's own pixels");
       expect(half('centre_y'), closeTo(want.dy, 0.01));
+    });
+
+    /// Denoise's square is in its layer's own pixels too: on a layer at half
+    /// size and moved its corners sit where the layer puts them, and a drag
+    /// is worked out in the layer's pixels. Under the interface's own scale,
+    /// as the app ships, so a drag measured in the window's pixels rather than
+    /// the square's comes out a tenth out.
+    testWidgets('the noise square sits on its layer', (tester) async {
+      final p = withLayer();
+      final layer = halfSizeLayer(p.comp);
+      layer.addEffect(name: 'denoise');
+      final fx = layer.getEffects().single.id();
+      p.uiState
+        ..setEffectSelection(layer, [fx])
+        ..model.refresh();
+      await tester.pumpWidget(hostPanel(
+        child: const UiScaleView(scale: 1.0, child: ViewerPanelFrb()),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(700, 500),
+      ));
+      await tester.pump();
+
+      double row(String id) =>
+          ((layer.getEffects().single.getValue(id: id)
+                      as BridgeEffectValue_Float)
+                  .field0 as BridgeScalar_Static)
+              .field0;
+      final x = row('sample_x'), y = row('sample_y'), side = row('sample_size');
+      final h = side / 2;
+      final onScreen = layerToScreen(tester, p.comp, layer);
+      Finder grip(String name) => find.byKey(ValueKey<String>(
+          'viewer-noise-sample-${layer.internallayerId}/$fx-$name'));
+      for (final (name, at) in [
+        ('topLeft', onScreen(x - h, y - h)),
+        ('topRight', onScreen(x + h, y - h)),
+        ('bottomLeft', onScreen(x - h, y + h)),
+        ('bottomRight', onScreen(x + h, y + h)),
+      ]) {
+        final c = tester.getCenter(grip(name));
+        expect(c.dx, closeTo(at.dx, 0.5), reason: '$name sits on the layer');
+        expect(c.dy, closeTo(at.dy, 0.5));
+      }
+
+      // Screen pixels per layer pixel, as the window has them.
+      final perPixel = onScreen(x + 1, y).dx - onScreen(x, y).dx;
+      // A mouse drag in several moves, then the release, which measures and
+      // writes once the measure lands.
+      Future<void> drag(Offset from, Offset step, String watched) async {
+        final was = row(watched);
+        final mouse =
+            await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(mouse.removePointer);
+        await mouse.down(from);
+        await tester.pump();
+        for (var i = 0; i < 8; i++) {
+          await mouse.moveBy(step);
+          await tester.pump();
+        }
+        await mouse.up();
+        for (var i = 0; i < 100 && row(watched) == was; i++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 100)));
+          await tester.pump();
+        }
+        await tester.pump();
+      }
+
+      // Moved by its middle: the square follows the pointer exactly.
+      await drag(onScreen(x, y), const Offset(6, 4), 'sample_x');
+      expect(row('sample_x'), closeTo(x + 48 / perPixel, 0.5),
+          reason: 'the move is the whole of the pointer travel');
+      expect(row('sample_y'), closeTo(y + 32 / perPixel, 0.5));
+      expect(row('sample_size'), side);
+
+      // Grown by a corner, about its centre: the side follows the corner.
+      await drag(tester.getCenter(grip('bottomRight')), const Offset(3, 3),
+          'sample_size');
+      expect(row('sample_size'), closeTo(side + 2 * 24 / perPixel, 0.5),
+          reason: 'the corner is the whole of the pointer travel');
+      expect(row('sample_x'), closeTo(x + 48 / perPixel, 0.5));
+      await tester.pumpAndSettle();
     });
 
     testWidgets(

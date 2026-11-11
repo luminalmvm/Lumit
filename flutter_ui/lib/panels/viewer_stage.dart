@@ -50,6 +50,7 @@ import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
+import 'viewer_noise_sample.dart';
 import 'viewer_follow.dart';
 import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
@@ -1177,6 +1178,16 @@ class ViewerStage extends StatelessWidget {
                 // Locked layers too: a point is still drawn on one.
                 boxes: () => _boxes(locked: true),
                 colour: t.accent,
+                tool: uiState.tools.tool,
+                onChanged: onChanged,
+              ),
+            // Where a selected Denoise measures its noise: a square, moved
+            // and grown like the layer's own box.
+            if (wireframes)
+              ViewerNoiseSample(
+                comp: comp,
+                uiState: uiState,
+                boxes: () => _boxes(locked: true),
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
               ),

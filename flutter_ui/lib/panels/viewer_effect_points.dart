@@ -43,6 +43,7 @@ import 'viewer_anchor.dart' show constrainToAxis;
 import 'viewer_gizmo.dart' show LayerBox, gizmoAnchorSlop;
 import 'viewer_layer_map.dart' show ViewerLayerMap;
 import 'viewer_menus.dart' show viewerRow;
+import 'viewer_noise_sample.dart' show denoiseMatchName, sampleX;
 import 'viewer_tool_cursor.dart' show paintAnchorMark;
 
 /// A point's row changed in Effect controls or the Timeline picks its effect,
@@ -367,6 +368,8 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
             rows.contains(path);
         final params = cachedListParameters(fx.name);
         for (final pair in cachedListPairs(fx.name)) {
+          // Denoise's sample is a square, drawn by its own layer.
+          if (fx.name == denoiseMatchName && pair.x == sampleX) continue;
           if (!whole &&
               !rows.contains('$path/${pair.x}') &&
               !rows.contains('$path/${pair.y}')) {
