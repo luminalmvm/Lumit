@@ -150,16 +150,27 @@ impl Realiser<'_> {
                         } => (*format, colour_space.clone()),
                         _ => (lumit_media::decode::PixelFormat::Srgb8, None),
                     };
-                    let neighbours: Vec<(i32, wgpu::Texture)> = l
-                        .neighbours
-                        .iter()
-                        .map(|(offset, rgba, nw, nh)| {
-                            (
-                                *offset,
-                                self.upload_source(rgba, *nw, *nh, format, &colour_space),
+                    // A frame read last time is the picture made of it then.
+                    let upload = |rgba: &[u8], nw, nh| {
+                        self.upload_source(rgba, nw, nh, format, &colour_space)
+                    };
+                    let neighbours: Vec<(i32, wgpu::Texture)> = match self.flow {
+                        Some(kept) if !l.neighbours.is_empty() => {
+                            kept.borrow_mut().neighbours.pictures(
+                                &self.ctx,
+                                self.colour_config,
+                                &l.neighbours,
+                                format,
+                                &colour_space,
+                                upload,
                             )
-                        })
-                        .collect();
+                        }
+                        _ => l
+                            .neighbours
+                            .iter()
+                            .map(|(offset, rgba, nw, nh)| (*offset, upload(rgba, *nw, *nh)))
+                            .collect(),
+                    };
                     // The dense motion fields, one per offset a
                     // flow-consuming effect asked for, each uploaded
                     // as its own texture at the size it was filed at: the
@@ -170,12 +181,13 @@ impl Realiser<'_> {
                     let flow: Vec<(i32, wgpu::Texture)> = l
                         .flow_fields
                         .iter()
-                        .filter(|(_, _, _, _, fw, fh)| *fw > 0 && *fh > 0)
-                        .map(|(offset, u, v, conf, fw, fh)| {
+                        .filter(|(_, f)| f.w > 0 && f.h > 0)
+                        .map(|(offset, f)| {
+                            let (fw, fh) = (f.w as u32, f.h as u32);
                             (
                                 *offset,
-                                lumit_gpu::fx::common::upload_flow_field(
-                                    &self.ctx, u, v, conf, *fw, *fh,
+                                lumit_gpu::fx::common::upload_flow_texels(
+                                    &self.ctx, &f.texels, fw, fh,
                                 ),
                             )
                         })

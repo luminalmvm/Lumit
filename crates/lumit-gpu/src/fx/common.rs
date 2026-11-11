@@ -123,8 +123,22 @@ pub fn upload_flow_field(
     w: u32,
     h: u32,
 ) -> wgpu::Texture {
-    // Charged to the frame, as a work texture is: a frame of Denoise uploads
-    // one for every neighbour.
+    let n = (w * h) as usize;
+    let mut interleaved = vec![0f32; n * 4];
+    for i in 0..n {
+        interleaved[i * 4] = u.get(i).copied().unwrap_or(0.0);
+        interleaved[i * 4 + 1] = v.get(i).copied().unwrap_or(0.0);
+        // Absent confidence reads as full (no streak scaling).
+        interleaved[i * 4 + 2] = conf.get(i).copied().unwrap_or(1.0);
+    }
+    upload_flow_texels(ctx, &interleaved, w, h)
+}
+
+/// [`upload_flow_field`] for a field already interleaved `[u, v, conf, 0]` per
+/// texel, which goes to the card as it is. A short slice is padded with no
+/// motion at full confidence rather than refused. Charged to the frame, as a
+/// work texture is: a frame of Denoise uploads one for every neighbour.
+pub fn upload_flow_texels(ctx: &GpuContext, texels: &[f32], w: u32, h: u32) -> wgpu::Texture {
     ctx.charge_vram(crate::texture_bytes(wgpu::TextureFormat::Rgba32Float, w, h));
     let tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("fx-flow-field"),
@@ -140,14 +154,21 @@ pub fn upload_flow_field(
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    let n = (w * h) as usize;
-    let mut interleaved = vec![0f32; n * 4];
-    for i in 0..n {
-        interleaved[i * 4] = u.get(i).copied().unwrap_or(0.0);
-        interleaved[i * 4 + 1] = v.get(i).copied().unwrap_or(0.0);
-        // Absent confidence reads as full (no streak scaling).
-        interleaved[i * 4 + 2] = conf.get(i).copied().unwrap_or(1.0);
-    }
+    let n = (w * h) as usize * 4;
+    let padded;
+    let texels = if texels.len() >= n {
+        texels.get(..n).unwrap_or_default()
+    } else {
+        padded = (0..n)
+            .map(|i| {
+                texels
+                    .get(i)
+                    .copied()
+                    .unwrap_or(if i % 4 == 2 { 1.0 } else { 0.0 })
+            })
+            .collect::<Vec<f32>>();
+        &padded
+    };
     ctx.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &tex,
@@ -155,7 +176,7 @@ pub fn upload_flow_field(
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         },
-        bytemuck::cast_slice(&interleaved),
+        bytemuck::cast_slice(texels),
         wgpu::TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(w * 16),

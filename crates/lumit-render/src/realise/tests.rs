@@ -251,7 +251,7 @@ fn a_float_plates_neighbours_are_read_as_floats() {
         .flat_map(|_| [colour[0] * 2.0, colour[1] * 2.0, colour[2] * 2.0, 1.0])
         .flat_map(f32::to_le_bytes)
         .collect();
-    l.neighbours = vec![(-1, brighter, W, H)];
+    l.neighbours = vec![(-1, std::sync::Arc::new(brighter), W, H)];
     // One echo in front at 0.6 over the frame at 0.4: 1.2 + 0.4 of it.
     let mut echo = lumit_core::fx::builtins::instantiate("echo").expect("echo is a built-in");
     for p in &mut echo.params {

@@ -608,16 +608,15 @@ pub struct CompLayerDraw {
     /// Decoded neighbour source frames for a temporal effect (echo etc.),
     /// keyed by frame offset — same sRGB8 form and decoded size as a Pixels
     /// source. Empty unless the stack is temporal.
-    pub neighbours: Vec<(i32, Vec<u8>, u32, u32)>,
-    /// The layer's dense forward flow fields `(offset, u, v, conf, w, h)`, one
+    pub neighbours: Vec<(i32, std::sync::Arc<Vec<u8>>, u32, u32)>,
+    /// The layer's dense forward flow fields `(offset, field)`, one
     /// per neighbour offset a flow-consuming effect asked for — Fast
     /// motion blur (docs/08 §3.2) reads `+1`, Datamosh (§3.12) reads `-1`, and a
     /// stack with both carries both rather than one of them silently doing
-    /// nothing. Carried from the decode job; `w × h` matches the decoded source.
+    /// nothing. Carried from the decode job, at the size each was filed at.
     /// `conf` is the per-pixel confidence in 0..1 (FX-19) that tapers the
     /// streak; Datamosh reads only `(u, v)`. Empty unless the stack wants one.
-    #[allow(clippy::type_complexity)]
-    pub flow_fields: Vec<(i32, Vec<f32>, Vec<f32>, Vec<f32>, u32, u32)>,
+    pub flow_fields: Vec<(i32, crate::decode::FlowFieldData)>,
     /// The ordered file paths of the layer's enabled built-in `lut` effects
     /// (docs/08 §3.11; None = unset). Because `resolve_stack` keeps the same
     /// filter and order and a `lut` effect always resolves to exactly one

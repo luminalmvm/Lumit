@@ -4880,30 +4880,22 @@ fn comp_walk(
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack, and where a
         // composition clip's picture is the source and not the decode.
-        let neighbours: Vec<(i32, Vec<u8>, u32, u32)> = pixels_by_layer
+        let neighbours: Vec<(i32, Arc<Vec<u8>>, u32, u32)> = pixels_by_layer
             .get(&layer.id)
             .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.temporal
                     .iter()
-                    .map(|(o, rgba)| (*o, rgba.clone(), lp.width, lp.height))
+                    .map(|(o, rgba)| (*o, Arc::clone(rgba), lp.width, lp.height))
                     .collect()
             })
             .unwrap_or_default();
         // The dense motion fields, one per offset a flow-consuming effect
-        // asked for, carried from the same decode job (their
-        // `(u, v, conf)` at the size each was filed at).
+        // asked for, shared from the same decode job.
         let flow_fields = pixels_by_layer
             .get(&layer.id)
             .filter(|_| comp_clips.is_none())
-            .map(|lp| {
-                lp.flow_fields
-                    .iter()
-                    .map(|(offset, (u, v, conf, (fw, fh)))| {
-                        (*offset, u.clone(), v.clone(), conf.clone(), *fw, *fh)
-                    })
-                    .collect()
-            })
+            .map(|lp| lp.flow_fields.clone())
             .unwrap_or_default();
         // A Shape or Text layer's picture is only as big as its art, so the
         // points effects its stack ends on are given room round it to draw
@@ -9191,7 +9183,7 @@ mod render_below_at_tests {
             source_key: 0,
             source_frame: 0,
         };
-        let neighbour = || flat(ORANGE).rgba.to_vec();
+        let neighbour = || Arc::clone(&flat(ORANGE).rgba);
         let moment = || Some(Box::new(flat(ORANGE)));
         let mut lp = flat(GREY);
         lp.temporal = job

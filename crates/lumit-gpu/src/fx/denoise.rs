@@ -9,6 +9,15 @@
 //! float format whatever the project's depth: the working one when it is float,
 //! half float when it is eight bits. The temporal sums are 32-bit float, one
 //! pair of them for any number of frames.
+//!
+//! They are Denoise's own and kept from one frame to the next, charged to the
+//! governor while they are and let go when it is short of memory
+//! ([`DenoiseKernels::let_go`]), rather than taken from the frame's pool and made
+//! again every frame: the frame's pool lets its memory go when the frame
+//! ends, and a frame-sized set made again from nothing costs the card a new
+//! block of memory nearly every frame. None of them is ever handed to the
+//! frame's pool, so no other pass can be drawing in one when the next run
+//! takes it.
 
 use crate::GpuContext;
 
@@ -232,6 +241,15 @@ pub struct DenoiseKernels {
     mid_format: wgpu::TextureFormat,
     /// The working format the last pass writes, which they were built for.
     working: wgpu::TextureFormat,
+    /// The working pictures not in use, and what the governor holds for them.
+    spare: std::cell::RefCell<Spare>,
+}
+
+/// Pictures a run gave back, kept for the next.
+#[derive(Default)]
+struct Spare {
+    free: Vec<wgpu::Texture>,
+    held: Option<lumit_budget::Reservation>,
 }
 
 impl DenoiseKernels {
@@ -278,6 +296,7 @@ impl DenoiseKernels {
             ),
             mid_format,
             working: ctx.working(),
+            spare: std::cell::RefCell::default(),
         }
     }
 
@@ -288,15 +307,91 @@ impl DenoiseKernels {
         self.working
     }
 
-    /// A working picture, from the frame's pool when one is spare.
+    /// A working picture, a spare one when one matches.
     fn mid(&self, ctx: &GpuContext, w: u32, h: u32) -> wgpu::Texture {
-        pooled(ctx, w, h, self.mid_format, "fx-denoise-mid")
+        self.picture(ctx, w, h, self.mid_format, "fx-denoise-mid")
     }
 
-    /// Give a picture back to the frame's pool for the next pass to use,
-    /// whatever its format: the pool hands out only what matches.
-    fn done(ctx: &GpuContext, t: wgpu::Texture) {
-        ctx.recycle(t);
+    /// A picture `format` and `w` by `h`: a spare one, or a new one charged to
+    /// the frame like any work texture.
+    fn picture(
+        &self,
+        ctx: &GpuContext,
+        w: u32,
+        h: u32,
+        format: wgpu::TextureFormat,
+        label: &str,
+    ) -> wgpu::Texture {
+        {
+            let mut spare = self.spare.borrow_mut();
+            if let Some(i) = spare
+                .free
+                .iter()
+                .position(|t| t.width() == w && t.height() == h && t.format() == format)
+            {
+                return spare.free.swap_remove(i);
+            }
+        }
+        ctx.charge_vram(crate::texture_bytes(format, w, h));
+        ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: crate::WORK_USAGE,
+            view_formats: &[],
+        })
+    }
+
+    /// Give a picture back for a later pass, or the next run, to use.
+    fn done(&self, t: wgpu::Texture) {
+        self.spare.borrow_mut().free.push(t);
+    }
+
+    /// After a run: keep what it gave back if the governor has room, holding
+    /// that much for as long as it is kept, and let it all go if not. A
+    /// picture left over from a run at another size goes too.
+    fn settle(&self, ctx: &GpuContext, w: u32, h: u32) {
+        let mut spare = self.spare.borrow_mut();
+        spare.free.retain(|t| t.width() == w && t.height() == h);
+        let bytes: u64 = spare
+            .free
+            .iter()
+            .map(|t| crate::texture_bytes(t.format(), t.width(), t.height()))
+            .sum();
+        spare.held = None;
+        let pressed = ctx
+            .ledger()
+            .pressure(lumit_budget::Tier::Vram)
+            .should_trim();
+        spare.held = if pressed {
+            None
+        } else {
+            ctx.ledger().try_reserve(lumit_budget::Tier::Vram, bytes)
+        };
+        if spare.held.is_none() {
+            spare.free.clear();
+        }
+    }
+
+    /// Under memory pressure: the spare pictures the kept kernels hold go
+    /// back to the card, and the governor's hold on them with them. The
+    /// kernels themselves stay.
+    pub fn let_go(fx: &super::FxEngine) {
+        if let Some(kernels) = fx.take_kept::<Self>() {
+            {
+                let mut spare = kernels.spare.borrow_mut();
+                spare.free.clear();
+                spare.held = None;
+            }
+            fx.keep(kernels);
+        }
     }
 
     /// `input` (premultiplied linear, `w` by `h`) denoised, with `neighbours`
@@ -328,7 +423,7 @@ impl DenoiseKernels {
             self.mid.run(ctx, "atrous_h", [above; 6], &[&across], &p);
             let below = self.mid(ctx, w, h);
             self.mid.run(ctx, "atrous_v", [&across; 6], &[&below], &p);
-            Self::done(ctx, across);
+            self.done(across);
             p.pass[1] = band;
             p.pass[3] = if sum.is_none() { FIRST_BAND } else { 0 };
             let next_sum = self.mid(ctx, w, h);
@@ -343,10 +438,10 @@ impl DenoiseKernels {
                 );
             }
             if let Some(old) = sum.replace(next_sum) {
-                Self::done(ctx, old);
+                self.done(old);
             }
             if let Some(old) = level.replace(below) {
-                Self::done(ctx, old);
+                self.done(old);
             }
         }
         let out = work_texture(ctx, w, h, "fx-denoise-out");
@@ -370,11 +465,12 @@ impl DenoiseKernels {
                 &[&out],
                 &p,
             );
-            Self::done(ctx, sum);
-            Self::done(ctx, coarse);
+            self.done(sum);
+            self.done(coarse);
         }
-        Self::done(ctx, current);
-        Self::done(ctx, averaged);
+        self.done(current);
+        self.done(averaged);
+        self.settle(ctx, w, h);
         out
     }
 
@@ -400,8 +496,8 @@ impl DenoiseKernels {
             self.mid.run(ctx, "plain", [current; 6], &[&averaged], base);
             return averaged;
         }
-        let sums = |label| pooled(ctx, w, h, wgpu::TextureFormat::Rgba32Float, label);
-        let squares = |label| pooled(ctx, w, h, wgpu::TextureFormat::R32Float, label);
+        let sums = |label| self.picture(ctx, w, h, wgpu::TextureFormat::Rgba32Float, label);
+        let squares = |label| self.picture(ctx, w, h, wgpu::TextureFormat::R32Float, label);
         let mut s = (sums("fx-denoise-sum-a"), squares("fx-denoise-sq-a"));
         let mut t = (sums("fx-denoise-sum-b"), squares("fx-denoise-sq-b"));
         self.sum.run(ctx, "init", [current; 6], &[&s.0, &s.1], base);
@@ -430,7 +526,7 @@ impl DenoiseKernels {
             );
             std::mem::swap(&mut s, &mut t);
         }
-        Self::done(ctx, aligned);
+        self.done(aligned);
         self.mid.run(
             ctx,
             "resolve",
@@ -439,45 +535,8 @@ impl DenoiseKernels {
             base,
         );
         for t in [s.0, s.1, t.0, t.1] {
-            Self::done(ctx, t);
+            self.done(t);
         }
         averaged
     }
-}
-
-/// A picture of this pass's, `format` and `w` by `h`: one an earlier pass in
-/// this frame gave back, or a new one charged to the frame like any work
-/// texture. The working pictures are float whatever the project's depth and
-/// the sums are 32-bit, so the shared work texture is not always the shape.
-fn pooled(
-    ctx: &GpuContext,
-    w: u32,
-    h: u32,
-    format: wgpu::TextureFormat,
-    label: &str,
-) -> wgpu::Texture {
-    {
-        let mut pool = ctx.pool.borrow_mut();
-        if let Some(i) = pool
-            .iter()
-            .position(|t| t.width() == w && t.height() == h && t.format() == format)
-        {
-            return pool.swap_remove(i);
-        }
-    }
-    ctx.charge_vram(crate::texture_bytes(format, w, h));
-    ctx.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some(label),
-        size: wgpu::Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: crate::WORK_USAGE,
-        view_formats: &[],
-    })
 }

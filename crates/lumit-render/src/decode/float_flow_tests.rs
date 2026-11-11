@@ -60,20 +60,24 @@ fn a_float_plates_motion_is_measured_on_its_floats() {
     let frame = pool
         .decode_comp(Uuid::now_v7(), 0, &[job], 0, &|_| {})
         .unwrap();
-    let (_, (u, v, _, size)) = frame.layers[0]
+    let (_, field) = frame.layers[0]
         .flow_fields
         .iter()
         .find(|(o, _)| *o == 1)
         .expect("the field asked for");
-    assert_eq!(*size, (w, h), "at the frame's own size");
+    assert_eq!(
+        (field.w as u32, field.h as u32),
+        (w, h),
+        "at the frame's own size"
+    );
     // The middle of the frame, away from the edges the content slid in at.
     let mut us: Vec<f32> = Vec::new();
     let mut vs: Vec<f32> = Vec::new();
     for y in 32..96 {
         for x in 32..96 {
             let i = (y * w + x) as usize;
-            us.push(u[i]);
-            vs.push(v[i]);
+            us.push(field.texels[i * 4]);
+            vs.push(field.texels[i * 4 + 1]);
         }
     }
     us.sort_by(f32::total_cmp);

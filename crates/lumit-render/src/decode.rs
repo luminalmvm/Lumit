@@ -152,11 +152,11 @@ pub struct ShutterSample {
     pub blend: Option<(usize, f32)>,
 }
 
-/// One measured motion field: per-pixel `u` and `v` in its own pixels, then the
-/// per-pixel confidence in 0..1 (FX-19), each `width × height`, and that size.
-/// At the layer's decoded size for a consumer that wants it there, otherwise
-/// at the size it was measured at.
-pub type FlowFieldData = (Vec<f32>, Vec<f32>, Vec<f32>, (u32, u32));
+/// One measured motion field: per-pixel `u` and `v` in its own pixels and the
+/// confidence in 0..1 (FX-19), packed as its texture holds them and shared, not
+/// copied, on the way there. At the layer's decoded size for a consumer that
+/// wants it there, otherwise at the size it was measured at.
+pub type FlowFieldData = Arc<lumit_flow::chain::Leg>;
 
 pub struct CompLayerPixels {
     pub layer: Uuid,
@@ -178,9 +178,9 @@ pub struct CompLayerPixels {
     /// Native source size (see [`CompJob::natural_w`]); drives geometry.
     pub natural_w: u32,
     pub natural_h: u32,
-    /// Decoded neighbour frames for a temporal effect (see
-    /// [`CompJob::temporal`]): `(offset, rgba)`, same size as `rgba`.
-    pub temporal: Vec<(i32, Vec<u8>)>,
+    /// Decoded neighbour frames for a temporal effect, shared with the frame
+    /// cache (see [`CompJob::temporal`]): `(offset, rgba)`, same size as `rgba`.
+    pub temporal: Vec<(i32, Arc<Vec<u8>>)>,
     /// Dense forward flow (per-pixel `(u, v)` motion in pixels, plus a per-pixel
     /// `conf`idence in 0..1, row-major, same `width × height` as `rgba`) from
     /// this frame to each neighbour [`CompJob::flow_neighbours`] asked for,
@@ -277,7 +277,7 @@ fn weigh(layers: &[CompLayerPixels]) -> u64 {
             let flow: u64 = l
                 .flow_fields
                 .iter()
-                .map(|(_, (u, v, c, _))| ((u.len() + v.len() + c.len()) * 4) as u64)
+                .map(|(_, f)| (f.texels.len() * 4) as u64)
                 .sum();
             // A moment is a whole layer-pixels of its own, so it is weighed by
             // the same rule rather than a second one that could drift.
@@ -303,7 +303,7 @@ type FrameCacheKey = (Uuid, usize, Option<u32>, Option<[Option<String>; 4]>);
 struct CachedFrame {
     width: u32,
     height: u32,
-    rgba: Vec<u8>,
+    rgba: Arc<Vec<u8>>,
     format: lumit_media::decode::PixelFormat,
     /// Decoded ahead for one render, which takes it out rather than copying
     /// it ([`DecodePool::hand_over_prefetched`]).
@@ -490,7 +490,7 @@ pub struct DecodePool {
     gpu: Option<lumit_gpu::GpuContext>,
     /// Measured flow pairs, so a scrub does not remeasure and the two
     /// consumers of a layer's motion share one measurement.
-    flow_cache: lumit_cache::ByteLru<FlowKey, CachedFlow>,
+    flow_cache: flow_store::FlowCache,
     /// How many comp frames this pool has actually decoded. Diagnostic, and the
     /// thing the drag fast path is *measured* by: a value drag must not move it
     /// (see the headless preview tests).
@@ -575,7 +575,7 @@ impl DecodePool {
             refuse_substitution: false,
             hand_over: false,
             gpu: None,
-            flow_cache: lumit_cache::ByteLru::new(DEFAULT_FLOW_CACHE_BYTES),
+            flow_cache: flow_store::FlowCache::new(DEFAULT_FLOW_CACHE_BYTES),
             comp_decodes: 0,
             ledger: None,
         }
@@ -617,7 +617,7 @@ impl DecodePool {
         self.frame_cache
             .account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
         self.flow_cache
-            .account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
+            .account_against(&ledger, lumit_budget::Tier::Ram);
         self.ledger = Some(ledger);
     }
 
@@ -792,7 +792,7 @@ impl DecodePool {
             CachedFrame {
                 width: decoded.width,
                 height: decoded.height,
-                rgba: decoded.rgba,
+                rgba: Arc::new(decoded.rgba),
                 format: decoded.format,
                 once: self.hand_over,
                 stamp: source.frame_stamp(frame),
@@ -880,7 +880,7 @@ fn decode(
             return Ok(FramePixels {
                 width: hit.width,
                 height: hit.height,
-                rgba: hit.rgba,
+                rgba: Arc::unwrap_or_clone(hit.rgba),
                 format: hit.format,
                 frame: req.frame,
                 item: req.item,
@@ -891,7 +891,7 @@ fn decode(
         return Ok(FramePixels {
             width: hit.width,
             height: hit.height,
-            rgba: hit.rgba.clone(),
+            rgba: hit.rgba.to_vec(),
             format: hit.format,
             frame: req.frame,
             item: req.item,
@@ -912,7 +912,7 @@ fn decode(
                 CachedFrame {
                     width: out.width,
                     height: out.height,
-                    rgba: out.rgba.clone(),
+                    rgba: Arc::new(out.rgba.clone()),
                     format: out.format,
                     once: false,
                     stamp,
@@ -962,7 +962,7 @@ fn decode(
         CachedFrame {
             width: out.width,
             height: out.height,
-            rgba: out.rgba.clone(),
+            rgba: Arc::new(out.rgba.clone()),
             format: out.format,
             once: false,
             stamp,
@@ -1000,7 +1000,7 @@ fn decode(
 #[allow(clippy::too_many_arguments)]
 fn flow_for(
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
-    flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
+    flow_cache: &mut flow_store::FlowCache,
     gpu: Option<&lumit_gpu::GpuContext>,
     item: Uuid,
     frame_a: usize,
@@ -1324,7 +1324,7 @@ fn combine_pair(
     )>,
     refuse: bool,
     refused: &mut Option<SynthesisRefusal>,
-    flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
+    flow_cache: &mut flow_store::FlowCache,
     gpu: Option<&lumit_gpu::GpuContext>,
     job: &CompJob,
     a: FramePixels,
@@ -1462,7 +1462,7 @@ fn decode_comp(
         Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
     )>,
     refuse: bool,
-    flow_cache: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>,
+    flow_cache: &mut flow_store::FlowCache,
     gpu: Option<&lumit_gpu::GpuContext>,
     comp: Uuid,
     frame: usize,
@@ -1473,6 +1473,7 @@ fn decode_comp(
     let decode_started = web_time::Instant::now();
     let mut layers = Vec::with_capacity(jobs.len());
     for (i, job) in jobs.iter().enumerate() {
+        let stood_in = lumit_media::stand_ins();
         let req = Request {
             generation: 0,
             item: job.item,
@@ -1506,35 +1507,19 @@ fn decode_comp(
             });
             decode(decoders, cache, &req, last)?
         };
-        // Neighbour frames for a temporal effect (job.temporal is empty
-        // for a plain layer, so this loop does nothing then). A neighbour
-        // that fails to decode is simply dropped — a missing echo tap
-        // degrades the effect, never the frame.
-        let mut temporal: Vec<(i32, Vec<u8>)> = job
-            .temporal
-            .iter()
-            .filter_map(|&(offset, frame)| {
-                let nreq = Request {
-                    generation: 0,
-                    item: job.item,
-                    source: job.source.clone(),
-                    frame,
-                    target_width: job.target_width,
-                    slate: None,
-                    // A neighbour frame is the same picture at another moment,
-                    // so it is read through the same channels — an echo of an
-                    // extracted depth pass is an echo of the depth pass.
-                    channels: job.channels.clone(),
-                };
-                decode(decoders, cache, &nreq, false)
-                    .ok()
-                    .map(|p| (offset, p.rgba))
-            })
-            .collect();
-        // The motion fields the stack's flow readers want, measured from the
-        // raw current frame before it is consumed into `rgba` below.
-        let flow_fields =
-            neighbour_fields::neighbour_fields(flow_engine, flow_cache, gpu, job, &px, &temporal)?;
+        // Neighbour frames for a temporal effect, and the motion fields the
+        // stack's flow readers want, measured from the raw current frame
+        // before it is consumed into `rgba` below.
+        let mut temporal = neighbour_frames::of_job(decoders, cache, job);
+        let flow_fields = neighbour_fields::neighbour_fields(
+            flow_engine,
+            flow_cache,
+            gpu,
+            job,
+            &px,
+            &temporal,
+            stood_in,
+        )?;
         // The moments an accumulation motion blur above wants this clip at
         // (empty for a plain layer, so this loop does nothing then). Each is
         // made the way the primary frame is made under a Blend or Flow retime,
@@ -1642,7 +1627,7 @@ fn decode_comp(
                     if let Some(p) = other(clip)
                         .filter(|p| (p.width, p.height, p.format) == (px.width, px.height, format))
                     {
-                        temporal.push((*offset, Arc::unwrap_or_clone(p.rgba)));
+                        temporal.push((*offset, p.rgba));
                     }
                 }
                 Cut::Moment(offset, None) => shutter.push((*offset, None)),
@@ -1731,7 +1716,9 @@ fn decode_comp(
     })
 }
 
+mod flow_store;
 mod neighbour_fields;
+mod neighbour_frames;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -1773,18 +1760,20 @@ mod tests {
         let mut layer = pixels(100);
         assert_eq!(weigh(std::slice::from_ref(&layer)), 100);
 
-        layer.temporal = vec![(-1, vec![0u8; 100]), (1, vec![0u8; 100])];
+        let frame = Arc::new(vec![0u8; 100]);
+        layer.temporal = vec![(-1, Arc::clone(&frame)), (1, frame)];
         assert_eq!(
             weigh(std::slice::from_ref(&layer)),
             300,
             "and its neighbours"
         );
 
-        // Three planes of f32 — u, v and the confidence — at four bytes each.
-        layer.flow_fields = vec![(1, (vec![0.0; 10], vec![0.0; 10], vec![0.0; 10], (10, 1)))];
+        // Four f32 channels a pixel, as the texture holds them.
+        let field = Arc::new(lumit_flow::chain::Leg::from_planes(&[], &[], &[], 10, 1));
+        layer.flow_fields = vec![(1, field)];
         assert_eq!(
             weigh(std::slice::from_ref(&layer)),
-            300 + 120,
+            300 + 160,
             "and the motion measured against them"
         );
 
@@ -1792,14 +1781,14 @@ mod tests {
         layer.shutter = vec![(0.0, moment()), (0.5, moment())];
         assert_eq!(
             weigh(std::slice::from_ref(&layer)),
-            300 + 120 + 200,
+            300 + 160 + 200,
             "and every moment the shutter asked for"
         );
 
         // Two such layers weigh twice as much, which is the whole point: it is
         // the sum nobody was taking.
         let both = [pixels(100), layer];
-        assert_eq!(weigh(&both), 100 + 620);
+        assert_eq!(weigh(&both), 100 + 660);
     }
 
     /// The frame in flight holds its reservation for as long as it lives and

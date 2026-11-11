@@ -2265,6 +2265,7 @@ dependencies = [
  "bytemuck",
  "lumit-gpu",
  "pollster",
+ "rayon",
  "thiserror 2.0.18",
  "wgpu",
 ]
