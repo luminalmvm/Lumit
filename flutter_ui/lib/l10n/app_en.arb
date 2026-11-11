@@ -20591,6 +20591,10 @@
   "@addonTaskSegmentation": {
     "description": "Settings window, Addons: what a model pack does, shown on its row. This one traces the thing you clicked on."
   },
+  "addonTaskVoice": "Voice isolation",
+  "@addonTaskVoice": {
+    "description": "Settings window, Addons: what a model pack does, shown on its row. This one keeps speech and turns everything else down."
+  },
   "fileTypeAddon": "Addon description",
   "@fileTypeAddon": {
     "description": "File dialogue: the name of the addon.json file type, when picking a pack to install from disk."

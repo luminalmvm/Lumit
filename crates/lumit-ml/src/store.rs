@@ -22,7 +22,7 @@ use std::{
 
 use crate::{
     error::MlError,
-    manifest::{self, Manifest, Task, Unpack},
+    manifest::{self, Arch, Manifest, Task, Unpack},
     runtime, tarball,
 };
 
@@ -223,6 +223,11 @@ pub fn find(task: Task) -> Option<Installed> {
 /// slightly different picture, and §7 says the key carries the provider that
 /// ran, so the name moves the moment the machine's real answer is known: one
 /// cache miss, and the truth afterwards.
+///
+/// The voice model is the exception. It always runs on the processor, so its
+/// name carries that rather than whatever another model's first open took, and
+/// it folds in its own numbers too: they shape the spectrum the graphs hear,
+/// and a pack can change them without changing its version.
 #[must_use]
 pub fn identity(manifest: &Manifest) -> [u8; 32] {
     let mut out = [0u8; 32];
@@ -233,12 +238,13 @@ pub fn identity(manifest: &Manifest) -> [u8; 32] {
             }
         }
     }
+    let (provider, numbers) = match manifest.model.as_ref().map(|model| &model.arch) {
+        Some(Arch::DeepFilter(names)) => (runtime::CPU, serde_json::to_string(names).ok()),
+        _ => (runtime::provider(), None),
+    };
     let mut fold = 0xcbf2_9ce4_8422_2325_u64;
-    for part in [
-        manifest.id.as_str(),
-        manifest.version.as_str(),
-        runtime::provider(),
-    ] {
+    let parts = [manifest.id.as_str(), manifest.version.as_str(), provider];
+    for part in parts.into_iter().chain(numbers.as_deref()) {
         for byte in part.bytes().chain(std::iter::once(0)) {
             fold = (fold ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
         }

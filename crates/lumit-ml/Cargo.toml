@@ -16,8 +16,8 @@ lumit-project = { path = "../lumit-project" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-# Whisper's spectrogram and the speaker model's filterbank. Already in the
-# graph through `lumit-audio`, at the same pin.
+# Whisper's spectrogram, the speaker model's filterbank and the voice model's
+# spectrum. Already in the graph through `lumit-audio`, at the same pin.
 realfft = "3.5"
 # The squash test openai's transcribe uses to spot a decoder caught in a
 # loop, and the `.tar.gz` some packs are published as. Already in the graph

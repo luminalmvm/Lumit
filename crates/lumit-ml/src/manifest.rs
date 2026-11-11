@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::MlError;
 
+pub mod deep_filter;
+
 /// The manifest format this build reads. A higher one is refused rather than
 /// guessed at.
 pub const FORMAT: u32 = 1;
@@ -75,6 +77,8 @@ pub enum Task {
     Segmentation,
     /// The words somebody said, with when they said them.
     Speech,
+    /// Speech kept and everything else turned down.
+    Voice,
 }
 
 impl fmt::Display for Task {
@@ -85,6 +89,7 @@ impl fmt::Display for Task {
             Task::Matte => "matte",
             Task::Segmentation => "segmentation",
             Task::Speech => "speech",
+            Task::Voice => "voice",
         })
     }
 }
@@ -468,6 +473,8 @@ pub enum Arch {
     Sam2(Sam2),
     /// Speech, Whisper. Boxed, because it names far more than the others.
     Whisper(Box<Whisper>),
+    /// Voice, DeepFilterNet.
+    DeepFilter(deep_filter::DeepFilter),
 }
 
 impl Arch {
@@ -481,6 +488,7 @@ impl Arch {
             Arch::Rvm(_) | Arch::Birefnet(_) => Task::Matte,
             Arch::Sam2(_) => Task::Segmentation,
             Arch::Whisper(_) => Task::Speech,
+            Arch::DeepFilter(_) => Task::Voice,
         }
     }
 
@@ -506,6 +514,7 @@ impl Arch {
             .flatten()
             .map(String::as_str)
             .collect(),
+            Arch::DeepFilter(m) => vec![m.enc.as_str(), m.erb_dec.as_str(), m.df_dec.as_str()],
         }
     }
 }

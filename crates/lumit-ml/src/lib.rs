@@ -20,9 +20,10 @@
 //! on a control the user can see.
 //!
 //! Nothing generative lives here and nothing ever will: a model in Lumit makes
-//! a plane of depth, a plane of coverage or an in-between frame, never a
-//! picture from a description. A model can also write down the words someone
-//! said, with when they said each one.
+//! a plane of depth, a plane of coverage, an in-between frame or gains on a
+//! sound's own spectrum, never a picture or a voice from a description. A
+//! model can also write down the words someone said, with when they said each
+//! one.
 //!
 //! # Thread role and contract
 //!
@@ -37,7 +38,8 @@
 //! [`depth`] and [`matte`] are two of the baked ones, and [`segment`] is the
 //! one a tap on the picture asks a question of. [`speech`] is the one that
 //! listens: it streams a recording through three models and hands back its
-//! words.
+//! words. [`voice`] listens too, and turns down everything in a recording but
+//! the speech.
 
 pub mod depth;
 pub mod error;
@@ -51,6 +53,7 @@ pub mod store;
 pub mod synthesis;
 mod tarball;
 pub mod tensor;
+pub mod voice;
 
 /// Where the tests find a real runtime and real packs, on the one machine
 /// that has them.

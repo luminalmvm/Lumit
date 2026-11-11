@@ -146,7 +146,8 @@ class Addon {
   /// What the whole addon weighs, for the size on the row.
   final int sizeBytes;
 
-  /// What a model pack does: `depth`, `matte`, `segmentation` or `synthesis`.
+  /// What a model pack does: `depth`, `matte`, `segmentation`, `synthesis`
+  /// or `voice`.
   /// Empty for the runtime.
   final String task;
 

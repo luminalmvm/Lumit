@@ -2827,7 +2827,7 @@ bool hasEffectBadge(String key) => effectBadge(key) != null;
 
 /// What a model pack does, for the line under its name on the Addons page.
 ///
-/// The word arrives as one of the four tasks a pack may declare in its manifest
+/// The word arrives as one of the six tasks a pack may declare in its manifest
 /// (docs/impl/addons.md §4). A task this build has no word for comes back as it
 /// arrived, which is what a catalogue written for a newer Lumit would send.
 String addonTask(String task) {
@@ -2842,6 +2842,8 @@ String addonTask(String task) {
       return l10n.addonTaskSegmentation;
     case 'speech':
       return l10n.addonTaskSpeech;
+    case 'voice':
+      return l10n.addonTaskVoice;
     default:
       return task;
   }
