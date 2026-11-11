@@ -63,6 +63,13 @@ use super::effects::{
             vibrato::{AudioVibrato, AudioVibratoDef},
             wah::{AudioWah, AudioWahDef},
         },
+        repair::{
+            declick::{AudioDeclick, AudioDeclickDef},
+            deess::{AudioDeess, AudioDeessDef},
+            dehum::{AudioDehum, AudioDehumDef},
+            denoise::{AudioDenoise, AudioDenoiseDef},
+            dereverb::{AudioDereverb, AudioDereverbDef},
+        },
         space::{
             delay::{AudioDelay, AudioDelayDef},
             distortion::{AudioDistortion, AudioDistortionDef},
@@ -97,7 +104,6 @@ use super::effects::{
     custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
-    denoise::{Denoise, DenoiseDef},
     depth::{Depth, DepthDef},
     depth_points::{DepthPoints, DepthPointsDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
@@ -227,8 +233,6 @@ crate::catalogue![
     RadialBlurDef => RadialBlur,
     SharpenDef => Sharpen,
     SharpenSimpleDef => SharpenSimple,
-    // Noise measured and taken out, over the frames either side.
-    DenoiseDef => Denoise,
     SpriteFlareDef => SpriteFlare,
     LightWrapDef => LightWrap,
     RgbSplitDef => RgbSplit,
@@ -470,6 +474,13 @@ crate::catalogue![
     AudioTremoloDef => AudioTremolo,
     AudioVibratoDef => AudioVibrato,
     AudioWahDef => AudioWah,
+    // Repair, last: what takes damage out of a recording rather than adding
+    // anything to it.
+    AudioDenoiseDef => AudioDenoise,
+    AudioDehumDef => AudioDehum,
+    AudioDeclickDef => AudioDeclick,
+    AudioDeessDef => AudioDeess,
+    AudioDereverbDef => AudioDereverb,
     // The other effect whose arithmetic came from somewhere else: a whole node
     // graph composition applied to this layer, with the graph's Inputs as its
     // rows (docs/impl/node-graph-comp.md §1.3). Beside the Custom shader,

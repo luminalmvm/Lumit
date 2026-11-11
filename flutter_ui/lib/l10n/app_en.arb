@@ -20233,6 +20233,102 @@
   "@fxWet": {
     "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
   },
+  "fxNoiseReduction": "Noise reduction",
+  "@fxNoiseReduction": {
+    "description": "Effect controls: the name of an audio effect that takes a steady hiss, rumble or whine out from under the sound."
+  },
+  "fxAdaptive": "Adaptive",
+  "@fxAdaptive": {
+    "description": "Effect controls: a switch on Noise reduction. On, the effect works out the noise from the whole sound itself instead of using what Learn measured."
+  },
+  "fxTonalReduction": "Tonal reduction",
+  "@fxTonalReduction": {
+    "description": "Effect controls: on Noise reduction, how much further steady tones in the noise, such as a whine or a buzz, are turned down, in dB."
+  },
+  "fxNoiseOnly": "Noise only",
+  "@fxNoiseOnly": {
+    "description": "Effect controls: a switch on Noise reduction that plays only the noise it takes away, to hear whether any of the voice went with it."
+  },
+  "fxReduction": "Reduction",
+  "@fxReduction": {
+    "description": "Effect controls: on the sound clean-up effects, the most the unwanted sound is turned down, in dB."
+  },
+  "fxHumRemoval": "Hum removal",
+  "@fxHumRemoval": {
+    "description": "Effect controls: the name of an audio effect that takes mains hum at 50 or 60 Hz and its harmonics out of the sound."
+  },
+  "fxFindFrequency": "Find frequency",
+  "@fxFindFrequency": {
+    "description": "Effect controls: a switch on Hum removal. On, the effect finds the mains frequency and its drift from the sound itself."
+  },
+  "fxHarmonics": "Harmonics",
+  "@fxHarmonics": {
+    "description": "Effect controls: on Hum removal, how many multiples of the mains frequency are taken out, the mains frequency itself counted."
+  },
+  "fxSlope": "Slope",
+  "@fxSlope": {
+    "description": "Effect controls: on Hum removal, how much less each higher harmonic is turned down than the one below it, in dB."
+  },
+  "fxHumOnly": "Hum only",
+  "@fxHumOnly": {
+    "description": "Effect controls: a switch on Hum removal that plays only the hum it takes away."
+  },
+  "fxClickRemoval": "Click removal",
+  "@fxClickRemoval": {
+    "description": "Effect controls: the name of an audio effect that finds short clicks, crackle and mouth noise and fills them in from the sound around them."
+  },
+  "fxClicks": "Clicks",
+  "@fxClicks": {
+    "description": "Effect controls: one of Click removal's Type options. Hunts single clicks and pops."
+  },
+  "fxMouthClicks": "Mouth clicks",
+  "@fxMouthClicks": {
+    "description": "Effect controls: one of Click removal's Type options. Hunts the small wet clicks a mouth makes between words."
+  },
+  "fxMaximumLength": "Maximum length",
+  "@fxMaximumLength": {
+    "description": "Effect controls: on Click removal, the longest a click may be, in milliseconds. Anything longer is left alone as part of the sound."
+  },
+  "fxWiden": "Widen",
+  "@fxWiden": {
+    "description": "Effect controls: on Click removal, how far each repair reaches past the click on either side, in milliseconds."
+  },
+  "fxClicksOnly": "Clicks only",
+  "@fxClicksOnly": {
+    "description": "Effect controls: a switch on Click removal that plays only what it takes out."
+  },
+  "fxDeEsser": "De-esser",
+  "@fxDeEsser": {
+    "description": "Effect controls: the name of an audio effect that turns down harsh s and sh sounds in a voice as they happen."
+  },
+  "fxWholeSound": "Whole sound",
+  "@fxWholeSound": {
+    "description": "Effect controls: a switch on De-esser. On, the whole sound is turned down on each s rather than only its top."
+  },
+  "fxSibilanceOnly": "Sibilance only",
+  "@fxSibilanceOnly": {
+    "description": "Effect controls: a switch on De-esser that plays only what it takes away from the s sounds."
+  },
+  "fxReverbReduction": "Reverb reduction",
+  "@fxReverbReduction": {
+    "description": "Effect controls: the name of an audio effect that turns down the echo of a room behind a voice."
+  },
+  "fxFindReverbTime": "Find reverb time",
+  "@fxFindReverbTime": {
+    "description": "Effect controls: a switch on Reverb reduction. On, the effect measures how long the room's echo lasts from the sound itself."
+  },
+  "fxReverbTime": "Reverb time",
+  "@fxReverbTime": {
+    "description": "Effect controls: on Reverb reduction, how long the room's echo takes to die away, in seconds, used when Find reverb time is off."
+  },
+  "fxBestQuality": "Best quality",
+  "@fxBestQuality": {
+    "description": "Effect controls: a switch on Reverb reduction. On, a slower and cleaner pass over the whole sound runs first."
+  },
+  "fxReverbOnly": "Reverb only",
+  "@fxReverbOnly": {
+    "description": "Effect controls: a switch on Reverb reduction that plays only the echo it takes away."
+  },
   "graphInput": "Input",
   "@graphInput": {
     "description": "Heading over the four Input rows in the Node graph panel's Ctrl+Space console: a box standing for a value or picture handed in from outside the graph."

@@ -33558,6 +33558,380 @@
       "matte_role": "none"
     },
     {
+      "slug": "noise-reduction",
+      "match_name": "audio_denoise",
+      "label": "Noise reduction",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "learn",
+          "label": "Learn",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "adaptive",
+          "label": "Adaptive",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 20.0,
+          "hard_min": -10.0,
+          "hard_max": 20.0
+        },
+        {
+          "id": "reduction",
+          "label": "Reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 40.0,
+          "hard_min": 0.0,
+          "hard_max": 40.0
+        },
+        {
+          "id": "smoothing",
+          "label": "Smoothing",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "tonal",
+          "label": "Tonal reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 40.0,
+          "hard_min": 0.0,
+          "hard_max": 40.0
+        },
+        {
+          "id": "noise_only",
+          "label": "Noise only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "hum-removal",
+      "match_name": "audio_dehum",
+      "label": "Hum removal",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "auto",
+          "label": "Find frequency",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 50.0,
+          "slider_min": 40.0,
+          "slider_max": 70.0,
+          "hard_min": 40.0,
+          "hard_max": 70.0
+        },
+        {
+          "id": "harmonics",
+          "label": "Harmonics",
+          "kind": "int",
+          "unit": "raw",
+          "default": 12,
+          "slider_min": 1.0,
+          "slider_max": 24.0,
+          "hard_min": 1.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "width",
+          "label": "Width",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.3,
+          "slider_max": 5.0,
+          "hard_min": 0.3,
+          "hard_max": 5.0
+        },
+        {
+          "id": "reduction",
+          "label": "Reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 60.0,
+          "hard_min": 0.0,
+          "hard_max": 60.0
+        },
+        {
+          "id": "slope",
+          "label": "Slope",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 6.0,
+          "hard_min": 0.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "hum_only",
+          "label": "Hum only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "frequency",
+          "on": "auto",
+          "cond": "bool_is",
+          "value": false
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "click-removal",
+      "match_name": "audio_declick",
+      "label": "Click removal",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "mode",
+          "label": "Type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Clicks",
+            "Crackle",
+            "Mouth clicks"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "sensitivity",
+          "label": "Sensitivity",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5.0,
+          "slider_min": 1.0,
+          "slider_max": 10.0,
+          "hard_min": 1.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "max_length",
+          "label": "Maximum length",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "widen",
+          "label": "Widen",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "clicks_only",
+          "label": "Clicks only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "de-esser",
+      "match_name": "audio_deess",
+      "label": "De-esser",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -20.0,
+          "slider_min": -40.0,
+          "slider_max": 0.0,
+          "hard_min": -40.0,
+          "hard_max": 0.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5000.0,
+          "slider_min": 2000.0,
+          "slider_max": 12000.0,
+          "hard_min": 2000.0,
+          "hard_max": 12000.0
+        },
+        {
+          "id": "range",
+          "label": "Range",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 60.0,
+          "slider_min": 20.0,
+          "slider_max": 200.0,
+          "hard_min": 20.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "wideband",
+          "label": "Whole sound",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ess_only",
+          "label": "Sibilance only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "reverb-reduction",
+      "match_name": "audio_dereverb",
+      "label": "Reverb reduction",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "reduction",
+          "label": "Reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0,
+          "hard_max": 30.0
+        },
+        {
+          "id": "auto",
+          "label": "Find reverb time",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "reverb_time",
+          "label": "Reverb time",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.8,
+          "slider_min": 0.1,
+          "slider_max": 3.0,
+          "hard_min": 0.1,
+          "hard_max": 3.0
+        },
+        {
+          "id": "smoothing",
+          "label": "Smoothing",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "best",
+          "label": "Best quality",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "reverb_only",
+          "label": "Reverb only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "reverb_time",
+          "on": "auto",
+          "cond": "bool_is",
+          "value": false
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
       "slug": "node-graph",
       "match_name": "node_graph",
       "label": "Node graph",

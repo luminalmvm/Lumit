@@ -9,12 +9,13 @@
 //! a time, and expects the same answer twice.
 //!
 //! [`dsp`] holds what they all share: the filters, the delay lines, the
-//! followers and the oversampler. The four group modules beside it hold the
-//! effects themselves, sorted by what they do to the sound rather than by
-//! which product named them first.
+//! followers, the oversampler and the spectral framing. The five group
+//! modules beside it hold the effects themselves, sorted by what they do to
+//! the sound rather than by which product named them first.
 
 pub mod dsp;
 pub mod dynamics;
 pub mod filters;
 pub mod modulation;
+pub mod repair;
 pub mod space;
