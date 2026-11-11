@@ -35,6 +35,7 @@
 //! - [`sim_step`] times one step of a million simulated particles: B37.
 //! - [`extruded`] times one letter's mesh on an extruded layer: B39.
 //! - [`smoke_step`] times a step and a march of smoke at 128 cells a side: B40.
+//! - [`denoise_play`] plays a Denoise forward over 1080p footage: B41.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.
@@ -51,6 +52,7 @@
 
 pub mod baseline;
 pub mod comp;
+pub mod denoise_play;
 pub mod extruded;
 pub mod long;
 pub mod long_comp;

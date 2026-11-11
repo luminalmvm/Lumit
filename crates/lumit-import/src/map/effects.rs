@@ -115,6 +115,9 @@ fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
     if let Some(mapped) = super::fx_timewarp::claim(conv, path, node) {
         return Some(mapped);
     }
+    if let Some(mapped) = super::fx_denoise::claim(conv, path, node) {
+        return Some(mapped);
+    }
     super::fx_distort::claim(conv, path, node)
 }
 

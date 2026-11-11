@@ -15,15 +15,15 @@
 
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock, TryLockError},
 };
 
 use crate::{
     error::MlError,
-    manifest::{self, Manifest, Task, Unpack},
-    runtime,
+    manifest::{self, Arch, Manifest, Task, Unpack},
+    runtime, tarball,
 };
 
 /// The file every addon folder holds.
@@ -32,6 +32,13 @@ pub const MANIFEST_FILE: &str = "addon.json";
 /// Where an install is assembled before it is renamed into place. Swept on
 /// every [`scan`], so a build that died halfway leaves nothing behind.
 pub const STAGING: &str = ".staging";
+
+/// The most one file taken out of a zip or a tar may unpack to: 4 GiB. The
+/// largest file in the catalogue today is about 220 MB and one ONNX graph
+/// cannot pass 2 GiB, so this is room for a much larger model's weights. A
+/// manifest gives no unpacked size, and without a ceiling a small download
+/// that unpacks to zeros would fill the disk before anything refused it.
+pub(crate) const MOST_UNPACKED: u64 = 4 << 30;
 
 /// The one install in flight. A `Mutex<()>` rather than a flag so the slot is
 /// released even when the installing thread unwinds.
@@ -216,6 +223,11 @@ pub fn find(task: Task) -> Option<Installed> {
 /// slightly different picture, and §7 says the key carries the provider that
 /// ran, so the name moves the moment the machine's real answer is known: one
 /// cache miss, and the truth afterwards.
+///
+/// The voice model is the exception. It always runs on the processor, so its
+/// name carries that rather than whatever another model's first open took, and
+/// it folds in its own numbers too: they shape the spectrum the graphs hear,
+/// and a pack can change them without changing its version.
 #[must_use]
 pub fn identity(manifest: &Manifest) -> [u8; 32] {
     let mut out = [0u8; 32];
@@ -226,12 +238,13 @@ pub fn identity(manifest: &Manifest) -> [u8; 32] {
             }
         }
     }
+    let (provider, numbers) = match manifest.model.as_ref().map(|model| &model.arch) {
+        Some(Arch::DeepFilter(names)) => (runtime::CPU, serde_json::to_string(names).ok()),
+        _ => (runtime::provider(), None),
+    };
     let mut fold = 0xcbf2_9ce4_8422_2325_u64;
-    for part in [
-        manifest.id.as_str(),
-        manifest.version.as_str(),
-        runtime::provider(),
-    ] {
+    let parts = [manifest.id.as_str(), manifest.version.as_str(), provider];
+    for part in parts.into_iter().chain(numbers.as_deref()) {
         for byte in part.bytes().chain(std::iter::once(0)) {
             fold = (fold ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
         }
@@ -398,6 +411,7 @@ pub fn install(manifest_text: &str, files: &[PathBuf]) -> Result<Installed, MlEr
         let placed = match download.unpack {
             Unpack::File => copy_file(file, download.size, &staging.join(&download.dest)),
             Unpack::Zip => take_from_zip(file, download.size, &download.entries, &staging),
+            Unpack::TarGz => tarball::take(file, download.size, &download.entries, &staging),
         };
         if let Err(why) = placed {
             return Err(abandon(&staging, why));
@@ -513,12 +527,28 @@ fn take_from_zip(
         let mut entry = zip
             .by_name(inside)
             .map_err(|_| MlError::Invalid(format!("the download has no \"{inside}\" in it")))?;
+        if entry.size() > MOST_UNPACKED {
+            return Err(too_large(inside));
+        }
         let mut out =
             fs::File::create(into.join(dest)).map_err(|e| MlError::Invalid(e.to_string()))?;
-        std::io::copy(&mut entry, &mut out).map_err(|e| MlError::Invalid(e.to_string()))?;
+        // Bounded as well, because the size the zip declares is only its word.
+        let copied = std::io::copy(&mut (&mut entry).take(MOST_UNPACKED + 1), &mut out)
+            .map_err(|e| MlError::Invalid(e.to_string()))?;
+        if copied > MOST_UNPACKED {
+            return Err(too_large(inside));
+        }
         out.flush().map_err(|e| MlError::Invalid(e.to_string()))?;
     }
     Ok(())
+}
+
+/// The refusal for a file inside a download that unpacks past
+/// [`MOST_UNPACKED`].
+pub(crate) fn too_large(inside: &str) -> MlError {
+    MlError::Invalid(format!(
+        "\"{inside}\" unpacks to more than an addon file may hold"
+    ))
 }
 
 /// Write the catalogue's own text into the folder, unchanged, so the

@@ -529,7 +529,44 @@ class LumitUiState extends ChangeNotifier {
   /// Here for the same reason the updater is: Settings draws it and anything
   /// that sends the user to that page reads the same answer. Built lazily, so a
   /// widget test that never opens the page never asks the engine anything.
-  late final AddonService addons = createAddonService();
+  late final AddonService addons = createAddonService()
+    ..addListener(_addonsMoved);
+
+  /// What was installed when the layers were last read for it, and whether
+  /// this state has been put away: the service outlives it by a download.
+  String _addonsTold = '';
+  bool _addonsDone = false;
+
+  /// An install or a removal changes which effects can run their model, and
+  /// nothing in the document moves to say so. Read the layers again, so a
+  /// missing-addon badge comes or goes, and draw the frame again with the
+  /// model in it. The service also notifies for every step of a download, so
+  /// only a change in what is installed counts.
+  void _addonsMoved() {
+    if (_addonsDone) return;
+    final now = [
+      addons.runtime.state.name,
+      for (final a in addons.installed) '${a.id}@${a.version}',
+    ].join(' ');
+    if (now == _addonsTold) return;
+    _addonsTold = now;
+    // After this turn, not within it: the service's first reading can come
+    // from a dialogue's initState, and telling every listener then would be
+    // asking for a rebuild in the middle of a build.
+    scheduleMicrotask(() {
+      if (_addonsDone) return;
+      model.refresh();
+      solveLanded.value++;
+      requestFrame();
+      // The sound too: a mix already loaded was made without the model, and
+      // nothing in its jobs moved to say it should be made again.
+      try {
+        selectedComp?.audioPrepare();
+      } catch (_) {
+        // The composition has gone; there is no mix to make again.
+      }
+    });
+  }
 
   /// The extensions installed, and which pane each is shown in. Not lazy:
   /// the dock asks it what to call an extension's tab from the first frame.
@@ -3567,6 +3604,7 @@ class LumitUiState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _addonsDone = true;
     _app.removeListener(_adoptProjectSession);
     _app.removeListener(refreshColourSummary);
     _app.removeListener(_sourceNames.clear);

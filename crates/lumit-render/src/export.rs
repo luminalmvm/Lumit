@@ -319,9 +319,7 @@ pub fn chain_bake(
         let first = bake_values(chain, instance, def, start_frame, 1, rate)
             .pop()
             .unwrap_or_default();
-        if let Some(processor) =
-            def.open_audio(instance.plugin_state_bytes(), &first, rate, offline)
-        {
+        if let Some(processor) = crate::voice::open_audio(instance, def, &first, rate, offline) {
             opened.push((instance, def, processor));
         }
     }
@@ -453,6 +451,10 @@ fn bake_values(
                 EffectValue::Bool(on) => std::borrow::Cow::Owned(
                     lumit_core::anim::Property::fixed(f64::from(u8::from(*on))),
                 ),
+                // A list goes as the index of what is picked.
+                EffectValue::Choice(index) => {
+                    std::borrow::Cow::Owned(lumit_core::anim::Property::fixed(f64::from(*index)))
+                }
                 _ => return None,
             };
             Some(Row {

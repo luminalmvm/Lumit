@@ -94,9 +94,9 @@ pub(crate) mod harness {
 
     /// The effect's rows at their declared defaults, with `over` applied by id.
     ///
-    /// Only the rows the bake actually sends: it hands a processor the Float
-    /// side of the document, which is every Slider, Float and Int row and
-    /// nothing else (docs/impl/audio-effects.md §2).
+    /// Only the rows the bake actually sends: every Slider, Float and Int
+    /// row, a switch as nought or one and a Choice as its index
+    /// (docs/impl/audio-effects.md §2).
     pub fn values(def: &dyn EffectDef, over: &[(&str, f64)]) -> Vec<(ParamId, f64)> {
         def.schema()
             .params
@@ -105,6 +105,8 @@ pub(crate) mod harness {
                 let declared = match param.kind {
                     ParamKind::Float { default, .. } | ParamKind::Slider { default, .. } => default,
                     ParamKind::Int { default, .. } => default as f64,
+                    ParamKind::Bool { default } => f64::from(u8::from(default)),
+                    ParamKind::Choice { default, .. } => f64::from(default),
                     _ => return None,
                 };
                 let held = over
@@ -144,6 +146,18 @@ pub(crate) mod harness {
             .expect("an audio effect opens a processor")
     }
 
+    /// One open instance that has been shown the whole of `input` first, as
+    /// the chain shows every link before its first block.
+    pub fn looked(
+        def: &dyn EffectDef,
+        values: &[(ParamId, f64)],
+        input: &[f32],
+    ) -> Arc<dyn AudioProcessor> {
+        let processor = open(def, values);
+        processor.look(input, &[values.to_vec()]);
+        processor
+    }
+
     /// Whole blocks through one processor, the run starting at block `first`.
     pub fn run_from(
         processor: &dyn AudioProcessor,
@@ -179,12 +193,12 @@ pub(crate) mod harness {
     /// own two halves spliced at a block edge with the state carried.
     pub fn deterministic(def: &dyn EffectDef, over: &[(&str, f64)], input: &[f32]) {
         let values = values(def, over);
-        let once = run(&*open(def, &values), input, &values);
-        let again = run(&*open(def, &values), input, &values);
+        let once = run(&*looked(def, &values, input), input, &values);
+        let again = run(&*looked(def, &values, input), input, &values);
         assert_eq!(once, again, "two bakes of one input must agree bit for bit");
 
         let split = input.len() / 2 / AUDIO_BLOCK_SAMPLES * AUDIO_BLOCK_SAMPLES;
-        let carried = open(def, &values);
+        let carried = looked(def, &values, input);
         let mut halves = run(&*carried, &input[..split], &values);
         halves.extend(run_from(
             &*carried,
@@ -257,6 +271,7 @@ pub(crate) mod harness {
                 let processor = def
                     .open_audio(None, &values, rate, false)
                     .expect("an audio effect opens a processor");
+                processor.look(&input, std::slice::from_ref(&values));
                 envelope(&run(&*processor, &input, &values), rate)
             })
             .collect();

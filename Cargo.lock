@@ -2224,6 +2224,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "rayon",
+ "realfft",
  "rhai",
  "serde",
  "serde_json",
@@ -2265,6 +2266,7 @@ dependencies = [
  "bytemuck",
  "lumit-gpu",
  "pollster",
+ "rayon",
  "thiserror 2.0.18",
  "wgpu",
 ]

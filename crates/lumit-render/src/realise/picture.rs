@@ -138,28 +138,56 @@ impl Realiser<'_> {
                     self.measure_below_flow(l, &tex, *width, *height, *background)
                 }
                 _ => {
-                    let neighbours: Vec<(i32, wgpu::Texture)> = l
-                        .neighbours
-                        .iter()
-                        .map(|(offset, rgba, nw, nh)| {
-                            let src = self.engine.upload_srgb8(&self.ctx, rgba, *nw, *nh);
-                            (*offset, self.engine.linearise(&self.ctx, &src))
-                        })
-                        .collect();
+                    // A neighbour is the same footage at another moment, so it
+                    // is read the way the frame it sits beside was: a float
+                    // plate stays float and a tagged one goes through its
+                    // input transform, or the trail is another colour.
+                    let (format, colour_space) = match &l.source {
+                        DrawSource::Pixels {
+                            format,
+                            colour_space,
+                            ..
+                        } => (*format, colour_space.clone()),
+                        _ => (lumit_media::decode::PixelFormat::Srgb8, None),
+                    };
+                    // A frame read last time is the picture made of it then.
+                    let upload = |rgba: &[u8], nw, nh| {
+                        self.upload_source(rgba, nw, nh, format, &colour_space)
+                    };
+                    let neighbours: Vec<(i32, wgpu::Texture)> = match self.flow {
+                        Some(kept) if !l.neighbours.is_empty() => {
+                            kept.borrow_mut().neighbours.pictures(
+                                &self.ctx,
+                                self.colour_config,
+                                &l.neighbours,
+                                format,
+                                &colour_space,
+                                upload,
+                            )
+                        }
+                        _ => l
+                            .neighbours
+                            .iter()
+                            .map(|(offset, rgba, nw, nh)| (*offset, upload(rgba, *nw, *nh)))
+                            .collect(),
+                    };
                     // The dense motion fields, one per offset a
                     // flow-consuming effect asked for, each uploaded
-                    // as its own texture (only when it matches the layer's
-                    // raster). The confidence rides in the .z channel
+                    // as its own texture at the size it was filed at: the
+                    // layer's raster for Motion blur and Datamosh, which
+                    // only bind one that matches it, the measured size for
+                    // Denoise. The confidence rides in the .z channel
                     // (FX-19).
                     let flow: Vec<(i32, wgpu::Texture)> = l
                         .flow_fields
                         .iter()
-                        .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
-                        .map(|(offset, u, v, conf, _, _)| {
+                        .filter(|(_, f)| f.w > 0 && f.h > 0)
+                        .map(|(offset, f)| {
+                            let (fw, fh) = (f.w as u32, f.h as u32);
                             (
                                 *offset,
-                                lumit_gpu::fx::common::upload_flow_field(
-                                    &self.ctx, u, v, conf, w, h,
+                                lumit_gpu::fx::common::upload_flow_texels(
+                                    &self.ctx, &f.texels, fw, fh,
                                 ),
                             )
                         })

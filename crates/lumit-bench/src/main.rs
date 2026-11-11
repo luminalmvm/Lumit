@@ -153,6 +153,17 @@ fn run() -> Result<(), String> {
         );
     })?);
 
+    // Denoise played forward over 1080p footage (docs/13 §2 B41).
+    results.extend(lumit_bench::denoise_play::budgets(
+        &media_dir(),
+        &mut |m: Measurement| {
+            println!(
+                "{}",
+                serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+            );
+        },
+    )?);
+
     let out = out_path();
     let banked = Baseline::from_results(&results);
     let text =

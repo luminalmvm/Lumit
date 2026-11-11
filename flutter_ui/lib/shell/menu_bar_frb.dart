@@ -60,6 +60,7 @@ import 'create_captions_dialog_frb.dart'
 import '../panels/grade_clipboard.dart'
     show canCopyGrade, canPasteGrade, copyGrade, pasteGrade;
 import '../panels/layer_source_menu.dart';
+import '../panels/noise_actions.dart';
 import '../panels/normalise_commands.dart' show normaliseLayers;
 import '../panels/preset_save.dart'
     show deletePreset, isOwnPreset, presetMoveToRow, renamePreset;
@@ -2290,6 +2291,13 @@ List<MenuEntry> _effectMenu(
               ? () => removeAllEffects(app, layers)
               : null,
           action: 'effect.remove.all'),
+      // The clean-up effects' two, on the one picked or the selection's first.
+      MenuEntry(l10n.fxMenuLearnNoise,
+          canLearnNoise(ui) ? () => learnSelectedNoise(ui) : null,
+          action: 'effect.learn'),
+      MenuEntry.toggle(l10n.fxMenuRemovedOnly,
+          canShowRemoved(ui) ? () => toggleRemovedOnly(ui) : null,
+          action: 'effect.listen', checked: () => removedOnlyOn(ui)),
       MenuEntry.divider(),
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [

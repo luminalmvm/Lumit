@@ -23,6 +23,7 @@ A
 APS-C
 Accumulation motion blur
 Across
+Adaptive
 Add
 Add grain
 Add input
@@ -90,6 +91,7 @@ Away from points
 B
 Back
 Background
+Background only
 Backing
 Backward
 Backwards
@@ -134,6 +136,7 @@ Beat trigger
 Beats
 Behind
 Bend
+Best quality
 Between
 Bevel
 Bevel and emboss
@@ -185,6 +188,7 @@ Boxes y
 Bright spots
 Brighter
 Brightness
+Broad
 Broadband, amber
 Broadband, blue
 Broadband, green
@@ -228,11 +232,20 @@ Chisel soft
 Choke
 Choose by
 Chorus
+Chroma
+Chroma broad
+Chroma coarse
+Chroma fine
+Chroma medium
+Chroma noise
 Chromatic aberration
 Chrome
 Circle
 Clamp
 Clearance
+Click removal
+Clicks
+Clicks only
 Clip
 Clip black
 Clip rollback
@@ -252,6 +265,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Coarse
 Coat
 Coat roughness
 Coating
@@ -360,6 +374,7 @@ Darken
 Darker
 Darker colour
 Datamosh
+De-esser
 Death
 Decay
 Decimals
@@ -370,6 +385,7 @@ Deep yellow
 Deform
 Deformer
 Delay
+Denoise
 Denominator
 Density
 Density layer
@@ -539,6 +555,10 @@ Filter
 Final
 Final result
 Find edges
+Find frequency
+Find reverb time
+Fine
+Finish
 Fire
 Fire brightness
 Fire colour
@@ -572,6 +592,7 @@ Focus point x
 Focus point y
 Focus range
 Follow
+Follow motion
 Follow the vectors
 For
 Force on all layers
@@ -587,6 +608,7 @@ Fractal type
 Frame mix
 Frame rate
 Frames
+Frames blended
 Free
 Freeze
 Frequency
@@ -674,6 +696,7 @@ Hard hide
 Hard light
 Hard mix
 Hardness
+Harmonics
 Haze
 Height
 Hexagons
@@ -707,6 +730,8 @@ Hue range
 Hue shift
 Hue spread
 Hue start
+Hum only
+Hum removal
 Hysteresis
 IOR
 Ice
@@ -783,6 +808,7 @@ Layer size
 Layer time
 Layer's box
 Layout
+Learn
 Left
 Left and right
 Left bottom tangent x
@@ -845,8 +871,13 @@ Lower left y
 Lower right x
 Lower right y
 Luma
+Luma broad
+Luma coarse
 Luma fade
+Luma fine
 Luma hide
+Luma medium
+Luma noise
 Luma reveal
 Luminance
 Luminance only
@@ -889,10 +920,12 @@ Max points
 Max renders
 Max trails
 Maximum
+Maximum length
 Maximum signal
 Maximum span length
 Measure
 Median
+Medium
 Merge
 Merge points
 Metallic
@@ -922,6 +955,7 @@ Mosaic
 Motion
 Motion blur
 Motion vectors
+Mouth clicks
 Multiply
 NTSC
 Name
@@ -935,6 +969,10 @@ Negative
 Neon
 Node graph
 Noise
+Noise by size
+Noise by tone
+Noise only
+Noise reduction
 Noise scale
 Noise size
 Noise speed
@@ -1152,6 +1190,7 @@ Red phase
 Reds
 Reduce brightness
 Reduce saturation
+Reduction
 Refine radius
 Refraction
 Region from
@@ -1169,6 +1208,7 @@ Remove edge leak
 Remove from picked
 Remove input
 Removed
+Removed noise
 Render
 Rendered
 Repeat
@@ -1184,6 +1224,9 @@ Resonance
 Result
 Reveal original
 Reverb
+Reverb only
+Reverb reduction
+Reverb time
 Reverse
 Right
 Right bottom tangent x
@@ -1230,6 +1273,9 @@ Rows/columns jitter
 Rubber
 Same
 Same as Per
+Sample size
+Sample x
+Sample y
 Samples
 Satin
 Satin colour
@@ -1298,6 +1344,7 @@ Shuffle
 Shutter
 Shutter angle
 Shutter phase
+Sibilance only
 Siceliot
 Side
 Sides
@@ -1322,6 +1369,7 @@ Slice start
 Slide
 Slider
 Slider control
+Slope
 Slope channel
 Slow motion with blur
 Smoke
@@ -1361,6 +1409,8 @@ Spark size
 Spark speed
 Sparks
 Sparks from
+Spatial
+Spatial by size
 Speed
 Speed jitter
 Speed max
@@ -1445,6 +1495,7 @@ Technique
 Tele lens width
 Temperature
 Temporal
+Temporal strength
 Text
 Text layer
 Text step
@@ -1482,6 +1533,7 @@ To
 To group
 To x
 To y
+Tonal reduction
 Tone
 Top
 Top and bottom
@@ -1591,6 +1643,8 @@ Vision3 250D
 Vision3 500T
 Vision3 50D
 Vivid light
+Voice
+Voice isolation
 Voices
 Volume
 Vortex
@@ -1616,6 +1670,8 @@ Waves
 Weak
 Wet
 Whole frames
+Whole sound
+Widen
 Width
 Wiggle
 Wiggle type

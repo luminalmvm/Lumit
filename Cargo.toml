@@ -45,6 +45,13 @@ opt-level = 3
 [profile.dev.package.lumit-render]
 opt-level = 3
 
+# Motion measurement is in the frame path once Denoise is on a layer: its
+# luma, confidence and chaining run on the processor for every new frame. At
+# opt-level 1 a debug app played a Denoise at one frame a second where a
+# release build plays it at about thirty.
+[profile.dev.package.lumit-flow]
+opt-level = 3
+
 # The browser build (scripts/build-web.ps1). One codegen unit and full LTO make
 # the engine's wasm much smaller, and the page downloads every byte of it.
 [profile.web]

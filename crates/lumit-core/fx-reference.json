@@ -680,6 +680,475 @@
       "matte_role": "own"
     },
     {
+      "slug": "denoise",
+      "match_name": "denoise",
+      "label": "Denoise",
+      "version": 1,
+      "category": "Blur & sharpen",
+      "category_slug": "blur-sharpen",
+      "params": [
+        {
+          "id": "view",
+          "label": "View",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Result",
+            "Removed noise",
+            "Frames blended"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "learn",
+          "label": "Learn",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "sample_x",
+          "label": "Sample x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "sample_y",
+          "label": "Sample y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "sample_size",
+          "label": "Sample size",
+          "kind": "float",
+          "unit": "px",
+          "default": 96.0,
+          "slider_min": 16.0,
+          "slider_max": 512.0,
+          "hard_min": 16.0,
+          "hard_max": 512.0
+        },
+        {
+          "id": "luma_noise",
+          "label": "Luma noise",
+          "kind": "float",
+          "unit": "raw",
+          "default": 3.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "chroma_noise",
+          "label": "Chroma noise",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "luma_fine",
+          "label": "Luma fine",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "luma_medium",
+          "label": "Luma medium",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "luma_coarse",
+          "label": "Luma coarse",
+          "kind": "float",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "luma_broad",
+          "label": "Luma broad",
+          "kind": "float",
+          "unit": "percent",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_fine",
+          "label": "Chroma fine",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_medium",
+          "label": "Chroma medium",
+          "kind": "float",
+          "unit": "percent",
+          "default": 80.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_coarse",
+          "label": "Chroma coarse",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "chroma_broad",
+          "label": "Chroma broad",
+          "kind": "float",
+          "unit": "percent",
+          "default": 45.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "shadows",
+          "label": "Shadows",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "midtones",
+          "label": "Midtones",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "highlights",
+          "label": "Highlights",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "int",
+          "unit": "frames",
+          "default": 2,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "motion",
+          "label": "Follow motion",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "temporal",
+          "label": "Temporal strength",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "luma",
+          "label": "Luma",
+          "kind": "float",
+          "unit": "percent",
+          "default": 75.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "chroma",
+          "label": "Chroma",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "fine",
+          "label": "Fine",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "medium",
+          "label": "Medium",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "coarse",
+          "label": "Coarse",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "broad",
+          "label": "Broad",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "detail",
+          "label": "Detail",
+          "kind": "float",
+          "unit": "percent",
+          "default": 25.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "sharpen",
+          "label": "Sharpen",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "grain",
+          "label": "Grain",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Noise by size",
+          "params": [
+            "luma_fine",
+            "luma_medium",
+            "luma_coarse",
+            "luma_broad",
+            "chroma_fine",
+            "chroma_medium",
+            "chroma_coarse",
+            "chroma_broad"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Noise by tone",
+          "params": [
+            "shadows",
+            "midtones",
+            "highlights"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Temporal",
+          "params": [
+            "frames",
+            "motion",
+            "temporal"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Spatial",
+          "params": [
+            "luma",
+            "chroma"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Spatial by size",
+          "params": [
+            "fine",
+            "medium",
+            "coarse",
+            "broad"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Finish",
+          "params": [
+            "detail",
+            "sharpen",
+            "grain"
+          ],
+          "collapsed": false
+        }
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "scales the reduction per pixel: white takes all the noise the rows say, grey less, black none"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "sprite-flare",
       "match_name": "sprite_flare",
       "label": "Sprite flare",
@@ -33083,6 +33552,432 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "noise-reduction",
+      "match_name": "audio_denoise",
+      "label": "Noise reduction",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "learn",
+          "label": "Learn",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "adaptive",
+          "label": "Adaptive",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 20.0,
+          "hard_min": -10.0,
+          "hard_max": 20.0
+        },
+        {
+          "id": "reduction",
+          "label": "Reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 40.0,
+          "hard_min": 0.0,
+          "hard_max": 40.0
+        },
+        {
+          "id": "smoothing",
+          "label": "Smoothing",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "tonal",
+          "label": "Tonal reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 40.0,
+          "hard_min": 0.0,
+          "hard_max": 40.0
+        },
+        {
+          "id": "noise_only",
+          "label": "Noise only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "hum-removal",
+      "match_name": "audio_dehum",
+      "label": "Hum removal",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "auto",
+          "label": "Find frequency",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 50.0,
+          "slider_min": 40.0,
+          "slider_max": 70.0,
+          "hard_min": 40.0,
+          "hard_max": 70.0
+        },
+        {
+          "id": "harmonics",
+          "label": "Harmonics",
+          "kind": "int",
+          "unit": "raw",
+          "default": 12,
+          "slider_min": 1.0,
+          "slider_max": 24.0,
+          "hard_min": 1.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "width",
+          "label": "Width",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.3,
+          "slider_max": 5.0,
+          "hard_min": 0.3,
+          "hard_max": 5.0
+        },
+        {
+          "id": "reduction",
+          "label": "Reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 60.0,
+          "hard_min": 0.0,
+          "hard_max": 60.0
+        },
+        {
+          "id": "slope",
+          "label": "Slope",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 6.0,
+          "hard_min": 0.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "hum_only",
+          "label": "Hum only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "frequency",
+          "on": "auto",
+          "cond": "bool_is",
+          "value": false
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "click-removal",
+      "match_name": "audio_declick",
+      "label": "Click removal",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "mode",
+          "label": "Type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Clicks",
+            "Crackle",
+            "Mouth clicks"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "sensitivity",
+          "label": "Sensitivity",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5.0,
+          "slider_min": 1.0,
+          "slider_max": 10.0,
+          "hard_min": 1.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "max_length",
+          "label": "Maximum length",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "widen",
+          "label": "Widen",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0,
+          "hard_max": 5.0
+        },
+        {
+          "id": "clicks_only",
+          "label": "Clicks only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "de-esser",
+      "match_name": "audio_deess",
+      "label": "De-esser",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -20.0,
+          "slider_min": -40.0,
+          "slider_max": 0.0,
+          "hard_min": -40.0,
+          "hard_max": 0.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 5000.0,
+          "slider_min": 2000.0,
+          "slider_max": 12000.0,
+          "hard_min": 2000.0,
+          "hard_max": 12000.0
+        },
+        {
+          "id": "range",
+          "label": "Range",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0,
+          "hard_max": 24.0
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 60.0,
+          "slider_min": 20.0,
+          "slider_max": 200.0,
+          "hard_min": 20.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "wideband",
+          "label": "Whole sound",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ess_only",
+          "label": "Sibilance only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "reverb-reduction",
+      "match_name": "audio_dereverb",
+      "label": "Reverb reduction",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "reduction",
+          "label": "Reduction",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0,
+          "hard_max": 30.0
+        },
+        {
+          "id": "auto",
+          "label": "Find reverb time",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "reverb_time",
+          "label": "Reverb time",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.8,
+          "slider_min": 0.1,
+          "slider_max": 3.0,
+          "hard_min": 0.1,
+          "hard_max": 3.0
+        },
+        {
+          "id": "smoothing",
+          "label": "Smoothing",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "best",
+          "label": "Best quality",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "reverb_only",
+          "label": "Reverb only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "reverb_time",
+          "on": "auto",
+          "cond": "bool_is",
+          "value": false
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "voice-isolation",
+      "match_name": "audio_voice",
+      "label": "Voice isolation",
+      "version": 1,
+      "category": "Audio",
+      "category_slug": "audio",
+      "params": [
+        {
+          "id": "voice",
+          "label": "Voice",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -24.0,
+          "slider_max": 12.0,
+          "hard_min": -24.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "background",
+          "label": "Background",
+          "kind": "slider",
+          "unit": "raw",
+          "default": -60.0,
+          "slider_min": -60.0,
+          "slider_max": 0.0,
+          "hard_min": -60.0,
+          "hard_max": 0.0
+        },
+        {
+          "id": "wet",
+          "label": "Wet",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 80.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "background_only",
+          "label": "Background only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
         }
       ],
       "groups": [],

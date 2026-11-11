@@ -799,6 +799,7 @@ impl HeadlessRenderer {
         // against this one account (docs/13 §3).
         let ledger = std::sync::Arc::clone(gpu.ledger());
         crate::model::account_against(&ledger);
+        crate::voice::account_against(&ledger);
         Self {
             gpu,
             parts: Some(parts),
@@ -1446,7 +1447,7 @@ impl HeadlessRenderer {
                         w.decoded(done as u32, total);
                     }
                 })
-                .map_err(|e| format!("headless preview: {e}"))?;
+                .map_err(|e| crate::cancel::or_fault(e, "headless preview"))?;
             self.retained = Some(Retained {
                 comp: comp_id,
                 frame,

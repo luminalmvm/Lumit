@@ -2,8 +2,12 @@
 //
 // A Centre or a Light is an x and a y in the panel, and nothing on the picture
 // said where that was. With the effect selected, or either of the pair's rows
-// in the Timeline, each point wears the anchor's mark at the spot a pick there
-// would write.
+// in the Timeline, each point wears the anchor's mark.
+//
+// A point is in the layer's own pixels, since an effect runs on the layer's
+// picture before its transform. So each mark goes through the layer's own map,
+// the one the gizmo draws its box with, and sits where the effect has it on a
+// layer that is scaled, moved, turned, parented or seen through a camera.
 //
 // With the Selection tool in hand a mark can be dragged: the point follows
 // the pointer through the same preview a row's drag uses, and the release
@@ -36,8 +40,10 @@ import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show effectPath;
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_anchor.dart' show constrainToAxis;
-import 'viewer_gizmo.dart' show gizmoAnchorSlop;
+import 'viewer_gizmo.dart' show LayerBox, gizmoAnchorSlop;
+import 'viewer_layer_map.dart' show ViewerLayerMap;
 import 'viewer_menus.dart' show viewerRow;
+import 'viewer_noise_sample.dart' show denoiseMatchName, sampleX;
 import 'viewer_tool_cursor.dart' show paintAnchorMark;
 
 /// A point's row changed in Effect controls or the Timeline picks its effect,
@@ -63,15 +69,21 @@ class _Mark {
   /// The two halves as the document holds them, so a keyed half takes a key.
   final BridgeScalar? xWas, yWas;
 
-  /// What a whole frame is worth in the pair's unit: comp pixels, or a hundred.
+  /// What a whole frame is worth in the pair's unit: the layer's own pixels,
+  /// or a hundred.
   final Size span;
+
+  /// The layer's own picture, in its own pixels, and where the layer puts
+  /// those pixels on screen.
+  final Size size;
+  final ViewerLayerMap map;
   final Offset at;
 
   /// An expression works out either half, so the mark is not dragged.
   final bool driven;
 
   const _Mark(this.layer, this.effect, this.x, this.y, this.xWas, this.yWas,
-      this.span, this.at, this.driven);
+      this.span, this.size, this.map, this.at, this.driven);
 
   String get key => '${layer.internallayerId}/$effect/$x';
 }
@@ -80,9 +92,9 @@ class ViewerEffectPoints extends StatefulWidget {
   final CompositionReference comp;
   final LumitUiState uiState;
 
-  /// Where the picture is drawn in this panel, at the current magnification.
-  final Rect fitted;
-  final Size compSize;
+  /// Every layer's box as the gizmo has it, asked for only once a point is
+  /// to be drawn.
+  final List<LayerBox> Function() boxes;
   final Color colour;
 
   /// The armed tool. Only Selection drags a mark.
@@ -95,8 +107,7 @@ class ViewerEffectPoints extends StatefulWidget {
     super.key,
     required this.comp,
     required this.uiState,
-    required this.fitted,
-    required this.compSize,
+    required this.boxes,
     required this.colour,
     required this.tool,
     required this.onChanged,
@@ -114,9 +125,10 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
   /// The mark under the pointer is driven, by an expression or a wire.
   bool _hoverDriven = false;
 
-  /// The drag in flight: the mark, where the press was, the point it started
-  /// from, and where it is now.
+  /// The drag in flight: the mark, the corner of its patch on screen and the
+  /// press within it, the point it started from, and where it is now.
   _Mark? _held;
+  Offset _patch = Offset.zero;
   Offset _down = Offset.zero;
   Offset _from = Offset.zero;
   Offset? _to;
@@ -138,6 +150,9 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
             _ui.model,
             _ui.playheadFrame,
             EffectStackEditor.staging,
+            // A layer moved in the Viewer or scrubbed in its rows carries its
+            // points with it.
+            _ui.liveTransforms,
           ]),
           builder: (context, _) {
             final marks = _marks();
@@ -276,23 +291,25 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
     if (x == null || y == null) return;
     setState(() {
       _held = m;
+      _patch = m.at - const Offset(gizmoAnchorSlop / 2, gizmoAnchorSlop / 2);
       _down = at;
       _from = Offset(x, y);
     });
   }
 
-  /// The pick's own sum run backwards: screen travel over the picture's width
-  /// is a fraction of the frame, and the span says what a frame is worth.
+  /// The pointer's travel taken back through the layer's map into its own
+  /// pixels, and the span says what a frame of those is worth.
   void _move(Offset at) {
     final m = _held;
-    final fitted = widget.fitted;
-    if (m == null || fitted.isEmpty) return;
+    if (m == null) return;
     var d = at - _down;
     // Shift keeps it to one axis, as it does for a layer's move.
     if (HardwareKeyboard.instance.isShiftPressed) d = constrainToAxis(d);
+    final from = m.map.layerOf(_patch + _down);
+    final now = m.map.layerOf(_patch + _down + d);
     final to = _from +
-        Offset(d.dx / fitted.width * m.span.width,
-            d.dy / fitted.height * m.span.height);
+        Offset((now.dx - from.dx) / m.size.width * m.span.width,
+            (now.dy - from.dy) / m.size.height * m.span.height);
     _to = to;
     final frame = _ui.playheadFrame.value;
     for (final (id, was, v) in [(m.x, m.xWas, to.dx), (m.y, m.yWas, to.dy)]) {
@@ -341,7 +358,7 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
     final owner = _ui.selectedEffectsLayer?.internallayerId;
     final staged = EffectStackEditor.staging.value;
     final frame = _ui.playheadFrame.value;
-    final fitted = widget.fitted;
+    late final boxes = {for (final b in widget.boxes()) b.id: b};
     final out = <_Mark>[];
     for (final entry in _ui.model.layers) {
       final layerId = entry.layer.internallayerId;
@@ -351,17 +368,21 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
             rows.contains(path);
         final params = cachedListParameters(fx.name);
         for (final pair in cachedListPairs(fx.name)) {
+          // Denoise's sample is a square, drawn by its own layer.
+          if (fx.name == denoiseMatchName && pair.x == sampleX) continue;
           if (!whole &&
               !rows.contains('$path/${pair.x}') &&
               !rows.contains('$path/${pair.y}')) {
             continue;
           }
-          // The pick's own rule, so the mark sits where a pick would put it:
-          // px is comp pixels, per cent is of the frame, and nothing else is
-          // a position.
+          // A layer that is not on the picture has nowhere to put a mark.
+          final box = boxes[layerId];
+          if (box == null || box.bounds.isEmpty) continue;
+          // px is the layer's own pixels, per cent is of its own frame, and
+          // nothing else is a position.
           final unit = params.where((p) => p.id == pair.x).firstOrNull?.unit;
           final span = switch (unit) {
-            BridgeUnit.px => widget.compSize,
+            BridgeUnit.px => box.bounds,
             BridgeUnit.percent => const Size(100, 100),
             _ => Size.zero,
           };
@@ -384,6 +405,10 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
 
           final x = at(pair.x), y = at(pair.y);
           if (x == null || y == null) continue;
+          final lx = x / span.width * box.bounds.width;
+          final ly = y / span.height * box.bounds.height;
+          // Behind the camera, a point has no place on the picture.
+          if (!box.map.inFront(lx, ly)) continue;
           out.add(_Mark(
             entry.layer,
             fx.id,
@@ -392,10 +417,9 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
             held(pair.x),
             held(pair.y),
             span,
-            Offset(
-              fitted.left + x / span.width * fitted.width,
-              fitted.top + y / span.height * fitted.height,
-            ),
+            box.bounds,
+            box.map,
+            box.map.toScreen(lx, ly),
             held(pair.x) is BridgeScalar_Expression ||
                 held(pair.y) is BridgeScalar_Expression,
           ));

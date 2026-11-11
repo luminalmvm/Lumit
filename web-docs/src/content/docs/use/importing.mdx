@@ -291,6 +291,11 @@ A common third-party effect becomes the maker's own OFX plugin where one is inst
 its controls carried across by name. Any other third-party effect arrives as a placeholder
 that keeps its values and draws nothing. Neither stops the rest of the project importing.
 
+**Remove Grain** arrives as [Denoise](/effects/blur-sharpen/denoise/). Temporal filtering
+sets **Frames** to 2, or to 0 when it is off. Its amount becomes **Temporal strength**, and
+the blend with the original becomes **Mix**. Nothing else comes across, the noise samples
+included: select the effect and press **Learn**.
+
 Expressions come across as JavaScript and run as written, and a pseudo effect arrives as
 [Custom controls](/effects/controls/custom-controls/). A property with both keyframes and
 an expression keeps its keyframes. See

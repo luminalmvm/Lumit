@@ -30,6 +30,10 @@ spade = "2.15"
 # The puppet mesh cache key (docs/impl/puppet.md §1.4). Already in the lock.
 blake3 = "1"
 half = "2"
+# The repair effects' transforms (Noise reduction, Reverb reduction, the hum
+# finder): any size, so a frame is the same length in seconds at every rate.
+# Already in the lock through lumit-audio, same version.
+realfft = "3.5"
 
 [dev-dependencies]
 proptest = "1"

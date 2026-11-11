@@ -6863,6 +6863,14 @@
   "@keyRemoveEveryEffectFromTheSelectedLayers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyLearnTheNoise": "Learn the noise",
+  "@keyLearnTheNoise": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Presses Learn on the selected Denoise or Noise reduction effect."
+  },
+  "keyShowOnlyWhatTheEffectRemoves": "Show only what the effect removes",
+  "@keyShowOnlyWhatTheEffectRemoves": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Turns a clean-up effect over to showing or playing only what it takes away, and back."
+  },
   "keyHoldTheFrameAtThePlayhead": "Hold the frame at the playhead",
   "@keyHoldTheFrameAtThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -18094,6 +18102,10 @@
   "@switchPluginOff": {
     "description": "Command in the right-click menu on a plugin's row in the Effects & presets panel. It stops the plugin being offered and stops it rendering, and is remembered between sessions."
   },
+  "badgeVoiceTooLong": "Too long for Voice isolation. Split the layer.",
+  "@badgeVoiceTooLong": {
+    "description": "Calm badge at the top of Voice isolation's card in the Effect controls panel, when the sound it was given is longer than it will take (about an hour). The sound plays unchanged. Splitting the layer into shorter pieces lets the effect run on each."
+  },
   "badgePluginFailed": "This plugin did not render this frame",
   "@badgePluginFailed": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, when an OFX plugin crashed, hung or refused. The layer still composites, showing the picture unchanged. The plugin's own words about what went wrong appear beneath it."
@@ -20094,6 +20106,122 @@
   "@fxParametricEq": {
     "description": "Effect controls: the name of an audio effect, five bands whose frequency, gain and width are all set by hand."
   },
+  "fxDenoise": "Denoise",
+  "@fxDenoise": {
+    "description": "Effect name: takes camera noise out of footage, measured first, using the frames either side."
+  },
+  "fxRemovedNoise": "Removed noise",
+  "@fxRemovedNoise": {
+    "description": "Effect controls, Denoise's View option: shows only what the effect takes away, brightened, so it can be checked for picture."
+  },
+  "fxFramesBlended": "Frames blended",
+  "@fxFramesBlended": {
+    "description": "Effect controls, Denoise's View option: a grey picture of how many neighbouring frames went into each pixel, black for none."
+  },
+  "fxLearn": "Learn",
+  "@fxLearn": {
+    "description": "Effect controls: a button on Denoise and on Noise reduction that measures the noise, in the picture at the playhead or in the sound of the work area, and sets the effect from it."
+  },
+  "fxSampleX": "Sample x",
+  "@fxSampleX": {
+    "description": "Effect controls, Denoise: the horizontal centre of the square the noise is measured in, in pixels."
+  },
+  "fxSampleY": "Sample y",
+  "@fxSampleY": {
+    "description": "Effect controls, Denoise: the vertical centre of the square the noise is measured in, in pixels."
+  },
+  "fxSampleSize": "Sample size",
+  "@fxSampleSize": {
+    "description": "Effect controls, Denoise: the side of the square the noise is measured in, in pixels."
+  },
+  "fxLumaNoise": "Luma noise",
+  "@fxLumaNoise": {
+    "description": "Effect controls, Denoise: how much noise there is in the brightness, in eight-bit code values. Learn sets it."
+  },
+  "fxChromaNoise": "Chroma noise",
+  "@fxChromaNoise": {
+    "description": "Effect controls, Denoise: how much noise there is in the colour, in eight-bit code values. Learn sets it."
+  },
+  "fxLumaFine": "Luma fine",
+  "@fxLumaFine": {
+    "description": "Effect controls, Denoise's Noise by size group: the finest brightness noise, as a per cent of Luma noise."
+  },
+  "fxLumaMedium": "Luma medium",
+  "@fxLumaMedium": {
+    "description": "Effect controls, Denoise's Noise by size group: brightness noise a little coarser than the finest, as a per cent of Luma noise."
+  },
+  "fxLumaCoarse": "Luma coarse",
+  "@fxLumaCoarse": {
+    "description": "Effect controls, Denoise's Noise by size group: coarse brightness noise, as a per cent of Luma noise."
+  },
+  "fxLumaBroad": "Luma broad",
+  "@fxLumaBroad": {
+    "description": "Effect controls, Denoise's Noise by size group: the broadest brightness noise, blotches rather than grain, as a per cent of Luma noise."
+  },
+  "fxChromaFine": "Chroma fine",
+  "@fxChromaFine": {
+    "description": "Effect controls, Denoise's Noise by size group: the finest colour noise, as a per cent of Chroma noise."
+  },
+  "fxChromaMedium": "Chroma medium",
+  "@fxChromaMedium": {
+    "description": "Effect controls, Denoise's Noise by size group: colour noise a little coarser than the finest, as a per cent of Chroma noise."
+  },
+  "fxChromaCoarse": "Chroma coarse",
+  "@fxChromaCoarse": {
+    "description": "Effect controls, Denoise's Noise by size group: coarse colour noise, as a per cent of Chroma noise."
+  },
+  "fxChromaBroad": "Chroma broad",
+  "@fxChromaBroad": {
+    "description": "Effect controls, Denoise's Noise by size group: the broadest colour noise, blotches rather than grain, as a per cent of Chroma noise."
+  },
+  "fxFollowMotion": "Follow motion",
+  "@fxFollowMotion": {
+    "description": "Effect controls, Denoise: a switch that lines the neighbouring frames up along the measured motion before they are averaged. Off suits a locked-off shot."
+  },
+  "fxTemporalStrength": "Temporal strength",
+  "@fxTemporalStrength": {
+    "description": "Effect controls, Denoise: how different a neighbouring frame may be and still be averaged in."
+  },
+  "fxChroma": "Chroma",
+  "@fxChroma": {
+    "description": "Effect controls, Denoise: how much of the colour noise is taken out."
+  },
+  "fxFine": "Fine",
+  "@fxFine": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the finest noise is taken out."
+  },
+  "fxMedium": "Medium",
+  "@fxMedium": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the noise a little coarser than the finest is taken out."
+  },
+  "fxCoarse": "Coarse",
+  "@fxCoarse": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the coarse noise is taken out."
+  },
+  "fxBroad": "Broad",
+  "@fxBroad": {
+    "description": "Effect controls, Denoise's Spatial by size group: how much of the broadest noise, the blotches, is taken out."
+  },
+  "fxNoiseBySize": "Noise by size",
+  "@fxNoiseBySize": {
+    "description": "Effect controls, Denoise: the heading of the group that says how the measured noise splits between fine grain and broad blotches."
+  },
+  "fxNoiseByTone": "Noise by tone",
+  "@fxNoiseByTone": {
+    "description": "Effect controls, Denoise: the heading of the group that says how the noise changes between the shadows, the midtones and the highlights."
+  },
+  "fxSpatial": "Spatial",
+  "@fxSpatial": {
+    "description": "Effect controls, Denoise: the heading of the group that takes noise out within each frame."
+  },
+  "fxSpatialBySize": "Spatial by size",
+  "@fxSpatialBySize": {
+    "description": "Effect controls, Denoise: the heading of the group that sets how much noise of each size is taken out within each frame."
+  },
+  "fxFinish": "Finish",
+  "@fxFinish": {
+    "description": "Effect controls, Denoise: the heading of the group that gives back detail, sharpens and puts back grain after the noise is taken out."
+  },
   "fxPhaser": "Phaser",
   "@fxPhaser": {
     "description": "Effect controls: the name of an audio effect, which sweeps notches through the sound."
@@ -20170,6 +20298,18 @@
   "@fxVibrato": {
     "description": "Effect controls: the name of an audio effect, which rocks the pitch up and down."
   },
+  "fxVoice": "Voice",
+  "@fxVoice": {
+    "description": "Effect controls: a control on Voice isolation. The level of the speech the model found, in dB."
+  },
+  "fxVoiceIsolation": "Voice isolation",
+  "@fxVoiceIsolation": {
+    "description": "Effect controls: the name of an audio effect that keeps speech and turns everything else down, using the Voice addon."
+  },
+  "fxBackgroundOnly": "Background only",
+  "@fxBackgroundOnly": {
+    "description": "Effect controls: a checkbox on Voice isolation. When on, only what the model calls background is heard, to hear what is being taken away."
+  },
   "fxVoices": "Voices",
   "@fxVoices": {
     "description": "Effect controls: a control on the Chorus. How many copies it makes."
@@ -20181,6 +20321,204 @@
   "fxWet": "Wet",
   "@fxWet": {
     "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
+  },
+  "fxMenuLearnNoise": "Learn noise",
+  "@fxMenuLearnNoise": {
+    "description": "Effect menu: presses Learn on the selected Denoise or Noise reduction effect, which measures the noise it should take away."
+  },
+  "fxMenuRemovedOnly": "Only what is removed",
+  "@fxMenuRemovedOnly": {
+    "description": "Effect menu, a ticked row: turns the selected clean-up effect over to showing (Denoise) or playing (the sound clean-up effects) only what it takes away, and back."
+  },
+  "denoiseMeasuring": "Measuring",
+  "@denoiseMeasuring": {
+    "description": "Denoise's and Noise reduction's displays in Effect controls: the line under the plot while the noise is being measured."
+  },
+  "denoiseNoPicture": "Nothing to measure",
+  "@denoiseNoPicture": {
+    "description": "Denoise's and Noise reduction's displays in Effect controls: the line when the noise could not be measured, because the layer has no picture or no sound there."
+  },
+  "denoiseQuality": "Quality {percent}%",
+  "@denoiseQuality": {
+    "description": "Denoise's display in Effect controls: how far the measured noise can be trusted. {percent} is 0 to 100.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "denoiseReasonSmall": "Small sample",
+  "@denoiseReasonSmall": {
+    "description": "Denoise's display: after the quality, why it is low. The sample square is smaller than the noise needs to be read well."
+  },
+  "denoiseReasonDetail": "Detail in the sample",
+  "@denoiseReasonDetail": {
+    "description": "Denoise's display: after the quality, why it is low. The sample square covers edges or texture rather than a flat patch."
+  },
+  "denoiseReasonClipped": "Clipped",
+  "@denoiseReasonClipped": {
+    "description": "Denoise's display: after the quality, why it is low. Much of the sample is pure black or pure white, where noise cannot show."
+  },
+  "denoiseReasonFaint": "Little noise",
+  "@denoiseReasonFaint": {
+    "description": "Denoise's display: after the quality, why it is low. The sample holds almost no noise to measure."
+  },
+  "repairHumAt": "Hum at {hz} Hz",
+  "@repairHumAt": {
+    "description": "Hum removal's display in Effect controls: the mains hum frequency found in the sound around the playhead. {hz} is a number with one decimal, such as 50.0.",
+    "placeholders": {
+      "hz": {
+        "type": "String"
+      }
+    }
+  },
+  "repairAxisHertz": "{hertz}",
+  "@repairAxisHertz": {
+    "description": "The sound clean-up effects' display in Effect controls: a mark on the frequency axis below a thousand hertz, a bare number. {hertz} is 100.",
+    "placeholders": {
+      "hertz": {
+        "type": "String"
+      }
+    }
+  },
+  "repairAxisKilohertz": "{thousands}k",
+  "@repairAxisKilohertz": {
+    "description": "The sound clean-up effects' display in Effect controls: a mark on the frequency axis in thousands of hertz, kept as short as it can be. {thousands} is 1 or 10.",
+    "placeholders": {
+      "thousands": {
+        "type": "String"
+      }
+    }
+  },
+  "denoiseQualityBecause": "Quality {percent}% · {reason}",
+  "@denoiseQualityBecause": {
+    "description": "Denoise's display in Effect controls: how far the measured noise can be trusted, and why it is not higher. {percent} is 0 to 100; {reason} is one of the short reasons, such as Small sample.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "repairLearned": "Learned",
+  "@repairLearned": {
+    "description": "Noise reduction's display in Effect controls: the line under the plot when the noise floor drawn is one learned with the Learn button, not worked out from the whole sound."
+  },
+  "repairClicks": "{count, plural, =0{No clicks} =1{1 click} other{{count} clicks}}",
+  "@repairClicks": {
+    "description": "Click removal's display in Effect controls: how many clicks it finds in the two seconds of sound around the playhead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "repairReverbTime": "Reverb {seconds} s",
+  "@repairReverbTime": {
+    "description": "Reverb reduction's display in Effect controls: how long the room's reverb takes to die away, as found in the sound. {seconds} is a number with two decimals, such as 0.82.",
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "fxNoiseReduction": "Noise reduction",
+  "@fxNoiseReduction": {
+    "description": "Effect controls: the name of an audio effect that takes a steady hiss, rumble or whine out from under the sound."
+  },
+  "fxAdaptive": "Adaptive",
+  "@fxAdaptive": {
+    "description": "Effect controls: a switch on Noise reduction. On, the effect works out the noise from the whole sound itself instead of using what Learn measured."
+  },
+  "fxTonalReduction": "Tonal reduction",
+  "@fxTonalReduction": {
+    "description": "Effect controls: on Noise reduction, how much further steady tones in the noise, such as a whine or a buzz, are turned down, in dB."
+  },
+  "fxNoiseOnly": "Noise only",
+  "@fxNoiseOnly": {
+    "description": "Effect controls: a switch on Noise reduction that plays only the noise it takes away, to hear whether any of the voice went with it."
+  },
+  "fxReduction": "Reduction",
+  "@fxReduction": {
+    "description": "Effect controls: on the sound clean-up effects, the most the unwanted sound is turned down, in dB."
+  },
+  "fxHumRemoval": "Hum removal",
+  "@fxHumRemoval": {
+    "description": "Effect controls: the name of an audio effect that takes mains hum at 50 or 60 Hz and its harmonics out of the sound."
+  },
+  "fxFindFrequency": "Find frequency",
+  "@fxFindFrequency": {
+    "description": "Effect controls: a switch on Hum removal. On, the effect finds the mains frequency and its drift from the sound itself."
+  },
+  "fxHarmonics": "Harmonics",
+  "@fxHarmonics": {
+    "description": "Effect controls: on Hum removal, how many multiples of the mains frequency are taken out, the mains frequency itself counted."
+  },
+  "fxSlope": "Slope",
+  "@fxSlope": {
+    "description": "Effect controls: on Hum removal, how much less each higher harmonic is turned down than the one below it, in dB."
+  },
+  "fxHumOnly": "Hum only",
+  "@fxHumOnly": {
+    "description": "Effect controls: a switch on Hum removal that plays only the hum it takes away."
+  },
+  "fxClickRemoval": "Click removal",
+  "@fxClickRemoval": {
+    "description": "Effect controls: the name of an audio effect that finds short clicks, crackle and mouth noise and fills them in from the sound around them."
+  },
+  "fxClicks": "Clicks",
+  "@fxClicks": {
+    "description": "Effect controls: one of Click removal's Type options. Hunts single clicks and pops."
+  },
+  "fxMouthClicks": "Mouth clicks",
+  "@fxMouthClicks": {
+    "description": "Effect controls: one of Click removal's Type options. Hunts the small wet clicks a mouth makes between words."
+  },
+  "fxMaximumLength": "Maximum length",
+  "@fxMaximumLength": {
+    "description": "Effect controls: on Click removal, the longest a click may be, in milliseconds. Anything longer is left alone as part of the sound."
+  },
+  "fxWiden": "Widen",
+  "@fxWiden": {
+    "description": "Effect controls: on Click removal, how far each repair reaches past the click on either side, in milliseconds."
+  },
+  "fxClicksOnly": "Clicks only",
+  "@fxClicksOnly": {
+    "description": "Effect controls: a switch on Click removal that plays only what it takes out."
+  },
+  "fxDeEsser": "De-esser",
+  "@fxDeEsser": {
+    "description": "Effect controls: the name of an audio effect that turns down harsh s and sh sounds in a voice as they happen."
+  },
+  "fxWholeSound": "Whole sound",
+  "@fxWholeSound": {
+    "description": "Effect controls: a switch on De-esser. On, the whole sound is turned down on each s rather than only its top."
+  },
+  "fxSibilanceOnly": "Sibilance only",
+  "@fxSibilanceOnly": {
+    "description": "Effect controls: a switch on De-esser that plays only what it takes away from the s sounds."
+  },
+  "fxReverbReduction": "Reverb reduction",
+  "@fxReverbReduction": {
+    "description": "Effect controls: the name of an audio effect that turns down the echo of a room behind a voice."
+  },
+  "fxFindReverbTime": "Find reverb time",
+  "@fxFindReverbTime": {
+    "description": "Effect controls: a switch on Reverb reduction. On, the effect measures how long the room's echo lasts from the sound itself."
+  },
+  "fxReverbTime": "Reverb time",
+  "@fxReverbTime": {
+    "description": "Effect controls: on Reverb reduction, how long the room's echo takes to die away, in seconds, used when Find reverb time is off."
+  },
+  "fxBestQuality": "Best quality",
+  "@fxBestQuality": {
+    "description": "Effect controls: a switch on Reverb reduction. On, a slower and cleaner pass over the whole sound runs first."
+  },
+  "fxReverbOnly": "Reverb only",
+  "@fxReverbOnly": {
+    "description": "Effect controls: a switch on Reverb reduction that plays only the echo it takes away."
   },
   "graphInput": "Input",
   "@graphInput": {
@@ -20443,6 +20781,10 @@
   "addonTaskSegmentation": "Segmentation",
   "@addonTaskSegmentation": {
     "description": "Settings window, Addons: what a model pack does, shown on its row. This one traces the thing you clicked on."
+  },
+  "addonTaskVoice": "Voice isolation",
+  "@addonTaskVoice": {
+    "description": "Settings window, Addons: what a model pack does, shown on its row. This one keeps speech and turns everything else down."
   },
   "fileTypeAddon": "Addon description",
   "@fileTypeAddon": {

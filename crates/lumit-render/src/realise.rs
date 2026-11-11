@@ -21,6 +21,7 @@ use order::{draw_order, runs_of};
 use shadows::{casts_shadows, shadow_only};
 
 mod lighting;
+mod neighbour_textures;
 mod order;
 mod paint;
 mod passes;
@@ -289,6 +290,8 @@ pub type LateCloneMaker<'a> = dyn Fn(&crate::draw::LateClones, usize) -> Vec<Lay
 #[derive(Default)]
 pub struct CompositeFlow {
     engine: Option<lumit_flow::FlowEngine>,
+    /// The pictures made of neighbour frames, kept for the next frame.
+    neighbours: neighbour_textures::NeighbourTextures,
 }
 
 impl Realiser<'_> {
@@ -1414,6 +1417,7 @@ impl Realiser<'_> {
         // ([`crate::fxops::run_ops`]), so there is no flag here to set and
         // later remember to clear. Rung two is this.
         self.fx_cache.borrow_mut().trim_under_pressure();
+        self.let_go_of_kept();
         if self.ctx.try_begin_frame(estimate).is_err() {
             self.ctx.begin_frame();
         }
@@ -1806,8 +1810,8 @@ impl Realiser<'_> {
             // Only an offset a flow consumer asked for is measured. An Echo
             // or a plugin reads the neighbour picture and nothing more. A
             // field measured on the other side of the frame is turned round.
-            if let Some(under) = *measure {
-                if let Some(field) = self.measure_flow(now, &then, under != *offset) {
+            if let Some((under, want)) = *measure {
+                if let Some(field) = self.field_to(now, &then, under != *offset, want) {
                     fields.push((under, field));
                 }
             }

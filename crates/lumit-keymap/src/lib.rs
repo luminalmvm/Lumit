@@ -264,6 +264,8 @@ impl ActionId {
             "layer.duplicate" => "Duplicate the layer",
             "effect.apply.last" => "Apply the last effect again",
             "effect.remove.all" => "Remove every effect from the selected layers",
+            "effect.learn" => "Learn the noise",
+            "effect.listen" => "Show only what the effect removes",
             "grade.copy" => "Copy the layer's grade",
             "grade.paste" => "Paste the grade onto the selected layers",
             "layer.precompose" => "Precompose the layer",

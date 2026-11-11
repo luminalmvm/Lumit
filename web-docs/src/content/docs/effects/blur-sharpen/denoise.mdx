@@ -1,0 +1,170 @@
+---
+title: Denoise
+description: "Removes the noise and grain a camera adds, from a measurement of the noise in the shot."
+---
+
+Denoise is a [Blur & sharpen](/effects/#blur--sharpen) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Removes the noise a camera adds to footage. Frames either side, lined up along the motion
+between them, are averaged in where they agree with this one. The noise left is then taken
+out of each frame at four sizes, fine to broad, less where there is edge or texture.
+
+Both work from a **noise profile**: how much noise the shot has in brightness and in colour,
+at each of the four sizes, and in its shadows, midtones and highlights.
+
+**Learn** measures the profile on the flattest patch of the frame at the playhead, and puts
+the sample square on the patch it measured. It reads the layer as Denoise is handed it, and
+writes the profile as one undo step. Where it finds nothing it can read, such as a black
+frame, a frame with no noise or the playhead outside the layer, the profile stays as it was.
+A Denoise on a clip's rack is measured only with the playhead on that clip.
+
+The frames either side are the layer's own, and only a Denoise that is the first enabled
+effect on the layer reads them. Anywhere else in the stack it works as at **Frames** 0. A
+frame from another clip of a Sequence layer is not averaged in, even across a cut that
+removed nothing. Nor is one that repeats a frame already read, as on a held or slowed layer,
+or a Precomp or adjustment layer over a freeze, a still or a slower frame rate.
+
+## The sample square
+
+With the effect selected, the square is drawn on the Viewer. With the **Selection** tool,
+dragging it moves it and dragging a corner resizes it. The noise is measured again where it
+is let go. Where there is nothing to read, the square still moves and the noise rows stay as
+they were. Right-clicking it has **Learn** and **Reveal in Effect controls**. A square whose
+rows an expression drives cannot be dragged. **Guides ▸ Layer controls** hides it.
+
+## The display
+
+Above the controls are the measured patch and the noise at each size, for luma and for
+chroma. The line under them reads **Quality** as a per cent. Below 60 it gives the reason:
+
+| Reason | The sample |
+| --- | --- |
+| **Small sample** | Is too small to measure the broad sizes. |
+| **Detail in the sample** | Has picture in it as well as noise. |
+| **Clipped** | Is partly pure black or pure white. |
+| **Little noise** | Has too little noise to measure. |
+
+**Nothing to measure** means there was no picture at the playhead, or Learn found nothing
+there it could read.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **View** | Dropdown | Result · Removed noise · Frames blended | Result | - |
+| **Learn** | Button | - | - | - |
+| **Sample x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Sample y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Sample size** | Slider | 16 to 512 | 96 | Pixels at composition size |
+| **Luma noise** | Slider | 0 to 50; higher | 3 | - |
+| **Chroma noise** | Slider | 0 to 50; higher | 2 | - |
+| **Luma fine** | Slider | 0 to 400 | 100 | Per cent |
+| **Luma medium** | Slider | 0 to 400 | 60 | Per cent |
+| **Luma coarse** | Slider | 0 to 400 | 35 | Per cent |
+| **Luma broad** | Slider | 0 to 400 | 20 | Per cent |
+| **Chroma fine** | Slider | 0 to 400 | 100 | Per cent |
+| **Chroma medium** | Slider | 0 to 400 | 80 | Per cent |
+| **Chroma coarse** | Slider | 0 to 400 | 60 | Per cent |
+| **Chroma broad** | Slider | 0 to 400 | 45 | Per cent |
+| **Shadows** | Slider | 0 to 400 | 100 | Per cent |
+| **Midtones** | Slider | 0 to 400 | 100 | Per cent |
+| **Highlights** | Slider | 0 to 400 | 100 | Per cent |
+| **Frames** | Slider, whole numbers | 0 to 5 | 2 | Frames |
+| **Follow motion** | Checkbox | On or off | On | - |
+| **Temporal strength** | Slider | 0 to 200 | 100 | Per cent |
+| **Luma** | Slider | 0 to 100 | 75 | Per cent |
+| **Chroma** | Slider | 0 to 100 | 100 | Per cent |
+| **Fine** | Slider | 0 to 100 | 100 | Per cent |
+| **Medium** | Slider | 0 to 100 | 100 | Per cent |
+| **Coarse** | Slider | 0 to 100 | 100 | Per cent |
+| **Broad** | Slider | 0 to 100 | 0 | Per cent |
+| **Detail** | Slider | 0 to 100 | 25 | Per cent |
+| **Sharpen** | Slider | 0 to 200 | 0 | Per cent |
+| **Grain** | Slider | 0 to 100 | 0 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Noise by size** groups **Luma fine**, **Luma medium**, **Luma coarse**, **Luma broad**, **Chroma fine**, **Chroma medium**, **Chroma coarse**, **Chroma broad**, and starts closed.
+- **Noise by tone** groups **Shadows**, **Midtones**, **Highlights**, and starts closed.
+- **Temporal** groups **Frames**, **Follow motion**, **Temporal strength**.
+- **Spatial** groups **Luma**, **Chroma**.
+- **Spatial by size** groups **Fine**, **Medium**, **Coarse**, **Broad**, and starts closed.
+- **Finish** groups **Detail**, **Sharpen**, **Grain**.
+- **Matte** scales the reduction per pixel: white takes all the noise the rows say, grey less, black none. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **View**: **Result** is the picture. **Removed noise** is what was taken away, four times
+  over, on mid grey. **Frames blended** is white where every frame either side was averaged
+  in and black where none was.
+- **Learn**: measure the noise at the playhead, on the flattest patch of the frame.
+- **Sample x** and **Sample y**: the centre of the patch the noise is measured on.
+- **Sample size**: the length of the patch's side.
+- **Luma noise** and **Chroma noise**: how much noise the shot has in brightness and in
+  colour, in eight-bit code values.
+
+The **Noise by size** and **Noise by tone** groups hold the rest of the profile:
+
+- **Luma fine**, **Luma medium**, **Luma coarse** and **Luma broad**: the noise at each size,
+  against Luma noise.
+- **Chroma fine**, **Chroma medium**, **Chroma coarse** and **Chroma broad**: the same,
+  against Chroma noise.
+- **Shadows**, **Midtones** and **Highlights**: the luma noise at each brightness, against
+  Luma noise.
+
+The **Temporal** group:
+
+- **Frames**: how many frames either side are averaged in. 0 turns the averaging off.
+- **Follow motion**: lines the frames up along the motion before averaging them. Off, they
+  are averaged where they stand.
+- **Temporal strength**: how different a frame either side may be and still be averaged in.
+
+The **Spatial** and **Spatial by size** groups:
+
+- **Luma** and **Chroma**: how much of the noise left in brightness and in colour is taken.
+- **Fine**, **Medium**, **Coarse** and **Broad**: how much is taken at each size.
+
+The **Finish** group:
+
+- **Detail**: keeps fine texture that stands above the noise.
+- **Sharpen**: lifts fine detail where it is picture and not noise.
+- **Grain**: puts back this much of the fine noise taken away.
+
+Additional properties:
+
+- **Mix**: how much of the result replaces the original.
+- **Matte**, **Invert** and **Channel**: scale the reduction by another layer. The Removed
+  noise view shows it.
+
+## Commands
+
+**Effect ▸ Learn noise** (`Alt+L`) presses **Learn**. **Effect ▸ Only what is removed**
+(`Alt+N`) switches **View** between Result and Removed noise. Both act on the effect
+selected in Effect controls. With none selected there, they act on the first effect in the
+selected layer's stack that has a Learn button, or a view of what it removes.
+
+## Related
+
+- [Cleaning up a noisy shot and its sound](/tutorials/clean-up-a-noisy-shot/)
+- [Noise reduction](/effects/audio/noise-reduction/)
+- [Add grain](/effects/generate/add-grain/)
+- [Median](/effects/stylise/median/)
+- [Blur & sharpen](/effects/#blur--sharpen)
+- [Effects](/use/effects/)

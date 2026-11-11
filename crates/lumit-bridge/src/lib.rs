@@ -117,6 +117,7 @@ mod render;
 mod scratch;
 mod script;
 mod shape_paint;
+mod sound_span;
 mod speech;
 mod streams;
 #[cfg(test)]

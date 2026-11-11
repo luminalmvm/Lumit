@@ -1,0 +1,61 @@
+---
+title: De-esser
+description: "Turns down harsh S and SH sounds in a voice."
+---
+
+De-esser is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns down the hiss of S and SH sounds in a voice. It holds the level of the sound above
+**Frequency** against the level of the whole sound. When the difference passes
+**Threshold**, the sound above Frequency is turned down until the S has passed. Threshold is
+against the voice's own level, so it holds as the voice gets louder or quieter.
+
+Sound quieter than -60 dB is left alone.
+
+The display above the controls marks Frequency on the sound arriving around the playhead,
+with the level the sound above it has to reach and what comes out.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Threshold** | Slider | -40 to 0 | -20 | - |
+| **Frequency** | Slider | 2000 to 12000 | 5000 | - |
+| **Range** | Slider | 0 to 24 | 10 | - |
+| **Speed** | Slider | 20 to 200 | 60 | - |
+| **Whole sound** | Checkbox | On or off | Off | - |
+| **Sibilance only** | Checkbox | On or off | Off | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Threshold**: how loud the sound above Frequency has to be against the whole sound, in
+  dB, before it is turned down.
+- **Frequency**: where the S sounds start, in hertz.
+- **Range**: the most an S is turned down, in dB.
+- **Speed**: how quickly the sound comes back up after an S, in milliseconds.
+- **Whole sound**: turns the whole sound down during an S, and not only the part above
+  Frequency.
+- **Sibilance only**: plays what is taken away.
+
+**Effect ▸ Only what is removed** (`Alt+N`) switches **Sibilance only**.
+
+## Related
+
+- [Cleaning up a noisy shot and its sound](/tutorials/clean-up-a-noisy-shot/)
+- [Compressor](/effects/audio/compressor/)
+- [Parametric EQ](/effects/audio/parametric-eq/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)
