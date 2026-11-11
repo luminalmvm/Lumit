@@ -1597,6 +1597,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   double? _defaultOf(BridgeTransformProp prop) => switch (prop) {
         BridgeTransformProp.scaleX ||
         BridgeTransformProp.scaleY ||
+        BridgeTransformProp.scaleZ ||
         BridgeTransformProp.opacity =>
           100,
         BridgeTransformProp.rotation ||
