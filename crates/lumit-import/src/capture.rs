@@ -183,9 +183,71 @@ pub struct Comp {
     pub preserve_nested_resolution: Option<bool>,
     #[serde(default)]
     pub markers: Vec<Marker>,
+    /// The composition's Essential Graphics, where it has any.
+    #[serde(default)]
+    pub essential: Option<Essential>,
     /// In AE's stacking order, top first.
     #[serde(default)]
     pub layers: Vec<Layer>,
+}
+
+/// A composition's Essential Graphics: what After Effects calls the template
+/// and the controllers it offers.
+///
+/// A layer placing the composition answers them under `ADBE Layer Overrides`
+/// in its own property tree, one leaf a controller, in this order.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+pub struct Essential {
+    /// The name the template is exported under.
+    pub name: Option<String>,
+    /// The controllers in the order the panel lists them, the members of a
+    /// group in the group's place.
+    #[serde(default)]
+    pub controllers: Vec<Controller>,
+}
+
+/// One Essential Graphics controller: a property of a layer inside the
+/// composition that a layer placing it can set.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+pub struct Controller {
+    /// After Effects' own id for it, which a placing layer names it by. Only
+    /// the project file has one.
+    pub id: Option<String>,
+    /// The name the panel shows.
+    pub name: Option<String>,
+    /// `checkbox` | `slider` | `angle` | `colour` | `point` | `scale` | `text`
+    /// | `menu` | `media` | `comment` | `group`, or the file's own number
+    /// written out for a kind this reader does not know.
+    pub kind: Option<String>,
+    /// The item id of the composition the source is in.
+    pub comp_id: Option<i64>,
+    /// The stacking index of the layer the source is on.
+    pub layer_index: Option<u32>,
+    /// From that layer down to the source property. Empty for replaceable
+    /// media, which names the layer itself.
+    #[serde(default)]
+    pub path: Vec<Step>,
+    /// The ends of a slider's travel, where After Effects states them.
+    pub range: Option<(f64, f64)>,
+    /// A menu's options, in order.
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// For text: whether a placing layer may change the font. Only the
+    /// project file says.
+    pub font: Option<bool>,
+    /// For text: whether a placing layer may change the size.
+    pub size: Option<bool>,
+    /// The group it sits in.
+    pub group: Option<String>,
+}
+
+/// One step of a path through a layer's property tree.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+pub struct Step {
+    pub match_name: Option<String>,
+    /// Its place among its siblings counting from 0, where its parent is a
+    /// list (effects, masks, a shape's contents).
+    pub index: Option<u32>,
 }
 
 /// A comp's motion-blur settings, in AE's own units.
@@ -347,6 +409,17 @@ pub struct Property {
     pub control: Option<String>,
     /// The ends of a slider's travel, where the file states them.
     pub range: Option<(f64, f64)>,
+    /// A popup's options, in order.
+    pub options: Option<Vec<String>>,
+    /// On a leaf under `ADBE Layer Overrides`: whether the layer set this
+    /// Essential Property itself. The leaves it did not set follow the
+    /// composition.
+    pub overridden: Option<bool>,
+    /// On the same leaves: the id of the [`Controller`] it answers, where the
+    /// project file names one.
+    pub controller_id: Option<String>,
+    /// On a replaceable media leaf: the item the layer put there.
+    pub alternate_id: Option<i64>,
 }
 
 /// A mask's own facts, which sit on the mask node rather than among its

@@ -125,9 +125,10 @@ const PSEUDO: &str = "Pseudo/";
 ///
 /// A pseudo effect is a set of named controls somebody made for a rig: it
 /// draws nothing, and expressions on other properties read it by name. Lumit's
-/// Custom controls is the same thing, so each slider, angle, checkbox and
-/// colour comes across as a control with the name it had, its keyframes and
-/// its range, and the set keeps the name the expressions look it up by.
+/// Custom controls is the same thing, so each slider, angle, checkbox, colour
+/// and menu comes across as a control with the name it had, its keyframes and
+/// its range, and the set keeps the name the expressions look it up by. A
+/// Dropdown Menu Control is a pseudo effect with one menu, and arrives so.
 ///
 /// A point is two numbers here, named "… x" and "… y". The headings a pseudo
 /// effect groups its controls under carry nothing and are passed over.
@@ -168,6 +169,7 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
         let kind = match (leaf.value_type.as_deref(), leaf.control.as_deref()) {
             (Some("float"), Some("angle")) => ControlKind::Angle,
             (Some("float"), Some("checkbox")) => ControlKind::Checkbox,
+            (Some("float"), Some("popup")) => ControlKind::Menu,
             (Some("float"), _) => ControlKind::Number,
             (Some("colour"), _) => ControlKind::Colour,
             (Some("point" | "point3"), _) => {
@@ -180,6 +182,7 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
                         default: [value.value_at(0.0), 0.0, 0.0, 0.0],
                         min: 0.0,
                         max: if axis == 0 { conv.size.0 } else { conv.size.1 },
+                        options: Vec::new(),
                     });
                     values.push(EffectValue::Float(value));
                 }
@@ -201,10 +204,15 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
             ControlKind::Number | ControlKind::Angle => {
                 EffectValue::Float(from_node(conv, &here, leaf, 0, 0.0))
             }
+            // After Effects counts a dropdown's options from 1.
+            ControlKind::Menu => EffectValue::Choice(
+                (from_node(conv, &here, leaf, 0, 1.0).value_at(0.0) - 1.0).max(0.0) as u32,
+            ),
         };
         let default = match &value {
             EffectValue::Float(p) => [p.value_at(0.0), 0.0, 0.0, 0.0],
             EffectValue::Bool(on) => [f64::from(u8::from(*on)), 0.0, 0.0, 0.0],
+            EffectValue::Choice(option) => [f64::from(*option), 0.0, 0.0, 0.0],
             EffectValue::Colour(c) => [
                 c[0].value_at(0.0),
                 c[1].value_at(0.0),
@@ -220,6 +228,10 @@ fn pseudo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
             default,
             min,
             max,
+            options: match kind {
+                ControlKind::Menu => leaf.options.clone().unwrap_or_default(),
+                _ => Vec::new(),
+            },
         });
         values.push(value);
     }
