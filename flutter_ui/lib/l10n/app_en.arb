@@ -6851,6 +6851,14 @@
   "@keyRemoveEveryEffectFromTheSelectedLayers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyLearnTheNoise": "Learn the noise",
+  "@keyLearnTheNoise": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Presses Learn on the selected Denoise or Noise reduction effect."
+  },
+  "keyShowOnlyWhatTheEffectRemoves": "Show only what the effect removes",
+  "@keyShowOnlyWhatTheEffectRemoves": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Turns a clean-up effect over to showing or playing only what it takes away, and back."
+  },
   "keyHoldTheFrameAtThePlayhead": "Hold the frame at the playhead",
   "@keyHoldTheFrameAtThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -20248,6 +20256,14 @@
   "fxWet": "Wet",
   "@fxWet": {
     "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
+  },
+  "fxMenuLearnNoise": "Learn noise",
+  "@fxMenuLearnNoise": {
+    "description": "Effect menu: presses Learn on the selected Denoise or Noise reduction effect, which measures the noise it should take away."
+  },
+  "fxMenuRemovedOnly": "Only what is removed",
+  "@fxMenuRemovedOnly": {
+    "description": "Effect menu, a ticked row: turns the selected clean-up effect over to showing (Denoise) or playing (the sound clean-up effects) only what it takes away, and back."
   },
   "denoiseMeasuring": "Measuring",
   "@denoiseMeasuring": {

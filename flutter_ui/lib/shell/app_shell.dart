@@ -12,6 +12,8 @@ import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/grade_clipboard.dart' show copyGrade, pasteGrade;
 import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
+import 'package:lumit_flutter/panels/noise_actions.dart'
+    show learnSelectedNoise, toggleRemovedOnly;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
@@ -925,6 +927,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           removeAllEffects(state, layers);
         }
+      case 'effect.learn':
+        handled = learnSelectedNoise(ui);
+      case 'effect.listen':
+        handled = toggleRemovedOnly(ui);
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —
@@ -1544,6 +1550,8 @@ bool _pressedOnce(String action) =>
       'keyframe.interpolation',
       'keyframe.speed',
       'expression.add',
+      'effect.learn',
+      'effect.listen',
       'layer.lock.toggle',
       'layer.unlock.all',
       'layer.centre',

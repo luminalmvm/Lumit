@@ -2082,6 +2082,9 @@ Map<String, String> get _built => {
       "Apply the last effect again": l10n.keyApplyTheLastEffectAgain,
       "Remove every effect from the selected layers":
           l10n.keyRemoveEveryEffectFromTheSelectedLayers,
+      "Learn the noise": l10n.keyLearnTheNoise,
+      "Show only what the effect removes":
+          l10n.keyShowOnlyWhatTheEffectRemoves,
       "New Solid layer": l10n.keyNewSolidLayer,
       "New Text layer": l10n.keyNewTextLayer,
       "New Camera layer": l10n.keyNewCameraLayer,

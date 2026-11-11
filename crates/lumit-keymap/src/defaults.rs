@@ -286,6 +286,10 @@ pub fn default_keymap() -> Keymap {
         // The Effect menu's two rows above its categories, from anywhere.
         row(Global, "Mod+Alt+Shift+E", "effect.apply.last"),
         row(Global, "Mod+Shift+E", "effect.remove.all"),
+        // The clean-up effects' two: Learn on the selected one, and its view
+        // or listen switch for only what it takes away.
+        row(Global, "Alt+L", "effect.learn"),
+        row(Global, "Alt+N", "effect.listen"),
         // The Grade panel's Copy grade and Paste grade, from anywhere, so a
         // grade goes across a dozen shots with one key each.
         row(Global, "Alt+Shift+C", "grade.copy"),
