@@ -176,6 +176,18 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
                       min: 0,
                       zeroLabel: l10n.paragraphBoxHeightAuto),
                 ),
+                // Only box text has a box to fit.
+                if ((paragraph.boxWidth ?? 0) > 0)
+                  textCell(
+                    t,
+                    l10n.paragraphShrink,
+                    HouseCheckbox(
+                      key: const ValueKey('paragraph-shrink'),
+                      value: paragraph.shrink,
+                      onChanged: (on) => commitText(
+                          ui, target, reflow((p) => p.copyWith(shrink: on))),
+                    ),
+                  ),
                 textCell(
                   t,
                   l10n.paragraphIndentLeft,

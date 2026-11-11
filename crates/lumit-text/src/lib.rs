@@ -194,8 +194,8 @@ pub fn shape_items(
     offset: f32,
 ) -> Vec<lumit_core::shape::modifier::ShapeEntry> {
     use lumit_core::shape::modifier::{ShapeEntry, ShapeGroup};
-    let glyphs = if block.plain() {
-        glyph_outlines(block.text, block.size, path, offset)
+    let (glyphs, shrink) = if block.plain() {
+        (glyph_outlines(block.text, block.size, path, offset), 1.0)
     } else {
         styled::outlines(block, path, offset)
     };
@@ -211,7 +211,7 @@ pub fn shape_items(
             }
             if stroke {
                 item.stroke = Some(lumit_core::shape::colour::still(style.stroke));
-                item.stroke_width = lumit_core::anim::Property::fixed(style.stroke_width);
+                item.stroke_width = lumit_core::anim::Property::fixed(style.stroke_width * shrink);
             }
             item.combine = u32::from(i > 0) * 4;
             ShapeEntry::Item(item)

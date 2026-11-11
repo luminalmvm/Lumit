@@ -20725,6 +20725,10 @@
   "@paragraphSpaceAfter": {
     "description": "Paragraph panel: label beside the room added below each paragraph, in pixels."
   },
+  "paragraphShrink": "Shrink to fit",
+  "@paragraphShrink": {
+    "description": "Paragraph panel tick, shown for box text. On, words too long for the box are set smaller until they fit, in place of wrapping onto another line."
+  },
   "paragraphBoxHeight": "Box height",
   "@paragraphBoxHeight": {
     "description": "Paragraph panel: label beside how tall the block of words is, in pixels. Nought lets the block grow with its lines."

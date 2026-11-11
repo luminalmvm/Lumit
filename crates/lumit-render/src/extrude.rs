@@ -169,8 +169,12 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                 let items = lumit_core::shape::modifier::items(&group.entries);
                 let filled = items.iter().filter(|i| i.fill.is_some());
                 let filled: Vec<_> = filled.collect();
+                // The outline's width as the letters were set, which Shrink to
+                // fit narrows along with them.
+                let stroke = items.iter().find(|i| i.stroke.is_some());
+                let stroke = stroke.map_or(style.stroke_width, |i| i.stroke_width.value_at(lt));
                 let mut contours: Vec<Vec<[f64; 2]>> = if filled.is_empty() {
-                    let width = style.stroke_width;
+                    let width = stroke;
                     (items.iter())
                         .flat_map(|i| {
                             lumit_core::shape::solid::outline_of(
@@ -183,11 +187,7 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                     let flat = filled
                         .iter()
                         .map(|i| lumit_core::extrude::flattened(&i.path));
-                    let outline = if style.stroke_on {
-                        style.stroke_width
-                    } else {
-                        0.0
-                    };
+                    let outline = if style.stroke_on { stroke } else { 0.0 };
                     lumit_core::shape::solid::with_stroke(&flat.collect::<Vec<_>>(), outline)
                 };
                 // A caption moved off its place takes its solid letters along.

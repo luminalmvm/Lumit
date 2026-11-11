@@ -60,8 +60,8 @@ pub(super) fn draw(
     xforms: &[GlyphXform],
 ) {
     let style = block.style;
-    let pad = finite(style.plate_padding).max(0.0);
-    let radius = finite(style.plate_radius).max(0.0);
+    let pad = finite(style.plate_padding).max(0.0) * laid.shrink;
+    let radius = finite(style.plate_radius).max(0.0) * laid.shrink;
     // A line's box, from its carets and the font's ascent and descent.
     let line_box = |baseline: f32, (left, right): (f32, f32)| {
         [

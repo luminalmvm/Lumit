@@ -853,6 +853,10 @@ pub struct ParagraphStyle {
     /// Does nothing without a box.
     #[serde(default, skip_serializing_if = "is_default")]
     pub justify: bool,
+    /// Shrink to fit: no line wraps, and the words are set smaller until the
+    /// longest line fits the box. Does nothing without a box.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub shrink: bool,
     /// Px in from the left edge of the block.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub indent_left: f64,

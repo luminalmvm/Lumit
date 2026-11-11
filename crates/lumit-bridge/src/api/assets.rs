@@ -150,6 +150,9 @@ pub struct BridgeParagraphStyle {
     pub box_width: Option<f64>,
     /// Stretch every line but a paragraph's last to the box.
     pub justify: bool,
+    /// Shrink to fit: no line wraps, and the words are set smaller until the
+    /// longest line fits the box. Does nothing without a box.
+    pub shrink: bool,
     pub indent_left: f64,
     pub indent_right: f64,
     pub indent_first: f64,
