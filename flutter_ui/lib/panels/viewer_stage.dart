@@ -1174,11 +1174,8 @@ class ViewerStage extends StatelessWidget {
               ViewerEffectPoints(
                 comp: comp,
                 uiState: uiState,
-                fitted: fitted,
-                compSize: Size(
-                  compSize.width.toDouble(),
-                  compSize.height.toDouble(),
-                ),
+                // Locked layers too: a point is still drawn on one.
+                boxes: () => _boxes(locked: true),
                 colour: t.accent,
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
@@ -1218,7 +1215,11 @@ class ViewerStage extends StatelessWidget {
             // Above both, because while the dropper is armed the whole
             // picture is a target: a drag handle under the pointer must not
             // take the click that was meant to pick a pixel.
-            DropperLayer(comp: comp, uiState: uiState, fitted: fitted),
+            DropperLayer(
+                comp: comp,
+                uiState: uiState,
+                fitted: fitted,
+                boxes: () => _boxes(locked: true)),
             // The rulers along the top and left edges, and the guides dragged
             // out of them. Over the tool layers, because a guide is
             // grabbed by its own thin strip and a handle underneath must not

@@ -34,6 +34,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart' show CameraPose;
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
@@ -768,29 +769,78 @@ void main() {
           reason: 'one undo puts back the whole drag, both axes at once');
     });
 
-    /// An effect's point dragged on the picture lands where the mark was let
-    /// go, and both halves undo together.
+    /// A layer at half size, moved off the middle, for the overlays that work
+    /// in a layer's own pixels.
+    LayerReference halfSizeLayer(CompositionReference comp) {
+      final layer = comp.addSolidLayer();
+      final size = comp.getSize();
+      for (final (prop, v) in [
+        (BridgeTransformProp.scaleX, 50.0),
+        (BridgeTransformProp.scaleY, 50.0),
+        (BridgeTransformProp.positionX, size.width * 0.3),
+        (BridgeTransformProp.positionY, size.height * 0.6),
+      ]) {
+        layer.setTransform(prop: prop, value: BridgeScalar.static_(v));
+      }
+      return layer;
+    }
+
+    /// Where [layer], at half size, puts its own pixel ([x], [y]) on screen,
+    /// through the stage's own box so it holds under the interface's scale.
+    Offset Function(double x, double y) layerToScreen(
+        WidgetTester tester, CompositionReference comp, LayerReference layer) {
+      double still(BridgeScalar s) => (s as BridgeScalar_Static).field0;
+      final tf = layer.getTransform();
+      final fitted = drawnPicture(tester);
+      final stage = tester.renderObject<RenderBox>(find.byType(ViewerStage));
+      final view = fitted.width / comp.getSize().width;
+      return (x, y) => stage.localToGlobal(fitted.topLeft +
+          Offset(still(tf.positionX) + (x - still(tf.anchorX)) * 0.5,
+                  still(tf.positionY) + (y - still(tf.anchorY)) * 0.5) *
+              view);
+    }
+
+    /// An effect's point is in its layer's own pixels. On a layer at half
+    /// size and moved, the mark sits where the layer puts the point, a drag
+    /// writes the layer's own pixels, and both halves undo together.
     testWidgets('a dragged effect point is one undo step', (tester) async {
       final p = withLayer();
-      p.layer.addEffect(name: 'radial_blur');
-      final fx = p.layer.getEffects().single.id();
+      final layer = halfSizeLayer(p.comp);
+      final size = p.comp.getSize();
+      layer.addEffect(name: 'radial_blur');
+      final effect = layer.getEffects().single;
+      final fx = effect.id();
+      // Off the layer's pivot, so a point drawn as comp pixels misses.
+      effect.setValue(
+          id: 'centre_x',
+          value: BridgeEffectValue.float(
+              BridgeScalar.static_(size.width * 0.25)));
+      effect.setValue(
+          id: 'centre_y',
+          value: BridgeEffectValue.float(
+              BridgeScalar.static_(size.height * 0.25)));
       p.uiState
-        ..setEffectSelection(p.layer, [fx])
+        ..setEffectSelection(layer, [fx])
         ..model.refresh();
       await mount(tester, p);
 
       double half(String id) =>
-          ((p.layer.getEffects().single.getValue(id: id)
+          ((layer.getEffects().single.getValue(id: id)
                       as BridgeEffectValue_Float)
                   .field0 as BridgeScalar_Static)
               .field0;
       final beforeX = half('centre_x'), beforeY = half('centre_y');
       final layerX =
-          (p.layer.getTransform().positionX as BridgeScalar_Static).field0;
+          (layer.getTransform().positionX as BridgeScalar_Static).field0;
+      final onScreen = layerToScreen(tester, p.comp, layer);
+      final view = drawnPicture(tester).width / size.width;
 
       final mark = find.byKey(ValueKey<String>(
-          'viewer-fx-point-${p.layer.internallayerId}/$fx/centre_x'));
+          'viewer-fx-point-${layer.internallayerId}/$fx/centre_x'));
       final from = tester.getCenter(mark);
+      expect(from.dx, closeTo(onScreen(beforeX, beforeY).dx, 0.5),
+          reason: 'the mark sits where the layer puts the point');
+      expect(from.dy, closeTo(onScreen(beforeX, beforeY).dy, 0.5));
       final gesture = await tester.startGesture(from);
       await tester.pump();
       for (var i = 0; i < 8; i++) {
@@ -800,13 +850,14 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
 
-      expect(half('centre_x'), isNot(closeTo(beforeX, 1e-6)));
-      expect(half('centre_y'), isNot(closeTo(beforeY, 1e-6)));
+      expect(half('centre_x'), closeTo(beforeX + 48 / view / 0.5, 0.01),
+          reason: "a drag writes the layer's own pixels");
+      expect(half('centre_y'), closeTo(beforeY + 40 / view / 0.5, 0.01));
       final to = tester.getCenter(mark);
       expect(to.dx, closeTo(from.dx + 48, 0.5),
           reason: 'the mark sits where it was let go');
       expect(to.dy, closeTo(from.dy + 40, 0.5));
-      expect((p.layer.getTransform().positionX as BridgeScalar_Static).field0,
+      expect((layer.getTransform().positionX as BridgeScalar_Static).field0,
           closeTo(layerX, 1e-9),
           reason: 'the press did not fall through to the layer');
 
@@ -814,6 +865,61 @@ void main() {
       expect(half('centre_x'), closeTo(beforeX, 1e-6));
       expect(half('centre_y'), closeTo(beforeY, 1e-6),
           reason: 'one undo puts the whole point back');
+    });
+
+    /// The crosshair beside a point picks it in the layer's own pixels too:
+    /// on a layer at half size and moved, the pick is the pixel of the layer
+    /// under the pointer, not of the composition.
+    testWidgets("a picked effect point is the layer's own pixel",
+        (tester) async {
+      final p = withLayer();
+      final layer = halfSizeLayer(p.comp);
+      final size = p.comp.getSize();
+      layer.addEffect(name: 'radial_blur');
+      final fx = layer.getEffects().single.id();
+      p.uiState
+        ..setSelection([layer])
+        ..setEffectSelection(layer, [fx])
+        ..model.refresh();
+      // The Viewer beside Effect controls, where the crosshair is.
+      tester.view.physicalSize = const Size(1180, 760);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1180, 760),
+        child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              SizedBox(width: 700, height: 500, child: ViewerPanelFrb()),
+              Expanded(child: EffectControlsPanelFrb()),
+            ]),
+      ));
+      await tester.pump();
+
+      final crosshair =
+          find.byKey(ValueKey<String>('dropper-fx-$fx-centre_x'));
+      await tester.ensureVisible(crosshair);
+      await tester.pump();
+      await tester.tap(crosshair);
+      await tester.pump();
+
+      final want = Offset(size.width * 0.4, size.height * 0.3);
+      final gesture = await tester
+          .startGesture(layerToScreen(tester, p.comp, layer)(want.dx, want.dy));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      double half(String id) =>
+          ((layer.getEffects().single.getValue(id: id)
+                      as BridgeEffectValue_Float)
+                  .field0 as BridgeScalar_Static)
+              .field0;
+      expect(half('centre_x'), closeTo(want.dx, 0.01),
+          reason: "a pick writes the layer's own pixels");
+      expect(half('centre_y'), closeTo(want.dy, 0.01));
     });
 
     testWidgets(
