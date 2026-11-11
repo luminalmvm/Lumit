@@ -670,8 +670,7 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE Checkbox Control", "checkbox_control"),
         ("ADBE Color Control", "colour_control"),
         ("ADBE Point Control", "point_control"),
-        // Placeholders on purpose (docs/11 §5).
-        ("VISINF Grain Removal", ""),
+        ("VISINF Grain Removal", "denoise"),
     ];
 
     for (ae, lumit) in ROWS {

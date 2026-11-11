@@ -267,6 +267,12 @@ lumit = "add_grain"
 conversion = "add_grain"
 
 [[effect]]
+ae = "VISINF Grain Removal"
+name = "Remove Grain"
+lumit = "denoise"
+conversion = "remove_grain"
+
+[[effect]]
 ae = "ADBE Scribble Fill"
 name = "Scribble"
 lumit = "scribble"
@@ -531,14 +537,6 @@ ae = "ADBE Timewarp"
 name = "Timewarp"
 lumit = "timewarp"
 conversion = "timewarp"
-
-# --- Deliberate placeholders (docs/11 §5) ----------------------------------
-
-[[effect]]
-ae = "VISINF Grain Removal"
-name = "Remove Grain"
-suggest = "removing grain is a programme of its own rather than an effect port"
-
 
 # --- Third-party effects (docs/11 §5) --------------------------------------
 #
