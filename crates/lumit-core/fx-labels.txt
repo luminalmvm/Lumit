@@ -91,6 +91,7 @@ Away from points
 B
 Back
 Background
+Background only
 Backing
 Backward
 Backwards
@@ -1641,6 +1642,8 @@ Vision3 250D
 Vision3 500T
 Vision3 50D
 Vivid light
+Voice
+Voice isolation
 Voices
 Volume
 Vortex

@@ -18029,6 +18029,10 @@
   "@switchPluginOff": {
     "description": "Command in the right-click menu on a plugin's row in the Effects & presets panel. It stops the plugin being offered and stops it rendering, and is remembered between sessions."
   },
+  "badgeVoiceTooLong": "Too long for Voice isolation. Split the layer.",
+  "@badgeVoiceTooLong": {
+    "description": "Calm badge at the top of Voice isolation's card in the Effect controls panel, when the sound it was given is longer than it will take (about an hour). The sound plays unchanged. Splitting the layer into shorter pieces lets the effect run on each."
+  },
   "badgePluginFailed": "This plugin did not render this frame",
   "@badgePluginFailed": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, when an OFX plugin crashed, hung or refused. The layer still composites, showing the picture unchanged. The plugin's own words about what went wrong appear beneath it."
@@ -20220,6 +20224,18 @@
   "fxVibrato": "Vibrato",
   "@fxVibrato": {
     "description": "Effect controls: the name of an audio effect, which rocks the pitch up and down."
+  },
+  "fxVoice": "Voice",
+  "@fxVoice": {
+    "description": "Effect controls: a control on Voice isolation. The level of the speech the model found, in dB."
+  },
+  "fxVoiceIsolation": "Voice isolation",
+  "@fxVoiceIsolation": {
+    "description": "Effect controls: the name of an audio effect that keeps speech and turns everything else down, using the Voice addon."
+  },
+  "fxBackgroundOnly": "Background only",
+  "@fxBackgroundOnly": {
+    "description": "Effect controls: a checkbox on Voice isolation. When on, only what the model calls background is heard, to hear what is being taken away."
   },
   "fxVoices": "Voices",
   "@fxVoices": {

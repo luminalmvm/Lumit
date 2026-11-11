@@ -119,6 +119,7 @@ Map<String, String> get _built => {
       "Waveform": l10n.fxWaveform,
       "B": l10n.fxB,
       "Background": l10n.fxBackground,
+      "Background only": l10n.fxBackgroundOnly,
       "Backwards": l10n.fxBackwards,
       "Balance": l10n.fxBalance,
       "Band 1 Q": l10n.fxBand1Q,
@@ -748,6 +749,8 @@ Map<String, String> get _built => {
       "Up": l10n.fxUp,
       "Units": l10n.fxUnits,
       "Vibrato": l10n.fxVibrato,
+      "Voice": l10n.fxVoice,
+      "Voice isolation": l10n.fxVoiceIsolation,
       "Voices": l10n.fxVoices,
       "Wah": l10n.fxWah,
       "Wet": l10n.fxWet,
@@ -2789,6 +2792,10 @@ String? effectBadge(String key, [String? detail]) {
   switch (key) {
     case 'plugin_failed':
       return l10n.badgePluginFailed;
+    // Voice isolation given more sound than it will take. The sound plays
+    // unchanged, and the headline says what to do.
+    case 'too_long':
+      return l10n.badgeVoiceTooLong;
     case 'plugin_disabled':
       return l10n.badgePluginDisabled;
     case 'plugin_missing':

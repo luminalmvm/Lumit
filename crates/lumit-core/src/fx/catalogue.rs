@@ -75,6 +75,7 @@ use super::effects::{
             distortion::{AudioDistortion, AudioDistortionDef},
             reverb::{AudioReverb, AudioReverbDef},
         },
+        voice::{AudioVoice, AudioVoiceDef},
     },
     audio_spectrum::{AudioSpectrum, AudioSpectrumDef},
     bake_points::{BakePoints, BakePointsDef},
@@ -104,6 +105,7 @@ use super::effects::{
     custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
+    denoise::{Denoise, DenoiseDef},
     depth::{Depth, DepthDef},
     depth_points::{DepthPoints, DepthPointsDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
@@ -233,6 +235,8 @@ crate::catalogue![
     RadialBlurDef => RadialBlur,
     SharpenDef => Sharpen,
     SharpenSimpleDef => SharpenSimple,
+    // Noise measured and taken out, over the frames either side.
+    DenoiseDef => Denoise,
     SpriteFlareDef => SpriteFlare,
     LightWrapDef => LightWrap,
     RgbSplitDef => RgbSplit,
@@ -481,6 +485,7 @@ crate::catalogue![
     AudioDeclickDef => AudioDeclick,
     AudioDeessDef => AudioDeess,
     AudioDereverbDef => AudioDereverb,
+    AudioVoiceDef => AudioVoice,
     // The other effect whose arithmetic came from somewhere else: a whole node
     // graph composition applied to this layer, with the graph's Inputs as its
     // rows (docs/impl/node-graph-comp.md §1.3). Beside the Custom shader,

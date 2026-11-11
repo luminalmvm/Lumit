@@ -2436,6 +2436,7 @@ pub const BADGE_REASONS: &[&str] = &[
     "addon_missing",
     "lfx_missing",
     "lfx_struck_off",
+    "too_long",
 ];
 
 /// Why this instance is not doing its own work, if it is not.
@@ -2465,6 +2466,10 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
         // "switched off" rather than reporting it as a failure.
         return if why == lumit_ofx::discover::DISABLED_REASON {
             (Some("plugin_disabled".to_owned()), None)
+        } else if why == lumit_render::voice::TOO_LONG {
+            // Voice isolation given more sound than it will take: not a
+            // failure of anything, and the headline says what to do.
+            (Some("too_long".to_owned()), None)
         } else {
             (Some("plugin_failed".to_owned()), Some(why))
         };
@@ -2498,6 +2503,11 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     // and the detail names the addon to install. Read off the installed-packs
     // snapshot, which is memory rather than a folder walk.
     if let Some(addon) = lumit_render::planes::addon_missing(effect) {
+        return (Some("addon_missing".to_owned()), Some(addon));
+    }
+    // Voice isolation asks a model for the voice the same way, and passes its
+    // sound through untouched until the model is there.
+    if let Some(addon) = lumit_render::voice::addon_missing(effect) {
         return (Some("addon_missing".to_owned()), Some(addon));
     }
     // `def`, so a **layer style** is an instance this build knows rather than
