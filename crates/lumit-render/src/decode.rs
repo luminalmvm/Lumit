@@ -1574,7 +1574,15 @@ fn decode_comp(
                         divisor: 2,
                         ..lumit_flow::FlowSettings::default()
                     };
-                    let (ga, gb, _) = lumit_flow::flow_grays(&px.rgba, other, w, h, &set);
+                    // Read as the samples are: a float plate's bytes are not
+                    // eight-bit colour, and measured as if they were the
+                    // motion is noise.
+                    let (ga, gb, _) =
+                        if px.format == lumit_media::decode::PixelFormat::LinearF32 {
+                            lumit_flow::flow_grays_f32(&px.rgba, other, w, h, &set)
+                        } else {
+                            lumit_flow::flow_grays(&px.rgba, other, w, h, &set)
+                        };
                     let nb = job
                         .temporal
                         .iter()
@@ -1799,6 +1807,10 @@ fn decode_comp(
         held: None,
     })
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod float_flow_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
