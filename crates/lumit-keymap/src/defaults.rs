@@ -576,14 +576,14 @@ pub fn after_effects_preset() -> Keymap {
 ///   and with Mod as well they go to the edit point either side.
 /// - The numeric keypad nudges the picked clips: **1** and **3** a frame
 ///   earlier and later, **8** and **2** up and down a track.
-/// - **Mod+D** is the select tool, Vegas's normal edit tool, and the default
-///   transition takes Shift with it. **Mod+Shift+U** turns linked selection
-///   on and off, the chord that ignores event grouping there.
+/// - **Mod+Shift+U** turns linked selection on and off, the chord that
+///   ignores event grouping there.
 /// - **Mod+L** turns auto ripple on and off and **Mod+Shift+X** automatic
 ///   crossfades. Quantise to frames is on Alt+F8 already.
 /// - **Q** turns looping on and off, and **Mod+Shift+E** shows and hides the
 ///   speed lines on the clips, Vegas's chord for its envelopes.
-/// - **V** and **P** show and hide a track's volume and pan envelopes.
+/// - **V** and **P** show and hide a track's volume and pan envelopes, and
+///   the select tool moves to **Shift+V**. Vegas's own Ctrl+D duplicates here.
 /// - **Mod+Shift+V** pastes a clip's attributes. Takes and regions agree already.
 /// - The wheel zooms time with no key held, and Ctrl with it scrolls the
 ///   tracks.
@@ -632,6 +632,7 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+Shift+E", "cut.speed.toggle"),
         (Cut, "V", "cut.envelope.volume"),
         (Cut, "P", "cut.envelope.pan"),
+        (Cut, "Shift+V", "cut.tool.select"),
         (Cut, "Mod+Shift+V", "cut.paste.attributes"),
         (Cut, "Q", "playback.loop.toggle"),
         (Cut, "G", "cut.group"),
