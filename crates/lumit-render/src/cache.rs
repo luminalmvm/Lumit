@@ -332,8 +332,17 @@ pub fn frame_key_at(
 /// layer time, the same whichever parent asks for it. `None` when the frame
 /// must not be cached — some footage unprobed, or a draft render, whose
 /// decode is narrower than the settled name would claim.
+///
+/// `doc` is the document the comp is read from: the project, or for a copy of
+/// a graphics template the document its values make. The name is made from
+/// it, so two copies with two values are two names.
 pub trait NestedKeyer {
-    fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128>;
+    fn nested_key(
+        &self,
+        doc: &std::sync::Arc<Document>,
+        nested: &Composition,
+        lt: f64,
+    ) -> Option<u128>;
 
     /// The same name, with a placed node graph's own Input values folded in
     /// (docs/impl/node-graph-comp.md §5.3): a graph placed twice with two sets
@@ -345,48 +354,53 @@ pub trait NestedKeyer {
     /// pictures alike.
     fn nested_key_with(
         &self,
+        doc: &std::sync::Arc<Document>,
         nested: &Composition,
         lt: f64,
         inputs: Option<&lumit_core::model::EffectInstance>,
     ) -> Option<u128> {
         match inputs {
-            None => self.nested_key(nested, lt),
+            None => self.nested_key(doc, nested, lt),
             Some(_) => None,
         }
     }
 }
 
-/// The renderer's [`NestedKeyer`]: the document, the probes a render already
-/// gathered, and the quality it renders at.
+/// The renderer's [`NestedKeyer`]: the probes a render already gathered, and
+/// the quality it renders at.
 pub struct NestedKeys<'a> {
-    pub doc: &'a std::sync::Arc<Document>,
     pub probes: &'a dyn SourceProbes,
     pub quality: Quality,
 }
 
 impl NestedKeyer for NestedKeys<'_> {
-    fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128> {
+    fn nested_key(
+        &self,
+        doc: &std::sync::Arc<Document>,
+        nested: &Composition,
+        lt: f64,
+    ) -> Option<u128> {
         if self.quality.draft {
             return None;
         }
         // Named the way this thread shows models, as the frame around it is.
-        frame_key_at(self.doc, nested, lt, self.quality, self.probes)
-            .map(crate::model::named_as_shown)
+        frame_key_at(doc, nested, lt, self.quality, self.probes).map(crate::model::named_as_shown)
     }
 
     fn nested_key_with(
         &self,
+        doc: &std::sync::Arc<Document>,
         nested: &Composition,
         lt: f64,
         inputs: Option<&lumit_core::model::EffectInstance>,
     ) -> Option<u128> {
-        let base = self.nested_key(nested, lt)?;
+        let base = self.nested_key(doc, nested, lt)?;
         let Some(inst) = inputs else {
             return Some(base);
         };
-        let stamper = Stamper::new(self.doc, self.probes, self.quality);
+        let stamper = Stamper::new(doc, self.probes, self.quality);
         let extra = lumit_eval::instance_key(
-            self.doc,
+            doc,
             nested,
             inst,
             lt,

@@ -100,6 +100,8 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
     catalogue(|category| category != lumit_core::fx::schema::FxCategory::Compositing)
         .into_iter()
         .filter(|entry| entry.name != lumit_core::comp_graph::NODE_GRAPH)
+        // What a copy of a graphics template keeps is never added by hand.
+        .filter(|entry| entry.name != lumit_core::fx::effects::template::MATCH_NAME)
         .collect()
 }
 

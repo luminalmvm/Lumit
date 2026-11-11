@@ -72,6 +72,8 @@ enum _ProjectMenuAction {
   useProxy,
   clearProxy,
   moveToRoot,
+  updateTemplate,
+  updateAll,
   delete
 }
 
@@ -321,6 +323,14 @@ Future<void> showProjectMenuFrb({
 
   /// Make a comp from these items, the panel's own New composition.
   void Function(List<FootageReference> footage)? onNewComposition,
+
+  /// Bring in the library's newer version of this composition's graphics
+  /// template. Null when it has none, and the row is left off.
+  VoidCallback? onUpdateTemplate,
+
+  /// On the Graphics templates folder: bring in the newer version of every
+  /// template in it that has one. Null when none has.
+  VoidCallback? onUpdateAll,
 }) async {
   final isFootage = item is ItemReference_Footage;
   // Where this footage is in a shared project, and who has it. Read once,
@@ -439,6 +449,9 @@ Future<void> showProjectMenuFrb({
               row(_ProjectMenuAction.makeProxy, l10n.makeProxies,
                   key: 'make-proxies',
                   enabled: (targets ?? [item]).any(_holdsFootage)),
+              if (onUpdateAll != null)
+                row(_ProjectMenuAction.updateAll, l10n.templateUpdateAll,
+                    key: 'update-all'),
             ],
             if (isComp) ...[
               row(_ProjectMenuAction.open, l10n.projectOpen,
@@ -452,6 +465,9 @@ Future<void> showProjectMenuFrb({
                   key: 'multicam', enabled: !several, ticked: isMulticam),
               row(_ProjectMenuAction.export, l10n.menuExport,
                   key: 'export', enabled: !several),
+              if (onUpdateTemplate != null)
+                row(_ProjectMenuAction.updateTemplate, l10n.templateUpdateMenu,
+                    key: 'update-template', enabled: !several),
             ],
             if (item is! ItemReference_Folder) ...[
               row(_ProjectMenuAction.addToComp, l10n.projectAddToComp,
@@ -949,6 +965,10 @@ Future<void> showProjectMenuFrb({
       eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
           (target) => target.moveToRoot());
       onLocalEdit();
+    case _ProjectMenuAction.updateTemplate:
+      onUpdateTemplate?.call();
+    case _ProjectMenuAction.updateAll:
+      onUpdateAll?.call();
     case _ProjectMenuAction.delete:
       if (await deleteProjectItems(context, acts)) onLocalEdit();
   }

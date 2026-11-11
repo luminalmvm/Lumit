@@ -5,6 +5,7 @@ mod effects;
 mod items;
 mod keys;
 mod layers;
+mod templates;
 mod write;
 
 use std::path::{Path, PathBuf};
@@ -105,6 +106,13 @@ macro_rules! keys_form {
 macro_rules! rate {
     () => {
         r#"{"description":"1 to 999 frames a second","oneOf":[{"type":"integer","minimum":1,"maximum":999},{"type":"object","properties":{"num":{"type":"integer","minimum":1},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false}]}"#
+    };
+}
+// Controls and the values to set them to, as `comp.controls` and
+// `layer.values` take them.
+macro_rules! control_values {
+    () => {
+        r#"{"type":"object","description":"Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name"}"#
     };
 }
 macro_rules! comp_settings {
@@ -453,6 +461,71 @@ pub const COMMANDS: &[Command] = &[
         summary: "Stop an export",
         schema: r#"{"type":"object","properties":{"job":{"type":"integer","minimum":0}},"required":["job"],"additionalProperties":false}"#,
     },
+    Command {
+        name: "comp.controls",
+        summary: "A comp's controls and their values, after setting the template's own values when told to",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","set":"#,
+            control_values!(),
+            r#"},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "layer.values",
+        summary: "The values a copy of a graphics template has: its own, set or fed by a data row, or the template's",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","clip":{"type":"string","description":"For a copy that is a clip on a Sequence layer: the clip's id"},"set":"#,
+            control_values!(),
+            r#","reset":{"description":"Controls that follow the template again, by id or label, or true for all","oneOf":[{"type":"boolean"},{"type":"array","items":{"type":"string"}}]},"row":{"type":["integer","null"],"minimum":1,"description":"The data row to follow, counting from 1, or null to stop"}},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "data.rows",
+        summary: "The data linked to a graphics template, after linking a CSV, TSV or JSON file or saying what its columns feed",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","file":{"type":"string","description":"A CSV, TSV or JSON file to link. Its columns feed the controls of their names"},"feeds":{"type":"object","additionalProperties":{"type":["string","null"]},"description":"Column name to what it feeds: a control's id or label, length, file name, or null for nothing"}},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "data.export",
+        summary: "Export a graphics template once for each row of its data",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","rows":{"type":"array","items":{"type":"integer","minimum":1},"minItems":2,"maxItems":2,"description":"The first and last row, counting from 1. All of them if left out"},"out":{"type":"string","description":"The files' name, which may hold {Column}, {row}, {comp} and {date} and a folder"},"layer":{"type":"string","description":"A copy's layer, by id or name: the comp it sits in is exported with the copy following each row. The template on its own if left out"},"clip":{"type":"string","description":"With layer, for a copy that is a clip: the clip's id"}},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "template.list",
+        summary: "The graphics templates in the library",
+        schema: none!(),
+    },
+    Command {
+        name: "template.place",
+        summary: "Bring a graphics template into the project, and place it in a comp when told to",
+        schema: concat!(
+            r#"{"type":"object","properties":{"template":{"type":"string","description":"Its name in the library, or a .lumt file"},"comp":{"type":"string","description":"The comp to place it in, by id or name, as a Precomp layer"},"at":{"description":"Where the layer starts. The start if left out","allOf":["#,
+            time!(),
+            r#"]}},"required":["template"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "template.save",
+        summary: "Save a comp to the library as a graphics template",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","name":{"type":"string","description":"The comp's name if left out"},"group":{"type":"string","description":"The folder in the library, parted by /. The top if left out"},"pack_fonts":{"type":"boolean","description":"Put the font files its text names in the file"}},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
 ];
 
 /// `reach`, when there is one, is where the command's paths may go.
@@ -499,6 +572,13 @@ pub(crate) fn run(
         "export.vector" => items::export_vector(host, reach, parse(args)?),
         "export.status" => items::export_status(host, parse(args)?),
         "export.cancel" => items::export_cancel(host, parse(args)?),
+        "comp.controls" => templates::comp_controls(host, parse(args)?),
+        "layer.values" => templates::layer_values(host, parse(args)?),
+        "data.rows" => templates::data_rows(host, reach, parse(args)?),
+        "data.export" => templates::data_export(host, reach, parse(args)?),
+        "template.list" => templates::template_list(host, parse(args)?),
+        "template.place" => templates::template_place(host, reach, parse(args)?),
+        "template.save" => templates::template_save(host, parse(args)?),
         _ => Err(ScriptError::UnknownCommand(name.to_owned())),
     }
 }

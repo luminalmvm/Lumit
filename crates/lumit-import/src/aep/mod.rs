@@ -48,6 +48,7 @@
 //! documentation. No code is vendored from any of them.
 
 pub mod enums;
+mod essential;
 pub mod ffx;
 mod props;
 pub mod rifx;
@@ -262,10 +263,11 @@ pub fn parse_capture(bytes: &[u8]) -> Result<Parsed, AepError> {
         })
         .collect();
 
-    let comps = comp_chunks
+    let mut comps: Vec<Comp> = comp_chunks
         .into_iter()
         .map(|(id, chunk)| read_comp(id, &chunk, &items, &by_id, &by_comp_id, &mut skipped))
         .collect();
+    essential::resolve(&mut comps, &items);
 
     Ok(Parsed {
         capture: Capture {
@@ -899,6 +901,8 @@ fn read_comp(
             )
         })
         .unwrap_or_default();
+
+    comp.essential = essential::read(&inside, &indices);
 
     // Being *used* as somebody's matte is the one thing a layer cannot say
     // about itself: it is a fact about whoever points at it, so it is filled in

@@ -742,6 +742,9 @@ pub(crate) fn export_cancel() -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct QueueRow {
     pub id: u32,
+    /// The run of rows it was queued with, and what the run is called.
+    pub group: Option<u32>,
+    pub group_name: String,
     /// The composition it was made from, so its settings can be opened again.
     pub comp: uuid::Uuid,
     pub comp_name: String,
@@ -786,6 +789,54 @@ pub(crate) fn queue_add(
     start: bool,
 ) -> Result<u32, String> {
     driving::queue_add(doc, comp, comp_name, spec, out_path, start)
+}
+
+/// A number for a run of a template's rows queued together, called `name`.
+pub(crate) fn queue_group(name: String) -> u32 {
+    driving::queue_group(name)
+}
+
+/// Queue one row's version of a template: `version` is applied to the
+/// snapshot when the item starts, so a run of rows shares one snapshot.
+pub(crate) fn queue_add_version(
+    doc: std::sync::Arc<lumit_core::model::Document>,
+    comp: uuid::Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: &str,
+    version: Vec<lumit_core::ops::Op>,
+    group: u32,
+) -> Result<u32, String> {
+    driving::queue_add_version(
+        doc,
+        comp,
+        comp_name,
+        spec,
+        out_path,
+        version,
+        Some(group),
+        false,
+    )
+}
+
+/// `out_path` with its format's ending, or the first free numbered name
+/// beside it when that is taken already, by a file or by the queue.
+pub(crate) fn untaken_path(out_path: &str, codec: &str, captions: BridgeCaptionsOut) -> String {
+    if path_taken(out_path, codec, captions) {
+        free_path(out_path, codec, captions)
+    } else {
+        with_format_extension(out_path, codec)
+    }
+}
+
+/// Queue an item that has run, or failed, again as it was.
+pub(crate) fn queue_again(id: u32) -> Option<u32> {
+    driving::queue_again(id)
+}
+
+/// Today's date, as the `{date}` token writes it.
+pub(crate) fn today() -> String {
+    names::today()
 }
 
 /// Show a file in the desktop's own file manager — the *Open folder* tick, and

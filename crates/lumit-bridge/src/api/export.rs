@@ -618,6 +618,10 @@ pub fn export_cancel() {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeExportQueueItem {
     pub id: u32,
+    /// The run of a graphics template's rows this item was queued with, and
+    /// the template's name. The queue folds a run under one heading.
+    pub group: Option<u32>,
+    pub group_name: String,
     /// The composition it was made from. It may have been deleted since.
     pub comp: uuid::Uuid,
     pub comp_name: String,
@@ -732,6 +736,8 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
         .into_iter()
         .map(|row| BridgeExportQueueItem {
             id: row.id,
+            group: row.group,
+            group_name: row.group_name,
             comp: row.comp,
             comp_name: row.comp_name,
             path: row.out_path,
@@ -835,6 +841,14 @@ pub fn export_queue_update(
 #[frb(sync)]
 pub fn export_path_taken(path: String, codec: String, captions: BridgeCaptionsOut) -> bool {
     crate::export::path_taken(&path, &codec, captions)
+}
+
+/// Queue an item that has run, or failed, again exactly as it was: the same
+/// snapshot, and for a row of a graphics template the same row. Answers the
+/// new item's id, or `None` once the item has gone.
+#[frb(sync)]
+pub fn export_queue_again(id: u32) -> Option<u32> {
+    crate::export::queue_again(id)
 }
 
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.

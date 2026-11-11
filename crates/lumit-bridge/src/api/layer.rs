@@ -42,8 +42,12 @@ pub(crate) enum InstanceHome {
     /// The Transition effect on the overlap at a clip's start, a list of one.
     ClipTransition(Uuid),
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
-    /// instance rather than a list, held in `Layer::graph_inputs`.
+    /// instance rather than a list, held in `Layer::graph_inputs`. Also what
+    /// a Precomp layer that is a copy of a graphics template has set.
     GraphInputs,
+    /// What one clip that is a copy of a graphics template has set: one
+    /// instance, held in the clip's `inputs`, named by the clip's id.
+    ClipInputs(Uuid),
     /// The drivers on this layer's graph (`Layer::graph.nodes`), so a
     /// driver's keys move, and its rows write, from the Timeline as an
     /// effect's do.
@@ -84,9 +88,13 @@ pub(crate) fn is_graph_inputs(
 ) -> bool {
     match &layer.graph_inputs {
         Some(current) => current.id == instance.id,
-        None => placed_graph_of(doc, layer).is_some_and(|comp| {
-            lumit_core::fx::effects::node_graph::comp_of(instance) == Some(comp)
-        }),
+        None => {
+            placed_graph_of(doc, layer).is_some_and(|comp| {
+                lumit_core::fx::effects::node_graph::comp_of(instance) == Some(comp)
+            }) || crate::api::template::copy::placed_template_of(doc, layer).is_some_and(|comp| {
+                lumit_core::fx::effects::template::comp_of(instance) == Some(comp)
+            })
+        }
     }
 }
 
@@ -1577,6 +1585,9 @@ pub struct BridgeClip {
     pub end_exact: f64,
     /// The angle a multicam clip plays, or `None` on any other clip.
     pub angle: Option<crate::api::multicam::BridgeClipAngle>,
+    /// The graphics template this clip is a copy of, and what the copy has
+    /// set. `None` on every other clip.
+    pub copy: Option<crate::api::template::copy::BridgeCopy>,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1716,6 +1727,9 @@ fn bridge_clip(
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
         angle: crate::api::multicam::clip_angle(doc, clip),
+        copy: crate::api::template::copy::clip_template_of(doc, clip).and_then(|comp| {
+            crate::api::template::copy::bridge_copy(doc, comp, clip.inputs.as_ref())
+        }),
     }
 }
 
@@ -1781,6 +1795,10 @@ pub struct BridgeLayerInfo {
     /// file or an import. `LayerReference::get_graph_inputs` offers such a layer a
     /// fresh one, which the user's next edit adopts.
     pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// The graphics template this Precomp layer is a copy of, and what the
+    /// copy has set. Its rows are in `graph_inputs`. `None` on every other
+    /// layer.
+    pub copy: Option<crate::api::template::copy::BridgeCopy>,
     /// A Model layer's material rows, `None` while its file is being read.
     pub materials: Option<Vec<crate::api::effect::BridgeEffectInstanceInfo>>,
     /// A Model layer's Animation and parts' rows, `None` while its file is
@@ -2047,12 +2065,29 @@ pub(crate) fn read_layer_info(
                     .get_info()
             })
             .collect(),
-        graph_inputs: layer.graph_inputs.as_ref().map(|inputs| {
-            crate::api::effect::read_instance_info(
-                &crate::api::effect::with_live_inputs(inputs, doc),
-                layer.start_offset.0,
-                !layer.is_adjustment(),
-            )
+        graph_inputs: match crate::api::template::copy::placed_template_of(doc, layer) {
+            // A copy of a graphics template shows a row for every control,
+            // set or not.
+            Some(comp) => {
+                crate::api::template::copy::shown(doc, comp, layer.graph_inputs.as_ref(), layer.id)
+                    .map(|inst| {
+                        crate::api::effect::read_instance_info(
+                            &inst,
+                            layer.start_offset.0,
+                            !layer.is_adjustment(),
+                        )
+                    })
+            }
+            None => layer.graph_inputs.as_ref().map(|inputs| {
+                crate::api::effect::read_instance_info(
+                    &crate::api::effect::with_live_inputs(inputs, doc),
+                    layer.start_offset.0,
+                    !layer.is_adjustment(),
+                )
+            }),
+        },
+        copy: crate::api::template::copy::placed_template_of(doc, layer).and_then(|comp| {
+            crate::api::template::copy::bridge_copy(doc, comp, layer.graph_inputs.as_ref())
         }),
         materials: lumit_render::model_material::rows(doc, layer).map(|rows| {
             let read = |r| crate::api::effect::read_instance_info(r, layer.start_offset.0, true);
@@ -7276,6 +7311,9 @@ impl LayerReference {
             if let Some(clip) = clips.iter().find(overlap) {
                 return Ok(InstanceHome::ClipTransition(clip.id));
             }
+            if let Some(clip) = crate::api::template::copy::clip_of_inputs(&layer, instance) {
+                return Ok(InstanceHome::ClipInputs(clip));
+            }
         }
         let doc = self.document()?;
         if is_graph_inputs(&doc, &layer, instance) {
@@ -7314,6 +7352,7 @@ impl LayerReference {
         if lumit_core::fx::builtins::def(&name).is_some_and(|def| {
             def.schema().category == lumit_core::fx::schema::FxCategory::Compositing
         }) || name == lumit_core::comp_graph::NODE_GRAPH
+            || name == lumit_core::fx::effects::template::MATCH_NAME
         {
             return Err(BridgeError::NotAStackEffect);
         }
@@ -7634,7 +7673,10 @@ impl LayerReference {
                 // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
                 // one instance where the document had none. Everywhere else a
                 // staged list must still name what the document names.
-                let adopting = home == InstanceHome::GraphInputs && current.is_empty();
+                let adopting = matches!(
+                    home,
+                    InstanceHome::GraphInputs | InstanceHome::ClipInputs(_)
+                ) && current.is_empty();
                 let same_stack = adopting
                     || (current.len() == staged.len()
                         && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
@@ -7788,6 +7830,17 @@ impl LayerReference {
     pub fn get_graph_inputs(&self) -> Result<Option<BridgeEffectInstance>, BridgeError> {
         let layer = self.item()?;
         let doc = self.document()?;
+        // A copy of a graphics template: what it has set, with the template's
+        // own values in every row it has not.
+        if let Some(comp) = crate::api::template::copy::placed_template_of(&doc, &layer) {
+            return Ok(crate::api::template::copy::shown(
+                &doc,
+                comp,
+                layer.graph_inputs.as_ref(),
+                layer.id,
+            )
+            .map(|inst| BridgeEffectInstance::new(inst, layer.start_offset.0)));
+        }
         if let Some(inputs) = &layer.graph_inputs {
             return Ok(Some(BridgeEffectInstance::new(
                 crate::api::effect::with_live_inputs(inputs, &doc).into_owned(),

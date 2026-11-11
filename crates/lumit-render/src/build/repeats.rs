@@ -8,8 +8,10 @@
 //! would have as a comp of their own. A picture with no name is kept, as it
 //! always was. Runs on the render thread.
 
+use std::sync::Arc;
+
 use lumit_core::fx::temporal::{leave_out_repeats, FlowWant};
-use lumit_core::model::{Composition, Layer, LayerKind};
+use lumit_core::model::{Composition, Document, Layer, LayerKind};
 
 use crate::cache::NestedKeyer;
 
@@ -19,6 +21,7 @@ type Offsets = [(i32, Option<(i32, FlowWant)>)];
 /// Takes the field off each neighbour of a Precomp layer whose nested comp,
 /// named at `at(offset)`, is the frame's own picture again.
 pub(super) fn in_nested(
+    doc: &Arc<Document>,
     offsets: &mut Offsets,
     keys: Option<&dyn NestedKeyer>,
     layer: &Layer,
@@ -28,13 +31,20 @@ pub(super) fn in_nested(
     let Some(keys) = keys.filter(|_| wants_some(offsets)) else {
         return;
     };
-    let inputs = layer.graph_inputs.as_ref();
-    leave_out_repeats(offsets, |o| keys.nested_key_with(nested, at(o), inputs));
+    // A template's copy is named by its document alone.
+    let inputs = layer
+        .graph_inputs
+        .as_ref()
+        .filter(|i| lumit_core::fx::effects::template::comp_of(i).is_none());
+    leave_out_repeats(offsets, |o| {
+        keys.nested_key_with(doc, nested, at(o), inputs)
+    });
 }
 
 /// The same for the adjustment layer at `idx` in `comp`, whose picture is the
 /// layers below it at comp time `at(offset)`.
 pub(super) fn below(
+    doc: &Arc<Document>,
     offsets: &mut Offsets,
     keys: Option<&dyn NestedKeyer>,
     comp: &Composition,
@@ -54,7 +64,7 @@ pub(super) fn below(
             l.switches.solo = false;
         }
     }
-    leave_out_repeats(offsets, |o| keys.nested_key(&alone, at(o)));
+    leave_out_repeats(offsets, |o| keys.nested_key(doc, &alone, at(o)));
 }
 
 /// Whether any neighbour is measured for Denoise, the one reader that cares.

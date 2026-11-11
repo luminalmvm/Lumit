@@ -34,6 +34,7 @@ import 'retime_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
 import 'stagger_panel_frb.dart';
+import 'template_panel_frb.dart';
 import 'extension_panel.dart';
 import 'text_panel_frb.dart';
 import 'timeline_panel_frb.dart';
@@ -59,6 +60,7 @@ const Set<Panel> _changing = {
   Panel.notes,
   Panel.align,
   Panel.captions,
+  Panel.graphicsTemplate,
 };
 
 /// The panels laid out along a time or space axis, or holding code. They read
@@ -139,6 +141,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.retime => const RetimePanelFrb(),
       Panel.notes => const NotesPanelFrb(),
       Panel.captions => const CaptionsPanelFrb(),
+      Panel.graphicsTemplate => const TemplatePanelFrb(),
       Panel.transcript => const TranscriptPanelFrb(),
       Panel.align => const AlignPanel(),
       Panel.debug => const DebugPanel(),

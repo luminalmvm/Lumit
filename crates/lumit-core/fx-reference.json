@@ -34506,6 +34506,17 @@
       "matte_role": "none"
     },
     {
+      "slug": "graphics-template",
+      "match_name": "template",
+      "label": "Graphics template",
+      "version": 1,
+      "category": "Controls",
+      "category_slug": "controls",
+      "params": [],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "wiggle",
       "match_name": "wiggle",
       "label": "Wiggle",

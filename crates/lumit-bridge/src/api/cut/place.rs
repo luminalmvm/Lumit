@@ -304,6 +304,45 @@ impl Edit<'_> {
         self.commit()
     }
 
+    /// Put one clip of composition `comp` down for each of `copies`, one after
+    /// another from `at_frame`, on a new picture Sequence layer at the top.
+    /// Each holds the values it is given and runs for the seconds it is
+    /// given, or as long as the composition. What placing a graphics
+    /// template's data rows does in Cut.
+    pub(super) fn place_copies(
+        mut self,
+        comp: Uuid,
+        at_frame: i64,
+        copies: Vec<(Option<lumit_core::model::EffectInstance>, Option<f64>)>,
+    ) -> Cut {
+        if comp == self.comp.id || copies.is_empty() {
+            return Err(BridgeCutResult::WrongLayer.into());
+        }
+        let (length, width, height) = {
+            let doc = self.of.document()?;
+            let inner = doc.comp(comp).ok_or(BridgeError::InvalidComp)?;
+            (
+                inner.duration.0,
+                f64::from(inner.width),
+                f64::from(inner.height),
+            )
+        };
+        let mut at = self.time(at_frame.max(0))?;
+        let r = self.add_row(None, false, width, height);
+        let fps = self.comp.frame_rate.fps();
+        for (inputs, seconds) in copies {
+            let long = match seconds {
+                Some(seconds) => self.time((seconds * fps).round().max(1.0) as i64)?,
+                None => length,
+            };
+            let mut clip = Clip::new(ClipSource::Comp(comp), Rational::ZERO, long, at, long);
+            clip.inputs = inputs;
+            self.rows[r].clips.push(clip);
+            at = at.checked_add(long)?;
+        }
+        self.commit()
+    }
+
     /// **Replace**: the source from `source_in` over `clip`, which keeps its
     /// row, its place and its length. `Limit` when the file runs out first.
     pub(super) fn replace(

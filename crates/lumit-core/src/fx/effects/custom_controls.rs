@@ -45,6 +45,9 @@ pub enum ControlKind {
     Angle,
     Checkbox,
     Colour,
+    /// One of a list of options, read by an expression as its number
+    /// counting from 1. What an After Effects dropdown imports as.
+    Menu,
 }
 
 /// One control of a set.
@@ -63,6 +66,9 @@ pub struct Control {
     pub min: f64,
     #[serde(default = "hundred")]
     pub max: f64,
+    /// A menu's options, in the order it lists them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
 }
 
 fn hundred() -> f64 {
@@ -137,6 +143,7 @@ pub fn set_controls(inst: &mut EffectInstance, controls: &[Control]) {
                     EffectValue::Float(Property::fixed(d[0]))
                 }
                 ControlKind::Checkbox => EffectValue::Bool(d[0] != 0.0),
+                ControlKind::Menu => EffectValue::Choice(d[0].max(0.0) as u32),
                 ControlKind::Colour => EffectValue::Colour(d.map(Property::fixed)),
             },
             extra: serde_json::Map::new(),
@@ -215,6 +222,16 @@ fn rows_of(inst: &EffectInstance) -> &'static [ParamSchema] {
                 },
                 Unit::Raw,
             ),
+            // The options are the control's own words, handed over by
+            // `row_state` and not written into the declaration.
+            ControlKind::Menu => (
+                ParamKind::Choice {
+                    options: &[],
+                    default: d[0].max(0.0) as u32,
+                    dividers_after: crate::fx::builtins::CHOICE_UNGROUPED,
+                },
+                Unit::Raw,
+            ),
         };
         rows.push(ParamSchema {
             id: Box::leak(control.id.into_boxed_str()),
@@ -245,5 +262,22 @@ impl EffectDef for CustomControlsDef {
 
     fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
         rows_of(inst)
+    }
+
+    /// A menu's options.
+    fn row_state(&self, inst: &EffectInstance) -> crate::fx::registry::RowState {
+        let rows = rows_of(inst);
+        let options = controls_of(inst)
+            .into_iter()
+            .filter(|c| c.kind == ControlKind::Menu)
+            .filter_map(|c| {
+                let row = rows.iter().find(|r| r.id == c.id)?;
+                Some((row.id, c.options))
+            })
+            .collect();
+        crate::fx::registry::RowState {
+            options,
+            ..Default::default()
+        }
     }
 }

@@ -43,7 +43,7 @@ pub(super) struct AddArgs {
 }
 
 /// Whether `comp`, or a comp anywhere inside it, holds comp `id`.
-fn holds(doc: &Document, comp: &Composition, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
+pub(super) fn holds(doc: &Document, comp: &Composition, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
     edits::nested_comps(doc, comp).into_iter().any(|inner| {
         if inner == id {
             return true;

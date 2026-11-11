@@ -360,6 +360,11 @@ class ProjectRowFrb extends StatefulWidget {
   final void Function(List<ItemReference> items)? onDropItems;
   final Future<String?> Function()? relinkPicker;
 
+  /// Bring in the library's newer version of this composition's graphics
+  /// template. Null when the library has none, and the row wears no Update
+  /// badge.
+  final VoidCallback? onUpdate;
+
   const ProjectRowFrb({
     super.key,
     required this.item,
@@ -402,6 +407,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.onSetLabel,
     this.onDropItems,
     this.relinkPicker,
+    this.onUpdate,
   });
 
   @override
@@ -875,6 +881,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           ],
         null => const <(String, String, Color)>[],
       },
+      // The library has a newer version of this graphics template.
+      if (widget.onUpdate != null)
+        ('update-$id', l10n.templateUpdate, t.accent),
       // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
       // about which file the item is being read from, not something that
       // wants acting on, so it takes the badge family's shape at
@@ -1016,6 +1025,25 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                           colour:
                               Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
                         ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (key.startsWith('update-'))
+                LumitTooltip(
+                  message: l10n.templateUpdateMenu,
+                  child: HoverMark(
+                    swells: true,
+                    builder: (context, lit) => GestureDetector(
+                      key: ValueKey<String>(key),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onUpdate,
+                      // Claims a double-click too, so the row does not open
+                      // under the badge.
+                      onDoubleTap: widget.onUpdate,
+                      child: ProjectBadge(
+                        label: label,
+                        colour: Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
                       ),
                     ),
                   ),

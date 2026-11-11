@@ -100,7 +100,11 @@ enum Panel {
   retime,
 
   /// A caption layer's captions, a row each, to read, retype and retime.
-  captions;
+  captions,
+
+  /// The fronted composition's controls, as a copy of it will show them,
+  /// to set, rename, group and reorder.
+  graphicsTemplate;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -127,6 +131,7 @@ enum Panel {
         Panel.transcript => l10n.panelTranscript,
         Panel.align => l10n.panelAlign,
         Panel.captions => l10n.panelCaptions,
+        Panel.graphicsTemplate => l10n.panelGraphicsTemplate,
         Panel.debug => l10n.panelDebug,
         Panel.extension => l10n.panelExtension,
       };
@@ -626,6 +631,7 @@ DockSplit defaultLayout() => DockSplit(
                 DockPane(Panel.text),
                 DockPane(Panel.paragraph),
                 DockPane(Panel.captions),
+                DockPane(Panel.graphicsTemplate),
                 DockPane(Panel.align),
                 DockPane(Panel.stagger),
               ],
@@ -684,10 +690,11 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       WorkspacePreset.edit => defaultLayout(),
       // Project and Effect controls (fronted) tabbed on the left; the Easing
       // panel full height beside the Viewer; then a stack at the right edge
-      // with Effects & presets open, and Expressions and Scopes shut. The
-      // Timeline is Edit's height exactly: the owner asked for one
-      // timeline height across Edit, Effects, Nodes and Colour, so that
-      // changing workspace does not move the lanes under the pointer. The
+      // with Effects & presets open, and Expressions, Scopes and Graphics
+      // template shut. The Timeline is Edit's height exactly: the owner
+      // asked for one timeline height across Edit, Effects, Nodes and
+      // Colour, so that changing workspace does not move the lanes under
+      // the pointer. The
       // stack is the owner's own measured width — wide enough to work
       // in rather than as narrow as an exactly 16:9 Viewer would need.
       WorkspacePreset.effects => DockSplit(
@@ -707,6 +714,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                     DockPane(Panel.effectsAndPresets),
                     DockPane(Panel.expressions),
                     DockPane(Panel.scopes),
+                    DockPane(Panel.graphicsTemplate),
                   ],
                   stacked: true,
                   open: {Panel.effectsAndPresets.pane()},

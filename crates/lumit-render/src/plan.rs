@@ -166,14 +166,25 @@ impl Quality {
 /// (docs/impl/node-graph-comp.md §5.3), which are part of the frame's name, so
 /// what the builder names and what the planner skips agree. `None` everywhere
 /// else, which is every layer over a layer comp.
-pub type HeldNested<'a> =
-    &'a dyn Fn(&Composition, f64, Option<&lumit_core::model::EffectInstance>) -> bool;
+///
+/// The document is the one the comp is read from, which for a copy of a
+/// graphics template is the one its values make.
+pub type HeldNested<'a> = &'a dyn Fn(
+    &std::sync::Arc<Document>,
+    &Composition,
+    f64,
+    Option<&lumit_core::model::EffectInstance>,
+) -> bool;
 
 /// The inputs a plan walk carries down the Precomp recursion, unchanged at
 /// every depth: what the media is and how coarsely to decode. Bundled so the
 /// recursive walk stays readable.
 pub struct PlanContext<'a> {
     pub doc: &'a Document,
+    /// `doc` as the renderer shares it, when it does. A copy of a graphics
+    /// template is planned in the document its values make, and making one
+    /// starts from this. `None` plans every copy as the template itself.
+    pub shared: Option<&'a std::sync::Arc<Document>>,
     pub quality: Quality,
     pub probes: &'a dyn SourceProbes,
     /// Answers "is this nested comp's frame, at this layer time, already held
@@ -367,6 +378,7 @@ pub fn collect_comp_jobs(
 ) {
     let PlanContext {
         doc,
+        shared,
         quality,
         probes,
         held,
@@ -769,6 +781,30 @@ pub fn collect_comp_jobs(
                     let ClipSource::Comp(nested_id) = clip.source else {
                         continue;
                     };
+                    // A clip that is a copy of a graphics template is planned
+                    // in the document its values make, so a picture it puts in
+                    // the template is the one fetched.
+                    let placed = shared.and_then(|shared| {
+                        lumit_core::template::placed::for_clip(
+                            shared,
+                            comp,
+                            layer,
+                            clip,
+                            lt,
+                            sample_times[idx],
+                        )
+                    });
+                    let within = placed.as_ref().map(|placed| PlanContext {
+                        doc: placed,
+                        shared: Some(placed),
+                        quality,
+                        probes,
+                        held,
+                    });
+                    let (ctx, doc) = match (&within, &placed) {
+                        (Some(within), Some(placed)) => (within, &**placed),
+                        _ => (ctx, doc),
+                    };
                     // A multicam clip decodes its angle and no other.
                     let Some(nested) = lumit_core::multicam::nested_for(doc, clip)
                         .filter(|_| !visited.contains(&nested_id))
@@ -777,7 +813,11 @@ pub fn collect_comp_jobs(
                     };
                     let nested = nested.as_ref();
                     let st = clip.nested_time(nested, lt);
-                    if sample_times[idx] == t && held.is_some_and(|held| held(nested, st, None)) {
+                    if sample_times[idx] == t
+                        && held
+                            .zip(placed.as_ref().or(shared))
+                            .is_some_and(|(held, read)| held(read, nested, st, None))
+                    {
                         continue;
                     }
                     visited.push(nested_id);
@@ -860,6 +900,32 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
+                    // A copy of a graphics template is planned in the document
+                    // its values make, so a picture it puts in the template is
+                    // the one fetched.
+                    let placed = shared.and_then(|shared| {
+                        lumit_core::template::placed::for_layer(
+                            shared,
+                            comp,
+                            layer,
+                            lt,
+                            sample_times[idx],
+                            None,
+                        )
+                    });
+                    let within = placed.as_ref().map(|placed| PlanContext {
+                        doc: placed,
+                        shared: Some(placed),
+                        quality,
+                        probes,
+                        held,
+                    });
+                    let (ctx, doc, nested) = match (&within, &placed) {
+                        (Some(within), Some(placed)) => {
+                            (within, &**placed, placed.comp(*nested_id).unwrap_or(nested))
+                        }
+                        _ => (ctx, doc, nested),
+                    };
                     // The Retime map (docs/impl/node-graph-comp.md §5.6): the
                     // moment of the nested comp this layer shows, which is the
                     // moment the builder evaluates and names. Equal to `lt`
@@ -921,7 +987,16 @@ pub fn collect_comp_jobs(
                     if live
                         && !collapsed
                         && nested_moments.is_empty()
-                        && held.is_some_and(|held| held(nested, st, layer.graph_inputs.as_ref()))
+                        && held
+                            .zip(placed.as_ref().or(shared))
+                            .is_some_and(|(held, read)| {
+                                // A template's copy is named by its document
+                                // alone, as the builder names it.
+                                let inputs = layer.graph_inputs.as_ref().filter(|i| {
+                                    lumit_core::fx::effects::template::comp_of(i).is_none()
+                                });
+                                held(read, nested, st, inputs)
+                            })
                     {
                         continue;
                     }
@@ -1155,6 +1230,7 @@ fn collect_graph_jobs(
 ) {
     let PlanContext {
         doc,
+        shared,
         quality,
         probes,
         held,
@@ -1227,7 +1303,11 @@ fn collect_graph_jobs(
                 // A held nested frame wants no decodes: the realiser will
                 // serve the texture and never look at the pixels. A rebuild
                 // at another moment is made from pixels, as a Precomp's is.
-                if moments.is_empty() && held.is_some_and(|held| held(nested, t, None)) {
+                if moments.is_empty()
+                    && held
+                        .zip(shared)
+                        .is_some_and(|(held, read)| held(read, nested, t, None))
+                {
                     continue;
                 }
                 visited.push(*nested_id);
@@ -1358,13 +1438,27 @@ pub fn plan_comp_frame(
     quality: Quality,
     probes: &dyn SourceProbes,
 ) -> Vec<CompJob> {
-    plan_comp_frame_held(doc, comp, t, quality, probes, None)
+    planned(doc, None, comp, t, quality, probes, None)
 }
 
-/// [`plan_comp_frame`] with the nested-frame answerer ([`PlanContext::held`]).
+/// [`plan_comp_frame`] for the document as the renderer shares it, with the
+/// nested-frame answerer ([`PlanContext::held`]). What a frame is planned by,
+/// so a copy of a graphics template is planned under its own values.
 #[must_use]
 pub fn plan_comp_frame_held(
+    doc: &std::sync::Arc<Document>,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    probes: &dyn SourceProbes,
+    held: Option<HeldNested<'_>>,
+) -> Vec<CompJob> {
+    planned(doc, Some(doc), comp, t, quality, probes, held)
+}
+
+fn planned(
     doc: &Document,
+    shared: Option<&std::sync::Arc<Document>>,
     comp: &Composition,
     t: f64,
     quality: Quality,
@@ -1373,6 +1467,7 @@ pub fn plan_comp_frame_held(
 ) -> Vec<CompJob> {
     let ctx = PlanContext {
         doc,
+        shared,
         quality,
         probes,
         held,
@@ -1895,11 +1990,15 @@ mod tests {
         .collect();
 
         let asked = std::cell::Cell::new(f64::NAN);
-        let held = |_: &Composition, lt: f64, _: Option<&lumit_core::model::EffectInstance>| {
+        let held = |_: &std::sync::Arc<Document>,
+                    _: &Composition,
+                    lt: f64,
+                    _: Option<&lumit_core::model::EffectInstance>| {
             asked.set(lt);
             false
         };
         let held: HeldNested<'_> = &held;
+        let doc = std::sync::Arc::new(doc);
         let jobs = plan_comp_frame_held(
             &doc,
             doc.comp(outer_id).unwrap(),

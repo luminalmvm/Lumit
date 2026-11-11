@@ -26,6 +26,7 @@ import 'package:lumit_flutter/src/rust/api/colour.dart'
     show BridgeColourItem, BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowRef;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeInputRef, BridgeNodeRef, BridgeOutputRef_Driver, BridgePortType;
@@ -53,6 +54,8 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import '../widgets/layer_picker.dart';
+import '../state/template_controls.dart' show ControlRow;
+import 'control_rows.dart' show ControlMark;
 import 'expression_editor.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
@@ -156,6 +159,18 @@ Widget withUnitRider(LumitTheme t, BridgeUnit unit, Widget control) {
       Text(text, style: unitRiderStyle(t)),
     ],
   );
+}
+
+/// The name a point's two rows share, from the label of the row across:
+/// "Light x" and "Light y" are "Light", and "Scale x %" is "Scale", the unit
+/// being the rider after the wells.
+String pointStem(String label) {
+  var stem = label;
+  if (stem.endsWith(' %')) stem = stem.substring(0, stem.length - 2);
+  if (stem.toLowerCase().endsWith(' x')) {
+    stem = stem.substring(0, stem.length - 2);
+  }
+  return stem;
 }
 
 /// One parameter: its label, and the control its kind asks for.
@@ -306,6 +321,10 @@ class EffectParamRowFrb extends StatelessWidget {
   /// layer's own stack: a style, a material, a clip's or a group's effect.
   final String? rowPath;
 
+  /// This row as a control of the composition's graphics template can name
+  /// it, for Add to controls and the mark. Null where the engine cannot.
+  final BridgeRowRef? controlRow;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -338,6 +357,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.optionNote,
     this.optionReason,
     this.rowPath,
+    this.controlRow,
   });
 
   @override
@@ -439,11 +459,12 @@ class EffectParamRowFrb extends StatelessWidget {
     Widget name(double lit) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onLabelTap,
-          child: nameGroup == null
+          child: nameGroup == null && controlRow == null
               ? labelText(lit)
               : Row(children: [
                   ...flatGroupPrefix(t, nameGroup),
                   Flexible(child: labelText(lit)),
+                  ControlMark(controlRow),
                 ]),
         );
     // Only a name that picks its property lights.
@@ -699,6 +720,10 @@ class EffectParamRowFrb extends StatelessWidget {
             layer: layer,
             row: BridgeExpressionRow.effect(effect: effectId, param: param.id));
     return ParamMenu(
+      control: switch (controlRow) {
+        final row? => ControlRow(comp, row),
+        null => null,
+      },
       // Named as Paste link runs, so a layer or effect renamed since the copy
       // is written under its name now.
       linkTo: (link) => _linkRef(link, ui.model.byId(ownerLayerId)),
@@ -2444,9 +2469,14 @@ class EffectPointRowFrb extends StatelessWidget {
   /// graph's box, which has none.
   final UuidValue? ownerLayerId;
 
+  /// The point as a control can name it, both rows as one. Null where the
+  /// engine cannot.
+  final BridgeRowRef? controlRow;
+
   const EffectPointRowFrb({
     super.key,
     this.ownerLayerId,
+    this.controlRow,
     required this.effectId,
     required this.xParam,
     required this.yParam,
@@ -2510,13 +2540,7 @@ class EffectPointRowFrb extends StatelessWidget {
     final id = effectId;
     final sx = _scalar(xValue);
     final sy = _scalar(yValue);
-    // The shared stem: "Light x" / "Light y" → "Light", and "Scale x %" →
-    // "Scale", the unit being the rider after the wells.
-    var stem = xParam.label;
-    if (stem.endsWith(' %')) stem = stem.substring(0, stem.length - 2);
-    if (stem.toLowerCase().endsWith(' x')) {
-      stem = stem.substring(0, stem.length - 2);
-    }
+    final stem = pointStem(xParam.label);
 
     // Both halves as one op where the caller can commit one, so a point moved
     // is one undo step and not one per axis.
@@ -2546,11 +2570,15 @@ class EffectPointRowFrb extends StatelessWidget {
             },
           );
 
-    final label = Text(
+    final words = Text(
       t.propertyCase(stem),
       style: enabled ? t.body : t.body.copyWith(color: t.textDisabled),
       overflow: TextOverflow.ellipsis,
     );
+    // The point wears the mark once, for both of its rows.
+    final Widget label = controlRow == null
+        ? words
+        : Row(children: [Flexible(child: words), ControlMark(controlRow)]);
 
     // Deaf, not faded (docs/15 §5): a control that still answers a drag while
     // looking disabled is worse than one that never changed, and the label's
@@ -2806,6 +2834,10 @@ class EffectPointRowFrb extends StatelessWidget {
             BridgeEffectValue.float(BridgeScalar.expression(
                 read(scalar).toString(), newExpressionLanguage(context))));
     final menu = ParamMenu(
+      control: switch (controlRow) {
+        final row? => ControlRow(comp, row),
+        null => null,
+      },
       keys: keyframes is KeyframeControlsFrb ? keyframes : null,
       reset: fallbacks.$1 == null || fallbacks.$2 == null
           ? null
@@ -3577,6 +3609,11 @@ class EffectStackEditor {
   /// because a row belongs to one container. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? clipStack;
 
+  /// Where the rows of a clip that is a copy of a graphics template are read
+  /// from, set by Effect controls while it shows that clip's card. Looked in
+  /// by id ahead of [groupStack] and [clipStack], which are taken unasked.
+  List<BridgeEffectInstance> Function()? clipInputs;
+
   /// Whether this editor's rows are a layer's **drivers** (the Timeline's
   /// Drivers group): the list is the layer's graph nodes, the commit routes
   /// to the graph by the same shared lookup, and a drag previews through
@@ -3629,7 +3666,8 @@ class EffectStackEditor {
       final styleIds = {for (final s in styles) s.id()};
       stack = _staged.keys.every((key) => styleIds.contains(key.$1))
           ? styles
-          : ((groupStack ?? clipStack)?.call() ??
+          : (_clipInputs() ??
+              (groupStack ?? clipStack)?.call() ??
               _materials(layer) ??
               _modelRows(layer) ??
               graphInputsOf(layer));
@@ -3643,6 +3681,23 @@ class EffectStackEditor {
       }
     }
     return stack;
+  }
+
+  /// A clip's graphics template rows when they hold what is staged.
+  List<BridgeEffectInstance>? _clipInputs() {
+    final read = clipInputs;
+    if (read == null) return null;
+    final List<BridgeEffectInstance> rows;
+    try {
+      rows = read();
+    } catch (_) {
+      // The clip went under the panel, so the rows are somebody else's.
+      return null;
+    }
+    final ids = {for (final r in rows) r.id()};
+    return rows.isNotEmpty && _staged.keys.every((key) => ids.contains(key.$1))
+        ? rows
+        : null;
   }
 
   /// A Model layer's material rows when they hold what is staged.

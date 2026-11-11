@@ -218,6 +218,26 @@ fn a_box_wraps_and_justifies() {
     assert!(last.carets.last().unwrap() < &(full.right - 1.0));
 }
 
+/// Shrink to fit sets a long line smaller until it fits the box. Off, the
+/// same line wraps.
+#[test]
+fn shrink_to_fit_keeps_a_long_line_inside_the_box() {
+    let text = "one two three four five six";
+    let boxed = |shrink| ParagraphStyle {
+        box_width: 400.0,
+        shrink,
+        ..ParagraphStyle::default()
+    };
+    let wrapped = layout(&block(text, &kerned(), &boxed(false)), false);
+    assert!(wrapped.lines.len() > 1);
+
+    let fitted = layout(&block(text, &kerned(), &boxed(true)), false);
+    assert_eq!(fitted.lines.len(), 1);
+    let carets = &fitted.lines[0].carets;
+    let width = carets[carets.len() - 1] - carets[0];
+    assert!(width <= 400.0 && width > 399.0, "{width}");
+}
+
 #[test]
 fn an_outline_adds_ink_and_room_for_it() {
     let paragraph = ParagraphStyle::default();
@@ -334,7 +354,7 @@ fn styled_text_runs_along_a_path_and_converts_to_outlines() {
         .sum();
     assert_eq!(top, 0);
 
-    assert_eq!(outlines(&b, None, 0.0).len(), 5);
+    assert_eq!(outlines(&b, None, 0.0).0.len(), 5);
     let groups = crate::shape_items(&b, None, 0.0);
     assert_eq!(groups.len(), 5, "a group for each letter");
     assert!(lumit_core::shape::modifier::items(&groups)

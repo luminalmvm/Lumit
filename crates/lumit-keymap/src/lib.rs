@@ -315,6 +315,7 @@ impl ActionId {
             "layer.rename" => "Rename the layer",
             "effect.rename" => "Rename the selected effect",
             "effect.duplicate" => "Duplicate the selected effects",
+            "template.controls.add" => "Add to controls",
             "layer.toggle.visible" => "Show or hide the layer",
             // Graph editor.
             "graph.ease" => "Easy ease",

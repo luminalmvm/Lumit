@@ -19,6 +19,7 @@ import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/share_marks.dart';
 import '../state/caption_tracks.dart';
+import 'copy_ends.dart';
 import 'timeline_captions_frb.dart' show CaptionMarksPainter;
 import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
@@ -1111,6 +1112,23 @@ class _BarState extends State<Bar> {
                           _trimCursor(width, left: true),
                           _trimCursor(width, left: false),
                         ],
+                        // A copy of a graphics template shades the stretches
+                        // it plays its intro and its outro in.
+                        if (info.copy case final copy?)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: CopyEndsPainter(
+                                  copy: copy,
+                                  pxPerSecond: widget.fps > 0
+                                      ? (widget.axis.xOf(widget.fps.round()) -
+                                          widget.axis.xOf(0))
+                                      : 0,
+                                  ink: t.surface0,
+                                ),
+                              ),
+                            ),
+                          ),
                         // The corner marks: this bar is as long as its source
                         // allows in that direction.
                         Positioned.fill(

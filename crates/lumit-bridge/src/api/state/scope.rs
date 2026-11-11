@@ -79,6 +79,9 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetCompStart { comp, .. }
         // The Project panel's row wears the multicam mark.
         | Op::SetCompMulticam { comp, .. }
+        // And the template mark, with its update chip.
+        | Op::SetCompTemplate { comp, .. }
+        | Op::SetCompTemplateData { comp, .. }
         | Op::TrimCompToWorkArea { comp }
         | Op::CropCompToRegion { comp, .. } => (Some(*comp), None, true),
 

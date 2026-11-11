@@ -1393,12 +1393,12 @@ impl HeadlessRenderer {
             probes: &self.probes,
         };
         let keys = crate::cache::NestedKeys {
-            doc,
             probes: &probes,
             quality,
         };
         let jobs = {
-            let held = |nested: &Composition,
+            let held = |read: &Arc<Document>,
+                        nested: &Composition,
                         lt: f64,
                         inputs: Option<&lumit_core::model::EffectInstance>|
              -> bool {
@@ -1409,7 +1409,7 @@ impl HeadlessRenderer {
                 // own Input values included, or the planner would skip decodes
                 // for a texture the realiser never finds.
                 let Some(key) =
-                    crate::cache::NestedKeyer::nested_key_with(&keys, nested, lt, inputs)
+                    crate::cache::NestedKeyer::nested_key_with(&keys, read, nested, lt, inputs)
                 else {
                     return false;
                 };
@@ -1494,7 +1494,7 @@ impl HeadlessRenderer {
             // Clone to points' pictures for a stream that is only made during
             // the render: the walk asks for them here once it has the stream.
             let late_clones = |spec: &crate::draw::LateClones, points: usize| {
-                crate::build::late_clone_pictures(doc, spec, points, &pixels_by_layer)
+                crate::build::late_clone_pictures(spec, points, &pixels_by_layer)
             };
             let realiser = crate::realise::Realiser {
                 graph_reach: Some(&reach),
@@ -3443,6 +3443,40 @@ impl AudioJobsBuilder {
                 let Some(nested) = doc.comp(*nested_id) else {
                     return;
                 };
+                // A copy of a graphics template is heard as the document its
+                // own values make, so footage it puts in the template sounds.
+                //
+                // ponytail: read once, at the copy's first moment, so a keyed
+                // control on a row that sounds is heard at the value it
+                // starts on. Reading the mix per moment is the upgrade.
+                let first = layer.in_point.0.to_f64();
+                let placed = lumit_core::template::placed::for_layer(
+                    doc,
+                    comp,
+                    layer,
+                    lumit_core::time::layer_time(first, layer.start_offset.0),
+                    first,
+                    None,
+                );
+                let doc = placed.as_ref().unwrap_or(doc);
+                let nested = doc.comp(*nested_id).unwrap_or(nested);
+                // A template with an intro or an outro is heard through the
+                // clock its picture is seen through.
+                let retime = retime.or_else(|| {
+                    let timing = nested.template_timing()?;
+                    let ends = layer.graph_inputs.as_ref().map_or(
+                        lumit_core::template::time::Ends::BOTH,
+                        lumit_core::fx::effects::template::ends,
+                    );
+                    let start = first - layer.start_offset.0.to_f64();
+                    let length = layer.out_point.0.to_f64() - first;
+                    Some(crate::export::Retimed {
+                        map: lumit_core::template::time::copy_map(timing, ends, start, length)?,
+                        origin_s: offset_s,
+                        held: None,
+                        pitch_follows_speed: layer.pitch_follows_speed,
+                    })
+                });
                 // Retimed, the comp is heard over the stretch of its own time
                 // the map reaches, and the sum read through the map.
                 let retime = retime.map(|retime| {
@@ -3697,6 +3731,19 @@ impl AudioJobsBuilder {
                 let lumit_core::sequence::ClipSource::Comp(nested_id) = clip.source else {
                     continue;
                 };
+                // A clip that is a copy of a graphics template is heard as
+                // the document its own values make, read at its first moment
+                // as a Precomp layer's copy is.
+                let first = clip.place_start.to_f64();
+                let placed = lumit_core::template::placed::for_clip(
+                    doc,
+                    comp,
+                    layer,
+                    clip,
+                    first,
+                    first + layer.start_offset.0.to_f64(),
+                );
+                let doc = placed.as_ref().unwrap_or(doc);
                 // A multicam clip hears its comp through its angle.
                 let Some(nested) = lumit_core::multicam::nested_for(doc, clip)
                     .filter(|_| !visited.contains(&nested_id))
@@ -3704,9 +3751,30 @@ impl AudioJobsBuilder {
                     continue;
                 };
                 let nested = nested.as_ref();
+                // A template with an intro or an outro is heard through the
+                // clock its picture is seen through, which starts at the
+                // clip's start whatever its trim.
+                let responsive = retime.is_none().then(|| nested.template_timing()).flatten();
+                let retime = retime.or_else(|| {
+                    let ends = clip.inputs.as_ref().map_or(
+                        lumit_core::template::time::Ends::BOTH,
+                        lumit_core::fx::effects::template::ends,
+                    );
+                    let length = clip.place_duration.to_f64();
+                    Some(crate::export::Retimed {
+                        map: lumit_core::template::time::copy_map(responsive?, ends, 0.0, length)?,
+                        origin_s: offset_s + first,
+                        held: None,
+                        pitch_follows_speed: layer.pitch_follows_speed,
+                    })
+                });
                 // The comp's own time 0 sits where the clip's source time 0
                 // does: the clip's start, less how far it is trimmed in.
-                let nested_s = start_s - clip.source_in.to_f64();
+                let nested_s = if responsive.is_some() {
+                    start_s
+                } else {
+                    start_s - clip.source_in.to_f64()
+                };
                 // Retimed, the comp is heard over the stretch of its own time
                 // the map reaches, and the sum read through the map.
                 let retime = retime.map(|retime| {

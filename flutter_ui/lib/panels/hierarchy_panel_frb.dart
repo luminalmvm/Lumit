@@ -14,6 +14,7 @@
 import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/copies.dart' show shownLayerName;
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -152,7 +153,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
 
       rows.add(_HierarchyRow(
         key: ValueKey<String>('hierarchy-row-$id'),
-        name: info.name,
+        name: shownLayerName(info),
         kind: kind,
         label: info.label,
         depth: depth,

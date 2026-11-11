@@ -70,6 +70,7 @@ import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
 import 'repair_display_frb.dart' show RepairDisplayFrb, repairEffects;
 import 'node_menus.dart' show showGraphBoxMenu;
 import 'placeholder.dart';
+import 'control_rows.dart' show paramControlRow, pointControlRow;
 import '../state/dock.dart' show Panel;
 import 'row_filter.dart';
 import 'plane_display_frb.dart';
@@ -1396,6 +1397,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           final stem = pairStemOf(picked.info.name, param.id);
           out.add(EffectPointRowFrb(
             key: ValueKey<String>('node-row-$id-${param.id}-pair'),
+            // An effect on the layer's stack. A driver's rows, and a box in
+            // a node graph, are not a graphics template's to name.
+            controlRow: picked.driver || layer == null
+                ? null
+                : pointControlRow(owner, id, param, next,
+                    engineLabel(pointStem(param.label))),
             effectId: id,
             xParam: param,
             yParam: next,
@@ -1418,6 +1425,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         }
         out.add(EffectParamRowFrb(
           key: ValueKey<String>('node-row-$id-${param.id}'),
+          controlRow: picked.driver || layer == null
+              ? null
+              : paramControlRow(owner, id, param),
           effectId: id,
           param: param,
           value: _staged(id, param.id) ?? values[param.id],

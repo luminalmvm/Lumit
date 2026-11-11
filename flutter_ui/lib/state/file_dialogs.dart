@@ -29,6 +29,11 @@ export 'files.dart' if (dart.library.js_interop) 'files_web.dart'
 XTypeGroup _projectGroup() =>
     XTypeGroup(label: l10n.fileTypeProject, extensions: const ['lum']);
 
+/// The `.lumt` graphics template type group, which Import adds to the
+/// library.
+XTypeGroup _templateGroup() => XTypeGroup(
+    label: l10n.fileTypeGraphicsTemplate, extensions: const ['lumt']);
+
 /// The extensions the footage filter offers.
 ///
 /// Two lists in one: the containers FFmpeg reads, and every still-image format
@@ -135,15 +140,16 @@ Future<String?> pickProjectSaveLocation(
 
 /// Pick one or more footage files, or an empty list when cancelled. With
 /// [projects] a Lumit project is offered too, which an import brings one
-/// composition in from.
+/// composition in from, and a graphics template, which joins the library.
 Future<List<String>> pickFootage({bool projects = false}) async {
-  final here = await pickFilesHere(
-      l10n.fileTypeFootage, [..._pickerExtensions, if (projects) 'lum']);
+  final here = await pickFilesHere(l10n.fileTypeFootage,
+      [..._pickerExtensions, if (projects) ...['lum', 'lumt']]);
   if (here != null) return here;
   final files = await openFiles(
     acceptedTypeGroups: [
       _footageGroup(),
       if (projects) _projectGroup(),
+      if (projects) _templateGroup(),
       _anyGroup(),
     ],
   );
@@ -455,6 +461,30 @@ Future<String?> pickAeBundle() =>
 /// was cancelled.
 Future<String?> pickFolder() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
+
+/// Pick a CSV, TSV or JSON file of rows for a graphics template's data, or
+/// null when cancelled.
+Future<String?> pickTemplateData() async =>
+    (await openFile(acceptedTypeGroups: [
+      XTypeGroup(
+          label: l10n.templateDataFileType,
+          extensions: const ['csv', 'tsv', 'tab', 'json']),
+    ]))
+        ?.path;
+
+/// Where to write a starting CSV for a graphics template's data, or null when
+/// cancelled.
+Future<String?> pickTemplateDataSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.templateDataFileType, extensions: const ['csv']),
+    ],
+    suggestedName: '$suggestedName.csv',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.csv')) return path;
+  return '$path.csv';
+}
 
 /// An addon's own description file, the `addon.json` that names what the pack
 /// is and which files belong to it (docs/impl/addons.md §4).

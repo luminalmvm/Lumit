@@ -1,0 +1,186 @@
+{
+  "unreadables": [
+    {
+      "comp": "Lower third",
+      "layer": "Logo",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Logo",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Logo",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Logo",
+      "path": "Replace Source > Item Cache Entry",
+      "match_name": "ADBE Layer Source Alternate",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “ADBE Layer Source Alternate”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Title",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Title",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Title",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Bar",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Bar",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Bar",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Plate",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Plate",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Plate",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Lower third",
+      "layer": "Plate",
+      "path": "Replace Source > Item Cache Entry",
+      "match_name": "ADBE Layer Source Alternate",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “ADBE Layer Source Alternate”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy A",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy A",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy A",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy A",
+      "path": "Replace Source > Item Cache Entry",
+      "match_name": "ADBE Layer Source Alternate",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “ADBE Layer Source Alternate”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy B",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy B",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy B",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Main",
+      "layer": "Copy B",
+      "path": "Replace Source > Item Cache Entry",
+      "match_name": "ADBE Layer Source Alternate",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “ADBE Layer Source Alternate”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Logo_Other logo 2",
+      "layer": "Other logo",
+      "path": "Layer Styles > Outer Glow > Colors",
+      "match_name": "outerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “outerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Logo_Other logo 2",
+      "layer": "Other logo",
+      "path": "Layer Styles > Inner Glow > Colors",
+      "match_name": "innerGlow/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “innerGlow/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Logo_Other logo 2",
+      "layer": "Other logo",
+      "path": "Layer Styles > Gradient Overlay > Colors",
+      "match_name": "gradientFill/gradient",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “gradientFill/gradient”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    },
+    {
+      "comp": "Logo_Other logo 2",
+      "layer": "Other logo",
+      "path": "Replace Source > Item Cache Entry",
+      "match_name": "ADBE Layer Source Alternate",
+      "error": "Error: After Effects error: Can not get or set a value from this property (matchname is “ADBE Layer Source Alternate”). This property’s propertyValueType is PropertyValueType.NO_VALUE."
+    }
+  ]
+}

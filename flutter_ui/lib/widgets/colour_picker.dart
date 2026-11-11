@@ -464,6 +464,10 @@ class ColourSwatchButton extends StatelessWidget {
   /// menu, for a colour with no default of its own.
   final PickedColour? resetTo;
 
+  /// Leave a right press to the row the chip sits in, whose own menu holds
+  /// the colour's rows.
+  final bool rowMenu;
+
   const ColourSwatchButton({
     super.key,
     required this.colour,
@@ -473,6 +477,7 @@ class ColourSwatchButton extends StatelessWidget {
     this.max = 1,
     this.onPreview,
     this.resetTo,
+    this.rowMenu = false,
   });
 
   @override
@@ -480,10 +485,12 @@ class ColourSwatchButton extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onSecondaryTapDown: (d) => showColourWellMenu(context, d.globalPosition,
-          current: initial ?? PickedColour.of(colour),
-          onPicked: onPicked,
-          resetTo: resetTo),
+      onSecondaryTapDown: rowMenu
+          ? null
+          : (d) => showColourWellMenu(context, d.globalPosition,
+              current: initial ?? PickedColour.of(colour),
+              onPicked: onPicked,
+              resetTo: resetTo),
       onTap: () async {
         final box = context.findRenderObject();
         if (box is! RenderBox) return;

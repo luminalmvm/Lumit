@@ -638,6 +638,11 @@ Map<String, String> get _built => {
       "Point 2 y": l10n.fxPoint2Y,
       "Point control": l10n.fxPointControl,
       "Custom controls": l10n.fxCustomControls,
+      "Graphics template": l10n.fxGraphicsTemplate,
+      "Font": l10n.fxFont,
+      "Fit": l10n.fxFit,
+      "Intro": l10n.fxIntro,
+      "Outro": l10n.fxOutro,
       "Point x": l10n.fxPointX,
       "Point y": l10n.fxPointY,
       "Points": l10n.fxPoints,
@@ -2117,6 +2122,7 @@ Map<String, String> get _built => {
           l10n.keyApplyTheRememberedInterpretation,
       "Rename the selected effect": l10n.keyRenameTheSelectedEffect,
       "Duplicate the selected effects": l10n.keyDuplicateTheSelectedEffects,
+      "Add to controls": l10n.keyAddToControls,
       "Show or hide the layer": l10n.keyShowOrHideTheLayer,
       "Easy ease": l10n.keyEasyEase,
       "Easy ease in": l10n.keyEasyEaseIn,
@@ -2363,6 +2369,8 @@ Map<String, String> get _built => {
       "Edit layer markers": l10n.histEditLayerMarkers,
       "Edit footage markers": l10n.histEditFootageMarkers,
       "Set multicam": l10n.histSetMulticam,
+      "Edit controls": l10n.histEditControls,
+      "Link data": l10n.histLinkData,
       "Set blend mode": l10n.histSetBlendMode,
       "Set parent": l10n.histSetParent,
       "Edit transform": l10n.histEditTransform,
@@ -2509,6 +2517,10 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeShadowSwitchKeyed;
     case 'geometry_options_carried':
       return l10n.aeGeometryOptionsCarried;
+    case 'control_not_carried':
+      return l10n.aeControlNotCarried(a('control'), a('row'));
+    case 'control_value_not_carried':
+      return l10n.aeControlValueNotCarried(a('control'));
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

@@ -45,6 +45,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../state/copies.dart';
 import '../state/dock.dart' show Panel;
 import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../state/motion_paths.dart' show motionPathWith;
@@ -2810,6 +2811,24 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     _setHover(null);
   }
 
+  /// Make [clip] the clip Effect controls shows. The Cut timeline picks it
+  /// too where it is on show. Another layer picked lets the clip go, so the
+  /// panel follows the pick again.
+  void _pickCopyClip(LumitUiState ui, LayerReference layer, UuidValue clip) {
+    ui.cutOverlap.value = null;
+    ui.cutClip.value = (layer: layer, clip: clip);
+    ui.cutPickRequest.value = {'$clip'};
+    void release() {
+      if (ui.selectedLayer.value?.internallayerId == layer.internallayerId) {
+        return;
+      }
+      ui.selectedLayers.removeListener(release);
+      if (ui.cutClip.value?.clip == clip) ui.cutClip.value = null;
+    }
+
+    ui.selectedLayers.addListener(release);
+  }
+
   /// A double-click opens what the layer holds: a text layer's words, for
   /// typing, as a click with the Type tool does, and a precomp layer's
   /// composition, as its bar in the Timeline does. No other kind has anything
@@ -2817,8 +2836,29 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void _open(LayerBox hit, Offset at) {
     final ui = widget.uiState;
     BridgeLayerKind? kind;
+    BridgeLayerInfo? info;
     for (final entry in ui.model.heldLayers) {
-      if (entry.layer.internallayerId == hit.id) kind = entry.info.kind;
+      if (entry.layer.internallayerId == hit.id) {
+        kind = entry.info.kind;
+        info = entry.info;
+      }
+    }
+    // A copy of a graphics template with words to type: the cursor goes to
+    // its first text box in Effect controls. A Sequence layer answers for
+    // the clip under the playhead, which becomes the picked clip.
+    if (kind == BridgeLayerKind.precomp && copyHasWords(info?.copy)) {
+      focusCopyWords(ui, hit.layer);
+      return;
+    }
+    if (kind == BridgeLayerKind.sequence && info != null) {
+      final frame = ui.playheadFrame.value;
+      for (final clip in info.clips) {
+        if (clip.angle != null || !copyHasWords(clip.copy)) continue;
+        if (frame < clip.startFrame || frame >= clip.endFrame) continue;
+        _pickCopyClip(ui, hit.layer, clip.id);
+        focusCopyWords(ui, hit.layer, clip: clip.id);
+        return;
+      }
     }
     if (kind == BridgeLayerKind.text) {
       // A caption layer shows its captions, not its own words: the one under
@@ -2881,7 +2921,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     final names = {
       for (final entry in ui.model.heldLayers)
-        entry.layer.internallayerId: entry.info.name,
+        entry.layer.internallayerId: shownLayerName(entry.info),
     };
     showViewerPictureMenu(
       context: context,

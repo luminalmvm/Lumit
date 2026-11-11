@@ -6,6 +6,7 @@ mod dirs;
 pub mod fixtures;
 pub mod pack;
 pub mod plugins;
+pub mod template_file;
 
 use lumit_core::model::Document;
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
@@ -539,14 +540,24 @@ impl<R: std::io::Read + ?Sized> ZipEntry for zip::read::ZipFile<'_, R> {
 
 pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
     let mut zip = ZipArchive::new(lumit_ingress::files::open(path)?)?;
+    let manifest = read_manifest(&mut zip, FORMAT)?;
+    let doc = read_project(&mut zip, &manifest)?;
+    Ok((doc, manifest))
+}
 
+/// The manifest of an archive, which has to say it is a `format` and ask for
+/// no newer a reader than this one.
+fn read_manifest<R: Read + Seek>(
+    zip: &mut ZipArchive<R>,
+    format: &str,
+) -> Result<Manifest, ProjectError> {
     let manifest: Manifest = {
         let entry = zip
             .by_name("manifest.json")
             .map_err(|_| ProjectError::NotALumitProject)?;
         serde_json::from_str(&entry_text(entry, MANIFEST_MAX_BYTES)?)?
     };
-    if manifest.format != FORMAT {
+    if manifest.format != format {
         return Err(ProjectError::NotALumitProject);
     }
     if let (Some(ours), Some(needs)) = (
@@ -560,7 +571,15 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
             });
         }
     }
+    Ok(manifest)
+}
 
+/// The document in an archive's `project.json`, brought up to this Lumit's
+/// schema from the one `manifest` says it was written at.
+fn read_project<R: Read + Seek>(
+    zip: &mut ZipArchive<R>,
+    manifest: &Manifest,
+) -> Result<Document, ProjectError> {
     let doc: Document = {
         let entry = zip
             .by_name("project.json")
@@ -579,7 +598,7 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
     };
     let mut doc = doc;
     forward_migrate(&mut doc)?;
-    Ok((doc, manifest))
+    Ok(doc)
 }
 
 /// A document as raw JSON written at `schema_version`, walked up to this
@@ -1009,6 +1028,15 @@ pub fn media_index_dir() -> Option<PathBuf> {
 pub fn presets_dir() -> Option<PathBuf> {
     let dirs = dirs::project_dirs()?;
     Some(dirs.data_dir().join("presets"))
+}
+
+/// The user's graphics template library: the `.lumt` files saved to it, with
+/// the footage and fonts read out of them in folders of their own
+/// ([`template_file`]). Beside the effect presets. `None` only when the
+/// platform has no home directory; callers create it lazily.
+pub fn templates_dir() -> Option<PathBuf> {
+    let dirs = dirs::project_dirs()?;
+    Some(dirs.data_dir().join("templates"))
 }
 
 /// The user's own lenses, as `.lens` files: saved from the lens window and

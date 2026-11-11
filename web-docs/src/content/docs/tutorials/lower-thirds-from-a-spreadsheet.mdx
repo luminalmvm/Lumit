@@ -1,0 +1,48 @@
+---
+title: Lower thirds from a spreadsheet
+description: Make a lower third once, give it controls, and export one for every row of a spreadsheet.
+sidebar:
+  order: 8
+---
+
+A [graphics template](/use/graphics-templates/) is a composition with controls. With a
+spreadsheet linked to it, it exports a version for each row.
+
+**1. Make the lower third.** In a new composition, add two Text layers, **Name** and
+**Role**, and animate them in and out.
+
+**2. Give the name a plate that fits it.** Select **Name** and tick **Background** in the
+[Text panel](/use/text/). The box behind the words grows and shrinks with them. For a name that
+must stay on one line, set **Box width** in the Paragraph panel and tick **Shrink to fit**.
+
+**3. Add the controls.** Right-click the **Name** layer and choose **Add to controls ▸
+Words**. Do the same for **Role**. Right-click **Name**'s Background colour in the Text panel
+and choose **Add to controls**, then rename that control **Plate** in the Graphics template
+panel.
+
+**4. Set the intro and the outro.** Open **Window ▸ Graphics template**. Move the playhead to
+where the lower third has come in and press **At playhead** beside **Intro**, then to where
+it starts to leave and do the same for **Outro**.
+
+**5. Write the spreadsheet.** Press **Data…**, then **Save a starting file…**. Open the CSV in
+a spreadsheet, and put one person on each row under **Name**, **Role** and **Plate**. A colour
+is written `#1E88E5`. Save it as CSV.
+
+**6. Link it.** In the Data window press **Open file…** and pick the CSV. Each column feeds the
+control of its name. Click a row to see it in the Viewer.
+
+**7. Name the files.** Press **Export rows…**. Set **File name** to `{Name}` and pick a folder
+and a preset.
+
+**8. Export.** Press **Export**. The rows are queued under one heading in the export queue, one
+file each.
+
+**9. Place them in a cut instead.** Select rows in the Data window and press **Place rows**.
+A copy of the lower third lands for each, one after another from the playhead, each following
+its row.
+
+## Related
+
+- [Graphics templates](/use/graphics-templates/)
+- [Text](/use/text/)
+- [Export](/use/export/)

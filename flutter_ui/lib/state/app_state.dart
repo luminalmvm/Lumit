@@ -78,6 +78,11 @@ String? presetPathFromArgs(List<String> args) => _fileFromArgs(args, '.lumfx');
 String? themePathFromArgs(List<String> args) =>
     _fileFromArgs(args, '.lumtheme');
 
+/// The graphics template a double-click or a drop asked Lumit to add to its
+/// library, read as [projectPathFromArgs] reads a project.
+String? templatePathFromArgs(List<String> args) =>
+    _fileFromArgs(args, '.lumt');
+
 String? _fileFromArgs(List<String> args, String ending) {
   for (var a in args) {
     if (a.startsWith('file:')) {
@@ -135,6 +140,10 @@ class LumitState extends ChangeNotifier {
 
   /// The style Lumit was started with, until it is taken in.
   String? launchStyle;
+
+  /// The graphics template Lumit was started with, until it is in the
+  /// library.
+  String? launchTemplate;
 
   StreamSubscription? currentDocumentStream;
 

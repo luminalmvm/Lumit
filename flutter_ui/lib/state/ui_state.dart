@@ -106,6 +106,7 @@ import 'package:lumit_flutter/state/relay_door.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
 import 'package:lumit_flutter/state/reviews.dart';
 import 'package:lumit_flutter/state/settings.dart';
+import 'package:lumit_flutter/state/template_controls.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/updates.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -916,6 +917,12 @@ class LumitUiState extends ChangeNotifier {
 
   void requestRevealProperty(UuidValue layer, String action) =>
       revealPropertyRequest.value = (layer, action);
+
+  /// One row the Timeline has been asked to show and pick, from another
+  /// panel: the layer, the twirls to open on the way to the row, and the
+  /// row's own path. A null row brings the layer's own row into view.
+  final ValueNotifier<({UuidValue layer, List<String> open, String? row})?>
+      revealRowRequest = ValueNotifier(null);
 
   /// A reveal the Timeline has been asked to run over the selection — the
   /// Animation ▸ Reveal rows, which are the `U` machinery under the
@@ -2045,6 +2052,10 @@ class LumitUiState extends ChangeNotifier {
   /// call when the engine reports a change, read by everything else for free.
   final CompModel model = CompModel();
 
+  /// The fronted composition's graphics template: which of its rows are
+  /// controls. Read when [model] says the document moved, never in a build.
+  final TemplateControls templateControls = TemplateControls();
+
   /// Every Viewer view, which pane holds it, and which one is active
   /// (docs/impl/multi-viewer.md §1). The panels that follow the active view
   /// read [selectedComp], which is a reading of this.
@@ -3095,6 +3106,8 @@ class LumitUiState extends ChangeNotifier {
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
+    templateControls.follow(model, () => _selectedComp,
+        edited: _app.notifyDocumentChanged);
     selectedLayer.addListener(_syncSelection);
     selectedLayers.addListener(_noteClickOrder);
     this.workspace.presetApplied.addListener(_onPresetApplied);

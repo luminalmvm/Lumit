@@ -108,8 +108,9 @@ const PARAM_FLOAT_SLIDER: u8 = 10;
 /// One effect's parameter definitions, by match name — the `pard` records in
 /// the effect's own `parT` list. Each holds the SDK parameter type and the
 /// plug-in's own name for the slot, which is the name scripting reports: a
-/// parameter's `tdsn` is sometimes the neighbouring slot's name instead.
-pub(crate) type ParamTypes = std::collections::HashMap<String, (u8, String)>;
+/// parameter's `tdsn` is sometimes the neighbouring slot's name instead. A
+/// popup's options come last, from the `pdnm` after its definition.
+pub(crate) type ParamTypes = std::collections::HashMap<String, (u8, String, Vec<String>)>;
 
 /// What a group needs to know about where it sits, so the values inside it can
 /// be put back into the DOM's units.
@@ -260,7 +261,7 @@ fn marker_value(nmrd: &Chunk<'_>) -> (f64, u32, String, String) {
 /// than one chunk — a mask carries `mkif` beside its group, an arbitrary-data
 /// effect parameter carries `aRbs` beside its `tdbs` — so the run keeps them
 /// all and the reader picks.
-fn runs<'a>(group: &Chunk<'a>) -> Vec<(String, Vec<Chunk<'a>>)> {
+pub(super) fn runs<'a>(group: &Chunk<'a>) -> Vec<(String, Vec<Chunk<'a>>)> {
     let mut out: Vec<(String, Vec<Chunk<'a>>)> = Vec::new();
     let mut open = false;
     for child in group.children().ok() {
@@ -282,7 +283,7 @@ fn runs<'a>(group: &Chunk<'a>) -> Vec<(String, Vec<Chunk<'a>>)> {
 /// One run, as the capture node it describes plus whether it is a
 /// dimension-separated leader — or nothing, when the run holds no node that
 /// belongs in the capture's property tree.
-fn read_node(
+pub(super) fn read_node(
     match_name: &str,
     chunks: &[Chunk<'_>],
     ctx: Ctx<'_>,
@@ -305,6 +306,11 @@ fn read_node(
 
     if let Some(sspc) = list(b"sspc") {
         return Some((read_effect(match_name, sspc, ctx, skipped), false));
+    }
+    // A layer's Essential Properties name their controllers beside the group.
+    if let (Some(names), Some(group)) = (list(b"OvG2"), list(b"tdgp")) {
+        let node = super::essential::read_overrides(names, group, ctx, skipped);
+        return Some((node, false));
     }
     if let Some(group) = list(b"tdgp") {
         return Some((
@@ -458,13 +464,19 @@ pub(super) fn read_effect(
 fn read_param_types(part: &Chunk<'_>) -> ParamTypes {
     let mut out = ParamTypes::new();
     let mut named: Option<String> = None;
+    let mut last: Option<String> = None;
     for child in part.children().ok() {
         if child.id == *b"tdmn" {
             named = Some(child.text());
         } else if child.id == *b"pard" {
             if let (Some(name), Some(kind)) = (named.take(), u8_at(child.body, 15)) {
                 let label = child.body.get(16..48).map(text_of).unwrap_or_default();
-                out.insert(name, (kind, label));
+                out.insert(name.clone(), (kind, label, Vec::new()));
+                last = Some(name);
+            }
+        } else if child.id == *b"pdnm" {
+            if let Some(slot) = last.as_ref().and_then(|name| out.get_mut(name)) {
+                slot.2 = super::essential::options_of(&child);
             }
         }
     }
@@ -711,12 +723,15 @@ fn read_leaf(
     // not a value — scripting reports both as unreadable, and so does this.
     let declared = ctx.params.and_then(|table| table.get(match_name));
     if let Some(label) = declared
-        .map(|(_, label)| label)
+        .map(|(_, label, _)| label)
         .filter(|l| !l.trim().is_empty())
     {
         node.name = Some(label.clone());
     }
-    let declared = declared.map(|(kind, _)| *kind);
+    node.options = declared
+        .map(|(_, _, options)| options.clone())
+        .filter(|options| !options.is_empty());
+    let declared = declared.map(|(kind, _, _)| *kind);
     node.control = declared.and_then(|kind| {
         Some(
             match kind {

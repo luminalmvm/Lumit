@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import '../icons/icons.dart' show iconSize;
 import 'audio_timeline_fades_frb.dart' show ClipFadePainter;
 import 'clip_fades.dart' show ClipFadeRamp, clipFadeGain;
+import 'copy_ends.dart';
 import 'cut_timeline_tracks.dart';
 import 'graph_maths.dart' show rationalSeconds;
 import 'timeline_bar_frb.dart' show BarGrab;
@@ -585,12 +586,18 @@ class CutTrackPainter extends CustomPainter {
       final own? => colours.labels[own % colours.labels.length],
       null => colours.label,
     };
-    final name = clip.angle?.name ?? clip.sourceName;
+    // A copy of a graphics template goes by what its first text control
+    // says, so twenty lower thirds read as twenty names.
+    final name = clip.angle?.name ?? clip.copy?.title ?? clip.sourceName;
     if (held != null) _reach(canvas, clip, box, held);
     _fill(canvas, box, label,
         picked: selected.contains(id),
         seamLeft: seamLeft,
         seamRight: seamRight);
+    // A copy of a graphics template shades its intro and its outro.
+    paintCopyEnds(canvas, box, clip.copy,
+        pxPerSecond: fps > 0 ? axis.xOf(fps.round()) - axis.xOf(0) : 0,
+        ink: colours.edge);
     if (mark != null && mark.fade == null && mark.clips.contains(id)) {
       _hoverEdge(canvas, box, mark, label);
     }

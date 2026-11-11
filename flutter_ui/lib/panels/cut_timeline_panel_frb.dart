@@ -48,12 +48,14 @@ import '../shell/menu_bar_frb.dart'
     show exportFrb, insertEmptyLayer, newLayerRow;
 import 'cut_insert.dart';
 import 'cut_kinds.dart';
+import 'template_place.dart' show placeTemplateInCut;
 import 'retime_commands.dart' show askToFreezeClips;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../shell/number_dialog_frb.dart' show askNumberFrb;
 import '../shell/stretch_dialog_frb.dart';
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
+import '../state/copies.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
 import '../state/keymap.dart';
@@ -2465,7 +2467,15 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         return;
       }
       final clip = track.clip(_lastPressed!);
-      if (clip != null && comp != null) _openClip(ui, comp, track, clip);
+      if (clip == null || comp == null) return;
+      // A copy of a graphics template with words to type: the cursor goes
+      // to its first text box in Effect controls. Its composition is opened
+      // from its card there, or from the clip's menu.
+      if (clip.angle == null && copyHasWords(clip.copy)) {
+        focusCopyWords(ui, track.entry.layer, clip: clip.id);
+        return;
+      }
+      _openClip(ui, comp, track, clip);
       return;
     }
     if (_toggleOnUp case final id? when !held.moved) {
@@ -3489,6 +3499,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           true,
         ),
       SolidDragData(:final label) => (still, label, true),
+      TemplateDragData(:final label, :final seconds) => (
+          seconds > 0 ? (seconds * fps).round() : still,
+          label,
+          true,
+        ),
       // Files from outside: where they land, with no length yet.
       _Files() => (0, '', false),
       _ => (-1, '', false),
@@ -3693,6 +3708,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         comp.cutPlaceComp(target: target, comp: dropped, atFrame: frame)));
   }
 
+  /// A graphics template dropped at [global] is brought into the project and
+  /// goes down whole as one clip, as a comp does.
+  Future<void> _dropTemplate(
+      CompositionReference comp, String path, Offset global,
+      {int? atFrame}) async {
+    final ui = _ui;
+    if (ui == null) return;
+    final at = _pointOnLanes(global);
+    final index = at == null ? null : cutTrackAt(_tracks, at.dy, _tops);
+    final track = index == null ? null : _tracks[index];
+    final target =
+        track?.kind == CutTrackKind.picture ? track!.entry.layer : null;
+    final frame = atFrame ??
+        (at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx));
+    await placeTemplateInCut(
+        Provider.of<LumitState>(context, listen: false), ui, comp, path,
+        target: target, frame: frame);
+    if (mounted) _afterWrite();
+  }
+
   /// A solid dropped at [global] goes down as one clip, as long as a still,
   /// on the picture track under the pointer or a new one.
   void _dropSolid(
@@ -3857,6 +3892,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 details.data is FootageDragData ||
                 details.data is CompDragData ||
                 details.data is SolidDragData ||
+                details.data is TemplateDragData ||
                 details.data is EffectDragData,
             // An effect in hand rings the clip it is over, and anything
             // else shows where it will land.
@@ -3886,6 +3922,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                   _dropComp(comp, dropped, details.offset, atFrame: frame);
                 case SolidDragData(:final solid):
                   _dropSolid(comp, solid, details.offset, atFrame: frame);
+                case TemplateDragData(:final path):
+                  await _dropTemplate(comp, path, details.offset,
+                      atFrame: frame);
                 case final EffectDragData effect:
                   await _dropEffect(effect, details.offset);
               }
@@ -3904,7 +3943,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               candidate.any((data) =>
                                   data is FootageDragData ||
                                   data is CompDragData ||
-                                  data is SolidDragData)
+                                  data is SolidDragData ||
+                                  data is TemplateDragData)
                           ? t.accent
                           : t.accent.withValues(alpha: 0),
                       width: 2)),

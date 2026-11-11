@@ -80,6 +80,7 @@ enum ProfileGroup {
           ],
         library => const [
             'favourite_effects',
+            'title_template',
             'saved_expressions',
             'saved_expression_languages',
             'recent_colours',

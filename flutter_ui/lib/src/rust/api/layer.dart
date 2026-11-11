@@ -30,6 +30,8 @@ import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'template.dart';
+import 'template/copy.dart';
 import 'transcript.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
@@ -545,6 +547,10 @@ class BridgeClip {
   /// The angle a multicam clip plays, or `None` on any other clip.
   final BridgeClipAngle? angle;
 
+  /// The graphics template this clip is a copy of, and what the copy has
+  /// set. `None` on every other clip.
+  final BridgeCopy? copy;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -578,6 +584,7 @@ class BridgeClip {
     required this.startExact,
     required this.endExact,
     this.angle,
+    this.copy,
   });
 
   @override
@@ -613,7 +620,8 @@ class BridgeClip {
       group.hashCode ^
       startExact.hashCode ^
       endExact.hashCode ^
-      angle.hashCode;
+      angle.hashCode ^
+      copy.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -651,7 +659,8 @@ class BridgeClip {
           group == other.group &&
           startExact == other.startExact &&
           endExact == other.endExact &&
-          angle == other.angle;
+          angle == other.angle &&
+          copy == other.copy;
 }
 
 /// One end of a clip's fade: how long it takes, and the curve it takes. Zero
@@ -863,6 +872,11 @@ class BridgeLayerInfo {
   /// fresh one, which the user's next edit adopts.
   final BridgeEffectInstanceInfo? graphInputs;
 
+  /// The graphics template this Precomp layer is a copy of, and what the
+  /// copy has set. Its rows are in `graph_inputs`. `None` on every other
+  /// layer.
+  final BridgeCopy? copy;
+
   /// A Model layer's material rows, `None` while its file is being read.
   final List<BridgeEffectInstanceInfo>? materials;
 
@@ -1026,6 +1040,7 @@ class BridgeLayerInfo {
     required this.styles,
     required this.drivers,
     this.graphInputs,
+    this.copy,
     this.materials,
     this.modelRows,
     required this.collapseForced,
@@ -1074,6 +1089,7 @@ class BridgeLayerInfo {
       styles.hashCode ^
       drivers.hashCode ^
       graphInputs.hashCode ^
+      copy.hashCode ^
       materials.hashCode ^
       modelRows.hashCode ^
       collapseForced.hashCode ^
@@ -1124,6 +1140,7 @@ class BridgeLayerInfo {
           styles == other.styles &&
           drivers == other.drivers &&
           graphInputs == other.graphInputs &&
+          copy == other.copy &&
           materials == other.materials &&
           modelRows == other.modelRows &&
           collapseForced == other.collapseForced &&
@@ -3168,6 +3185,12 @@ class LayerReference {
         that: this,
       );
 
+  /// Let rows of this copy follow the template again. An empty list is
+  /// every row, which is the card's **Reset**.
+  void clearCopyRows({required List<String> rows, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClearCopyRows(
+          that: this, rows: rows, clip: clip);
+
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does
@@ -3581,6 +3604,13 @@ class LayerReference {
         that: this,
       );
 
+  /// Let this copy, or its clip `clip`, follow row `row` of its template's
+  /// data, or with `None` stop following one. Its controls then come from
+  /// that row, except the ones it sets itself.
+  void followDataRow({int? row, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceFollowDataRow(
+          that: this, row: row, clip: clip);
+
   /// **Insert a freeze at the playhead** (docs/04 §7.3,
   /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
   /// `hold_frames`, everything after it is pushed that far later, and the map
@@ -3637,6 +3667,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetClipEffects(
           that: this, clip: clip, onCompClock: onCompClock);
 
+  /// The rows of the template this clip places, as a staged copy to drag,
+  /// key and commit through [`Self::set_effects`], as
+  /// [`Self::get_graph_inputs`] hands a layer's. On the clip's own clock, or
+  /// with `on_comp_clock` on the composition's, as [`Self::get_clip_effects`]
+  /// crosses a clip's effects.
+  BridgeEffectInstance? getClipInputs(
+          {required UuidValue clip, required bool onCompClock}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetClipInputs(
+          that: this, clip: clip, onCompClock: onCompClock);
+
   /// The instance behind the overlap at `clip`'s start, as a staged copy on
   /// the comp's clock like [`Self::get_clip_effects`] with `on_comp_clock`.
   /// `None` for a dissolve.
@@ -3653,6 +3693,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetClips(
         that: this,
       );
+
+  /// What this layer, or its clip `clip`, is a copy of, as its card draws
+  /// it. `None` when it places no graphics template.
+  BridgeCopy? getCopy({UuidValue? clip}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceGetCopy(that: this, clip: clip);
 
   /// This layer's effect stack as staged copies.
   ///
@@ -4677,6 +4722,32 @@ class LayerReference {
           required double endPercent}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipSpeed(
           that: this, clip: clip, percent: percent, endPercent: endPercent);
+
+  /// **Set as default**: write this copy's value for `control` into the
+  /// template, for every copy that has not set its own, and let this copy
+  /// follow the template again. One undo step.
+  void setCopyAsDefault({required String control, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCopyAsDefault(
+          that: this, control: control, clip: clip);
+
+  /// Set one of a text control's further rows on this copy: its font.
+  void setCopyFont(
+          {required String row,
+          required String family,
+          required String face,
+          UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCopyFont(
+          that: this, row: row, family: family, face: face, clip: clip);
+
+  /// Set a control on this copy to a value that does not key: words, a
+  /// font, a picture, a tick, a menu's option. A number, a point or a
+  /// colour set this way is fixed, in place of any keys the copy had.
+  void setCopyValue(
+          {required String control,
+          required BridgeControlValue value,
+          UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCopyValue(
+          that: this, control: control, value: value, clip: clip);
 
   /// Where caption `cue`'s lines break, by the words that start them.
   void setCueBreaks({required int cue, required List<int> breaks}) =>

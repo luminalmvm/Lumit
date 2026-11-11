@@ -663,6 +663,7 @@ Gradient stops
 Gradient type
 Grain
 Graphic EQ
+Graphics template
 Gravity
 Green
 Green amount

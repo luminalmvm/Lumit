@@ -891,6 +891,19 @@ pub enum Op {
         comp: Uuid,
         multicam: Option<Box<crate::multicam::Multicam>>,
     },
+    /// Set a composition's graphics template: its controls, its poster and
+    /// where its intro ends and its outro starts. `None` takes it away, and
+    /// the composition is an ordinary one again.
+    SetCompTemplate {
+        comp: Uuid,
+        template: Option<Box<crate::template::Template>>,
+    },
+    /// Link data to a composition's graphics template, change what its
+    /// columns feed, or take it away (`None`).
+    SetCompTemplateData {
+        comp: Uuid,
+        data: Option<Box<crate::template::feed::Data>>,
+    },
     TrimCompToWorkArea {
         comp: Uuid,
     },
@@ -1039,6 +1052,8 @@ impl Op {
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
             Op::SetCompMulticam { .. } => "Set multicam",
+            Op::SetCompTemplate { .. } => "Edit controls",
+            Op::SetCompTemplateData { .. } => "Link data",
             Op::SetFootageMarkers { .. } => "Edit footage markers",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
@@ -2683,6 +2698,10 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             })
         }
         Op::SetCompMulticam { comp, multicam } => crate::multicam::set_mark(doc, *comp, multicam),
+        Op::SetCompTemplate { comp, template } => {
+            crate::template::set_template(doc, *comp, template)
+        }
+        Op::SetCompTemplateData { comp, data } => crate::template::set_data(doc, *comp, data),
         Op::SetFootageMarkers { id, markers } => crate::markers::set_on_footage(doc, *id, markers),
         Op::TrimCompToWorkArea { comp } => {
             let batch = reshape::trim_comp_to_work_area(doc, *comp)?;

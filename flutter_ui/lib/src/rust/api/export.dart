@@ -171,6 +171,12 @@ bool exportPathTaken(
     BridgeLib.instance.api.crateApiExportExportPathTaken(
         path: path, codec: codec, captions: captions);
 
+/// Queue an item that has run, or failed, again exactly as it was: the same
+/// snapshot, and for a row of a graphics template the same row. Answers the
+/// new item's id, or `None` once the item has gone.
+int? exportQueueAgain({required int id}) =>
+    BridgeLib.instance.api.crateApiExportExportQueueAgain(id: id);
+
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
 String exportFreePath(
         {required String path,
@@ -376,6 +382,11 @@ class BridgeExportPresetEntry {
 class BridgeExportQueueItem {
   final int id;
 
+  /// The run of a graphics template's rows this item was queued with, and
+  /// the template's name. The queue folds a run under one heading.
+  final int? group;
+  final String groupName;
+
   /// The composition it was made from. It may have been deleted since.
   final UuidValue comp;
   final String compName;
@@ -398,6 +409,8 @@ class BridgeExportQueueItem {
 
   const BridgeExportQueueItem({
     required this.id,
+    this.group,
+    required this.groupName,
     required this.comp,
     required this.compName,
     required this.path,
@@ -411,6 +424,8 @@ class BridgeExportQueueItem {
   @override
   int get hashCode =>
       id.hashCode ^
+      group.hashCode ^
+      groupName.hashCode ^
       comp.hashCode ^
       compName.hashCode ^
       path.hashCode ^
@@ -426,6 +441,8 @@ class BridgeExportQueueItem {
       other is BridgeExportQueueItem &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          group == other.group &&
+          groupName == other.groupName &&
           comp == other.comp &&
           compName == other.compName &&
           path == other.path &&

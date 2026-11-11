@@ -15,6 +15,7 @@ import 'dart:ui' as dartui;
 
 import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/copies.dart' show shownLayerName;
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -2457,7 +2458,7 @@ class ViewerTag extends StatelessWidget {
         for (final entry in uiState.model.heldLayers) {
           if (picked.contains(entry.layer.internallayerId)) {
             // The tag names the box, and a sound has none.
-            if (_drawsPicture(entry)) name = entry.info.name;
+            if (_drawsPicture(entry)) name = shownLayerName(entry.info);
             break;
           }
         }

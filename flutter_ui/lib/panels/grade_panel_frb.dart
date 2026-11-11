@@ -31,11 +31,13 @@ import '../shell/theme_name_dialog.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
 import '../state/dropper.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import '../widgets/edge_fade.dart';
+import 'control_rows.dart' show paramControlRow;
 import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart'
     show
@@ -737,6 +739,8 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       ],
       if (param != null)
         paramLastRows(context, param, close, tickColumn: true),
+      if (param != null)
+        paramControlRows(context, param, close, tickColumn: true),
       if (present) [
         _row('grade-section-remove', l10n.gradeRemovePart(_part(fxs)), close,
             () => _remove(fxs)),
@@ -846,6 +850,15 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     }
 
     return ParamMenu(
+      // A row of the grade's own effect, once the layer has it.
+      control: switch ((at, _schema[fx]?[id])) {
+        (final at?, final param?) => switch (
+              paramControlRow(layer.internallayerId, at.id, param)) {
+            final row? => ControlRow(comp, row),
+            null => null,
+          },
+        _ => null,
+      },
       // The value as text, as Effect controls copies it, so it pastes into any
       // other row or field, and onto every picked layer.
       copy: expression != null
