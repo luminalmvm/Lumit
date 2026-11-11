@@ -1033,6 +1033,10 @@ class Workspace extends ChangeNotifier {
   /// The `.lum` a new project starts as a copy of, or empty for none.
   String projectTemplate = '';
 
+  /// The graphics template Insert title places in the Cut timeline, as its
+  /// file in the library, or empty for a plain Text layer.
+  String titleTemplate = '';
+
   /// The folder File > Scripts lists, or empty for Lumit's own.
   String scriptsFolder = '';
 
@@ -1700,6 +1704,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// Choose the graphics template Insert title places, or none.
+  void setTitleTemplate(String path) {
+    titleTemplate = path;
+    settingsChanged();
+  }
+
   /// Choose the folder File > Scripts lists, or empty for Lumit's own.
   void setScriptsFolder(String path) {
     scriptsFolder = path;
@@ -2292,6 +2302,7 @@ class Workspace extends ChangeNotifier {
         'live_endpoint': liveEndpoint,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
+        'title_template': titleTemplate,
         'scripts_folder': scriptsFolder,
         'blender_path': blenderPath,
         'event_scripts': {
@@ -2430,6 +2441,7 @@ class Workspace extends ChangeNotifier {
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     projectTemplate = j['project_template'] as String? ?? '';
+    titleTemplate = j['title_template'] as String? ?? '';
     scriptsFolder = j['scripts_folder'] as String? ?? '';
     blenderPath = j['blender_path'] as String? ?? '';
     eventScripts.clear();

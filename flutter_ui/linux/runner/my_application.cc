@@ -1180,12 +1180,13 @@ static void my_application_activate(GApplication* application) {
 }
 
 // Whether this start was asked to install an extension package, a style, a
-// preset or a theme.
+// preset, a theme or a graphics template.
 static gboolean asks_for_package(gchar** arguments) {
   for (gchar** argument = arguments; *argument != nullptr; argument++) {
     g_autofree gchar* lower = g_ascii_strdown(*argument, -1);
     if (g_str_has_suffix(lower, ".lfx") || g_str_has_suffix(lower, ".lumstyle") ||
-        g_str_has_suffix(lower, ".lumfx") || g_str_has_suffix(lower, ".lumtheme")) {
+        g_str_has_suffix(lower, ".lumfx") || g_str_has_suffix(lower, ".lumtheme") ||
+        g_str_has_suffix(lower, ".lumt")) {
       return TRUE;
     }
   }

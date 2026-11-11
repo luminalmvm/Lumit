@@ -55,6 +55,21 @@ class SolidDragData {
   const SolidDragData(this.solid, this.label);
 }
 
+/// A graphics template dragged from the library in Effects & presets. It is
+/// brought into the project where it lands, and then placed as a composition
+/// dragged from the Project panel would be.
+class TemplateDragData {
+  /// The template's `.lumt` file in the library.
+  final String path;
+
+  /// What the floating label under the pointer reads.
+  final String label;
+
+  /// How long it plays, for the Cut timeline to show where it will land.
+  final double seconds;
+  const TemplateDragData(this.path, this.label, {this.seconds = 0});
+}
+
 /// An effect, or a saved preset, dragged from the Effects & presets panel
 /// onto a layer or a clip.
 class EffectDragData {

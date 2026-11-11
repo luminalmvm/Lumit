@@ -39,15 +39,21 @@
 // preset library, nested as deep as the folders go, and folds like a
 // category. Groups are made, renamed and deleted from their right-click menu,
 // and a preset moves by dragging it onto a group or from its own menu.
+//
+// **Graphics templates** head the list, as tiles (effects_presets_templates).
 
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/presets.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
+import 'package:lumit_flutter/src/rust/api/template/library.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
@@ -62,12 +68,16 @@ import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import '../state/external_links.dart' show effectManualUrl, openExternalLink;
 import '../state/file_dialogs.dart';
+import '../state/template_library.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
 import 'expressions_panel_frb.dart' show panelBar;
 import 'preset_save.dart';
+import 'template_place.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+
+part 'effects_presets_templates.dart';
 
 class EffectsPresetsPanelFrb extends StatefulWidget {
   /// The preset file seams, injected by tests so no plugin channel opens.
@@ -100,7 +110,8 @@ class EffectsPresetsPanelFrb extends StatefulWidget {
   State<EffectsPresetsPanelFrb> createState() => _EffectsPresetsPanelFrbState();
 }
 
-class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
+class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb>
+    with _TemplateShelf {
   final TextEditingController _search = TextEditingController();
 
   /// The search field's focus, owned here so `Ctrl+F` can put the cursor in it
@@ -122,6 +133,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// here goes to the engine: which groups are open is how this panel is being
   /// looked at, not part of the document (the Project panel's `_closedFolders`
   /// keeps its folders the same way).
+  @override
   final Set<String> _shut = <String>{};
 
   /// The saved-preset group's name in [_shut]. No engine category is called
@@ -150,6 +162,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// Whether a heading's rows are showing. A live search opens every group
   /// that still has a match in it, without disturbing what was folded — so
   /// clearing the field puts the folds back as they were.
+  @override
   bool _isOpen(String key, String needle) =>
       needle.isNotEmpty || !_shut.contains(key);
 
@@ -168,6 +181,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     _boundUi!.presetsChanged.addListener(_refreshPresets);
     // An extension installed or removed brings or takes its effects.
     _boundUi!.extensions.addListener(_extensionsChanged);
+    _bindTileKeys(_boundUi!);
   }
 
   void _extensionsChanged() {
@@ -187,6 +201,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   }
 
   void _readLibrary() {
+    _readTemplates();
     _presets = (widget.presetsLister ?? listPresets)();
     // A test that hands in its own presets reads no real groups either.
     _groups = (widget.groupsLister ??
@@ -202,6 +217,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     _boundUi?.extensions.removeListener(_extensionsChanged);
     _search.dispose();
     _searchFocus.dispose();
+    _disposeTemplates();
     super.dispose();
   }
 
@@ -254,8 +270,12 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     final anyFavourite = (widget.effectsLister ?? listEffects)()
             .any((e) => ui.workspace.isFavouriteEffect(e.name)) ||
         _presets.any((p) =>
-            ui.workspace.isFavouriteEffect(_presetFavouriteKey(p.name)));
+            ui.workspace.isFavouriteEffect(_presetFavouriteKey(p.name))) ||
+        _anyFavouriteTemplate(ui);
     if (!anyFavourite) _favouritesOnly = false;
+    // The tiles drawn below, which the arrow keys walk.
+    _tileGrids.clear();
+    _gridColumns.clear();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -328,10 +348,12 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           // preset but no effect still shows the preset.
           child: Builder(builder: (context) {
             final favouriteRows = _favouriteRows(t, ui, grouped, needle);
+            final templateRows =
+                _favouritesOnly ? const <Widget>[] : _templateRows(t, ui, needle);
             final presetRows = _presetRows(t, ui, needle);
             if (_favouritesOnly
                 ? favouriteRows.isEmpty
-                : grouped.isEmpty && presetRows.isEmpty) {
+                : grouped.isEmpty && presetRows.isEmpty && templateRows.isEmpty) {
               return Center(child: Text(l10n.noEffectsMatch, style: t.small));
             }
             // The ground under the rows has a menu of its own.
@@ -347,6 +369,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                     ? favouriteRows
                     : [
                         ...favouriteRows,
+                        ...templateRows,
                         ...presetRows,
                         for (final entry in grouped.entries) ...[
                           _heading(
@@ -438,7 +461,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     ..addAll(_categories)
     ..add(_favouritesKey)
     ..add(_presetsKey)
-    ..addAll(_groups.map((g) => '$_groupKey$g')));
+    ..addAll(_groups.map((g) => '$_groupKey$g'))
+    ..addAll(_templateFoldKeys));
 
   List<Widget> _foldRows(void Function(void Function()) run) => [
         MenuRow(
@@ -528,6 +552,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// A heading over saved presets names its group in [library], empty for the
   /// top of the library: it has the groups' menu, and a preset dropped on it
   /// moves into it.
+  @override
   Widget _heading(
     LumitTheme t, {
     required String group,
@@ -777,6 +802,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// Star something, or take the star off. The workspace saves itself; this
   /// only has to redraw, because the Favourites group above is built from the
   /// same set the star reads.
+  @override
   void _star(LumitUiState ui, String key) {
     ui.workspace.toggleFavouriteEffect(key);
     setState(() {});
@@ -807,7 +833,10 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             (needle.isEmpty || preset.name.toLowerCase().contains(needle)))
           preset,
     ];
-    if (effects.isEmpty && presets.isEmpty) return const [];
+    final templates = _favouriteTemplates(ui, needle);
+    if (effects.isEmpty && presets.isEmpty && templates.isEmpty) {
+      return const [];
+    }
     // Narrowed to the favourites, the list is them: no heading, and nothing
     // a fold could hide.
     final open = _favouritesOnly || _isOpen(_favouritesKey, needle);
@@ -835,6 +864,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             onToggleFavourite: () =>
                 _star(ui, _presetFavouriteKey(preset.name)),
           ),
+        if (templates.isNotEmpty) _tileGrid(ui, templates),
       ],
     ];
   }

@@ -28,6 +28,11 @@
 // A waiting row's settings mark opens the export dialogue on that item, so
 // each one can have its own settings before it runs.
 //
+// **A graphics template's rows fold.** The rows queued together from one
+// template share a group, and are drawn under one heading, shut until it is
+// opened: how many are done, a bar across the run, and the failed ones. A
+// shut run is dragged as one block.
+//
 // **How the drag is drawn follows the Motion setting** (docs/15 §8.1). At Full
 // the row is carried and the rows it passes step aside. At Minimal and None
 // nothing moves: an accent line marks the place the row would take, the same
@@ -64,6 +69,28 @@ const double exportQueueWidth = 800;
 /// One item's row, and the tallest the list grows before it scrolls.
 const double exportQueueRow = 28;
 const double exportQueueListMax = 320;
+
+/// How far a template's rows are set in under the heading of their run,
+/// which is the width of its twirl.
+const double _runIndent = 18;
+
+/// One line of the list: an item, or the heading of a run of a template's
+/// rows queued together.
+class _Line {
+  const _Line({this.item, this.inRun = false, this.group, this.run = const []});
+
+  final BridgeExportQueueItem? item;
+
+  /// The item is one of a run's rows, drawn under its open heading.
+  final bool inRun;
+
+  /// A heading's group and its rows, in the queue's order.
+  final int? group;
+  final List<BridgeExportQueueItem> run;
+
+  /// What the line is known by across reads of the queue.
+  String get key => item != null ? 'item-${item!.id}' : 'run-$group';
+}
 
 /// How often the window asks the engine how the queue is getting on. The same
 /// cadence the export dialog used to poll at: fast enough to feel live, slow
@@ -109,10 +136,15 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// finds nothing here and keeps the settings it has.
   Map<String, CompositionReference> _comps = const {};
 
-  /// A drag that is marked rather than carried: the item in hand, where the
+  /// What the list draws: each item, with a template's rows under the
+  /// heading of their run, and the runs opened to show their rows.
+  List<_Line> _lines = const [];
+  final Set<int> _openRuns = {};
+
+  /// A drag that is marked rather than carried: the line in hand, where the
   /// pointer went down, and the place it is aimed at. All null between drags,
   /// and never set while rows are carried.
-  int? _markedId;
+  String? _markedKey;
   double _markedFrom = 0;
   int? _markedTo;
 
@@ -154,17 +186,93 @@ class _ExportQueueState extends State<_ExportQueue> {
     }
     setState(() {
       _items = (widget.list ?? exportQueueList)();
+      _lines = _fold(_items);
       // A row that started exporting while it was in hand has lost the
       // gesture that would have ended the drag, so its mark is taken down
       // here.
-      final marked = _items.where((i) => i.id == _markedId).firstOrNull;
-      if (_markedId != null &&
-          marked?.state is! BridgeExportQueueState_Waiting) {
-        _markedId = null;
+      final marked = _lines.where((l) => l.key == _markedKey).firstOrNull;
+      if (_markedKey != null && (marked == null || _blockOf(marked).isEmpty)) {
+        _markedKey = null;
         _markedFrom = 0;
         _markedTo = null;
       }
     });
+  }
+
+  /// The lines the list draws: an item where it stands, and each run of a
+  /// template's rows under a heading where its first row stands, its rows
+  /// after the heading while it is open.
+  List<_Line> _fold(List<BridgeExportQueueItem> items) {
+    final runs = <int, List<BridgeExportQueueItem>>{};
+    for (final item in items) {
+      if (item.group case final group?) (runs[group] ??= []).add(item);
+    }
+    _openRuns.retainAll(runs.keys);
+    final lines = <_Line>[];
+    for (final item in items) {
+      final group = item.group;
+      if (group == null) {
+        lines.add(_Line(item: item));
+        continue;
+      }
+      final run = runs.remove(group);
+      if (run == null) continue;
+      lines.add(_Line(group: group, run: run));
+      if (_openRuns.contains(group)) {
+        for (final row in run) {
+          lines.add(_Line(item: row, inRun: true));
+        }
+      }
+    }
+    return lines;
+  }
+
+  /// The items a drag of [line] moves: a waiting item, or the waiting rows of
+  /// a shut run. Empty for a line that cannot be picked up.
+  List<int> _blockOf(_Line line) {
+    if (line.item case final item?) {
+      return item.state is BridgeExportQueueState_Waiting ? [item.id] : const [];
+    }
+    if (_openRuns.contains(line.group)) return const [];
+    return [
+      for (final item in line.run)
+        if (item.state is BridgeExportQueueState_Waiting) item.id,
+    ];
+  }
+
+  /// Move the line at [from] to the place [to] in the list without it, the
+  /// index `onReorderItem` gives. Its items land before the first item of the
+  /// line now at [to], or last. Each is moved on its own, in the order that
+  /// keeps the block's own order.
+  void _moveLines(int from, int to) {
+    final lines = _lines;
+    if (from < 0 || from >= lines.length) return;
+    final block = _blockOf(lines[from]);
+    if (block.isEmpty) return;
+    final rest = [...lines]..removeAt(from);
+    final order = [for (final item in _items) item.id];
+    final after = [
+      for (final id in order)
+        if (!block.contains(id)) id,
+    ];
+    int? anchor;
+    if (to < rest.length) {
+      final line = rest[to];
+      anchor = line.item?.id ??
+          line.run.map((i) => i.id).where((id) => !block.contains(id)).firstOrNull;
+    }
+    var at = anchor == null ? after.length : after.indexOf(anchor);
+    if (at < 0) at = after.length;
+    after.insertAll(at, block);
+    final down = after.indexOf(block.first) > order.indexOf(block.first);
+    try {
+      for (final id in down ? block.reversed : block) {
+        (widget.move ?? exportQueueMove)(id: id, index: after.indexOf(id));
+      }
+    } catch (_) {
+      // The queue turned over under the drag; re-reading is the recovery.
+    }
+    _refresh();
   }
 
   @override
@@ -212,21 +320,20 @@ class _ExportQueueState extends State<_ExportQueue> {
                     slivers: [
                       if (carries)
                         SliverReorderableList(
-                          itemCount: _items.length,
+                          itemCount: _lines.length,
                           itemBuilder: (context, index) =>
-                              _row(t, _items[index], index),
+                              _row(t, _lines[index], index),
                           // `onReorderItem` gives the place the row lands in
-                          // the list without it, which is the index the
-                          // engine's own move takes.
-                          onReorderItem: _move,
+                          // the list without it.
+                          onReorderItem: _moveLines,
                           proxyDecorator: (child, index, animation) =>
                               _lifted(t, child),
                         )
                       else
                         SliverList.builder(
-                          itemCount: _items.length,
+                          itemCount: _lines.length,
                           itemBuilder: (context, index) =>
-                              _markedRow(t, _items[index], index),
+                              _markedRow(t, _lines[index], index),
                         ),
                     ],
                   ),
@@ -298,11 +405,11 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// scrolls the list when the row is carried past its edge. A row that is not
   /// waiting has no listener at all, so it can be read and dropped past but
   /// never picked up.
-  Widget _row(LumitTheme t, BridgeExportQueueItem item, int index) {
-    final row = _opensFolder(item, _rowFace(t, item));
+  Widget _row(LumitTheme t, _Line line, int index) {
+    final row = _lineFace(t, line);
     return KeyedSubtree(
-      key: ValueKey<String>('export-queue-row-${item.id}'),
-      child: item.state is BridgeExportQueueState_Waiting
+      key: ValueKey<String>('export-queue-row-${line.key}'),
+      child: _blockOf(line).isNotEmpty
           // The row is picked up anywhere along it, not only where there
           // happens to be a letter: a row of text and gaps hit-tests only on
           // its text, and half of it would be dead to the grip.
@@ -316,15 +423,15 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   /// One item's row where a drag is marked and not carried: the same grip,
   /// and the line on whichever edge the row in hand would land against.
-  Widget _markedRow(LumitTheme t, BridgeExportQueueItem item, int index) {
-    final row = _opensFolder(item, _rowFace(t, item));
-    final from = _items.indexWhere((i) => i.id == _markedId);
+  Widget _markedRow(LumitTheme t, _Line entry, int index) {
+    final row = _lineFace(t, entry);
+    final from = _lines.indexWhere((l) => l.key == _markedKey);
     final to = _markedTo;
     final marked = from >= 0 && to == index && to != from;
     final below = marked && index > from;
     final line = BorderSide(color: t.accent, width: 2);
     return KeyedSubtree(
-      key: ValueKey<String>('export-queue-row-${item.id}'),
+      key: ValueKey<String>('export-queue-row-${entry.key}'),
       child: DecoratedBox(
         key: marked ? const ValueKey('export-queue-drop-line') : null,
         // Foreground, so the line sits over the row rather than under it,
@@ -337,7 +444,7 @@ class _ExportQueueState extends State<_ExportQueue> {
                   ? Border(bottom: line)
                   : Border(top: line),
         ),
-        child: item.state is BridgeExportQueueState_Waiting
+        child: _blockOf(entry).isNotEmpty
             ? GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 // From where the pointer went down, not from where the drag
@@ -345,24 +452,26 @@ class _ExportQueueState extends State<_ExportQueue> {
                 // the row has been taken.
                 dragStartBehavior: DragStartBehavior.down,
                 onVerticalDragStart: (d) => setState(() {
-                  _markedId = item.id;
+                  _markedKey = entry.key;
                   _markedFrom = d.localPosition.dy;
                   _markedTo = index;
                 }),
                 onVerticalDragUpdate: (d) {
-                  final at = _items.indexWhere((i) => i.id == _markedId);
+                  final at = _lines.indexWhere((l) => l.key == _markedKey);
                   if (at < 0) return;
                   // The place whose row the pointer is past the middle of.
                   final travel = d.localPosition.dy - _markedFrom;
                   final next = (at + (travel / exportQueueRow).round())
-                      .clamp(0, _items.length - 1);
+                      .clamp(0, _lines.length - 1);
                   if (next != _markedTo) setState(() => _markedTo = next);
                 },
                 onVerticalDragEnd: (_) {
-                  final at = _items.indexWhere((i) => i.id == _markedId);
+                  final at = _lines.indexWhere((l) => l.key == _markedKey);
                   final next = _markedTo;
                   _endMarked();
-                  if (at >= 0 && next != null && next != at) _move(at, next);
+                  if (at >= 0 && next != null && next != at) {
+                    _moveLines(at, next);
+                  }
                 },
                 onVerticalDragCancel: _endMarked,
                 child: row,
@@ -375,10 +484,188 @@ class _ExportQueueState extends State<_ExportQueue> {
   void _endMarked() {
     if (!mounted) return;
     setState(() {
-      _markedId = null;
+      _markedKey = null;
       _markedFrom = 0;
       _markedTo = null;
     });
+  }
+
+  /// A line's face: an item's row, set in under its run's heading when it is
+  /// one of a template's rows, or the heading of a run.
+  Widget _lineFace(LumitTheme t, _Line line) {
+    final item = line.item;
+    if (item == null) return _runFace(t, line);
+    final row = _opensFolder(item, _rowFace(t, item));
+    return line.inRun
+        ? Padding(
+            padding: const EdgeInsetsDirectional.only(start: _runIndent),
+            child: row)
+        : row;
+  }
+
+  /// The heading of a run of a template's rows: the twirl, the template's
+  /// name and how many rows, how many are done of how many, a bar across the
+  /// run, and the failed rows in the error ink.
+  Widget _runFace(LumitTheme t, _Line line) {
+    final group = line.group!;
+    final run = line.run;
+    final open = _openRuns.contains(group);
+    var done = 0;
+    var failed = 0;
+    var progress = 0.0;
+    for (final item in run) {
+      switch (item.state) {
+        case BridgeExportQueueState_Done():
+          done++;
+          progress += 1;
+        case BridgeExportQueueState_Failed():
+          failed++;
+        case BridgeExportQueueState_Running(:final frame, :final total)
+            when total > 0:
+          progress += frame / total;
+        default:
+      }
+    }
+    return GestureDetector(
+      key: ValueKey<String>('export-queue-run-$group'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() {
+        if (!_openRuns.remove(group)) _openRuns.add(group);
+        _lines = _fold(_items);
+      }),
+      onSecondaryTapDown: (press) => _runMenu(line, press.globalPosition),
+      child: HoverFill(
+        child: SizedBox(
+          height: exportQueueRow,
+          child: Row(
+            children: [
+              SizedBox(
+                width: _runIndent,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TwirlTurn(
+                    open: open,
+                    child: glyph.LumitIcon(
+                      open ? LumitIcons.collapse : LumitIcons.expand,
+                      size: 12,
+                      colour: t.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: FittedText(
+                    l10n.exportQueueRun(run.first.groupName, run.length),
+                    t.bodyPrimary),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 260,
+                child: Row(
+                  key: ValueKey<String>('export-queue-run-status-$group'),
+                  children: [
+                    Text(l10n.exportQueueRunDone(done, run.length),
+                        style: dialogMono(t)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: HouseProgressBar(
+                          fraction: run.isEmpty ? 0 : progress / run.length),
+                    ),
+                    if (failed > 0) ...[
+                      const SizedBox(width: 8),
+                      Text(l10n.exportQueueRunFailed(failed),
+                          style: dialogMono(t).copyWith(color: t.error)),
+                    ],
+                  ],
+                ),
+              ),
+              // Where an item's settings and remove marks stand.
+              const SizedBox(width: 8 + 2 * (dialogCloseGlyph + 8)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A run's menu: stop after the row in hand, cancel what still waits,
+  /// clear what has landed, queue the failed rows again, and the folder.
+  void _runMenu(_Line line, Offset at) {
+    final run = line.run;
+    final running =
+        run.any((item) => item.state is BridgeExportQueueState_Running);
+    final waiting = [
+      for (final item in run)
+        if (item.state is BridgeExportQueueState_Waiting) item.id,
+    ];
+    final done = [
+      for (final item in run)
+        if (item.state is BridgeExportQueueState_Done) item,
+    ];
+    final failed = [
+      for (final item in run)
+        if (item.state is BridgeExportQueueState_Failed) item.id,
+    ];
+    final shown = done.lastOrNull?.path ?? run.first.path;
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        Widget row(String id, String label, VoidCallback? press) => MenuRow(
+              key: ValueKey<String>('export-queue-run-menu-$id'),
+              enabled: press != null,
+              onPressed: () {
+                close(null);
+                press?.call();
+                _refresh();
+              },
+              child: MenuLabel(label,
+                  enabled: press != null, ticked: running ? false : null),
+            );
+        return [
+          if (running) _stopAfterRow(() => close(null)),
+          row(
+              'cancel',
+              l10n.exportQueueCancelWaiting,
+              waiting.isEmpty
+                  ? null
+                  : () {
+                      for (final id in waiting) {
+                        exportQueueRemove(id: id);
+                      }
+                    }),
+          row(
+              'clear',
+              l10n.exportQueueRemoveFinished,
+              done.isEmpty
+                  ? null
+                  : () {
+                      for (final item in done) {
+                        exportQueueRemove(id: item.id);
+                      }
+                    }),
+          row(
+              'again',
+              l10n.exportQueueAgainFailed,
+              failed.isEmpty
+                  ? null
+                  : () {
+                      for (final id in failed) {
+                        if (exportQueueAgain(id: id) != null) {
+                          exportQueueRemove(id: id);
+                        }
+                      }
+                    }),
+          if (!kIsWeb)
+            row('folder', l10n.projectShowInFolder, () {
+              // The last file written, else the folder the run writes into.
+              if (revealInFolder(path: shown)) return;
+              final cut = shown.lastIndexOf(RegExp(r'[/\\]'));
+              if (cut > 0) revealInFolder(path: shown.substring(0, cut));
+            }),
+        ];
+      },
+    ));
   }
 
   /// The row while it is being carried: the panel's own surface under an
@@ -545,12 +832,31 @@ class _ExportQueueState extends State<_ExportQueue> {
                         context: context, comp: comp, queued: item.id),
                 run),
           // Asks the composition as it is now, so a comp since deleted cannot.
+          // A template's row is queued again as it was, so it keeps its row.
           if (!running)
-            row('duplicate', l10n.menuDuplicate,
-                comp == null ? null : () => _duplicate(comp, item), run),
+            row(
+                'duplicate',
+                l10n.menuDuplicate,
+                item.group != null
+                    ? () => _duplicateRow(item)
+                    : comp == null
+                        ? null
+                        : () => _duplicate(comp, item),
+                run),
           if (done || item.state is BridgeExportQueueState_Failed)
-            row('again', l10n.exportQueueAgain,
-                comp == null ? null : () => _again(comp, item), run),
+            row(
+                'again',
+                l10n.exportQueueAgain,
+                item.group != null
+                    ? () {
+                        if (exportQueueAgain(id: item.id) != null) {
+                          exportQueueRemove(id: item.id);
+                        }
+                      }
+                    : comp == null
+                        ? null
+                        : () => _again(comp, item),
+                run),
           if (waiting && _items.length > 1) ...[
             const MenuDivider(),
             row('top', l10n.moveToTop, index == 0 ? null : () => _move(index, 0),
@@ -651,6 +957,19 @@ class _ExportQueueState extends State<_ExportQueue> {
         path: exportFreePath(
             path: item.path, codec: item.codec, captions: spec.captions),
         start: false);
+  }
+
+  /// A template's row queued again as it was, so it keeps its row, written
+  /// to a file of its own beside the original.
+  void _duplicateRow(BridgeExportQueueItem item) {
+    final spec = exportQueueSpec(id: item.id);
+    final copy = exportQueueAgain(id: item.id);
+    if (spec == null || copy == null) return;
+    exportQueueUpdate(
+        id: copy,
+        spec: spec,
+        path: exportFreePath(
+            path: item.path, codec: item.codec, captions: spec.captions));
   }
 
   /// A finished or failed row, queued again over its own file.
