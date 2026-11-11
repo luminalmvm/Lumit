@@ -717,6 +717,18 @@
   "@foldInputs": {
     "description": "Heading in a layer's fold-out and in the Effect controls panel, over the Inputs of the node graph the layer places."
   },
+  "foldControls": "Controls",
+  "@foldControls": {
+    "description": "Heading in a layer's fold-out in the Timeline, over the controls of the graphics template the layer is a copy of. It takes the place of the Inputs heading on such a layer."
+  },
+  "templateCopyOpen": "Open",
+  "@templateCopyOpen": {
+    "description": "Word on the heading of a graphics template's card in the Effect controls panel, and the same command in that heading's right-click menu. Brings the template's composition to the front."
+  },
+  "templateCopySetAsDefault": "Set as default",
+  "@templateCopySetAsDefault": {
+    "description": "Right-click menu item on a control of a copy of a graphics template, in the Effect controls panel. Writes this copy's value into the template, so every copy that has not set its own takes it."
+  },
   "foldStyles": "Styles",
   "@foldStyles": {
     "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."
@@ -7291,6 +7303,10 @@
   "@keyDuplicateTheSelectedEffects": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyAddToControls": "Add to controls",
+  "@keyAddToControls": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Makes the selected rows controls of the composition’s graphics template."
+  },
   "keyInterpretTheSelectedFootage": "Interpret the selected footage",
   "@keyInterpretTheSelectedFootage": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -9298,6 +9314,14 @@
   "sourceClearMarkers": "Clear markers",
   "@sourceClearMarkers": {
     "description": "Source view menu: takes every marker off the footage shown."
+  },
+  "histEditControls": "Edit controls",
+  "@histEditControls": {
+    "description": "Edit > History step: a control of a graphics template was added, removed, renamed, moved or given a range."
+  },
+  "histLinkData": "Link data",
+  "@histLinkData": {
+    "description": "Edit > History step: a data file was linked to a graphics template, taken away, reloaded, or one of its columns set to feed another control."
   },
   "histSetMulticam": "Set multicam",
   "@histSetMulticam": {
@@ -14187,6 +14211,26 @@
   "@fxColourControl": {
     "description": "Effect name in the Add effect menu — holds one colour for an expression to read."
   },
+  "fxGraphicsTemplate": "Graphics template",
+  "@fxGraphicsTemplate": {
+    "description": "Name of what a placed copy of a graphics template keeps: its own values for the template’s controls. Shown where an effect’s name would be."
+  },
+  "fxFont": "Font",
+  "@fxFont": {
+    "description": "Row label on a copy of a graphics template: the font of one of its text controls."
+  },
+  "fxFit": "Fit",
+  "@fxFit": {
+    "description": "Row label on a copy of a graphics template: how a picture put in a footage control is fitted into the frame of the one it replaces. Also one of that row’s three options."
+  },
+  "fxIntro": "Intro",
+  "@fxIntro": {
+    "description": "Tick on a copy of a graphics template: whether the copy plays the template’s intro."
+  },
+  "fxOutro": "Outro",
+  "@fxOutro": {
+    "description": "Tick on a copy of a graphics template: whether the copy plays the template’s outro."
+  },
   "fxCustomControls": "Custom controls",
   "@fxCustomControls": {
     "description": "Effect name in the Add effect menu — a named set of controls for expressions to read, which is what an After Effects pseudo effect imports as."
@@ -14633,6 +14677,27 @@
   "aeGeometryOptionsCarried": "The geometry options were imported",
   "@aeGeometryOptionsCarried": {
     "description": "Import report: a Text or Shape layer's extrusion and bevel in After Effects came across."
+  },
+  "aeControlNotCarried": "The control {control} was not carried ({row})",
+  "@aeControlNotCarried": {
+    "description": "Import report row reason. An Essential Graphics control in the After Effects project sets a row Lumit's controls cannot name, so the composition arrives without that control. {control} is the control's name and {row} the After Effects property it set.",
+    "placeholders": {
+      "control": {
+        "type": "String"
+      },
+      "row": {
+        "type": "String"
+      }
+    }
+  },
+  "aeControlValueNotCarried": "The copy's {control} was not carried",
+  "@aeControlValueNotCarried": {
+    "description": "Import report row reason. A precomp layer set its own value for an Essential Graphics control and the value could not be read, so the layer follows the template there. {control} is the control's name.",
+    "placeholders": {
+      "control": {
+        "type": "String"
+      }
+    }
   },
   "aeShadowSwitchKeyed": "The shadow setting kept its first key",
   "@aeShadowSwitchKeyed": {
@@ -20878,6 +20943,30 @@
   "paramMenuPasteLink": "Paste link",
   "@paramMenuPasteLink": {
     "description": "Right-click menu of a property row: make this row follow the property Copy link remembered, by writing an expression that reads it."
+  },
+  "controlsAdd": "Add to controls",
+  "@controlsAdd": {
+    "description": "Right-click menu of a property row, a submenu of a layer’s own menu, and a row of the Composition menu: make the row a control of the composition’s graphics template, which every placed copy can then set for itself."
+  },
+  "controlsRemove": "Remove from controls",
+  "@controlsRemove": {
+    "description": "Right-click menu of a property row that is a control of the composition’s graphics template: stop it being one."
+  },
+  "controlsWords": "Words",
+  "@controlsWords": {
+    "description": "Layer menu > Add to controls, on a Text layer: what the layer says. Ticked while it is a control, and choosing it then removes the control."
+  },
+  "controlsFootage": "Footage",
+  "@controlsFootage": {
+    "description": "Layer menu > Add to controls, on a Footage or Precomp layer: the picture the layer shows. Ticked while it is a control, and choosing it then removes the control."
+  },
+  "controlsVisibility": "Visibility",
+  "@controlsVisibility": {
+    "description": "Layer menu > Add to controls: whether the layer shows. Ticked while it is a control, and choosing it then removes the control."
+  },
+  "controlsEffectOnOff": "Add on and off to controls",
+  "@controlsEffectOnOff": {
+    "description": "Right-click menu of an effect’s heading: make whether the effect is on a control of the composition’s graphics template. Ticked while it is one, and choosing it then removes the control."
   },
   "paramMenuPasteValue": "Paste value",
   "@paramMenuPasteValue": {
@@ -27183,6 +27272,518 @@
   "fxFaceBevel": "Bevel",
   "@fxFaceBevel": {
     "description": "Name of a Text or Shape layer's material for its bevel, beside Front, Side and Back."
+  },
+  "panelGraphicsTemplate": "Graphics template",
+  "@panelGraphicsTemplate": {
+    "description": "Name of the panel listing the controls of the fronted composition: the rows every placed copy of it can set for itself. Shown on its tab, in Window ▸ Panels and where the panel has nothing to list."
+  },
+  "templateNoControls": "No controls",
+  "@templateNoControls": {
+    "description": "Graphics template panel: the one line shown when the fronted composition has no controls yet."
+  },
+  "templateAdd": "Add",
+  "@templateAdd": {
+    "description": "Tooltip on the Graphics template panel's add button, which opens a short menu of kinds of control to add."
+  },
+  "templateMenu": "Menu",
+  "@templateMenu": {
+    "description": "Graphics template panel: the row in the add button's menu that makes a menu control, a dropdown whose options each set several rows. Also the name a new one is given."
+  },
+  "templateMenuOption": "Option {number}",
+  "@templateMenuOption": {
+    "description": "Graphics template panel: the name a new option of a menu control is given, numbered by its place. Typed over by the person.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "templateControlsLayer": "Controls",
+  "@templateControlsLayer": {
+    "description": "Name of the layer made to hold a graphics template's menu controls, when the composition has none yet."
+  },
+  "templateAddOption": "Add option",
+  "@templateAddOption": {
+    "description": "Graphics template panel: the line under a menu control's options that adds another."
+  },
+  "templateRemoveOption": "Remove option",
+  "@templateRemoveOption": {
+    "description": "Tooltip on the cross that takes one option off a menu control in the Graphics template panel."
+  },
+  "templateRecord": "Record",
+  "@templateRecord": {
+    "description": "Graphics template panel: button on a menu control's option. After it is pressed, every row changed in the composition becomes what that option sets, until Stop."
+  },
+  "templateStop": "Stop",
+  "@templateStop": {
+    "description": "Graphics template panel: button that ends recording what a menu control's option sets, and keeps it."
+  },
+  "templateSetsRows": "{count, plural, =1{Sets 1 row} other{Sets {count} rows}}",
+  "@templateSetsRows": {
+    "description": "Tooltip on the number beside a menu control's option in the Graphics template panel: how many rows choosing that option sets.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "templateClearLook": "Clear what it sets",
+  "@templateClearLook": {
+    "description": "Right-click menu of a menu control's option in the Graphics template panel: the option goes back to setting no rows."
+  },
+  "templateRange": "Range…",
+  "@templateRange": {
+    "description": "Right-click menu of a number control in the Graphics template panel: opens a small box that sets the lowest and highest value a copy may give it."
+  },
+  "templateRangeLimit": "Limit",
+  "@templateRangeLimit": {
+    "description": "Tick in the Range box of a number control: when on, a copy's value stays between the two numbers beside it."
+  },
+  "templateTextRows": "Font, size and colour",
+  "@templateTextRows": {
+    "description": "Right-click menu of a text control in the Graphics template panel: a submenu of three ticks for what a copy may change beside the words."
+  },
+  "templateMoveToGroup": "Move to group",
+  "@templateMoveToGroup": {
+    "description": "Right-click menu of a control in the Graphics template panel: a submenu listing the groups of controls, to put the selected controls in one."
+  },
+  "templateNewGroup": "New group…",
+  "@templateNewGroup": {
+    "description": "Row in the Move to group submenu: puts the selected controls in a new group, whose name is then typed."
+  },
+  "templateGroup": "Group",
+  "@templateGroup": {
+    "description": "Name a new group of controls is given in the Graphics template panel until the person types their own. A second one is this word and a number."
+  },
+  "templateRevealRow": "Reveal row",
+  "@templateRevealRow": {
+    "description": "Right-click menu of a control in the Graphics template panel: selects the layer and unfolds the Timeline to the row the control sets."
+  },
+  "templateRemove": "Remove",
+  "@templateRemove": {
+    "description": "Right-click menu of a control in the Graphics template panel: the selected rows stop being controls. The rows themselves stay."
+  },
+  "templatePoster": "Poster",
+  "@templatePoster": {
+    "description": "Graphics template panel: label of the frame the library shows as the template's picture."
+  },
+  "templateIntro": "Intro",
+  "@templateIntro": {
+    "description": "Graphics template panel: label of the frame the template's intro ends on. The intro keeps its speed when a copy is made longer or shorter."
+  },
+  "templateOutro": "Outro",
+  "@templateOutro": {
+    "description": "Graphics template panel: label of the frame the template's outro starts on. The outro keeps its speed when a copy is made longer or shorter."
+  },
+  "templateAtPlayhead": "At playhead",
+  "@templateAtPlayhead": {
+    "description": "Graphics template panel: button beside Poster, Intro and Outro that sets that frame to where the playhead is."
+  },
+  "templateData": "Data…",
+  "@templateData": {
+    "description": "Graphics template panel: button that opens the Data window, where rows from a file feed the template's controls."
+  },
+  "templateSave": "Save graphics template…",
+  "@templateSave": {
+    "description": "Graphics template panel: button that opens the dialogue saving the composition to the library of graphics templates."
+  },
+  "templateChanged": "Changed",
+  "@templateChanged": {
+    "description": "Small mark beside the composition's name in the Graphics template panel: the design has changed since it was saved to the library."
+  },
+  "templateOutroBeforeIntro": "The outro can't start before the intro ends.",
+  "@templateOutroBeforeIntro": {
+    "description": "Status line, when an Intro or Outro frame set in the Graphics template panel would put the outro before the intro."
+  },
+  "templateEditFailed": "That change could not be made to the controls.",
+  "@templateEditFailed": {
+    "description": "Status line when the engine turns down an edit made in the Graphics template panel."
+  },
+  "graphicsTemplates": "Graphics templates",
+  "@graphicsTemplates": {
+    "description": "Heading of the group of saved graphics templates in the Effects & presets panel, shown as tiles. Also the top of the library in the Move to submenu and in the Save graphics template dialogue's Group list."
+  },
+  "templatesFolder": "Graphics templates",
+  "@templatesFolder": {
+    "description": "Name of the Project panel folder that graphics templates placed from the library are filed in."
+  },
+  "templatePlace": "Place",
+  "@templatePlace": {
+    "description": "Menu row on a graphics template's tile in Effects & presets: places it at the playhead in the Timeline or the Cut timeline, whichever was used last."
+  },
+  "templateUseForTitle": "Use for Insert title",
+  "@templateUseForTitle": {
+    "description": "Tick on a graphics template's tile menu in Effects & presets: Insert title in the Cut timeline places this template."
+  },
+  "templateOpen": "Open",
+  "@templateOpen": {
+    "description": "Menu row on a graphics template's tile in Effects & presets: brings the template into the project and opens its composition for editing."
+  },
+  "templateLibraryNewGroup": "New group…",
+  "@templateLibraryNewGroup": {
+    "description": "Row at the end of the Move to submenu on a graphics template's tile: moves it into a new group, whose name is then typed."
+  },
+  "templateDeleteQuestion": "Delete the graphics template {name}?",
+  "@templateDeleteQuestion": {
+    "description": "Asked before a graphics template is deleted from the library. Projects that placed it keep theirs.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateMissingFonts": "Missing fonts: {fonts}",
+  "@templateMissingFonts": {
+    "description": "Hover text on the warning mark of a graphics template's tile: the fonts it names that are not on this computer, as a list.",
+    "placeholders": {
+      "fonts": {
+        "type": "String"
+      }
+    }
+  },
+  "templateReplace": "Replace the graphics template {name}?",
+  "@templateReplace": {
+    "description": "Asked before a graphics template takes the place of another of the same name in the library, when saving one or adding a .lumt file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateAdded": "{name} added to graphics templates",
+  "@templateAdded": {
+    "description": "Status line, after a .lumt file opened, dropped or imported has been added to the library.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateNotAdded": "{name} could not be added to graphics templates",
+  "@templateNotAdded": {
+    "description": "Status line, when a .lumt file opened, dropped or imported could not be read or written into the library.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateGone": "That graphics template is no longer in the library",
+  "@templateGone": {
+    "description": "Status line, when a template is placed whose file has been moved or deleted."
+  },
+  "templatePlaceFailed": "The graphics template could not be brought into the project",
+  "@templatePlaceFailed": {
+    "description": "Status line, when placing or opening a graphics template from the library fails."
+  },
+  "templateSaveTitle": "Save graphics template",
+  "@templateSaveTitle": {
+    "description": "Title of the dialogue that saves a composition to the library of graphics templates."
+  },
+  "templateLibraryGroup": "Group",
+  "@templateLibraryGroup": {
+    "description": "Label of the field in the Save graphics template dialogue choosing the folder of the library it goes in. A new one can be typed."
+  },
+  "templatePackFonts": "Pack fonts",
+  "@templatePackFonts": {
+    "description": "Tick in the Save graphics template dialogue: the font files its text uses go into the file, so it shows the same on another computer. Fonts not on this computer are left out."
+  },
+  "templateFontMissing": "Not on this computer",
+  "@templateFontMissing": {
+    "description": "Hover text on the warning mark beside a font in the Save graphics template dialogue: it cannot be packed."
+  },
+  "templateSaving": "Saving…",
+  "@templateSaving": {
+    "description": "The Save button of the Save graphics template dialogue while the template is being written."
+  },
+  "templateSaveFailed": "The graphics template could not be saved: {error}",
+  "@templateSaveFailed": {
+    "description": "Footer line of the Save graphics template dialogue when the save fails. The engine's reason follows.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "templateUpdate": "Update",
+  "@templateUpdate": {
+    "description": "Badge on a composition in the Project panel, and a word on a template copy's card in Effect controls, when the library has a newer version of the graphics template. Pressing it brings the new version in."
+  },
+  "templateUpdateMenu": "Update graphics template",
+  "@templateUpdateMenu": {
+    "description": "Menu row on a composition in the Project panel: brings in the library's newer version of the graphics template, keeping what each copy has set."
+  },
+  "templateUpdateAll": "Update all",
+  "@templateUpdateAll": {
+    "description": "Menu row on the Graphics templates folder in the Project panel: brings in the library's newer version of every template in it that has one."
+  },
+  "templateUpdateFailed": "The graphics template could not be updated",
+  "@templateUpdateFailed": {
+    "description": "Status line, when bringing in a newer version of a graphics template from the library fails."
+  },
+  "fileTypeGraphicsTemplate": "Lumit graphics template",
+  "@fileTypeGraphicsTemplate": {
+    "description": "A file type in the system's Import dialogue, and the name the operating system gives a .lumt file."
+  },
+  "templateDataTitle": "Data",
+  "@templateDataTitle": {
+    "description": "Title of the Data window, where rows from a CSV, TSV or JSON file feed a graphics template's controls. The template's name follows it."
+  },
+  "templateDataFolder": "Data",
+  "@templateDataFolder": {
+    "description": "Name of the Project panel folder that footage named in a graphics template's data is brought into."
+  },
+  "templateDataFileType": "Data",
+  "@templateDataFileType": {
+    "description": "A file type in the system's Open and Save dialogues of the Data window: a CSV, TSV or JSON file of rows."
+  },
+  "templateDataOpen": "Open file…",
+  "@templateDataOpen": {
+    "description": "Data window: button that links a CSV, TSV or JSON file to the graphics template, its rows then feeding the controls."
+  },
+  "templateDataSaveStarting": "Save a starting file…",
+  "@templateDataSaveStarting": {
+    "description": "Data window: writes a CSV with a column for each control and the template's own values as its first row, to fill in elsewhere."
+  },
+  "templateDataReload": "Reload",
+  "@templateDataReload": {
+    "description": "Data window tool bar: reads the linked file again."
+  },
+  "templateDataUnlink": "Unlink data",
+  "@templateDataUnlink": {
+    "description": "Data window menu: takes the rows away from the graphics template. Copies following a row go back to the template's own values."
+  },
+  "templateDataMore": "More",
+  "@templateDataMore": {
+    "description": "Tooltip on the three dots at the end of the Data window's tool bar, which open its menu."
+  },
+  "templateDataFollow": "Follow row",
+  "@templateDataFollow": {
+    "description": "Data window tool bar: the selected copy of the template takes its controls from the selected row."
+  },
+  "templateDataStopFollowing": "Stop following",
+  "@templateDataStopFollowing": {
+    "description": "Data window tool bar, in place of Follow row when the selected copy already follows the selected row: it goes back to its own values."
+  },
+  "templateDataPlace": "Place rows",
+  "@templateDataPlace": {
+    "description": "Data window tool bar: places one copy of the template for each selected row, or for every row, one after another from the playhead."
+  },
+  "templateDataExport": "Export rows…",
+  "@templateDataExport": {
+    "description": "Data window tool bar: opens the dialogue that exports one file for each selected row, or for every row."
+  },
+  "templateDataNothing": "Nothing",
+  "@templateDataNothing": {
+    "description": "Data window: in a column header's menu, the column feeds no control. The column is then drawn in the quiet ink."
+  },
+  "templateDataFont": "{name} font",
+  "@templateDataFont": {
+    "description": "Data window: in a column header's menu and under the header, the column feeds the font of the text control {name}.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateDataSize": "{name} size",
+  "@templateDataSize": {
+    "description": "Data window: in a column header's menu and under the header, the column feeds the size of the text control {name}.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateDataColour": "{name} colour",
+  "@templateDataColour": {
+    "description": "Data window: in a column header's menu and under the header, the column feeds the colour of the text control {name}.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "templateDataLength": "Length",
+  "@templateDataLength": {
+    "description": "Data window: in a column header's menu, the column says how long each row's version runs, in seconds."
+  },
+  "templateDataFileName": "File name",
+  "@templateDataFileName": {
+    "description": "Data window: in a column header's menu, the column names each row's exported file."
+  },
+  "templateDataRows": "{count, plural, =1{1 row} other{{count} rows}}",
+  "@templateDataRows": {
+    "description": "How many rows a graphics template's data has, at the foot of the Data window after the file's path, and how many rows have a fault in the Export rows dialogue.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "templateDataOpenFailed": "That file could not be read.",
+  "@templateDataOpenFailed": {
+    "description": "Status line when the file picked in the Data window, or the linked one on Reload, can't be read as rows."
+  },
+  "templateDataSaveFailed": "The starting file could not be written.",
+  "@templateDataSaveFailed": {
+    "description": "Status line when Save a starting file in the Data window can't write the file."
+  },
+  "templateDataPlaceFailed": "The rows could not be placed.",
+  "@templateDataPlaceFailed": {
+    "description": "Status line when Place rows in the Data window is turned down."
+  },
+  "templateCopyRow": "Row",
+  "@templateCopyRow": {
+    "description": "Heading of a copy's card in Effect controls: label of the box holding the number of the data row the copy follows. Blank when it follows none."
+  },
+  "templateCopyPreviousRow": "Previous row",
+  "@templateCopyPreviousRow": {
+    "description": "Tooltip on the arrow before the Row box on a copy's card: the copy follows the row before."
+  },
+  "templateCopyNextRow": "Next row",
+  "@templateCopyNextRow": {
+    "description": "Tooltip on the arrow after the Row box on a copy's card: the copy follows the row after."
+  },
+  "templateRowsTitle": "Export rows",
+  "@templateRowsTitle": {
+    "description": "Title of the dialogue that exports one file for each row of a graphics template's data."
+  },
+  "templateRowsComposition": "Composition",
+  "@templateRowsComposition": {
+    "description": "Export rows dialogue: label of the row choosing what is exported, the template on its own or the composition a selected copy sits in."
+  },
+  "templateRowsInHost": "{comp}, with this copy following each row",
+  "@templateRowsInHost": {
+    "description": "Export rows dialogue: the choice that exports the composition {comp}, which the selected copy sits in, once for each row with the copy following it.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      }
+    }
+  },
+  "templateRowsFileName": "File name",
+  "@templateRowsFileName": {
+    "description": "Export rows dialogue: label of the box holding the pattern each row's file is named by, such as {Name} {row}."
+  },
+  "templateRowsInsert": "Insert",
+  "@templateRowsInsert": {
+    "description": "Tooltip on the button beside the file name pattern in the Export rows dialogue. Its menu puts a column's name, the row number, the composition or the date in at the cursor."
+  },
+  "templateRowsRowNumber": "Row number",
+  "@templateRowsRowNumber": {
+    "description": "Export rows dialogue: a row of the file name's Insert menu, which puts in each row's number."
+  },
+  "templateRowsCompName": "Composition",
+  "@templateRowsCompName": {
+    "description": "Export rows dialogue: a row of the file name's Insert menu, which puts in the composition's name."
+  },
+  "templateRowsDate": "Date",
+  "@templateRowsDate": {
+    "description": "Export rows dialogue: a row of the file name's Insert menu, which puts in today's date."
+  },
+  "templateRowsFolder": "Folder",
+  "@templateRowsFolder": {
+    "description": "Export rows dialogue: label of the folder every row's file is written into."
+  },
+  "templateRowsStill": "Still (PNG)",
+  "@templateRowsStill": {
+    "description": "Export rows dialogue: the last choice in the Preset list, one PNG picture for each row at the template's poster frame."
+  },
+  "templateRowsFaults": "Faults",
+  "@templateRowsFaults": {
+    "description": "Export rows dialogue: label of the row shown when some rows have a cell that can't be read, with how many and what to do with them."
+  },
+  "templateRowsSkip": "Leave them out",
+  "@templateRowsSkip": {
+    "description": "Export rows dialogue: the rows with a fault are not exported."
+  },
+  "templateRowsUseTemplate": "Use the template's values",
+  "@templateRowsUseTemplate": {
+    "description": "Export rows dialogue: the rows with a fault are exported with the template's own value in each cell that can't be read."
+  },
+  "templateRowsFiles": "{count, plural, =1{1 file} other{{count} files}}",
+  "@templateRowsFiles": {
+    "description": "Footer of the Export rows dialogue: how many files the export will write.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "templateRowsWriting": "{done} of {total}",
+  "@templateRowsWriting": {
+    "description": "Footer of the Export rows dialogue while stills are written: how many are done of how many.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "templateRowsWritten": "{count, plural, =0{No stills written} =1{1 still written} other{{count} stills written}}",
+  "@templateRowsWritten": {
+    "description": "Footer of the Export rows dialogue once the stills have been written.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "templateRowsStop": "Stop",
+  "@templateRowsStop": {
+    "description": "Export rows dialogue: stops writing stills after the one in hand."
+  },
+  "templateRowsNone": "No rows to export.",
+  "@templateRowsNone": {
+    "description": "Footer of the Export rows dialogue when every row asked for was left out for a fault."
+  },
+  "templateRowsFailed": "The rows could not be exported.",
+  "@templateRowsFailed": {
+    "description": "Footer of the Export rows dialogue when the engine turns the export down."
+  },
+  "exportQueueRun": "{name}, {count, plural, =1{1 row} other{{count} rows}}",
+  "@exportQueueRun": {
+    "description": "Export queue: the heading row that folds the rows of a graphics template queued together. {name} is the template's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportQueueRunDone": "{done} of {total}",
+  "@exportQueueRunDone": {
+    "description": "Export queue: on the heading of a run of a template's rows, how many are done of how many.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "exportQueueRunFailed": "{count} failed",
+  "@exportQueueRunFailed": {
+    "description": "Export queue: on the heading of a run of a template's rows, how many have failed. Drawn in the error ink.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportQueueCancelWaiting": "Cancel the rows still waiting",
+  "@exportQueueCancelWaiting": {
+    "description": "Export queue: menu of the heading of a run of a template's rows. Takes the rows that have not started off the queue."
+  },
+  "exportQueueAgainFailed": "Queue the failed rows again",
+  "@exportQueueAgainFailed": {
+    "description": "Export queue: menu of the heading of a run of a template's rows. Each failed row is queued again as it was."
   },
   "panelTranscript": "Transcript",
   "@panelTranscript": {

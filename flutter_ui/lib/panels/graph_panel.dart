@@ -89,6 +89,7 @@ import 'node_menus.dart';
 import 'graph_ties.dart';
 import '../state/clipboard.dart' show ClipboardKind;
 import 'fx_section.dart' show fxEnableMarkScale;
+import 'control_rows.dart' show paramControlRow;
 import 'layer_fold_frb.dart' show effectPath;
 import '../state/share.dart';
 import 'placeholder.dart';
@@ -1658,6 +1659,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         withChained(info, param, value, comp, ui.playheadFrame.value);
     return EffectParamRowFrb(
       key: ValueKey<String>('graph-row-$key-$param'),
+      // An effect on the layer's stack. A driver's rows are not a graphics
+      // template's to name.
+      controlRow:
+          driver ? null : paramControlRow(layer.internallayerId, info.id, p),
       effectId: info.id,
       param: p,
       value: valueOf(param),

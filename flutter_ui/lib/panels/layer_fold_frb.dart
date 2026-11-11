@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/copies.dart' show copyRowsWithoutLane;
 import 'package:lumit_flutter/state/layer_bounds.dart' show isGeometryOptions, meshKindOf;
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -2821,12 +2822,18 @@ List<LayerFoldRow> layerFoldRows({
   // A placed node graph's Inputs, where Contents would be: they make the
   // layer's picture, which the masks then gate and the effects process. The
   // rows are the ordinary effect rows, so they key, drag and ease as any do.
+  //
+  // A copy of a graphics template calls them its controls, and leaves out
+  // the words, the fonts and the footage, which have nothing to show in a
+  // lane.
+  final copy = info.copy;
+  final laneless = copy == null ? const <String>{} : copyRowsWithoutLane(copy);
   if (info.graphInputs case final inputs?
-      when inputs.derivedParams.isNotEmpty) {
+      when inputs.derivedParams.any((p) => !laneless.contains(p.id))) {
     final inputsOpen = open.contains(inputsPath(id));
     rows.add(FoldGroupRow(
       path: inputsPath(id),
-      label: l10n.foldInputs,
+      label: copy == null ? l10n.foldInputs : l10n.foldControls,
       open: inputsOpen,
       depth: 1,
     ));
@@ -2835,6 +2842,7 @@ List<LayerFoldRow> layerFoldRows({
       // layer that places it.
       final values = {for (final v in inputs.values) v.id: v.value};
       for (final param in inputs.derivedParams) {
+        if (laneless.contains(param.id)) continue;
         rows.add(FoldEffectParamRow(inputs, param, values[param.id],
             depth: 2,
             inputs: true,

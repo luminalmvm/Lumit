@@ -1125,6 +1125,7 @@ void main() {
                 const BridgeExportQueueState.waiting()}) =>
         BridgeExportQueueItem(
           id: id,
+          groupName: '',
           comp: UuidValue.fromString('00000000-0000-0000-0000-000000000000'),
           compName: name,
           path: 'C:/exports/$name.mp4',

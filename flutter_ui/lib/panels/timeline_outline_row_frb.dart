@@ -7,6 +7,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/copies.dart' show shownLayerName;
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -25,6 +26,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
+import 'control_rows.dart' show ControlMark;
 import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
 import 'light_rows_frb.dart' show feedsEnvironment;
 import 'property_link.dart' show LinkDrop;
@@ -980,12 +982,16 @@ class _OutlineRowState extends State<OutlineRow> {
           // the selected row; every other row keeps `body`.
           child: Row(children: [
             Flexible(
-              child: Text(info.name,
+              // A copy of a graphics template goes by its first text
+              // control until the layer is renamed.
+              child: Text(shownLayerName(info),
                   style: widget.selected ? t.bodyPrimary : t.body,
-                  textDirection: nameDirection(info.name),
+                  textDirection: nameDirection(shownLayerName(info)),
                   textAlign: TextAlign.left,
                   overflow: TextOverflow.ellipsis),
             ),
+            // Marked while its visibility, words or footage is a control.
+            ControlMark.layer(layer.internallayerId),
             // Its eye does nothing, as a light reads it whether it's on or off.
             if (feedsEnvironment(widget.stack, layer.internallayerId)) ...[
               const SizedBox(width: identityGap),

@@ -110,6 +110,7 @@ import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'model_fold_rows.dart' show modelPartPath, modelPartReveal;
 import 'shape_entries.dart';
+import 'template_place.dart' show placeTemplateInTimeline;
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
@@ -1912,6 +1913,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     });
   }
 
+  /// A row asked for from another panel: the twirls on the way to it open,
+  /// and it is picked and brought into view.
+  void _onRevealRowRequested() {
+    final request = _ui?.revealRowRequest.value;
+    if (request == null || !mounted) return;
+    _ui!.revealRowRequest.value = null;
+    final id = request.layer.toString();
+    final row = request.row;
+    setState(() {
+      if (row == null) {
+        _layerToShow = id;
+        return;
+      }
+      _setOpen(id, true);
+      _open.addAll(request.open);
+      _foldToShow = row;
+    });
+    if (row != null) _ui!.requestSelectProperty(row);
+  }
+
   /// Layer ▸ Reveal ▸ Expand all or Collapse all: the ground menu's rows.
   void _onFoldAllRequested() {
     if (!mounted) return;
@@ -2352,6 +2373,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // be on screen. Ensure-open, not the reveal keys' toggle: showing
     // a row that is already showing must never hide it.
     _ui!.revealPropertyRequest.addListener(_onRevealRequested);
+    _ui!.revealRowRequest.addListener(_onRevealRowRequested);
     // Animation ▸ Reveal …: the menu says which reveal, the panel runs
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
@@ -3848,6 +3870,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
+    _ui?.revealRowRequest.removeListener(_onRevealRowRequested);
     _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
     _ui?.foldAllRequest.removeListener(_onFoldAllRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
@@ -4715,7 +4738,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             onWillAcceptWithDetails: (details) =>
                 details.data is FootageDragData ||
                 details.data is CompDragData ||
-                details.data is SolidDragData,
+                details.data is SolidDragData ||
+                details.data is TemplateDragData,
             // With Alt held the row under the pointer is the one that changes,
             // so it lights up.
             onMove: (details) {
@@ -4789,6 +4813,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   try {
                     comp.addSolidItemLayer(solid: solid, row: at);
                   } catch (_) {}
+                case TemplateDragData(:final path):
+                  // Brought into the project, then nested as a comp is.
+                  placeTemplateInTimeline(
+                      Provider.of<LumitState>(context, listen: false),
+                      ui,
+                      comp,
+                      path,
+                      row: at);
               }
               ui.model.refresh();
             },

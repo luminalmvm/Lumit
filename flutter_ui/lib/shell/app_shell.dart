@@ -9,6 +9,7 @@ import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/control_rows.dart' show addToControlsRow;
 import 'package:lumit_flutter/panels/grade_clipboard.dart' show copyGrade, pasteGrade;
 import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
@@ -31,6 +32,8 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
 import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
+import 'package:lumit_flutter/panels/template_place.dart'
+    show installTemplateFiles;
 import 'package:lumit_flutter/panels/caption_layers.dart'
     show frontCaptionsPanel, stepToCaption;
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
@@ -69,6 +72,8 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/share.dart';
+import 'package:lumit_flutter/state/template_library.dart'
+    show TemplateUpdates;
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
@@ -421,10 +426,19 @@ class _LumitAppViewState extends State<LumitAppView> {
           importStyle(context, app, ui, style);
           return;
         }
+        final template = app.launchTemplate;
+        if (template != null) {
+          app.launchTemplate = null;
+          installTemplateFiles(context, app, ui, [template]);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
+    // Which graphics templates the library has newer versions of, and which
+    // timeline had the keys last, followed from the start.
+    TemplateUpdates.of(context.read<LumitState>(), context.read<LumitUiState>());
     listenForOpenRequests(_openAsked);
     // A friend's invite that comes while Lumit is open is said on the status
     // line, with the way to the Multi-edit window, where it is joined.
@@ -439,12 +453,13 @@ class _LumitAppViewState extends State<LumitAppView> {
     };
   }
 
-  /// A project, an extension package, a style, a preset or a theme
-  /// double-clicked, or an invite link clicked in a browser, while Lumit is
+  /// A project, an extension package, a style, a preset, a theme or a
+  /// graphics template double-clicked, or an invite link clicked in a browser, while Lumit is
   /// running. On macOS all of them come to this Lumit. Elsewhere all but a
   /// project and a link always do, and those two when it is kept running in
   /// the background. They are opened as File ▸ Open, the install window,
-  /// Import style, [openPresetOrTheme] and the Shared project window would.
+  /// Import style, [openPresetOrTheme], [installTemplateFiles] and the Shared
+  /// project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -460,6 +475,11 @@ class _LumitAppViewState extends State<LumitAppView> {
       importStyle(context, app, context.read<LumitUiState>(), style);
     }
     openPresetOrTheme(app, context.read<LumitUiState>(), asked);
+    final template = templatePathFromArgs(asked);
+    if (template != null) {
+      installTemplateFiles(
+          context, app, context.read<LumitUiState>(), [template]);
+    }
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);
   }
@@ -1427,6 +1447,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = keyframeSpeedRow(context, state, ui).press();
       case 'expression.add':
         handled = addExpressionRow(context, state, ui).press();
+      // The selected rows, as the Composition menu's own row adds them.
+      case 'template.controls.add':
+        handled = addToControlsRow(ui).press();
       // The Layer menu's rows the same way. Stepping the blend mode repeats
       // while the key is held, and stops at either end of the list.
       case 'layer.blend.next':
@@ -1544,6 +1567,7 @@ bool _pressedOnce(String action) =>
       'keyframe.interpolation',
       'keyframe.speed',
       'expression.add',
+      'template.controls.add',
       'layer.lock.toggle',
       'layer.unlock.all',
       'layer.centre',

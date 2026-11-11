@@ -48,6 +48,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/template/copy.dart' show BridgeCopy;
 import 'package:lumit_flutter/src/rust/api/track.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:provider/provider.dart';
@@ -96,8 +97,12 @@ import 'timeline_extras_frb.dart' show DoubleTap, clipRadius, showMenuAt;
 import 'timeline_metrics_frb.dart' show dimmedIf;
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
+import '../state/copies.dart';
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
+import 'copy_card_frb.dart';
+import 'control_rows.dart'
+    show copyControlRow, effectControlRow, pointControlRow;
 import 'effect_commands.dart';
 import 'param_row_menu.dart' show menuGroups;
 import 'placeholder.dart';
@@ -1099,11 +1104,27 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           changed();
         }
 
+        _effects.clipInputs = null;
+        final copy = clip.copy;
+        final copyRows =
+            copy == null ? null : _clipCopyRows(ui, layer, clipId);
+        final copyCard = copy == null || copyRows == null
+            ? null
+            : _copyCard(
+                context,
+                ui,
+                comp,
+                [
+                  CopyTarget(
+                      layer: layer, clip: clipId, copy: copy, rows: copyRows),
+                ],
+                changed);
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(
-              layerName: clip.sourceName,
+              layerName: shownClipName(clip),
               clipOn: entry.info.name,
               onAdd: addToClip,
               onMenu: (at) => _showStackMenu(context, at,
@@ -1145,6 +1166,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       key: const ValueKey('fx-clip-ground'),
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       children: [
+                        // A clip of a graphics template: its card, above
+                        // the clip's own effects.
+                        if (copyCard != null) copyCard,
                         if (stack.isEmpty) _EmptyStack(onAdd: addToClip),
                         for (var i = 0; i < stack.length; i++)
                           _clipEffectCard(
@@ -1160,6 +1184,157 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           ],
         );
       },
+    );
+  }
+
+  /// The staged rows of the clips that are copies of a graphics template,
+  /// read once per document revision and kept: on the comp's clock, as a
+  /// clip's effects are.
+  ({int? revision, Map<UuidValue, BridgeEffectInstanceInfo?> rows})? _copyRead;
+
+  BridgeEffectInstanceInfo? _clipCopyRows(
+      LumitUiState ui, LayerReference layer, UuidValue clip) {
+    final revision = ui.model.revision;
+    var held = _copyRead;
+    if (held == null || held.revision != revision) {
+      held = _copyRead = (revision: revision, rows: {});
+    }
+    if (held.rows.containsKey(clip)) return held.rows[clip];
+    BridgeEffectInstanceInfo? info;
+    try {
+      info = layer.getClipInputs(clip: clip, onCompClock: true)?.getInfo();
+    } catch (_) {
+      // The clip went under the panel, which then draws no card for it.
+    }
+    return held.rows[clip] = info;
+  }
+
+  /// [picks] as copies, when every one of them is a copy of one template.
+  /// Empty otherwise.
+  List<CopyTarget> _clipCopies(LumitUiState ui,
+      List<({LayerReference layer, UuidValue clip})> picks) {
+    final out = <CopyTarget>[];
+    for (final pick in picks) {
+      BridgeCopy? copy;
+      for (final c in ui.model.byId(pick.layer.internallayerId)?.info.clips ??
+          const <BridgeClip>[]) {
+        if (c.id == pick.clip) copy = c.copy;
+      }
+      if (copy == null ||
+          (out.isNotEmpty && out.first.copy.comp != copy.comp)) {
+        return const [];
+      }
+      final rows = _clipCopyRows(ui, pick.layer, pick.clip);
+      if (rows == null) return const [];
+      out.add(CopyTarget(
+          layer: pick.layer, clip: pick.clip, copy: copy, rows: rows));
+    }
+    return out;
+  }
+
+  /// The copies the template card edits while a layer is the subject: the
+  /// clips picked in the Cut timeline when several are copies of one
+  /// template, else the shown layer with every other selected layer that is
+  /// a copy of the same template.
+  List<CopyTarget> _copiesFor(
+      LumitUiState ui, LayerReference layer, BridgeLayerInfo info) {
+    final id = layer.internallayerId;
+    // The picked clips, while the layer on show is one they are on: a pick
+    // left behind by a Cut timeline since shut is not followed.
+    final clips = _clipCopies(ui, ui.cutClips.value);
+    if (clips.length > 1 &&
+        clips.any((c) => c.layer.internallayerId == id)) {
+      return clips;
+    }
+    final copy = info.copy;
+    final rows = info.graphInputs;
+    if (copy == null || rows == null) return const [];
+    final picked = ui.selectedLayerIds;
+    return [
+      CopyTarget(layer: layer, copy: copy, rows: rows),
+      if (picked.contains(id))
+        for (final other in ui.model.layers)
+          if (other.layer.internallayerId != id &&
+              picked.contains(other.layer.internallayerId))
+            if ((other.info.copy, other.info.graphInputs)
+                case (final theirs?, final staged?)
+                when theirs.comp == copy.comp)
+              CopyTarget(layer: other.layer, copy: theirs, rows: staged),
+    ];
+  }
+
+  /// The template card for [targets], the one it shows first, kept while
+  /// what it draws from reads the same.
+  Widget _copyCard(BuildContext context, LumitUiState ui,
+      CompositionReference comp, List<CopyTarget> targets,
+      VoidCallback changed) {
+    final first = targets.first;
+    final id = first.rows.id;
+    final layer = first.layer;
+    final clip = first.clip;
+    // A clip's staged rows are found by the editor here, ahead of the clip's
+    // own stack. A layer's are found as a placed graph's Inputs are.
+    _effects.clipInputs = clip == null
+        ? null
+        : () => [
+              if (layer.getClipInputs(clip: clip, onCompClock: true)
+                  case final rows?)
+                rows,
+            ];
+    // By the copy and not by its rows, whose id changes the first time the
+    // copy stores a value: a box being typed in must keep its place.
+    final name = 'copy-${clip ?? layer.internallayerId}';
+    final open = _isOpen(name);
+    final playhead = ui.playheadFrame.value;
+    return _SameCard(
+      key: ValueKey<String>('fx-card-$name'),
+      reading: [
+        for (final t in targets) ...[
+          t.layer.internallayerId,
+          t.clip,
+          t.copy.comp,
+          t.copy.name,
+          [
+            for (final c in t.copy.controls)
+              [c.id, c.label, c.kind, c.group, c.rows, c.options, c.own, c.fed],
+          ],
+          t.rows.id,
+          t.rows.values,
+          t.rows.derivedParams,
+          [
+            for (final r in t.rows.rowOptions) [r.id, r.options],
+          ],
+        ],
+        open,
+        playhead,
+        _folds,
+        _filter.needle,
+        comp.internalid,
+        l10n.localeName,
+        // What a live drag is holding, which is not in the document yet.
+        [
+          for (final p in first.rows.derivedParams)
+            _effects.stagedValue(id, p.id),
+        ],
+      ],
+      card: () => CopyCardFrb(
+        targets: targets,
+        comp: comp,
+        editor: _effects,
+        open: open,
+        onToggle: () => _toggle(name),
+        isGroupOpen: _isGroupOpen,
+        onToggleGroup: _toggleGroup,
+        allLayers: ui.model.layers,
+        playheadFrame: playhead,
+        onSeek: (frame) => ui.playheadFrame.value = frame,
+        onLive: (effect, param, value) => setState(() {
+          _effects.live(comp, layer, effect, param, value,
+              frame: ui.playheadFrame.value, scale: ui.viewerScale);
+        }),
+        onChanged: changed,
+        filter: _filter.needle,
+      ),
     );
   }
 
@@ -1458,7 +1633,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Header(
-          layerName: info.name,
+          layerName: shownLayerName(info),
           onAdd: addToLayer,
           onMenu: stackMenu,
           onFilter: _filter.show,
@@ -1504,6 +1679,22 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   children: [
+                    // A copy of a graphics template: its card first, above
+                    // everything the layer itself has. It follows the
+                    // selection, as it edits every selected copy at once.
+                    ListenableBuilder(
+                      listenable:
+                          Listenable.merge([ui.selectedLayers, ui.cutClips]),
+                      builder: (context, _) {
+                        final copies = _copiesFor(ui, layer, info);
+                        if (copies.isEmpty) {
+                          _effects.clipInputs = null;
+                          return const SizedBox.shrink();
+                        }
+                        return _copyCard(
+                            context, ui, comp, copies, ui.model.refresh);
+                      },
+                    ),
                     // Source (a text layer's words, a solid's colour) and Retime
                     // ride with Transform behind the same choice: all three are
                     // the *layer*, and this panel is about the effects on it.
@@ -1596,7 +1787,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     ),
                     // A placed node graph's Inputs, above the stack because
                     // they make the picture the effects then process.
-                    if (info.graphInputs?.derivedParams.isNotEmpty ?? false)
+                    if (info.copy == null &&
+                        (info.graphInputs?.derivedParams.isNotEmpty ?? false))
                       _effectCard(context, ui, comp, layer, info, 0,
                           layersRead: layersRead, inputs: true),
                     // A Model layer's materials, before the effects that run
@@ -3198,12 +3390,27 @@ class _EffectSection extends StatelessWidget {
       for (final p in compositing) p.id,
     };
 
+    // What a control of the composition's graphics template can name here:
+    // a row of the layer's own stack or styles, and on a copy's card the
+    // control of the template placed there. Nothing on any other card.
+    final owner = layer.internallayerId;
+    final onStack = !material && group == null && clip == null;
+    final copy = !inputs
+        ? null
+        : allLayers
+            .where((e) => e.layer.internallayerId == owner)
+            .firstOrNull
+            ?.info
+            .copy;
+
     Widget rowFor(BridgeParamInfo param) {
       return marked(
           param.id,
           null,
           EffectParamRowFrb(
         key: ValueKey<String>('fx-row-$id-${param.id}'),
+        controlRow: effectControlRow(owner, id, param,
+            inputs: inputs, copy: copy, elsewhere: !onStack),
         effectId: id,
         param: param,
         value: stagedValue(id, param.id) ?? values[param.id],
@@ -3312,6 +3519,13 @@ class _EffectSection extends StatelessWidget {
               next.id,
               EffectPointRowFrb(
             key: ValueKey<String>('fx-row-$id-${param.id}-pair'),
+            // Both rows as one. A copy's point is one control already.
+            controlRow: !onStack
+                ? null
+                : inputs
+                    ? copyControlRow(owner, copy, param.id)
+                    : pointControlRow(owner, id, param, next,
+                        engineLabel(pointStem(param.label))),
             ownerLayerId: layer.internallayerId,
             effectId: id,
             xParam: param,

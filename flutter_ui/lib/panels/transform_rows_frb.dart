@@ -38,10 +38,12 @@ import '../shell/menu_layer_frb.dart'
     show freshTransform, onSelection, transformRows;
 import '../state/comp_time.dart';
 import '../state/preview_throttle.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/timeline_columns.dart';
 import '../widgets/angle_dial.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'control_rows.dart' show ControlMark, transformControlRow;
 import 'drive_chain.dart' show wiggleExpression;
 import 'graph_editor_frb.dart';
 import 'fx_key_strip.dart';
@@ -863,6 +865,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          ControlMark(
+              transformControlRow(widget.layer.internallayerId, group)),
           // One dot per axis in its stroke colour, so a two-axis property names
           // both of its curves.
           if ((widget.graphColours?.length ?? 0) > 1)
@@ -1459,6 +1463,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             shown(p).toString(), newExpressionLanguage(context)));
 
     return ParamMenu(
+      // Every axis the row shows, in order.
+      control: ControlRow(widget.comp,
+          transformControlRow(widget.layer.internallayerId, group)),
       linkTo: (link) => _linkRef(link, group, cells),
       linkFrom: _link(group, transform),
       own: group.pair != null || _turnsIn3d(group)

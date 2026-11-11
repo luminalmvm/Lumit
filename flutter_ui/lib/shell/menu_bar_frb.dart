@@ -53,6 +53,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/control_rows.dart' show addToControlsRow;
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import 'create_captions_dialog_frb.dart'
     show createCaptionsFrb, importCaptionsFrb;
@@ -64,6 +65,7 @@ import '../panels/preset_save.dart'
     show deletePreset, isOwnPreset, presetMoveToRow, renamePreset;
 import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
+import '../panels/template_place.dart' show installTemplateFiles;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
 import '../panels/timeline_group_row_frb.dart';
@@ -1485,6 +1487,9 @@ List<MenuSection> lumitMenus(
                         app.notifyDocumentChanged();
                       }),
             MenuEntry.divider(),
+            // The selected rows become controls of the graphics template.
+            addToControlsRow(ui),
+            MenuEntry.divider(),
             // "Export", never "render", for anything the user sees (glossary §9).
             // Adding to the queue is what the export dialog does, so this opens
             // it rather than queueing something nobody has said where to write.
@@ -2767,11 +2772,24 @@ Future<void> openProjectFrb(LumitState app,
 
 /// Import what was picked, and say whether anything came in. Footage comes
 /// in as footage. A Lumit project is not footage: one of its compositions is
-/// brought in, chosen from a list.
+/// brought in, chosen from a list. A graphics template joins the library.
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
   var picked = await (picker ?? () => pickFootage(projects: true))();
   if (!context.mounted) return false;
+  final templates = [
+    for (final path in picked)
+      if (path.toLowerCase().endsWith('.lumt')) path,
+  ];
+  if (templates.isNotEmpty) {
+    await installTemplateFiles(
+        context, app, context.read<LumitUiState>(), templates);
+    if (!context.mounted) return false;
+    picked = [
+      for (final path in picked)
+        if (!templates.contains(path)) path,
+    ];
+  }
   picked = await importLottieFrb(context, app, picked);
   final projects = [
     for (final path in picked)

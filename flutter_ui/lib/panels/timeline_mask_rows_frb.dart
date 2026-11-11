@@ -20,9 +20,11 @@ import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../shell/menu_layer_frb.dart' show maskRows, pickedMaskSet;
 import '../state/clipboard.dart' show ClipboardKind;
+import '../state/template_controls.dart' show ControlRow;
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
+import 'control_rows.dart' show ControlMark, maskControlRow;
 import 'timeline_extras_frb.dart';
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
@@ -615,6 +617,9 @@ class _MaskValueRowState extends State<MaskValueRow> {
             navigatorApart: true,
           );
     final RowKeys lead = pathKeys ?? keys;
+    // Opacity, Feather and Expansion can be controls. The path cannot.
+    final control = maskControlRow(
+        widget.layer.internallayerId, widget.mask.id, widget.value);
     final row = Row(
       children: [
         pathKeys ?? keys,
@@ -633,6 +638,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
                           color: Color.lerp(t.body.color, t.textPrimary, lit)),
                       overflow: TextOverflow.ellipsis),
                 ),
+                ControlMark(control),
               ]),
             ),
           ),
@@ -685,7 +691,9 @@ class _MaskValueRowState extends State<MaskValueRow> {
     }
     return ParamRowMenu(
       menu: scalarRowMenu(context, keys,
-          defaults: [widget.value == MaskValue.opacity ? 100 : 0]),
+          defaults: [widget.value == MaskValue.opacity ? 100 : 0],
+          control:
+              control == null ? null : ControlRow(widget.comp, control)),
       child: row,
     );
   }
