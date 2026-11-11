@@ -1,6 +1,6 @@
 ---
 title: Addons and models
-description: The optional models behind Flow, Depth, Remove background, the Roto brush and captions, and how to install them.
+description: The optional models behind Flow, Depth, Remove background, the Roto brush, captions and Voice isolation, and how to install them.
 sidebar:
   order: 9.9
 ---
@@ -10,8 +10,8 @@ import Clip from "../../../components/Clip.astro";
 
 An **addon** is an optional download: the model runtime, or a model pack. Each pack reads
 your footage and hands back one thing: an in-between frame, a depth map, a matte, the outline
-of what you clicked, or the words said. They run on your own graphics card. Lumit works
-without any of them.
+of what you clicked, the words said, or the voice in a recording. They run on your own
+machine. Lumit works without any of them.
 
 <Shot file="models-installed.png" caption="Settings ▸ Addons with the runtime and all five packs installed." eager/>
 
@@ -27,6 +27,7 @@ without any of them.
 | **SAM 2.1 Hiera Tiny** | 111 MB | The outline of the thing you click on. | [Roto brush](#roto-brush) |
 | **Whisper large-v3 turbo** | 1.1 GB | The words said, when, and who says them. | [Captions](#captions-whisper) |
 | **Whisper small** | 280 MB | The same from a smaller model, which can also write it in English. | [Captions](#captions-whisper) |
+| **DeepFilterNet3** | 8 MB | The speech in a recording, apart from everything else. | [Voice isolation](#voice-isolation) |
 
 Every addon is an analysis model. Nothing generative is listed.
 
@@ -52,8 +53,8 @@ the graphics provider it is running on.
 machine with no network. **Where they are kept ▸ Show** opens the folder. **Remove** on a
 row deletes that addon. **Licence** opens its licence in the browser.
 
-Without the pack it needs, an effect wears a badge naming the pack and leaves the picture
-alone.
+Without the pack it needs, an effect wears a badge naming the pack and leaves the picture,
+or the sound, alone. An install or a removal takes effect at once.
 
 ## Where they are used
 
@@ -111,6 +112,12 @@ Without SAM 2.1, a propagation seeded by **Segment** is **refused**.
 hear about a hundred languages, tell voices apart and find where speech starts and stops.
 With both installed, **Whisper large-v3 turbo** is used, and **Whisper small** for **Into
 English**.
+
+### Voice isolation
+
+**Effect ▸ Audio ▸ [Voice isolation](/effects/audio/voice-isolation/)** keeps the speech in
+a layer's sound and turns everything else down. The model runs on the processor. Without
+DeepFilterNet3 the sound plays untouched, in an export too.
 
 ## Licences
 

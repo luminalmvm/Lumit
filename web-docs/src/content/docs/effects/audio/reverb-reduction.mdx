@@ -1,0 +1,67 @@
+---
+title: Reverb reduction
+description: "Turns down the echo of a room on a voice."
+---
+
+Reverb reduction is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns down the echo a room adds to a recording. From the room's reverb time it works out
+how much of the sound at each moment is the room still ringing, and turns that down.
+
+With **Find reverb time** on, the reverb time is measured in the whole of the layer's own
+sound, from how it dies away in its pauses. Off, **Reverb time** is used.
+
+**Best quality** first takes away the reverb that can be predicted from the sound just
+before it, worked out over the whole of the layer's sound, then turns down what is left.
+
+The display above the controls shows the sound arriving around the playhead, the reverb
+found in it and what comes out. Under it is the reverb time found in the three seconds
+around the playhead, where there is one.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Reduction** | Slider | 0 to 30 | 12 | - |
+| **Find reverb time** | Checkbox | On or off | On | - |
+| **Reverb time** | Slider | 0.1 to 3 | 0.8 | - |
+| **Smoothing** | Slider | 0 to 100 | 50 | Per cent |
+| **Best quality** | Checkbox | On or off | Off | - |
+| **Reverb only** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Reverb time** is editable while **Find reverb time** is off.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Reduction**: the most the reverb is turned down, in dB.
+- **Find reverb time**: measures the room's reverb time in the sound.
+- **Reverb time**: how long the room rings, in seconds, while Find reverb time is off.
+- **Smoothing**: how slowly the reduction closes after a sound. Low leaves a watery residue.
+  High leaves reverb behind.
+- **Best quality**: takes out the predictable reverb first, then turns down the rest.
+- **Reverb only**: plays what is taken away.
+
+**Effect ▸ Only what is removed** (`Alt+N`) switches **Reverb only**.
+
+## Related
+
+- [Noise reduction](/effects/audio/noise-reduction/)
+- [Voice isolation](/effects/audio/voice-isolation/)
+- [Reverb](/effects/audio/reverb/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

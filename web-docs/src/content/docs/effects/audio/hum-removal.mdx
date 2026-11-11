@@ -1,0 +1,70 @@
+---
+title: Hum removal
+description: "Removes mains hum at 50 or 60 Hz and its harmonics."
+---
+
+Hum removal is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Removes the hum mains electricity puts on a recording, at 50 or 60 Hz and its harmonics.
+Each harmonic's level is measured over the whole of the layer's sound and that much is
+taken out, in a band **Width** wide. A voice or an instrument either side of the band is
+left in place.
+
+With **Find frequency** on, the hum's frequency is found in the layer's own sound, at 50 or
+60 Hz, whichever stands out more, and followed as it drifts. Off, the hum is taken to be at
+**Frequency**, and follows its keyframes. Find frequency and Width are read once for the
+whole layer, and keyframes on them are not followed.
+
+The display above the controls marks the hum and its harmonics on the sound arriving around
+the playhead, with the frequency under it, where most of the harmonics agree on one near 50 or
+60 Hz. Where speech covers the hum the display may show none, though the effect, which reads
+the whole layer, still takes it out. With Find frequency off, it marks and names Frequency.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Find frequency** | Checkbox | On or off | On | - |
+| **Frequency** | Slider | 40 to 70 | 50 | - |
+| **Harmonics** | Slider, whole numbers | 1 to 24 | 12 | - |
+| **Width** | Slider | 0.3 to 5 | 1 | - |
+| **Reduction** | Slider | 0 to 60 | 40 | - |
+| **Slope** | Slider | 0 to 6 | 0 | - |
+| **Hum only** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Frequency** is editable while **Find frequency** is off.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Find frequency**: finds the hum's frequency in the sound, and follows it as it drifts.
+- **Frequency**: the hum's frequency, in hertz, while Find frequency is off.
+- **Harmonics**: how many of the hum's harmonics are removed, the hum itself included.
+- **Width**: how wide a band is taken out around each harmonic, in hertz.
+- **Reduction**: how far the hum is turned down, in dB.
+- **Slope**: how much less each harmonic is turned down than the one below it, in dB.
+- **Hum only**: plays what is taken away.
+
+**Effect ▸ Only what is removed** (`Alt+N`) switches **Hum only**.
+
+## Related
+
+- [Cleaning up a noisy shot and its sound](/tutorials/clean-up-a-noisy-shot/)
+- [Noise reduction](/effects/audio/noise-reduction/)
+- [Parametric EQ](/effects/audio/parametric-eq/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)
