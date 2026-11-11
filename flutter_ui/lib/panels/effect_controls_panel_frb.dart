@@ -70,6 +70,8 @@ import 'viewer_effect_points.dart' show pickForPoint;
 import 'graph_panel.dart' show DrivenParam, drivenParamsIn, graphCompById;
 import 'node_panel.dart' show NodePanelFrb;
 import 'camera_track_display_frb.dart';
+import 'denoise_display_frb.dart';
+import 'repair_display_frb.dart';
 import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
@@ -3858,6 +3860,29 @@ Widget? customEffectDisplay(
           layer: layer,
           effectId: effectId,
           onChanged: onChanged,
+          pressed: pressed,
+        ),
+      // Denoise's is a reading and its result: the patch the noise was
+      // measured in, the noise by size, and how far it can be trusted.
+      'denoise' => DenoiseDisplayFrb(
+          key: ValueKey<String>('fx-denoise-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          comp: comp,
+          playheadFrame: playheadFrame,
+          values: values,
+          pressed: pressed,
+          onChanged: onChanged,
+        ),
+      // The sound clean-up effects': what arrives around the playhead, what
+      // each works from, and what comes out.
+      final name when repairEffects.contains(name) => RepairDisplayFrb(
+          key: ValueKey<String>('fx-repair-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          matchName: name,
+          playheadFrame: playheadFrame,
+          values: values,
           pressed: pressed,
         ),
       _ => null,

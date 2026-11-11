@@ -20249,6 +20249,100 @@
   "@fxWet": {
     "description": "Effect controls: how much of the treated sound is heard, on every audio effect that keeps some of the untreated sound beside it."
   },
+  "denoiseMeasuring": "Measuring",
+  "@denoiseMeasuring": {
+    "description": "Denoise's and Noise reduction's displays in Effect controls: the line under the plot while the noise is being measured."
+  },
+  "denoiseNoPicture": "Nothing to measure",
+  "@denoiseNoPicture": {
+    "description": "Denoise's and Noise reduction's displays in Effect controls: the line when the noise could not be measured, because the layer has no picture or no sound there."
+  },
+  "denoiseQuality": "Quality {percent}%",
+  "@denoiseQuality": {
+    "description": "Denoise's display in Effect controls: how far the measured noise can be trusted. {percent} is 0 to 100.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "denoiseReasonSmall": "Small sample",
+  "@denoiseReasonSmall": {
+    "description": "Denoise's display: after the quality, why it is low. The sample square is smaller than the noise needs to be read well."
+  },
+  "denoiseReasonDetail": "Detail in the sample",
+  "@denoiseReasonDetail": {
+    "description": "Denoise's display: after the quality, why it is low. The sample square covers edges or texture rather than a flat patch."
+  },
+  "denoiseReasonClipped": "Clipped",
+  "@denoiseReasonClipped": {
+    "description": "Denoise's display: after the quality, why it is low. Much of the sample is pure black or pure white, where noise cannot show."
+  },
+  "denoiseReasonFaint": "Little noise",
+  "@denoiseReasonFaint": {
+    "description": "Denoise's display: after the quality, why it is low. The sample holds almost no noise to measure."
+  },
+  "repairHumAt": "Hum at {hz} Hz",
+  "@repairHumAt": {
+    "description": "Hum removal's display in Effect controls: the mains hum frequency found in the sound around the playhead. {hz} is a number with one decimal, such as 50.0.",
+    "placeholders": {
+      "hz": {
+        "type": "String"
+      }
+    }
+  },
+  "repairAxisHertz": "{hertz}",
+  "@repairAxisHertz": {
+    "description": "The sound clean-up effects' display in Effect controls: a mark on the frequency axis below a thousand hertz, a bare number. {hertz} is 100.",
+    "placeholders": {
+      "hertz": {
+        "type": "String"
+      }
+    }
+  },
+  "repairAxisKilohertz": "{thousands}k",
+  "@repairAxisKilohertz": {
+    "description": "The sound clean-up effects' display in Effect controls: a mark on the frequency axis in thousands of hertz, kept as short as it can be. {thousands} is 1 or 10.",
+    "placeholders": {
+      "thousands": {
+        "type": "String"
+      }
+    }
+  },
+  "denoiseQualityBecause": "Quality {percent}% · {reason}",
+  "@denoiseQualityBecause": {
+    "description": "Denoise's display in Effect controls: how far the measured noise can be trusted, and why it is not higher. {percent} is 0 to 100; {reason} is one of the short reasons, such as Small sample.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "repairLearned": "Learned",
+  "@repairLearned": {
+    "description": "Noise reduction's display in Effect controls: the line under the plot when the noise floor drawn is one learned with the Learn button, not worked out from the whole sound."
+  },
+  "repairClicks": "{count, plural, =0{No clicks} =1{1 click} other{{count} clicks}}",
+  "@repairClicks": {
+    "description": "Click removal's display in Effect controls: how many clicks it finds in the two seconds of sound around the playhead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "repairReverbTime": "Reverb {seconds} s",
+  "@repairReverbTime": {
+    "description": "Reverb reduction's display in Effect controls: how long the room's reverb takes to die away, as found in the sound. {seconds} is a number with two decimals, such as 0.82.",
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
   "fxNoiseReduction": "Noise reduction",
   "@fxNoiseReduction": {
     "description": "Effect controls: the name of an audio effect that takes a steady hiss, rumble or whine out from under the sound."
