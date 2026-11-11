@@ -261,9 +261,12 @@ pub enum LayerInputDraw {
     Late(Box<LateClones>),
 }
 
-/// Where a [`LayerInputDraw::Late`] list belongs, as plain data: enough for
+/// Where a [`LayerInputDraw::Late`] list belongs: enough for
 /// the builder to walk back to the effect and make its pictures.
 pub struct LateClones {
+    /// The document the walk read. Inside a copy of a graphics template that
+    /// is the copy's own, not the frame's.
+    pub doc: std::sync::Arc<lumit_core::model::Document>,
     /// The composition, the layer the effect is on, and the effect.
     pub comp: uuid::Uuid,
     pub owner: uuid::Uuid,

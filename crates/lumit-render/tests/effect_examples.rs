@@ -726,9 +726,8 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
         // for expressions to read; none of them draws, so a picture would be the
         // plate twice.
         "camera_track" | "planar_track" | "slider_control" | "angle_control"
-        | "checkbox_control" | "colour_control" | "point_control" | "custom_controls" => {
-            Some("draws nothing by design")
-        }
+        | "checkbox_control" | "colour_control" | "point_control" | "custom_controls"
+        | "template" => Some("draws nothing by design"),
         // The drivers. A driver answers with a *number*, a colour or a bag of
         // points for something else to use, and reaches whatever it drives
         // through a wire in the node graph. There is no picture of one.

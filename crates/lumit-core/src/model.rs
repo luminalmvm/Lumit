@@ -2271,10 +2271,23 @@ impl Default for Switches {
 /// nothing past the nested duration.
 #[must_use]
 pub fn nested_source_time(layer: &Layer, nested: &Composition, lt: f64) -> f64 {
-    if layer.retime.is_none() {
-        return lt;
-    }
     let last = (nested.duration.0.to_f64() - 1.0 / nested.frame_rate.fps().max(1.0)).max(0.0);
+    if layer.retime.is_none() {
+        // A template with an intro or an outro fits the layer's span: its
+        // ends keep their speed and the stretch between them takes what is
+        // left. Retime on the layer is the more exact instruction, and
+        // turns this off.
+        let Some(timing) = nested.template_timing() else {
+            return lt;
+        };
+        let ends = layer.graph_inputs.as_ref().map_or(
+            crate::template::time::Ends::BOTH,
+            crate::fx::effects::template::ends,
+        );
+        let start = layer.in_point.0.to_f64() - layer.start_offset.0.to_f64();
+        let length = layer.out_point.0.to_f64() - layer.in_point.0.to_f64();
+        return crate::template::time::copy_time(timing, ends, length, lt - start).clamp(0.0, last);
+    }
     layer.source_time_at(lt).clamp(0.0, last)
 }
 
@@ -2827,6 +2840,7 @@ impl Composition {
                 .chain(&layer.graph_inputs)
                 .chain(&layer.graph.nodes)
                 .chain(clips.iter().flat_map(|clip| &clip.effects))
+                .chain(clips.iter().flat_map(|clip| &clip.inputs))
         });
         boxes.chain(headers).chain(layers)
     }
@@ -2848,7 +2862,11 @@ impl Composition {
                 .chain(&mut layer.styles)
                 .chain(&mut layer.graph_inputs)
                 .chain(&mut layer.graph.nodes)
-                .chain(clips.iter_mut().flat_map(|clip| &mut clip.effects))
+                .chain(
+                    clips
+                        .iter_mut()
+                        .flat_map(|clip| clip.effects.iter_mut().chain(&mut clip.inputs)),
+                )
         });
         boxes.chain(headers).chain(layers)
     }

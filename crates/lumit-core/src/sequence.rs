@@ -210,6 +210,12 @@ pub struct Clip {
     /// ahead of the row's own (docs/impl/audio-timeline.md §4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<EffectInstance>,
+    /// The values this clip hands the graphics template it places: what
+    /// [`crate::model::Layer::graph_inputs`] is to a Precomp layer. Keyed
+    /// from the clip's own start, as its effects are. `None` is a clip that
+    /// sets nothing, which is every clip of anything but a template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<EffectInstance>,
     /// The whole stack's bypass, the clip's twin of the layer's fx switch.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub fx: bool,
@@ -295,6 +301,7 @@ impl Clip {
             fade_in: Fade::default(),
             fade_out: Fade::default(),
             effects: Vec::new(),
+            inputs: None,
             fx: true,
             gain_db: 0.0,
             link: None,
@@ -618,12 +625,26 @@ impl Clip {
     /// Precomp layer's. The one place a clip's composition is given a time,
     /// so the frame key, the decode plan and the draw agree on it.
     pub fn nested_time(&self, nested: &Composition, lt: f64) -> f64 {
-        let st = self.held_source_time(lt);
-        if self.retime.is_none() {
-            return st;
-        }
         let last = nested.duration.0.to_f64() - 1.0 / nested.frame_rate.fps().max(1.0);
-        st.min(last).max(0.0)
+        if self.retime.is_none() {
+            // A template with an intro or an outro fits the clip's length:
+            // its ends keep their speed and the stretch between them takes
+            // what is left. Retime on the clip is the more exact
+            // instruction, and turns this off.
+            if let Some(timing) = nested.template_timing() {
+                let ends = self.inputs.as_ref().map_or(
+                    crate::template::time::Ends::BOTH,
+                    crate::fx::effects::template::ends,
+                );
+                let along = lt - self.place_start.to_f64();
+                let length = self.place_duration.to_f64();
+                return crate::template::time::copy_time(timing, ends, length, along)
+                    .min(last)
+                    .max(0.0);
+            }
+            return self.held_source_time(lt);
+        }
+        self.held_source_time(lt).min(last).max(0.0)
     }
 
     /// The exact source time shown at layer time `at`, through the clip's
@@ -686,6 +707,10 @@ impl Clip {
         Clip {
             id: Uuid::now_v7(),
             effects: respawn(&self.effects),
+            inputs: self
+                .inputs
+                .as_ref()
+                .and_then(|i| respawn(std::slice::from_ref(i)).pop()),
             transition: self
                 .transition
                 .as_ref()
@@ -799,6 +824,7 @@ impl Clip {
             group: self.group,
             opacity: self.opacity,
             takes: self.takes.clone(),
+            inputs: self.inputs.clone(),
             // What the clip's start draws as, which is the left piece's start.
             transition: self.transition.clone(),
             extra: self.extra.clone(),
@@ -824,6 +850,14 @@ impl Clip {
                 }
                 effects
             },
+            // And so are the values it hands a template.
+            inputs: self.inputs.as_ref().and_then(|inputs| {
+                let mut inputs = respawn(std::slice::from_ref(inputs));
+                if let Ok(back) = Rational::ZERO.checked_sub(tau_clip) {
+                    crate::preset::shift_keys(&mut inputs, back);
+                }
+                inputs.pop()
+            }),
             fx: self.fx,
             gain_db: self.gain_db,
             link: self.link,

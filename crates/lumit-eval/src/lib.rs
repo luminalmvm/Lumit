@@ -1836,6 +1836,19 @@ fn feed_layer(
                 };
                 for o in window().chain(turned(&crosses)) {
                     let nt = nested_at(o);
+                    // A template's copy, under the values it has at that
+                    // neighbour's moment.
+                    let at = t + f64::from(o) * comp_dt;
+                    let placed = lumit_core::template::placed::for_layer(
+                        doc,
+                        comp,
+                        layer,
+                        lumit_core::time::layer_time(at, layer.start_offset.0),
+                        at,
+                        None,
+                    );
+                    let doc = placed.as_ref().unwrap_or(doc);
+                    let nested = doc.comp(*nested_id).unwrap_or(nested);
                     visited.push(*nested_id);
                     let r = comp_key_visited(doc, nested, nt, quality, stamper, visited);
                     visited.pop();
@@ -2260,6 +2273,14 @@ fn feed_source(
                 h.update(b"nocomp");
                 return Some(());
             };
+            // A copy of a graphics template plays the document its own
+            // values make, and is named from that document. So two copies
+            // with two values are two names, two with the same values share
+            // one, and nothing of the values is fed beside it.
+            let placed =
+                lumit_core::template::placed::for_layer(doc, owner, layer, lt, comp_time, None);
+            let doc = placed.as_ref().unwrap_or(doc);
+            let nested = doc.comp(*comp).unwrap_or(nested);
             // The nested comp is named on its own and the parent
             // folds in that 16-byte name rather than the nested walk itself.
             // The parent's semantics are unchanged — an edit inside still
@@ -2306,7 +2327,11 @@ fn feed_source(
             // hands it is content beside it. Fed with the layer, so its driver
             // wires and their clock are folded too and a driven value cannot
             // hold the frame's name still.
-            if let Some(inputs) = &layer.graph_inputs {
+            if let Some(inputs) = layer
+                .graph_inputs
+                .as_ref()
+                .filter(|i| lumit_core::fx::effects::template::comp_of(i).is_none())
+            {
                 h.update(b"graph-inputs/");
                 // With the comp it names on the chain, so the fold does not
                 // walk that comp's key a second time: it is the sixteen bytes
@@ -2390,6 +2415,13 @@ fn feed_source(
                         }
                         // A multicam clip is named by its comp seen through
                         // its angle, so each angle caches as its own picture.
+                        // A clip that is a copy of a graphics template plays
+                        // the document its own values make, as a Precomp
+                        // layer's copy does.
+                        let placed = lumit_core::template::placed::for_clip(
+                            doc, owner, layer, clip, lt, comp_time,
+                        );
+                        let doc = placed.as_ref().unwrap_or(doc);
                         let Some(nested) = lumit_core::multicam::nested_for(doc, clip) else {
                             h.update(b"nocomp");
                             return Some(());
