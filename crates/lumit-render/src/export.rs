@@ -453,6 +453,10 @@ fn bake_values(
                 EffectValue::Bool(on) => std::borrow::Cow::Owned(
                     lumit_core::anim::Property::fixed(f64::from(u8::from(*on))),
                 ),
+                // A list goes as the index of what is picked.
+                EffectValue::Choice(index) => {
+                    std::borrow::Cow::Owned(lumit_core::anim::Property::fixed(f64::from(*index)))
+                }
                 _ => return None,
             };
             Some(Row {
