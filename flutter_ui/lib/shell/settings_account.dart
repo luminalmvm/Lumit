@@ -23,6 +23,8 @@ import '../state/ui_state.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'add_phone_window.dart';
+import 'library_parts.dart' show libraryStatusWords;
+import 'library_window.dart' show showLibrary;
 import 'pro_window.dart';
 import 'profile_chip.dart';
 import 'project_history_window.dart' show backupSize, backupTime;
@@ -38,7 +40,6 @@ String profileGroupLabel(ProfileGroup group) => switch (group) {
       ProfileGroup.layout => l10n.syncGroupLayout,
       ProfileGroup.preferences => l10n.syncGroupPreferences,
       ProfileGroup.library => l10n.syncGroupLibrary,
-      ProfileGroup.presets => l10n.syncGroupPresets,
     };
 
 /// The name of every row the page can show, for the command palette, which
@@ -54,6 +55,7 @@ List<String> accountSettingsRows() => [
       l10n.phonesExport,
       l10n.settingsSyncOn,
       for (final group in ProfileGroup.values) profileGroupLabel(group),
+      l10n.settingsLibrary,
       l10n.backupSettingsOn,
     ];
 
@@ -69,7 +71,7 @@ class AccountSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return ListenableBuilder(
-      listenable: Listenable.merge([ui.account, ui.profiles]),
+      listenable: Listenable.merge([ui.account, ui.profiles, ui.library]),
       builder: (context, _) {
         final sections = <Widget>[];
         void section(String title, List<Widget?> rows) {
@@ -396,7 +398,10 @@ class AccountSettings extends StatelessWidget {
                 l10n.settingsSyncNow,
                 profiles.status == SyncStatus.syncing
                     ? null
-                    : () => unawaited(profiles.syncNow())),
+                    : () {
+                        unawaited(profiles.syncNow());
+                        unawaited(ui.library.syncNow());
+                      }),
           ],
           description: switch (profiles.status) {
             SyncStatus.syncing => l10n.syncStatusSyncing,
@@ -405,6 +410,18 @@ class AccountSettings extends StatelessWidget {
             SyncStatus.off => '',
           },
         ),
+      // The library is free, so its row stands whatever the account has;
+      // with Pro and sync on it says how the library stands.
+      _row(
+        t,
+        l10n.settingsLibrary,
+        _value(t, libraryStatusWords(ui.library).$1,
+            muted: !ui.library.syncing),
+        actions: [
+          _button(t, 'open-library', l10n.settingsOpenLibrary,
+              () => unawaited(showLibrary(context))),
+        ],
+      ),
     ];
   }
 }

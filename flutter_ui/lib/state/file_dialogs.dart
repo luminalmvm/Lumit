@@ -609,3 +609,32 @@ Future<String?> pickCaptionsSaveLocation(
   if (path == null || path.toLowerCase().endsWith('.$extension')) return path;
   return '$path.$extension';
 }
+
+/// The `.lumlibrary` type group: a zip of library items, which Export writes
+/// and Import takes in.
+XTypeGroup _libraryGroup() =>
+    XTypeGroup(label: l10n.libraryFileType, extensions: const ['lumlibrary']);
+
+/// Pick a library file to import, or null when the dialogue was cancelled.
+Future<String?> pickLibraryToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_libraryGroup()]);
+  return file?.path;
+}
+
+/// Where to write a library file, or null when cancelled.
+Future<String?> pickLibrarySaveLocation() async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [_libraryGroup()],
+    suggestedName: 'library.lumlibrary',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.lumlibrary')) return path;
+  return '$path.lumlibrary';
+}
+
+/// Files to add to the library, of any kind: the library sorts them by
+/// extension. Empty when cancelled.
+Future<List<String>> pickLibraryFiles() async {
+  final files = await openFiles(acceptedTypeGroups: [_anyGroup()]);
+  return droppedPaths(files);
+}

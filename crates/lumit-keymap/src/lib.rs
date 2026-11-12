@@ -195,6 +195,7 @@ impl ActionId {
             "comp.settings" => "Composition settings",
             "comp.trim.workarea" => "Trim the composition to the work area",
             "export.queue.open" => "Open the export queue",
+            "library.open" => "Open the library",
             "help.open" => "Open Lumit help",
             "edit.undo" => "Undo",
             "edit.redo" => "Redo",

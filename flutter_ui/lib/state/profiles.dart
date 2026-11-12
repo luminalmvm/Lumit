@@ -25,7 +25,6 @@ import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart' show presetsDirPath;
 import 'package:lumit_flutter/src/rust/api/library.dart'
     show libraryFolders, libraryUseHome;
 import 'package:uuid/uuid.dart';
@@ -47,17 +46,16 @@ enum ProfileGroup {
   shortcuts,
   layout,
   preferences,
-  library,
-  presets;
+  library;
 
   /// The keys of the settings file this group owns.
   List<String> get keys => switch (this) {
         appearance => const [
             'color_scheme',
             'theme_shape',
+            'custom_style',
             'accent_override',
             'animation_level',
-            'custom_themes',
             'custom_theme',
             'themed_scopes',
             'themed_effect_graphs',
@@ -93,7 +91,6 @@ enum ProfileGroup {
             'recent_colours',
             'palette_recents',
           ],
-        presets => const [],
       };
 }
 
@@ -637,15 +634,6 @@ class ProfilesState extends ChangeNotifier {
     return jsonDecode(jsonEncode(data)) as Map<String, dynamic>;
   }
 
-  Directory? get _presetsDir {
-    try {
-      final path = presetsDirPath();
-      return path == null ? null : Directory(path);
-    } catch (_) {
-      return null;
-    }
-  }
-
   String? _text(File file) {
     try {
       return file.existsSync() ? file.readAsStringSync() : null;
@@ -679,10 +667,7 @@ class ProfilesState extends ChangeNotifier {
       dir.createSync(recursive: true);
       final wanted = <String>{};
       for (final MapEntry(:key, :value) in files.entries) {
-        if (key is! String || value is! String) continue;
-        if (key.contains('/') || key.contains(r'\') || key.startsWith('.')) {
-          continue;
-        }
+        if (key is! String || value is! String || !_safeName(key)) continue;
         wanted.add(key);
         final file = File('${dir.path}${Platform.pathSeparator}$key');
         if (_text(file) != value) file.writeAsStringSync(value);

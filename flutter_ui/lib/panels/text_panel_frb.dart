@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../state/library.dart' show LibraryState;
 import '../state/template_controls.dart' show ControlRow;
 import '../state/text_documents.dart';
 import '../theme/theme.dart';
@@ -43,6 +44,19 @@ class _TextPanelFrbState extends State<TextPanelFrb>
   @override
   void initState() {
     super.initState();
+    _readFamilies();
+    LibraryState.fontsChanged.addListener(_readFamilies);
+  }
+
+  @override
+  void dispose() {
+    LibraryState.fontsChanged.removeListener(_readFamilies);
+    super.dispose();
+  }
+
+  /// Read the families now, and again when the library's fonts change.
+  void _readFamilies() {
+    _faces.clear();
     textFontFamilies().then((families) {
       if (mounted) setState(() => _families = families);
     }).catchError((Object _) {
