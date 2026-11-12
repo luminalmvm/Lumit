@@ -1060,9 +1060,8 @@ fn float_layer_comp(
 fn a_proximity_selector_follows_its_null() {
     use lumit_core::anim::Property;
     use lumit_core::model::{ProjectItem, TextDocument};
-    use lumit_core::text::{
-        AnimatorAxis, RangeSelector, SelectorKind, SelectorShape, TextAnimator,
-    };
+    use lumit_core::text::selector::{RangeSelector, SelectorKind, SelectorShape};
+    use lumit_core::text::{AnimatorAxis, TextAnimator};
     let layer = |kind: LayerKind| Layer {
         graph: Default::default(),
         markers: Vec::new(),

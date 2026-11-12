@@ -1547,7 +1547,7 @@ mit",
     #[test]
     fn an_animated_line_is_deterministic() {
         use lumit_core::anim::Property;
-        use lumit_core::text::{glyph_xforms, SelectorShape, TextAnimator};
+        use lumit_core::text::{glyph_xforms, selector::SelectorShape, TextAnimator};
         let mut a = TextAnimator::new("Cascade");
         a.selector.shape = SelectorShape::Ramp;
         a.position_y = Property::fixed(-20.0);
