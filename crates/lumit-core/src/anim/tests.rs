@@ -493,3 +493,222 @@ fn a_round_trip_through_auto_keeps_the_custom_ease() {
         SideInterp::Hold
     );
 }
+
+// -----------------------------------------------------------------------
+// Key presets, After Effects eases and the edges of the evaluator.
+// -----------------------------------------------------------------------
+
+/// **The F9 presets reshape a key and never move it.** Each one rewrites
+/// both sides, the key's own value stays exactly where it was, and the
+/// span it leads shows the shape the preset names.
+#[test]
+fn key_presets_reshape_the_span_and_keep_the_value() {
+    let free = SideInterp::Bezier {
+        speed: 40.0,
+        influence: 0.6,
+    };
+    let start = key(rat(0, 1), 0.0, free);
+    let end = key(rat(1, 1), 10.0, SideInterp::Linear);
+
+    let linear = start.to_linear();
+    assert_eq!(linear.value, 0.0);
+    assert!(!linear.is_bezier() && !linear.is_hold());
+    let keys = [linear, end];
+    assert!((evaluate(&keys, 0.25).unwrap() - 2.5).abs() < 1e-12);
+
+    // Easy ease leaves the key flat, and the end is straight, so the curve
+    // starts slower than the chord.
+    let eased = start.to_bezier();
+    assert!(eased.is_bezier() && !eased.is_hold());
+    assert_eq!(eased.interp_in, EASY_EASE);
+    let keys = [eased, end.to_bezier()];
+    assert!(evaluate(&keys, 0.05).unwrap() < 0.5);
+    assert!((evaluate(&keys, 0.5).unwrap() - 5.0).abs() < 1e-9);
+
+    // Held: the value stays put until the next key, and the speed lens
+    // reads that stretch as still.
+    let held = start.to_hold();
+    assert!(held.is_hold() && !held.is_bezier());
+    let keys = [held, end];
+    assert_eq!(evaluate(&keys, 0.99), Some(0.0));
+    assert_eq!(evaluate_speed(&keys, 0.5), Some(0.0));
+
+    // An automatic side counts as eased: it has a tangent to draw.
+    let mut auto_out = start.to_linear();
+    auto_out.interp_out = auto(true);
+    assert!(auto_out.is_bezier());
+}
+
+/// **After Effects writes influence as a per cent.** Left out, the ease is
+/// After Effects' own default; given, it is divided down to Lumit's
+/// fraction and kept inside the 0.1 to 100 range After Effects allows.
+#[test]
+fn an_after_effects_ease_reads_per_cent_influence() {
+    let SideInterp::Bezier { speed, influence } = ae_ease(None, None) else {
+        panic!("an After Effects ease is a bezier side");
+    };
+    assert_eq!(speed, 0.0);
+    assert!((influence - 1.0 / 3.0).abs() < 1e-12);
+    assert_eq!(
+        ae_ease(Some(12.5), Some(75.0)),
+        SideInterp::Bezier {
+            speed: 12.5,
+            influence: 0.75
+        }
+    );
+    assert_eq!(
+        ae_ease(Some(-3.0), Some(250.0)),
+        SideInterp::Bezier {
+            speed: -3.0,
+            influence: 1.0
+        }
+    );
+    assert_eq!(
+        ae_ease(None, Some(0.0)),
+        SideInterp::Bezier {
+            speed: 0.0,
+            influence: 1e-3
+        }
+    );
+}
+
+/// **Clamp holds the tangent to three times the gentler chord.** A slow
+/// step into a steep climb would have the smooth tangent bulge below the
+/// first key; clamped, the curve climbs without ever turning back.
+#[test]
+fn a_clamped_tangent_is_held_to_the_gentler_chord() {
+    let climb = |side: SideInterp| {
+        [
+            key(rat(0, 1), 0.0, SideInterp::Linear),
+            key(rat(1, 1), 1.0, side),
+            key(rat(2, 1), 100.0, SideInterp::Linear),
+        ]
+    };
+    let smooth = climb(auto(false));
+    let clamped = climb(auto(true));
+    assert!((auto_speed(&smooth, 1, false) - 50.0).abs() < 1e-12);
+    assert!((auto_speed(&clamped, 1, true) - 3.0).abs() < 1e-12);
+    let mut prev = f64::MIN;
+    for i in 0..=200 {
+        let v = evaluate(&clamped, f64::from(i) / 100.0).unwrap();
+        assert!(v >= prev - 1e-9, "clamped curve turned back at {i}: {v}");
+        prev = v;
+    }
+    let dip = (0..=100)
+        .map(|i| evaluate(&smooth, f64::from(i) / 100.0).unwrap())
+        .fold(f64::MAX, f64::min);
+    assert!(dip < -1e-6, "the smooth tangent should dip below the start");
+}
+
+/// **A span with no length answers calmly.** Two keys on one time (a
+/// broken import, or keys mid-drag) have no slope to aim along and no
+/// width to solve across, so every reading is flat and finite rather than
+/// a division by zero.
+#[test]
+fn a_span_with_no_length_answers_calmly() {
+    let keys = [
+        key(rat(0, 1), 0.0, auto(false)),
+        key(rat(1, 1), 5.0, auto(true)),
+        key(rat(1, 1), 9.0, auto(false)),
+    ];
+    assert_eq!(auto_speed(&keys, 1, true), 0.0);
+    let stacked = [
+        key(rat(1, 1), 0.0, auto(false)),
+        key(rat(1, 1), 5.0, auto(false)),
+        key(rat(1, 1), 9.0, auto(false)),
+    ];
+    assert_eq!(auto_speed(&stacked, 1, false), 0.0);
+    assert_eq!(evaluate_span(&keys, 1, 1.0), 5.0);
+    assert_eq!(evaluate_speed_span(&keys, 1, 1.0), 0.0);
+
+    let flat = CubicSpan::from_points([2.0; 4], [0.0, 1.0, 2.0, 3.0]);
+    assert_eq!(flat.solve_u(2.0), 0.0);
+    let calm = SideInterp::Bezier {
+        speed: 0.0,
+        influence: MIN_INFLUENCE,
+    };
+    assert_eq!(flat.out_side(), calm);
+    assert_eq!(flat.in_side(), calm);
+}
+
+/// **A key put into a held span holds on.** The held value carries
+/// through the new key and on to the next, so the picture is unchanged.
+/// With no curve to keep, or no keys at all, nothing is added.
+#[test]
+fn a_key_put_into_a_held_span_holds_on() {
+    let mut p = Property {
+        animation: Animation::Keyframed(vec![
+            key(rat(0, 1), 3.0, SideInterp::Hold),
+            key(rat(2, 1), 8.0, SideInterp::Linear),
+        ]),
+        extra: serde_json::Map::new(),
+    };
+    let before: Vec<f64> = (0..=200)
+        .map(|i| p.value_at(f64::from(i) / 100.0))
+        .collect();
+    assert!(p.insert_key_preserving_shape(rat(1, 1)));
+    let Animation::Keyframed(keys) = &p.animation else {
+        panic!("still keyframed");
+    };
+    assert_eq!(keys.len(), 3);
+    assert_eq!(keys[1].value, 3.0);
+    assert!(keys[1].is_hold());
+    for (i, was) in before.iter().enumerate() {
+        assert_eq!(p.value_at(f64::from(i as u32) / 100.0), *was);
+    }
+
+    let mut fixed = Property::fixed(4.0);
+    assert!(!fixed.insert_key_preserving_shape(rat(1, 1)));
+    assert_eq!(fixed, Property::fixed(4.0));
+    let mut empty = Property {
+        animation: Animation::Keyframed(Vec::new()),
+        extra: serde_json::Map::new(),
+    };
+    assert!(!empty.insert_key_preserving_shape(rat(1, 1)));
+    assert_eq!(empty.animation, Animation::Keyframed(Vec::new()));
+}
+
+/// **A stretched map keeps its shape.** Every key's time scales about the
+/// pivot and every stored speed is divided by the same factor, so the
+/// stretched curve at the scaled time reads what the original read. An
+/// automatic side's filed ease scales with it, so going back to Free hands
+/// out the ease that fits the new length.
+#[test]
+fn a_stretched_curve_keeps_its_shape() {
+    let filed = SideInterp::Auto {
+        clamped: false,
+        speed: 5.0,
+        influence: 0.5,
+    };
+    let keys = [
+        key(
+            rat(1, 1),
+            0.0,
+            SideInterp::Bezier {
+                speed: 6.0,
+                influence: 0.4,
+            },
+        ),
+        key(rat(2, 1), 10.0, filed),
+        key(rat(3, 1), 4.0, EASY_EASE),
+        key(rat(4, 1), 8.0, SideInterp::Hold),
+        key(rat(5, 1), 2.0, SideInterp::Linear),
+    ];
+    let stretched = crate::retime::stretch_keys(&keys, rat(1, 1), rat(5, 2)).unwrap();
+    assert_eq!(stretched[0].time, rat(1, 1), "the pivot stays put");
+    assert_eq!(stretched[4].time, rat(11, 1));
+    assert_eq!(
+        stretched[1].interp_out,
+        SideInterp::Auto {
+            clamped: false,
+            speed: 2.0,
+            influence: 0.5
+        }
+    );
+    for i in 0..=400 {
+        let t = 1.0 + f64::from(i) / 100.0;
+        let was = evaluate(&keys, t).unwrap();
+        let now = evaluate(&stretched, 1.0 + (t - 1.0) * 2.5).unwrap();
+        assert!((now - was).abs() < 1e-9, "at t={t}: {was} -> {now}");
+    }
+}
