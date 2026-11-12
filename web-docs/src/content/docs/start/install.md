@@ -53,8 +53,8 @@ the repository from GitHub, build it, and run `packaging/linux/install.sh`.
 
 `flatpak uninstall io.github.luminalmvm.Lumit` removes the Flatpak.
 
-The `.AppImage` runs without installing. It needs glibc 2.35 or newer, and uses the
-system's own GTK and WebKitGTK:
+The `.AppImage` runs without installing. It needs glibc 2.35 or newer and uses the
+system's own GTK. Extension panels use the system's WebKitGTK 4.1 if it is installed:
 
 ```bash
 chmod +x lumit-*.AppImage

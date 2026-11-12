@@ -313,8 +313,9 @@ jobs:
           if-no-files-found: error
 
   # The same bundle as one file that runs without installing anything, for
-  # distributions where Flatpak isn't set up. It uses the machine's own GTK and
-  # WebKitGTK, so it runs on any glibc at least as new as the build machine's.
+  # distributions where Flatpak isn't set up. It uses the machine's own GTK, and
+  # WebKitGTK only for extension panels, so it runs on any glibc at least as new
+  # as the build machine's.
   # That is why this is 22.04 (glibc 2.35, so Debian 12 and Ubuntu 22.04) and
   # not the Flatpak's 24.04. Jammy has no libclang 18, so LLVM comes from the
   # same pinned download the Windows job uses.
@@ -387,6 +388,8 @@ jobs:
           # The bundle as linux-bundle stages it, with the desktop entry and
           # icon at the top, where appimagetool looks.
           cp -r flutter_ui/build/linux/x64/release/bundle AppDir
+          # The launcher must not need WebKitGTK to start (#693).
+          if readelf -d AppDir/lumit_flutter | grep -i webkit; then exit 1; fi
           cp -a "$FFMPEG_ROOT"/lib/*.so* AppDir/lib/
           mkdir -p AppDir/data/colour
           cp crates/lumit-colour/vendored/*.artefact AppDir/data/colour/
