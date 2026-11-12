@@ -1,0 +1,49 @@
+---
+title: Mixing a dialogue scene
+description: Route the voice through a bus with a reverb on a send, lower the music behind it, ride the music, and export to a loudness with stems.
+sidebar:
+  order: 10
+---
+
+A scene with a dialogue recording and music, mixed through buses in the
+[Mixer](/panels/audio/#mixer). See [Mixing](/use/mixing/) for each part.
+
+**1. Place the sound.** Drag the dialogue recording and the music from the
+[Project panel](/panels/project/) into the composition. Each becomes an Audio layer.
+
+**2. Open the Audio workspace.** Switch to the **Audio** workspace on the strip at the right
+of the toolbar. The Mixer has a strip for each layer.
+
+**3. Make the dialogue bus.** Select the dialogue layer and press `Ctrl`+`Alt`+`Shift`+`B`.
+The new bus's strip stands after the layers, and the dialogue strip's output chip names it.
+Double-click the bus's name and type `Dialogue`.
+
+**4. Make the reverb bus.** Right-click the Mixer's empty ground and choose **Insert bus**.
+Name it `Reverb`. Click the empty slot in its inserts and pick
+**[Reverb](/effects/audio/reverb/)**. In Effect controls, set **Dry** to 0 and **Wet** to
+100.
+
+**5. Send the dialogue to it.** On the **Dialogue** strip, click the empty slot in the sends and
+pick **Reverb**. Drag the send's bar left until the room sits behind the voice.
+
+**6. Lower the music behind the dialogue.** Select the music layer. In the
+[Audio panel](/panels/audio/#audio-panel), press **Lower behind…** and pick **Dialogue**.
+Set **Amount** to −15 dB.
+
+**7. Set the music to Touch.** Click the automation mode chip on the music strip and choose
+**Touch**.
+
+**8. Ride the music.** Press `Space`. Hold the music fader, bring it up under the opening
+and let go before the first line. The fader glides back to where it was. Press `Space` to
+stop. The ride is written as keys, one undo step named **Record automation**. Twirl the music
+track open in the Audio timeline to see it on the **Volume** lane.
+
+**9. Set the loudness target.** Right-click the **Master** strip and choose **Loudness
+target ▸ −16 LUFS**.
+
+**10. Normalise the mix.** Right-click the **Master** strip and choose **Normalise mix…**.
+The status line gives the loudness it reached.
+
+**11. Export with stems.** Choose **File ▸ Export**. In the **Audio** section, **Loudness**
+reads **Target, −16 LUFS**. Tick **A file for each bus** beside **Stems**, and press
+**Export**. Beside the file are `<file name> - Dialogue` and `<file name> - Reverb`.

@@ -167,6 +167,7 @@ set()})})`,
                         "use/expressions",
                         "use/markers",
                         "use/audio",
+                        "use/mixing",
                       ],
                     },
                     {
