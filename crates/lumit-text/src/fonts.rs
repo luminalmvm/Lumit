@@ -10,6 +10,11 @@
 //! kept apart from the system's and looked in after them, so a packed file
 //! never stands in front of an installed family.
 //!
+//! The fonts in the user's library are drawn with beside the system's. Their
+//! files are read into memory, never mapped, so the library can replace or
+//! delete one while Lumit runs. A library family hides an installed family of
+//! the same name.
+//!
 //! ponytail: a missing glyph draws the font's own empty box, there is no
 //! fallback to a second font for a script the first doesn't cover.
 
@@ -99,6 +104,16 @@ struct Registry {
     /// Those files, so one is never added twice.
     files: Vec<PathBuf>,
     loaded: HashMap<(String, String), Arc<Face>>,
+    /// The families the library's fonts made, each with what its files hold,
+    /// as a frame key reads it. Only looked up, so the map's order decides
+    /// nothing.
+    library: HashMap<fontique::FamilyId, [u8; 32]>,
+    /// Moved on by every reload of the library, so a face read from the
+    /// collection a reload replaced is used once and never kept.
+    generation: u64,
+    /// The file each library font was read from, by the id of the bytes it
+    /// was read into, so a template can pack a library font.
+    library_files: HashMap<u64, PathBuf>,
 }
 
 /// The system's fonts and the faces loaded so far.
@@ -121,8 +136,157 @@ fn registry() -> &'static Mutex<Registry> {
             }),
             files: Vec::new(),
             loaded: HashMap::new(),
+            library: HashMap::new(),
+            generation: 0,
+            library_files: HashMap::new(),
         })
     })
+}
+
+type Found = Option<(String, String)>;
+
+/// The answers [`by_postscript_name`] has given, forgotten when the library
+/// changes. Grows by one entry per name a project asks for.
+fn postscript_seen() -> &'static Mutex<HashMap<String, Found>> {
+    static SEEN: OnceLock<Mutex<HashMap<String, Found>>> = OnceLock::new();
+    SEEN.get_or_init(Mutex::default)
+}
+
+/// Reads the library's fonts again from `folder`, every `.ttf`, `.otf`,
+/// `.ttc` or `.otc` in it or in a folder inside it, and draws with them from
+/// now on. `None`, or a folder that isn't there, leaves only the system's.
+/// Said when the library home changes and whenever its fonts folder does.
+///
+/// The files are read with no lock held. The registry then drops the last
+/// library's fonts and every face loaded so far, so the next draw looks for
+/// its font again. Clearing rather than making a new collection keeps the
+/// system's fonts as they were scanned.
+pub fn use_library(folder: Option<&Path>) {
+    let mut paths = Vec::new();
+    if let Some(folder) = folder {
+        font_files(folder, &mut paths);
+    }
+    paths.sort();
+    let files: Vec<(PathBuf, Vec<u8>)> = paths
+        .into_iter()
+        .filter_map(|path| std::fs::read(&path).ok().map(|bytes| (path, bytes)))
+        .collect();
+    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    registry.system.clear();
+    registry.library_files.clear();
+    let mut library: HashMap<fontique::FamilyId, blake3::Hasher> = HashMap::new();
+    for (path, bytes) in files {
+        let digest = blake3::hash(&bytes);
+        let blob: fontique::Blob<u8> = bytes.into();
+        registry.library_files.insert(blob.id(), path);
+        for (family, _) in registry.system.register_fonts(blob, None) {
+            library.entry(family).or_default().update(digest.as_bytes());
+        }
+    }
+    registry.library = library
+        .into_iter()
+        .map(|(family, h)| (family, *h.finalize().as_bytes()))
+        .collect();
+    let ids: Vec<fontique::FamilyId> = registry.library.keys().copied().collect();
+    let mut names: Vec<String> = ids
+        .into_iter()
+        .filter_map(|id| registry.system.family_name(id).map(str::to_owned))
+        .collect();
+    registry.loaded.clear();
+    registry.generation = registry.generation.wrapping_add(1);
+    drop(registry);
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup();
+    *library_names()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = names;
+    postscript_seen()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+}
+
+/// Every font file in `folder` and the folders inside it, leaving out links
+/// and names that start with a dot.
+fn font_files(folder: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        let path = entry.path();
+        if kind.is_dir() {
+            font_files(&path, out);
+        } else if kind.is_file() && is_font_file(&path) {
+            out.push(path);
+        }
+    }
+}
+
+fn is_font_file(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        ["ttf", "otf", "ttc", "otc"]
+            .iter()
+            .any(|f| e.eq_ignore_ascii_case(f))
+    })
+}
+
+/// The families the last [`use_library`] found, kept apart from the registry
+/// so asking never waits on the system's fonts being scanned.
+fn library_names() -> &'static Mutex<Vec<String>> {
+    static NAMES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    &NAMES
+}
+
+/// The families that come from the library's fonts, sorted the way a menu
+/// reads.
+#[must_use]
+pub fn library_families() -> Vec<String> {
+    library_names()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
+/// What the library's files of `family` hold, when that family is drawn from
+/// the library, for a frame key to fold in. A text layer drawn before its font
+/// arrived, or after it left, is then named apart from one drawn with it.
+/// `None` for a family the system has or nobody has, which is what every
+/// frame key made before the library carries.
+#[must_use]
+pub fn library_identity(family: &str) -> Option<[u8; 32]> {
+    let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    if registry.library.is_empty() || family.is_empty() {
+        return None;
+    }
+    let id = registry.system.family_id(family)?;
+    registry.library.get(&id).copied()
+}
+
+/// The family and faces a font file holds, read from its bytes, or `None`
+/// when it isn't a font this engine draws with.
+#[must_use]
+pub fn file_info(bytes: &[u8]) -> Option<(String, Vec<String>)> {
+    let file = skrifa::raw::FileRef::new(bytes).ok()?;
+    let mut family: Option<String> = None;
+    let mut faces: Vec<String> = Vec::new();
+    for font in file.fonts().flatten() {
+        if family.is_none() {
+            family = name(&font, StringId::TYPOGRAPHIC_FAMILY_NAME)
+                .or_else(|| name(&font, StringId::FAMILY_NAME));
+        }
+        for (face, _) in faces_in(&font) {
+            if !faces.contains(&face) {
+                faces.push(face);
+            }
+        }
+    }
+    Some((family?, faces))
 }
 
 fn name(font: &FontRef<'_>, id: StringId) -> Option<String> {
@@ -157,8 +321,8 @@ fn faces_in(font: &FontRef<'_>) -> Vec<(String, Option<usize>)> {
     }
 }
 
-/// The font families installed on this machine or handed over as files,
-/// sorted the way a menu reads.
+/// The font families installed on this machine, in the library or handed
+/// over as files, sorted the way a menu reads.
 #[must_use]
 pub fn families() -> Vec<String> {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
@@ -253,8 +417,8 @@ fn holds(font: &fontique::FontInfo, wanted: &str) -> bool {
     })
 }
 
-/// The file a face is read from, for packing it. `None` for a bundled face or
-/// one that is not installed.
+/// The file a face is read from, for packing it, a library font's included.
+/// `None` for a bundled face or one that is not installed.
 ///
 /// An empty `face` is the family's regular, as a layer reads it. A face that
 /// would be drawn with a stand-in has no file.
@@ -268,10 +432,16 @@ pub fn file_of(family: &str, face: &str) -> Option<PathBuf> {
     };
     passes.iter().find_map(|wanted| {
         fonts.iter().find_map(|font| {
-            let fontique::SourceKind::Path(path) = font.source().kind() else {
-                return None;
+            let path = match font.source().kind() {
+                fontique::SourceKind::Path(path) => path.to_path_buf(),
+                fontique::SourceKind::Memory(blob) => registry()
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .library_files
+                    .get(&blob.id())?
+                    .clone(),
             };
-            holds(font, wanted).then(|| path.to_path_buf())
+            holds(font, wanted).then_some(path)
         })
     })
 }
@@ -288,7 +458,8 @@ pub fn installed(family: &str, face: &str) -> bool {
 }
 
 /// The faces of one family, in the order the family lists them, with the
-/// faces of Inter the program carries. Empty when the family isn't installed.
+/// faces of Inter the program carries. Empty when the family is neither
+/// installed nor in the library.
 #[must_use]
 pub fn faces(family: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -320,9 +491,7 @@ pub fn faces(family: &str) -> Vec<String> {
 /// Keep an index if a project with many fonts opens slowly.
 #[must_use]
 pub fn by_postscript_name(postscript: &str) -> Option<(String, String)> {
-    type Found = Option<(String, String)>;
-    static SEEN: OnceLock<Mutex<HashMap<String, Found>>> = OnceLock::new();
-    let seen = SEEN.get_or_init(Mutex::default);
+    let seen = postscript_seen();
     if let Some(found) = seen
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -356,6 +525,7 @@ pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
     if let Some(found) = known.loaded.get(&key) {
         return found.clone();
     }
+    let generation = known.generation;
     drop(known);
     // Read with the lock let go of. Two threads after the same new face both
     // read it, and the first one in is the one kept.
@@ -365,6 +535,9 @@ pub(crate) fn face(family: &str, face: &str) -> Arc<Face> {
         .or_else(|| load(&fonts, face))
         .unwrap_or_else(builtin);
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
+    if registry.generation != generation {
+        return found;
+    }
     registry.loaded.entry(key).or_insert(found).clone()
 }
 
@@ -411,4 +584,74 @@ fn load(fonts: &[fontique::FontInfo], face: &str) -> Option<Arc<Face>> {
         }
     }
     None
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::TextBlock;
+    use lumit_core::model::LinearColour;
+    use lumit_core::text::{ParagraphStyle, TextStyle};
+
+    /// **A font in the library is listed and drawn with, and once it is gone
+    /// drawing falls back to Inter without a fault.** Paper Mono, which the
+    /// interface ships, stands in for a font the person keeps; it is read
+    /// from a temporary library folder, never a real one.
+    #[test]
+    fn a_library_font_is_used_and_falls_back_once_deleted() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../flutter_ui/assets/fonts/PaperMono-Regular.otf");
+        let bytes = std::fs::read(&source).unwrap();
+        let (family, faces) = file_info(&bytes).expect("Paper Mono is a font");
+        assert!(!faces.is_empty());
+        assert!(file_info(b"not a font").is_none());
+        let installed = families().contains(&family);
+
+        let folder = std::env::temp_dir().join(format!("lumit-fonts-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(folder.join("Mono")).unwrap();
+        let kept = folder.join("Mono").join("PaperMono-Regular.otf");
+        std::fs::write(&kept, &bytes).unwrap();
+
+        use_library(Some(&folder));
+        assert_eq!(library_families(), vec![family.clone()]);
+        assert!(families().contains(&family));
+        assert!(library_identity(&family).is_some());
+        assert!(
+            !Arc::ptr_eq(&face(&family, ""), &builtin()),
+            "the library font is drawn with"
+        );
+        let style = TextStyle {
+            family: family.clone(),
+            ..TextStyle::default()
+        };
+        let paragraph = ParagraphStyle::default();
+        let block = TextBlock {
+            text: "Library",
+            size: 32.0,
+            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            style: &style,
+            paragraph: &paragraph,
+            boxed: false,
+        };
+        let with = crate::rasterise(&block, &[]);
+
+        std::fs::remove_dir_all(&folder).unwrap();
+        use_library(Some(&folder));
+        assert!(library_families().is_empty());
+        assert!(library_identity(&family).is_none());
+        if !installed {
+            assert!(
+                Arc::ptr_eq(&face(&family, ""), &builtin()),
+                "falls back to Inter"
+            );
+        }
+        let without = crate::rasterise(&block, &[]);
+        assert!(without.width > 0 && without.height > 0);
+        if !installed {
+            assert_ne!(with.rgba, without.rgba, "drawn in a different font");
+        }
+        use_library(None);
+    }
 }

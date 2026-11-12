@@ -5117,12 +5117,12 @@ fn colour_tables(
                 "lut" => {
                     return e
                         .path_at("file", lt)
-                        .map(|p| TableRequest::Cube(p.to_owned()))
+                        .map(|p| TableRequest::Cube(crate::library_luts::or_found(p)))
                 }
                 "ocio_file" => {
                     return e.path_at("file", lt).map(|p| {
                         TableRequest::Ocio(OcioRequest::File {
-                            path: p.to_owned(),
+                            path: crate::library_luts::or_found(p),
                             inverse: inverse(e),
                         })
                     })

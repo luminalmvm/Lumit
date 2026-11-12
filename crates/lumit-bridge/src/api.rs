@@ -41,6 +41,7 @@ pub mod keymap;
 pub mod layer;
 pub mod layer_source;
 pub mod lens;
+pub mod library;
 pub mod mask_clipboard;
 pub mod mixer;
 pub mod model;
