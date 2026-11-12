@@ -3791,6 +3791,14 @@
   "@fxBake": {
     "description": "Effect controls — a button on Bake points: write the points to disk now."
   },
+  "fxAnimateMesh": "Animate mesh",
+  "@fxAnimateMesh": {
+    "description": "Effect controls — a switch on Mesh warp, After Effects' stopwatch on Distortion Mesh: on, a drag of a grid point in the Viewer keys the whole mesh at the playhead."
+  },
+  "fxResetMesh": "Reset mesh",
+  "@fxResetMesh": {
+    "description": "Effect controls — a button on Mesh warp: every grid point back where a flat grid has it, keys and all."
+  },
   "fxRead": "Read",
   "@fxRead": {
     "description": "Effect controls — a Mode option on Bake points: hand on only the points that were written to disk, whatever has changed since."
@@ -13826,6 +13834,10 @@
   "fxMedian": "Median",
   "@fxMedian": {
     "description": "Effect name in the Add effect menu — replaces each pixel with the middle value of its neighbours."
+  },
+  "fxMeshWarp": "Mesh warp",
+  "@fxMeshWarp": {
+    "description": "Effect name in the Add effect menu — the picture bent by a grid of points that can each be dragged, as After Effects' Mesh Warp."
   },
   "fxMosaic": "Mosaic",
   "@fxMosaic": {

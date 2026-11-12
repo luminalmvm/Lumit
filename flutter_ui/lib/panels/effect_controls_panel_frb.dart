@@ -2082,6 +2082,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           )) {
             return;
           }
+          // Mesh warp's Reset mesh puts every crossing back where a flat grid
+          // has it, keys and all, as one undo step.
+          if (fx.name == 'mesh_warp' && param == 'reset_mesh') {
+            _effects.writeAll(layer, effect, {
+              for (final p in fx.derivedParams)
+                if (p.kind case BridgeParamKind_Float(:final default_))
+                  p.id: BridgeEffectValue.float(BridgeScalar.static_(default_)),
+            });
+            ui.model.refresh();
+            return;
+          }
           // The Node graph's Open graph row is the frontend's own the same
           // way: fronting a comp is not an event the engine could answer.
           if (fx.name == 'node_graph' && param == 'open') {

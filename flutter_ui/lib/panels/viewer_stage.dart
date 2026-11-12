@@ -50,6 +50,7 @@ import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
+import 'viewer_mesh_warp.dart';
 import 'viewer_follow.dart';
 import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
@@ -1166,6 +1167,16 @@ class ViewerStage extends StatelessWidget {
                   compSize.width.toDouble(),
                   compSize.height.toDouble(),
                 ),
+                colour: t.accent,
+                tool: uiState.tools.tool,
+                onChanged: onChanged,
+              ),
+            // A picked Mesh warp's grid, over its layer, to drag.
+            if (wireframes)
+              ViewerMeshWarp(
+                comp: comp,
+                uiState: uiState,
+                boxes: _boxes,
                 colour: t.accent,
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
