@@ -112,6 +112,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         document.animators,
         i,
         write,
+        document.style,
       ));
     }
     return FxSection(
@@ -162,6 +163,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     List<BridgeTextAnimator> animators,
     int index,
     ValueChanged<List<BridgeTextAnimator>> write,
+    BridgeTextStyle style,
   ) {
     final t = ThemeScope.of(context).theme;
     final a = animators[index];
@@ -500,7 +502,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
       // axes, a place rather than an amount, so 900 is the heaviest weight
       // whatever the layer is set at.
       for (var k = 0; k < a.axes.length; k++)
-        _axisRow(context, animators, index, k, put),
+        _axisRow(context, animators, index, k, put, style),
     ];
   }
 
@@ -516,12 +518,12 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     int index,
     int k,
     ValueChanged<BridgeTextAnimator> put,
+    BridgeTextStyle style,
   ) {
     final a = animators[index];
     final axis = a.axes[k];
-    final style = layer.getText()?.style;
-    final family = style?.family ?? '';
-    final face = style?.face ?? '';
+    final family = style.family;
+    final face = style.face;
     final (lo, hi) = fontAxisRange(family, face, axis.tag);
     void putAxes(List<BridgeAnimatorAxis> axes) =>
         put(animatorWith(a, axes: axes));
