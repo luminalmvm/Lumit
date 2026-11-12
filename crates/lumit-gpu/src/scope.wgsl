@@ -97,16 +97,20 @@ fn bin(@builtin(global_invocation_id) gid: vec3<u32>) {
                 atomicAdd(&counts[c * GRID * GRID + by * GRID + bx], 1u);
             }
         }
-        case 2u: { // vectorscope (Rec.601 Cb/Cr)
+        case 2u: { // vectorscope (Rec.709 Cb/Cr)
             let rf = f32(rgb.x) / 255.0;
             let gf = f32(rgb.y) / 255.0;
             let bf = f32(rgb.z) / 255.0;
-            let cb = -0.168736 * rf - 0.331264 * gf + 0.5 * bf;
-            let cr = 0.5 * rf - 0.418688 * gf - 0.081312 * bf;
-            let centre = (f32(GRID) - 1.0) * 0.5;
+            // Rec.709, as the waveform's luma is.
+            let y = 0.2126 * rf + 0.7152 * gf + 0.0722 * bf;
+            let cb = (bf - y) / 1.8556;
+            let cr = (rf - y) / 1.5748;
+            // The plot's middle is the grid's middle edge, not a cell's centre,
+            // so a cell is drawn round the value it holds.
+            let half = f32(GRID) * 0.5;
             let scale = f32(GRID) * 0.9;
-            let px = centre + cb * scale;
-            let py = centre - cr * scale; // screen y down; Cr up
+            let px = half + cb * scale;
+            let py = half - cr * scale; // screen y down; Cr up
             if (px >= 0.0 && px < f32(GRID) && py >= 0.0 && py < f32(GRID)) {
                 atomicAdd(&counts[u32(py) * GRID + u32(px)], 1u);
             }

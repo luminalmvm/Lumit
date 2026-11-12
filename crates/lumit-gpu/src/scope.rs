@@ -65,7 +65,7 @@ pub enum ScopeKind {
     WaveformLuma,
     /// Red/green/blue waveforms overlaid.
     WaveformRgb,
-    /// Chroma on a circle (Rec.601 Cb/Cr).
+    /// Chroma on a circle (Rec.709 Cb/Cr).
     Vectorscope,
     /// Per-channel pixel counts by brightness.
     Histogram,
