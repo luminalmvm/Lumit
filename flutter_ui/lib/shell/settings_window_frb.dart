@@ -51,6 +51,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show setTouchReturnMs;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
@@ -2042,6 +2043,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
+          _row(
+            t,
+            l10n.settingsWaveformScale,
+            _dropdown<WaveformScale>(
+              key: 'settings-waveform-scale',
+              value: settings.waveformScale,
+              options: WaveformScale.values,
+              label: (scale) => switch (scale) {
+                WaveformScale.linear => l10n.waveformLinear,
+                WaveformScale.squareRoot => l10n.waveformSquareRoot,
+                WaveformScale.logarithmic => l10n.waveformLogarithmic,
+              },
+              onChanged: (scale) => setState(() {
+                settings.waveformScale = scale;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
         ],
       ),
     ]);
@@ -2597,12 +2616,45 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ),
         ],
       ),
+      (
+        l10n.settingsGroupPlayback,
+        [
+          _flag(t, 'settings-scrub-on-drag', l10n.settingsScrubOnDrag,
+              value: ui.workspace.scrubOnDrag,
+              set: ui.workspace.setScrubOnDrag),
+          _row(
+            t,
+            l10n.settingsTouchReturn,
+            _carry(_setting('settings-touch-return', ui.workspace.touchReturnMs,
+                (int ms) => _setTouchReturn(ui.workspace, ms),
+                copy: '${ui.workspace.touchReturnMs}'), SizedBox(
+              width: 70,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: const ValueKey('settings-touch-return'),
+                value: ui.workspace.touchReturnMs.toDouble(),
+                min: 0,
+                max: 2000,
+                decimals: 0,
+                suffix: ' ms',
+                resetTo: _shippedNumber('settings-touch-return'),
+                onChanged: (ms) => _setTouchReturn(ui.workspace, ms.round()),
+              ),
+            )),
+          ),
+        ],
+      ),
     ]);
   }
 
   void _setAudioOffset(Workspace workspace, int ms) {
     audioSetOffsetMs(ms: ms);
     setState(() => workspace.setAudioOffsetMs(ms));
+  }
+
+  void _setTouchReturn(Workspace workspace, int ms) {
+    setTouchReturnMs(ms: ms);
+    setState(() => workspace.setTouchReturnMs(ms));
   }
 
   /// Take the choice: tell the engine, write it to the settings file, and read

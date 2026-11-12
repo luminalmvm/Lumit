@@ -250,7 +250,10 @@ class SoundMixLane extends StatelessWidget {
                 // The mix has one band: the stack's filters want the samples,
                 // and a mix keeps none. Where the wave sits follows Settings.
                 style: WaveformStyle(
-                    multiwave: false, fromBottom: style.fromBottom),
+                    multiwave: false,
+                    fromBottom: style.fromBottom,
+                    scale: style.scale),
+                full: t.error,
               ),
               size: Size(box.maxWidth, t.density.laneRow * soundMixRows),
             ),

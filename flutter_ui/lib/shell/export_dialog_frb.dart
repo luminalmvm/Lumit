@@ -59,6 +59,8 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show BridgeLoudnessTarget;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
@@ -68,6 +70,8 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/loudness_commands.dart'
+    show loudnessPresets, loudnessTargetLabel, presetTruePeakDb;
 import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
@@ -177,6 +181,9 @@ const String exportTokenDate = '{date}';
 /// A crop inset's well — four of them and their T · L · B · R marks fit the
 /// row beside the region tick and the final-size reading.
 const double exportCropWell = 40;
+
+/// The loudness and true peak wells.
+const double exportLoudnessWell = 76;
 
 /// The audio row's five faces, as the drawing measures them.
 const double exportAudioSourceWidth = 110;
@@ -374,6 +381,27 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// repeated here. Read once, because `build` crosses no bridge.
   List<int> _sampleRates = const [48000];
 
+  /// What the mix is brought to: null for off, [_targetPick] for the comp's
+  /// loudness target, [_customPick] for [_customLufs], or a preset in LUFS.
+  /// [_truePeakDb] is the ceiling it is held under.
+  Object? _loudnessPick;
+  double _customLufs = loudnessPresets.first;
+  double _truePeakDb = presetTruePeakDb;
+  static const Object _targetPick = #target;
+  static const Object _customPick = #custom;
+
+  /// A file of each bus's sound beside the main one.
+  bool _stems = false;
+
+  /// The comp's loudness target and whether it has a bus, read once.
+  BridgeLoudnessTarget? _compTarget;
+  bool _hasBus = false;
+
+  /// The settings came from a preset of one's own or a queued export, so
+  /// their loudness, Off included, stands over the comp's target. A built-in
+  /// names no loudness, and the target stands.
+  bool _ownLoudness = false;
+
   String? _path;
 
   /// The path the system's Save dialogue handed back, which has already asked
@@ -526,6 +554,10 @@ class _ExportDialogState extends State<_ExportDialog> {
       }
       _rangeStart = _workStart;
       _rangeEnd = _workEnd;
+      _compTarget = widget.comp.loudnessTarget();
+      _hasBus = widget.comp
+          .getLayers()
+          .any((l) => l.getInfo().kind == BridgeLayerKind.bus);
     } catch (_) {
       // A comp that cannot be read leaves the placeholder defaults; the export
       // itself will refuse with the engine's own words.
@@ -571,6 +603,13 @@ class _ExportDialogState extends State<_ExportDialog> {
       final format = _formats.where((f) => f.key == defaults.codec).firstOrNull;
       if (format != null) _format = format;
     }
+    // A comp with a loudness target is exported to it unless the preset says
+    // otherwise.
+    if (_compTarget case final target?
+        when _loudnessPick == null && !_ownLoudness) {
+      _loudnessPick = _targetPick;
+      _truePeakDb = target.truePeakDb;
+    }
     _seedDestination(defaults);
     _recompute();
     try {
@@ -600,7 +639,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// queued, so that group goes.
   void _reopen(BridgeExportSpec spec, String path) {
     _lacking = const [];
-    _takeSpec(spec);
+    _takeSpec(spec, exact: true);
     _edit(() {
       _ownRate = spec.fps > 0 && (spec.fps - _compFps).abs() > 0.0005;
       _fps = spec.fps > 0 ? spec.fps : _compFps;
@@ -720,6 +759,21 @@ class _ExportDialogState extends State<_ExportDialog> {
     return '$line · $size';
   }
 
+  /// The loudness the dialogue asks for, null for none.
+  BridgeExportLoudness? get _loudness {
+    final pick = _loudnessPick;
+    final lufs = pick is double
+        ? pick
+        : pick == _targetPick
+            ? _compTarget?.lufs
+            : pick == _customPick
+                ? _customLufs
+                : null;
+    return lufs == null
+        ? null
+        : BridgeExportLoudness(lufs: lufs, truePeakDb: _truePeakDb);
+  }
+
   BridgeExportSpec get _spec {
     final (start, end) = _range;
     final (width, height) = _outputSize;
@@ -775,6 +829,8 @@ class _ExportDialogState extends State<_ExportDialog> {
       gifDither: _gifDither,
       gifPalettePerFrame: _gifPalettePerFrame,
       gifPlays: _gifPlays,
+      loudness: _loudness,
+      stems: _stems,
     );
   }
 
@@ -947,6 +1003,8 @@ class _ExportDialogState extends State<_ExportDialog> {
               _audioChannels == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
               if (_caps.audioBitRate)
                 l10n.exportReadingAudioRate('${_audioRate ~/ 1000}'),
+              if (_loudness case final loudness?)
+                loudnessTargetLabel(loudness.lufs),
             ]
           : [l10n.off],
       // Nothing to say until somebody has written something in it.
@@ -1902,6 +1960,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     final dim = !_caps.audio;
     // Why the settings after the first list are dead while it reads Off.
     final off = _audio ? null : l10n.tipExportAudioOff;
+    final live = _caps.audio && _audio;
     return _group(
       t,
       ExportSection.audio,
@@ -2002,10 +2061,123 @@ class _ExportDialogState extends State<_ExportDialog> {
           ]),
           dimmed: dim,
         ),
+        _columns(
+          _row(
+            t,
+            l10n.exportLoudness,
+            Row(children: [
+              Expanded(
+                child: SizedBox(
+                  height: dialogControlHeight,
+                  child: _why(
+                    off,
+                    BareDropdown<Object?>(
+                      key: const ValueKey('export-loudness'),
+                      value: _loudnessPick,
+                      options: [
+                        null,
+                        if (_compTarget != null) _targetPick,
+                        ...loudnessPresets,
+                        _customPick,
+                      ],
+                      label: _loudnessLabel,
+                      onChanged: live ? _pickLoudness : null,
+                    ),
+                  ),
+                ),
+              ),
+              if (_loudnessPick == _customPick) ...[
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: exportLoudnessWell,
+                  height: dialogControlHeight,
+                  child: live
+                      ? DragValueField(
+                          key: const ValueKey('export-loudness-lufs'),
+                          value: _customLufs,
+                          min: -40,
+                          max: -5,
+                          decimals: 1,
+                          fill: t.surface0,
+                          onChanged: (v) =>
+                              _edit(() => _customLufs = v.toDouble()),
+                        )
+                      : _well(t, _customLufs.toStringAsFixed(1),
+                          key: const ValueKey('export-loudness-lufs'),
+                          tone: t.textDisabled),
+                ),
+              ],
+            ]),
+            dimmed: dim,
+          ),
+          _loudness == null
+              ? null
+              : _row(
+                  t,
+                  l10n.exportTruePeak,
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: SizedBox(
+                      width: exportLoudnessWell,
+                      height: dialogControlHeight,
+                      child: live
+                          ? DragValueField(
+                              key: const ValueKey('export-true-peak'),
+                              value: _truePeakDb,
+                              min: -9,
+                              max: 0,
+                              decimals: 1,
+                              suffix: ' ${l10n.unitSymbolDbtp}',
+                              resetTo: presetTruePeakDb,
+                              fill: t.surface0,
+                              onChanged: (v) =>
+                                  _edit(() => _truePeakDb = v.toDouble()),
+                            )
+                          : _well(
+                              t,
+                              '${_truePeakDb.toStringAsFixed(1)} '
+                              '${l10n.unitSymbolDbtp}',
+                              key: const ValueKey('export-true-peak'),
+                              tone: t.textDisabled),
+                    ),
+                  ),
+                  labelColumn: exportLabelColumnPaired,
+                  dimmed: dim,
+                ),
+        ),
+        if (_hasBus)
+          _row(
+            t,
+            l10n.exportStems,
+            _why(
+              off,
+              _tick(t, 'export-stems', l10n.exportStemsEach, _stems,
+                  live ? (on) => _edit(() => _stems = on) : null),
+            ),
+            dimmed: dim,
+          ),
       ],
       dimmed: dim,
     );
   }
+
+  /// A loudness choice as the list reads it.
+  String _loudnessLabel(Object? pick) => switch (pick) {
+        final double lufs => loudnessTargetLabel(lufs),
+        _targetPick => l10n.exportLoudnessTarget(
+            loudnessTargetLabel(_compTarget?.lufs ?? 0)),
+        _customPick => l10n.custom,
+        _ => l10n.off,
+      };
+
+  /// A loudness picked off the list. The comp's target brings its own true
+  /// peak with it.
+  void _pickLoudness(Object? pick) => _edit(() {
+        _loudnessPick = pick;
+        if (_compTarget case final target? when pick == _targetPick) {
+          _truePeakDb = target.truePeakDb;
+        }
+      });
 
   /// Metadata: an ordered key/value set, because the order lands in the file
   /// and an export is deterministic. The five classic fields lead, named; a
@@ -2501,7 +2673,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 
   /// Fill every field a preset carries from [stored], its name included.
-  void _takeSpec(BridgeExportSpec stored) {
+  /// [exact] for a queued export's own settings, which name their loudness.
+  void _takeSpec(BridgeExportSpec stored, {bool exact = false}) {
     _edit(() {
       _preset = stored.preset;
       _format = _formats.firstWhere(
@@ -2527,6 +2700,24 @@ class _ExportDialogState extends State<_ExportDialog> {
       _audioSampleRate = stored.audioRate == 0 ? 48000 : stored.audioRate;
       _audioDepth = stored.audioDepth >= 24 ? 24 : 16;
       _audioChannels = stored.audioChannels == 1 ? 1 : 2;
+      final loudness = stored.loudness;
+      _ownLoudness = exact ||
+          _presets.any((p) => p.name == stored.preset && !p.readOnly);
+      final target = _compTarget;
+      _loudnessPick = switch (loudness?.lufs) {
+        null when target != null && !_ownLoudness => _targetPick,
+        null => null,
+        final lufs when lufs == _compTarget?.lufs => _targetPick,
+        final lufs when loudnessPresets.contains(lufs) => lufs,
+        _ => _customPick,
+      };
+      if (loudness != null) {
+        _truePeakDb = loudness.truePeakDb;
+        if (_loudnessPick == _customPick) _customLufs = loudness.lufs;
+      } else if (target != null && _loudnessPick == _targetPick) {
+        _truePeakDb = target.truePeakDb;
+      }
+      _stems = stored.stems;
       _colourSpace = stored.colourSpace;
       _resample = stored.resample;
       _renderGuides = stored.renderGuides;

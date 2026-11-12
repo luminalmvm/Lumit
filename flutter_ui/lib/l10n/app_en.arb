@@ -15358,6 +15358,64 @@
   "@settingsNormaliseTo": {
     "description": "Settings window, Audio: the level, in dB, that Normalise puts a sound's loudest sample at."
   },
+  "audioOutputMoved": "Sound moved to another output",
+  "@audioOutputMoved": {
+    "description": "Status line, when the sound output in use went away and the sound was moved to another output, usually the system default."
+  },
+  "audioFellBehind": "Sound could not keep up",
+  "@audioFellBehind": {
+    "description": "Status line, said at most once a playback, when some sound was played as silence because it was not ready in time."
+  },
+  "settingsTouchReturn": "Touch return",
+  "@settingsTouchReturn": {
+    "description": "Settings window, Audio: how long, in milliseconds, a control let go while recording in the Touch automation mode takes to glide back to its keys."
+  },
+  "settingsScrubOnDrag": "Scrub when dragging the playhead",
+  "@settingsScrubOnDrag": {
+    "description": "Settings window, Audio: a switch. On, dragging the playhead along a timeline ruler plays the sound under it, as dragging with Ctrl held always does."
+  },
+  "settingsWaveformScale": "Scale",
+  "@settingsWaveformScale": {
+    "description": "Settings window, Appearance, Waveforms: the name of the row choosing how a waveform's height follows the level of the sound."
+  },
+  "waveformLinear": "Linear",
+  "@waveformLinear": {
+    "description": "One choice for a waveform's scale: the height is the level itself."
+  },
+  "waveformSquareRoot": "Square root",
+  "@waveformSquareRoot": {
+    "description": "One choice for a waveform's scale: the height is the square root of the level, which makes quiet sound easier to see."
+  },
+  "waveformLogarithmic": "Logarithmic",
+  "@waveformLogarithmic": {
+    "description": "One choice for a waveform's scale: the height follows the level in decibels, from -60 dB at the centre to 0 dB at the edge."
+  },
+  "exportLoudness": "Loudness",
+  "@exportLoudness": {
+    "description": "Export dialog, Audio section: the name of the row choosing the loudness, in LUFS, the exported mix is brought to."
+  },
+  "exportLoudnessTarget": "Target, {target}",
+  "@exportLoudnessTarget": {
+    "description": "Export dialog, Loudness list: the composition's own loudness target, for example \"Target, −14 LUFS\".",
+    "placeholders": {
+      "target": {
+        "type": "String",
+        "example": "−14 LUFS"
+      }
+    }
+  },
+  "exportTruePeak": "True peak",
+  "@exportTruePeak": {
+    "description": "Export dialog, Audio section: the name of the row holding the highest true peak, in dBTP, the exported mix may reach."
+  },
+  "exportStems": "Stems",
+  "@exportStems": {
+    "description": "Export dialog, Audio section: the name of the row that also writes each bus's sound to a file of its own."
+  },
+  "exportStemsEach": "A file for each bus",
+  "@exportStemsEach": {
+    "description": "Export dialog, Stems row: the tick that writes, beside the main file, one sound file for each bus in the composition."
+  },
   "settingsAudioOffset": "Audio offset",
   "@settingsAudioOffset": {
     "description": "Settings window, Audio: the name of the row that sets how many milliseconds late the sound is heard on this setup, so playback can line the picture up with it. Above zero holds the picture back for late sound, such as through Bluetooth headphones; below zero holds the sound back."
