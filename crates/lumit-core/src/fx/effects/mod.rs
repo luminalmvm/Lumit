@@ -41,6 +41,7 @@ pub mod connect_points;
 pub mod contour_points;
 pub mod contrast;
 pub mod corner_pin;
+pub mod correction;
 pub mod crop;
 pub mod curves;
 pub mod custom_controls;

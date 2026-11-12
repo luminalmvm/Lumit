@@ -66,6 +66,7 @@ pub mod frames;
 pub mod fxops;
 /// The GPU dispatch table for migrated effects (docs/impl/effect-registry.md §2.5).
 pub mod gpufx;
+mod gpufx_correction;
 mod gpufx_crop;
 mod gpufx_denoise;
 mod gpufx_film;

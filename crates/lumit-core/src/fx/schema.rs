@@ -449,6 +449,15 @@ pub enum ParamKind {
         /// start invisible and grow from nothing (particulate.md §2).
         default: &'static [[f32; 2]],
     },
+    /// An **outline** inside a box: up to
+    /// [`SHAPE_MAX_POINTS`](super::shape_points::SHAPE_MAX_POINTS) points in
+    /// order round a closed shape, each in `-1..1` of the box the rows beside
+    /// it place (a Correction window's polygon). The value is an
+    /// [`EffectValue::Shape`](crate::model::EffectValue::Shape), empty for a
+    /// fresh row, read through
+    /// [`ShapePoints::sanitised`](super::shape_points::ShapePoints::sanitised).
+    /// Static, as a curve is: the box animates, the points do not.
+    Shape,
     /// A **button**, not a value: a row the panel draws as a push
     /// button, which asks the engine to *do* something rather than describing
     /// what a picture should look like.
@@ -505,6 +514,7 @@ impl ParamKind {
             | ParamKind::Clip
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
+            | ParamKind::Shape
             | ParamKind::ColourName { .. }
             | ParamKind::Text { .. }
             | ParamKind::Action => None,

@@ -100,6 +100,7 @@ use super::effects::{
     contour_points::{ContourPoints, ContourPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
+    correction::{Correction, CorrectionDef},
     crop::{Crop, CropDef},
     curves::{Curves, CurvesDef},
     custom_controls::{CustomControls, CustomControlsDef},
@@ -408,6 +409,8 @@ crate::catalogue![
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,
+    // A whole grade node, beside the colour effects it gathers up.
+    CorrectionDef => Correction,
     LevelsDef => Levels,
     BrightnessDef => Brightness,
     HueSaturationDef => HueSaturation,

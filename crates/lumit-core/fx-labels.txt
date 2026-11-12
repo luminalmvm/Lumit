@@ -29,6 +29,7 @@ Add grain
 Add input
 Add to picked
 Add up
+Adjust
 Adjust time by
 Age
 Align
@@ -148,6 +149,7 @@ Bezier warp
 BiRefNet
 Bias
 Black and white
+Black clip
 Blades
 Blend
 Blobs
@@ -159,10 +161,14 @@ Blue amount
 Blue blade
 Blue blur
 Blue from
+Blue high
+Blue low
+Blue output
 Blue phase
 Blues
 Blur
 Blur & sharpen
+Blur radius
 Blur size
 Boolean
 Boolean layer
@@ -243,6 +249,8 @@ Chromatic aberration
 Chrome
 Circle
 Clamp
+Clean black
+Clean white
 Clearance
 Click removal
 Clicks
@@ -285,6 +293,7 @@ Colour 4 position
 Colour A
 Colour B
 Colour balance
+Colour boost
 Colour burn
 Colour by
 Colour control
@@ -345,6 +354,7 @@ Corner segments
 Corner x
 Corner y
 Corners
+Correction
 Cosine
 Count
 Count nested inputs
@@ -674,6 +684,9 @@ Green
 Green amount
 Green blur
 Green from
+Green high
+Green low
+Green output
 Green phase
 Greens
 Grid
@@ -690,6 +703,7 @@ Grow
 Grow max
 Grow min
 H line rel width
+HSL
 Hairs
 Halation
 Half
@@ -709,6 +723,9 @@ Hide behind
 Hiding
 High
 High cut
+High range
+High soft clip
+Highlight
 Highlight amount
 Highlight boost
 Highlight colour
@@ -731,10 +748,17 @@ Horizontal phase shift
 How to treat
 Hue
 Hue and saturation
+Hue curves
 Hue range
 Hue shift
+Hue softness
 Hue spread
 Hue start
+Hue symmetry
+Hue v hue
+Hue v lum
+Hue v sat
+Hue width
 Hum only
 Hum removal
 Hysteresis
@@ -756,6 +780,7 @@ Inner bevel
 Inner glow
 Inner radius
 Inner shadow
+Inner softness
 Input
 Input black
 Input colour space
@@ -792,6 +817,7 @@ Jolts only
 Jumpy
 Keep in picked
 Keep inside
+Keep luma
 Keep scale
 Key out safe
 Key out unsafe
@@ -868,23 +894,32 @@ Linear to sRGB
 Linear wipe
 Lines
 Load from file…
+Log
+Log wheels
 Look
 Lookahead
 Loop
 Low
+Low range
+Low soft clip
 Lower left x
 Lower left y
 Lower right x
 Lower right y
+Lum mix
+Lum v sat
 Luma
 Luma broad
 Luma coarse
 Luma fade
 Luma fine
 Luma hide
+Luma high
+Luma low
 Luma medium
 Luma noise
 Luma reveal
+Luma softness
 Luminance
 Luminance only
 Luminosity
@@ -911,6 +946,7 @@ Material
 Math
 Math points
 Matte
+Matte finesse
 Matte inverted
 Matte key
 Matte mode
@@ -940,7 +976,9 @@ Method
 Micro Four Thirds
 Middle
 Middle colour
+Midtone
 Midtone contrast
+Midtone detail
 Midtones
 Min
 Min area
@@ -950,6 +988,7 @@ Minimum gap
 Mirror
 Mirror edges
 Mix
+Mixer
 Mode
 Model
 Model layer
@@ -975,6 +1014,7 @@ Nearest distance
 Negative
 Neon
 No motion
+Node
 Node graph
 Noise
 Noise by size
@@ -1042,6 +1082,7 @@ Out low
 Outer bevel
 Outer glow
 Outer radius
+Outer softness
 Outline
 Output
 Output black
@@ -1057,6 +1098,7 @@ PAL
 Padding x
 Padding y
 Paint style
+Parallel
 Parametric EQ
 Part
 Part id
@@ -1103,6 +1145,7 @@ Pinned
 Pinning
 Pipe radius
 Pipe segments
+Pivot
 Pixel motion
 Pixel sort
 Pixels
@@ -1135,6 +1178,7 @@ Points layer
 Points sample
 Polar coordinates
 Polar to rectangular
+Polygon
 Portra 160
 Portra 400
 Portra 800
@@ -1162,9 +1206,11 @@ Provia 100F
 Pull
 Pulse
 Push or pull
+Qualifier
 Quality
 Quarter
 Quarter speed
+RGB
 RGB split
 Radial
 Radial blur
@@ -1195,6 +1241,9 @@ Red amount
 Red blade
 Red blur
 Red from
+Red high
+Red low
+Red output
 Red phase
 Reds
 Reduce
@@ -1290,9 +1339,14 @@ Sample size
 Sample x
 Sample y
 Samples
+Sat v lum
+Sat v sat
 Satin
 Satin colour
 Saturation
+Saturation high
+Saturation low
+Saturation softness
 Save to folder
 Sawtooth
 Scale
@@ -1332,10 +1386,12 @@ Sensor
 Separate timing
 Separation
 Sepia
+Serial
 Set channels
 Set matte
 Set number
 Shade colour
+Shadow
 Shadow amount
 Shadow colour
 Shadow highlight
@@ -1625,13 +1681,16 @@ Upper right x
 Upper right y
 Use colour ramp
 Use focus point
+Use hue
 Use inner radius
 Use light colour
 Use light intensity
+Use luma
 Use masks
 Use middle colour
 Use point colour
 Use point size
+Use saturation
 Use source colour
 Use this frame
 Utility
@@ -1657,6 +1716,7 @@ Vertical channel
 Vertical distortion
 Vibrancy
 Vibrato
+Video
 View
 Vignette
 Violet
@@ -1694,6 +1754,8 @@ Wavelength
 Waves
 Weak
 Wet
+Wheels
+White clip
 Whole frames
 Whole sound
 Widen
@@ -1709,6 +1771,10 @@ Wind x
 Wind y
 Wind z
 Window
+Window 1
+Window 2
+Window 3
+Window 4
 Wipe
 Wipe angle
 Wipe centre x

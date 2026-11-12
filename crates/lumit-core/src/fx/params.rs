@@ -194,6 +194,8 @@ pub enum Value {
     /// A short text the user typed, inline, for the reason a curve is: it is
     /// small, `Copy`, and hashed into the frame key with everything else.
     Text(ShortText),
+    /// A Shape row's points, inline for the reason a curve's are.
+    Shape(ShapePoints),
 }
 
 /// The most bytes of UTF-8 a [`ParamKind::Text`](crate::fx::schema::ParamKind::Text)
@@ -387,8 +389,8 @@ impl Value {
             // A shape is not a number; its first point's output is the least
             // misleading scalar to give a caller that asked anyway.
             Value::Curve(c) => c.xy[0][1],
-            // Words are not a number either.
-            Value::Text(_) => 0.0,
+            // Words are not a number either, and nor is an outline.
+            Value::Text(_) | Value::Shape(_) => 0.0,
         }
     }
 
@@ -407,6 +409,7 @@ impl Value {
             Value::MaskPath(_) => 8,
             Value::Curve(_) => 9,
             Value::Text(_) => 10,
+            Value::Shape(_) => 11,
         }
     }
 }
@@ -532,6 +535,14 @@ impl<'a> Params<'a> {
         match self.get(id) {
             Some(Value::Curve(c)) => c,
             _ => CurvePoints::IDENTITY,
+        }
+    }
+
+    /// The Shape row `id`, or no points when absent or of another kind.
+    pub fn shape(&self, id: ParamId) -> ShapePoints {
+        match self.get(id) {
+            Some(Value::Shape(s)) => s,
+            _ => ShapePoints::EMPTY,
         }
     }
 
@@ -884,6 +895,14 @@ impl ResolvedFx<'_> {
                     feed(&[text.len]);
                     feed(text.as_str().as_bytes());
                 }
+                // The length first, then the live points, as a curve's.
+                Value::Shape(s) => {
+                    feed(&(s.len() as u32).to_le_bytes());
+                    for p in s.points() {
+                        feed(&p[0].to_le_bytes());
+                        feed(&p[1].to_le_bytes());
+                    }
+                }
             }
         }
     }
@@ -891,6 +910,7 @@ impl ResolvedFx<'_> {
 
 use super::registry::EffectDef;
 use super::schema::ParamSchema;
+use super::shape_points::ShapePoints;
 
 impl std::fmt::Debug for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

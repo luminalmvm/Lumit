@@ -440,6 +440,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Invert,
     &Tint,
     &Curves,
+    &crate::gpufx_correction::CorrectionFx,
     &Levels,
     &Brightness,
     &HueSaturation,

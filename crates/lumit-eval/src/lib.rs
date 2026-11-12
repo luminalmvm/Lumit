@@ -1390,6 +1390,16 @@ fn feed_effect_stack(
                         feed_f64(h, f64::from(xy[1]));
                     }
                 }
+                EffectValue::Shape(points) => {
+                    // The outline as the render reads it, so a point the
+                    // read drops keys nothing.
+                    let shape = lumit_core::fx::shape_points::ShapePoints::sanitised(points);
+                    h.update(&(shape.len() as u32).to_le_bytes());
+                    for xy in shape.points() {
+                        feed_f64(h, f64::from(xy[0]));
+                        feed_f64(h, f64::from(xy[1]));
+                    }
+                }
             }
         }
         // A seeded effect (docs/08 §1.3 Randomness) draws from

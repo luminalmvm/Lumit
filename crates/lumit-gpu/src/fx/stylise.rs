@@ -116,15 +116,15 @@ struct MaskFillParams {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct MatteTidyParams {
-    dx: i32,
-    dy: i32,
-    ri: i32,
-    frac: f32,
-    grow: u32,
-    black: f32,
-    white: f32,
-    _pad0: f32,
+pub(super) struct MatteTidyParams {
+    pub(super) dx: i32,
+    pub(super) dy: i32,
+    pub(super) ri: i32,
+    pub(super) frac: f32,
+    pub(super) grow: u32,
+    pub(super) black: f32,
+    pub(super) white: f32,
+    pub(super) _pad0: f32,
 }
 
 #[repr(C)]

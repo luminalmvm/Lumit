@@ -1712,6 +1712,10 @@ pub enum EffectValue {
     ///
     /// Also what a text row holds: the text as typed.
     Text(String),
+    /// A Shape row's points, in order round the outline, each in `-1..1` of
+    /// the box the rows beside it place. Static, and straightened on read
+    /// ([`crate::fx::shape_points::ShapePoints::sanitised`]) as a curve is.
+    Shape(Vec<[f32; 2]>),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case

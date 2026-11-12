@@ -14,6 +14,8 @@ pub mod audio_spectrum;
 pub mod blur;
 pub mod colour;
 pub mod common;
+/// The Correction's passes, built on first use.
+pub mod correction;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
 /// Denoise's passes, built on first use.
@@ -397,6 +399,7 @@ pub struct FxEngine {
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
     film: film::LazyFilm,
+    correction: correction::LazyCorrection,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with

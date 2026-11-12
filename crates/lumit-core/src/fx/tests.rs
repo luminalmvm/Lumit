@@ -7007,6 +7007,34 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "point2_y"),
             ("planar_track", "region"),
             ("depth_points", "point_size"),
+            // The Correction: the qualifier's Blur and Grow, and each
+            // window's place, size and softness.
+            ("correction", "qual_blur"),
+            ("correction", "qual_grow"),
+            ("correction", "win1_x"),
+            ("correction", "win1_y"),
+            ("correction", "win1_w"),
+            ("correction", "win1_h"),
+            ("correction", "win1_soft"),
+            ("correction", "win1_soft_in"),
+            ("correction", "win2_x"),
+            ("correction", "win2_y"),
+            ("correction", "win2_w"),
+            ("correction", "win2_h"),
+            ("correction", "win2_soft"),
+            ("correction", "win2_soft_in"),
+            ("correction", "win3_x"),
+            ("correction", "win3_y"),
+            ("correction", "win3_w"),
+            ("correction", "win3_h"),
+            ("correction", "win3_soft"),
+            ("correction", "win3_soft_in"),
+            ("correction", "win4_x"),
+            ("correction", "win4_y"),
+            ("correction", "win4_w"),
+            ("correction", "win4_h"),
+            ("correction", "win4_soft"),
+            ("correction", "win4_soft_in"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -7208,6 +7236,7 @@ fn payload_len(v: Value) -> usize {
         Value::Curve(c) => 4 + 8 * c.points().len(),
         // A length byte, then the bytes typed.
         Value::Text(t) => 1 + t.as_str().len(),
+        Value::Shape(s) => 4 + 8 * s.len(),
     }
 }
 
@@ -7752,6 +7781,9 @@ fn every_effect_carries_a_matte_row() {
                 // Denoise: the matte scales how much noise is taken, so the
                 // Removed noise view shows what the matte lets through.
                 | "denoise"
+                // The Correction: the matte joins the node's key, which
+                // mixes the grade back per pixel inside the kernel.
+                | "correction"
         );
         assert_eq!(
             !s.matte.generic(),
@@ -8600,7 +8632,10 @@ fn every_x_parameter_is_half_of_a_declared_pair() {
                     p.id
                 );
             }
-            if let Some(stem) = p.id.strip_suffix("_y") {
+            // Only a number can be half a point: the Correction's Luma
+            // curve is `curve_y` and is no one's other half.
+            let number = matches!(p.kind, ParamKind::Float { .. });
+            if let Some(stem) = p.id.strip_suffix("_y").filter(|_| number) {
                 assert!(
                     schema.pairs().any(|q| q.stem == stem),
                     "{}.{}: a `_y` with no `{stem}_x` before it",
