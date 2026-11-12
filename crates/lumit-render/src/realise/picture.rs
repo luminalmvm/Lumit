@@ -138,12 +138,22 @@ impl Realiser<'_> {
                     self.measure_below_flow(l, &tex, *width, *height, *background)
                 }
                 _ => {
+                    // Decoded as the frame itself was, so made ready the
+                    // same way: its pixel format and its input transform.
+                    let (format, colour_space) = match &l.source {
+                        DrawSource::Pixels {
+                            format,
+                            colour_space,
+                            ..
+                        } => (*format, colour_space.clone()),
+                        _ => (lumit_media::decode::PixelFormat::Srgb8, None),
+                    };
                     let neighbours: Vec<(i32, wgpu::Texture)> = l
                         .neighbours
                         .iter()
                         .map(|(offset, rgba, nw, nh)| {
-                            let src = self.engine.upload_srgb8(&self.ctx, rgba, *nw, *nh);
-                            (*offset, self.engine.linearise(&self.ctx, &src))
+                            let tex = self.upload_source(rgba, *nw, *nh, format, &colour_space);
+                            (*offset, tex)
                         })
                         .collect();
                     // The dense motion fields, one per offset a
