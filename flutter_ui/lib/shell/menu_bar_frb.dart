@@ -42,6 +42,7 @@ import 'package:lumit_flutter/src/rust/api/cache.dart'
         vramCacheStats;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show BridgeLoudnessTarget;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/presets.dart'
     show listPresetGroups, movePreset;
@@ -62,6 +63,7 @@ import '../panels/grade_clipboard.dart'
 import '../panels/layer_source_menu.dart';
 import '../panels/noise_actions.dart';
 import '../panels/normalise_commands.dart' show normaliseLayers;
+import '../panels/loudness_commands.dart';
 import '../panels/preset_save.dart'
     show deletePreset, isOwnPreset, presetMoveToRow, renamePreset;
 import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
@@ -1532,6 +1534,35 @@ List<MenuSection> lumitMenus(
                 onComp((c) => detectCompBeats(app, c))),
             MenuEntry(
                 l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
+            // The loudness the mix is made for, and the master set to meet it,
+            // as the Master strip's menu has them.
+            MenuEntry.submenu(l10n.menuAudio, [
+              MenuEntry.submenu(l10n.mixerLoudnessTarget, () {
+                BridgeLoudnessTarget? target;
+                try {
+                  target = comp?.loudnessTarget();
+                } catch (_) {}
+                void set(BridgeLoudnessTarget? to) =>
+                    setCompLoudnessTarget(comp!, to, () {});
+                return [
+                  MenuEntry(l10n.mixerLoudnessTargetOff,
+                      onComp((_) => set(null)),
+                      checked: target == null),
+                  for (final lufs in loudnessPresets)
+                    MenuEntry(loudnessTargetLabel(lufs),
+                        onComp((_) => set(presetTarget(lufs))),
+                        checked: isPreset(target, lufs)),
+                  MenuEntry(
+                      l10n.mixerLoudnessTargetCustom,
+                      onComp((c) => customLoudnessTarget(
+                          context, c, app.notifyDocumentChanged))),
+                ];
+              }()),
+              MenuEntry(
+                  l10n.mixerNormaliseMix,
+                  onComp((c) => normaliseMixCommand(
+                      context, app, c, app.notifyDocumentChanged))),
+            ]),
           ]
     ),
     (
@@ -1556,6 +1587,7 @@ List<MenuSection> lumitMenus(
               newRow(l10n.menuCard, 'layer.new.card'),
               newRow(l10n.menuSequence, 'layer.new.sequence'),
               newRow(l10n.menuAudio, 'layer.new.audio'),
+              newRow(l10n.menuBus, 'layer.new.bus'),
               // The Cut ground's two: five seconds from the playhead. Only
               // where the comp has clips, as beside Text and Solid they read
               // as the same thing twice. Without their chord, which only the
@@ -2643,6 +2675,7 @@ Future<void> newLayerFrb(BuildContext context, LumitUiState ui,
           'layer.new.null' => comp.addNullLayer(row: row),
           'layer.new.card' =>
             comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
+          'layer.new.bus' => await _newBus(app, ui, comp),
           _ => insertEmptyLayer(ui, comp, action),
         };
   if (made == null) return;
@@ -2650,6 +2683,39 @@ Future<void> newLayerFrb(BuildContext context, LumitUiState ui,
   ui.model.refresh();
   ui.setSelection([made]);
   if (action == 'layer.new.text') openTypeEdit(ui, made);
+}
+
+/// A new bus, and the picked layers that make a sound, buses aside, routed
+/// into it, all as one undo step.
+Future<LayerReference?> _newBus(
+    LumitState app, LumitUiState ui, CompositionReference comp) async {
+  final picked = ui.selectedLayerIds;
+  final inputs = <LayerReference>[];
+  for (final entry in ui.model.heldLayers) {
+    if (!picked.contains(entry.layer.internallayerId) ||
+        entry.info.kind == BridgeLayerKind.bus) {
+      continue;
+    }
+    try {
+      if (await entry.layer.hasAudio()) inputs.add(entry.layer);
+    } catch (_) {
+      // The layer has gone.
+    }
+  }
+  LayerReference? bus;
+  asOneUndoStep(app.project, () {
+    bus = insertEmptyLayer(ui, comp, 'layer.new.bus');
+    final id = bus?.internallayerId;
+    if (id == null) return;
+    for (final layer in inputs) {
+      try {
+        layer.setAudioRoutes(output: id, sends: layer.getInfo().sends);
+      } catch (_) {
+        // A locked layer refuses, and the rest still take it.
+      }
+    }
+  });
+  return bus;
 }
 
 /// The right-click menu on the empty ground under the Cut and Audio

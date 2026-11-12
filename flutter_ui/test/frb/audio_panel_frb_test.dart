@@ -1,7 +1,6 @@
 // The Audio panel against the real engine: the three sections, the Beats
-// controls over the beat engine, and the two graph templates — whose staged
-// chains land as real wires the engine validates, Duck under's on the Layer
-// out's Volume socket.
+// controls over the beat engine, Drive with audio's staged chain, which lands
+// as real wires the engine validates, and Lower behind's duck.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -74,49 +73,47 @@ void main() {
           reason: 'the chain ends on the effect\'s own socket');
     });
 
-    /// *Lower behind…* (the ducking template) stages the inverted
-    /// chain onto the selected layer's own Volume socket: Audio level
-    /// listening to the picked layer, Remap upside down, Smooth, into the
-    /// Layer out — and the engine accepts the wire, which is the whole road
-    /// being proved.
-    testWidgets('Lower behind stages the inverted chain onto the Volume socket',
+    /// *Lower behind…* opens its popover on the comp's other sounding layers,
+    /// and a pick lowers the selected layer behind it with the engine's usual
+    /// settings, through the layer's own duck rather than a driver chain.
+    testWidgets('Lower behind sets a duck on the picked layer',
         (tester) async {
-      final p = await mount(tester, solids: 2);
-      final layer = p.comp.getLayers().first;
-      // Distinct names, so the menu's offers can be told apart — and told
-      // apart from the header, which names the selection.
-      layer.rename(name: 'Music bed');
-      p.comp.getLayers().last.rename(name: 'Voice over');
-      p.ui.model.refresh();
-      await tester.pump();
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Cut');
+      p.uiState.setSelectedComp(comp);
+      final tone = p.state.project!.importFootage(path: _toneWavFile());
+      comp.addFootageLayer(footage: tone, asSequence: false);
+      comp.addFootageLayer(footage: tone, asSequence: false);
+      final layers = comp.getLayers();
+      // Distinct names, so the offer can be told apart from the header,
+      // which names the selection.
+      layers.first.rename(name: 'Music bed');
+      layers.last.rename(name: 'Voice over');
+      p.uiState.selectedLayer.value = layers.first;
+      p.uiState.model.refresh();
+      final feed = AudioMeterFeed();
+      feed.read = () => const [];
+      addTearDown(feed.dispose);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: AudioPanelFrb(feed: feed),
+      ));
+      await settleFrb(tester, minRounds: 8);
 
       await tester.tap(find.byKey(const ValueKey('audio-duck')));
       await tester.pump();
-      // The other layer is the menu; the selected one is only in the header.
-      expect(find.text('Music bed'), findsOneWidget,
-          reason: 'the selection is named once, in the header — a layer '
-              'cannot duck under itself');
       final offer = find.text('Voice over');
       expect(offer, findsOneWidget,
-          reason: 'the other layer is what there is to duck under');
+          reason: 'the other layer is what there is to lower behind');
       await tester.tap(offer);
       await tester.pump();
 
-      final graph = layer.getGraph();
-      expect(layer.getGraphDrivers().length, 3);
-      final toVolume = graph.wiring.edges.where((e) =>
-          e.to is BridgeInputRef_Param &&
-          (e.to as BridgeInputRef_Param).node is BridgeNodeRef_Out &&
-          (e.to as BridgeInputRef_Param).port == 'volume');
-      expect(toVolume.length, 1,
-          reason: 'the chain lands on the Layer out\'s Volume socket');
-      // The Out box now reports its Volume socket wired, so the Graph panel
-      // draws the wire filled.
-      final out = graph.nodes
-          .firstWhere((n) => n.node is BridgeNodeRef_Out);
-      final volumePort =
-          out.inputs.firstWhere((portInfo) => portInfo.id == 'volume');
-      expect(volumePort.wired, isTrue);
+      final duck = layers.first.getInfo().duck;
+      expect(duck?.behind, layers.last.internallayerId);
+      expect(duck?.depthDb, -12, reason: "the engine's usual amount");
+      expect(layers.first.getGraphDrivers(), isEmpty,
+          reason: 'no driver chain is staged any more');
     });
 
     /// The board's Pan row carries the Mixer's own pot beside the value well:

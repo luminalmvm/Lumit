@@ -46,7 +46,9 @@ import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
-import 'mixer_panel_frb.dart' show PanPot, meterRows;
+import 'lower_behind.dart';
+import 'mixer_meter.dart' show PanPot;
+import 'mixer_panel_frb.dart' show meterRows, panLabel;
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_outline_row_frb.dart' show RowRenameField;
@@ -184,7 +186,10 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     if (widget.feed == null) {
       final ui = Provider.of<LumitUiState>(context, listen: false);
       meterPeakHoldSeconds = ui.workspace.interface.peakHoldSeconds;
-      _feed.start(wake: Listenable.merge([ui.playing, ui.playheadFrame]));
+      _feed.start(
+          wake: Listenable.merge([ui.playing, ui.playheadFrame]),
+          playing: ui.playing,
+          follow: false);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _settled = true);
   }
@@ -772,6 +777,12 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                   // audio…* exists to move a visual layer's parameters with
                   // the music. It loses the rows that would be lying on it.
                   canSound: canSound,
+                  sources: [
+                    for (final e in sounding)
+                      if (e.layer.internallayerId !=
+                          entry.layer.internallayerId)
+                        e,
+                  ],
                   onChanged: () {
                     ui.model.refresh();
                     comp.audioPrepare();
@@ -789,7 +800,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
 
 /// The output's two bars and their scale, painted as one inside one
 /// RepaintBoundary, the limiter's lamp, which shows only while lit and is its
-/// own tiny widget under the clip listenable, and the loudness under them.
+/// own tiny widget under the clip listenable, and the loudness under them
+/// with its last half minute drawn.
 class _LevelsBlock extends StatelessWidget {
   final AudioMeterFeed feed;
   final LumitUiState ui;
@@ -867,6 +879,9 @@ class _LevelsBlock extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             LoudnessReadout(feed: feed),
+            const SizedBox(height: 8),
+            LoudnessHistoryGraph(
+                feed: feed, ui: ui, left: LevelBarsPainter._leftGutter),
           ],
         ),
       ),
@@ -990,6 +1005,10 @@ class _SelectedLayerBlock extends StatefulWidget {
   /// fade rows are not drawn — controls on a silent layer would be switches
   /// that switch nothing — and the template buttons stay.
   final bool canSound;
+
+  /// What the layer can be lowered behind: the comp's other layers that make
+  /// a sound, and its buses.
+  final List<BridgeLayerEntry> sources;
   final VoidCallback onChanged;
 
   const _SelectedLayerBlock({
@@ -997,6 +1016,7 @@ class _SelectedLayerBlock extends StatefulWidget {
     required this.comp,
     required this.entry,
     required this.canSound,
+    required this.sources,
     required this.onChanged,
   });
 
@@ -1130,6 +1150,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   child: DragValueField(
                     key: const ValueKey('audio-pan-value'),
                     value: panValue,
+                    reading: (v) => panLabel(v.toDouble()),
                     min: -100,
                     max: 100,
                     decimals: 0,
@@ -1180,13 +1201,34 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   onPressed: () => _pickDriveTarget(context),
                   child: Text(l10n.audioDriveWith),
                 ),
-                HouseButton(
-                  key: const ValueKey('audio-duck'),
-                  small: true,
-                  onPressed: () => _pickDuckSource(context),
-                  child: Text(l10n.audioDuckUnder),
+                Builder(
+                  builder: (button) => HouseButton(
+                    key: const ValueKey('audio-duck'),
+                    small: true,
+                    onPressed: () => _lowerBehind(button),
+                    child: Text(l10n.audioDuckUnder),
+                  ),
                 ),
               ]),
+              if (_duckLine(ui) case final line?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Builder(
+                    builder: (anchor) => HoverMark(
+                      builder: (context, lit) => GestureDetector(
+                        key: const ValueKey('audio-duck-line'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _lowerBehind(anchor),
+                        child: Text(line,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.body.copyWith(
+                                color: Color.lerp(
+                                    t.textSecondary, t.textPrimary, lit))),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -1368,37 +1410,26 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// *Lower behind…* (the ducking template, in plain words): pick the layer
-  /// whose sound pushes this one down, then stage the inverted chain onto
-  /// this layer's own Volume socket — Audio level listening to the picked
-  /// layer, Remap upside down, Smooth, into the Layer out's Volume.
-  void _pickDuckSource(BuildContext context) {
-    final ui = Provider.of<LumitUiState>(context, listen: false);
-    final self = widget.entry.layer.internallayerId;
-    final others = <(String, UuidValue)>[];
-    for (final entry in ui.model.heldLayers) {
-      final id = entry.layer.internallayerId;
-      if (id == self) continue;
-      others.add((entry.info.name, id));
+  /// *Lower behind…*: the popover, under [anchor].
+  void _lowerBehind(BuildContext anchor) => showLowerBehind(
+        anchor: anchor,
+        entry: widget.entry,
+        sources: widget.sources,
+        onChanged: widget.onChanged,
+      );
+
+  /// What the layer is lowered behind and by how much, or null without a
+  /// duck. Off the read model, as the rest of the block is.
+  String? _duckLine(LumitUiState ui) {
+    final duck = widget.entry.info.duck;
+    if (duck == null) return null;
+    for (final e in ui.model.heldLayers) {
+      if (e.layer.internallayerId != duck.behind) continue;
+      final db = duck.depthDb;
+      return l10n.audioDuckLine(e.info.name,
+          db.toStringAsFixed(db == db.roundToDouble() ? 0 : 1));
     }
-    _menu(
-      context,
-      empty: l10n.audioDuckNoSources,
-      rows: [
-        for (final (name, id) in others)
-          (
-            name,
-            () => _stageChain(
-                  target: const BridgeInputRef.param(
-                    node: BridgeNodeRef.out(),
-                    port: 'volume',
-                  ),
-                  inverted: true,
-                  listenTo: id,
-                )
-          ),
-      ],
-    );
+    return null;
   }
 
   void _menu(

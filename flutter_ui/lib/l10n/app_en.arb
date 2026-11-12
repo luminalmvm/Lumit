@@ -13235,6 +13235,18 @@
   "@audioLowerBehind": {
     "description": "Right-click menu on a sound layer: opens a list of the composition's other sounding layers and its buses. Picking one makes this layer's sound go down while that one is heard."
   },
+  "audioDuckLine": "{name}, {db} dB",
+  "@audioDuckLine": {
+    "description": "Audio panel, under the Lower behind button: what the picked layer is lowered behind and by how much, for example \"Dialogue, -12 dB\". Click to change it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "db": {
+        "type": "String"
+      }
+    }
+  },
   "duckAmount": "Amount",
   "@duckAmount": {
     "description": "Lower behind popover in the Audio panel: how far the layer's sound goes down while the other one is heard, in dB."
@@ -16983,6 +16995,65 @@
       }
     }
   },
+  "mixerGainTip": "Gain {value} dB",
+  "@mixerGainTip": {
+    "description": "Tooltip on a Mixer strip's Gain pot: the layer's own level before its effects and its volume, for example \"Gain +3.0 dB\".",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "mixerInsertsCount": "{count} fx",
+  "@mixerInsertsCount": {
+    "description": "Mixer strip on a short panel: one row standing for the strip's audio effects, for example \"3 fx\". Click to list them. Keep it very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mixerSendsCount": "{count, plural, =1{1 send} other{{count} sends}}",
+  "@mixerSendsCount": {
+    "description": "Mixer strip on a short panel: one row standing for the strip's sends to buses, for example \"2 sends\". Click to list them. Keep it very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mixerInsertOn": "On",
+  "@mixerInsertOn": {
+    "description": "Right-click on an audio effect row in a Mixer strip: a ticked row. Unticked, the effect is off and the sound passes it unchanged."
+  },
+  "mixerInsertRemove": "Remove",
+  "@mixerInsertRemove": {
+    "description": "Right-click on an audio effect row in a Mixer strip: takes the effect off the layer."
+  },
+  "mixerSendPreFader": "Pre-fader",
+  "@mixerSendPreFader": {
+    "description": "Right-click on a send row in a Mixer strip: a ticked row. The send is taken before the strip's fader and pan."
+  },
+  "mixerSendPostFader": "Post-fader",
+  "@mixerSendPostFader": {
+    "description": "Right-click on a send row in a Mixer strip: a ticked row. The send is taken after the strip's fader and pan."
+  },
+  "mixerSendRemove": "Remove send",
+  "@mixerSendRemove": {
+    "description": "Right-click on a send row in a Mixer strip: stops sending this strip's sound to that bus."
+  },
+  "mixerShowBus": "Show bus",
+  "@mixerShowBus": {
+    "description": "Right-click on a send row in a Mixer strip: picks the bus the send goes to and scrolls the Mixer to its strip."
+  },
+  "mixerNewBus": "New bus",
+  "@mixerNewBus": {
+    "description": "Mixer, the Output list at the foot of a strip: adds a bus and sends this strip's sound to it."
+  },
+  "mixerClipped": "Clipped",
+  "@mixerClipped": {
+    "description": "Tooltip on a Mixer strip's clip light while it is lit: the strip's sound reached full scale. Click to put the light out."
+  },
   "mixerLoudnessTarget": "Loudness target",
   "@mixerLoudnessTarget": {
     "description": "Right-click on the Mixer's Master strip, and Composition menu, Audio submenu: the loudness the composition's mix is made for. Also the title of the dialogue that asks for one."
@@ -17019,6 +17090,22 @@
   "mixerNormaliseBusy": "The mix is already being measured",
   "@mixerNormaliseBusy": {
     "description": "Status line when Normalise mix is chosen while an earlier Normalise mix is still measuring, so the second one did not start."
+  },
+  "loudnessMomentaryMark": "M",
+  "@loudnessMomentaryMark": {
+    "description": "Mixer, Master strip: the short mark over the momentary loudness reading. Keep it one or two letters."
+  },
+  "loudnessMomentary": "Momentary loudness",
+  "@loudnessMomentary": {
+    "description": "Tooltip on the Master strip's M reading: the loudness of the last 400 milliseconds, in LUFS."
+  },
+  "loudnessRangeMark": "LRA",
+  "@loudnessRangeMark": {
+    "description": "Mixer, Master strip: the short mark over the loudness range reading. Keep it very short."
+  },
+  "loudnessRange": "Loudness range",
+  "@loudnessRange": {
+    "description": "Tooltip on the Master strip's LRA reading: how much the loudness varies over the mix, in LU."
   },
   "unitSymbolLufs": "LUFS",
   "@unitSymbolLufs": {
