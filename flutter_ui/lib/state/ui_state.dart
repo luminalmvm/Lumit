@@ -1279,6 +1279,11 @@ class LumitUiState extends ChangeNotifier {
     if (want && !_capsLockWatching) {
       HardwareKeyboard.instance.addHandler(_capsLockWatch);
       _capsLockWatching = true;
+      // A lock already on when the setting is turned on counts at once.
+      _capsLockWatch(const KeyUpEvent(
+          physicalKey: PhysicalKeyboardKey.capsLock,
+          logicalKey: LogicalKeyboardKey.capsLock,
+          timeStamp: Duration.zero));
     } else if (!want && _capsLockWatching) {
       HardwareKeyboard.instance.removeHandler(_capsLockWatch);
       _capsLockWatching = false;

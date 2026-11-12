@@ -855,8 +855,6 @@ class ViewerStage extends StatelessWidget {
                 ),
               ),
             ),
-            _missingSlate(),
-            _cutSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
             // called once per tool layer — six times per build, sixty times a
@@ -1285,6 +1283,10 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
+            // The notices sit over the tools, which would otherwise take
+            // their clicks.
+            _missingSlate(),
+            _cutSlate(),
             // The selection's name, over the stage's own corner. Last
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.
@@ -1327,14 +1329,32 @@ class ViewerStage extends StatelessWidget {
           builder: (context, cut, _) {
             if (!cut) return const SizedBox.shrink();
             final t = ThemeScope.of(context).theme;
-            return HouseButton(
-              key: const ValueKey('viewer-cut'),
-              small: true,
-              onPressed: () => unawaited(showSettingsWindowFrb(context,
-                  initialPage: SettingsPage.previewAndCache,
-                  row: l10n.settingsLargestPicture)),
-              child: Text(l10n.viewerPictureCut,
-                  style: t.small.copyWith(color: t.warning)),
+            // A small mark, not a button's worth of words: the sentence is
+            // the tooltip.
+            return LumitTooltip(
+              message: l10n.viewerPictureCut,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: const ValueKey('viewer-cut'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => unawaited(showSettingsWindowFrb(context,
+                      initialPage: SettingsPage.previewAndCache,
+                      row: l10n.settingsLargestPicture)),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: t.surface2,
+                      border: Border.all(color: t.warning),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                    child: Text(l10n.viewerPictureCutMark,
+                        style: t.small.copyWith(color: t.warning)),
+                  ),
+                ),
+              ),
             );
           },
         ),

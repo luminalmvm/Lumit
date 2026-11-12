@@ -19919,6 +19919,10 @@
   "@viewerPictureCut": {
     "description": "Viewer, bottom right in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Clicking it opens that setting."
   },
+  "viewerPictureCutMark": "Cut",
+  "@viewerPictureCutMark": {
+    "description": "Viewer, bottom right, a small mark in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Its tooltip is viewerPictureCut, and clicking it opens that setting."
+  },
   "colourPickerWas": "Was",
   "@colourPickerWas": {
     "description": "Colour picker: tooltip on the half of the chip showing the colour the picker opened on. Clicking it goes back to that colour."
