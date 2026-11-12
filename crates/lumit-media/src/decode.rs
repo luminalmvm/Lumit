@@ -7,12 +7,12 @@
 //! the index, which came from the same container.
 //!
 //! Decoding itself takes the fastest path the machine offers (§4's v1
-//! baseline): on Windows the bitstream is decoded by the graphics card's
-//! fixed-function video unit (D3D11VA) and the finished picture transferred
-//! back to ordinary memory, where the same conversion the software path uses
-//! turns it into RGBA. Anything about that failing — no hardware, an
-//! unsupported codec — falls back to software decoding with all cores,
-//! never an error.
+//! baseline): the bitstream is decoded by the graphics card's fixed-function
+//! video unit (D3D11VA on Windows, NVDEC through CUDA or VA-API on Linux) and
+//! the finished picture transferred back to ordinary memory, where the same
+//! conversion the software path uses turns it into RGBA. No hardware, an
+//! unsupported codec or a frame that won't come back falls back to software
+//! decoding with all cores, never an error.
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::index::FrameIndex;

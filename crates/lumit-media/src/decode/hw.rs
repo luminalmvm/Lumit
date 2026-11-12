@@ -14,7 +14,7 @@ use std::sync::{Mutex, PoisonError};
 /// Which device a decoder asks for.
 #[derive(Clone, Copy)]
 pub(super) enum HwKind {
-    /// The platform's own: D3D11VA on Windows.
+    /// The platform's own: D3D11VA on Windows, CUDA or VA-API on Linux.
     Platform,
     /// CUDA on its own, so the shared path can be tried on a Windows machine.
     #[cfg(test)]
@@ -56,11 +56,70 @@ fn platform_device(fits: impl Fn(ffi::AVHWDeviceType) -> bool) -> Option<AVHWDev
         .flatten()
 }
 
+/// One device every decoder shares, found the first time one asks.
+#[cfg(target_os = "linux")]
+fn platform_device(fits: impl Fn(ffi::AVHWDeviceType) -> bool) -> Option<AVHWDeviceContext> {
+    // Found outside the cell, so no lock is held while a driver loads. Two
+    // decoders opening at once may each look once.
+    let found = match SHARED.get() {
+        Some(found) => found,
+        None => {
+            let _ = SHARED.set(find_device());
+            SHARED.get()?
+        }
+    };
+    let Shared(device, kind) = found.as_ref()?;
+    // A new reference for the decoder, which frees it when it closes.
+    fits(*kind).then(|| device.clone())
+}
+
 /// The macOS sibling is VideoToolbox and lands with the macOS pass; until
 /// then every other platform decodes in software, on all cores.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 fn platform_device(_fits: impl Fn(ffi::AVHWDeviceType) -> bool) -> Option<AVHWDeviceContext> {
     None
+}
+
+/// The device found, or `None` for none, kept for the rest of the run.
+#[cfg(target_os = "linux")]
+static SHARED: std::sync::OnceLock<Option<Shared>> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "linux")]
+struct Shared(AVHWDeviceContext, ffi::AVHWDeviceType);
+
+// SAFETY: the device is only reached through `&`, and the one call made
+// through it is `av_buffer_ref`, whose count is atomic. libav's CUDA and
+// VA-API devices are made to be shared by decoders on many threads.
+#[cfg(target_os = "linux")]
+#[allow(unsafe_code)]
+unsafe impl Sync for Shared {}
+
+/// CUDA, or else VA-API on the first render node that opens. Asked only once
+/// hardware decode is on, so with it off no driver is touched. Each library
+/// is opened by hand first: FFmpeg's Linux build reaches libva and libdrm
+/// through stubs that end the process when one is missing, and the video
+/// half of the NVIDIA driver is often a package of its own.
+#[cfg(target_os = "linux")]
+fn find_device() -> Option<Shared> {
+    let cuda = ffi::AV_HWDEVICE_TYPE_CUDA;
+    if crate::vaapi::loads(&["libcuda.so.1", "libnvcuvid.so.1"]).is_ok() {
+        if let Ok(device) = AVHWDeviceContext::create(cuda, None, None, 0) {
+            return Some(Shared(device, cuda));
+        }
+    }
+    let vaapi = ffi::AV_HWDEVICE_TYPE_VAAPI;
+    crate::vaapi::libva_loads().ok()?;
+    // Only the render node, so FFmpeg never falls back to libva's X11 half.
+    let drm = rsmpeg::avutil::AVDictionary::new(c"connection_type", c"drm", 0);
+    (128..192).find_map(|n| {
+        let node = format!("/dev/dri/renderD{n}");
+        if !std::path::Path::new(&node).exists() {
+            return None;
+        }
+        let path = std::ffi::CString::new(node).ok()?;
+        let device = AVHWDeviceContext::create(vaapi, Some(&path), Some(&drm), 0).ok()?;
+        Some(Shared(device, vaapi))
+    })
 }
 
 /// Whether a device of this type is offered the stream: a layout it can hand
