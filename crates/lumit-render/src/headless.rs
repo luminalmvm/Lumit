@@ -1780,7 +1780,8 @@ impl HeadlessRenderer {
     ///
     /// Not a display: no view transform, no encoding curve, no clamp. A value
     /// four times white comes back as four, which is the whole reason the
-    /// format is worth writing.
+    /// format is worth writing. A `quality` below full composites smaller,
+    /// and the size returned is the picture's own.
     pub fn render_preview_linear(
         &mut self,
         doc: &Arc<Document>,
@@ -1788,15 +1789,16 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Result<(Vec<f32>, u32, u32), String> {
-        let (shown, cw, ch) =
+        let (shown, _, _) =
             self.preview_display_texture_fmt(doc, comp_id, frame, quality, Present::LinearF32)?;
         let Some(parts) = self.parts.as_ref() else {
             return Err("headless preview: renderer is unavailable after an earlier fault".into());
         };
+        let (w, h) = (shown.width(), shown.height());
         parts
             .colour
             .readback_linear_f32(&self.gpu, &shown)
-            .map(|px| (px, cw, ch))
+            .map(|px| (px, w, h))
             .map_err(|e| format!("headless preview: {e}"))
     }
 
