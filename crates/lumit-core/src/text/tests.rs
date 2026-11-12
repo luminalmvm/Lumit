@@ -308,3 +308,30 @@ fn an_animators_property_list_reads_back() {
     assert!(plain.get("properties").is_none());
 }
 
+/// **Every socket on the Source box reaches its number**: each name an
+/// animator lists for wiring finds the number it names and comes back from
+/// its port, or a wire into it would move nothing.
+#[test]
+fn every_wireable_number_is_found_by_its_port() {
+    for kind in [
+        SelectorKind::Range,
+        SelectorKind::Proximity,
+        SelectorKind::Wiggly,
+    ] {
+        let mut a = TextAnimator::new("A");
+        a.selector.kind = kind;
+        a.axes = vec![AnimatorAxis {
+            tag: "wght".into(),
+            value: Property::fixed(700.0),
+        }];
+        let names = a.wireable_numbers();
+        assert!(names.iter().any(|(n, _)| n == "axis.wght"), "{kind:?}");
+        for (name, label) in &names {
+            assert!(!label.is_empty(), "{name}");
+            assert!(a.number_mut(name).is_some(), "{kind:?} {name}");
+            let port = ports::animator_port(2, name);
+            assert_eq!(ports::parse_animator_port(&port), Some((2, name.as_str())));
+        }
+        assert!(a.number_mut("nothing").is_none());
+    }
+}
