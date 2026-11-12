@@ -9960,6 +9960,26 @@
   "@settingsDecodeAtShownSize": {
     "description": "Settings window: a footage layer shown smaller than its own size is decoded for the preview no larger than it is shown. Export always decodes at full size."
   },
+  "settingsLowSpecMode": "Low-spec mode",
+  "@settingsLowSpecMode": {
+    "description": "Settings window, Performance: one switch for a weak computer. On, it turns Motion to None, Reduce transparency on, playback Adaptive, Decode footage at shown size on, the Adaptive resolution limit to 1/16 and the preview Resolution to Auto, and the panels follow the playhead less often while playing. Off, it puts them back."
+  },
+  "lowSpecOfferTitle": "A small machine for Lumit",
+  "@lowSpecOfferTitle": {
+    "description": "Title of the window offered once at start on a computer with little video memory or memory."
+  },
+  "lowSpecOfferBody": "This computer has little video memory or memory for Lumit. Low-spec mode turns down motion, transparency and the preview's resolution together, so editing stays smooth. It can be turned off at any time in Settings, Performance.",
+  "@lowSpecOfferBody": {
+    "description": "Body of the window offered once at start on a small computer."
+  },
+  "lowSpecOfferYes": "Turn on",
+  "@lowSpecOfferYes": {
+    "description": "Button in the Low-spec mode offer: turns Low-spec mode on."
+  },
+  "lowSpecOfferNo": "Not now",
+  "@lowSpecOfferNo": {
+    "description": "Button in the Low-spec mode offer: leaves the settings as they are. The offer is not shown again."
+  },
   "tipShownSize": "Shown size",
   "@tipShownSize": {
     "description": "Tooltip on the Viewer deck's mark for Decode footage at shown size: lit while footage shown smaller is decoded smaller for the preview."

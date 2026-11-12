@@ -1175,7 +1175,7 @@ class LumitUiState extends ChangeNotifier {
       end: _clockEnd,
       reverse: _reverse,
     );
-    if (_ahead(frame)) playheadFrame.value = frame;
+    if (_ahead(frame)) _playbackPlayhead(frame);
   }
 
   /// Whether `frame` is further along the running leg than the playhead.
@@ -1225,6 +1225,8 @@ class LumitUiState extends ChangeNotifier {
   void _returnPlayhead({bool restore = true}) {
     _clock.stop();
     _clockWatch.stop();
+    // The frame playback stopped on, if Low-spec mode was holding it back.
+    _flushPlayhead();
     final from = _playedFrom;
     _playedFrom = null;
     if (!restore || from == null) return;
@@ -1255,6 +1257,98 @@ class LumitUiState extends ChangeNotifier {
   /// keep the picture they have while the edits go on, and draw the frame
   /// once updates resume.
   final ValueNotifier<bool> viewerSuspended = ValueNotifier(false);
+
+  /// **Low-spec mode** (Settings → Performance), one switch for a weak
+  /// machine. On, it keeps what the settings it touches were and turns them
+  /// down together: Motion to None, Reduce transparency on, playback Adaptive,
+  /// Decode footage at shown size on, the Adaptive resolution limit to 1/16,
+  /// and the fronted comp's Resolution to Auto (the comps not yet set follow,
+  /// [_compResolution]). While it is on the playhead tells the panels at most
+  /// [_lowSpecPlayheadHz] times a second during playback. Off, it puts the
+  /// settings back as they were.
+  void setLowSpecMode(bool on) {
+    final perf = workspace.performance;
+    if (perf.lowSpecMode == on) return;
+    final look = workspace.interface;
+    if (on) {
+      perf.lowSpecWas = {
+        'animation': workspace.animationLevel.name,
+        'reduce_transparency': look.reduceTransparency,
+        'playback': perf.playback.name,
+        'shown_size': perf.decodeAtShownSize,
+        'drag_limit': perf.dragResolutionLimit,
+      };
+      workspace.animationLevel = AnimationLevel.none;
+      look.reduceTransparency = true;
+      perf.playback = PlaybackMode.adaptive;
+      perf.lowSpecMode = true;
+      setDecodeAtShownSize(true);
+      setAdaptiveResolutionLimit(16);
+      setPreviewResolution(PreviewResolution.auto);
+    } else {
+      final was = perf.lowSpecWas ?? const <String, dynamic>{};
+      workspace.animationLevel = AnimationLevel.values
+              .where((a) => a.name == was['animation'])
+              .firstOrNull ??
+          AnimationLevel.all;
+      look.reduceTransparency = was['reduce_transparency'] == true;
+      perf.playback = PlaybackMode.values
+              .where((m) => m.name == was['playback'])
+              .firstOrNull ??
+          PerformanceSettings().playback;
+      perf.lowSpecMode = false;
+      perf.lowSpecWas = null;
+      setDecodeAtShownSize(was['shown_size'] != false);
+      setAdaptiveResolutionLimit(
+          was['drag_limit'] is int ? was['drag_limit'] as int : 0);
+      _flushPlayhead();
+    }
+    workspace.beforeLookChange?.call();
+    workspace.recompose();
+    workspace.settingsChanged();
+  }
+
+  /// How many times a second the playhead tells the panels while playing in
+  /// Low-spec mode. The Viewer's picture is the engine's and keeps its pace.
+  static const int _lowSpecPlayheadHz = 15;
+
+  /// The newest frame playback reached that the panels have not been told.
+  int? _heldPlayhead;
+  Timer? _playheadTimer;
+  final Stopwatch _sincePlayhead = Stopwatch()..start();
+
+  /// Move the playhead for playback, at most [_lowSpecPlayheadHz] times a
+  /// second in Low-spec mode, and the newest frame always arrives.
+  void _playbackPlayhead(int frame) {
+    if (!workspace.performance.lowSpecMode) {
+      playheadFrame.value = frame;
+      return;
+    }
+    const gap = Duration(microseconds: 1000000 ~/ _lowSpecPlayheadHz);
+    final since = _sincePlayhead.elapsed;
+    if (since >= gap && _playheadTimer == null) {
+      _sincePlayhead.reset();
+      _heldPlayhead = null;
+      playheadFrame.value = frame;
+      return;
+    }
+    _heldPlayhead = frame;
+    _playheadTimer ??= Timer(since >= gap ? Duration.zero : gap - since, () {
+      _playheadTimer = null;
+      _flushPlayhead();
+    });
+  }
+
+  /// Tell the panels the newest frame playback held back, if any.
+  void _flushPlayhead() {
+    _playheadTimer?.cancel();
+    _playheadTimer = null;
+    final held = _heldPlayhead;
+    _heldPlayhead = null;
+    if (held == null) return;
+    _sincePlayhead.reset();
+    playheadFrame.value = held;
+  }
 
   /// **Adaptive resolution limit**, from Settings → Performance or the deck:
   /// 0 is Auto, otherwise the coarsest divisor a slow drag may reach.
@@ -1829,7 +1923,7 @@ class LumitUiState extends ChangeNotifier {
     // The adaptive clock may already stand a frame past this picture, and pulling
     // the playhead back would make it twitch at every present.
     if (_ahead(frame) || !_clock.isActive) {
-      playheadFrame.value = frame;
+      _playbackPlayhead(frame);
     }
     // The end of the work area: the frame there is shown, then the loop mode
     // says what comes next (docs/07 §9). A new leg is started through `play`
@@ -2784,7 +2878,9 @@ class LumitUiState extends ChangeNotifier {
 
   PreviewResolution get _compResolution =>
       previewResolutions[_selectedComp?.internalid.toString()] ??
-      PreviewResolution.full;
+      (workspace.performance.lowSpecMode
+          ? PreviewResolution.auto
+          : PreviewResolution.full);
 
   /// Choose the preview resolution for the fronted comp, and ask for the frame
   /// again — the setting changes what the *next* frame is made of, so without

@@ -19,6 +19,7 @@ import 'package:lumit_flutter/panels/viewer_camera.dart'
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
+import 'package:lumit_flutter/shell/low_spec_offer.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/extension_install_frb.dart';
 import 'package:lumit_flutter/shell/look_fade.dart';
@@ -373,6 +374,9 @@ class _LumitAppViewState extends State<LumitAppView> {
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
       maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
+          // Low-spec mode, offered once on a small machine, after the
+          // questions and before anything else opens.
+          .then((_) => mounted ? maybeOfferLowSpec(context, ui) : null)
           .then((_) {
         // The update check follows the questions rather than racing them:
         // the setup screen is where somebody may have just switched it off.
