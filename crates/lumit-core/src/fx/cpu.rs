@@ -25,8 +25,12 @@ mod path_draw;
 /// its `cpu::` reference directly from the lumit-gpu test, which can upload the
 /// second picture.
 pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::params::ResolvedStack) {
-    for fx in ops.iter() {
+    let mut run = super::effects::correction::combine::Run::default();
+    for (i, fx) in ops.iter().enumerate() {
+        run.begin(ops, i, rgba);
         match blend_seam(fx.def.schema(), fx.params) {
+            // A Layer node is drawn by the run, below.
+            _ if run.layers() => {}
             // The Blend row, the CPU half of the seam: the kernel runs
             // at Mix 100 into a copy, and the blend and the Mix are applied
             // here, once, exactly as `run_ops` does on the GPU.
@@ -38,6 +42,7 @@ pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::params::Resolv
             }
             None => fx.def.apply_cpu(rgba, w, h, fx.params),
         }
+        run.end(rgba, w, h, &fx);
     }
 }
 

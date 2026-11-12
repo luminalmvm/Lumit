@@ -421,7 +421,9 @@ pub fn driven_param(
     let v = match from {
         OutputRef::Driver { node, port } => ev.output(*node, port, lt, 0),
         OutputRef::EffectData { effect, port } => ev.effect_number(*effect, port, lt),
-        OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+        OutputRef::SourceMatte | OutputRef::EffectOutput { .. } | OutputRef::EffectKey { .. } => {
+            None
+        }
     }?;
     Some(f64::from(v.as_f32()))
 }
@@ -856,7 +858,9 @@ impl Eval<'_> {
             // unwired, which is the documented no-op rather than a wrong
             // number — and is unreachable through a validated document, where
             // the type check refused it at commit.
-            OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+            OutputRef::SourceMatte
+            | OutputRef::EffectOutput { .. }
+            | OutputRef::EffectKey { .. } => None,
         }
     }
 
@@ -943,7 +947,9 @@ impl Eval<'_> {
             // not a stream and was refused at commit by the type check.
             OutputRef::Driver { node, .. } => self.tap_stream(*node, t, depth),
             // A texture is not a stream either.
-            OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+            OutputRef::SourceMatte
+            | OutputRef::EffectOutput { .. }
+            | OutputRef::EffectKey { .. } => None,
         }
     }
 

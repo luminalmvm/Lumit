@@ -434,7 +434,9 @@ pub fn group_from_graph(
             let from = match &e.from {
                 OutputRef::Driver { node, .. } => wanted.contains(&NodeRef::Driver(*node)),
                 OutputRef::EffectData { effect, .. } => wanted.contains(&NodeRef::Effect(*effect)),
-                OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => false,
+                OutputRef::SourceMatte
+                | OutputRef::EffectOutput { .. }
+                | OutputRef::EffectKey { .. } => false,
             };
             let to = match &e.to {
                 InputRef::Param { node, .. } => wanted.contains(node),
@@ -553,7 +555,9 @@ pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
                     effect: *fresh.get(effect)?,
                     port: port.clone(),
                 },
-                OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => return None,
+                OutputRef::SourceMatte
+                | OutputRef::EffectOutput { .. }
+                | OutputRef::EffectKey { .. } => return None,
             };
             let to = match &e.to {
                 InputRef::Param { node, port } => InputRef::Param {

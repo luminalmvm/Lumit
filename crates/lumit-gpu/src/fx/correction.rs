@@ -45,6 +45,7 @@ pub(super) struct CorrectionFx {
     qualify: wgpu::ComputePipeline,
     key: wgpu::ComputePipeline,
     grade: wgpu::ComputePipeline,
+    parallel: wgpu::ComputePipeline,
 }
 
 impl CorrectionFx {
@@ -89,6 +90,7 @@ impl CorrectionFx {
             qualify: pipe("correction_qualify"),
             key: pipe("correction_key"),
             grade: pipe("correction_grade"),
+            parallel: pipe("correction_parallel"),
             layout,
         }
     }
@@ -315,6 +317,44 @@ impl FxEngine {
     ) -> Option<wgpu::Texture> {
         let bufs = Buffers::new(ctx, op);
         self.correction_key_with(ctx, src, w, h, matte, op, &bufs)
+    }
+
+    /// The node's key as a picture even when nothing keys, white then: what
+    /// a key wire hands on.
+    pub fn correction_key_picture(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        matte: Option<&wgpu::Texture>,
+        op: &CorrectionOp<'_>,
+    ) -> wgpu::Texture {
+        let bufs = Buffers::new(ctx, op);
+        self.correction_key_with(ctx, src, w, h, matte, op, &bufs)
+            .unwrap_or_else(|| {
+                // With nothing keying, the key pass draws the windows' 1.
+                let fx = self.correction.get_or_init(|| CorrectionFx::new(ctx));
+                self.correction_pass(ctx, &fx.key, &bufs, src, None, None, w, h)
+            })
+    }
+
+    /// A Parallel node joined to its run: `acc + (out - input)`, where `out`
+    /// is the node drawn from the run's `input`. `op` only fills the buffers.
+    #[allow(clippy::too_many_arguments)]
+    pub fn correction_parallel(
+        &self,
+        ctx: &GpuContext,
+        acc: &wgpu::Texture,
+        out: &wgpu::Texture,
+        input: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &CorrectionOp<'_>,
+    ) -> wgpu::Texture {
+        let fx = self.correction.get_or_init(|| CorrectionFx::new(ctx));
+        let bufs = Buffers::new(ctx, op);
+        self.correction_pass(ctx, &fx.parallel, &bufs, acc, Some(out), Some(input), w, h)
     }
 
     /// The Correction over a linear working texture (premultiplied). A node at

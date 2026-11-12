@@ -654,6 +654,7 @@ impl Realiser<'_> {
                         })
                     }
                     LayerInputDraw::EffectOutput(id) => return LayerInput::EffectOutput(*id),
+                    LayerInputDraw::EffectKey(id) => return LayerInput::EffectKey(*id),
                     // Made when its op comes round (`late_clones`).
                     LayerInputDraw::Late(_) => return LayerInput::Late,
                     // An op's whole list: each layer rendered as it would be

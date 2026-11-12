@@ -13,6 +13,7 @@ use lumit_gpu::GpuContext;
 
 use crate::gpufx::{AuxData, AuxKind, AuxSlot};
 
+mod combine;
 pub mod layer_input;
 
 type Tex = wgpu::Texture;
@@ -565,6 +566,9 @@ pub enum LayerInput {
     /// What an effect above made, named by its instance. Only the matte list
     /// carries one, and `run_ops` keeps that effect's output to hand over.
     EffectOutput(uuid::Uuid),
+    /// The key a Correction above made, named by its instance. Only the matte
+    /// list carries one.
+    EffectKey(uuid::Uuid),
     /// Another layer, already rendered alone at this raster.
     Texture(Tex),
     /// Distance in metres rather than a picture: a 3D precomp's Scene depth
@@ -594,7 +598,8 @@ impl LayerInput {
             LayerInput::Absent
             | LayerInput::Several(_)
             | LayerInput::Late
-            | LayerInput::EffectOutput(_) => None,
+            | LayerInput::EffectOutput(_)
+            | LayerInput::EffectKey(_) => None,
             LayerInput::ThisLayer => Some(current),
             LayerInput::Texture(t) | LayerInput::Depth(t, _) => Some(t),
         }
@@ -605,7 +610,10 @@ impl LayerInput {
     fn binds_a_picture(&self) -> bool {
         match self {
             // An effect's output above is in the chain's own name already.
-            LayerInput::Absent | LayerInput::ThisLayer | LayerInput::EffectOutput(_) => false,
+            LayerInput::Absent
+            | LayerInput::ThisLayer
+            | LayerInput::EffectOutput(_)
+            | LayerInput::EffectKey(_) => false,
             // A late list is pictures nothing names yet.
             LayerInput::Texture(_) | LayerInput::Depth(..) | LayerInput::Late => true,
             LayerInput::Several(list) => list.iter().any(|(l, _)| l.binds_a_picture()),
@@ -897,6 +905,7 @@ pub fn run_ops(
         .iter()
         .position(|op| kept_for.contains(&op.instance))
         .map_or(held_limit, |i| held_limit.min(i + 1));
+    let held_limit = combine::key_limit(ops, mattes, held_limit);
     // Streams made so far this walk, by the slot of the op that made them.
     let mut late_streams: Vec<(u32, lumit_core::fx::points::PointsStream)> = Vec::new();
     if let Some((store, _)) = cache {
@@ -905,6 +914,11 @@ pub fn run_ops(
             let Some(key) = keys.get(i).copied().flatten() else {
                 continue;
             };
+            // A run's joining node reads the run's input, which a held picture
+            // does not carry.
+            if lumit_core::fx::effects::correction::combine::joins(ops, i + 1) {
+                continue;
+            }
             if let Some(held) = store.lru.get(&key) {
                 tex = held.0.clone();
                 // The held picture may have been made by a growing op,
@@ -945,6 +959,8 @@ pub fn run_ops(
     }
     // The picture the op before this one made, once nothing can read it again.
     let mut spent: Option<Tex> = None;
+    // Parallel and Layer runs, and the keys a wire reads.
+    let mut run = combine::Run::default();
     // Outputs made this walk, filed at the end rather than as they are made:
     // a flare bake queued *during* the walk means a picture of the previous
     // lens, which must not be filed under the name of the new one.
@@ -1242,6 +1258,7 @@ pub fn run_ops(
         // that passes its input straight through has made nothing, and the one
         // texture must not be offered to the pool while the chain still holds
         // it.
+        tex = run.begin(ctx, ops, i, tex, w, h, &mut spent);
         let given = tex.clone();
         // Only a bound matte costs anything: the input texture is held (a
         // cheap handle clone) so the dissolve below has something to lerp
@@ -1251,6 +1268,7 @@ pub fn run_ops(
                 LayerInput::EffectOutput(from) => {
                     kept.iter().find(|(id, _)| id == from).map(|(_, t)| t)
                 }
+                LayerInput::EffectKey(from) => run.key_of(from),
                 _ => m.texture(&tex),
             })
             .cloned();
@@ -1306,7 +1324,7 @@ pub fn run_ops(
         // table entry (an orchestration-only effect) passes the texture through
         // — the convention a missing LUT or flow field already uses, never a
         // fault (engine crates do not panic, 14-ENGINEERING-RULES §4).
-        if let Some(gpu) = gpu {
+        if let Some(gpu) = gpu.filter(|_| !run.layers()) {
             // The Blend row: anything but Normal runs the kernel at
             // Mix 100 and applies the blend and the Mix itself, afterwards and
             // once — the same decision `cpu::apply_stack` makes, read from
@@ -1429,6 +1447,8 @@ pub fn run_ops(
                 tex = fx.blend_mix(ctx, &input, &tex, w, h, mode, mix);
             }
         }
+        tex = run.end(fx, ctx, tex, w, h, &resolved, own_matte);
+        run.keep_key(fx, ctx, mattes, &resolved, &given, own_matte, w, h);
 
         // **The Node graph effect** (docs/impl/node-graph-comp.md §2.4). It has
         // no kernel either: what it does is another walk of the engine, which
@@ -1636,7 +1656,10 @@ pub fn run_ops(
                     // only by the op after it, which has run. The one thing
                     // left to check is that it is not the picture the chain
                     // holds right now.
-                    if dropped != tex && !kept.iter().any(|(_, k)| *k == dropped) {
+                    if dropped != tex
+                        && !kept.iter().any(|(_, k)| *k == dropped)
+                        && !run.holds(&dropped)
+                    {
                         ctx.recycle(dropped);
                     }
                 }
@@ -1862,6 +1885,10 @@ fn op_keys(
                     // every op above. Which one feeds the matte is not.
                     Some(LayerInput::EffectOutput(from)) => {
                         h.update(b"matte-from/");
+                        h.update(from.as_bytes());
+                    }
+                    Some(LayerInput::EffectKey(from)) => {
+                        h.update(b"matte-key/");
                         h.update(from.as_bytes());
                     }
                     _ => {}

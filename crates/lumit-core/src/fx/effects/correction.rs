@@ -11,6 +11,7 @@
 //! Combine says how the node meets the one above it in the stack. The stack
 //! reads it; this effect draws every node as Serial.
 
+pub mod combine;
 pub mod cpu;
 pub mod groups;
 pub mod maths;

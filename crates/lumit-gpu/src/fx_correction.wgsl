@@ -8,6 +8,7 @@
 //   correction_qualify  the qualifier's key, before Grow and Blur
 //   correction_key      the node's key: windows x qualifier x matte
 //   correction_grade    the grade, mixed back by the key
+//   correction_parallel a Parallel node joined to its run: src + (a - b)
 
 struct Win {
     a: vec4<f32>,  // shape, centre x, centre y, opacity
@@ -467,4 +468,17 @@ fn correction_grade(@builtin(global_invocation_id) gid: vec3<u32>) {
         detail = luma(textureLoad(tex_b, xy, 0).rgb);
     }
     textureStore(dst, xy, grade(o, key, detail));
+}
+
+// What a Parallel node changed (tex_a, drawn from the run's input tex_b),
+// added to what the run made (src). combine::parallel's twin.
+@compute @workgroup_size(8, 8)
+fn correction_parallel(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = vec2<i32>(textureDimensions(src));
+    let xy = vec2<i32>(gid.xy);
+    if (xy.x >= size.x || xy.y >= size.y) {
+        return;
+    }
+    let acc = textureLoad(src, xy, 0);
+    textureStore(dst, xy, acc + (textureLoad(tex_a, xy, 0) - textureLoad(tex_b, xy, 0)));
 }

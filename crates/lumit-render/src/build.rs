@@ -3230,6 +3230,9 @@ fn comp_walk(
                 if let Some(from) = graph.matte_from(e.id) {
                     return LayerInputDraw::EffectOutput(from);
                 }
+                if let Some(from) = graph.key_from(e.id) {
+                    return LayerInputDraw::EffectKey(from);
+                }
                 // A row the panel does not show, or shows greyed, is a row
                 // nobody meant: the Lens flare's Matte rows only exist while
                 // its Source type is Matte, and rendering the layer one names

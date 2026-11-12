@@ -45,6 +45,8 @@ pub const MATTE_PORT: Port = Port::new("matte", "Matte", PortType::Matte);
 pub const INPUT_PORT: Port = Port::new("input", "Input", PortType::Image);
 /// An effect node's one picture out.
 pub const OUTPUT_PORT: Port = Port::new("output", "Output", PortType::Image);
+/// A Correction's key out, which a wire hands to a Matte further down.
+pub const KEY_PORT: Port = Port::new("key", "Key", PortType::Matte);
 /// The Layer out node's sound. Drawn and unfilled: audio comes only from a
 /// footage layer's own stream, so this accepts no wire in this phase
 /// (§7) — listed rather than faked.
@@ -63,11 +65,12 @@ pub const OUT_VOLUME_PORT: Port = Port::new("volume", "Volume", PortType::Number
 ///
 /// Gathered in one list so the label walk ([`crate::fx::labels`]) can
 /// find their words the same way it finds an effect's.
-pub const DERIVED_PORTS: [Port; 6] = [
+pub const DERIVED_PORTS: [Port; 7] = [
     IMAGE_PORT,
     MATTE_PORT,
     INPUT_PORT,
     OUTPUT_PORT,
+    KEY_PORT,
     AUDIO_PORT,
     OUT_VOLUME_PORT,
 ];
@@ -127,6 +130,10 @@ pub enum OutputRef {
     /// effect further down. The chain is untouched: the picture still flows on
     /// down the stack, and this hands a copy of it to the matte as well.
     EffectOutput { effect: Uuid },
+    /// A Correction's key, as it leaves that node, into the Matte of an effect
+    /// further down: white where the node grades, black where it leaves the
+    /// picture alone.
+    EffectKey { effect: Uuid },
 }
 
 /// Where a wire goes.
@@ -140,7 +147,7 @@ pub enum InputRef {
         port: String,
     },
     /// An effect's matte input, fed by [`OutputRef::SourceMatte`] or by an
-    /// effect above it ([`OutputRef::EffectOutput`]).
+    /// effect above it ([`OutputRef::EffectOutput`], [`OutputRef::EffectKey`]).
     Matte { effect: Uuid },
 }
 
@@ -386,9 +393,10 @@ fn flows_down_the_stack(edge: &Edge, effects: &[EffectInstance]) -> bool {
                 ..
             },
         )
-        | (OutputRef::EffectOutput { effect }, InputRef::Matte { effect: consumer }) => {
-            (effect, consumer)
-        }
+        | (
+            OutputRef::EffectOutput { effect } | OutputRef::EffectKey { effect },
+            InputRef::Matte { effect: consumer },
+        ) => (effect, consumer),
         _ => return true,
     };
     let at = |id: &Uuid| effects.iter().position(|e| e.id == *id);
@@ -480,9 +488,9 @@ impl LayerGraph {
             // to remove, but an effect is.
             let source_stands = match &e.from {
                 OutputRef::Driver { .. } | OutputRef::SourceMatte => true,
-                OutputRef::EffectData { effect, .. } | OutputRef::EffectOutput { effect } => {
-                    alive(effect)
-                }
+                OutputRef::EffectData { effect, .. }
+                | OutputRef::EffectOutput { effect }
+                | OutputRef::EffectKey { effect } => alive(effect),
             };
             let destination_stands = match &e.to {
                 InputRef::Param { node, .. } => !gone(node),
@@ -629,6 +637,20 @@ impl LayerGraph {
         })
     }
 
+    /// The Correction above `effect` whose key is wired into its matte, if one
+    /// is.
+    #[must_use]
+    pub fn key_from(&self, effect: Uuid) -> Option<Uuid> {
+        self.edges.iter().find_map(|e| match (&e.from, &e.to) {
+            (OutputRef::EffectKey { effect: from }, InputRef::Matte { effect: to })
+                if *to == effect =>
+            {
+                Some(*from)
+            }
+            _ => None,
+        })
+    }
+
     /// Check every rule `SetLayerGraph` enforces (§1.5), against the effect
     /// stack the graph sits beside.
     ///
@@ -689,6 +711,16 @@ impl LayerGraph {
                 .any(|e| e.id == *effect)
                 .then_some(PortType::Image)
                 .ok_or(GraphError::UnknownNode),
+            // Only a Correction has a key to hand on.
+            OutputRef::EffectKey { effect } => {
+                let inst = effects
+                    .iter()
+                    .find(|e| e.id == *effect)
+                    .ok_or(GraphError::UnknownNode)?;
+                (inst.effect.match_name == "correction")
+                    .then_some(PortType::Matte)
+                    .ok_or(GraphError::UnknownPort)
+            }
             OutputRef::Driver { node, port } => {
                 let inst = self.node(*node).ok_or(GraphError::UnknownNode)?;
                 Self::def_of(inst)?
@@ -811,7 +843,9 @@ impl LayerGraph {
                 let from = match &e.from {
                     OutputRef::Driver { node, .. } => *node,
                     OutputRef::EffectData { effect, .. } => *effect,
-                    OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => return None,
+                    OutputRef::SourceMatte
+                    | OutputRef::EffectOutput { .. }
+                    | OutputRef::EffectKey { .. } => return None,
                 };
                 let to = match &e.to {
                     InputRef::Param {
