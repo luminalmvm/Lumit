@@ -3,7 +3,7 @@
 //! assertion rather than a look.
 
 use crate::{
-    solve::RotoSolver, stroke::base_seeds, stroke::RotoStroke, stroke::Seed, stroke::Seeds,
+    gdt, solve::RotoSolver, stroke::base_seeds, stroke::RotoStroke, stroke::Seed, stroke::Seeds,
     stroke::StrokeKind, warp::mask_seeds, warp::warp_and_seed, warp::FlowField, FrameRgb,
     RotoError, RotoSettings,
 };
@@ -737,6 +737,52 @@ fn a_masks_confident_interiors_seed_and_its_soft_edge_does_not() {
         mask_seeds(&mask, w, h, &mut other),
         Err(RotoError::SizeMismatch { .. })
     ));
+}
+
+/// From 2880 on the long side the distance step runs averaged down, and each
+/// stroke's side must come back up as its own. Below that it runs at full size.
+#[test]
+fn a_large_frame_keeps_each_stroke_on_its_side() {
+    for w in [2879u32, 2880] {
+        let h = 6u32;
+        let half = w as f32 / 2.0;
+        let rgb = frame_from(w, h, |x, y| {
+            let base = if (x as f32) < half { SUBJECT } else { BACKDROP };
+            tint(base, x as i32, y as i32, 0.04)
+        });
+        let strokes = [
+            stroke(&[(200.0, 3.0)], 2.0, StrokeKind::Foreground, 0),
+            stroke(&[(w as f32 - 200.0, 3.0)], 2.0, StrokeKind::Background, 0),
+        ];
+        let seeds = base_seeds(w, h, &strokes).unwrap();
+        let mut solver = RotoSolver::new(RotoSettings::default());
+        let mut matte = vec![0.0f32; (w * h) as usize];
+        solver
+            .solve(FrameRgb::new(&rgb, w, h).unwrap(), &seeds, &mut matte)
+            .unwrap();
+        let row = (3 * w) as usize;
+        assert_eq!(matte[row + 100], 1.0, "foreground side lost at width {w}");
+        assert_eq!(
+            matte[row + w as usize - 100],
+            0.0,
+            "background side lost at width {w}"
+        );
+        if w == 2879 {
+            let n = (w * h) as usize;
+            let (mut steps, mut d_f, mut d_b) = (vec![[0.0; 4]; n], vec![0.0; n], vec![0.0; n]);
+            let mut full = vec![0.0f32; n];
+            gdt::alpha_raw(
+                FrameRgb::new(&rgb, w, h).unwrap(),
+                &seeds,
+                RotoSettings::default().gamma,
+                &mut steps,
+                &mut d_f,
+                &mut d_b,
+                &mut full,
+            );
+            assert_eq!(solver.alpha_raw(), &full[..], "solved below full size");
+        }
+    }
 }
 
 #[test]

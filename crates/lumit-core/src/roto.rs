@@ -66,7 +66,11 @@ use crate::model::{EffectInstance, EffectValue};
 ///
 /// Version 3 refines the edge from the nearer-seed answer, so the grey mattes
 /// version 2 wrote are dropped.
-pub const TIER_VERSION: u16 = 3;
+///
+/// Version 4 averages a frame well above HD down by a whole number for the
+/// distance step, to bring its long side near HD, so the mattes version 3
+/// wrote are dropped.
+pub const TIER_VERSION: u16 = 4;
 
 /// The Roto brush's `match_name`, so the render path and the frame key can find
 /// the effect without importing the catalogue's type.
