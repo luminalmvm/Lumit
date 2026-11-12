@@ -20,6 +20,7 @@ pub mod expression;
 pub mod extrude;
 pub mod fx;
 pub mod grade;
+pub mod grade_solve;
 /// The layer driver graph: the additive wiring beside the effect stack.
 pub mod graph;
 /// Layer groups: the Timeline's organisational fold over a run of layers.

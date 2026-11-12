@@ -390,22 +390,22 @@ pub fn select_keyframes(set: &TrackSet, settings: &GeometrySettings) -> Vec<Pair
 
 // --- LO-RANSAC --------------------------------------------------------------
 
-struct Budget {
-    thr: f64,
-    max_iterations: usize,
-    confidence: f64,
-    seed: u64,
-    sample: usize,
+pub(crate) struct Budget {
+    pub(crate) thr: f64,
+    pub(crate) max_iterations: usize,
+    pub(crate) confidence: f64,
+    pub(crate) seed: u64,
+    pub(crate) sample: usize,
 }
 
-struct Fit {
-    model: Mat3,
-    inliers: Vec<usize>,
+pub(crate) struct Fit {
+    pub(crate) model: Mat3,
+    pub(crate) inliers: Vec<usize>,
 }
 
 /// LO-RANSAC: minimal samples, a fixed iteration cap, a deterministic early
 /// exit, and a re-fit on the inliers every time the best model improves.
-fn lo_ransac<Min, Ref, Res>(
+pub(crate) fn lo_ransac<Min, Ref, Res>(
     pts: &[Correspondence],
     budget: &Budget,
     minimal: Min,
@@ -569,7 +569,7 @@ fn gric(residuals: &[f64], sigma: f64, dimension: usize, parameters: usize) -> f
 
 /// Splitmix64's finaliser — the same mixer `tests.rs` builds its texture hash
 /// from, and the house style for "a number derived from these numbers".
-fn mix(mut z: u64) -> u64 {
+pub(crate) fn mix(mut z: u64) -> u64 {
     z ^= z >> 30;
     z = z.wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z ^= z >> 27;
@@ -579,7 +579,7 @@ fn mix(mut z: u64) -> u64 {
 
 /// The sampler's seed for one pair: `(from, to, correspondence count)` through
 /// the mixer, per docs/impl/tracking.md §4's determinism ruling.
-fn seed_for(from: i64, to: i64, count: usize) -> u64 {
+pub(crate) fn seed_for(from: i64, to: i64, count: usize) -> u64 {
     let a = mix((from as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
     let b = mix((to as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F) ^ a);
     mix((count as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93) ^ b)
