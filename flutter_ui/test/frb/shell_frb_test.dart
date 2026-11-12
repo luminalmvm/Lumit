@@ -284,8 +284,7 @@ void main() {
           'settings-disk-clear',
         ],
         'shortcuts': [
-          'keymap-preset-lumit',
-          'keymap-preset-ae',
+          'keymap-preset',
           'keymap-import',
           'keymap-export',
         ],

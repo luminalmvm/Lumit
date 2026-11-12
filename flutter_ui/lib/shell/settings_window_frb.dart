@@ -3411,8 +3411,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final km = ui.keymap;
     final groups = km.visibleGroups;
     return [
-      // Where the whole table comes from: one of the two presets, or a file.
-      // Two rows rather than five buttons in a heap, so each says what it is.
+      // Where the whole table comes from: a shipped preset, a saved set, or a
+      // file. Rows rather than buttons in a heap, so each says what it is.
       settingsSection(
           t,
           l10n.settingsGroupKeymap,
@@ -3421,42 +3421,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               t,
               l10n.settingsPreset,
               _presetMessage ?? '',
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  HouseButton(
-                    key: const ValueKey('keymap-preset-lumit'),
-                    small: true,
-                    onPressed: () async {
-                      await km.loadPreset(BridgeKeymapPreset.lumit);
-                      _vegasDrags(false);
-                      _presetLoaded(l10n.keymapLumitDefault);
-                    },
-                    child: Text(l10n.keymapLumitDefault, style: t.small),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('keymap-preset-ae'),
-                    small: true,
-                    onPressed: () async {
-                      await km.loadPreset(BridgeKeymapPreset.afterEffects);
-                      _vegasDrags(false);
-                      _presetLoaded(l10n.keymapAfterEffects);
-                    },
-                    child: Text(l10n.keymapAfterEffects, style: t.small),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('keymap-preset-vegas'),
-                    small: true,
-                    onPressed: () async {
-                      await km.loadPreset(BridgeKeymapPreset.vegas);
-                      _vegasDrags(true);
-                      _presetLoaded(l10n.firstRunVegasName);
-                    },
-                    child: Text(l10n.firstRunVegasName, style: t.small),
-                  ),
-                ],
+              _dropdown<Object?>(
+                key: 'keymap-preset',
+                value: km.inForce,
+                options: [...BridgeKeymapPreset.values, ...km.sets, _saveSet],
+                width: _ddWide,
+                label: (choice) => switch (choice) {
+                  BridgeKeymapPreset preset => _presetName(preset),
+                  String set => set,
+                  _ when identical(choice, _saveSet) => l10n.keymapSaveSet,
+                  _ => l10n.custom,
+                },
+                onChanged: (choice) => _pickKeymap(km, choice),
               ),
             )),
             // What the last import said, when it had something to say. Kept beside
@@ -3652,6 +3628,38 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     return [settingsSection(t, l10n.keymapDrag, rows)];
   }
 
+  /// The Preset list's last choice, which keeps the keymap as a set.
+  static const Object _saveSet = Object();
+
+  static String _presetName(BridgeKeymapPreset preset) => switch (preset) {
+        BridgeKeymapPreset.lumit => l10n.keymapLumitDefault,
+        BridgeKeymapPreset.afterEffects => l10n.keymapAfterEffects,
+        BridgeKeymapPreset.vegas => l10n.firstRunVegasName,
+      };
+
+  /// Put a shipped preset or a saved set in force, or save one.
+  Future<void> _pickKeymap(KeymapState km, Object? choice) async {
+    switch (choice) {
+      case BridgeKeymapPreset preset:
+        await km.loadPreset(preset);
+        _vegasDrags(preset == BridgeKeymapPreset.vegas);
+        _presetLoaded(_presetName(preset));
+      case String set:
+        final refusal = await km.useSet(set);
+        if (refusal == null) {
+          _presetLoaded(set);
+        } else if (mounted) {
+          setState(() => _presetMessage = refusal);
+        }
+      case _ when identical(choice, _saveSet):
+        final name = await askThemeName(context,
+            title: l10n.keymapSaveSetTitle, suggested: '', confirm: l10n.save);
+        if (name == null || !mounted) return;
+        km.saveSet(name);
+        setState(() => _presetMessage = null);
+    }
+  }
+
   /// The Cut timeline's drags, which follow the preset last loaded.
   void _vegasDrags(bool on) {
     final workspace =
@@ -3701,6 +3709,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       return;
     }
     final refusal = await km.fromJson(text);
+    if (refusal == null) {
+      // Kept as a set too, named after the file and never over another.
+      final file = path.split(RegExp(r'[\\/]')).last;
+      final stem =
+          file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file;
+      var name = stem;
+      for (var n = 2; km.sets.contains(name); n++) {
+        name = '$stem $n';
+      }
+      km.saveSet(name);
+    }
     if (!mounted) return;
     setState(() => _keymapMessage = refusal ?? l10n.keymapImported);
   }

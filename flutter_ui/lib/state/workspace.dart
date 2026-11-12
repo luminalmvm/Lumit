@@ -14,11 +14,12 @@ import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeExpressionLanguage;
+import 'package:lumit_flutter/src/rust/api/library.dart' show libraryUseHome;
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
-import '../theme/theme_file.dart' show readThemeFile;
+import '../theme/theme_file.dart';
 import 'window_backdrop.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
@@ -657,12 +658,46 @@ class Workspace extends ChangeNotifier {
   /// changes, so a saved edit shows straight away.
   List<StyleSheet> styles = const [];
   StreamSubscription<FileSystemEvent>? _stylesWatch;
+  String? _stylesWatched;
   Timer? _stylesSoon;
   bool _stylesRead = false;
 
+  /// The folder the profile in use keeps its library in, or null for the one
+  /// beside the settings (profiles.dart).
+  static String? libraryHome;
+
   /// The folder a person's own styles are read from.
-  static String stylesFolder() =>
-      '${storeFile().parent.path}${Platform.pathSeparator}styles';
+  static String stylesFolder() => _libraryFolder('styles');
+
+  /// The folder a person's own themes are kept in, a file each.
+  static String themesFolder() => _libraryFolder('themes');
+
+  /// The folder saved shortcut sets are kept in, a file each.
+  static String shortcutsFolder() => _libraryFolder('shortcuts');
+
+  static String _libraryFolder(String kind) =>
+      '${libraryHome ?? storeFile().parent.path}${Platform.pathSeparator}$kind';
+
+  /// The current profile's library home as profiles.dart last wrote it, so
+  /// the folders are right before anything reads one.
+  static String? _homeOnFile() {
+    try {
+      final j = jsonDecode(File('${storeFile().parent.path}'
+              '${Platform.pathSeparator}profiles.json')
+          .readAsStringSync());
+      if (j case {'current': final String id, 'profiles': final List<dynamic> all}) {
+        for (final p in all) {
+          if (p case {'id': final String at, 'library_home': final String home}
+              when at == id) {
+            return home;
+          }
+        }
+      }
+    } catch (_) {
+      // No profiles yet: the folders beside the settings.
+    }
+    return null;
+  }
 
   /// The style in use, or null.
   StyleSheet? get activeStyle {
@@ -700,15 +735,17 @@ class Workspace extends ChangeNotifier {
       // A read-only settings folder still opens Lumit, with no styles.
     }
     styles = StyleSheet.readFolder(folder);
-    if (_stylesWatch == null && Directory(folder).existsSync()) {
-      // One read for a burst of events, as a save is often several. A watch
-      // that fails or ends, as when the folder goes, is dropped, and the next
-      // resume arms a new one.
-      void drop() {
-        _stylesWatch?.cancel();
-        _stylesWatch = null;
-      }
+    // One read for a burst of events, as a save is often several. A watch
+    // that fails or ends, as when the folder goes, is dropped, and the next
+    // resume arms a new one. So is one on another profile's folder.
+    void drop() {
+      _stylesWatch?.cancel();
+      _stylesWatch = null;
+    }
 
+    if (_stylesWatched != folder) drop();
+    if (_stylesWatch == null && Directory(folder).existsSync()) {
+      _stylesWatched = folder;
       _stylesWatch = Directory(folder).watch(recursive: true).listen(
         (_) {
           _stylesSoon?.cancel();
@@ -760,8 +797,95 @@ class Workspace extends ChangeNotifier {
   Color? accentOverride;
   AnimationLevel animationLevel = AnimationLevel.all;
 
-  /// The themes the user has made, in the order they were saved.
+  /// The themes the user has made, read from [themesFolder].
   List<CustomTheme> customThemes = [];
+
+  /// Each of [customThemes]' file, by the theme's name.
+  final Map<String, File> _themeFiles = {};
+
+  /// Read the themes folder again, after something else changed it. A theme
+  /// in use that has gone falls back as a deleted one does.
+  void reloadThemes() {
+    _readThemes();
+    if (customThemeName != null && activeCustomTheme == null) {
+      customThemeName = null;
+      save();
+    }
+    recompose();
+  }
+
+  /// Every theme file in the folder. The name inside wins over the file's,
+  /// and a second file with a name already read is left out.
+  void _readThemes() {
+    customThemes = [];
+    _themeFiles.clear();
+    if (_keepingThemes) {
+      for (final entry in _themesKept!) {
+        if (entry is! Map) continue;
+        final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (theme != null) customThemes.add(theme);
+      }
+      return;
+    }
+    final List<File> files;
+    try {
+      files = Directory(themesFolder())
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.$themeFileExtension'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+    } on FileSystemException {
+      return;
+    }
+    for (final file in files) {
+      try {
+        final stem = file.path.split(RegExp(r'[\\/]')).last;
+        final theme = readThemeFile(file.readAsStringSync(),
+                name: stem.substring(0, stem.lastIndexOf('.')))
+            .theme;
+        if (theme == null || _themeFiles.containsKey(theme.name)) continue;
+        customThemes.add(theme);
+        _themeFiles[theme.name] = file;
+      } catch (_) {
+        // A file that will not read is not a theme.
+      }
+    }
+  }
+
+  /// Write [theme] to its own file, a new one when it has none yet.
+  void _writeTheme(CustomTheme theme) {
+    if (_keepingThemes) {
+      _keepThemes();
+      return;
+    }
+    try {
+      final file = _themeFiles[theme.name];
+      if (file == null) {
+        _themeFiles[theme.name] = writeThemeFileInto(themesFolder(), theme);
+      } else {
+        file.writeAsStringSync(encodeThemeFile(theme));
+      }
+    } on FileSystemException {
+      // Kept until Lumit closes, as a save that fails is.
+    }
+  }
+
+  void _keepThemes() {
+    _themesKept = [for (final t in customThemes) t.toJson()];
+  }
+
+  void _dropThemeFile(String name) {
+    if (_keepingThemes) {
+      _keepThemes();
+      return;
+    }
+    try {
+      _themeFiles.remove(name)?.deleteSync();
+    } on FileSystemException {
+      // Already gone.
+    }
+  }
 
   /// The custom theme in use, by name, or null for the built-in
   /// [colorScheme]. Two fields rather than one because a built-in scheme is
@@ -1107,11 +1231,16 @@ class Workspace extends ChangeNotifier {
   /// default rather than a copy of them written out at first launch.
   String? keymapJson;
 
+  /// Where [keymapJson] was last taken from whole: a shipped preset's name,
+  /// or a saved set's file name. Null once a binding has changed since.
+  String? keymapSet;
+
   /// Store the engine's keymap text and write the file. Called after every
   /// binding change, which is rare and cheap — the file is a few kilobytes and
   /// a keymap edit is a deliberate act, not something that happens per frame.
-  void setKeymapJson(String json) {
+  void setKeymapJson(String json, {String? set}) {
     keymapJson = json;
+    keymapSet = set;
     save();
   }
 
@@ -1600,6 +1729,7 @@ class Workspace extends ChangeNotifier {
     } else {
       customThemes.add(theme);
     }
+    _writeTheme(theme);
     customThemeName = theme.name;
     recompose();
     save();
@@ -1672,6 +1802,8 @@ class Workspace extends ChangeNotifier {
     if (wanted.isEmpty || wanted == from) return from;
     final name = availableThemeName(wanted);
     customThemes[at] = customThemes[at].renamed(name);
+    _dropThemeFile(from);
+    _writeTheme(customThemes[at]);
     if (customThemeName == from) customThemeName = name;
     recompose();
     save();
@@ -1682,6 +1814,7 @@ class Workspace extends ChangeNotifier {
   /// session using it falls back to its built-in scheme.
   void deleteCustomTheme(String name) {
     customThemes.removeWhere((t) => t.name == name);
+    _dropThemeFile(name);
     if (customThemeName == name) customThemeName = null;
     recompose();
     save();
@@ -2328,6 +2461,7 @@ class Workspace extends ChangeNotifier {
         },
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
+        'keymap_set': keymapSet,
         'audio_device': audioDevice,
         'audio_offset_ms': audioOffsetMs,
         'touch_return_ms': touchReturnMs,
@@ -2353,7 +2487,7 @@ class Workspace extends ChangeNotifier {
         'share_moved': shareMoved,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
-        'custom_themes': [for (final t in customThemes) t.toJson()],
+        if (_themesKept != null) 'custom_themes': _themesKept,
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
         'themed_splash': themedSplash,
@@ -2472,6 +2606,7 @@ class Workspace extends ChangeNotifier {
     }
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
+    keymapSet = j['keymap_set'] is String ? j['keymap_set'] as String : null;
     // Absent, or empty from a hand-edited file, means follow the machine —
     // which is what every settings file written before this field existed was
     // already doing.
@@ -2551,16 +2686,7 @@ class Workspace extends ChangeNotifier {
     // there is no sense in which it could mean anything else.
     autosaveMinutes = (j['autosave_minutes'] as int? ?? 5).clamp(0, 240);
     autosaveKeep = (j['autosave_keep'] as int? ?? 5).clamp(1, 50);
-    customThemes = [];
-    final rawThemes = j['custom_themes'];
-    if (rawThemes is List) {
-      for (final entry in rawThemes) {
-        if (entry is Map) {
-          final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
-          if (theme != null) customThemes.add(theme);
-        }
-      }
-    }
+    _readThemes();
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
@@ -2692,9 +2818,17 @@ class Workspace extends ChangeNotifier {
   }
 
   void load() {
-    // The user's own workspaces are their own files beside the settings, so
-    // they are read whether or not there is a settings file to read.
+    // The profile in use's library, known before anything reads from it.
+    libraryHome = _homeOnFile();
+    try {
+      libraryUseHome(home: libraryHome);
+    } catch (_) {
+      // No engine to tell, as in a test.
+    }
+    // The user's own workspaces and themes are their own files, so they are
+    // read whether or not there is a settings file to read.
     loadUserWorkspaces();
+    _readThemes();
     try {
       final f = storeFile();
       if (!f.existsSync()) {
@@ -2707,11 +2841,89 @@ class Workspace extends ChangeNotifier {
         return;
       }
       final j = jsonDecode(f.readAsStringSync());
-      if (j is Map<String, dynamic>) applyJson(j);
+      if (j is Map<String, dynamic>) {
+        final moved = _writeOutThemes(j['custom_themes']);
+        applyJson(j);
+        // The settings stop holding them, so this happens once.
+        if (moved) save();
+      }
     } catch (_) {
       // A corrupt store falls back to defaults — never a crash.
     }
   }
+
+  /// Themes kept in the settings, from before each was a file, written out
+  /// the first time there is no themes folder. A name already taken by a
+  /// file is numbered, never written over. True when there were any.
+  bool _writeOutThemes(Object? kept) {
+    _themesKept = null;
+    final folder = themesFolder();
+    if (kept is! List || kept.isEmpty) return false;
+    if (Directory(folder).existsSync()) return _joinThemes(kept, folder);
+    // Written beside the folder and moved in whole, so a failure leaves no
+    // folder and the next start tries again.
+    final half = Directory('$folder.moving');
+    try {
+      if (half.existsSync()) half.deleteSync(recursive: true);
+      half.createSync(recursive: true);
+      for (final entry in kept) {
+        if (entry is! Map) continue;
+        final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (theme != null) writeThemeFileInto(half.path, theme);
+      }
+      half.renameSync(folder);
+      return true;
+    } on FileSystemException {
+      try {
+        half.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Left for the next try to clear.
+      }
+      _themesKept = kept;
+      _themesKeptFor = folder;
+      return false;
+    }
+  }
+
+  /// Themes kept in the settings when a themes folder is there already, as
+  /// when the library brought one from another computer before these were
+  /// moved: each joins it, an identical one is skipped and a name already
+  /// taken is numbered, so none is written over or lost.
+  bool _joinThemes(List<dynamic> kept, String folder) {
+    final there = {for (final t in customThemes) t.name: t};
+    try {
+      for (final entry in kept) {
+        if (entry is! Map) continue;
+        final read = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (read == null) continue;
+        var theme = read;
+        final same = there[read.name];
+        if (same != null) {
+          if (jsonEncode(same.toJson()) == jsonEncode(read.toJson())) continue;
+          var n = 2;
+          while (there.containsKey('${read.name} $n')) {
+            n++;
+          }
+          theme = read.renamed('${read.name} $n');
+        }
+        writeThemeFileInto(folder, theme);
+        there[theme.name] = theme;
+      }
+      return true;
+    } on FileSystemException {
+      _themesKept = kept;
+      _themesKeptFor = folder;
+      return false;
+    }
+  }
+
+  /// Themes still kept in the settings, because writing them out failed,
+  /// and the themes folder they are for. Read and written back there until
+  /// a later start moves them all.
+  List<dynamic>? _themesKept;
+  String? _themesKeptFor;
+  bool get _keepingThemes =>
+      _themesKept != null && _themesKeptFor == themesFolder();
 
   void save() {
     try {

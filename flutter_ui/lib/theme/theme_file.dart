@@ -4,11 +4,9 @@
 // the built-in scheme it starts from, and the colours that differ from that
 // scheme as `:root` variables. A file from before this, in JSON, still reads.
 //
-// **In plain terms.** A custom theme normally lives inside the workspace file,
-// which is machine-local: it never leaves the computer it was made on. This is
-// the same theme written out on its own, so it can be posted, put in a repo, or
-// carried to another machine — the keymap already has one of these, and a theme
-// is the other thing in Lumit worth sharing.
+// **In plain terms.** Each of a person's own themes is kept as one of these, in
+// the library's themes folder, and the same file can be posted, put in a repo,
+// or carried to another machine.
 //
 // **The file is a small, readable JSON document**: a marker saying what it is, a
 // version, the theme's name, its light-or-dark base, and the colours as
@@ -25,10 +23,13 @@
 // than an exception, because picking the wrong file is a normal thing to do.
 
 import 'dart:convert';
+import 'dart:io' hide Platform;
 import 'dart:ui' show Color;
 
 import 'custom_theme.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 import 'style_sheet.dart';
 import 'theme.dart';
@@ -135,6 +136,21 @@ String themeFileName(String themeName) {
       .replaceAll(RegExp('[^a-z0-9]+'), '-')
       .replaceAll(RegExp('^-+|-+\$'), '');
   return '${slug.isEmpty ? 'theme' : slug}.$themeFileExtension';
+}
+
+/// Write [theme] into [folder] as a new file named after it, numbered when
+/// that name is taken, so it never writes over another.
+File writeThemeFileInto(String folder, CustomTheme theme) {
+  final named = themeFileName(theme.name);
+  final stem = '$folder${Platform.pathSeparator}'
+      '${named.substring(0, named.lastIndexOf('.'))}';
+  var file = File('$stem.$themeFileExtension');
+  for (var n = 2; file.existsSync(); n++) {
+    file = File('$stem-$n.$themeFileExtension');
+  }
+  file.parent.createSync(recursive: true);
+  file.writeAsStringSync(encodeThemeFile(theme));
+  return file;
 }
 
 /// The CSS form: `@name`, `@base` and `:root` colours.

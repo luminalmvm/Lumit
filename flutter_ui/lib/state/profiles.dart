@@ -1,9 +1,11 @@
 // Profiles: one person's way of working, kept apart from another's.
 //
 // A profile is a name and a set of settings: how Lumit looks, its shortcuts,
-// its panel layout, its preferences, and the easings, expressions and effect
-// presets a person has saved. Several can live on one machine, and switching
-// puts one away and takes another out. None of that needs an account.
+// its panel layout, its preferences, and the easings and expressions a person
+// has saved. It also has a library of its own (presets, styles, themes and
+// the rest), kept in its own folder. Several can live on one machine, and
+// switching puts one away and takes another out. None of that needs an
+// account.
 //
 // A profile signed in to an account with Lumit Pro is also kept on Lumit's
 // server, so signing in on another machine brings it along, and a change on
@@ -24,7 +26,12 @@ import 'dart:io' hide Platform;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show presetsDirPath;
+import 'package:lumit_flutter/src/rust/api/library.dart'
+    show libraryFolders, libraryUseHome;
 import 'package:uuid/uuid.dart';
+
+import '../theme/custom_theme.dart';
+import '../theme/theme_file.dart';
 
 import 'account.dart';
 import 'custom_easings.dart';
@@ -58,7 +65,7 @@ enum ProfileGroup {
             'curve_plot_size',
             'smooth_zoomed_viewer',
           ],
-        shortcuts => const ['keymap'],
+        shortcuts => const ['keymap', 'keymap_set'],
         layout => const ['dock'],
         preferences => const [
             'interface',
@@ -115,6 +122,11 @@ class Profile {
   bool sync;
   final Set<ProfileGroup> unsynced;
 
+  /// The folder its library lives in, or null for the folders Lumit kept
+  /// the library in before profiles had their own. That is the profile that
+  /// was in use when this build first ran, so nothing of it moves.
+  String? libraryHome;
+
   Profile({
     required this.id,
     required this.name,
@@ -122,6 +134,7 @@ class Profile {
     this.account,
     this.sync = true,
     Set<ProfileGroup>? unsynced,
+    this.libraryHome,
   }) : unsynced = unsynced ?? {};
 
   /// The secret store's name for this profile's sign-in.
@@ -134,6 +147,7 @@ class Profile {
         if (account != null) 'account': account!.toJson(),
         'sync': sync,
         'unsynced': [for (final g in unsynced) g.name],
+        if (libraryHome != null) 'library_home': libraryHome,
       };
 
   static Profile? from(Object? j) {
@@ -152,6 +166,8 @@ class Profile {
           for (final name in off)
             if (groups[name] case final group?) group,
       },
+      libraryHome:
+          j['library_home'] is String ? j['library_home'] as String : null,
     );
   }
 }
@@ -230,6 +246,37 @@ bool _same(Object? a, Object? b) => jsonEncode(a) == jsonEncode(b);
 String _hash(Object? data) =>
     sha256.convert(utf8.encode(jsonEncode(data))).toString();
 
+/// Whether a file name from a profile's settings stays in its folder. These
+/// names may have come from the server.
+bool _safeName(String name) =>
+    !name.contains('/') && !name.contains(r'\') && !name.startsWith('.');
+
+/// Copy each `[from, to]`: a folder with all it holds, or one file. Hidden
+/// names stay behind, the library sync's own folder among them.
+void _copyAll(List<List<String>> pairs) {
+  for (final [from, to] in pairs) {
+    _copy(from, to);
+  }
+}
+
+void _copy(String from, String to) {
+  try {
+    if (FileSystemEntity.isFileSync(from)) {
+      Directory(to).parent.createSync(recursive: true);
+      File(from).copySync(to);
+    } else if (FileSystemEntity.isDirectorySync(from)) {
+      Directory(to).createSync(recursive: true);
+      for (final entry in Directory(from).listSync()) {
+        final name = entry.path.split(RegExp(r'[\\/]')).last;
+        if (name.startsWith('.')) continue;
+        _copy(entry.path, '$to${Platform.pathSeparator}$name');
+      }
+    }
+  } catch (_) {
+    // What could be copied was.
+  }
+}
+
 /// The profiles on this machine, which one is in use, and its sync.
 class ProfilesState extends ChangeNotifier {
   final Workspace workspace;
@@ -246,6 +293,14 @@ class ProfilesState extends ChangeNotifier {
 
   final List<Profile> all = [];
   late Profile current;
+
+  /// Called before a switch puts the library away, and after it has taken
+  /// the next one out, for whoever keeps the library in step.
+  Future<void> Function()? beforeSwitch;
+  VoidCallback? afterSwitch;
+
+  /// A new profile's library while it is still being copied, by profile.
+  final Map<String, Future<void>> _copies = {};
 
   SyncStatus status = SyncStatus.off;
   DateTime? lastSynced;
@@ -266,10 +321,12 @@ class ProfilesState extends ChangeNotifier {
 
   void _load() {
     Object? inUse;
+    var homed = false;
     try {
       final j = jsonDecode(_index.readAsStringSync());
       if (j is Map) {
         inUse = j['current'];
+        homed = j['homes'] == true;
         for (final entry in j['profiles'] as List<dynamic>? ?? const []) {
           final profile = Profile.from(entry);
           if (profile != null) all.add(profile);
@@ -285,12 +342,114 @@ class ProfilesState extends ChangeNotifier {
           id: const Uuid().v4(), name: workspace.shareName?.trim() ?? ''));
     }
     current = all.firstWhere((p) => p.id == inUse, orElse: () => all.first);
+    // Profiles from before each had a library of its own: the one in use
+    // keeps the folders it has, and every other one gets a home, filled the
+    // first time it is taken out.
+    if (!homed) {
+      for (final p in all) {
+        if (p != current) p.libraryHome ??= _homeFor(p.id);
+      }
+      _save();
+    }
+    // The workspace read its folders as it loaded, from the same list, so
+    // they are read again only if that has since changed.
+    final read = Workspace.libraryHome;
+    _useHome();
+    if (Workspace.libraryHome != read) {
+      workspace.reloadThemes();
+      workspace.reloadStyles();
+    }
+  }
+
+  /// Where a profile made here keeps its library.
+  String _homeFor(String id) => '${_dir.path}${Platform.pathSeparator}profiles'
+      '${Platform.pathSeparator}$id${Platform.pathSeparator}library';
+
+  /// The folder [profile]'s library lives in, or null for the folders Lumit
+  /// has always used.
+  String? homeOf(Profile profile) => profile.libraryHome;
+
+  /// Point the library at the current profile's home, here and in the
+  /// engine.
+  void _useHome() {
+    final home = homeOf(current);
+    Workspace.libraryHome = home;
+    try {
+      libraryUseHome(home: home);
+    } catch (_) {
+      // No engine to tell, as in a test.
+    }
+  }
+
+  /// Copy the library in use into [home], away from the interface.
+  Future<void> _copyLibrary(String home) async {
+    final sep = Platform.pathSeparator;
+    final pairs = [
+      [Workspace.stylesFolder(), '$home${sep}styles'],
+      [Workspace.themesFolder(), '$home${sep}themes'],
+      [Workspace.shortcutsFolder(), '$home${sep}shortcuts'],
+    ];
+    try {
+      final engine = libraryFolders();
+      pairs.addAll([
+        [engine.presets, '$home${sep}presets'],
+        [engine.lenses, '$home${sep}lenses'],
+        [engine.flares, '$home${sep}flares'],
+        [engine.fonts, '$home${sep}fonts'],
+        [engine.luts, '$home${sep}luts'],
+        [engine.exportPresets, '$home${sep}export-presets.json'],
+      ]);
+    } catch (_) {
+      // No engine, as in a test: the interface's own folders only.
+    }
+    await compute(_copyAll, pairs);
+  }
+
+  /// Fill the home of a profile from before each had its own, the first
+  /// time it is taken out. Back then the library was shared, apart from the
+  /// presets at the top of the folder and the themes, which its settings
+  /// kept. So it gets the library in use with those put back, and nothing
+  /// it had is lost.
+  Future<void> _seed(Profile profile, Map<String, dynamic>? kept) async {
+    final home = homeOf(profile);
+    if (home == null || Directory(home).existsSync()) return;
+    await _copyLibrary(home);
+    final sep = Platform.pathSeparator;
+    if (kept?['presets'] case {'files': final Map<dynamic, dynamic> files}) {
+      final dir = Directory('$home${sep}presets');
+      try {
+        for (final file in dir.listSync().whereType<File>()) {
+          file.deleteSync();
+        }
+      } catch (_) {
+        // Nothing was copied.
+      }
+      for (final MapEntry(:key, :value) in files.entries) {
+        if (key is! String || value is! String || !_safeName(key)) continue;
+        _writeText(File('${dir.path}$sep$key'), value);
+      }
+    }
+    if (kept?['appearance']
+        case {'custom_themes': final List<dynamic> themes}) {
+      final dir = '$home${sep}themes';
+      try {
+        Directory(dir).deleteSync(recursive: true);
+      } catch (_) {
+        // Nothing was copied.
+      }
+      for (final entry in themes) {
+        if (entry is! Map) continue;
+        final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (theme != null) writeThemeFileInto(dir, theme);
+      }
+    }
   }
 
   void _save() {
     try {
       _index.parent.createSync(recursive: true);
       _index.writeAsStringSync(_pretty.convert({
+        'homes': true,
         'current': current.id,
         'profiles': [for (final p in all) p.toJson()],
       }));
@@ -329,7 +488,7 @@ class ProfilesState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A new profile that starts as a copy of the one in use.
+  /// A new profile that starts as a copy of the one in use, its library too.
   // ponytail: no way to start one from the shipped defaults. Add it if
   // people ask for a clean slate.
   Profile add(String name) {
@@ -338,10 +497,19 @@ class ProfilesState extends ChangeNotifier {
     while (taken.contains(colour) && colour < 8) {
       colour++;
     }
+    final id = const Uuid().v4();
     final made = Profile(
-        id: const Uuid().v4(), name: name.trim(), colour: colour, sync: true);
+        id: id,
+        name: name.trim(),
+        colour: colour,
+        sync: true,
+        libraryHome: _homeFor(id));
     all.add(made);
     _write(_file(made.id, 'settings'), _export());
+    // A switch to it waits for this.
+    _copies[id] = _copyLibrary(_homeFor(id)).whenComplete(() {
+      _copies.remove(id);
+    });
     _save();
     notifyListeners();
     return made;
@@ -358,33 +526,88 @@ class ProfilesState extends ChangeNotifier {
   Future<void> remove(Profile profile) async {
     if (profile == current || !all.remove(profile)) return;
     await deleteSecret(profile.slot);
-    for (final what in const ['settings', 'synced', 'reviews', 'backup']) {
+    for (final what in const [
+      'settings',
+      'synced',
+      'reviews',
+      'backup',
+      'library',
+      'library-index',
+      'library-listing',
+    ]) {
       try {
         _file(profile.id, what).deleteSync();
       } catch (_) {
         // Never written.
       }
     }
+    // Its library too, but only where Lumit put it: a hand-edited list must
+    // never point this at anything else.
+    await _copies[profile.id];
+    try {
+      // The library sync's own folder for it: incoming, trash, conflicts.
+      Directory('${_dir.path}${Platform.pathSeparator}profiles'
+              '${Platform.pathSeparator}${profile.id}.library')
+          .deleteSync(recursive: true);
+    } catch (_) {
+      // Never made.
+    }
+    final home = homeOf(profile);
+    if (home != null && home == _homeFor(profile.id)) {
+      try {
+        Directory(home).deleteSync(recursive: true);
+        Directory(home).parent.deleteSync();
+      } catch (_) {
+        // Never made, or something else is in there.
+      }
+    }
     _save();
     notifyListeners();
   }
 
-  /// Put the current profile away and take [next] out.
+  /// Put the current profile away and take [next] out, its library with it.
   Future<void> switchTo(Profile next) async {
+    // One switch at a time: a second waits for the first to land.
+    for (var under = _switching; under != null; under = _switching) {
+      await under;
+    }
     if (next == current || !all.contains(next)) return;
-    _write(_file(current.id, 'settings'), _export());
-    current = next;
-    _save();
-    final kept = _read(_file(next.id, 'settings'));
-    if (kept != null) _apply(kept, ProfileGroup.values);
-    status = SyncStatus.off;
-    lastSynced = null;
-    notifyListeners();
-    if (_started) {
-      await account.use(next.slot, remembered: next.account);
-      unawaited(syncNow());
+    final done = Completer<void>();
+    _switching = done.future;
+    try {
+      await beforeSwitch?.call();
+      try {
+        _write(_file(current.id, 'settings'), _export());
+        final kept = _read(_file(next.id, 'settings'));
+        await _copies[next.id];
+        await _seed(next, kept);
+        current = next;
+        _save();
+        _useHome();
+        if (kept != null) {
+          // Reads the themes and styles from the new home as it goes.
+          _apply(kept, ProfileGroup.values);
+        } else {
+          workspace.reloadThemes();
+          workspace.reloadStyles();
+        }
+        status = SyncStatus.off;
+        lastSynced = null;
+        notifyListeners();
+        if (_started) await account.use(next.slot, remembered: next.account);
+      } finally {
+        // Whatever failed above, the library is never left paused.
+        afterSwitch?.call();
+      }
+      if (_started) unawaited(syncNow());
+    } finally {
+      _switching = null;
+      done.complete();
     }
   }
+
+  /// The switch under way, if one is.
+  Future<void>? _switching;
 
   // --- Reading settings out and writing them back --------------------------
 
@@ -407,8 +630,6 @@ class ProfilesState extends ChangeNotifier {
         data['workspaces'] = _files(Workspace.userWorkspaceDir());
       case ProfileGroup.library:
         data['easings'] = _text(CustomEasings.storeFile());
-      case ProfileGroup.presets:
-        data['files'] = _files(_presetsDir);
       default:
     }
     // Through text and back, so what is compared and kept is exactly what a
@@ -508,8 +729,6 @@ class ProfilesState extends ChangeNotifier {
             _writeText(CustomEasings.storeFile(), easings);
           }
           CustomEasings.reload();
-        case ProfileGroup.presets:
-          _place(_presetsDir, data['files']);
         default:
       }
     }

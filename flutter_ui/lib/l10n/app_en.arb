@@ -7927,16 +7927,24 @@
   },
   "keymapPresetLoaded": "{name} loaded.",
   "@keymapPresetLoaded": {
-    "description": "Settings window, Shortcuts: shown beside the Preset buttons after one is pressed. {name} is the button's own label, such as Lumit default, After Effects or Vegas.",
+    "description": "Settings window, Shortcuts: shown beside the Preset list after a choice in it. {name} is the choice's own label, such as Lumit default, After Effects, Vegas or the name of a saved set.",
     "placeholders": {
       "name": {
         "type": "String"
       }
     }
   },
+  "keymapSaveSet": "Save as set…",
+  "@keymapSaveSet": {
+    "description": "Settings window, Shortcuts: the last choice in the Preset list. It keeps the shortcuts in force under a name, listed with the presets from then on."
+  },
+  "keymapSaveSetTitle": "Save shortcut set",
+  "@keymapSaveSetTitle": {
+    "description": "Title of the small window that asks what to call a saved set of shortcuts."
+  },
   "keymapLumitDefault": "Lumit default",
   "@keymapLumitDefault": {
-    "description": "Button that loads Lumit's own set of keyboard shortcuts."
+    "description": "Settings window, Shortcuts: the name of Lumit's own set of keyboard shortcuts, in the Preset list and the drag choices."
   },
   "keymapNoMatches": "No shortcut matches that.",
   "@keymapNoMatches": {
@@ -15683,7 +15691,7 @@
   },
   "settingsPreset": "Preset",
   "@settingsPreset": {
-    "description": "Settings window, Shortcuts: the name of the row whose buttons load a whole set of shortcuts at once."
+    "description": "Settings window, Shortcuts: the name of the row whose list puts a whole set of shortcuts in force at once."
   },
   "settingsResetPage": "Reset page",
   "@settingsResetPage": {
