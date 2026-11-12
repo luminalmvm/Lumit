@@ -3642,6 +3642,11 @@ class EffectStackEditor {
   /// lookup does. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? groupStack;
 
+  /// Whether [groupStack] is a grade group's list or a shared grade node's.
+  /// The engine stages those by their ids for a preview, so their drags show
+  /// as they go, as a layer's own rows do.
+  bool gradeList = false;
+
   /// Where a **clip's** stack is read from (docs/impl/audio-timeline.md §4),
   /// set by the Audio timeline while it is showing a clip's rows - the same
   /// place in the search as [groupStack], and never set at the same time,
@@ -3776,7 +3781,7 @@ class EffectStackEditor {
     //
     // A clip's rows do preview: the staged list is found by its ids on the
     // clip that holds it, and a picture clip's stack is on the picture.
-    if (groupStack != null) return;
+    if (groupStack != null && !gradeList) return;
     if (drivers) {
       _throttle.request(() => comp.renderFrameWithDriverPreview(
             frame: frame,

@@ -70,6 +70,10 @@ class GradeWheel extends StatefulWidget {
 
   /// The disc's diameter in logical pixels.
   final double size;
+
+  /// Whether the master bar is drawn. A colour whose brightness is kept
+  /// whatever its channels do has no master to move.
+  final bool bar;
   final bool enabled;
 
   /// Whether any channel has keyframes, so the dot wears the animated colour.
@@ -94,6 +98,7 @@ class GradeWheel extends StatefulWidget {
     required this.reach,
     required this.masterSpan,
     required this.size,
+    this.bar = true,
     required this.enabled,
     required this.keyed,
     required this.onStart,
@@ -212,21 +217,22 @@ class _GradeWheelState extends State<GradeWheel> {
             ),
           ),
         ),
-        const SizedBox(width: 6),
-        _drag(
-          bar: true,
-          onDouble: _resetMaster,
-          child: CustomPaint(
-            size: Size(10, size),
-            painter: _BarPainter(
-              at: ((master - widget.neutral) / widget.masterSpan)
-                  .clamp(-1.0, 1.0),
-              knob: knob,
-              track: t.hairlineStrong,
-              mark: t.hairline,
+        if (widget.bar) const SizedBox(width: 6),
+        if (widget.bar)
+          _drag(
+            bar: true,
+            onDouble: _resetMaster,
+            child: CustomPaint(
+              size: Size(10, size),
+              painter: _BarPainter(
+                at: ((master - widget.neutral) / widget.masterSpan)
+                    .clamp(-1.0, 1.0),
+                knob: knob,
+                track: t.hairlineStrong,
+                mark: t.hairline,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -275,11 +281,11 @@ class _WheelPainter extends CustomPainter {
     required this.enabled,
   });
 
-  /// A muted colour at [hue] degrees: a grade wheel is a control, so its
-  /// colours sit well below full saturation and the dot stays the brightest
-  /// thing on it. Disabled, the wheel is the same shape in grey.
+  /// A strong colour at [hue] degrees, so the rim reads clearly; the grey
+  /// centre and the dark ring round the dot keep the dot the thing to look
+  /// at. Disabled, the wheel is the same shape in grey.
   Color _hue(double hue) =>
-      enabled ? hsvToRgb(hue, 0.55, 0.78) : hsvToRgb(hue, 0.0, 0.42);
+      enabled ? hsvToRgb(hue, 0.95, 0.95) : hsvToRgb(hue, 0.0, 0.42);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -306,7 +312,8 @@ class _WheelPainter extends CustomPainter {
       Paint()
         ..shader = RadialGradient(
           colors: [centre, centre.withValues(alpha: 0)],
-          stops: const [0.08, 1.0],
+          // Gone by three quarters out, so the rim keeps its full colour.
+          stops: const [0.08, 0.75],
         ).createShader(rect),
     );
     final hair = Paint()

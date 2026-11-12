@@ -10,7 +10,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals, mapEquals;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, kIsWeb, listEquals, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
@@ -20,6 +21,8 @@ import 'package:lumit_flutter/panels/easing_curve.dart'
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show effectLabelOf;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
+import 'package:lumit_flutter/panels/grade_actions.dart'
+    show compShots, pickShots;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
     show RevealFilter, asOneUndoStep, effectPath;
@@ -3624,6 +3627,7 @@ class LumitUiState extends ChangeNotifier {
     sourcePlaying.dispose();
     cutPickRequest.dispose();
     cutLinked.dispose();
+    _grade?.dispose();
     cutClip.dispose();
     cutClips.dispose();
     cutOverlap.dispose();
@@ -4198,6 +4202,34 @@ class LumitUiState extends ChangeNotifier {
   /// Effects & presets lands. Null with no clip picked, or several.
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
       ValueNotifier(null);
+
+  /// What the Colour workspace grades: the current shot, its current node and
+  /// what the grading panels share. Made on first use.
+  GradeTarget get grade => _grade ??= GradeTarget(
+      layer: selectedLayer,
+      clip: cutClip,
+      comp: () => _selectedComp?.internalid,
+      project: () => _app.project)
+    ..linkPlayhead(
+        playhead: playheadFrame,
+        shots: () => compShots(this),
+        grading: () => const [
+              Panel.grade,
+              Panel.gradeNodes,
+              Panel.shots,
+              Panel.gallery,
+            ].any((p) => panelVisible(split, p)),
+        pick: (s) => pickShots(this, s));
+  GradeTarget? _grade;
+
+  /// The picked Cut clip, else the selected layer.
+  ValueListenable<GradeShot?> get gradeShot => grade.shot;
+
+  /// The effect the Grade panel edits on [gradeShot].
+  ValueListenable<UuidValue?> get gradeNode => grade.node;
+
+  /// Whose grade the nodes are: the shot's, a group's or the comp's.
+  ValueNotifier<GradeScope> get gradeScope => grade.scope;
 
   /// Every picture clip picked in the Cut timeline, the pressed one first: what
   /// the Retime panel works on.
