@@ -3805,11 +3805,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               options: const [0, 2, 4, 8, 16],
               width: _ddWide,
               label: (d) => d == 0 ? l10n.menuAuto : '1/$d',
-              onChanged: (d) => setState(() {
-                ui.workspace.performance.dragResolutionLimit = d;
-                setDragResolutionLimit(divisor: d);
-                ui.workspace.settingsChanged();
-              }),
+              onChanged: (d) =>
+                  setState(() => ui.setAdaptiveResolutionLimit(d)),
             ),
           ),
           _flag(t, 'settings-wireframe-drags',

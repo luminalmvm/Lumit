@@ -1256,6 +1256,14 @@ class LumitUiState extends ChangeNotifier {
   /// once updates resume.
   final ValueNotifier<bool> viewerSuspended = ValueNotifier(false);
 
+  /// **Adaptive resolution limit**, from Settings → Performance or the deck:
+  /// 0 is Auto, otherwise the coarsest divisor a slow drag may reach.
+  void setAdaptiveResolutionLimit(int divisor) {
+    workspace.performance.dragResolutionLimit = divisor;
+    setDragResolutionLimit(divisor: divisor);
+    workspace.settingsChanged();
+  }
+
   /// **Wireframe while dragging**, from Settings → Performance or the deck.
   void setWireframeWhileDragging(bool on) {
     workspace.performance.wireframeDrags = on;

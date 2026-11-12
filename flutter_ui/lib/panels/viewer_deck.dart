@@ -207,6 +207,19 @@ class ViewerDeck extends StatelessWidget {
                         !ui.workspace.performance.wireframeDrags),
                     tip: l10n.tipWireframeDrags,
                   ),
+                  // The Adaptive resolution limit beside them: how coarse a
+                  // slow drag may go.
+                  LumitTooltip(
+                    message: l10n.settingsAdaptiveResolutionLimit,
+                    child: BareDropdown<int>(
+                      key: const ValueKey('viewer-drag-limit'),
+                      dense: true,
+                      value: ui.workspace.performance.dragResolutionLimit,
+                      options: const [0, 2, 4, 8, 16],
+                      label: (d) => d == 0 ? l10n.menuAuto : '1/$d',
+                      onChanged: ui.setAdaptiveResolutionLimit,
+                    ),
+                  ),
                   ValueListenableBuilder<bool>(
                     valueListenable: ui.viewerSuspended,
                     builder: (context, suspended, _) => viewerBarMark(
