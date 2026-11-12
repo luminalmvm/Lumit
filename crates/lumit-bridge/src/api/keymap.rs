@@ -48,6 +48,7 @@ pub enum BridgeKeyContext {
     Cut,
     Captions,
     Transcript,
+    Colour,
 }
 
 impl From<BridgeKeyContext> for KeyContext {
@@ -65,6 +66,7 @@ impl From<BridgeKeyContext> for KeyContext {
             BridgeKeyContext::Cut => KeyContext::Cut,
             BridgeKeyContext::Captions => KeyContext::Captions,
             BridgeKeyContext::Transcript => KeyContext::Transcript,
+            BridgeKeyContext::Colour => KeyContext::Colour,
         }
     }
 }
@@ -84,6 +86,7 @@ impl From<KeyContext> for BridgeKeyContext {
             KeyContext::Cut => BridgeKeyContext::Cut,
             KeyContext::Captions => BridgeKeyContext::Captions,
             KeyContext::Transcript => BridgeKeyContext::Transcript,
+            KeyContext::Colour => BridgeKeyContext::Colour,
         }
     }
 }

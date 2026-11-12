@@ -15,6 +15,9 @@ import 'effect.dart';
 import 'extensions.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'grade_groups.dart';
+import 'grade_memories.dart';
+import 'grade_shared.dart';
 import 'import.dart';
 import 'layer.dart';
 import 'multicam/make.dart';
@@ -543,6 +546,17 @@ class ProjectReference {
       .instance.api
       .crateApiProjectProjectReferenceCorrectWords(that: this, edits: edits);
 
+  /// A new group with nothing in its grades yet, and `shots` in it, each
+  /// leaving any group it was in. Answers its id.
+  UuidValue createGradeGroup({required List<BridgeShotId> shots}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceCreateGradeGroup(
+          that: this, shots: shots);
+
+  /// Delete a group, and its place in every member's stack.
+  void deleteGradeGroup({required UuidValue group}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceDeleteGradeGroup(
+          that: this, group: group);
+
   /// Throw away the edits a crash left in the journal, for somebody who was
   /// offered them and said no.
   void discardJournal() =>
@@ -592,8 +606,27 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceFindScript(
           that: this, script: script, footage: footage);
 
+  /// Every grade group, in the order they were made. Shared nodes are
+  /// kept with them but listed apart ([`Self::get_shared_grade_nodes`]).
+  List<BridgeGradeGroup> getGradeGroups() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGetGradeGroups(
+        that: this,
+      );
+
+  /// The filled slots, in slot order.
+  List<BridgeGradeMemory> getGradeMemories() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGetGradeMemories(
+        that: this,
+      );
+
   List<ItemReference> getItems() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceGetItems(
+        that: this,
+      );
+
+  /// Every shared node, in the order they were made.
+  List<BridgeSharedNode> getSharedGradeNodes() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGetSharedGradeNodes(
         that: this,
       );
 
@@ -910,6 +943,10 @@ class ProjectReference {
         that: this,
       );
 
+  void renameGradeGroup({required UuidValue group, required String name}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceRenameGradeGroup(
+          that: this, group: group, name: name);
+
   /// Rename a speaker in every transcript and caption layer that has them.
   /// One undo step.
   void renameSpeaker({required String speaker, required String name}) =>
@@ -1052,6 +1089,13 @@ class ProjectReference {
       BridgeLib.instance.api
           .crateApiProjectProjectReferenceSetColourWorkingSpace(
               that: this, fromConfig: fromConfig);
+
+  /// Keep `grade` in `slot`, with its picture, or with `None` empty the
+  /// slot. One undo step.
+  void setGradeMemory(
+          {required int slot, String? grade, required String picture}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetGradeMemory(
+          that: this, slot: slot, grade: grade, picture: picture);
 
   /// Set [`Self::graph_room`]. Anything but 1, 2 or 0 reads as 1. An
   /// ordinary op, so it is undoable and saved in the `.lum`.
@@ -1594,6 +1638,11 @@ class ProjectReference {
   Future<BridgeUnpackResult> unpack({RustStreamSink<double>? onProgress}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceUnpack(
           that: this, onProgress: onProgress);
+
+  /// Stop sharing node `node`: each shot that uses it gets its own copy
+  /// where it stood, and the shared node goes. One undo step.
+  void unshareGradeNode({required UuidValue node}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceUnshareGradeNode(that: this, node: node);
 
   /// **Update**: put the library's newest version of a template in the
   /// place of the one this project has. The composition keeps its id, so

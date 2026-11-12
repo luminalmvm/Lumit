@@ -2748,6 +2748,7 @@ dependencies = [
  "lumit-scene",
  "lumit-script",
  "lumit-share",
+ "lumit-surface",
  "lumit-text",
  "lumit-track",
  "png",

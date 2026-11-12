@@ -50,6 +50,10 @@ impl Edit<'_> {
         // A clip's effects are keyed from its own start, and the hold starts here.
         let mut frozen = this.duplicate();
         lumit_core::preset::shift_keys(&mut frozen.effects, this.place_start.checked_sub(at)?);
+        frozen.grade_versions = lumit_core::grade::versions::respawned(
+            &frozen.grade_versions,
+            this.place_start.checked_sub(at)?,
+        );
         let sound = self.rows[r].audio_only;
         frozen = Clip {
             source_in: moment,

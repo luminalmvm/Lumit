@@ -422,12 +422,14 @@ pub enum KeyContext {
     Captions,
     /// The Transcript panel, where keys act on the selected words.
     Transcript,
+    /// The Colour workspace's panels: Grade, Grade nodes, Shots and Gallery.
+    Colour,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 12] = [
+    pub const ALL: [KeyContext; 13] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -440,6 +442,7 @@ impl KeyContext {
         KeyContext::Cut,
         KeyContext::Captions,
         KeyContext::Transcript,
+        KeyContext::Colour,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -461,6 +464,7 @@ impl KeyContext {
             KeyContext::Cut => "Cut timeline",
             KeyContext::Captions => "Captions panel",
             KeyContext::Transcript => "Transcript panel",
+            KeyContext::Colour => "Colour panels",
         }
     }
 }

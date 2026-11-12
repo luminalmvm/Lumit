@@ -29172,5 +29172,14 @@
   "vectorFileType": "Lottie",
   "@vectorFileType": {
     "description": "A file type in the system's Save dialogue of the Lottie and SVG window, and in the Import dialogue: a Lottie or dotLottie file."
+  },
+  "fxShapePointCount": "{count, plural, =0{No points} =1{1 point} other{{count} points}}",
+  "@fxShapePointCount": {
+    "description": "Effect controls: how many points a window's outline has. The points are drawn in the Viewer.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

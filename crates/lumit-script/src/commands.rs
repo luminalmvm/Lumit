@@ -2,6 +2,7 @@
 
 mod comps;
 mod effects;
+mod grade;
 mod items;
 mod keys;
 mod layers;
@@ -424,6 +425,33 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "grade.get",
+        summary: "A shot's grade versions, which one is showing, and the grade group it is in",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","clip":{"type":"string","description":"For one clip on a sequence layer, its id"}},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "grade.set",
+        summary: "Show another version of a shot's grade, or put the shot in a grade group, move it to another, or take it out",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","clip":{"type":"string","description":"For one clip on a sequence layer, its id"},"version":{"type":"string","description":"The version's id or name"},"group":{"type":["string","null"],"description":"The grade group's id or name, or null for none"}},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "grade.groups",
+        summary: "Every grade group, with how many shots are in it",
+        schema: none!(),
+    },
+    Command {
         name: "footage.import",
         summary: "Import files as footage items",
         schema: r#"{"type":"object","properties":{"paths":{"type":"array","items":{"type":"string"},"minItems":1}},"required":["paths"],"additionalProperties":false}"#,
@@ -566,6 +594,9 @@ pub(crate) fn run(
         "effect.get" => effects::get(host, parse(args)?),
         "effect.add" => effects::add(host, parse(args)?),
         "effect.set" => effects::set(host, parse(args)?),
+        "grade.get" => grade::get(host, parse(args)?),
+        "grade.set" => grade::set(host, parse(args)?),
+        "grade.groups" => grade::group_list(host, parse(args)?),
         "footage.import" => items::footage_import(host, reach, parse(args)?),
         "lottie.import" => items::lottie_import(host, reach, parse(args)?),
         "export.start" => items::export_start(host, reach, parse(args)?),

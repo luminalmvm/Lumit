@@ -48,6 +48,7 @@ pub(crate) fn add_above(
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut copy.grade_versions);
         // Masks and paint are drawn from the layer's box corner, and a shape
         // layer's corner is its art's box, so they would land somewhere else.
         copy.masks.clear();

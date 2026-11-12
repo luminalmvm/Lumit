@@ -3486,6 +3486,13 @@ class _EffectSection extends StatelessWidget {
               },
           ],
           resetTip: l10n.tipResetCurve,
+          rests: [
+            for (final p in run)
+              if (p.kind case BridgeParamKind_Curve(:final default_))
+                curvePointsOf(default_)
+              else
+                curveIdentity,
+          ],
           plotSize: curvePlotSize,
           onPlotSize: onCurvePlotSize,
           onLive: (c, points) => onLive(id, run[c].id, curveValue(points)),

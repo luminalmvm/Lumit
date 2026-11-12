@@ -102,6 +102,8 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
         .filter(|entry| entry.name != lumit_core::comp_graph::NODE_GRAPH)
         // What a copy of a graphics template keeps is never added by hand.
         .filter(|entry| entry.name != lumit_core::fx::effects::template::MATCH_NAME)
+        // Nor is a grade group's reference: joining the group adds it.
+        .filter(|entry| entry.name != lumit_core::fx::effects::grade_group::GRADE_GROUP)
         .collect()
 }
 
@@ -1296,8 +1298,15 @@ pub enum BridgeParamKind {
     MaskPath,
     /// A tone curve, drawn as a curve editor. The panel edits the
     /// point list itself; there is no range to declare, because the points
-    /// live in the unit square by definition.
-    Curve,
+    /// live in the unit square by definition. `default` is the shape Reset
+    /// goes back to: the diagonal for a tone curve, the flat middle line for
+    /// a hue curve.
+    Curve {
+        default: Vec<Vec<f32>>,
+    },
+    /// An outline inside a box, as up to 32 points in `-1..1` of it. The
+    /// row shows how many there are; the Viewer draws them.
+    Shape,
     /// A closed range, drawn as a track and thumb with the value
     /// beside it. `min`/`max` are the travel *and* the hard bound — that is
     /// what closed means — so the row refuses a typed value outside them.
@@ -1459,11 +1468,11 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::schema::ParamSchema) -> Bridg
         // entry, and what an unset row comes to is the render's answer,
         // not a control the panel draws differently.
         ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
-        // The declared default is not sent: a fresh instance is born
-        // with it written into the document (`default_param_value`),
-        // so the panel draws the curve it stores, never one the seam
-        // had to describe.
-        ParamKind::Curve { .. } => BridgeParamKind::Curve,
+        // The declared shape, which is what Reset goes back to.
+        ParamKind::Curve { default } => BridgeParamKind::Curve {
+            default: default.iter().map(|xy| xy.to_vec()).collect(),
+        },
+        ParamKind::Shape => BridgeParamKind::Shape,
         // A button. The row crosses so the panel can draw one;
         // the *value* never does, because there is none — the press
         // goes back as an event on the owning layer
@@ -2064,6 +2073,9 @@ pub enum BridgeEffectValue {
     /// mid-drag need not, and a curve is never refused for being momentarily
     /// out of order.
     Curve(Vec<Vec<f32>>),
+    /// An outline's points, `[x, y]` in `-1..1` of its box, in order. Crosses
+    /// as written; the engine straightens what it reads.
+    Shape(Vec<Vec<f32>>),
     /// A name from the OCIO config, as the config spells it; empty is unset.
     /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
     Text(String),
@@ -2100,6 +2112,9 @@ impl BridgeEffectValue {
             EffectValue::MaskPath(mask) => BridgeEffectValue::MaskPath(*mask),
             EffectValue::Curve(points) => {
                 BridgeEffectValue::Curve(points.iter().map(|xy| xy.to_vec()).collect())
+            }
+            EffectValue::Shape(points) => {
+                BridgeEffectValue::Shape(points.iter().map(|xy| xy.to_vec()).collect())
             }
             EffectValue::Text(name) => BridgeEffectValue::Text(name.clone()),
         }
@@ -2200,6 +2215,15 @@ impl BridgeEffectValue {
             }
             (BridgeEffectValue::Text(name), EffectValue::Text(target)) => {
                 *target = name;
+                Ok(())
+            }
+            // As a curve's: a pair short of a coordinate is dropped.
+            (BridgeEffectValue::Shape(points), EffectValue::Shape(target)) => {
+                *target = points
+                    .iter()
+                    .filter(|xy| xy.len() >= 2)
+                    .map(|xy| [xy[0], xy[1]])
+                    .collect();
                 Ok(())
             }
             _ => Err(BridgeError::ParamKindMismatch),

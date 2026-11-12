@@ -85,6 +85,8 @@ mod audio;
 mod autosave;
 mod beats;
 mod captioning;
+// ASC CDL files, read and written.
+mod cdl;
 mod claim;
 mod closing;
 // The command line, which the browser build has none of.

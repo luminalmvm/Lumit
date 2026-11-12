@@ -134,6 +134,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerStyles { comp, layer, .. }
         | Op::SetLayerGraphInputs { comp, layer, .. }
+        | Op::SetLayerGradeVersions { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
@@ -176,6 +177,10 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         // A transcript is named by its footage item, which the change carries
         // on its own (see `handle_change_callback`). The item list is as it was.
         Op::EditTranscript { .. } => (None, None, false),
+        // Any comp's members may draw a group, so no one subtree is the scope.
+        Op::SetGradeGroups { .. } => (None, None, false),
+        // Memories change no picture.
+        Op::SetGradeMemories { .. } => (None, None, false),
 
         // A batch is as broad as its members: the item flag is the union, and
         // the reference scope widens to "no one subtree" rather than picking a

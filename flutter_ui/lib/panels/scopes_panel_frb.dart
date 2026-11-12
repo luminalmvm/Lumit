@@ -318,7 +318,7 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
       comp.renderScope(
         frame: frame,
         scale: _ui.measuredScale,
-        kind: _asked,
+        kinds: [_asked],
         colours: scopeColoursFor(t, themed: _ui.workspace.themedScopes),
         view: _ui.measuredViewId,
       );

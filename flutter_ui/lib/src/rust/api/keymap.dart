@@ -256,6 +256,7 @@ enum BridgeKeyContext {
   cut,
   captions,
   transcript,
+  colour,
   ;
 }
 
