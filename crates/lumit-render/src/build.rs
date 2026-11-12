@@ -2055,8 +2055,17 @@ fn comp_walk(
             // Nothing to stamp in is the ordinary layer, and it keeps the
             // bytes it arrived with: both stages return on an empty list
             // anyway, and asking for them by name is what lets a decoded frame
-            // travel to the draw shared rather than copied.
-            if !layer.paint.is_empty() || !layer.masks.is_empty() {
+            // travel to the draw shared rather than copied. Eight-bit pixels
+            // under masks none of which acts here are kept too, since full
+            // coverage leaves every alpha as it was. A float alpha times one
+            // is not always itself, so float keeps the plain test.
+            let gated = match format {
+                lumit_media::decode::PixelFormat::Srgb8 => {
+                    layer.masks.iter().any(|m| m.does_something_at(lt))
+                }
+                lumit_media::decode::PixelFormat::LinearF32 => !layer.masks.is_empty(),
+            };
+            if !layer.paint.is_empty() || gated {
                 let rgba = Arc::make_mut(&mut rgba);
                 // Paint first, masks second: a stroke is part of the layer's
                 // picture, and a mask gates the picture (docs/06 render
