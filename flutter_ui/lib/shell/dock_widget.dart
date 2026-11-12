@@ -84,6 +84,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.grade => 200,
       // The header's scope switch and the add button; the canvas zooms.
       Panel.gradeNodes => 160,
+      // The count and the filter; the strip scrolls.
+      Panel.shots => 200,
       Panel.hierarchy => 180,
       Panel.easing => 220,
       Panel.retime => 220,

@@ -34,6 +34,7 @@ import 'project_panel_frb.dart';
 import 'retime_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
+import 'shots_panel_frb.dart';
 import 'stagger_panel_frb.dart';
 import 'template_panel_frb.dart';
 import 'extension_panel.dart';
@@ -72,6 +73,7 @@ const Set<Panel> _leftToRight = {
   Panel.timeline,
   Panel.scopes,
   Panel.gradeNodes,
+  Panel.shots,
   Panel.easing,
   Panel.graph,
   Panel.mixer,
@@ -131,6 +133,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.scopes => ScopesPanelFrb(instance: pane.instance),
       Panel.grade => const GradePanelFrb(),
       Panel.gradeNodes => const GradeNodesPanelFrb(),
+      Panel.shots => const ShotsPanelFrb(),
       Panel.hierarchy => const HierarchyPanelFrb(),
       Panel.easing => const EasingPanelFrb(),
       Panel.graph => const GraphPanelFrb(),

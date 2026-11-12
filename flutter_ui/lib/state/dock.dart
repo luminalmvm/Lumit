@@ -27,6 +27,9 @@ enum Panel {
 
   /// The current shot's grade as nodes, from its picture to what it shows.
   gradeNodes,
+
+  /// Every shot of the comp in time order, a graded picture each.
+  shots,
   debug,
   hierarchy,
   easing,
@@ -118,6 +121,7 @@ enum Panel {
         Panel.scopes => l10n.panelScopes,
         Panel.grade => l10n.panelGrade,
         Panel.gradeNodes => l10n.panelGradeNodes,
+        Panel.shots => l10n.panelShots,
         Panel.hierarchy => l10n.panelHierarchy,
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,

@@ -29779,6 +29779,10 @@
   "@panelGradeNodes": {
     "description": "Name of the panel that draws the current shot's grade as numbered nodes joined left to right. A tab title and a Window > Panels row."
   },
+  "panelShots": "Shots",
+  "@panelShots": {
+    "description": "Name of the panel that lists every shot of the composition in time order, a graded picture each. A tab title and a Window > Panels row."
+  },
   "gradeStillsAlbum": "Stills",
   "@gradeStillsAlbum": {
     "description": "The name given to the first album of stills, made when Grab still is used before any album exists."
@@ -29790,6 +29794,14 @@
   "gradeStillFailed": "The still could not be grabbed",
   "@gradeStillFailed": {
     "description": "Notice when Grab still could not write the still to the library."
+  },
+  "gradeGrabStill": "Grab still",
+  "@gradeGrabStill": {
+    "description": "Menu row (Layer > Grade, the Shots panel's menu): keep the frame at the playhead and the current shot's grade as a still in the Gallery."
+  },
+  "gradeExportLutEllipsis": "Export LUT…",
+  "@gradeExportLutEllipsis": {
+    "description": "Menu row (Layer > Grade, the Shots panel's menu): write the shot's grade as a .cube LUT file. Opens a save dialog."
   },
   "gradeCopyNode": "Copy node",
   "@gradeCopyNode": {
@@ -29810,6 +29822,42 @@
   "gradeScopeGroupPost": "Group post",
   "@gradeScopeGroupPost": {
     "description": "Grade nodes panel header: the shot's group's grade that comes after every member's own grade."
+  },
+  "gradeApplyPrevious": "Apply grade from previous shot",
+  "@gradeApplyPrevious": {
+    "description": "Shots panel menu: the grade of the shot before this one in time takes the place of this shot's grade."
+  },
+  "gradeMatchToCurrent": "Match to current shot",
+  "@gradeMatchToCurrent": {
+    "description": "Shots panel menu: change this shot's grade so its colours match the current shot's."
+  },
+  "gradeVersions": "Versions",
+  "@gradeVersions": {
+    "description": "Shots panel menu: the submenu listing the shot's grade versions, with New, Duplicate, Rename and Delete."
+  },
+  "gradeGroup": "Group",
+  "@gradeGroup": {
+    "description": "Shots panel menu: the submenu putting the shots into a grade group, moving them to another, or taking them out."
+  },
+  "gradeGroupNew": "New group from selection",
+  "@gradeGroupNew": {
+    "description": "Shots panel menu, Group submenu: make a grade group holding the picked shots."
+  },
+  "gradeGroupLeave": "Leave group",
+  "@gradeGroupLeave": {
+    "description": "Shots panel menu, Group submenu: take the picked shots out of their grade group."
+  },
+  "gradeFilterAll": "All",
+  "@gradeFilterAll": {
+    "description": "Shots panel header, first of three filter choices: every shot."
+  },
+  "gradeFilterGraded": "Graded",
+  "@gradeFilterGraded": {
+    "description": "Shots panel header filter: only the shots with a grade switched on."
+  },
+  "gradeFilterUngraded": "Ungraded",
+  "@gradeFilterUngraded": {
+    "description": "Shots panel header filter: only the shots with no grade switched on."
   },
   "histApplyGrade": "Apply grade",
   "@histApplyGrade": {
@@ -29854,6 +29902,15 @@
   "histMatchShot": "Match shot",
   "@histMatchShot": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot's grade changed to match another shot."
+  },
+  "gradeShotCount": "{count, plural, =1{1 shot} other{{count} shots}}",
+  "@gradeShotCount": {
+    "description": "Shots panel header: how many shots the composition has. {count} is 1 or more.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "fxHdr": "HDR",
   "@fxHdr": {
@@ -30007,9 +30064,21 @@
   "@fxShared": {
     "description": "Effect controls: a choice of Group grade's Part: the effect stands for a grade node shared by several shots."
   },
+  "gradeApplySecond": "Apply grade from two shots back",
+  "@gradeApplySecond": {
+    "description": "Shots panel menu: the grade of the shot two before this one in time takes the place of this shot's grade."
+  },
+  "gradeLightbox": "Lightbox",
+  "@gradeLightbox": {
+    "description": "Shots panel header button and menu row: the Shots panel fills the window as a grid of large pictures of every shot. Click again or press Escape to leave."
+  },
   "gradeGridVersions": "Versions in a grid",
   "@gradeGridVersions": {
     "description": "Grade panel versions menu, and the Viewer's grid chip: the Viewer shows every grade version of the current shot side by side in a grid."
+  },
+  "gradeGridShots": "Shots in a grid",
+  "@gradeGridShots": {
+    "description": "Shots panel menu, and the Viewer's grid chip: the Viewer shows the picked shots side by side in a grid."
   },
   "gradeKeyInvert": "Invert key",
   "@gradeKeyInvert": {
@@ -30018,6 +30087,27 @@
   "gradeKeyRemove": "Remove key wire",
   "@gradeKeyRemove": {
     "description": "Grade nodes panel, right-click on a key wire: the wire from one node's key to another node goes."
+  },
+  "gradeGroupRename": "Rename group…",
+  "@gradeGroupRename": {
+    "description": "Shots panel menu, Group submenu: renames the grade group the pressed shot is in. Opens a box to type the name."
+  },
+  "gradeGroupRenameTitle": "Rename group",
+  "@gradeGroupRenameTitle": {
+    "description": "Title of the box that renames a grade group."
+  },
+  "gradeGroupDelete": "Delete group",
+  "@gradeGroupDelete": {
+    "description": "Shots panel menu, Group submenu: deletes the grade group the pressed shot is in, and its grades from every shot in it. Asks first."
+  },
+  "gradeGroupDeleteAsk": "Delete {name} and its grades?",
+  "@gradeGroupDeleteAsk": {
+    "description": "Asked before a grade group is deleted. Its shots keep their own grades. {name} is the group's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "histApplyMemory": "Apply memory",
   "@histApplyMemory": {
@@ -30142,6 +30232,14 @@
   "gradeQualClear": "Clear",
   "@gradeQualClear": {
     "description": "Button at the end of the Keep or Drop row on the Grade panel's Qualifier page in 3D mode: forget those samples."
+  },
+  "gradeFilterColour": "Clip colour",
+  "@gradeFilterColour": {
+    "description": "Shots panel header button tooltip: show only the shots with one label colour, the colour the Timeline gives the layer or clip."
+  },
+  "gradeFilterAnyColour": "Every colour",
+  "@gradeFilterAnyColour": {
+    "description": "Shots panel clip colour menu: show the shots of every label colour."
   },
   "gradeNodeThumbnails": "Node thumbnails",
   "@gradeNodeThumbnails": {
