@@ -1020,16 +1020,24 @@ class EffectParamRowFrb extends StatelessWidget {
     // has none: it carries no `EffectValue` anywhere in the model, which is
     // what makes it a press rather than a write.
     if (param.kind is BridgeParamKind_Action) {
-      return HouseButton(
-        key: ValueKey<String>('fx-action-$id-${param.id}'),
-        small: true,
-        onPressed: onAction == null || !enabled
-            ? null
-            : () => onAction!(id, param.id),
-        child: Text(
-          engineLabel(param.label),
-          style: _off ? t.body.copyWith(color: t.textMuted) : t.body,
-        ),
+      return ValueListenableBuilder<Map<UuidValue, Set<String>>>(
+        valueListenable: actionsResting,
+        builder: (context, resting, _) {
+          final rests = resting[id]?.contains(param.id) ?? false;
+          return HouseButton(
+            key: ValueKey<String>('fx-action-$id-${param.id}'),
+            small: true,
+            onPressed: onAction == null || !enabled || rests
+                ? null
+                : () => onAction!(id, param.id),
+            child: Text(
+              engineLabel(param.label),
+              style: _off || rests
+                  ? t.body.copyWith(color: t.textMuted)
+                  : t.body,
+            ),
+          );
+        },
       );
     }
     if (value == null) return Text('—', style: t.small);
@@ -3182,6 +3190,12 @@ List<BridgeParamInfo> paramRidersFor(
 /// The effects with a bake running, which their status line keeps up to date, so
 /// a Cancel beside Bake takes presses only while there is something to stop.
 final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
+
+/// The Action rows an effect's status line has greyed for now, by effect and
+/// row id: an Analyse while one is running, a Cancel with nothing to stop. An
+/// effect not named here draws its Action rows as its schema says.
+final ValueNotifier<Map<UuidValue, Set<String>>> actionsResting =
+    ValueNotifier(const {});
 
 final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 

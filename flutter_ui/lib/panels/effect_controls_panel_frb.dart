@@ -73,6 +73,7 @@ import 'node_panel.dart' show NodePanelFrb;
 import 'camera_track_display_frb.dart';
 import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
+import 'stabilise_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'flare_window.dart';
@@ -3954,6 +3955,8 @@ bool _simulating(Map<String, BridgeEffectValue> values) {
   final on = values['simulate'];
   return on is BridgeEffectValue_Bool && on.field0;
 }
+bool _choiceIs(BridgeEffectValue? value, int option) =>
+    value is BridgeEffectValue_Choice && value.field0 == option;
 bool _namesALayer(BridgeEffectValue? value) =>
     value is BridgeEffectValue_Layer && value.field0 != null;
 
@@ -4007,6 +4010,16 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
           corrected: trackCorrected,
+        ),
+      // Stabilise's is the Camera track's kind of line, filed under this
+      // instance as the Planar track's is, and worded by its Mode.
+      'stabilise' => StabiliseDisplayFrb(
+          key: ValueKey<String>('fx-stabilise-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          reverse: _choiceIs(values['mode'], 1),
+          onChanged: onChanged,
+          pressed: pressed,
         ),
       // Planar track's display is the same kind of thing and not the same
       // thing: a status, but about a *surface* rather than a camera,

@@ -268,6 +268,7 @@ impl ActionId {
             "grade.paste" => "Paste the grade onto the selected layers",
             "layer.precompose" => "Precompose the layer",
             "layer.group" => "Group the selected layers",
+            "layer.stabilise" => "Stabilise the selected layers",
             "layer.ungroup" => "Ungroup",
             "layer.retime.enable" => "Give the layer a Retime",
             "layer.retime.hold" => "Hold the frame at the playhead",

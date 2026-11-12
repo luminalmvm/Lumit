@@ -508,8 +508,9 @@ pub fn default_keymap() -> Keymap {
     }
 }
 
-/// The actions that ship with no key: how a 3D view shows models, and moving
-/// a panel between windows.
+/// The actions that ship with no key: how a 3D view shows models, moving a
+/// panel between windows, and stabilising a layer, which Track camera's row
+/// beside it has no key for either.
 const UNBOUND: &[(KeyContext, &str)] = &[
     (KeyContext::Viewer, "viewer.look.final"),
     (KeyContext::Viewer, "viewer.look.shaded"),
@@ -519,6 +520,7 @@ const UNBOUND: &[(KeyContext, &str)] = &[
     (KeyContext::Viewer, "viewer.look.faces"),
     (KeyContext::Panels, "panel.float"),
     (KeyContext::Panels, "panel.dock"),
+    (KeyContext::Global, "layer.stabilise"),
 ];
 
 /// A **stored** keymap laid over the shipped defaults: the file's chord
