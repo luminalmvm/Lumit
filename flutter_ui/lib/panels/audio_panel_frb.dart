@@ -1012,6 +1012,9 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
   /// Mixer strip's own shape: the drag shows here and commits once on release.
   double? _dragPan;
 
+  /// Volume's well, held the same way while it is dragged.
+  double? _dragVolume;
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -1024,9 +1027,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
       builder: (context, frame, _) {
         final volume = info.volumeDb;
         final pan = info.pan;
-        final volumeValue = volume is BridgeScalar_Static
-            ? volume.field0
-            : sampledScalar(volume, timeOfFrame(widget.comp, frame));
+        final volumeValue = _dragVolume ??
+            (volume is BridgeScalar_Static
+                ? volume.field0
+                : sampledScalar(volume, timeOfFrame(widget.comp, frame)));
         final panValue = _dragPan ??
             (pan is BridgeScalar_Static
                 ? pan.field0
@@ -1099,6 +1103,11 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                     speed: 0.2,
                     onChanged: (v) =>
                         _commitVolume(volume, v.toDouble(), frame),
+                    onChangeLive: (v) =>
+                        setState(() => _dragVolume = v.toDouble()),
+                    onChangeEnd: (v) =>
+                        _commitVolume(volume, v.toDouble(), frame),
+                    onDragCancel: () => setState(() => _dragVolume = null),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -1126,6 +1135,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                     decimals: 0,
                     speed: 0.5,
                     onChanged: (v) => _commitPan(pan, v.toDouble(), frame),
+                    onChangeLive: (v) =>
+                        setState(() => _dragPan = v.toDouble()),
+                    onChangeEnd: (v) => _commitPan(pan, v.toDouble(), frame),
+                    onDragCancel: () => setState(() => _dragPan = null),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -1308,6 +1321,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     widget.entry.layer.setVolumeDb(
       value: scalarWithValueAt(scalar, value, widget.comp, frame),
     );
+    setState(() => _dragVolume = null);
     widget.onChanged();
   }
 
