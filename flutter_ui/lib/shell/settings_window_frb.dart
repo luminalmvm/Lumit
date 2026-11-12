@@ -3819,6 +3819,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             setWireframeDrags(on_: on);
             ui.workspace.settingsChanged();
           }),
+          _flag(t, 'settings-caps-lock-suspends',
+              l10n.settingsCapsLockSuspendsViewer,
+              value: ui.workspace.performance.capsLockSuspends, set: (on) {
+            ui.workspace.performance.capsLockSuspends = on;
+            ui.followCapsLock();
+            ui.workspace.settingsChanged();
+          }),
           _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
               value: ui.workspace.performance.hardwareDecode, set: (on) {
             ui.workspace.performance.hardwareDecode = on;

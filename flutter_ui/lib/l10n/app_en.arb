@@ -9948,6 +9948,22 @@
   "@settingsWireframeWhileDragging": {
     "description": "Settings window: a drag shows each layer as the outline of its rectangle, and the release shows the frame."
   },
+  "settingsCapsLockSuspendsViewer": "Caps Lock suspends Viewer updates",
+  "@settingsCapsLockSuspendsViewer": {
+    "description": "Settings window: while Caps Lock is on, the Viewer keeps its picture and draws the frame once it is off."
+  },
+  "viewerMenuLiveUpdate": "Live update",
+  "@viewerMenuLiveUpdate": {
+    "description": "Viewer menu: when off, a drag shows no new frame until the release."
+  },
+  "viewerMenuSuspendUpdates": "Suspend updates",
+  "@viewerMenuSuspendUpdates": {
+    "description": "Viewer menu: the Viewer keeps its picture while edits go on, and draws the frame once resumed."
+  },
+  "viewerUpdatesSuspended": "Viewer updates suspended",
+  "@viewerUpdatesSuspended": {
+    "description": "Shown over the Viewer while its updates are suspended."
+  },
   "settingsFramesWaitingToBeWritten": "Frames waiting to be written",
   "@settingsFramesWaitingToBeWritten": {
     "description": "Settings window: the name of one setting."

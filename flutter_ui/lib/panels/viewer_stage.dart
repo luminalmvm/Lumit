@@ -1892,7 +1892,36 @@ class _Picture extends StatelessWidget {
                     ),
                   )
                 : const SizedBox.expand();
-            return pictureChannelFilter(channel, picture);
+            // Suspended, the picture stays as it was, and says so across its
+            // top, as After Effects' red bar does.
+            return Stack(
+              fit: StackFit.passthrough,
+              children: [
+                pictureChannelFilter(channel, picture),
+                ValueListenableBuilder<bool>(
+                  valueListenable: uiState.viewerSuspended,
+                  builder: (context, suspended, _) {
+                    if (!suspended) return const SizedBox.shrink();
+                    final t = ThemeScope.of(context).theme;
+                    return Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: IgnorePointer(
+                        child: Container(
+                          key: const ValueKey('viewer-suspended'),
+                          color: t.error,
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          alignment: Alignment.center,
+                          child: Text(l10n.viewerUpdatesSuspended,
+                              style: t.small.copyWith(color: t.surface0)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            );
           },
         ),
       ),

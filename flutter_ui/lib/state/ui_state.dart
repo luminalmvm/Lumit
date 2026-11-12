@@ -61,6 +61,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setHardwareDecode,
         setLargestPicture,
         setWireframeDrags;
+import 'package:lumit_flutter/src/rust/api/shell.dart' as shell show setLiveUpdate;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
@@ -1239,8 +1240,55 @@ class LumitUiState extends ChangeNotifier {
   /// whatever piles up behind a render in flight (`drain_to_newest`), which is
   /// why this can be called freely and needs no in-flight bookkeeping here.
   /// Ignored during playback, where the engine is already choosing frames.
+  /// **Live Update** (the Viewer's menu), as After Effects' switch: off, a
+  /// drag draws no frame until the release. On by default; for the session.
+  final ValueNotifier<bool> liveUpdate = ValueNotifier(true);
+
+  void setLiveUpdate(bool on) {
+    liveUpdate.value = on;
+    shell.setLiveUpdate(on_: on);
+  }
+
+  /// **Viewer updates suspended** (the Viewer's menu, or Caps Lock where
+  /// Settings → Performance says so), as After Effects' Caps Lock: the views
+  /// keep the picture they have while the edits go on, and draw the frame
+  /// once updates resume.
+  final ValueNotifier<bool> viewerSuspended = ValueNotifier(false);
+
+  void setViewerSuspended(bool on) {
+    if (viewerSuspended.value == on) return;
+    viewerSuspended.value = on;
+    if (!on) requestFrame();
+  }
+
+  /// Follows Caps Lock into [viewerSuspended] while the setting asks for it.
+  /// Never takes the key: it only looks at the lock.
+  bool _capsLockWatch(KeyEvent _) {
+    if (workspace.performance.capsLockSuspends) {
+      setViewerSuspended(HardwareKeyboard.instance.lockModesEnabled
+          .contains(KeyboardLockMode.capsLock));
+    }
+    return false;
+  }
+
+  bool _capsLockWatching = false;
+
+  /// Starts or stops following Caps Lock, as the setting now says.
+  void followCapsLock() {
+    final want = workspace.performance.capsLockSuspends;
+    if (want && !_capsLockWatching) {
+      HardwareKeyboard.instance.addHandler(_capsLockWatch);
+      _capsLockWatching = true;
+    } else if (!want && _capsLockWatching) {
+      HardwareKeyboard.instance.removeHandler(_capsLockWatch);
+      _capsLockWatching = false;
+      setViewerSuspended(false);
+    }
+  }
+
   void requestFrame() {
     if (playing.value) return;
+    if (viewerSuspended.value) return;
     _releaseClosedViews();
     // **The view being worked in is asked whatever it last asked for.** This
     // is the explicit ask: something moved, or a caller wants the frame made
@@ -3017,6 +3065,7 @@ class LumitUiState extends ChangeNotifier {
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setDragResolutionLimit(divisor: perf.dragResolutionLimit);
     setWireframeDrags(on_: perf.wireframeDrags);
+    followCapsLock();
     setHardwareDecode(on_: perf.hardwareDecode);
     final largest = perf.largestPicture;
     if (largest != null) setLargestPicture(side: largest);

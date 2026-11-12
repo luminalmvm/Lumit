@@ -118,6 +118,13 @@ pub fn set_wireframe_drags(on: bool) {
     crate::realtime::set_wireframe_drags(on);
 }
 
+/// **Live Update** (the Viewer's menu): off, a drag draws no frame until the
+/// release.
+#[frb(sync)]
+pub fn set_live_update(on: bool) {
+    crate::realtime::set_live_update(on);
+}
+
 /// Let footage be decoded by the graphics card's video unit, or keep it on the
 /// processor.
 ///

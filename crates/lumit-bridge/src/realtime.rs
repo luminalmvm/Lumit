@@ -209,12 +209,25 @@ fn next_extra(extra: u32, cost_secs: f64) -> u32 {
 /// fast preview.
 static WIREFRAME_DRAGS: AtomicBool = AtomicBool::new(false);
 
+/// **Live Update** (the Viewer's switch, on by default): off, a drag draws no
+/// frame at all, and the Viewer keeps the last one until the release commits,
+/// as After Effects' Live Update switch.
+static LIVE_UPDATE: AtomicBool = AtomicBool::new(true);
+
 pub(crate) fn set_wireframe_drags(on: bool) {
     WIREFRAME_DRAGS.store(on, Ordering::Relaxed);
 }
 
 pub(crate) fn wireframe_drags() -> bool {
     WIREFRAME_DRAGS.load(Ordering::Relaxed)
+}
+
+pub(crate) fn set_live_update(on: bool) {
+    LIVE_UPDATE.store(on, Ordering::Relaxed);
+}
+
+pub(crate) fn live_update() -> bool {
+    LIVE_UPDATE.load(Ordering::Relaxed)
 }
 
 /// Strip a drag frame's document down to what a wireframe shows: no effect,

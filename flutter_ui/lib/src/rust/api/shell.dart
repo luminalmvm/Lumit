@@ -54,6 +54,11 @@ void setDragResolutionLimit({required int divisor}) => BridgeLib.instance.api
 void setWireframeDrags({required bool on_}) =>
     BridgeLib.instance.api.crateApiShellSetWireframeDrags(on_: on_);
 
+/// **Live Update** (the Viewer's menu): off, a drag draws no frame until the
+/// release.
+void setLiveUpdate({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetLiveUpdate(on_: on_);
+
 /// Let footage be decoded by the graphics card's video unit, or keep it on the
 /// processor.
 ///

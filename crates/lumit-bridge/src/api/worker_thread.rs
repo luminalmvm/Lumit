@@ -4994,6 +4994,11 @@ fn publish_preview(
     asked: f32,
     mut document: lumit_core::model::Document,
 ) -> Result<(), BridgeError> {
+    // Live Update off: a drag draws nothing, and the Viewer keeps the last
+    // frame until the release commits and draws the real one.
+    if !crate::realtime::live_update() {
+        return Ok(());
+    }
     let wireframe = crate::realtime::wireframe_drags();
     if wireframe {
         crate::realtime::wireframe_document(&mut document);
