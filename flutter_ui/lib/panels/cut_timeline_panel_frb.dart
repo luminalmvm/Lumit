@@ -2851,13 +2851,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   void _razorCut(BridgeLayerEntry clicked, int frame) {
     final comp = _ui?.selectedComp;
     if (comp == null) return;
-    _afterCut(_cut(() => comp.cutRazor(
-          layers: HardwareKeyboard.instance.isShiftPressed
-              ? const []
-              : [clicked.layer],
-          atFrame: frame,
-          linked: _linked,
-        )));
+    final all = HardwareKeyboard.instance.isShiftPressed;
+    var result = BridgeCutResult.nothing;
+    // Named here, or a footage layer's step takes its first op's name.
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      result = _cut(() => comp.cutRazor(
+            layers: all ? const [] : [clicked.layer],
+            atFrame: frame,
+            linked: _linked,
+          ));
+    }, name: all ? 'Split all tracks' : 'Split');
+    _afterCut(result);
   }
 
   /// The Cut ruler's own rows under its marker and work area: the work area

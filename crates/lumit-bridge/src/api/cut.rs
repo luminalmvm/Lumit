@@ -34,6 +34,7 @@ mod attributes;
 pub(crate) mod fold;
 pub(crate) mod freeze;
 pub(crate) mod place;
+pub(crate) mod razor;
 mod solids;
 mod streams;
 mod takes;
@@ -185,6 +186,30 @@ struct Row {
     at: usize,
 }
 
+impl Row {
+    /// A Sequence layer as a row, or `None` for a layer of any other kind.
+    fn of(layer: &Layer) -> Cut<Option<Row>> {
+        let LayerKind::Sequence { clips } = &layer.kind else {
+            return Ok(None);
+        };
+        let offset = layer.start_offset.0;
+        let mut clips = clips.clone();
+        for c in &mut clips {
+            c.place_start = c.place_start.checked_add(offset)?;
+        }
+        Ok(Some(Row {
+            id: layer.id,
+            audio_only: layer.audio_only,
+            locked: layer.switches.locked,
+            audible: layer.switches.audible,
+            offset,
+            clips,
+            fresh: None,
+            at: 0,
+        }))
+    }
+}
+
 /// An edit in progress: the composition as it was read, and its rows as they
 /// will be written. Nothing reaches the document until [`Edit::commit`].
 ///
@@ -199,7 +224,7 @@ struct Edit<'a> {
     /// Layers of other kinds a ripple has carried, moved in `comp` itself.
     carried: Vec<Uuid>,
     /// Ops to run ahead of the rows in the same batch: a composition made
-    /// for a clip to play.
+    /// for a clip to play, or a footage layer the razor made a Sequence layer.
     first: Vec<Op>,
     /// Sound rows this edit emptied by folding their clips into another, which
     /// go with them.
@@ -382,24 +407,7 @@ impl<'a> Edit<'a> {
         let comp = of.composition()?;
         let mut rows = Vec::new();
         for layer in &comp.layers {
-            let LayerKind::Sequence { clips } = &layer.kind else {
-                continue;
-            };
-            let offset = layer.start_offset.0;
-            let mut clips = clips.clone();
-            for c in &mut clips {
-                c.place_start = c.place_start.checked_add(offset)?;
-            }
-            rows.push(Row {
-                id: layer.id,
-                audio_only: layer.audio_only,
-                locked: layer.switches.locked,
-                audible: layer.switches.audible,
-                offset,
-                clips,
-                fresh: None,
-                at: 0,
-            });
+            rows.extend(Row::of(layer)?);
         }
         Ok(Edit {
             of,
@@ -1246,19 +1254,6 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
-    fn razor_at(mut self, layers: &[LayerReference], at_frame: i64, linked: bool) -> Cut {
-        let at = self.time(at_frame)?;
-        let rows: Vec<usize> = if layers.is_empty() {
-            (0..self.rows.len()).collect()
-        } else {
-            layers.iter().filter_map(|l| self.row_of(l.id())).collect()
-        };
-        if self.razor(&rows, at, linked)? == 0 {
-            return Err(BridgeCutResult::Nothing.into());
-        }
-        self.commit()
-    }
-
     fn remove_span(
         mut self,
         start_frame: i64,
@@ -1767,7 +1762,9 @@ impl CompositionReference {
     /// Razor: cut every clip under `at_frame` on `layers`, or on every
     /// unlocked Sequence layer when the list is empty. With `linked` a clip
     /// linked to one that was cut is cut too, and the later halves are
-    /// linked to each other and no longer to the earlier ones.
+    /// linked to each other and no longer to the earlier ones. A plain
+    /// footage layer named here is made a Sequence layer first, in the same
+    /// undo step.
     #[frb(sync)]
     pub fn cut_razor(
         &self,
