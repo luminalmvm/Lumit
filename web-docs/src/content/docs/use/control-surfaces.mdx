@@ -11,10 +11,10 @@ Control surfaces**.
 
 A surface drives the [Grade panel's](/panels/grade/) current node on the current shot, a
 layer or a Cut clip, or on the group's grade while that is in view. When the current node is
-not a [Correction](/effects/colour/correction/), it drives the last Correction. A turn shows
-at once and is written as one undo step once the hardware has been still for a quarter of a
-second. A keyed row takes a key at the playhead. The transport and undo work whatever is
-selected.
+not a [Correction](/effects/colour/correction/), it drives the last Correction, and with no
+Correction a turn does nothing. A turn shows at once and is written as one undo step once
+the hardware has been still for a quarter of a second. It lands on the current shot alone.
+A keyed row takes a key at the playhead. The transport and undo work whatever is selected.
 
 ## Tangent panels
 
@@ -23,7 +23,7 @@ The row under it says **Waiting for Tangent Hub**, or which panels are connected
 
 Each time panels are turned on, Lumit hands the Hub its list of controls and a map for each
 panel. Maps made in Tangent's Mapper are kept by the Hub and left alone. The panels'
-displays show each control's name and value, the shot's name and the node's number.
+displays show each control's name and value, the shot's name and the Correction's number.
 
 A trackball moves a wheel's colour, and its ring the wheel's master. **Alt** and the bank
 buttons are the panel's own.
@@ -37,7 +37,7 @@ buttons are the panel's own.
 | | Transport buttons | **Play or stop**, **Back a frame**, **Forward a frame**. |
 | | Twelve buttons | Button bank A or B, below. |
 | **Element Kb** | Twelve knobs, bank A | **Contrast**, **Pivot**, **Saturation**, **Hue**, **Lum mix**, **Temperature**, **Tint**, **Colour boost**, **Shadows**, **Highlights**, **Midtone detail**, **Exposure**. |
-| | Twelve knobs, bank B | **Shadow** across, up and master, **Midtone** across, up and master, **Highlight** across, up and master, **Low range**, **High range**. |
+| | Eleven knobs, bank B | **Shadow** across, up and master, **Midtone** across, up and master, **Highlight** across, up and master, **Low range**, **High range**. |
 | **Element Bt** | Twelve buttons | Button bank A or B, below. |
 
 | Button | Bank A | Bank B |
@@ -66,14 +66,14 @@ The three trackballs are **Lift**, **Gamma** and **Gain**, or with the ball bank
 | --- | --- |
 | The three trackballs | **Lift**, **Gamma** and **Gain**, or with the ball bank stepped, **Shadow**, **Midtone** and **Highlight**. |
 | Nine knobs, bank A | **Contrast**, **Pivot**, **Saturation**, **Hue**, **Lum mix**, **Temperature**, **Tint**, **Colour boost**, **Exposure**. |
-| Nine knobs, bank B | **Shadows**, **Highlights**, **Midtone detail**, **Low range**, **High range**, **Offset** across, up and master. |
+| Eight knobs, bank B | **Shadows**, **Highlights**, **Midtone detail**, **Low range**, **High range**, **Offset** across, up and master. |
 | Nine buttons, bank A | **Previous shot**, **Next shot**, **Grab still**, **Previous node**, **Next node**, **Add serial node**, **Add parallel node**, **Add layer node**, **Add outside node**. |
 | Nine buttons, bank B | **Wheels page**, **Bars page**, **Log page**, **Grade page**, **Wheel mode**, **Reset lift**, **Reset gamma**, **Reset gain**, **Reset offset**. |
-| The buttons above them | **Bypass grade**, **Bypass node**, **Previous shot**, **Next shot**, **Grab still**, **Undo**, **Redo**, **Reset node**. |
+| Eight more buttons | **Bypass grade**, **Bypass node**, **Previous shot**, **Next shot**, **Grab still**, **Undo**, **Redo**, **Reset node**. |
 | The transport buttons | **Back a frame**, **Forward a frame**, **Play or stop**. |
 | The transport ring | Jogs and shuttles. |
 
-Arc has no map of Lumit's own.
+Arc has no map of Lumit's own. Tangent's Mapper lists every control, for a map made there.
 
 ### What the buttons do
 
@@ -82,32 +82,37 @@ Arc has no map of Lumit's own.
 | **Previous shot**, **Next shot** | Makes the shot before or after current. |
 | **Previous node**, **Next node** | Steps to the Correction before or after. |
 | **Add serial node**, **Add parallel node**, **Add layer node**, **Add outside node** | A new node after the current one. See [Nodes](/use/grading/#nodes). |
-| **Bypass node**, **Bypass grade** | Switches the current Correction, or all of them, off and on. |
+| **Bypass node** | Switches the current Correction off and on. |
+| **Bypass grade** | Switches the whole grade off and on, on every picked shot. |
 | **Reset node** | Puts the current Correction's rows back to their defaults, its **Space** and **Combine** kept. |
 | **Reset lift**, **Reset gamma**, **Reset gain**, **Reset offset** | Puts that wheel back. |
-| **Grab still** | Grabs a still of the current shot. |
+| **Grab still** | Keeps the frame at the playhead in the Gallery, with the current shot's grade. |
 | **Wheels page**, **Bars page**, **Log page**, **HDR page** | Shows the Wheels page with its wheels that way. |
 | **Grade page** | Steps the Grade panel through **Wheels**, **Adjust**, **Curves**, **Qualifier**, **Windows**, **Match** and **Look**. |
-| **Wheel mode** | Steps the wheels through **Wheels**, **Bars**, **Log** and **HDR**. |
+| **Wheel mode** | Shows the Wheels page and steps its wheels through **Wheels**, **Bars**, **Log** and **HDR**. |
+
+**Reset shadow**, **Reset midtone** and **Reset highlight** are on no map of Lumit's own.
+Tangent's Mapper and MIDI learn list them.
 
 ## MIDI controllers
 
-**MIDI devices** lists the MIDI inputs on the system, each with a switch that opens it. A
-device switched on keeps its row while it is unplugged. With none, the row says **None
-found**.
+Each MIDI input on the system has a row with a switch that opens it. A device switched on
+keeps its row while it is unplugged, and opens again when it comes back. With no inputs,
+**MIDI devices** says **None found**.
 
 **MIDI learn** ties a control to something it drives:
 
-1. Pick what it drives from the list: a Correction row, a wheel's across, up or master, or
-   one of the buttons above.
-2. Press **Learn**. It reads **Move a control**.
-3. Move the knob, fader or key.
+1. Pick what it drives from the list: a row the knobs above reach, a wheel's **X** (across),
+   **Y** (up) or **master**, or a button. **Grade page** and **Wheel mode** are not in the
+   list.
+2. Press **Learn**. It reads **Move a control**, and a second press stops it.
+3. Move the knob or fader, or press the key, on a device that is switched on.
 
 One control drives one thing. Learning a control again replaces what it drove.
 
 Each learned control has a row: the control, as **Note**, **CC** or **CC 14-bit** with its
-number and channel, the device under it, what it drives, and **Remove**. A CC also has how
-it is read:
+number and channel, the device under it, what it drives, and **Remove**. A 7-bit CC also has
+how it is read:
 
 | Reading | For |
 | --- | --- |
@@ -116,14 +121,15 @@ it is read:
 | **Relative, sign bit** | An endless knob sending 1 for a step up and 65 for a step down. |
 | **Relative, offset 64** | An endless knob sending 65 for a step up and 63 for a step down. |
 
-Learn guesses the reading from the control's first two messages. Sign bit is only ever
-picked by hand.
+Learn guesses the reading from the control's first two messages. **Relative, sign bit** is
+only ever picked by hand.
 
-- An absolute control moves its row by how far it moved. Its first message only says where
-  it is, so picking a fader up never jumps the grade.
+- An absolute control moves its row by how far it moved, its whole travel the row's whole
+  range. Its first message only says where it is.
 - An endless knob moves its row ten of the row's smallest steps a click.
 - A key or pad resets the row it drives, or presses the button it drives.
 - A CC tied to a button presses it past half way, or on each click of an endless knob.
+- A 14-bit CC drives a row, never a button.
 
 ## Related
 

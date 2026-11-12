@@ -15,21 +15,24 @@ effects in its own stack.
 ## Shots
 
 A **shot** is a picture clip on a Sequence layer, or any other layer with a picture of its
-own: footage, a precomp, a solid, text, a shape or a 3D model. Sound-only and adjustment
-layers are not shots. The [Shots panel](/panels/shots/) lists them in time order, the top
-row first where two start together.
+own: footage, a precomp, a solid, text, a shape, a 3D model or a 3D shape. Sound-only and
+adjustment layers are not shots. The [Shots panel](/panels/shots/) lists them in time
+order, the upper layer first where two start together.
 
 ### The current shot
 
 The **current shot** is the clip picked in the [Cut timeline](/use/cutting/) while its
 layer is the selected layer, else the selected layer. The Grade, Grade nodes and Shots
-panels follow it. A clip's grade is the clip's own stack, not its Sequence layer's.
+panels follow it. A clip's grade is the clip's own stack, not its Sequence layer's. A
+Sequence layer selected with no clip picked is graded in its own stack, which runs after
+every clip's.
 
 While the Grade, Grade nodes, Shots or Gallery panel is in the workspace, the current shot
 and the playhead move together:
 
 - A shot made current while the playhead is outside it brings the playhead to its first
-  frame, or for a clip starting under the one before it, the first frame it is seen alone.
+  frame, or for a clip that starts under the one before it, to the first frame it shows
+  alone.
 - The playhead moved out of the current shot makes the shot under it current: for a clip,
   the clip on the same Sequence layer, the later one where two overlap; for a layer, the
   top layer shot there.
@@ -37,14 +40,15 @@ and the playhead move together:
 Over a gap nothing changes.
 
 An edit in the Grade panel lands on the current shot and on every other picked shot of its
-kind: the picked clips for a clip, the selected layers for a layer.
+kind: the picked clips for a clip, the selected layers for a layer. See
+[Grade](/panels/grade/#the-pages).
 
 ## Nodes
 
 Every effect in a shot's stack is a node, in stack order. The usual one is
-[Correction](/effects/colour/correction/), which holds a whole node: wheels, adjustments,
-curves, a qualifier and four windows. Any other effect, such as a LUT or a blur, is a node
-too.
+[Correction](/effects/colour/correction/): wheels, adjustments, a mixer, curves, a
+qualifier and four windows in one effect. Any other effect, such as a LUT or a blur, is a
+node too.
 
 The Grade panel edits the **current node**: the one picked, else the shot's last Correction.
 The first touch on a shot with no Correction adds one, in the same undo step.
@@ -52,42 +56,46 @@ The first touch on a shot with no Correction adds one, in the same undo step.
 | Node | What it does |
 | --- | --- |
 | **Serial** | Grades what the node before it made. |
-| **Parallel** | Grades the same picture as the node before it and adds its change to theirs. |
-| **Layer** | Grades the same picture as the node before it and lays its result over theirs, by its key. |
+| **Parallel** | Grades the picture the node before it graded, and adds its change to theirs. |
+| **Layer** | Grades the picture the node before it graded, and lays its result over theirs through its key. |
 | **Outside** | Grades what the current node leaves alone: its Matte is wired from the current node's key, inverted. |
 
-A new node goes after the current one and becomes current. A Parallel or Layer node is a
-Correction whose **Combine** says so. An outside node needs a Correction on a layer.
-**Add colour warper node**, on **Layer ▸ Grade** and the Grade nodes panel's add menus, adds
-a [Colour warper](/effects/colour/colour-warper/).
+**Layer ▸ Grade**, a right-click in the Grade or Grade nodes panel, and the
+[shortcuts](#shortcuts) add them. A new node goes after the current one and becomes
+current. A Parallel or Layer node is a Correction whose **Combine** says so. An outside
+node needs the current node to be a Correction on a layer, not on a clip. **Add colour
+warper node**, on **Layer ▸ Grade** and the Grade nodes panel's add menus, adds a
+[Colour warper](/effects/colour/colour-warper/).
 
 Each node has a **key**: its Matte, times its qualifier, times its windows, each white
 while off. The grade lands where the key is white.
 
 ### Key wires
 
-A Correction's **Key** feeds the Matte of any effect below it in the same stack, which
-then works only where the key is. An outside node is a Correction fed this way. In the
-[Grade nodes panel](/panels/grade-nodes/), a drag from a Correction's key out dot to a later
-node wires it, and a key wire is drawn dashed. The [node graph](/use/nodes/#key-wires) draws
-it as a wire.
+A Correction's **Key** wired into the Matte of an effect below it in the same stack mattes
+that effect, which then works only where the key is white. An outside node is a Correction
+wired this way. In the [Grade nodes panel](/panels/grade-nodes/), a drag from a
+Correction's key out dot onto a later node wires it, and the wire is drawn dashed. The
+[node graph](/use/nodes/#key-wires) shows the same wire.
 
 ### Shared nodes
 
-A **shared node** is one node used by several shots: an edit to it shows in every shot
+A **shared node** is one node used by several shots. An edit to it shows in every shot
 using it. **Share with picked shots**, on a node's menu in the Grade nodes panel, makes the
-node shared and puts it in the other picked shots. **Add shared node ▸** puts a shared node
-in another shot.
+node shared and puts it in every other picked shot, after that shot's last grade node.
+**Add shared node ▸**, on the same menu, puts one of the project's shared nodes in the
+current shot.
 
-Renaming or resetting a shared node does it for every shot. Bypassing or deleting it acts on
-this shot's use of it. **Unshare** gives every shot using it its own copy, where it stood.
+**Rename…** and **Reset node** act on a shared node in every shot. **Bypass node** and
+**Delete node** act on this shot's use of it. **Unshare** gives every shot using it its own
+copy, where it stood.
 
 ## The Grade panel
 
 The [Grade panel](/panels/grade/) edits the current node, a page at a time: **Wheels**,
 **Adjust**, **Curves**, **Qualifier**, **Windows**, **Match** and **Look**. The Wheels page
-shows the wheels as **Wheels**, **Bars**, **Log** or **HDR**, the six HDR zones by
-brightness in stops. A node that is not a Correction shows its own rows, and a
+shows the wheels as **Wheels**, **Bars**, **Log** or **HDR**, six zones by brightness in
+stops. A node that is not a Correction shows its own rows, and a
 [Colour warper](/effects/colour/colour-warper/) its mesh.
 
 Holding **Before** shows the shot without its grade.
@@ -97,19 +105,25 @@ Holding **Before** shows the shot without its grade.
 The qualifier keys a node by colour: **HSL**, **RGB**, **Luma** or **3D**.
 
 **Pick**, **Add to pick** and **Subtract from pick** on the Qualifier page arm the picture.
-A drag on the Viewer draws a circle, and the samples inside it set the ranges: Pick takes
-them in, Add widens the ranges to them, and Subtract pulls the nearest edge in past them.
-A click reads a few pixels. The samples are the picture coming into the node.
+A drag on the Viewer draws a circle, and the colours inside it, read from the picture
+coming into the node, set the ranges:
 
-The new ranges show as the drag goes, with the matte view on, and the release writes them as
-one undo step. A pick on a qualifier that is off turns HSL on. The tool stays armed until
-its button is pressed again or the picture is right-clicked.
+- **Pick** sets the ranges to cover them and nothing else.
+- **Add to pick** widens the ranges to cover them too.
+- **Subtract from pick** pulls the nearest edge of one range in past them.
+
+A click reads a few pixels. On a qualifier that is off, Pick and Add to pick turn HSL on,
+and Subtract from pick does nothing.
+
+The ranges show as the drag goes, in Highlight when the matte view is off, and the release
+writes them as one undo step. The tool stays armed until its button is pressed again or the
+picture is right-clicked.
 
 ### The 3D qualifier
 
-A **3D** qualifier keys on colours sampled from the picture, kept or dropped, up to 32 of
-each. On a node keyed in 3D, the pick tools draw a stroke on the Viewer in place of a
-circle, and the colours along it are the samples:
+A **3D** qualifier keys on colours sampled from the picture, some kept and some dropped, up
+to 32 of each. Past 32, the two closest are merged. On a node keyed in 3D, the pick tools
+draw a stroke on the Viewer in place of a circle, and the colours along it are the samples:
 
 - **Pick** keeps only this stroke's colours, and drops nothing.
 - **Add to pick** keeps this stroke's colours as well.
@@ -117,42 +131,46 @@ circle, and the colours along it are the samples:
 
 The key shows as the stroke is drawn, and the release writes it as one undo step. Each node
 keeps its strokes while the project is open, and the Viewer shows them faintly while a tool
-is armed. A key is white near a kept colour, as far as **Size** and **Softness** reach, and
-black near a dropped one. With nothing kept, every colour is kept.
+is armed. The key is white near a kept colour, as far as **Size** and **Softness** reach,
+and black near a dropped one. With nothing kept, every colour is kept.
 
 ### The matte view
 
-The matte view shows the current node's key on the Viewer:
+The matte view shows the current node's key on the Viewer, on the shot alone:
 
 | Matte view | Shows |
 | --- | --- |
 | **Off** | The picture. |
-| **Highlight** | The graded picture where the key is, and elsewhere mid grey, black, white, or the picture in black and white. In a Parallel or Layer run, the run's picture with this node joined. |
+| **Highlight** | The graded picture where the key is, over mid grey, black, white, or the picture in black and white. In a Parallel or Layer run, the run's picture with this node joined. |
 | **Key** | The key in black and white. |
 
-`Shift+H` steps through them. **Highlight** on the Qualifier page turns it on, and a
-right-click there offers all three. A chip on the Viewer's bar names it while it is on, and
-its right-click picks what Highlight shows around the key, kept until Lumit closes. The
-matte view is never exported, and it turns off when the current node is not a Correction.
+`Shift+H` steps through them. **Highlight** on the Qualifier page turns it on and off, and
+a right-click there offers all three. A chip on the Viewer's bar names it while it is on: a
+click turns it off, and a right-click picks what Highlight shows around the key, kept until
+Lumit closes. The matte view is never exported, and it turns off when the current node is
+not a Correction.
 
 ## Windows
 
 A Correction has four window slots. Each is an **Ellipse**, a **Rectangle**, a **Polygon**
-or a **Gradient**. A window joins the slots before it, or with **Subtract** cuts itself out
-of them. A slot turned on from the Windows page starts at the middle of the shot's picture.
+or a **Gradient**, placed in the shot's own picture. A window joins the slots before it, or
+with **Subtract** cuts itself out of them. A slot turned on from the Windows page starts at
+the middle of the shot's picture.
 
 The picked slot's handles show on the Viewer:
 
 - The centre moves the window.
 - A corner sizes it about the centre. `Shift` keeps its proportions.
 - An edge changes its width or height.
-- The stalk turns it. `Shift` snaps to 15°.
-- The dashed rings set the outer and inner softness.
-- On a rectangle, a handle sets the roundness.
-- On a gradient, an aim handle sets its direction, and two handles the width of its band.
+- The handle above it turns it. `Shift` snaps to 15°.
+- The handles on the dashed rings set the outer and inner softness.
+- On a rectangle, a handle on the top edge sets the roundness.
+- On a gradient, the aim handle sets its direction, and two handles its outer and inner
+  softness.
 
-Other slots show a dot at their centre. Click one to pick it. A keyed row takes a key at the
-playhead, and each drag is one undo step.
+Other slots show a dot at their centre. Click one to pick it. Right-click a handle to change
+the window's shape or turn it off. A keyed row takes a key at the playhead, and each drag is
+one undo step. `Escape` lets a drag go.
 
 A picked polygon with fewer than three points is drawn on the picture: each click adds a
 point, up to 32. `Enter`, or a click on the first point, closes it, and `Escape` lets it go.
@@ -162,13 +180,12 @@ Drag a point to move it. Click a point and press `Delete` to remove it.
 
 **Track forwards** and **Track back** on the Windows page follow the picture coming into the
 node, inside the picked window, from the playhead to the end or the start of the shot. They
-key the window's centre, size and angle at every frame, linear, as one undo step. **Stop** keeps the frames
-done. A window that loses the picture stops there, keeps the frames done, and the status
-line names the frame.
+key the window's centre, size and angle on every frame, linear, as one undo step, in place
+of any keys already in that span. **Stop** keeps the frames done. A window that loses the
+picture stops there, keeps the frames done, and the status line names the frame.
 
-A layer with no footage of its own, such as a solid, cannot be tracked. A track is refused
-while another analysis runs. A window in a group's grade or a shared node belongs to every
-shot that uses it, so it can't be tracked to one of them.
+Only footage and precomps track, as layers or as clips. A track is **refused** while
+another analysis runs. A window in a group's grade or in a shared node cannot be tracked.
 
 ## Matching
 
@@ -177,12 +194,14 @@ as one undo step.
 
 - **Auto balance** takes the cast out of the shot at the playhead and sets its black and
   white points. It writes Temperature, Tint, Lift and Gain.
-- **Match** brings the shot to look like the one in **Match to**: another shot of the
-  composition, or the Viewer's reference still. It writes Lift, Gamma, Gain and Saturation.
-- **Show chart** draws a 24-patch colour chart's outline on the Viewer. Drag its four
-  corners onto the chart in the picture, with dark skin at the top left. **Match chart**
-  reads the patches and writes Space, the mixer and Exposure, and the page shows the mean ΔE
-  before and after. The chart's colours are taken into the project's working space.
+- **Match** brings the shot at the playhead to look like the one in **Match to**: the
+  Viewer's reference, or another shot of the composition at its first frame. It writes Lift,
+  Gamma, Gain and Saturation.
+- **Show chart** draws the grid of a 24-patch ColorChecker Classic on the Viewer. Drag its
+  four corners onto the chart in the picture, with dark skin at the top left, or its middle
+  to move it whole. **Match chart** reads the patches at the playhead, sets Space to Linear
+  and writes the mixer and Exposure, and the page shows the mean ΔE before and after. The
+  chart's colours are taken into the project's working space.
 
 **Match to current shot**, on a tile's menu in the Shots panel, matches that shot to the
 current one. **Auto balance** is also on **Layer ▸ Grade**.
@@ -190,18 +209,19 @@ current one. **Auto balance** is also on **Layer ▸ Grade**.
 ## Looks and LUTs
 
 A **look** is a grade kept as a preset in the library's **Looks** group, which every
-project sees. **Save look…** writes the current shot's grade. Picking a look on the Look
-page puts its grade in place of the grade on every picked shot.
+project sees. **Save look…** writes the current shot's grade as one. Picking a look on the
+Look page puts its grade in place of the grade on every picked shot.
 
 The Look page's **LUT** row reads a `.cube` file into the shot's first LUT node, added after
 the grade.
 
 **Export LUT** writes the shot's grade as a `.cube`, at 17, 33 or 65 points a side, for
-Video, Log or sRGB pictures. It bakes the shot's enabled Colour effects as they stand at the
-playhead, Parallel and Layer nodes included. Qualifiers stay. Windows, mattes, key wires and
-Midtone detail are left out, and each node bakes as if its whole picture were keyed. A
-group's grades and shared nodes are left out. From the Shots panel and **Layer ▸ Grade** it
-writes 33 points for Video.
+**Video** (Rec. 709 at a 2.4 gamma), **Log** (ACEScct) or **sRGB** pictures. It bakes the
+shot's enabled Colour effects as they stand at the playhead, Parallel and Layer nodes
+included. Qualifiers stay, without their Denoise, Grow and Blur radius. Anything that
+depends on where a pixel sits is left out: windows, mattes, key wires, Midtone detail and a
+Vignette. Each node bakes as if its whole picture were keyed. A group's grades and shared nodes are
+left out. From the Shots panel and **Layer ▸ Grade** it writes 33 points for Video.
 
 ## CDL
 
@@ -209,10 +229,10 @@ writes 33 points for Video.
 after the current node, or after the node right-clicked, and makes it current. A file
 holding several corrections asks which.
 
-**Export CDL…** writes a Correction or CDL node as a `.cc`, or a `.cdl` decision list when
-the name ends so. A Correction that moves only Offset, Lift, Gamma, Gain and Saturation
-exports exactly. Any other is fitted, and the notice says **CDL exported, fitted**. The
-numbers are in the node's Space.
+**Export CDL…** writes a Correction or CDL node as a `.cc`, or as a `.cdl` decision list
+when the name ends so. A Correction that moves only Offset, Lift, Gamma, Gain and Saturation
+exports exactly. Any other is fitted, and the status line says *CDL exported, fitted*. The
+numbers are in the node's Space, read at the playhead, as if its key took the whole picture.
 
 Both are on the Look page, **Layer ▸ Grade** and a node's menu in the Grade nodes panel.
 
@@ -223,11 +243,15 @@ stack, and the others are kept aside. The version button in the Grade panel's he
 **Versions ▸** on a tile's menu in the Shots panel, list them.
 
 - Picking a version swaps it into the stack where the grade was.
-- **New version** starts an empty grade. **Duplicate version** starts a copy of the live one.
+- **New version** starts an empty grade. **Duplicate version** starts a copy of the live
+  one. Either becomes the live version.
 - **Rename…** names the live version.
 - **Delete version** deletes the live version and shows the one before it in its place, or
   the one after for the first. The last version going leaves its grade in the stack.
-- **Versions in a grid** shows them in the Viewer's [grid](#the-grid).
+- **Versions in a grid**, on the version button, shows them in the Viewer's
+  [grid](#the-grid).
+
+A group's grade has no versions.
 
 ## Groups
 
@@ -247,15 +271,19 @@ asking.
 ## Copying grades
 
 - **Copy grade**, `Alt+Shift+C`, puts the current shot's grade on the clipboard.
-- **Paste grade**, `Alt+Shift+V`, puts it in place of the grade on every picked shot.
-- **Apply grade from previous shot**, `=`, takes the grade of the shot before the current
-  one in time. **Apply grade from two shots back**, `-`, takes the one two before it.
-- **Reset grade** puts every node back to its defaults. **Bypass grade** switches the whole
-  grade off, and on again.
+- **Paste grade**, `Alt+Shift+V`, puts it in place of the grade on every picked shot. Both
+  are on the **Edit** menu.
+- **Apply grade from previous shot**, `=`, puts the grade of the shot before the current
+  one in time in place of the grade on every picked shot. **Apply grade from two shots
+  back**, `-`, takes the one two before it. Where that shot has no grade, the picked shots
+  lose theirs.
+- **Reset grade** puts every node back to its defaults, its Space and Combine kept. From
+  the Grade panel, a keyed row keeps its keys and takes its default at the playhead. From
+  the Grade nodes panel, the Shots panel and **Layer ▸ Grade**, the keys go.
+- **Bypass grade** switches the whole grade off, and on again.
 
 A grade copied, pasted, versioned, kept in a memory or saved as a look is the shot's Colour
-effects. Being in a group, or using a shared node, belongs to the shot, so a grade never
-carries it.
+effects. It never carries the shot's group or its shared nodes.
 
 ### Memories
 
@@ -267,9 +295,9 @@ puts a memory's grade in place of the grade on every picked shot. The
 ## Stills and the Gallery
 
 A **still** is a frame as the Viewer showed it, kept with the grade that made it. **Grab
-still**, `Ctrl+Alt+G`, keeps the composition's frame at the playhead in the
-[Gallery's](/panels/gallery/) open album, named by its shot and the Viewer's clock. Stills
-live in the library, so every project sees them.
+still**, `Ctrl+Alt+G`, keeps the composition's frame at the playhead, with the current
+shot's grade, in the [Gallery's](/panels/gallery/) open album, named by its shot and the
+Viewer's clock. Stills live in the library, and every project sees them.
 
 A still's grade goes on a shot from the Gallery, or by dragging the still onto a tile in
 the Shots panel. **Export still…** writes a still's picture as a PNG, and **Export grade as
@@ -278,7 +306,8 @@ LUT…** its grade as a 33-point `.cube` for Video.
 ### Comparing against a reference
 
 A still, or another shot's frame, can be the Viewer's **reference**. Double-click a still
-in the Gallery, or press **Compare** on the Match page. `Ctrl+Alt+C` shows or hides it.
+in the Gallery, or press **Compare** on the Match page, which takes the one in **Match
+to**. `Ctrl+Alt+C` shows or hides it.
 
 | Style | Shows |
 | --- | --- |
@@ -290,8 +319,9 @@ in the Gallery, or press **Compare** on the Match page. `Ctrl+Alt+C` shows or hi
 
 Drag the divider to move it, and double-click it to put it back in the middle. A chip on
 the Viewer's bar names the reference and its style: a click shows or hides it, the cross
-clears it, and a right-click offers the styles, **Swap sides**, **Reset divider** and
-**Clear reference**. A shot's frame is read once, when it becomes the reference.
+clears it, and a right-click offers **Show reference**, the styles, **Swap sides**, **Reset
+divider** and **Clear reference**. A shot's frame is read once, when it becomes the
+reference.
 
 ## The grid
 

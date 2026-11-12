@@ -19,12 +19,12 @@ The new bus's strip stands after the layers, and the dialogue strip's output chi
 Double-click the bus's name and type `Dialogue`.
 
 **4. Make the reverb bus.** Right-click the Mixer's empty ground and choose **Insert bus**.
-Name it `Reverb`. Click the empty slot in its inserts and pick
-**[Reverb](/effects/audio/reverb/)**. In Effect controls, set **Dry** to 0 and **Wet** to
-100.
+Double-click its name and type `Reverb`. Click the empty slot in its inserts and pick
+**[Reverb](/effects/audio/reverb/)**. Click the insert, and in Effect controls set **Dry** to
+0 and **Wet** to 100.
 
-**5. Send the dialogue to it.** On the **Dialogue** strip, click the empty slot in the sends and
-pick **Reverb**. Drag the send's bar left until the room sits behind the voice.
+**5. Send the dialogue to it.** On the **Dialogue** bus's strip, click the empty slot in the
+sends and pick **Reverb**. Drag the send's bar to set its level.
 
 **6. Lower the music behind the dialogue.** Select the music layer. In the
 [Audio panel](/panels/audio/#audio-panel), press **Lower behind…** and pick **Dialogue**.
@@ -44,6 +44,6 @@ target ▸ −16 LUFS**.
 **10. Normalise the mix.** Right-click the **Master** strip and choose **Normalise mix…**.
 The status line gives the loudness it reached.
 
-**11. Export with stems.** Choose **File ▸ Export**. In the **Audio** section, **Loudness**
+**11. Export with stems.** Choose **File ▸ Export…**. In the **Audio** section, **Loudness**
 reads **Target, −16 LUFS**. Tick **A file for each bus** beside **Stems**, and press
 **Export**. Beside the file are `<file name> - Dialogue` and `<file name> - Reverb`.
