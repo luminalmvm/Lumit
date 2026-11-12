@@ -1035,6 +1035,15 @@ class Workspace extends ChangeNotifier {
   /// live endpoint. Off until the person turns it on.
   bool liveEndpoint = false;
 
+  /// Whether Lumit talks to Tangent panels through Tangent's Hub.
+  bool tangentPanels = false;
+
+  /// The MIDI input ports kept open, by the names the system gives them.
+  List<String> midiInputs = [];
+
+  /// The learned MIDI controls, as `control_surfaces.dart` writes them.
+  List<Map<String, dynamic>> midiMappings = [];
+
   /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
@@ -1711,6 +1720,21 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setTangentPanels(bool on) {
+    tangentPanels = on;
+    settingsChanged();
+  }
+
+  void setMidiInputs(List<String> names) {
+    midiInputs = names;
+    settingsChanged();
+  }
+
+  void setMidiMappings(List<Map<String, dynamic>> mappings) {
+    midiMappings = mappings;
+    settingsChanged();
+  }
+
   /// Choose the project every new one starts as a copy of, or none.
   void setProjectTemplate(String path) {
     projectTemplate = path;
@@ -2313,6 +2337,9 @@ class Workspace extends ChangeNotifier {
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
         'live_endpoint': liveEndpoint,
+        'tangent_panels': tangentPanels,
+        'midi_inputs': midiInputs,
+        'midi_mappings': midiMappings,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'title_template': titleTemplate,
@@ -2453,6 +2480,17 @@ class Workspace extends ChangeNotifier {
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;
     liveEndpoint = j['live_endpoint'] as bool? ?? false;
+    tangentPanels = j['tangent_panels'] as bool? ?? false;
+    midiInputs = [
+      if (j['midi_inputs'] case final List<dynamic> names)
+        for (final name in names)
+          if (name is String) name,
+    ];
+    midiMappings = [
+      if (j['midi_mappings'] case final List<dynamic> mappings)
+        for (final mapping in mappings)
+          if (mapping is Map<String, dynamic>) mapping,
+    ];
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;

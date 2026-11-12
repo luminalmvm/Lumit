@@ -87,6 +87,8 @@ import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
+import 'package:lumit_flutter/state/control_surfaces.dart';
+import 'package:lumit_flutter/state/grade_target.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dock.dart';
@@ -577,6 +579,9 @@ class LumitUiState extends ChangeNotifier {
   /// So it is made in the constructor: given its value here it would wait
   /// for its first use.
   late final ExtensionService extensions;
+
+  /// Tangent panels and MIDI controllers, which drive the grade.
+  late final ControlSurfaces surfaces = ControlSurfaces(this, _app);
 
   /// Whether the extension [id] has its panel in the arrangement.
   bool extensionShown(String id) =>
@@ -3258,6 +3263,7 @@ class LumitUiState extends ChangeNotifier {
     if (largest != null) setLargestPicture(side: largest);
     pushDiscordStatus();
     if (this.workspace.liveEndpoint) applyLiveEndpoint();
+    surfaces.start();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,

@@ -2205,9 +2205,24 @@ Map<String, String> get _built => {
       "Trim the layer's out point to the playhead":
           l10n.keyTrimTheLayerSOutPointToThePlayhead,
       "Split the layer at the playhead": l10n.keySplitTheLayerAtThePlayhead,
-      "Copy the layer's grade": l10n.keyCopyTheLayerSGrade,
-      "Paste the grade onto the selected layers":
-          l10n.keyPasteTheGradeOntoTheSelectedLayers,
+      "Copy the shot's grade": l10n.keyCopyTheShotSGrade,
+      "Paste the grade onto the picked shots":
+          l10n.keyPasteTheGradeOntoThePickedShots,
+      "Add a serial node": l10n.keyAddASerialNode,
+      "Add a parallel node": l10n.keyAddAParallelNode,
+      "Add a layer node": l10n.keyAddALayerNode,
+      "Add an outside node": l10n.keyAddAnOutsideNode,
+      "Change the matte view": l10n.keyChangeTheMatteView,
+      "Grab a still": l10n.keyGrabAStill,
+      "Previous shot": l10n.keyPreviousShot,
+      "Next shot": l10n.keyNextShot,
+      "First shot": l10n.keyFirstShot,
+      "Last shot": l10n.keyLastShot,
+      "Apply the previous shot's grade": l10n.keyApplyThePreviousShotSGrade,
+      "Show or hide the reference": l10n.keyShowOrHideTheReference,
+      "Apply the grade from two shots back":
+          l10n.keyApplyTheGradeFromTwoShotsBack,
+      "Show or hide the Lightbox": l10n.keyShowOrHideTheLightbox,
       "Duplicate the layer": l10n.keyDuplicateTheLayer,
       "Precompose the layer": l10n.keyPreComposeTheLayer,
       "Group the selected layers": l10n.keyGroupTheSelectedLayers,
@@ -2332,6 +2347,7 @@ Map<String, String> get _built => {
       "Go to the previous caption": l10n.keyGoToThePreviousCaption,
       "Go to the next caption": l10n.keyGoToTheNextCaption,
       "Transcript panel": l10n.keyTranscriptPanel,
+      "Colour panels": l10n.keyColourPanels,
       "Delete the selected words and close the gap":
           l10n.keyDeleteTheSelectedWordsAndCloseTheGap,
       "Delete the selected words and leave a gap":

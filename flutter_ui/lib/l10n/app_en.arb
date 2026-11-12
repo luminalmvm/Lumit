@@ -7265,14 +7265,6 @@
   "@keySwitchThePickedClipsToTheirPreviousTake": {
     "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the previous of its takes. Vegas puts this on Shift+T."
   },
-  "keyCopyTheLayerSGrade": "Copy the layer's grade",
-  "@keyCopyTheLayerSGrade": {
-    "description": "Keyboard shortcut action: puts the selected layer's colour effects on the effect clipboard."
-  },
-  "keyPasteTheGradeOntoTheSelectedLayers": "Paste the grade onto the selected layers",
-  "@keyPasteTheGradeOntoTheSelectedLayers": {
-    "description": "Keyboard shortcut action: the grade on the clipboard takes the place of the grade on every selected layer."
-  },
   "keyPasteAClipSAttributesOntoThePickedClips": "Paste a clip's attributes onto the picked clips",
   "@keyPasteAClipSAttributesOntoThePickedClips": {
     "description": "Keyboard shortcut action in the Cut timeline: the copied clip's settings, such as its effects, are given to the picked clips. Vegas puts this on Ctrl+Shift+V."
@@ -29508,6 +29500,251 @@
   "@histLeaveGradeGroup": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot taken out of its grade group."
   },
+  "settingsGroupControlSurfaces": "Control surfaces",
+  "@settingsGroupControlSurfaces": {
+    "description": "Settings window, General page: heading over the Tangent panel and MIDI controller settings, hardware for grading by hand."
+  },
+  "settingsTangentPanels": "Tangent panels",
+  "@settingsTangentPanels": {
+    "description": "Settings window: a switch, off by default. On, Lumit talks to Tangent grading panels through Tangent's own Hub program."
+  },
+  "settingsTangentWaiting": "Waiting for Tangent Hub",
+  "@settingsTangentWaiting": {
+    "description": "Settings window: under the Tangent panels switch while it is on and Tangent's Hub program is not running."
+  },
+  "settingsTangentConnected": "Connected to {panels}",
+  "@settingsTangentConnected": {
+    "description": "Settings window: under the Tangent panels switch once Tangent's Hub answers. panels is Tangent's own panel names joined with commas, as in Element-Tk, Element-Mf.",
+    "placeholders": {
+      "panels": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsMidiDevices": "MIDI devices",
+  "@settingsMidiDevices": {
+    "description": "Settings window: row shown when there are no MIDI input devices to choose. Otherwise each device has its own row with its own name and a switch."
+  },
+  "settingsMidiNone": "None found",
+  "@settingsMidiNone": {
+    "description": "Settings window: under the MIDI devices row when the system lists no MIDI inputs."
+  },
+  "settingsMidiLearn": "MIDI learn",
+  "@settingsMidiLearn": {
+    "description": "Settings window: row with a list of what a MIDI control can drive and a Learn button. Pick a target, press Learn, then move a knob or press a key on the device."
+  },
+  "settingsMidiLearnButton": "Learn",
+  "@settingsMidiLearnButton": {
+    "description": "Settings window: button that waits for the next control moved on a MIDI device and ties it to the target chosen beside it."
+  },
+  "settingsMidiLearning": "Move a control",
+  "@settingsMidiLearning": {
+    "description": "Settings window: the Learn button's label while it waits for a control to be moved on a MIDI device. Pressing it again stops waiting."
+  },
+  "settingsMidiNote": "Note {number}, channel {channel}",
+  "@settingsMidiNote": {
+    "description": "Settings window: a learned MIDI key or pad, as in Note 36, channel 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "channel": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMidiCc": "CC {number}, channel {channel}",
+  "@settingsMidiCc": {
+    "description": "Settings window: a learned MIDI controller (knob, fader or encoder) by its controller number, as in CC 21, channel 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "channel": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMidiCc14": "CC {number} 14-bit, channel {channel}",
+  "@settingsMidiCc14": {
+    "description": "Settings window: a learned high-resolution MIDI controller, which sends its value as a pair of controller numbers.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "channel": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMidiAbsolute": "Absolute",
+  "@settingsMidiAbsolute": {
+    "description": "Settings window: how a learned MIDI controller is read. A knob or fader that sends where it is."
+  },
+  "settingsMidiTwosComplement": "Relative, two's complement",
+  "@settingsMidiTwosComplement": {
+    "description": "Settings window: how a learned MIDI controller is read. An endless encoder that sends 1 for a step up and 127 for a step down."
+  },
+  "settingsMidiSignBit": "Relative, sign bit",
+  "@settingsMidiSignBit": {
+    "description": "Settings window: how a learned MIDI controller is read. An endless encoder that sends 1 for a step up and 65 for a step down."
+  },
+  "settingsMidiOffset64": "Relative, offset 64",
+  "@settingsMidiOffset64": {
+    "description": "Settings window: how a learned MIDI controller is read. An endless encoder that sends 65 for a step up and 63 for a step down."
+  },
+  "settingsMidiRemove": "Remove",
+  "@settingsMidiRemove": {
+    "description": "Settings window: button on a learned MIDI control's row that forgets it."
+  },
+  "surfaceWheelX": "{wheel} X",
+  "@surfaceWheelX": {
+    "description": "A grading wheel's left and right movement, as a MIDI control can drive it, as in Lift X.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceWheelY": "{wheel} Y",
+  "@surfaceWheelY": {
+    "description": "A grading wheel's up and down movement, as a MIDI control can drive it, as in Lift Y.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceWheelMaster": "{wheel} master",
+  "@surfaceWheelMaster": {
+    "description": "A grading wheel's master, which moves all three colour channels together, as in Lift master.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceShadow": "Shadow",
+  "@surfaceShadow": {
+    "description": "A grading log wheel: the darkest part of the picture."
+  },
+  "surfaceMidtone": "Midtone",
+  "@surfaceMidtone": {
+    "description": "A grading log wheel: the middle of the picture's range."
+  },
+  "surfaceHighlight": "Highlight",
+  "@surfaceHighlight": {
+    "description": "A grading log wheel: the brightest part of the picture."
+  },
+  "surfaceLowRange": "Low range",
+  "@surfaceLowRange": {
+    "description": "Grading: where the log wheels' shadows end."
+  },
+  "surfaceHighRange": "High range",
+  "@surfaceHighRange": {
+    "description": "Grading: where the log wheels' highlights begin."
+  },
+  "surfacePivot": "Pivot",
+  "@surfacePivot": {
+    "description": "Grading: the level contrast turns about."
+  },
+  "surfaceHue": "Hue",
+  "@surfaceHue": {
+    "description": "Grading: turns every colour round the colour wheel."
+  },
+  "surfaceLumMix": "Lum mix",
+  "@surfaceLumMix": {
+    "description": "Grading: how much the wheels change brightness as well as colour."
+  },
+  "surfaceColourBoost": "Colour boost",
+  "@surfaceColourBoost": {
+    "description": "Grading: raises the saturation of the less saturated colours most."
+  },
+  "surfaceMidtoneDetail": "Midtone detail",
+  "@surfaceMidtoneDetail": {
+    "description": "Grading: local contrast in the middle tones."
+  },
+  "surfaceShotPrevious": "Previous shot",
+  "@surfaceShotPrevious": {
+    "description": "A control surface action: grade the shot before this one."
+  },
+  "surfaceShotNext": "Next shot",
+  "@surfaceShotNext": {
+    "description": "A control surface action: grade the shot after this one."
+  },
+  "surfaceNodePrevious": "Previous node",
+  "@surfaceNodePrevious": {
+    "description": "A control surface action: work on the grade node before this one."
+  },
+  "surfaceNodeNext": "Next node",
+  "@surfaceNodeNext": {
+    "description": "A control surface action: work on the grade node after this one."
+  },
+  "surfaceNodeAddSerial": "Add serial node",
+  "@surfaceNodeAddSerial": {
+    "description": "A control surface action: add a grade node after this one, taking its picture."
+  },
+  "surfaceNodeAddParallel": "Add parallel node",
+  "@surfaceNodeAddParallel": {
+    "description": "A control surface action: add a grade node beside this one, both taking the same picture."
+  },
+  "surfaceNodeAddLayer": "Add layer node",
+  "@surfaceNodeAddLayer": {
+    "description": "A control surface action: add a grade node laid over this one."
+  },
+  "surfaceNodeAddOutside": "Add outside node",
+  "@surfaceNodeAddOutside": {
+    "description": "A control surface action: add a grade node that grades what this node's key leaves out."
+  },
+  "surfaceNodeBypass": "Bypass node",
+  "@surfaceNodeBypass": {
+    "description": "A control surface action: switch the current grade node off or back on."
+  },
+  "surfaceNodeReset": "Reset node",
+  "@surfaceNodeReset": {
+    "description": "A control surface action: put every control of the current grade node back."
+  },
+  "surfaceResetWheel": "Reset {wheel}",
+  "@surfaceResetWheel": {
+    "description": "A control surface action: put one grading wheel back, as in Reset Lift.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceGradeBypass": "Bypass grade",
+  "@surfaceGradeBypass": {
+    "description": "A control surface action: show the shot without its grade, or with it again."
+  },
+  "surfaceStillGrab": "Grab still",
+  "@surfaceStillGrab": {
+    "description": "A control surface action: keep the frame on screen and its grade in the gallery."
+  },
+  "surfacePlayStop": "Play or stop",
+  "@surfacePlayStop": {
+    "description": "A control surface action: start or stop playback."
+  },
+  "surfaceFrameBack": "Back a frame",
+  "@surfaceFrameBack": {
+    "description": "A control surface action: move the playhead one frame back."
+  },
+  "surfaceFrameForward": "Forward a frame",
+  "@surfaceFrameForward": {
+    "description": "A control surface action: move the playhead one frame on."
+  },
+  "surfacePageWheels": "Wheels page",
+  "@surfacePageWheels": {
+    "description": "A control surface action: show the Grade panel's wheels as wheels."
+  },
+  "surfacePageBars": "Bars page",
+  "@surfacePageBars": {
+    "description": "A control surface action: show the Grade panel's wheels as bars."
+  },
+  "surfacePageLog": "Log page",
+  "@surfacePageLog": {
+    "description": "A control surface action: show the Grade panel's log wheels."
+  },
   "gradeWheels": "Wheels",
   "@gradeWheels": {
     "description": "Grade panel: the page with the colour wheels, and the wheel mode that draws them as wheels."
@@ -29895,6 +30132,10 @@
   "@panelShots": {
     "description": "Name of the panel that lists every shot of the composition in time order, a graded picture each. A tab title and a Window > Panels row."
   },
+  "menuGrade": "Grade",
+  "@menuGrade": {
+    "description": "Layer menu: the submenu holding the commands on the current shot's grade (add nodes, bypass, reset, grab a still, auto balance, export a LUT)."
+  },
   "gradeStillsAlbum": "Stills",
   "@gradeStillsAlbum": {
     "description": "The name given to the first album of stills, made when Grab still is used before any album exists."
@@ -29970,6 +30211,66 @@
   "gradeFilterUngraded": "Ungraded",
   "@gradeFilterUngraded": {
     "description": "Shots panel header filter: only the shots with no grade switched on."
+  },
+  "keyCopyTheShotSGrade": "Copy the shot's grade",
+  "@keyCopyTheShotSGrade": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Puts the current shot's colour effects on the effect clipboard. The shot is the clip picked in the Cut timeline, else the selected layer."
+  },
+  "keyPasteTheGradeOntoThePickedShots": "Paste the grade onto the picked shots",
+  "@keyPasteTheGradeOntoThePickedShots": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The grade on the clipboard takes the place of the grade on every picked clip or selected layer."
+  },
+  "keyAddASerialNode": "Add a serial node",
+  "@keyAddASerialNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction after the current grade node, grading what it makes."
+  },
+  "keyAddAParallelNode": "Add a parallel node",
+  "@keyAddAParallelNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction beside the current grade node, reading the same picture; their changes are added together."
+  },
+  "keyAddALayerNode": "Add a layer node",
+  "@keyAddALayerNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction beside the current grade node, laid over it."
+  },
+  "keyAddAnOutsideNode": "Add an outside node",
+  "@keyAddAnOutsideNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction that grades everything outside the current node's key."
+  },
+  "keyChangeTheMatteView": "Change the matte view",
+  "@keyChangeTheMatteView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Steps the Viewer through off, highlight (the picture only where the node's key is) and the key in black and white."
+  },
+  "keyGrabAStill": "Grab a still",
+  "@keyGrabAStill": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Keeps the frame at the playhead and the shot's grade in the Gallery."
+  },
+  "keyPreviousShot": "Previous shot",
+  "@keyPreviousShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the shot before the current one current."
+  },
+  "keyNextShot": "Next shot",
+  "@keyNextShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the shot after the current one current."
+  },
+  "keyFirstShot": "First shot",
+  "@keyFirstShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the first shot of the composition current."
+  },
+  "keyLastShot": "Last shot",
+  "@keyLastShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the last shot of the composition current."
+  },
+  "keyApplyThePreviousShotSGrade": "Apply the previous shot's grade",
+  "@keyApplyThePreviousShotSGrade": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. The grade of the shot before the current one takes the place of its grade."
+  },
+  "keyShowOrHideTheReference": "Show or hide the reference",
+  "@keyShowOrHideTheReference": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Shows or hides the still or shot the Viewer compares the picture with."
+  },
+  "keyColourPanels": "Colour panels",
+  "@keyColourPanels": {
+    "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Colour workspace's grading panels: Grade, Grade nodes, Shots and Gallery."
   },
   "histApplyGrade": "Apply grade",
   "@histApplyGrade": {
@@ -30266,6 +30567,14 @@
       }
     }
   },
+  "keyApplyTheGradeFromTwoShotsBack": "Apply the grade from two shots back",
+  "@keyApplyTheGradeFromTwoShotsBack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. The grade of the shot two before the current one takes the place of its grade."
+  },
+  "keyShowOrHideTheLightbox": "Show or hide the Lightbox",
+  "@keyShowOrHideTheLightbox": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. The Shots panel fills the window as a grid of large pictures, or goes back."
+  },
   "histApplyMemory": "Apply memory",
   "@histApplyMemory": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a kept grade memory put on shots in place of their grade."
@@ -30389,6 +30698,10 @@
   "gradeQualClear": "Clear",
   "@gradeQualClear": {
     "description": "Button at the end of the Keep or Drop row on the Grade panel's Qualifier page in 3D mode: forget those samples."
+  },
+  "surfacePageHdr": "HDR page",
+  "@surfacePageHdr": {
+    "description": "A control surface action: show the Grade panel's HDR zone wheels."
   },
   "gradeBackdropGrey": "Over grey",
   "@gradeBackdropGrey": {

@@ -776,10 +776,10 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.76, 0.24],
         ),
-      // Project and Effects & presets tabbed on the left; the Viewer in the
-      // centre with Scopes under it, wide, the way a waveform wants to be
-      // read; the Grade panel full height on the right with Effect controls
-      // one tab behind it; the Timeline at the one height.
+      // A colourist's page: the Gallery and Project on the left, the Viewer
+      // over the shots in the centre, Grade nodes over Scopes on the right,
+      // and the Grade panel along the bottom with the Timeline one tab
+      // behind it, at Edit's height so the lanes stay put.
       WorkspacePreset.colour => DockSplit(
           DockAxis.vertical,
           [
@@ -787,25 +787,35 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
               DockAxis.horizontal,
               [
                 DockTabs([
+                  DockPane(Panel.gallery),
                   DockPane(Panel.project),
-                  DockPane(Panel.effectsAndPresets),
                 ]),
                 DockSplit(
                   DockAxis.vertical,
                   [
                     DockPane(Panel.viewer),
+                    DockPane(Panel.shots),
+                  ],
+                  [0.74, 0.26],
+                ),
+                DockSplit(
+                  DockAxis.vertical,
+                  [
+                    DockTabs([
+                      DockPane(Panel.gradeNodes),
+                      DockPane(Panel.effectControls),
+                    ]),
                     DockPane(Panel.scopes),
                   ],
-                  [0.62, 0.38],
+                  [0.42, 0.58],
                 ),
-                DockTabs([
-                  DockPane(Panel.grade),
-                  DockPane(Panel.effectControls),
-                ]),
               ],
-              [0.16, 0.56, 0.28],
+              [0.17, 0.53, 0.30],
             ),
-            DockPane(Panel.timeline),
+            DockTabs([
+              DockPane(Panel.grade),
+              DockPane(Panel.timeline),
+            ]),
           ],
           [0.68, 0.32],
         ),

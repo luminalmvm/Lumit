@@ -19,6 +19,7 @@ use std::str::FromStr;
 
 pub mod after_effects;
 pub mod defaults;
+mod grade;
 
 /// Something a chord can be bound to, identified by a stable string (e.g.
 /// `"playback.toggle"`). A string — not a giant enum — so new commands never
@@ -75,6 +76,15 @@ impl ActionId {
         }
         if let Some(n) = self.0.strip_prefix("multicam.switch.") {
             return format!("Switch to angle {n}");
+        }
+        if let Some(n) = self.0.strip_prefix("grade.memory.apply.") {
+            return format!("Apply memory {n}");
+        }
+        if let Some(n) = self.0.strip_prefix("grade.memory.store.") {
+            return format!("Keep the grade in memory {n}");
+        }
+        if let Some(known) = grade::description(&self.0) {
+            return known.to_string();
         }
         let known = match self.0.as_str() {
             // Transport and navigation.
@@ -266,8 +276,6 @@ impl ActionId {
             "effect.remove.all" => "Remove every effect from the selected layers",
             "effect.learn" => "Learn the noise",
             "effect.listen" => "Show only what the effect removes",
-            "grade.copy" => "Copy the layer's grade",
-            "grade.paste" => "Paste the grade onto the selected layers",
             "layer.precompose" => "Precompose the layer",
             "layer.group" => "Group the selected layers",
             "layer.stabilise" => "Stabilise the selected layers",

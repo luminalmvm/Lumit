@@ -2724,7 +2724,7 @@ List<List<Panel>> panelGroups(DockNode root) {
       Panel.effectControls,
       Panel.effectsAndPresets,
     ],
-    [Panel.scopes, Panel.grade],
+    [Panel.scopes, Panel.grade, Panel.gradeNodes, Panel.shots, Panel.gallery],
     [Panel.graph, Panel.node],
     [Panel.mixer, Panel.audio, Panel.audioTimeline],
     [Panel.cutTimeline, Panel.transcript],
