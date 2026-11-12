@@ -19,14 +19,17 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../shell/settings_window_frb.dart';
+import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart' show TrackSpanBar;
 import 'status_poller.dart';
@@ -81,6 +84,8 @@ String rotoStatusSentence(BridgeRotoStatus? status) {
           : l10n.rotoSolving(status.done, status.total);
     case BridgeRotoStage.done:
     case BridgeRotoStage.cancelled:
+      // Every stroke undone: the card says so, whatever run is still held.
+      if (status.baseFrame == null) return l10n.rotoNoStrokes;
       return _span(status);
     case BridgeRotoStage.failed:
       return status.failure == null ? '' : rotoFailureSentence(status.failure!);
@@ -111,7 +116,7 @@ String _span(BridgeRotoStatus status) {
 int rotoCoveredFrames(BridgeRotoStatus status) {
   final first = status.firstFrame;
   final last = status.lastFrame;
-  if (first == null || last == null) return 0;
+  if (first == null || last == null || status.baseFrame == null) return 0;
   return (last - first + 1).clamp(0, status.clipFrames);
 }
 
@@ -180,6 +185,33 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb>
   @override
   bool shouldResample(RotoDisplayFrb old) =>
       old.pressed != widget.pressed || old.effectId != widget.effectId;
+
+  // The strokes live in the instance, which none of the card's own inputs
+  // carry, so a stroke, an undo or a solve landing in the Viewer is read here:
+  // once per revision while the card is open, never per rebuild.
+  late final Listenable _edits;
+
+  @override
+  void initState() {
+    super.initState();
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _edits = Listenable.merge([ui.model, ui.solveLanded])..addListener(_edited);
+  }
+
+  @override
+  void dispose() {
+    _edits.removeListener(_edited);
+    super.dispose();
+  }
+
+  void _edited() {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => sample());
+    } else {
+      sample();
+    }
+  }
 
   @override
   bool isMoving(BridgeRotoStatus? status) => switch (status?.stage) {
