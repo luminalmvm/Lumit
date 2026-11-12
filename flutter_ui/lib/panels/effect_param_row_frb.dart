@@ -2506,9 +2506,10 @@ class EffectPointRowFrb extends StatelessWidget {
   /// Whether the pair takes the **position dropper**, and in what unit a pick
   /// writes — read off the declaration, never off the parameter's id.
   ///
-  /// `null` is no dropper. `Px` writes comp PIXELS (fraction × comp size, read
-  /// at CLICK time, never in a rebuild), and `Percent` writes
-  /// fraction × 100, which is what Radial blur's Centre has always been. Every
+  /// `null` is no dropper. `Px` writes the layer's own pixels (fraction × its
+  /// frame), or comp pixels where the effect has no layer box on the picture
+  /// (fraction × comp size, read at CLICK time, never in a rebuild).
+  /// `Percent` writes fraction × 100, of the same frame. Every
   /// other unit gets no crosshair: a point picked off the picture is a
   /// *position*, and no arrangement of degrees or seconds is one.
   ///
@@ -2749,6 +2750,8 @@ class EffectPointRowFrb extends StatelessWidget {
               // fraction × comp size; a `Percent` pair writes
               // fraction × 100 — which is the same sum with the comp's size
               // set to a hundred, so there is one arithmetic here and not two.
+              // A pick in the layer's own pixels says its frame, and a `Px`
+              // pair takes that instead.
               //
               // The size is read **once, when the tool is armed** — a tap, and
               // so an edit rather than a rebuild. It used to be read
@@ -2765,6 +2768,20 @@ class EffectPointRowFrb extends StatelessWidget {
                   return; // the comp has gone; do not arm at all
                 }
               }
+              double ofX(DropperSample s) =>
+                  s.xFrac * (pickPixels ? (s.frame?.width ?? spanX) : spanX);
+              double ofY(DropperSample s) =>
+                  s.yFrac * (pickPixels ? (s.frame?.height ?? spanY) : spanY);
+              // An effect runs on its layer's picture before the transform,
+              // so its point is in that layer's own pixels. Only an effect in
+              // the layer's own stack: one on a clip inside it is not.
+              final owner = ownerLayerId;
+              final pointLayer = owner != null &&
+                      ui.model.layers.any((e) =>
+                          e.layer.internallayerId == owner &&
+                          e.info.effects.any((fx) => fx.id == id))
+                  ? owner
+                  : null;
               // Both halves at once, so a pick is never scaled by the chain:
               // it is a position, and a position is stated rather than nudged.
               //
@@ -2784,14 +2801,15 @@ class EffectPointRowFrb extends StatelessWidget {
                 id: 'fx-$id-${xParam.id}',
                 reads: DropperReads.position,
                 label: stem,
+                pointLayer: pointLayer,
                 // **The drag is the pick**: the point follows the
                 // pointer through the preview, and the release states it once.
                 onPreview: (sample) {
-                  onLive(id, xParam.id, at(sx, sample.xFrac * spanX));
-                  onLive(id, yParam.id, at(sy, sample.yFrac * spanY));
+                  onLive(id, xParam.id, at(sx, ofX(sample)));
+                  onLive(id, yParam.id, at(sy, ofY(sample)));
                 },
-                onPick: (sample) => writeBoth(
-                    at(sx, sample.xFrac * spanX), at(sy, sample.yFrac * spanY)),
+                onPick: (sample) =>
+                    writeBoth(at(sx, ofX(sample)), at(sy, ofY(sample))),
                 // Abandoned: the two numbers the row had, back through the
                 // same preview path. Nothing was committed either half.
                 onRevert: (sx == null || sy == null)

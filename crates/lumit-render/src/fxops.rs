@@ -1389,6 +1389,7 @@ pub fn run_ops(
                         }),
                     neighbours,
                 },
+                AuxKind::FlowFields => AuxData::FlowFields(flow_fields, neighbours),
             };
             let aux = AuxSlot::new(
                 data,
@@ -1945,6 +1946,7 @@ fn op_keys(
                 }
                 Some(AuxKind::FlowField) => broken = true,
                 Some(AuxKind::None) | None => {}
+                Some(_) => broken = true,
             }
             if broken {
                 return None;

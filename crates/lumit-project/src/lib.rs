@@ -2544,6 +2544,18 @@ mod tests {
         );
     }
 
+    /// **A number comes back as the bits it went in as.** Every row in a
+    /// project is a double, and one written with all seventeen digits used to
+    /// open a hair off (the reader rounded the last digit its own way), so a
+    /// reopened project did not quite match the one that was saved.
+    #[test]
+    fn a_saved_number_opens_to_the_same_bits() {
+        let x = f64::from(25.058_956_f32);
+        let text = serde_json::to_string(&x).unwrap();
+        let back: f64 = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.to_bits(), x.to_bits(), "{text} opened as {back}");
+    }
+
     #[test]
     fn save_open_round_trip_and_no_temp_litter() {
         let dir = tempfile::tempdir().unwrap();

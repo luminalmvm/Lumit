@@ -378,6 +378,10 @@ pub fn fire_effect_action(
     param: String,
     frame: Option<u64>,
 ) -> Result<(), BridgeError> {
+    // The clean-up effects' Learn, on the layer's stack or one of its clips'.
+    if let Some(pressed) = crate::api::denoise::try_press(&layer, effect, &param, frame) {
+        return pressed;
+    }
     let item = layer.item()?;
     let fx = item
         .effects

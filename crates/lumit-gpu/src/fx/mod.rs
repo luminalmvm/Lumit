@@ -16,6 +16,8 @@ pub mod colour;
 pub mod common;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
+/// Denoise's passes, built on first use.
+pub mod denoise;
 pub mod depth_points;
 pub mod distort;
 pub mod dof;
@@ -50,6 +52,9 @@ pub mod timewarp;
 pub mod utility;
 pub mod volumetric;
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod denoise_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;

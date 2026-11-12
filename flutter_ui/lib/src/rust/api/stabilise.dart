@@ -11,7 +11,6 @@ import 'package:uuid/uuid.dart';
 import 'track.dart';
 
 // These functions are ignored because they are not marked as `pub`: `asked_for`, `asked`, `commit_instance`, `failure_of`, `idle`, `instance`, `job_of`, `press`, `set`, `stage_of`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Asked`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 /// How `effect` on `layer` is getting on.

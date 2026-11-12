@@ -67,6 +67,7 @@ pub mod fxops;
 /// The GPU dispatch table for migrated effects (docs/impl/effect-registry.md §2.5).
 pub mod gpufx;
 mod gpufx_crop;
+mod gpufx_denoise;
 mod gpufx_film;
 mod gpufx_jolt;
 mod gpufx_luma_fade;
@@ -106,3 +107,4 @@ pub mod stabilise;
 pub mod standin;
 pub mod track;
 mod trails;
+pub mod voice;

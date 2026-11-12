@@ -61,6 +61,8 @@ pub enum AuxKind {
     /// The layer's decoded motion — the dense field and the neighbour frames
     /// beside it, both whole, never per-op.
     FlowField,
+    /// Every motion field measured, by offset, and the neighbour frames.
+    FlowFields,
 }
 
 /// Everything the render prepared beside one op: the [`AuxData`] its
@@ -77,7 +79,7 @@ pub enum AuxKind {
 /// consumes the matte — one seam, whatever else the effect happens to need.
 #[derive(Clone, Copy)]
 pub struct AuxSlot<'a> {
-    data: AuxData<'a>,
+    pub(crate) data: AuxData<'a>,
     matte: Option<&'a Tex>,
     /// This op's matte **whatever its role** — including the generic strength
     /// one, whose texture is spent in the dissolve beside the dispatch and so
@@ -126,6 +128,8 @@ pub enum AuxData<'a> {
         field: Option<&'a Tex>,
         neighbours: &'a [(i32, Tex)],
     },
+    /// Every field by offset, at its measured size, then the neighbour frames.
+    FlowFields(&'a [(i32, Tex)], &'a [(i32, Tex)]),
 }
 
 impl<'a> AuxSlot<'a> {
@@ -282,7 +286,9 @@ impl<'a> AuxSlot<'a> {
     pub fn neighbours(self) -> &'a [(i32, Tex)] {
         match self.data {
             AuxData::Neighbours(n) => n,
-            AuxData::FlowField { neighbours, .. } => neighbours,
+            AuxData::FlowField { neighbours, .. } | AuxData::FlowFields(_, neighbours) => {
+                neighbours
+            }
             _ => &[],
         }
     }
@@ -451,6 +457,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_luma_fade::LumaFadeFx,
     &crate::gpufx_srgb_curve::SrgbCurveFx,
     &crate::gpufx_timewarp::TimewarpFx,
+    &crate::gpufx_denoise::DenoiseFx,
     &RadialWipe,
     &VenetianBlinds,
     &IrisWipe,

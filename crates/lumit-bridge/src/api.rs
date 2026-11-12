@@ -20,6 +20,7 @@ pub mod colour;
 pub mod comp_graph;
 pub mod composition;
 pub mod cut;
+pub mod denoise;
 pub mod drive;
 pub mod effect;
 pub mod effect_duplicate;

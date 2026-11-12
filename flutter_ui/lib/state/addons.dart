@@ -146,7 +146,8 @@ class Addon {
   /// What the whole addon weighs, for the size on the row.
   final int sizeBytes;
 
-  /// What a model pack does: `depth`, `matte`, `segmentation` or `synthesis`.
+  /// What a model pack does: `depth`, `matte`, `segmentation`, `synthesis`
+  /// or `voice`.
   /// Empty for the runtime.
   final String task;
 
@@ -714,7 +715,7 @@ List<Map<String, dynamic>>? downloadsFor(
 }
 
 /// The files a manifest puts in the addon's folder: every download's `dest`,
-/// and every name a zip download takes out of its archive.
+/// and every name a zip or tar.gz download takes out of its archive.
 List<String> packFileNames(Map<String, dynamic> manifest, String platformKey) {
   final out = <String>[];
   for (final download in downloadsFor(manifest, platformKey) ?? const []) {

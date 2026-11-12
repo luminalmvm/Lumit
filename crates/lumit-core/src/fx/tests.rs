@@ -6659,6 +6659,10 @@ fn every_parameter_declares_a_unit() {
             ("radial_blur", "centre_x"),
             ("radial_blur", "centre_y"),
             ("sharpen", "radius"),
+            // Denoise's sample is a place on the picture and a side.
+            ("denoise", "sample_x"),
+            ("denoise", "sample_y"),
+            ("denoise", "sample_size"),
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
             ("sprite_flare", "light_z"),
@@ -7745,6 +7749,9 @@ fn every_effect_carries_a_matte_row() {
                 // as deep inside an effect's own maths as a matte gets — it
                 // decides the set rather than fading the picture that set drew.
                 | "scatter"
+                // Denoise: the matte scales how much noise is taken, so the
+                // Removed noise view shows what the matte lets through.
+                | "denoise"
         );
         assert_eq!(
             !s.matte.generic(),

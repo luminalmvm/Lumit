@@ -367,14 +367,16 @@ pub(crate) fn build_plan(
 }
 
 /// What a rack's sound depends on that its job does not carry: which plugins
-/// are switched off for now (AP5). A change here empties the bakes,
-/// so flicking the switch runs the racks again.
+/// are switched off for now (AP5), and whether the Voice addon is installed.
+/// A change here empties the bakes, so flicking the switch runs the racks
+/// again.
 fn rack_stamp() -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     if let Ok(disabled) = lumit_aplug::ipc::broker::session_disabled().lock() {
         format!("{disabled:?}").hash(&mut h);
     }
+    lumit_render::voice::installed().hash(&mut h);
     h.finish()
 }
 
@@ -575,7 +577,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::model::Document>) {
         }
         return;
     }
-    let sig = jobs_signature(&jobs, duration_s, master_db);
+    let sig = jobs_signature(&jobs, duration_s, master_db) ^ lumit_render::voice::stamp();
     {
         let st = lock();
         if st.loaded_comp == Some(comp) && st.loaded_sig == Some(sig) {

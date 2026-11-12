@@ -1,0 +1,55 @@
+---
+title: Click removal
+description: "Finds clicks, crackle and mouth clicks and fills them in from the sound around them."
+---
+
+Click removal is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Finds the short bursts a recording should not have, such as digital clicks, crackle and the
+clicks of a mouth, and rebuilds each one from the sound either side of it. A burst longer
+than **Maximum length**, like a drum or a consonant, is left alone.
+
+The display above the controls draws the two seconds around the playhead and marks the
+clicks it finds there. Under it is how many.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Type** | Dropdown | Clicks · Crackle · Mouth clicks | Clicks | - |
+| **Sensitivity** | Slider | 1 to 10 | 5 | - |
+| **Maximum length** | Slider | 0.1 to 10 | 2 | - |
+| **Widen** | Slider | 0 to 5 | 0 | - |
+| **Clicks only** | Checkbox | On or off | Off | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Type**: what is looked for. **Clicks** is single clicks. **Crackle** looks a second time
+  for the small clicks the large ones hid. **Mouth clicks** looks at the sound above 2 kHz,
+  with Maximum length at 3 milliseconds or more.
+- **Sensitivity**: how readily a burst counts as a click.
+- **Maximum length**: the longest a burst can be and still be a click, in milliseconds.
+- **Widen**: how far either side of a click the repair reaches, in milliseconds.
+- **Clicks only**: plays what is taken away.
+
+**Effect ▸ Only what is removed** (`Alt+N`) switches **Clicks only**.
+
+## Related
+
+- [Cleaning up a noisy shot and its sound](/tutorials/clean-up-a-noisy-shot/)
+- [Noise reduction](/effects/audio/noise-reduction/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

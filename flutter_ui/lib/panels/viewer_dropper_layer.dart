@@ -19,6 +19,7 @@ import '../state/keymap.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/dropper_overlay.dart';
 import '../widgets/escape_ladder.dart';
+import 'viewer_gizmo.dart' show LayerBox;
 
 /// The armed dropper over the picture: the magnifier, the sample-size wheel,
 /// and the **drag** that picks (docs/07 §6.1).
@@ -46,11 +47,16 @@ class DropperLayer extends StatefulWidget {
   /// Where the picture is drawn in this panel, at the current magnification.
   final Rect fitted;
 
+  /// Every layer's box as the gizmo has it, asked for only when a point pick
+  /// lands, so a point in a layer's own pixels goes through that layer's map.
+  final List<LayerBox> Function() boxes;
+
   const DropperLayer({
     super.key,
     required this.comp,
     required this.uiState,
     required this.fitted,
+    required this.boxes,
   });
 
   @override
@@ -103,6 +109,10 @@ class _DropperLayerState extends State<DropperLayer> {
 
   /// Whether a press is down and the pick is being dragged.
   bool _dragging = false;
+
+  /// The box of the layer a point pick is in, read once when the press lands
+  /// so the drag asks nothing more. Null picks in the composition's pixels.
+  LayerBox? _pointBox;
 
   @override
   void initState() {
@@ -392,6 +402,13 @@ class _DropperLayerState extends State<DropperLayer> {
     _syncViewfinder(arm);
     _dragging = true;
     _staged = null;
+    _pointBox = null;
+    final layer = arm.pointLayer;
+    if (arm.reads == DropperReads.position && layer != null) {
+      for (final box in widget.boxes()) {
+        if (box.id == layer && !box.bounds.isEmpty) _pointBox = box;
+      }
+    }
     _stage(arm, local);
   }
 
@@ -410,6 +427,11 @@ class _DropperLayerState extends State<DropperLayer> {
       // it is not held to the picture's edge.
       final fitted = widget.fitted;
       if (fitted.isEmpty) return;
+      // An effect's point is in its layer's own pixels, so the pointer goes
+      // back through that layer's map and is a fraction of its own frame.
+      final box = _pointBox;
+      final at = box == null ? local - fitted.topLeft : box.map.layerOf(local);
+      final size = box?.bounds ?? fitted.size;
       _staged = DropperSample(
         r: 0,
         g: 0,
@@ -417,8 +439,9 @@ class _DropperLayerState extends State<DropperLayer> {
         depth: 0,
         x: 0,
         y: 0,
-        xFrac: (local.dx - fitted.left) / fitted.width,
-        yFrac: (local.dy - fitted.top) / fitted.height,
+        xFrac: at.dx / size.width,
+        yFrac: at.dy / size.height,
+        frame: box?.bounds,
         region: _region,
       );
     } else if (window == null || !_covered(local)) {

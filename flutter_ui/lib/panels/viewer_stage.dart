@@ -51,6 +51,7 @@ import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
+import 'viewer_noise_sample.dart';
 import 'viewer_follow.dart';
 import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
@@ -1260,12 +1261,19 @@ class ViewerStage extends StatelessWidget {
               ViewerEffectPoints(
                 comp: comp,
                 uiState: uiState,
-                fitted: fitted,
-                compSize: Size(
-                  compSize.width.toDouble(),
-                  compSize.height.toDouble(),
-                ),
+                // Locked layers too: a point is still drawn on one.
+                boxes: () => _boxes(locked: true),
                 colour: t.accent,
+                tool: uiState.tools.tool,
+                onChanged: onChanged,
+              ),
+            // Where a selected Denoise measures its noise: a square, moved
+            // and grown like the layer's own box.
+            if (wireframes)
+              ViewerNoiseSample(
+                comp: comp,
+                uiState: uiState,
+                boxes: () => _boxes(locked: true),
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
               ),
@@ -1304,7 +1312,11 @@ class ViewerStage extends StatelessWidget {
             // Above both, because while the dropper is armed the whole
             // picture is a target: a drag handle under the pointer must not
             // take the click that was meant to pick a pixel.
-            DropperLayer(comp: comp, uiState: uiState, fitted: fitted),
+            DropperLayer(
+                comp: comp,
+                uiState: uiState,
+                fitted: fitted,
+                boxes: () => _boxes(locked: true)),
             // The rulers along the top and left edges, and the guides dragged
             // out of them. Over the tool layers, because a guide is
             // grabbed by its own thin strip and a handle underneath must not

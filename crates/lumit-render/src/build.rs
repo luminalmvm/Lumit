@@ -4434,7 +4434,10 @@ fn comp_walk(
                 };
                 let crosses =
                     |o| lumit_core::fx::temporal::cut_between(&nested.layers, st, nested_at(o));
-                flow_below = crate::plan::rebuild_offsets(layer, lt, dt, crosses)
+                let mut offsets = crate::plan::rebuild_offsets(layer, lt, dt, crosses);
+                let names = keys.filter(|_| !driven_inputs(layer));
+                repeats::in_nested(doc, &mut offsets, names, layer, nested, nested_at);
+                flow_below = offsets
                     .into_iter()
                     // None inside a walk that is itself a neighbour.
                     .filter(|_| !with.rebuild)
@@ -4927,37 +4930,22 @@ fn comp_walk(
         // Decoded neighbour frames for a temporal effect (echo), carried from
         // the layer's decode job; empty for a plain stack, and where a
         // composition clip's picture is the source and not the decode.
-        let neighbours: Vec<(i32, Vec<u8>, u32, u32)> = pixels_by_layer
+        let neighbours: Vec<(i32, Arc<Vec<u8>>, u32, u32)> = pixels_by_layer
             .get(&layer.id)
             .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.temporal
                     .iter()
-                    .map(|(o, rgba)| (*o, rgba.clone(), lp.width, lp.height))
+                    .map(|(o, rgba)| (*o, Arc::clone(rgba), lp.width, lp.height))
                     .collect()
             })
             .unwrap_or_default();
         // The dense motion fields, one per offset a flow-consuming effect
-        // asked for, carried from the same decode job (their
-        // `(u, v, conf)` are at the layer's decoded size).
+        // asked for, shared from the same decode job.
         let flow_fields = pixels_by_layer
             .get(&layer.id)
             .filter(|_| comp_clips.is_none())
-            .map(|lp| {
-                lp.flow_fields
-                    .iter()
-                    .map(|(offset, (u, v, conf))| {
-                        (
-                            *offset,
-                            u.clone(),
-                            v.clone(),
-                            conf.clone(),
-                            lp.width,
-                            lp.height,
-                        )
-                    })
-                    .collect()
-            })
+            .map(|lp| lp.flow_fields.clone())
             .unwrap_or_default();
         // A Shape or Text layer's picture is only as big as its art, so the
         // points effects its stack ends on are given room round it to draw
@@ -6871,7 +6859,7 @@ fn adjustment_flow_below(
     i32,
     Vec<CompLayerDraw>,
     Option<lumit_core::model::CameraPose>,
-    Option<i32>,
+    Option<(i32, lumit_core::fx::temporal::FlowWant)>,
 )> {
     // The comp's own frame interval: the shutter this effect smears over is a
     // frame of the render, not a frame of some source nobody here has.
@@ -6885,7 +6873,10 @@ fn adjustment_flow_below(
             lumit_core::time::frames_on(t_comp, o, dt),
         )
     };
-    crate::plan::rebuild_offsets(layer, lt, dt, crosses)
+    let mut offsets = crate::plan::rebuild_offsets(layer, lt, dt, crosses);
+    let at = |o| lumit_core::time::frames_on(t_comp, o, dt);
+    repeats::below(doc, &mut offsets, keys, comp, idx, at);
+    offsets
         .into_iter()
         .map(|(offset, measure)| {
             let (draws, camera) = below_draws_cloned(
@@ -7180,6 +7171,7 @@ mod energy_line_path;
 mod moments;
 pub(crate) mod motion_blur;
 mod puppet_warp;
+mod repeats;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -9243,7 +9235,7 @@ mod render_below_at_tests {
             source_key: 0,
             source_frame: 0,
         };
-        let neighbour = || flat(ORANGE).rgba.to_vec();
+        let neighbour = || Arc::clone(&flat(ORANGE).rgba);
         let moment = || Some(Box::new(flat(ORANGE)));
         let mut lp = flat(GREY);
         lp.temporal = job
@@ -9659,6 +9651,7 @@ mod render_below_at_tests {
     // window, and only a flow consumer's offset is measured.
     #[test]
     fn only_a_temporal_stack_on_a_precomp_pays_for_neighbours() {
+        use lumit_core::fx::temporal::FlowWant;
         use lumit_core::model::ProjectItem;
         let mut doc = Document::new();
         let (footage, probes) = clip(&mut doc);
@@ -9686,7 +9679,7 @@ mod render_below_at_tests {
                 Some(&|_, _, _, _| held),
             )
         };
-        let rebuilds = |comp: &Composition| -> Vec<(i32, Option<i32>)> {
+        let rebuilds = |comp: &Composition| -> Vec<(i32, Option<(i32, FlowWant)>)> {
             let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
             let mut v = vec![comp.id];
             build_comp_draws(
@@ -9738,7 +9731,11 @@ mod render_below_at_tests {
         assert!(!job.shutter.is_empty());
 
         // Motion blur still gets its measurement.
-        assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, Some(1))]);
+        let full = FlowWant::Full;
+        assert_eq!(
+            rebuilds(&precomp(&["motion_blur"])),
+            vec![(1, Some((1, full)))]
+        );
     }
 
     // Echo on a Precomp layer had the same fault as the plugin: every tap

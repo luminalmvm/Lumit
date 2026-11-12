@@ -144,6 +144,7 @@ Map<String, String> get _built => {
       "Waveform": l10n.fxWaveform,
       "B": l10n.fxB,
       "Background": l10n.fxBackground,
+      "Background only": l10n.fxBackgroundOnly,
       "Backwards": l10n.fxBackwards,
       "Balance": l10n.fxBalance,
       "Band 1 Q": l10n.fxBand1Q,
@@ -263,6 +264,36 @@ Map<String, String> get _built => {
       "Edge": l10n.fxEdge,
       "Edge margin": l10n.fxEdgeMargin,
       "Edit lens…": l10n.fxEditLens,
+      // Denoise: its controls, views and groups.
+      "Denoise": l10n.fxDenoise,
+      "Removed noise": l10n.fxRemovedNoise,
+      "Frames blended": l10n.fxFramesBlended,
+      "Learn": l10n.fxLearn,
+      "Sample x": l10n.fxSampleX,
+      "Sample y": l10n.fxSampleY,
+      "Sample size": l10n.fxSampleSize,
+      "Luma noise": l10n.fxLumaNoise,
+      "Chroma noise": l10n.fxChromaNoise,
+      "Luma fine": l10n.fxLumaFine,
+      "Luma medium": l10n.fxLumaMedium,
+      "Luma coarse": l10n.fxLumaCoarse,
+      "Luma broad": l10n.fxLumaBroad,
+      "Chroma fine": l10n.fxChromaFine,
+      "Chroma medium": l10n.fxChromaMedium,
+      "Chroma coarse": l10n.fxChromaCoarse,
+      "Chroma broad": l10n.fxChromaBroad,
+      "Follow motion": l10n.fxFollowMotion,
+      "Temporal strength": l10n.fxTemporalStrength,
+      "Chroma": l10n.fxChroma,
+      "Fine": l10n.fxFine,
+      "Medium": l10n.fxMedium,
+      "Coarse": l10n.fxCoarse,
+      "Broad": l10n.fxBroad,
+      "Noise by size": l10n.fxNoiseBySize,
+      "Noise by tone": l10n.fxNoiseByTone,
+      "Spatial": l10n.fxSpatial,
+      "Spatial by size": l10n.fxSpatialBySize,
+      "Finish": l10n.fxFinish,
       // Energy line: its controls, its noise types and its looks.
       "Paths": l10n.fxPaths,
       "One after another": l10n.fxOneAfterAnother,
@@ -748,9 +779,35 @@ Map<String, String> get _built => {
       "Up": l10n.fxUp,
       "Units": l10n.fxUnits,
       "Vibrato": l10n.fxVibrato,
+      "Voice": l10n.fxVoice,
+      "Voice isolation": l10n.fxVoiceIsolation,
       "Voices": l10n.fxVoices,
       "Wah": l10n.fxWah,
       "Wet": l10n.fxWet,
+      "Noise reduction": l10n.fxNoiseReduction,
+      "Adaptive": l10n.fxAdaptive,
+      "Tonal reduction": l10n.fxTonalReduction,
+      "Noise only": l10n.fxNoiseOnly,
+      "Reduction": l10n.fxReduction,
+      "Hum removal": l10n.fxHumRemoval,
+      "Find frequency": l10n.fxFindFrequency,
+      "Harmonics": l10n.fxHarmonics,
+      "Slope": l10n.fxSlope,
+      "Hum only": l10n.fxHumOnly,
+      "Click removal": l10n.fxClickRemoval,
+      "Clicks": l10n.fxClicks,
+      "Mouth clicks": l10n.fxMouthClicks,
+      "Maximum length": l10n.fxMaximumLength,
+      "Widen": l10n.fxWiden,
+      "Clicks only": l10n.fxClicksOnly,
+      "De-esser": l10n.fxDeEsser,
+      "Whole sound": l10n.fxWholeSound,
+      "Sibilance only": l10n.fxSibilanceOnly,
+      "Reverb reduction": l10n.fxReverbReduction,
+      "Find reverb time": l10n.fxFindReverbTime,
+      "Reverb time": l10n.fxReverbTime,
+      "Best quality": l10n.fxBestQuality,
+      "Reverb only": l10n.fxReverbOnly,
       "Work area": l10n.fxWorkArea,
       "sRGB": l10n.fxSrgb,
       "sRGB curve": l10n.fxSrgbCurve,
@@ -2055,6 +2112,9 @@ Map<String, String> get _built => {
       "Apply the last effect again": l10n.keyApplyTheLastEffectAgain,
       "Remove every effect from the selected layers":
           l10n.keyRemoveEveryEffectFromTheSelectedLayers,
+      "Learn the noise": l10n.keyLearnTheNoise,
+      "Show only what the effect removes":
+          l10n.keyShowOnlyWhatTheEffectRemoves,
       "New Solid layer": l10n.keyNewSolidLayer,
       "New Text layer": l10n.keyNewTextLayer,
       "New Camera layer": l10n.keyNewCameraLayer,
@@ -2773,6 +2833,10 @@ String? effectBadge(String key, [String? detail]) {
   switch (key) {
     case 'plugin_failed':
       return l10n.badgePluginFailed;
+    // Voice isolation given more sound than it will take. The sound plays
+    // unchanged, and the headline says what to do.
+    case 'too_long':
+      return l10n.badgeVoiceTooLong;
     case 'plugin_disabled':
       return l10n.badgePluginDisabled;
     case 'plugin_missing':
@@ -2811,7 +2875,7 @@ bool hasEffectBadge(String key) => effectBadge(key) != null;
 
 /// What a model pack does, for the line under its name on the Addons page.
 ///
-/// The word arrives as one of the four tasks a pack may declare in its manifest
+/// The word arrives as one of the six tasks a pack may declare in its manifest
 /// (docs/impl/addons.md §4). A task this build has no word for comes back as it
 /// arrived, which is what a catalogue written for a newer Lumit would send.
 String addonTask(String task) {
@@ -2826,6 +2890,8 @@ String addonTask(String task) {
       return l10n.addonTaskSegmentation;
     case 'speech':
       return l10n.addonTaskSpeech;
+    case 'voice':
+      return l10n.addonTaskVoice;
     default:
       return task;
   }

@@ -294,6 +294,9 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // whatever frame it landed on.
             ("radial_blur" | "sprite_flare", "centre_x") | ("jolt", "origin_x") => w * 0.5,
             ("radial_blur" | "sprite_flare", "centre_y") | ("jolt", "origin_y") => h * 0.5,
+            // Denoise's sample starts in the middle until Learn moves it.
+            ("denoise", "sample_x") => w * 0.5,
+            ("denoise", "sample_y") => h * 0.5,
             // Card wipe's Transition width is a distance across the frame,
             // and its declared half-a-frame default is only *half a frame* on
             // the comp it landed on. The default Flip order runs left to
