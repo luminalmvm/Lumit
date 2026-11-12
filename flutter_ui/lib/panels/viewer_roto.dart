@@ -278,6 +278,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     UuidValue? effect,
     int view,
     bool armed,
+    UuidValue? layer,
   })? _asked;
 
   VoidCallback? _escapeRelease;
@@ -386,6 +387,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       // A node graph's brush is found by the read itself, so arming the tool
       // is a reason to read there. A layer's arrives from the Viewer.
       armed: graph != null && widget.active,
+      // The layer in hand, so arming the brush or picking another layer reads
+      // that layer's frame. Without it the first stroke was refused.
+      layer: box?.layer.internallayerId,
     );
     if (_asked == next) return;
     _asked = next;
