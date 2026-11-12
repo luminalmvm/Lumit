@@ -3430,7 +3430,20 @@ impl LayerReference {
     pub fn copy_effects(&self, effects: Vec<Uuid>) -> Result<String, BridgeError> {
         let layer = self.leaving()?;
         let graph = layer.graph;
-        let stack = layer.effects;
+        // A Cut clip's effects live in the clip, so ids none of the layer's
+        // effects hold find the clip that holds them.
+        let stack = match layer.kind {
+            lumit_core::model::LayerKind::Sequence { clips }
+                if !effects.is_empty()
+                    && !layer.effects.iter().any(|e| effects.contains(&e.id)) =>
+            {
+                clips
+                    .into_iter()
+                    .find(|c| c.effects.iter().any(|e| effects.contains(&e.id)))
+                    .map_or(layer.effects, |c| c.effects)
+            }
+            _ => layer.effects,
+        };
         let full = stack.clone();
         let taken: Vec<_> = if effects.is_empty() {
             stack
