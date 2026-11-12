@@ -773,6 +773,8 @@ impl FxEngine {
             lens_blur: Default::default(),
             lens_dirt: Default::default(),
             film: Default::default(),
+            grade: Default::default(),
+            correction: Default::default(),
             particulate_scene: Default::default(),
             particulate_sim: Default::default(),
             smoke: Default::default(),

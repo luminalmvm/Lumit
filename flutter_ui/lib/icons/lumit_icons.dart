@@ -505,6 +505,16 @@ abstract final class LumitIcons {
   static const String windowCloseRound =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l6 6M11 5l-6 6"/></svg>';
 
+  // --- Grade ---
+  static const String pickAdd =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5l.7-2.4 4.3-4.3 1.7 1.7-4.3 4.3z"/><path d="M8.5 3.9a1.5 1.5 0 0 1 2.4 2.4l-1.4 1.4-2.4-2.4z"/><path d="M12 10v4M10 12h4"/></svg>';
+  static const String pickSubtract =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5l.7-2.4 4.3-4.3 1.7 1.7-4.3 4.3z"/><path d="M8.5 3.9a1.5 1.5 0 0 1 2.4 2.4l-1.4 1.4-2.4-2.4z"/><path d="M10 12h4"/></svg>';
+  static const String gradientWindow =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 8h11"/><path d="M2.5 10.5h11M2.5 13h11" opacity=".4"/></svg>';
+  static const String stop =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="8" height="8"/></svg>';
+
   /// Every glyph by its chrome word — the names tooltips and
   /// the Words setting use (docs/15-DESIGN.md §5.1).
   static const Map<String, String> byName = <String, String>{
@@ -710,5 +720,9 @@ abstract final class LumitIcons {
     'Window maximise round': windowMaximiseRound,
     'Window restore round': windowRestoreRound,
     'Window close round': windowCloseRound,
+    'Pick add': pickAdd,
+    'Pick subtract': pickSubtract,
+    'Gradient window': gradientWindow,
+    'Stop': stop,
   };
 }

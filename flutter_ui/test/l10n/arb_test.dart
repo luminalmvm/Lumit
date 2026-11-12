@@ -62,6 +62,10 @@ const _bannedWordIsAnotherSense = {
   'fxPlanarTrack',
   // And Track points follows things in the picture, the verb again.
   'fxTrackPoints',
+  // A grade window following the picture, the verb again.
+  'gradeTrack',
+  'gradeTrackBack',
+  'gradeTrackForwards',
   // The Audio timeline's own column header.
   'columnTrack',
   // The Cut timeline's notices about its own rows.

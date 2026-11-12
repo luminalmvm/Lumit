@@ -217,6 +217,32 @@ pub fn parse_cube(text: &str) -> Result<Lut, LutError> {
     }
 }
 
+/// A 3D cube as `.cube` text that [`parse_cube`] and other grading
+/// applications read: a `TITLE`, the size, the domain, then the rows red
+/// fastest. A quote or a line break in `title` would end the line early, so
+/// they are left out. A value that is not a number is written as nought.
+#[must_use]
+pub fn write_cube(lut: &Lut3d, title: &str) -> String {
+    use std::fmt::Write;
+    let title: String = title
+        .chars()
+        .filter(|c| *c != '"' && !c.is_control())
+        .collect();
+    let mut out = String::with_capacity(lut.data.len().saturating_mul(28).saturating_add(128));
+    let triple = |out: &mut String, key: &str, v: [f32; 3]| {
+        let _ = writeln!(out, "{key} {:.6} {:.6} {:.6}", v[0], v[1], v[2]);
+    };
+    let _ = writeln!(out, "TITLE \"{title}\"");
+    let _ = writeln!(out, "LUT_3D_SIZE {}", lut.size);
+    triple(&mut out, "DOMAIN_MIN", lut.domain_min);
+    triple(&mut out, "DOMAIN_MAX", lut.domain_max);
+    for rgb in &lut.data {
+        let v = rgb.map(|c| if c.is_finite() { c } else { 0.0 });
+        let _ = writeln!(out, "{:.6} {:.6} {:.6}", v[0], v[1], v[2]);
+    }
+    out
+}
+
 /// The transfer function a `.cube` was authored against — the LUT effect's
 /// **Input space** row (docs/08 §3.11).
 ///

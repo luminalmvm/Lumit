@@ -53,6 +53,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -241,4 +242,55 @@ fn a_clips_effects_fade_with_it_through_a_dissolve() {
     assert!(early < 100.0 && late > 0.0, "{early} then {late}");
     assert!(early > late, "less of it as the clip leaves");
     assert_eq!(mix(2.5), None, "and gone with the clip");
+}
+
+/// A grade group's grade reaches a member clip through its reference, names
+/// the frame, and a group that has gone leaves the clip as it was.
+#[test]
+fn a_grade_groups_grade_reaches_its_member_and_names_the_frame() {
+    use lumit_core::fx::effects::grade_group::{reference, Part};
+    use lumit_core::grade::groups::GradeGroup;
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let group = Uuid::now_v7();
+    let (member, comp) = two_clips(|c| c.effects.push(reference(group, Part::Pre).unwrap()));
+    let with = |pre: Vec<lumit_core::model::EffectInstance>| {
+        let mut doc = (*member).clone();
+        doc.grade_groups.push(GradeGroup {
+            id: group,
+            name: "Night".into(),
+            pre,
+            post: Vec::new(),
+            shared: false,
+        });
+        Arc::new(doc)
+    };
+    let inverted = with(vec![
+        lumit_core::fx::builtins::instantiate("invert").unwrap()
+    ]);
+    let empty = with(Vec::new());
+    let mut centre = |doc: &Arc<Document>, frame: u64| {
+        let (px, w, _) = r.render_rgba(doc, comp, frame, 1.0).unwrap();
+        rgb(&px, w, COMP / 2, COMP / 2)
+    };
+
+    let cyan = centre(&inverted, 30);
+    assert!(
+        cyan[0] < 30 && cyan[1] > 200,
+        "the group's Invert reaches the member: {cyan:?}"
+    );
+    let red = centre(&inverted, 90);
+    assert!(
+        red[0] > 200 && red[1] < 30,
+        "and not the clip after: {red:?}"
+    );
+    assert_eq!(centre(&empty, 30), red, "an empty group changes nothing");
+    assert_eq!(centre(&member, 30), red, "nor does one that has gone");
+    assert_ne!(
+        key_of(&inverted, comp, 0.5),
+        key_of(&empty, comp, 0.5),
+        "the group's effects name the member's frame"
+    );
 }

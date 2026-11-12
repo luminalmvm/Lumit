@@ -316,6 +316,14 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // the identity on all the others.
             ("tile", "tile_width" | "output_width") => w,
             ("tile", "tile_height" | "output_height") => h,
+            // A Correction's windows start in the middle at 40% of the frame.
+            ("correction", id) if id.starts_with("win") => match id.rsplit('_').next() {
+                Some("x") => w * 0.5,
+                Some("y") => h * 0.5,
+                Some("w") => w * 0.4,
+                Some("h") => h * 0.4,
+                _ => continue,
+            },
             // Wave 2's Distort II batch (docs/08 §3.55): a Bezier warp's twelve
             // points are the frame's own corners with the handles at the
             // thirds — the patch that is exactly the identity — and every one
@@ -419,6 +427,8 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         // shape for an over-life curve, which is a *look* rather than a no-op
         // (particulate.md §2).
         ParamKind::Curve { default } => EffectValue::Curve(default.to_vec()),
+        // A fresh outline has no points: the user draws them.
+        ParamKind::Shape => EffectValue::Shape(Vec::new()),
         // A button holds nothing — see the doc comment above.
         ParamKind::Action => return None,
     })

@@ -243,6 +243,8 @@ pub enum LayerInputDraw {
     /// The picture an effect above this one in the same stack made, wired into
     /// this one's Matte. `run_ops` keeps it from when that effect ran.
     EffectOutput(uuid::Uuid),
+    /// The key a Correction above this one made, wired into this one's Matte.
+    EffectKey(uuid::Uuid),
     /// Another layer, rendered alone at this raster.
     Layer(DofInputDraw),
     /// One op's whole list of layers, for an effect with more than one layer

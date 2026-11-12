@@ -913,6 +913,19 @@ class Workspace extends ChangeNotifier {
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
+  /// How each Scopes panel is set up, by the panel's instance number: its
+  /// layout, each slot's instrument and options, and the trace brightness.
+  /// Opaque to this file, so the panel decides what it keeps. A panel never
+  /// opened has no entry.
+  final Map<int, Map<String, dynamic>> scopeSetups = {};
+
+  /// Keep a Scopes panel's setup. Saved without notifying: only that panel
+  /// reads it, and it already holds the same values.
+  void setScopeSetup(int instance, Map<String, dynamic> setup) {
+    scopeSetups[instance] = setup;
+    save();
+  }
+
   /// Whether the start-up splash lights its card with the theme's accent
   /// rather than Lumit's own green and blue. Off by default, so the splash
   /// looks like Lumit whatever the chrome.
@@ -1145,6 +1158,15 @@ class Workspace extends ChangeNotifier {
   /// Whether other programs on this computer may drive Lumit through its
   /// live endpoint. Off until the person turns it on.
   bool liveEndpoint = false;
+
+  /// Whether Lumit talks to Tangent panels through Tangent's Hub.
+  bool tangentPanels = false;
+
+  /// The MIDI input ports kept open, by the names the system gives them.
+  List<String> midiInputs = [];
+
+  /// The learned MIDI controls, as `control_surfaces.dart` writes them.
+  List<Map<String, dynamic>> midiMappings = [];
 
   /// Whether the welcome screen opens on launch.
   ///
@@ -1848,6 +1870,21 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setTangentPanels(bool on) {
+    tangentPanels = on;
+    settingsChanged();
+  }
+
+  void setMidiInputs(List<String> names) {
+    midiInputs = names;
+    settingsChanged();
+  }
+
+  void setMidiMappings(List<Map<String, dynamic>> mappings) {
+    midiMappings = mappings;
+    settingsChanged();
+  }
+
   /// Choose the project every new one starts as a copy of, or none.
   void setProjectTemplate(String path) {
     projectTemplate = path;
@@ -2450,6 +2487,9 @@ class Workspace extends ChangeNotifier {
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
         'live_endpoint': liveEndpoint,
+        'tangent_panels': tangentPanels,
+        'midi_inputs': midiInputs,
+        'midi_mappings': midiMappings,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'title_template': titleTemplate,
@@ -2490,6 +2530,9 @@ class Workspace extends ChangeNotifier {
         if (_themesKept != null) 'custom_themes': _themesKept,
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'scope_setups': {
+          for (final e in scopeSetups.entries) '${e.key}': e.value,
+        },
         'themed_splash': themedSplash,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
@@ -2590,6 +2633,17 @@ class Workspace extends ChangeNotifier {
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;
     liveEndpoint = j['live_endpoint'] as bool? ?? false;
+    tangentPanels = j['tangent_panels'] as bool? ?? false;
+    midiInputs = [
+      if (j['midi_inputs'] case final List<dynamic> names)
+        for (final name in names)
+          if (name is String) name,
+    ];
+    midiMappings = [
+      if (j['midi_mappings'] case final List<dynamic> mappings)
+        for (final mapping in mappings)
+          if (mapping is Map<String, dynamic>) mapping,
+    ];
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
@@ -2690,6 +2744,14 @@ class Workspace extends ChangeNotifier {
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    scopeSetups
+      ..clear()
+      ..addAll({
+        if (j['scope_setups'] case final Map<dynamic, dynamic> setups)
+          for (final MapEntry(:key, :value) in setups.entries)
+            if (int.tryParse('$key') case final int n when value is Map)
+              n: value.cast<String, dynamic>(),
+      });
     themedSplash = j['themed_splash'] == true;
     favouriteEffects
       ..clear()

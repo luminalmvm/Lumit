@@ -42,13 +42,13 @@ const List<List<double>> curveIdentity = [
   [1.0, 1.0]
 ];
 
-/// Whether [points] is the identity diagonal, with no bend or moved end.
-bool curveIsIdentity(List<List<double>> points) =>
-    points.length == 2 &&
-    points[0][0] == 0 &&
-    points[0][1] == 0 &&
-    points[1][0] == 1 &&
-    points[1][1] == 1;
+/// Whether [a] and [b] are the same points.
+bool curveIs(List<List<double>> a, List<List<double>> b) =>
+    a.length == b.length &&
+    [
+      for (var i = 0; i < a.length; i++)
+        a[i][0] == b[i][0] && a[i][1] == b[i][1]
+    ].every((same) => same);
 
 /// How far outside the plot a point must be dragged before it is dropped, in
 /// logical pixels. Generous, because losing a point to a twitchy hand is worse
@@ -171,6 +171,9 @@ class CurveEditor extends StatefulWidget {
   /// Rows the panel adds to the right-click menu, under the curve's own.
   final List<Widget> Function(VoidCallback close)? moreRows;
 
+  /// What Reset goes back to.
+  final List<List<double>> rest;
+
   const CurveEditor({
     super.key,
     required this.points,
@@ -180,6 +183,7 @@ class CurveEditor extends StatefulWidget {
     this.line,
     this.warp,
     this.moreRows,
+    this.rest = curveIdentity,
   });
 
   @override
@@ -239,7 +243,7 @@ class _CurveEditorState extends State<CurveEditor> {
     final points = _points;
     // The two ends are never removed, as a drag off the plot does not either.
     final middle = near > 0 && near < points.length - 1;
-    final bent = !curveIsIdentity(points);
+    final bent = !curveIs(points, widget.rest);
     final asText = points.map((p) => p.join(' ')).join(', ');
     showLumitPopup<void>(
       context: context,
@@ -284,7 +288,7 @@ class _CurveEditorState extends State<CurveEditor> {
                   enabled: bent,
                   onPressed: () {
                     done();
-                    widget.onCommit(curveIdentity);
+                    widget.onCommit(widget.rest);
                   },
                   child: MenuLabel(l10n.tipResetCurve,
                       ticked: ticks, enabled: bent),
@@ -731,6 +735,10 @@ class CurveChannelEditor extends StatefulWidget {
   /// tab strip to understand (owner, desk test).
   final List<Color?>? channelColours;
 
+  /// Where Reset takes each channel back to, parallel to [labels]. Null is
+  /// the diagonal for every channel.
+  final List<List<List<double>>>? rests;
+
   const CurveChannelEditor({
     super.key,
     required this.labels,
@@ -740,6 +748,7 @@ class CurveChannelEditor extends StatefulWidget {
     required this.keyPrefix,
     required this.resetTip,
     this.channelColours,
+    this.rests,
     this.plotSize = curvePlotSizeDefault,
     this.onPlotSize,
   });
@@ -808,6 +817,10 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final channel = _channel.clamp(0, widget.curves.length - 1);
+    final rests = widget.rests;
+    final rest = rests != null && channel < rests.length
+        ? rests[channel]
+        : curveIdentity;
     final columnWidth = channelColumnWidth(widget.labels);
     // The channel buttons, and under them the one way back: only while this
     // channel's curve has somewhere to come back from.
@@ -821,7 +834,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
           keyPrefix: widget.keyPrefix,
           colours: widget.channelColours,
         ),
-        if (!curveIsIdentity(widget.curves[channel]))
+        if (!curveIs(widget.curves[channel], rest))
           LumitTooltip(
             message: widget.resetTip,
             child: HouseButton(
@@ -829,7 +842,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
               frameless: true,
               small: true,
               padding: const EdgeInsets.all(1),
-              onPressed: () => widget.onCommit(channel, curveIdentity),
+              onPressed: () => widget.onCommit(channel, rest),
               child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
             ),
           ),
@@ -858,6 +871,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
                 line: _colourOf(channel),
                 size: plot,
                 moreRows: _sizeRows,
+                rest: rest,
                 onLive: (p) => widget.onLive(channel, p),
                 onCommit: (p) => widget.onCommit(channel, p),
               );

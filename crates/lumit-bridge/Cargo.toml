@@ -63,6 +63,8 @@ lumit-text = { path = "../lumit-text" }
 lumit-import = { path = "../lumit-import" }
 lumit-keymap = { path = "../lumit-keymap" }
 lumit-lottie = { path = "../lumit-lottie" }
+# Tangent panels and MIDI controllers, for grading by hand.
+lumit-surface = { path = "../lumit-surface" }
 # The addons folder and the model runtime (docs/impl/addons.md §5). The bridge
 # is the composition root for these too: the Addons page is the one place that
 # knows what the user asked for and what the folder holds at once.

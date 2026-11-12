@@ -1,0 +1,87 @@
+---
+title: Grade nodes
+description: The current shot's stack drawn as nodes, from the source picture to what the shot shows.
+sidebar:
+  order: 8.2
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The Grade nodes panel draws the current shot's stack as nodes, left to right from the source
+to what the shot shows. It is another view of the stack
+[Effect controls](/panels/effect-controls/) lists. See [Grading](/use/grading/#nodes).
+
+<Shot file="grade-nodes.png" caption="Three nodes, the second a parallel run of two, with a key wire under them." eager/>
+
+## The canvas
+
+- Each node is a tile, numbered in stack order and named by its own name or its effect's.
+- A Correction's tile marks what it uses: curves, a qualifier, windows. A LUT node is marked
+  too.
+- A [shared node](/use/grading/#shared-nodes) shows a link mark and the shared node's name.
+- The current node has an accent outline. A bypassed node is dimmed, with a slash across it.
+- A Parallel or Layer run is drawn as tiles stacked between a split and a mixer: a plus for
+  Parallel, two bars for Layer.
+- A key wire is a dashed line from one tile to the effect whose Matte it feeds.
+- Every Correction has a key out dot, and every node with a Matte a matte in dot. On a clip
+  they are dimmed.
+
+With no nodes, the canvas shows the source and the end with a plus between them.
+
+## Working on it
+
+- Click a tile to make it the current node, which the [Grade panel](/panels/grade/) edits.
+- Double-click a tile to rename it.
+- Drag a tile to move the node. A line shows where it would land.
+- Drag from a key out dot onto a later node to wire its key into that node's Matte, in
+  place of what fed it. Drag a wire's end onto another node to move it, or off into the
+  ground to remove it. Each is one undo step.
+- Right-click a key wire for **Invert key** and **Remove key wire**.
+- The wheel zooms about the pointer. Drag the ground to pan, and double-click it to fit the
+  nodes again. A new shot fits them.
+
+| Key | What it does |
+| --- | --- |
+| `Delete`, `Backspace` | Deletes the current node. |
+| `Enter`, `F2` | Renames the current node. |
+| `←`, `→` | The node before or after. |
+
+Right-click a tile:
+
+| Row | Does |
+| --- | --- |
+| **Add serial node**, **Add parallel node**, **Add layer node**, **Add outside node** | A new node after it. |
+| **Add colour warper node** | A [Colour warper](/effects/colour/colour-warper/) after it. |
+| **Add shared node ▸** | The shared nodes by name, one the shot already uses greyed out. With any shared nodes. |
+| **Bypass node**, **Reset node**, **Rename…**, **Delete node** | **Reset node** puts every row back to its default and drops its keys, leaving **Space** and **Combine** as they are. |
+| **Share with picked shots** | Makes the node a shared node, used by the other picked shots too. |
+| **Unshare** | On a shared node. Every shot using it gets its own copy. |
+| **Import CDL…**, **Export CDL…** | See [CDL](/use/grading/#cdl). Import is not offered in a group's grade, and Export only on a Correction or CDL node. |
+| **Copy node**, **Paste node**, **Save look…**, **Reveal in Effect controls** | Not in a group's grade. |
+
+On a shared node, **Rename…** and **Reset node** act on the shared node in every shot, and
+**Bypass node** and **Delete node** on this shot's use of it.
+
+Right-click the ground for the add rows, **Paste node** at the end, **Reset grade** or
+**Bypass grade**.
+
+## The header
+
+The current shot's name, or, while the shot is in a [grade group](/use/grading/#groups),
+**Shot**, **Group pre** and **Group post**. **Group pre** and **Group post** show the
+group's nodes, which add, bypass, reset, rename, move and delete there for every member, and
+the [Grade panel](/panels/grade/) and the Viewer's grading tools follow. A group takes
+serial nodes and colour warpers, at its end, and has no key wires.
+
+**Node thumbnails** shows in each tile what its node puts out: the shot alone at the
+playhead, its grade stopping after that node. It is off until turned on, and the pictures
+are made once the playhead rests.
+
+The add button adds a serial node. A right-click on it offers every kind.
+
+## Related
+
+- [Grading](/use/grading/)
+- [Grade](/panels/grade/)
+- [The node graph](/use/nodes/)
+- [Correction](/effects/colour/correction/)

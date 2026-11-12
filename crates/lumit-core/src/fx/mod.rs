@@ -73,6 +73,8 @@ pub mod schema;
 /// The Custom shader's text side: the declaration grammar, the assembler and
 /// the uniform layout (docs/impl/custom-shader.md).
 pub mod shader;
+/// A Shape row's points: an outline inside a box.
+pub mod shape_points;
 /// The layer styles (docs/impl/layer-styles.md): nine named slots a
 /// layer wears, in one pinned order — a second, order-locked list beside the
 /// effect stack rather than entries in the catalogue.

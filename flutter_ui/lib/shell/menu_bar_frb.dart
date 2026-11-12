@@ -1773,6 +1773,7 @@ List<MenuSection> lumitMenus(
             ]),
             MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
             MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
+            MenuEntry.submenu(l10n.menuGrade, gradeRows(context, app, ui)),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuReveal, revealRows(ui)),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it

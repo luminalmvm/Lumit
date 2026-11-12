@@ -11,6 +11,7 @@ use crate::time::{CompTime, Duration, FrameRate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod folders;
 mod guards;
 mod locks;
 mod mixer;
@@ -266,6 +267,12 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         inputs: Option<Box<crate::model::EffectInstance>>,
+    },
+    /// Replace a layer's stored grade versions ([`crate::grade::versions`]).
+    SetLayerGradeVersions {
+        comp: Uuid,
+        layer: Uuid,
+        versions: Option<Box<crate::grade::versions::GradeVersions>>,
     },
     /// Replace a layer's whole **driver graph**: its drivers, its wires and
     /// its canvas positions.
@@ -856,6 +863,14 @@ pub enum Op {
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
     },
+    /// Replace the grade groups whole ([`crate::grade::groups`]).
+    SetGradeGroups {
+        groups: Vec<crate::grade::groups::GradeGroup>,
+    },
+    /// Replace the grade memories whole ([`crate::grade::memories`]).
+    SetGradeMemories {
+        memories: Vec<crate::grade::memories::GradeMemory>,
+    },
     /// Replace the project's notes whole. It changes no pixel.
     SetNotes {
         notes: String,
@@ -1024,6 +1039,7 @@ impl Op {
             Op::SetLayerEffects { .. } => "Edit effects",
             Op::SetLayerStyles { .. } => "Edit layer styles",
             Op::SetLayerGraphInputs { .. } => "Edit node graph inputs",
+            Op::SetLayerGradeVersions { .. } => "Edit grade versions",
             Op::SetLayerGraph { .. } => "Edit drivers",
             Op::SetLayerFx { .. } => "Fx switch",
             Op::SetLayerThreeD { .. } => "3D switch",
@@ -1094,6 +1110,10 @@ impl Op {
             Op::SetColourDepth { .. } => "Set colour depth",
             Op::SetGraphRoom { .. } => "Set node graph overscan",
             Op::SetProjectSwatches { .. } => "Edit swatches",
+            // Its own commands name their steps, so this is what an effect
+            // edit in a group's grade reads as.
+            Op::SetGradeGroups { .. } => "Edit effects",
+            Op::SetGradeMemories { .. } => "Store memory",
             Op::SetNotes { .. } => "Edit notes",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"
@@ -1555,6 +1575,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 inputs: previous.map(Box::new),
+            })
+        }
+        Op::SetLayerGradeVersions {
+            comp,
+            layer,
+            versions,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.grade_versions, versions.as_deref().cloned());
+            Ok(Op::SetLayerGradeVersions {
+                comp: *comp,
+                layer: *layer,
+                versions: previous.map(Box::new),
             })
         }
         Op::SetLayerGraph { comp, layer, graph } => {
@@ -2602,6 +2640,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.swatches, swatches.clone());
             Ok(Op::SetProjectSwatches { swatches: previous })
         }
+        Op::SetGradeGroups { groups } => Ok(Op::SetGradeGroups {
+            groups: std::mem::replace(&mut doc.grade_groups, groups.clone()),
+        }),
+        Op::SetGradeMemories { memories } => Ok(Op::SetGradeMemories {
+            memories: std::mem::replace(&mut doc.grade_memories, memories.clone()),
+        }),
         Op::SetNotes { notes } => {
             let previous = std::mem::replace(&mut doc.notes, notes.clone());
             Ok(Op::SetNotes { notes: previous })
@@ -2805,7 +2849,7 @@ pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animati
 pub fn new_folder_ops(doc: &Document, name: &str, parent: Option<Uuid>) -> (Uuid, Vec<Op>) {
     let id = Uuid::now_v7();
     let name = if name.trim().is_empty() {
-        next_folder_name(doc)
+        folders::next_folder_name(doc)
     } else {
         name.to_owned()
     };
@@ -2853,7 +2897,7 @@ pub fn move_to_folder_ops(doc: &Document, item: Uuid, folder: Uuid) -> Option<Ve
         return None;
     }
     doc.folder(folder)?;
-    if folder_descends_from(doc, folder, item) {
+    if folders::folder_descends_from(doc, folder, item) {
         return None;
     }
 
@@ -2999,51 +3043,6 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
     }
     ops.extend(gone.into_iter().map(|id| Op::RemoveItem { id }));
     Some(ops)
-}
-
-/// Whether `folder` sits anywhere inside `ancestor` — the cycle guard
-/// [`move_to_folder_ops`] refuses on.
-///
-/// Walks children rather than parents, and remembers where it has been: a
-/// document that already holds a cycle (one written by an older build, or by
-/// hand) must make this answer, not spin.
-fn folder_descends_from(doc: &Document, folder: Uuid, ancestor: Uuid) -> bool {
-    let mut seen = std::collections::HashSet::new();
-    let mut queue = vec![ancestor];
-    while let Some(id) = queue.pop() {
-        if !seen.insert(id) {
-            continue;
-        }
-        if let Some(f) = doc.folder(id) {
-            if f.children.contains(&folder) {
-                return true;
-            }
-            queue.extend(f.children.iter().copied());
-        }
-    }
-    false
-}
-
-/// The next unused "Folder N" — the default name [`new_folder_ops`] gives.
-///
-/// Counts up past the names already taken rather than off the number of
-/// folders: a project holding "Folder 1" and "Renders" must not offer
-/// "Folder 2" only to collide the moment "Folder 1" is renamed away.
-#[must_use]
-fn next_folder_name(doc: &Document) -> String {
-    let taken: std::collections::HashSet<&str> = doc
-        .items
-        .iter()
-        .filter(|i| matches!(i, ProjectItem::Folder(_)))
-        .map(ProjectItem::name)
-        .collect();
-    (1..)
-        .map(|n| format!("Folder {n}"))
-        .find(|candidate| !taken.contains(candidate.as_str()))
-        // `1..` is unbounded and `taken` is finite, so this always answers; the
-        // fallback is here because nothing in an engine crate may panic
-        // (docs/14 §4).
-        .unwrap_or_else(|| "Folder".to_owned())
 }
 
 /// The four playhead-relative span edits behind the `[` / `]` / `Alt+[` / `Alt+]`

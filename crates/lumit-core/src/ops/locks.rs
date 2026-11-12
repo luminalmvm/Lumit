@@ -33,6 +33,7 @@ pub(super) fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerStyles { comp, layer, .. }
         | Op::SetLayerGraphInputs { comp, layer, .. }
+        | Op::SetLayerGradeVersions { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }

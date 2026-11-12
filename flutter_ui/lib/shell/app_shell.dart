@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/control_rows.dart' show addToControlsRow;
+import 'package:lumit_flutter/panels/grade_actions.dart' show runGradeAction;
 import 'package:lumit_flutter/panels/grade_clipboard.dart' show copyGrade, pasteGrade;
 import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
@@ -672,6 +673,11 @@ class _LumitAppViewState extends State<LumitAppView> {
         Panel.effectControls => BridgeKeyContext.effects,
         Panel.graph => BridgeKeyContext.nodes,
         Panel.captions => BridgeKeyContext.captions,
+        Panel.grade ||
+        Panel.gradeNodes ||
+        Panel.shots ||
+        Panel.gallery =>
+          BridgeKeyContext.colour,
         Panel.mixer => BridgeKeyContext.mixer,
         _ => BridgeKeyContext.global,
       };
@@ -1541,9 +1547,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       // A bound action this shell has no call for yet — the menus carry those.
       // Ignored rather than swallowed, so the key still reaches whatever else
-      // wants it.
+      // wants it. The grading keys are the Colour workspace's.
       default:
-        handled = false;
+        handled = runGradeAction(state, ui, action);
     }
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }

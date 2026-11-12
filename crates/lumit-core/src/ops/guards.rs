@@ -29,6 +29,7 @@ pub(super) fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetLayerEffects { comp, .. }
         | Op::SetLayerStyles { comp, .. }
         | Op::SetLayerGraphInputs { comp, .. }
+        | Op::SetLayerGradeVersions { comp, .. }
         | Op::SetLayerGraph { comp, .. }
         | Op::SetLayerFx { comp, .. }
         | Op::SetLayerThreeD { comp, .. }

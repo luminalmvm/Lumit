@@ -17,17 +17,39 @@
 //! baked table beside the op exactly as a LUT's cube is threaded (docs/impl/
 //! effect-registry.md §2.5a); the effect itself resolves to its Mix alone.
 //!
-//! There is no CPU reference, for the reason the LUT has none: the table
-//! never reaches the single-buffer CPU dispatcher, so the degradation rung
-//! renders these as identity. The §1.6 oracle is `lumit_colour::bake::Artefact::eval`,
-//! held against the kernel in `lumit-render`'s `ocio_parity` test.
+//! The table never reaches the single-buffer CPU dispatcher, for the reason
+//! the LUT's cube does not, so the degradation rung renders these as identity.
+//! The §1.6 oracle is `lumit_colour::bake::Artefact::eval`, held against the
+//! kernel in `lumit-render`'s `ocio_parity` test. A caller holding the table
+//! runs [`apply_table_cpu`], which is how one of these is baked into a LUT.
 
-use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
+use crate::fx::{
+    params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// The per cent Mix every one of these ends with, as the kernel's 0-1.
 fn mix_of(mix: f32) -> f32 {
     (mix / 100.0).clamp(0.0, 1.0)
+}
+
+/// Any of the four on the CPU, given what its baked table does to one colour:
+/// `fx_ocio.wgsl`'s `ocio_effect` step for step. Partly covered pixels are
+/// graded straight and premultiplied again, and the result is mixed with what
+/// came in. Alpha is left alone.
+pub fn apply_table_cpu(rgba: &mut [f32], p: Params<'_>, table: impl Fn([f32; 3]) -> [f32; 3]) {
+    let mix = mix_of(p.float(crate::fx::schema::MIX_ID, 100.0));
+    for px in rgba.chunks_exact_mut(4) {
+        let (a, rgb) = (px[3], [px[0], px[1], px[2]]);
+        let graded = if a > 0.0 && a != 1.0 {
+            table(rgb.map(|v| v / a)).map(|v| v * a)
+        } else {
+            table(rgb)
+        };
+        for c in 0..3 {
+            px[c] = rgb[c] + (graded[c] - rgb[c]) * mix;
+        }
+    }
 }
 
 /// OCIO colour space transform: from one of the config's spaces to another.

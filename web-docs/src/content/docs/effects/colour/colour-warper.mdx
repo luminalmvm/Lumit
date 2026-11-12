@@ -1,0 +1,66 @@
+---
+title: Colour warper
+description: "A mesh over the colour wheel whose points move whole families of colour."
+---
+
+Colour warper is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+A mesh over the vectorscope's colour wheel: a spoke at each of six or eight even hues, three
+rings out to full colour, and the centre. A moved point takes the colours under it where it
+went, hue and saturation together, and the colours round it follow, fading out by the next
+spoke and ring. It is worked in video gamma. A mesh at rest changes nothing. The
+[Grade panel](/panels/grade/#colour-warper) draws the mesh to drag.
+
+:::note[Not built yet]
+A mesh of hue against luma.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Resolution** | Dropdown | Six hues · Eight hues | Six hues | - |
+| **Points** | Points | Up to 32 points | None | - |
+| **Keep luma** | Checkbox | On or off | On | - |
+| **Strength** | Slider | 0 to 100 | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Resolution**: **Six hues** or **Eight hues**, the spokes round the three rings.
+- **Points**: how far each mesh point has moved, the centre first. A point not listed has
+  not moved.
+- **Keep luma**: on, colours move without their brightness changing. Off, each pixel's
+  brightest channel stays where it was.
+- **Strength**: how far the colours follow the points.
+- **Mix**: how much of the result replaces the picture.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Correction](/effects/colour/correction/)
+- [Hue and saturation](/effects/colour/hue-and-saturation/)
+- [Grading](/use/grading/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)
