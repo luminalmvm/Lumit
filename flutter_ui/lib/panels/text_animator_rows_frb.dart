@@ -763,6 +763,10 @@ bool animatorHasKeys(BridgeTextAnimator a) => [
       a.fillG,
       a.fillB,
       a.selector.radius,
+      a.selector.minAmount,
+      a.selector.maxAmount,
+      a.selector.wiggles,
+      a.selector.correlation,
       for (final x in a.axes) x.value,
     ].any((s) => s is BridgeScalar_Keyframed);
 
