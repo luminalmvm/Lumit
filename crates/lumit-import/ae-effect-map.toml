@@ -405,6 +405,12 @@ lumit = "jolt"
 conversion = "twitch"
 pending_audit = true
 
+[[effect]]
+ae = "ADBE SubspaceStabilizer"
+name = "Warp Stabilizer"
+lumit = "stabilise"
+conversion = "warp_stabilizer"
+
 # --- Stylise ---------------------------------------------------------------
 
 [[effect]]
