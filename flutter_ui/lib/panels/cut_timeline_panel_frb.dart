@@ -46,6 +46,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart'
     show exportFrb, insertEmptyLayer, newLayerRow;
+import 'cut_buses.dart';
 import 'cut_insert.dart';
 import 'cut_kinds.dart';
 import 'template_place.dart' show placeTemplateInCut;
@@ -83,6 +84,7 @@ import 'audio_routes_frb.dart'
         soundHeadRows;
 import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart' show audioClipGainY, clipGainTopDb;
+import 'audio_timeline_zoom.dart' show waveBandsResolve, waveBuckets;
 import 'clip_fade_popover.dart' show clipFadeShapeName;
 import 'clip_fades.dart';
 import 'cut_timeline_lane.dart';
@@ -344,6 +346,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   final Map<String, ui.Image?> _thumbs = {};
   final Map<String, BridgeAudioPeaks> _peaks = {};
   final Map<String, String> _peakKeys = {};
+  final CutBusPeaks _busPeaks = CutBusPeaks();
   final ValueNotifier<int> _pictures = ValueNotifier<int>(0);
   bool _refreshQueued = false;
 
@@ -451,6 +454,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         .addPostFrameCallback((_) => ui?.cutClip.value = null);
     _releaseKeys();
     _settle.dispose();
+    _busPeaks.dispose();
     _rename?.dispose();
     _edge.dispose();
     _dropOn.dispose();
@@ -1582,6 +1586,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             axis.frameAtExact(viewRight) / fps);
         continue;
       }
+      if (track.bus) {
+        live.add(track.id);
+        _wantBusPeaks(ui, track, axis.frameAtExact(viewLeft) / fps,
+            axis.frameAtExact(viewRight) / fps);
+        continue;
+      }
       final (lo, hi) = track.window(from, to);
       for (var k = lo; k < hi; k++) {
         final clip = track.clips[k];
@@ -1620,10 +1630,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           clip: clip.id,
           startSeconds: request.startSeconds,
           endSeconds: request.endSeconds,
-          buckets: request.buckets,
-          multiwave: _multiwave,
+          buckets: waveBuckets(request),
+          multiwave: _multiwave && waveBandsResolve(secondsPerPixel),
           stereo: true,
         )
+            .then((peaks) => withSamples(peaks, secondsPerPixel, request,
+                (a, b) => track.entry.layer.clipAudioSamples(
+                    clip: clip.id, startSeconds: a, endSeconds: b, stereo: true)))
             .then((peaks) {
           if (!mounted || _peakKeys[id] != key) return;
           _peaks[id] = peaks;
@@ -1635,6 +1648,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // the time it comes back.
     _peaks.removeWhere((id, _) => !live.contains(id));
     _peakKeys.removeWhere((id, _) => !live.contains(id));
+    _busPeaks.keep(live);
     // So do the pictures along a clip: only the steps on screen are kept.
     _thumbs.removeWhere((key, image) {
       if (!key.contains('+') || film.contains(key)) return false;
@@ -1675,6 +1689,27 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _peaks[track.id] = peaks;
       _pictures.value++;
     }, onError: (Object _) {});
+  }
+
+  /// A bus track's mix over the comp seconds in view.
+  void _wantBusPeaks(
+      LumitUiState ui, CutTrack track, double viewStart, double viewEnd) {
+    final comp = ui.selectedComp;
+    final request = WaveformRequest.forView(
+        startSeconds: viewStart, endSeconds: viewEnd, pixels: _laneViewport);
+    if (comp == null || request == null) return;
+    _busPeaks.want(
+      comp: comp,
+      track: track,
+      request: request,
+      revision: ui.model.heldRevision,
+      alive: () => mounted,
+      onPeaks: (peaks) {
+        _peaks[track.id] = peaks;
+        _pictures.value++;
+      },
+      onRetry: _refreshPictures,
+    );
   }
 
   void _wantThumb(CutTrack track, BridgeClip clip) =>
@@ -2723,9 +2758,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final over = cutTrackAt(_tracks, held.at.dy, _tops);
       // A layer's own sound row takes no clips, so over it they stay on
       // their own track, as they do below the last row.
-      trackShift = over == null || _tracks[over].kind == CutTrackKind.layerSound
-          ? 0
-          : over - held.track!;
+      trackShift =
+          over == null || !_tracks[over].takesClips ? 0 : over - held.track!;
     }
     // A slide's neighbours trim and extend to stay against each sliding
     // clip: the one ending where it starts by its end, the one starting
@@ -2962,6 +2996,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             onDone: _afterWrite),
         for (final (action, label) in [
           ('layer.new.audio', l10n.insertAudioLayer),
+          ('layer.new.bus', l10n.insertBus),
           ('layer.new.sequence', l10n.insertVideoLayer),
           ('layer.new.adjustment', l10n.insertAdjustmentLayer),
         ])
@@ -3018,7 +3053,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       to >= 0 &&
       to < _tracks.length &&
       _tracks[to].kind != CutTrackKind.layerSound &&
-      (_anyOrder || _tracks[to].below == _tracks[from].below);
+      (_anyOrder || cutSameSide(_tracks[from], _tracks[to]));
 
   /// A right click on a track's head, or on the bar of a track with no clips:
   /// the commands of the layer it is.
@@ -3046,7 +3081,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // has too.
     final ui = _ui;
     final comp = _tracksComp;
-    if (track.sound && ui != null && comp != null) {
+    if ((track.sound || track.bus) && ui != null && comp != null) {
       return showMenuAt<void>(
         context: context,
         position: global,
@@ -3058,7 +3093,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           entry: track.entry,
           targets: audioMenuTargets(
               track.entry,
-              [for (final other in _tracks) if (other.sound) other.entry],
+              [
+                for (final other in _tracks)
+                  if (other.sound || other.bus) other.entry
+              ],
               ui.selectedLayerIds),
           buses: [
             for (final l in ui.model.layers)
@@ -3509,7 +3547,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _Files() => (0, '', false),
       _ => (-1, '', false),
     };
-    if (length < 0) return null;
+    if (length < 0 || cutOverBus(_tracks, _tops, at)) return null;
     final index = cutTrackAt(_tracks, at.dy, _tops);
     final kind = index == null ? null : _tracks[index].kind;
     final fits = picture
@@ -3532,6 +3570,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       label: label,
       caught: snapped.caught,
     );
+  }
+
+  /// A bus track takes no clips, so what is let go on one is refused, and
+  /// said so.
+  bool _busRefuses(Offset global) {
+    if (!cutOverBus(_tracks, _tops, _pointOnLanes(global))) return false;
+    cutRefuseOnBus(Provider.of<LumitState>(context, listen: false));
+    return true;
   }
 
   /// Whether files from outside Lumit are over the lanes.
@@ -3583,6 +3629,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           setState(() => _filesOver = false);
           _landing.value = null;
           _caught.value = null;
+          if (_busRefuses(details.globalPosition)) return;
           _dropFiles(comp, [for (final f in details.files) f.path],
               details.globalPosition,
               atFrame: frame);
@@ -3915,6 +3962,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               final frame = _landingOf(details.data, details.offset)?.frame;
               _landing.value = null;
               _caught.value = null;
+              if (details.data is! EffectDragData &&
+                  _busRefuses(details.offset)) {
+                return;
+              }
               switch (details.data) {
                 case FootageDragData(:final footage):
                   await _dropFootage(comp, footage, details.offset,
@@ -4446,7 +4497,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     if (over == null) return;
     final to = _tracks[over];
     final fits = to.kind != CutTrackKind.layerSound &&
-        (_anyOrder || to.below == _tracks[from].below);
+        (_anyOrder || cutSameSide(_tracks[from], to));
     if (fits) _reorderTo.value = over;
   }
 
@@ -4644,6 +4695,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ),
         );
     final row = Row(children: [
+          if (track.bus)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 4),
+              child: lumitIcon(iconForKind(BridgeLayerKind.bus),
+                  size: iconSize, color: t.textMuted),
+            ),
           Expanded(
             child: _renaming == track.id
                 ? RowRenameField(
@@ -4705,7 +4762,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
             // Not on a layer's own sound row: solo there would solo its
             // picture too.
-            if (track.sound)
+            if (track.sound || track.bus)
               _switch(t, comp, track, 'solo', s.solo, BridgeLayerSwitch.solo,
                   mark: LumitIcons.solo,
                   offMark: LumitIcons.solo,
@@ -4905,10 +4962,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       handle: t.textSecondary,
       handleFill: t.surface1,
       drop: t.accent,
+      full: t.error,
     );
     final style = WaveformStyle(
       multiwave: _multiwave,
-      sqrtScale: true,
+      scale: ui.workspace.interface.waveformScale,
       fromBottom: ui.workspace.interface.waveformsFromBottom,
     );
     final repaint =
@@ -5048,6 +5106,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                         handle: colours.handle,
                                         handleFill: colours.handleFill,
                                         drop: colours.drop,
+                                        full: colours.full,
                                       ),
                                       style: style,
                                       radius: clipRadius(t),

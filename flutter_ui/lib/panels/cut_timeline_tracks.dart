@@ -45,6 +45,9 @@ enum CutTrackKind {
   /// as its plain bar: one bar with the layer's waveform. A second row for
   /// the same layer, so the document holds nothing new.
   layerSound,
+
+  /// A Bus layer: no clips, one bar across the comp with the mix it carries.
+  bus,
 }
 
 /// One row of the Cut timeline.
@@ -71,8 +74,13 @@ class CutTrack {
 
   bool get sound => kind == CutTrackKind.sound;
 
+  bool get bus => kind == CutTrackKind.bus;
+
   /// Whether the row stands below the dividing line.
-  bool get below => sound || kind == CutTrackKind.layerSound;
+  bool get below => sound || bus || kind == CutTrackKind.layerSound;
+
+  /// Whether clips can land on the row.
+  bool get takesClips => kind != CutTrackKind.layerSound && !bus;
 
   /// The index range `[lo, hi)` of the clips touching `[from, to]` in comp
   /// frames. Both ends by binary search: the starts are sorted, and the
@@ -117,7 +125,7 @@ class CutTrack {
 /// picture and every sound row stands below the dividing line. Last come the
 /// sound rows of the uncut footage layers [hasAudio] says carry sound, by
 /// layer id: after the sound tracks, so those stay next to each other and a
-/// clip crosses between them as it always did.
+/// clip crosses between them as it always did. The bus tracks stand last.
 ///
 /// With [anyOrder] there is no dividing line: every track stands in stack
 /// order, and an uncut footage layer's sound row stands under its bar.
@@ -129,6 +137,7 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
   final above = <CutTrack>[];
   final below = <CutTrack>[];
   final own = <CutTrack>[];
+  final buses = <CutTrack>[];
   if (anyOrder) {
     final all = <CutTrack>[];
     for (final entry in layers.where(_cuttable)) {
@@ -138,6 +147,8 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
         ..sort((a, b) => a.startFrame.compareTo(b.startFrame));
       if (info.kind == BridgeLayerKind.audio) {
         all.add(CutTrack._(entry, id, CutTrackKind.sound, clips));
+      } else if (info.kind == BridgeLayerKind.bus) {
+        all.add(CutTrack._(entry, id, CutTrackKind.bus, clips));
       } else if (clips.isNotEmpty || info.kind == BridgeLayerKind.sequence) {
         all.add(CutTrack._(entry, id, CutTrackKind.picture, clips));
       } else {
@@ -157,6 +168,8 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
       ..sort((a, b) => a.startFrame.compareTo(b.startFrame));
     if (info.kind == BridgeLayerKind.audio) {
       below.add(CutTrack._(entry, id, CutTrackKind.sound, clips));
+    } else if (info.kind == BridgeLayerKind.bus) {
+      buses.add(CutTrack._(entry, id, CutTrackKind.bus, clips));
     } else if (clips.isNotEmpty || info.kind == BridgeLayerKind.sequence) {
       above.add(CutTrack._(entry, id, CutTrackKind.picture, clips));
     } else {
@@ -167,8 +180,13 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
       }
     }
   }
-  return [...above, ...below, ...own];
+  return [...above, ...below, ...own, ...buses];
 }
+
+/// Whether a track can be moved to where [to] stands from [from]'s place:
+/// the same side of the line, and a bus among the buses.
+bool cutSameSide(CutTrack from, CutTrack to) =>
+    from.below == to.below && from.bus == to.bus;
 
 /// The project clips were last copied in, which is as far as a paste of them
 /// reaches.

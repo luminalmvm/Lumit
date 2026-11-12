@@ -34,6 +34,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import 'audio_timeline_rows_frb.dart';
+import 'audio_timeline_zoom.dart' show waveBandsResolve, waveBuckets;
 import 'clip_fades.dart';
 import 'graph_maths.dart' show rationalSeconds;
 import 'spectral_lane_frb.dart';
@@ -294,6 +295,10 @@ class AudioClipStrip extends StatefulWidget {
   final void Function(BridgeClip clip, BuildContext at)? onAddEffect;
   final void Function(BridgeClip clip, BuildContext at)? onToggleOpen;
 
+  /// Where each clip's wave is handed on as it lands, by clip id, so the
+  /// track's lanes can draw it faint behind their curves.
+  final ValueNotifier<Map<String, BridgeAudioPeaks>>? waves;
+
   const AudioClipStrip({
     super.key,
     required this.track,
@@ -319,6 +324,7 @@ class AudioClipStrip extends StatefulWidget {
     this.onToggleFx,
     this.onAddEffect,
     this.onToggleOpen,
+    this.waves,
   });
 
   @override
@@ -693,8 +699,10 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     if (request == null) return;
     // The trim and the map are part of the key: both change which source
     // moments the buckets stand for, and neither moves the clip's box.
+    // Close in the bands are the filtered signal, so the full wave is asked.
+    final bands = widget.style.needsBands && waveBandsResolve(secondsPerPixel);
     final key = '${widget.mode.name}|${request.key}|${clip.startFrame}'
-        '|${clip.endFrame}|${clip.retimed}|${widget.style.needsBands}';
+        '|${clip.endFrame}|${clip.retimed}|$bands';
     if (_keys[id] == key) return;
     _keys[id] = key;
     final layer = widget.track.entry.layer;
@@ -719,13 +727,17 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       clip: clip.id,
       startSeconds: request.startSeconds,
       endSeconds: request.endSeconds,
-      buckets: request.buckets,
-      multiwave: widget.style.needsBands,
+      buckets: waveBuckets(request),
+      multiwave: bands,
       stereo: true,
     )
+        .then((peaks) => withSamples(peaks, secondsPerPixel, request,
+            (a, b) => layer.clipAudioSamples(
+                clip: clip.id, startSeconds: a, endSeconds: b, stereo: true)))
         .then((peaks) {
       if (!mounted || _keys[id] != key) return;
       setState(() => _peaks[id] = peaks);
+      widget.waves?.value = Map.of(_peaks);
     });
   }
 
@@ -1044,6 +1056,9 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                   colours: clipWaveColours(label, t.textPrimary),
                   style: widget.style,
                   height: height,
+                  gainDb:
+                      clip.gainDb + widget.track.entry.info.audioGainDb,
+                  full: t.error,
                 ),
               ),
       ),

@@ -189,6 +189,20 @@ final class FoldVolumeRow extends LayerFoldRow {
   const FoldVolumeRow({this.scalar, required int depth}) : super(depth);
 }
 
+/// The layer's Pan, keyed like Volume, from full left at -100 to full right
+/// at 100.
+final class FoldPanRow extends LayerFoldRow {
+  final BridgeScalar scalar;
+  const FoldPanRow(this.scalar, {required int depth}) : super(depth);
+}
+
+/// The layer's Gain, in dB, ahead of its effects and Volume. One value, never
+/// keyed.
+final class FoldGainRow extends LayerFoldRow {
+  final double db;
+  const FoldGainRow(this.db, {required int depth}) : super(depth);
+}
+
 /// One send of the layer's sound to a bus: its level, keyed like Volume, and
 /// whether it is taken before the layer's Volume and Pan.
 final class FoldSendRow extends LayerFoldRow {
@@ -900,6 +914,10 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
+      FoldPanRow(:final scalar) => switch (scalar) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       FoldFlowRow(:final rate) => switch (rate) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
@@ -1131,6 +1149,7 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
       FoldRetimeRow(:final scalar) => scalar,
       FoldVolumeRow(:final scalar) => scalar,
       FoldSendRow(:final send) => send.level,
+      FoldPanRow(:final scalar) => scalar,
       FoldFlowRow(:final rate) => rate,
       FoldEffectParamRow(value: BridgeEffectValue_Float(:final field0)) =>
         field0,
@@ -1181,6 +1200,8 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
           _ => true,
         },
       FoldSendRow() => true,
+      FoldPanRow(:final scalar) => _differs(scalar, 0),
+      FoldGainRow(:final db) => db != 0,
       FoldEffectParamRow(:final param, :final value) =>
         value != null && value != defaultEffectValue(param.kind),
       // A heading is a container, save for an effect's or a style's own: one
@@ -2237,6 +2258,13 @@ bool moveLaneKeys({
       entry.layer.setVolumeDb(value: BridgeScalar.keyframed(next));
       return true;
 
+    case FoldPanRow(:final scalar):
+      if (scalar is! BridgeScalar_Keyframed) return false;
+      final next = moved(scalar.field0);
+      if (next == null) return false;
+      entry.layer.setPan(value: BridgeScalar.keyframed(next));
+      return true;
+
     case FoldSendRow(:final send):
       if (send.level is! BridgeScalar_Keyframed) return false;
       final next = moved((send.level as BridgeScalar_Keyframed).field0);
@@ -2393,6 +2421,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
       FoldVolumeRow() => '${audioPath(layerId)}/volume',
+      FoldPanRow() => '${audioPath(layerId)}/pan',
+      FoldGainRow() => '${audioPath(layerId)}/gain',
       FoldSendRow(:final send) => '${sendsPath(layerId)}/${send.bus}',
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
@@ -2664,7 +2694,8 @@ String waveformPath(String layerId) => '$layerId/audio/waveform';
 /// caches it per layer, exactly as the Project panel caches missing media.
 /// `flowParams` and `volumeDb` are passed in for the same reason at a smaller
 /// scale: neither is in the read model, so the panel reads them once per
-/// document revision and the rows carry them.
+/// document revision and the rows carry them. [busNames] names the send rows,
+/// by bus id.
 List<LayerFoldRow> layerFoldRows({
   required BridgeLayerEntry entry,
   required Set<String> open,
@@ -2672,6 +2703,7 @@ List<LayerFoldRow> layerFoldRows({
   BridgeFlowParams? flowParams,
   BridgeScalar? volumeDb,
   Map<String, DrivenParam> driven = const {},
+  Map<String, String> busNames = const {},
 }) {
   final id = entry.layer.internallayerId.toString();
   final info = entry.info;
@@ -3307,17 +3339,38 @@ List<LayerFoldRow> layerFoldRows({
       waveform: audioOpen && open.contains(waveformPath(id)),
     ));
     if (audioOpen) {
+      final bus = info.kind == BridgeLayerKind.bus;
       rows.add(FoldVolumeRow(scalar: volumeDb, depth: 2));
-      // The waveform behind its own twirl, so a busy comp only pays
-      // for the lanes actually being looked at.
-      final waveOpen = open.contains(waveformPath(id));
-      rows.add(FoldGroupRow(
-        path: waveformPath(id),
-        label: l10n.foldWaveform,
-        open: waveOpen,
-        depth: 2,
-      ));
-      if (waveOpen) rows.add(const FoldWaveformRow(depth: 3));
+      rows.add(FoldPanRow(info.pan, depth: 2));
+      // A bus has no sound of its own to bring up or down, nor a wave.
+      if (!bus) rows.add(FoldGainRow(info.audioGainDb, depth: 2));
+      if (info.sends.isNotEmpty) {
+        final sendsOpen = open.contains(sendsPath(id));
+        rows.add(FoldGroupRow(
+          path: sendsPath(id),
+          label: l10n.audioSends,
+          open: sendsOpen,
+          depth: 2,
+        ));
+        if (sendsOpen) {
+          for (final send in info.sends) {
+            rows.add(FoldSendRow(send,
+                bus: busNames[send.bus.toString()] ?? '', depth: 3));
+          }
+        }
+      }
+      if (!bus) {
+        // The waveform behind its own twirl, so a busy comp only pays
+        // for the lanes actually being looked at.
+        final waveOpen = open.contains(waveformPath(id));
+        rows.add(FoldGroupRow(
+          path: waveformPath(id),
+          label: l10n.foldWaveform,
+          open: waveOpen,
+          depth: 2,
+        ));
+        if (waveOpen) rows.add(const FoldWaveformRow(depth: 3));
+      }
     }
   }
 
