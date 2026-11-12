@@ -60,6 +60,7 @@ impl Edit<'_> {
             for effect in &mut copy.effects {
                 effect.id = Uuid::now_v7();
             }
+            lumit_core::grade::versions::respawn(&mut copy.grade_versions);
             lumit_render::passes::follow_copy(doc, layer, &mut copy);
             copy.parent = None;
             copy.matte = None;

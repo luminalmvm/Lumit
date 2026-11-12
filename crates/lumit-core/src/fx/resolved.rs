@@ -645,6 +645,11 @@ pub(super) fn resolve_into_arena(
                 // different picture.
                 _ => CurvePoints::sanitised(default),
             }),
+            // An outline rides in the bag as a curve does.
+            ParamKind::Shape => Value::Shape(match e.param(p.id) {
+                Some(EffectValue::Shape(points)) => shape_points::ShapePoints::sanitised(points),
+                _ => shape_points::ShapePoints::EMPTY,
+            }),
             // A text is short enough to ride in the bag too. It does not
             // animate, so it is only cut to the cap.
             ParamKind::Text { default } => Value::Text(ShortText::new(match e.param(p.id) {

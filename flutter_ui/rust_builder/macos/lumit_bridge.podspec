@@ -70,7 +70,7 @@ A new Flutter FFI plugin project.
       '-lavcodec -lavdevice -lavfilter -lavformat -lavutil -lswresample -lswscale ' \
       '-framework AudioUnit -framework CoreAudio -framework CoreFoundation ' \
       '-framework IOSurface -framework Foundation -framework QuartzCore ' \
-      '-framework Metal -framework CoreGraphics ' \
+      '-framework Metal -framework CoreGraphics -framework CoreMIDI ' \
       '-lobjc -liconv',
   }
 end

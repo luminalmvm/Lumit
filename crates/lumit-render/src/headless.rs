@@ -1780,7 +1780,8 @@ impl HeadlessRenderer {
     ///
     /// Not a display: no view transform, no encoding curve, no clamp. A value
     /// four times white comes back as four, which is the whole reason the
-    /// format is worth writing.
+    /// format is worth writing. A `quality` below full composites smaller,
+    /// and the size returned is the picture's own.
     pub fn render_preview_linear(
         &mut self,
         doc: &Arc<Document>,
@@ -1788,15 +1789,16 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Result<(Vec<f32>, u32, u32), String> {
-        let (shown, cw, ch) =
+        let (shown, _, _) =
             self.preview_display_texture_fmt(doc, comp_id, frame, quality, Present::LinearF32)?;
         let Some(parts) = self.parts.as_ref() else {
             return Err("headless preview: renderer is unavailable after an earlier fault".into());
         };
+        let (w, h) = (shown.width(), shown.height());
         parts
             .colour
             .readback_linear_f32(&self.gpu, &shown)
-            .map(|px| (px, cw, ch))
+            .map(|px| (px, w, h))
             .map_err(|e| format!("headless preview: {e}"))
     }
 
@@ -2160,31 +2162,30 @@ impl HeadlessRenderer {
         self.render_preview(doc, comp_id, frame, Quality::default(), scale)
     }
 
-    /// Compute a v1 scope trace (waveform/vectorscope/histogram) from an
-    /// already-rendered comp frame's display bytes, returning the `GRID × GRID`
-    /// RGBA8 trace. `rgba` is the exact frame the Viewer shows (served from the
-    /// bridge's rendered-frame cache, so the scope traces the same frame at no
-    /// re-render cost); the binning runs on the GPU and only the tiny trace is
-    /// read back.
+    /// Compute scope traces from the display bytes of the frame the Viewer
+    /// shows, one `GRID × GRID` RGBA8 trace per kind, in the order asked.
     ///
-    /// `kind` is `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram
-    /// / `4` parade / `5` luma histogram (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
+    /// `kinds` are the codes `ScopeKind::from_code` reads (0 luma, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram, 6 CIE
+    /// xy, 7 vectorscope at 2x); `colours` carries the frontend's fixed
     /// `ScopeColours` as `[bg, trace, red, green, blue]` RGB byte triples, so no
     /// colour literal lives in the engine (docs/15-DESIGN.md) and the bridge need
-    /// not name `lumit-gpu`. `Err` on an unknown kind or if the tiny readback
-    /// fails.
+    /// not name `lumit-gpu`. `Err` on an unknown kind or if the readback fails.
     pub fn render_scope(
         &self,
         rgba: &[u8],
         width: u32,
         height: u32,
-        kind: u32,
+        kinds: &[u32],
         colours: [[u8; 3]; 5],
-    ) -> Result<Vec<u8>, String> {
-        let kind = lumit_gpu::scope::ScopeKind::from_code(kind)
-            .ok_or_else(|| format!("headless scope: unknown kind {kind}"))?;
+    ) -> Result<Vec<Vec<u8>>, String> {
+        let kinds = kinds
+            .iter()
+            .map(|&k| lumit_gpu::scope::ScopeKind::from_code(k).ok_or(k))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|k| format!("headless scope: unknown kind {k}"))?;
         self.scope
-            .trace_rgba8(&self.gpu, kind, colours.into(), rgba, width, height)
+            .trace_rgba8(&self.gpu, &kinds, colours.into(), rgba, width, height)
             .map_err(|e| e.to_string())
     }
 
@@ -4602,6 +4603,7 @@ pub(crate) mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -4698,6 +4700,7 @@ pub(crate) mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -4817,6 +4820,7 @@ pub(crate) mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
@@ -5331,61 +5335,6 @@ pub(crate) mod tests {
             r.render_prepared_named(&doc, comp_id, 0, q, false, name)
                 .is_ok(),
             "the next frame renders once the scope has ended"
-        );
-    }
-
-    /// **The export cannot see the Viewer's view**, and it is neutral by
-    /// *construction* rather than by discipline: `export::run` builds its own
-    /// `HeadlessRenderer` and nothing ever calls the setter on it, then renders
-    /// each frame through `render_preview` exactly as this does.
-    ///
-    /// So the property under test is that the view is renderer-owned state. The
-    /// obvious regression — making it a global, a static or a thread-local, all
-    /// of which would look fine in every preview test — fails here, because the
-    /// export's fresh renderer would then inherit a view somebody else set. The
-    /// first assertion also proves the view is doing something at all, so this
-    /// cannot pass by the display transform being a no-op.
-    #[test]
-    fn an_export_renders_neutral_whatever_the_viewer_is_set_to() {
-        let mut viewer = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.18, 0.18, 0.18, 1.0]), 8, 8);
-        let doc = store.snapshot();
-        let q = crate::plan::Quality::default();
-
-        let (neutral, _, _) = viewer
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("neutral render");
-
-        viewer.set_display_view(lumit_gpu::DisplayParams::from_stops(2.0, true));
-        let (exposed, _, _) = viewer
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("exposed render");
-        assert_ne!(
-            exposed, neutral,
-            "two stops and a tone map must visibly change the preview, or this \
-             test would pass on a display transform that does nothing"
-        );
-
-        // What the exporter does, in the order it does it (`export::run`): its
-        // own renderer, then `render_preview` per frame at full quality.
-        let mut exporter = HeadlessRenderer::new().expect("export renderer");
-        assert!(
-            exporter.display_view().is_neutral(),
-            "a fresh renderer starts neutral, which is what makes export neutral"
-        );
-        let (exported, _, _) = exporter
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("export render");
-        assert_eq!(
-            exported, neutral,
-            "the export's bytes are the neutral bytes, with the Viewer set to \
-             two stops and a tone map"
         );
     }
 
@@ -6676,6 +6625,7 @@ pub(crate) mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -10205,6 +10155,8 @@ pub(crate) mod tests {
             "measured times are real durations"
         );
     }
+
+    mod neutral_export;
 }
 
 /// The renderer every test borrows, over the one device and set of compiled

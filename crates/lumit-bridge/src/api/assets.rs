@@ -527,6 +527,7 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut copy.grade_versions);
         // The Source row stays **unset**, which reads this effect's own input —
         // the words underneath it. Pointing it at the copy by name would say
         // the same thing in a way that breaks the moment the layer is renamed

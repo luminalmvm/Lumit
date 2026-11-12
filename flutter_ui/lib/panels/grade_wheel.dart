@@ -70,6 +70,10 @@ class GradeWheel extends StatefulWidget {
 
   /// The disc's diameter in logical pixels.
   final double size;
+
+  /// Whether the master bar is drawn. A colour whose brightness is kept
+  /// whatever its channels do has no master to move.
+  final bool bar;
   final bool enabled;
 
   /// Whether any channel has keyframes, so the dot wears the animated colour.
@@ -94,6 +98,7 @@ class GradeWheel extends StatefulWidget {
     required this.reach,
     required this.masterSpan,
     required this.size,
+    this.bar = true,
     required this.enabled,
     required this.keyed,
     required this.onStart,
@@ -212,21 +217,22 @@ class _GradeWheelState extends State<GradeWheel> {
             ),
           ),
         ),
-        const SizedBox(width: 6),
-        _drag(
-          bar: true,
-          onDouble: _resetMaster,
-          child: CustomPaint(
-            size: Size(10, size),
-            painter: _BarPainter(
-              at: ((master - widget.neutral) / widget.masterSpan)
-                  .clamp(-1.0, 1.0),
-              knob: knob,
-              track: t.hairlineStrong,
-              mark: t.hairline,
+        if (widget.bar) const SizedBox(width: 6),
+        if (widget.bar)
+          _drag(
+            bar: true,
+            onDouble: _resetMaster,
+            child: CustomPaint(
+              size: Size(10, size),
+              painter: _BarPainter(
+                at: ((master - widget.neutral) / widget.masterSpan)
+                    .clamp(-1.0, 1.0),
+                knob: knob,
+                track: t.hairlineStrong,
+                mark: t.hairline,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -257,8 +263,9 @@ class _GradeWheelState extends State<GradeWheel> {
   }
 }
 
-/// The disc: hues round the rim fading to the panel's grey in the middle,
-/// a faint cross, and the dot.
+/// The disc: a ring of hues round a dark face, a faint cross, and the dot.
+/// At rest only the ring has colour; as the dot moves away from the middle
+/// the face fills with the hues, so a wheel that holds a grade shows it.
 class _WheelPainter extends CustomPainter {
   /// The dot, as a fraction of the radius with y up.
   final Offset chroma;
@@ -275,39 +282,57 @@ class _WheelPainter extends CustomPainter {
     required this.enabled,
   });
 
-  /// A muted colour at [hue] degrees: a grade wheel is a control, so its
-  /// colours sit well below full saturation and the dot stays the brightest
-  /// thing on it. Disabled, the wheel is the same shape in grey.
-  Color _hue(double hue) =>
-      enabled ? hsvToRgb(hue, 0.55, 0.78) : hsvToRgb(hue, 0.0, 0.42);
+  /// The width of the ring of hues at the rim.
+  static const double _rim = 5;
+
+  /// The hues round the disc as a sweep, [s] and [v] their saturation and
+  /// value, faded to [alpha]. Disabled, the same sweep in grey.
+  ///
+  /// The sweep runs clockwise from three o'clock and our angles anticlockwise,
+  /// so the hue at each step counts down from red's angle. It starts at zero
+  /// and runs the full circle: a sweep doesn't wrap below zero, so starting it
+  /// at red's angle left a hard seam at three o'clock.
+  Shader _sweep(Rect rect, double s, double v, [double alpha = 1]) {
+    const steps = 36;
+    return SweepGradient(
+      colors: [
+        for (var i = 0; i <= steps; i++)
+          (enabled
+                  ? hsvToRgb(((-i * 360 / steps - _angles[0]) % 360 + 360) % 360, s, v)
+                  : hsvToRgb(0, 0, 0.42))
+              .withValues(alpha: alpha),
+      ],
+    ).createShader(rect);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.shortestSide / 2;
     final rect = Rect.fromCircle(center: c, radius: r);
-    // The sweep runs clockwise on screen and our angles anticlockwise, so red
-    // starts at minus its angle and the hues count down from there.
-    const steps = 24;
+    final reach = chroma.distance.clamp(0.0, 1.0);
+    canvas.drawCircle(c, r, Paint()..color = centre);
+    // The face takes the hues as the dot moves out, darkest in the middle.
+    if (reach > 0) {
+      canvas.drawCircle(
+          c, r - _rim, Paint()..shader = _sweep(rect, 0.55, 0.85, 0.15 + 0.55 * reach));
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [centre, centre.withValues(alpha: 0)],
+            stops: const [0.1, 0.9],
+          ).createShader(rect),
+      );
+    }
     canvas.drawCircle(
       c,
-      r,
+      r - _rim / 2,
       Paint()
-        ..shader = SweepGradient(
-          startAngle: -_angles[0] * math.pi / 180,
-          endAngle: (360 - _angles[0]) * math.pi / 180,
-          colors: [for (var i = 0; i <= steps; i++) _hue(-i * 360 / steps)],
-        ).createShader(rect),
-    );
-    // Grey in the middle: the centre is no lean at all.
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [centre, centre.withValues(alpha: 0)],
-          stops: const [0.08, 1.0],
-        ).createShader(rect),
+        ..shader = _sweep(rect, 0.6, 0.92)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _rim,
     );
     final hair = Paint()
       ..color = cross

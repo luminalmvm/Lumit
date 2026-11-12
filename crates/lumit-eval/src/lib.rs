@@ -428,7 +428,7 @@ fn feed_comp(
         let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         // As the build draws it: a Sequence layer wearing its clip's effects
         // and blend mode, so a change to either retires the frame.
-        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let worn = lumit_core::grade::groups::worn_at(doc, layer, lt);
         // The builder reads a layer's own moments off the layer itself.
         moments::feed_own_moments(h, doc, comp, layer, t, quality, stamper, visited)?;
         let layer = worn.as_ref().unwrap_or(layer);
@@ -1386,6 +1386,16 @@ fn feed_effect_stack(
                     let curve = lumit_core::fx::params::CurvePoints::sanitised(points);
                     h.update(&(curve.points().len() as u32).to_le_bytes());
                     for xy in curve.points() {
+                        feed_f64(h, f64::from(xy[0]));
+                        feed_f64(h, f64::from(xy[1]));
+                    }
+                }
+                EffectValue::Shape(points) => {
+                    // The outline as the render reads it, so a point the
+                    // read drops keys nothing.
+                    let shape = lumit_core::fx::shape_points::ShapePoints::sanitised(points);
+                    h.update(&(shape.len() as u32).to_le_bytes());
+                    for xy in shape.points() {
                         feed_f64(h, f64::from(xy[0]));
                         feed_f64(h, f64::from(xy[1]));
                     }
@@ -2961,6 +2971,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -3313,67 +3324,6 @@ mod tests {
         };
         assert_eq!(at(1.0, &StubStamper), at(2.0, &StubStamper));
         assert_ne!(at(1.0, &Solved), at(2.0, &Solved));
-    }
-
-    /// Edits that cannot reach a pixel keep every key — the whole reason the
-    /// cache is content-keyed rather than emptied on every commit. The work
-    /// area is where the playhead loops, a marker is a label, a label colour is
-    /// Timeline chrome, and volume is sound: none of them is in the picture.
-    #[test]
-    fn picture_free_edits_keep_every_key() {
-        let doc = Document::new();
-        let mut comp = comp_with(vec![text_layer("hi", 0.0, 8.0, 0.0)]);
-        let before = key(&doc, &comp, 1.0);
-
-        comp.work_area = Some((secs(1.0), secs(2.0)));
-        assert_eq!(
-            before,
-            key(&doc, &comp, 1.0),
-            "the work area is not content"
-        );
-
-        comp.markers.push(lumit_core::markers::Marker {
-            id: Uuid::now_v7(),
-            time: secs(1.0),
-            duration: None,
-            label: "beat".into(),
-            kind: lumit_core::markers::MarkerKind::Beat { confidence: 1.0 },
-            colour: None,
-            extra: serde_json::Map::new(),
-        });
-        assert_eq!(before, key(&doc, &comp, 1.0), "a marker is a label");
-
-        comp.layers[0].label = 5;
-        comp.layers[0].volume_db = Property::fixed(-6.0);
-        comp.layers[0].switches.audible = false;
-        comp.layers[0].switches.shy = true;
-        comp.layers[0].switches.locked = true;
-        assert_eq!(
-            before,
-            key(&doc, &comp, 1.0),
-            "label, volume, audio and the Timeline switches change no pixel"
-        );
-
-        // And a node graph's canvas is presentation too (docs/impl/
-        // node-graph-comp.md §2.5): moving a box, twirling one open and
-        // naming a wash draw nothing at all.
-        let (gdoc, graphed, read, ..) = node_graph_doc();
-        let base = key(&gdoc, &graphed, 1.0);
-        let mut arranged = graphed.clone();
-        if let Some(g) = arranged.graph.as_mut() {
-            g.layout.push((read, [640.0, 480.0]));
-            g.exposed.push(read);
-            g.groups.push(lumit_core::comp_graph::GraphGroup {
-                name: "the wash".into(),
-                colour: 3,
-                members: vec![read],
-            });
-        }
-        assert_eq!(
-            base,
-            key(&gdoc, &arranged, 1.0),
-            "layout, exposure and groups are the canvas, not the picture"
-        );
     }
 
     /// Every content axis moves the key: text, solid colour (through the
@@ -5107,4 +5057,6 @@ mod tests {
             "two layer times on one source time are one frame"
         );
     }
+
+    mod picture_free_edits;
 }

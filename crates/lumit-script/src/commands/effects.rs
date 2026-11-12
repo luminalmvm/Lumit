@@ -87,6 +87,7 @@ fn effect_json(index: usize, e: &EffectInstance, offset: Rational) -> Value {
                 EffectValue::Bool(on) => ("bool", json!(on)),
                 EffectValue::Choice(n) => ("choice", json!(n)),
                 EffectValue::Seed(n) => ("seed", json!(n)),
+                EffectValue::Shape(points) => ("shape", json!(points)),
                 _ => ("other", Value::Null),
             };
             json!({ "id": p.id, "label": label_of(e, &p.id), "kind": kind, "value": value })
@@ -381,6 +382,16 @@ fn set_own(
                 _ => None,
             }
             .ok_or_else(|| bad(format!("{what} takes a whole number.")))?;
+            return Ok(());
+        }
+        // An outline: `[[x, y], ...]` in -1..1 of its box, read as the
+        // render reads it.
+        EffectValue::Shape(points) => {
+            *points = match change {
+                Change::Value(v) => serde_json::from_value::<Vec<[f32; 2]>>(v).ok(),
+                _ => None,
+            }
+            .ok_or_else(|| bad(format!("{what} takes a list of [x, y] points.")))?;
             return Ok(());
         }
         _ => return Err(bad(format!("{what} cannot be set from a script."))),

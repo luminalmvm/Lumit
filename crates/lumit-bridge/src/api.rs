@@ -31,6 +31,17 @@ pub mod extensions;
 pub mod flare;
 pub mod folder;
 pub mod footage;
+pub mod grade_cdl;
+pub mod grade_groups;
+pub mod grade_lut;
+pub mod grade_matte;
+pub mod grade_memories;
+pub mod grade_nodes;
+pub mod grade_shared;
+pub mod grade_shots;
+pub mod grade_solve;
+pub mod grade_track;
+pub mod grade_versions;
 pub mod graph;
 pub mod graph_looks;
 pub mod handler;
@@ -65,8 +76,10 @@ pub mod shell;
 pub mod solid;
 pub mod stabilise;
 pub mod state;
+pub mod stills;
 pub mod streams;
 pub mod styles;
+pub mod surface;
 pub mod system;
 pub mod template;
 pub mod track;
@@ -181,6 +194,8 @@ pub enum BridgeError {
     NoSolve,
     /// The razor was pointed at a layer that is not a Sequence layer.
     NotSequence,
+    /// A grade solver found nothing in the picture to read.
+    NothingToRead,
     /// Only a Footage layer converts to a Sequence layer.
     NotFootage,
     /// The layer carries a Retime, and a retimed clip is silent (docs/09 §7),
@@ -336,6 +351,7 @@ impl fmt::Display for BridgeError {
             BridgeError::NotLinked => write!(f, "That camera has no solve to bake"),
             BridgeError::NoSolve => write!(f, "Nothing has been solved at those points"),
             BridgeError::NotSequence => write!(f, "That is not a sequence layer"),
+            BridgeError::NothingToRead => write!(f, "There's nothing in the picture to read"),
             BridgeError::NotFootage => {
                 write!(f, "Only footage layers convert to sequenced")
             }

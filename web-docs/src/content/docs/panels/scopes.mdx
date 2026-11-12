@@ -13,14 +13,35 @@ Scopes read the frame the Viewer previews.
 | --- | --- |
 | **Waveform** | Brightness against horizontal position, as luma or as the three channels over each other. |
 | **RGB parade** | The red, green and blue waveforms side by side. |
-| **Vectorscope** | Hue and saturation on a colour wheel. |
+| **Vectorscope** | Hue and saturation on a colour wheel. **2x** draws it at twice the size. |
 | **Histogram** | How many pixels sit at each level, as luma or per channel. |
-
-Right-click the trace to change the scope, its reading, the graticule or the colours.
+| **CIE chromaticity** | Each pixel's colour on the CIE 1931 xy diagram. |
 
 <Shot file="scopes.png" caption="The waveform and vectorscope reading the current frame." eager/>
+
+## Layouts
+
+**One scope**, **Two scopes** or **Four scopes** sit side by side, from the picker at the
+panel's top right. Each has its own header, with the scope and its options. A second Scopes
+panel keeps its own layout and scopes.
+
+## The scale
+
+The graticule is drawn over each trace:
+
+- The waveform and parade are marked in **Percent**, 0 to 100, or **10-bit**, 0 to 1023.
+- The vectorscope marks where 75% colour bars land, and the skin tone line.
+- The CIE diagram draws the spectral locus, the Rec. 709, P3 and Rec. 2020 gamuts, and the
+  D65 white point.
+
+## The menu
+
+Right-click a scope for its instrument, **Luma** or **RGB**, and **2x**, then the layout,
+**Graticule**, **Percent** or **10-bit**, and **Theme colours**. **Brightness**, at the
+foot, draws the traces fainter or stronger, from 25% to 400%.
 
 ## Related
 
 - [Viewer](/panels/viewer/)
+- [Grading](/use/grading/)
 - [Effects](/use/effects/)

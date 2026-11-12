@@ -1723,6 +1723,10 @@ pub enum EffectValue {
     ///
     /// Also what a text row holds: the text as typed.
     Text(String),
+    /// A Shape row's points, in order round the outline, each in `-1..1` of
+    /// the box the rows beside it place. Static, and straightened on read
+    /// ([`crate::fx::shape_points::ShapePoints::sanitised`]) as a curve is.
+    Shape(Vec<[f32; 2]>),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case
@@ -3334,6 +3338,9 @@ pub struct Layer {
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
+    /// The other versions of the layer's grade ([`crate::grade::versions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade_versions: Option<crate::grade::versions::GradeVersions>,
     /// The layer's **style stack** (docs/impl/layer-styles.md §1): the
     /// shadow, glow, overlay and stroke a layer wears rather than the effects it
     /// carries.
@@ -4222,6 +4229,12 @@ pub struct Document {
     /// project. Nothing draws from it. Absent from the file when empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
+    /// The grade groups ([`crate::grade::groups`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grade_groups: Vec<crate::grade::groups::GradeGroup>,
+    /// The grade memories ([`crate::grade::memories`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grade_memories: Vec<crate::grade::memories::GradeMemory>,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
     /// (docs/10-FILE-FORMAT.md §1.2).
@@ -4572,6 +4585,8 @@ impl Document {
             colour: ColourManagement::default(),
             swatches: Vec::new(),
             notes: String::new(),
+            grade_groups: Vec::new(),
+            grade_memories: Vec::new(),
             ui_state: None,
             extra: serde_json::Map::new(),
         }
@@ -4965,6 +4980,7 @@ mod tests {
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5353,6 +5369,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5679,6 +5696,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5846,63 +5864,6 @@ mod tests {
         }
     }
 
-    /// The `in use` badge: footage, a solid and a nested composition all count
-    /// as used the moment a layer names them, and an item nothing names does
-    /// not — whatever else the project holds.
-    #[test]
-    fn an_item_is_used_when_some_comps_layer_names_it() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let used_footage = footage.id;
-        let idle_footage = bare_footage("b.mp4", "b.mp4", "");
-        let idle_id = idle_footage.id;
-
-        let solid = SolidDef {
-            id: Uuid::now_v7(),
-            name: "White".into(),
-            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            width: 64,
-            height: 64,
-            extra: serde_json::Map::new(),
-        };
-        let solid_id = solid.id;
-
-        let mut inner = bare_comp("Inner");
-        let inner_id = inner.id;
-        inner
-            .layers
-            .push(bare_layer(LayerKind::Footage { item: used_footage }));
-
-        let mut outer = bare_comp("Outer");
-        outer
-            .layers
-            .push(bare_layer(LayerKind::Precomp { comp: inner_id }));
-        outer
-            .layers
-            .push(bare_layer(LayerKind::Solid { def: solid_id }));
-        // A drawn layer names no project item at all.
-        outer.layers.push(bare_layer(LayerKind::Adjustment));
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Footage(idle_footage));
-        doc.items.push(ProjectItem::Solid(solid));
-        doc.items.push(ProjectItem::Composition(inner));
-        doc.items.push(ProjectItem::Composition(outer));
-
-        assert!(doc.item_is_used(used_footage));
-        assert!(doc.item_is_used(solid_id));
-        assert!(
-            doc.item_is_used(inner_id),
-            "a comp placed as a layer is used"
-        );
-        assert!(!doc.item_is_used(idle_id), "nothing places this footage");
-        assert!(
-            !doc.item_is_used(doc.items[4].id()),
-            "the outer comp is in nothing, however much is in it"
-        );
-        assert!(!doc.item_is_used(Uuid::now_v7()), "an id nobody knows");
-    }
-
     /// The flowchart's question: one step each way from a comp, each
     /// neighbour once, with a mark where the nesting carries on.
     #[test]
@@ -6026,4 +5987,6 @@ mod tests {
         assert_eq!(Off.samples_for(7680, 4320), 1);
         assert_eq!(X8.samples_for(0, 0), 8, "an empty comp is left alone");
     }
+
+    mod item_in_use;
 }

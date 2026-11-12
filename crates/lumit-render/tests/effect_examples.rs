@@ -46,6 +46,7 @@
 
 mod chord;
 mod example_cube;
+mod oval_mask;
 
 mod skipped;
 use std::path::PathBuf;
@@ -62,6 +63,7 @@ use lumit_core::model::{
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
+use oval_mask::oval_mask;
 use uuid::Uuid;
 
 /// The example frame's size: the source plate's own, and close enough to 1080p
@@ -493,6 +495,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -501,43 +504,6 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         effects: Vec::new(),
         styles: Vec::new(),
         switches: Switches::default(),
-        extra: serde_json::Map::new(),
-    }
-}
-
-/// An oval covering most of the frame, for the three effects that draw along a
-/// mask path (Vegas, Scribble, Stroke). Four vertices with the usual circular
-/// tangent length, which is close enough to an ellipse for a figure.
-fn oval_mask(mode: MaskMode) -> Mask {
-    let (cx, cy) = (f64::from(W) / 2.0, f64::from(H) / 2.0);
-    let (rx, ry) = (f64::from(W) * 0.3, f64::from(H) * 0.34);
-    // The magic number that turns four cubic segments into a circle.
-    let k = 0.552_284_75;
-    let (hx, hy) = (rx * k, ry * k);
-    let v = |pos: (f64, f64), tin: (f64, f64), tout: (f64, f64)| Vertex {
-        pos,
-        tan_in: tin,
-        tan_out: tout,
-    };
-    Mask {
-        id: id("Oval"),
-        name: "Oval".into(),
-        path: BezierPath {
-            vertices: vec![
-                v((cx, cy - ry), (-hx, 0.0), (hx, 0.0)),
-                v((cx + rx, cy), (0.0, -hy), (0.0, hy)),
-                v((cx, cy + ry), (hx, 0.0), (-hx, 0.0)),
-                v((cx - rx, cy), (0.0, hy), (0.0, -hy)),
-            ],
-            closed: true,
-        },
-        path_keys: Vec::new(),
-        inverted: false,
-        opacity: Property::fixed(100.0),
-        mode,
-        feather: Property::zero(),
-        vertex_feather: Vec::new(),
-        expansion: Property::zero(),
         extra: serde_json::Map::new(),
     }
 }

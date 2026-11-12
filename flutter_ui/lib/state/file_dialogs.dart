@@ -234,6 +234,41 @@ Future<String?> pickFrameSaveLocation(String suggestedName) async {
   return '$path.png';
 }
 
+/// Where to write a grade as a `.cube` LUT, or null when cancelled.
+Future<String?> pickLutSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.fxLut, extensions: const ['cube']),
+    ],
+    suggestedName: '$suggestedName.cube',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.cube')) return path;
+  return '$path.cube';
+}
+
+/// Pick a colour decision (`.cdl`, `.cc` or `.ccc`) to import, or null when
+/// cancelled.
+Future<String?> pickCdlToOpen() async => (await openFile(acceptedTypeGroups: [
+      XTypeGroup(label: l10n.gradeCdl, extensions: const ['cdl', 'cc', 'ccc']),
+    ]))
+        ?.path;
+
+/// Where to export a node as a colour decision, or null when cancelled. A
+/// `.cdl` is written as a decision list, anything else as a `.cc`.
+Future<String?> pickCdlSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.gradeCdl, extensions: const ['cc', 'cdl']),
+    ],
+    suggestedName: '$suggestedName.cc',
+  ))
+      ?.path;
+  if (path == null) return null;
+  final lower = path.toLowerCase();
+  return lower.endsWith('.cc') || lower.endsWith('.cdl') ? path : '$path.cc';
+}
+
 /// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;

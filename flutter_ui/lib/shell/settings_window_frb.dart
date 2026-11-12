@@ -55,6 +55,7 @@ import 'package:lumit_flutter/src/rust/api/mixer.dart' show setTouchReturnMs;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
+import 'package:lumit_flutter/src/rust/api/surface.dart';
 import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:provider/provider.dart';
 
@@ -64,6 +65,7 @@ import '../l10n/strings.dart';
 import '../state/addons.dart';
 import '../state/app_icon.dart';
 import '../state/background.dart';
+import '../state/control_surfaces.dart';
 import '../state/expression_language.dart';
 import '../state/extensions.dart';
 import '../state/external_links.dart';
@@ -305,6 +307,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     _largest = largestPicture();
     _largestChoices = largestPictureChoices();
     unawaited(_findBlender());
+    // The surfaces' rows follow the hardware while the window is up: a
+    // device plugged in, the Hub starting, a control learned.
+    if (!kIsWeb) {
+      final surfaces =
+          Provider.of<LumitUiState>(context, listen: false).surfaces;
+      _surfaces = surfaces;
+      surfaces.watchPorts();
+      surfaces.tangent.addListener(_surfacesMoved);
+      surfaces.ports.addListener(_surfacesMoved);
+      surfaces.learning.addListener(_surfacesMoved);
+    }
     // Preview and cache draws its readings in the first frame, so a window
     // opened straight onto it has to have them by then.
     if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
@@ -320,6 +333,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// On the row the window was opened to show, so it can be scrolled to.
   final GlobalKey _wantedRow = GlobalKey();
+
+  /// The control surfaces, listened to while the window is up.
+  ControlSurfaces? _surfaces;
+
+  void _surfacesMoved() {
+    if (mounted) setState(() {});
+  }
+
+  /// Everything a MIDI control can drive, and the one Learn ties the next
+  /// control to.
+  late final List<BridgeSurfaceTarget> _surfaceTargets = surfaceTargets();
+  BridgeSurfaceTarget? _learnTarget;
 
   /// The Blender 3D models open with, once looked for. Asking each one its
   /// version takes a moment, so the row fills in when the answer comes.
@@ -1411,6 +1436,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ],
         ),
+        (l10n.settingsGroupControlSurfaces, _controlSurfaces(t, ui)),
         (
           l10n.settingsGroupScripts,
           [
@@ -2667,6 +2693,122 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     _readAudio();
   }
 
+  /// Tangent panels, the MIDI devices kept open, and the learned controls.
+  List<Widget?> _controlSurfaces(LumitTheme t, LumitUiState ui) {
+    final surfaces = ui.surfaces;
+    final workspace = ui.workspace;
+    final chosen = workspace.midiInputs;
+    // A chosen device that is unplugged keeps its row, switched on, so it
+    // can be let go of.
+    final ports = [
+      ...surfaces.ports.value,
+      for (final port in chosen)
+        if (!surfaces.ports.value.contains(port)) port,
+    ];
+    final learnTarget = _learnTarget ?? _surfaceTargets.firstOrNull;
+    final learning = surfaces.learning.value != null;
+    return [
+      _row(
+        t,
+        l10n.settingsTangentPanels,
+        _carry(
+            _setting('settings-tangent-panels', workspace.tangentPanels,
+                surfaces.setTangent),
+            HouseToggle(
+              key: const ValueKey('settings-tangent-panels'),
+              value: workspace.tangentPanels,
+              onChanged: (on) => setState(() => surfaces.setTangent(on)),
+            )),
+        description: switch (surfaces.tangent.value) {
+          BridgeTangentStatus_Waiting() => l10n.settingsTangentWaiting,
+          BridgeTangentStatus_Connected(:final panels) =>
+            l10n.settingsTangentConnected(panels.join(', ')),
+          BridgeTangentStatus_Off() => '',
+        },
+      ),
+      if (ports.isEmpty)
+        _row(t, l10n.settingsMidiDevices, const SizedBox.shrink(),
+            description: l10n.settingsMidiNone)
+      else
+        for (final port in ports)
+          _row(
+            t,
+            port,
+            HouseToggle(
+              key: ValueKey<String>('settings-midi-$port'),
+              value: chosen.contains(port),
+              onChanged: (on) => setState(() => surfaces.setInput(port, on)),
+            ),
+          ),
+      if (learnTarget != null)
+        _row(
+          t,
+          l10n.settingsMidiLearn,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: _ddWide,
+                height: settingsControlHeight,
+                child: BareDropdown<BridgeSurfaceTarget>(
+                  key: const ValueKey('settings-midi-learn-target'),
+                  value: learnTarget,
+                  options: _surfaceTargets,
+                  label: surfaceTargetLabel,
+                  onChanged: (to) => setState(() => _learnTarget = to),
+                ),
+              ),
+              const SizedBox(width: 6),
+              HouseButton(
+                key: const ValueKey('settings-midi-learn'),
+                small: true,
+                onPressed: () => learning
+                    ? surfaces.stopLearning()
+                    : surfaces.learn(learnTarget),
+                child: Text(
+                    learning
+                        ? l10n.settingsMidiLearning
+                        : l10n.settingsMidiLearnButton,
+                    style: t.small),
+              ),
+            ],
+          ),
+        ),
+      for (final mapping in surfaces.mappings)
+        _row(
+          t,
+          midiControlLabel(mapping.control),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(surfaceTargetLabel(mapping.target), style: t.small),
+              if (mapping.control.kind == BridgeMidiKind.cc) ...[
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: _ddNarrow,
+                  height: settingsControlHeight,
+                  child: BareDropdown<BridgeMidiEncoding>(
+                    value: mapping.encoding,
+                    options: BridgeMidiEncoding.values,
+                    label: midiEncodingLabel,
+                    onChanged: (encoding) => setState(
+                        () => surfaces.setEncoding(mapping, encoding)),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 6),
+              HouseButton(
+                small: true,
+                onPressed: () => setState(() => surfaces.remove(mapping)),
+                child: Text(l10n.settingsMidiRemove, style: t.small),
+              ),
+            ],
+          ),
+          description: mapping.control.port,
+        ),
+    ];
+  }
+
   // ---- Autosave ------------------------------------------------------------
 
   /// How often Lumit writes a spare copy of the work, and how many it keeps.
@@ -3776,6 +3918,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     if (_endAccentPreview case final end?) scheduleMicrotask(end);
     _perfTimer?.cancel();
     _unwatchAddons();
+    if (_surfaces case final surfaces?) {
+      surfaces.tangent.removeListener(_surfacesMoved);
+      surfaces.ports.removeListener(_surfacesMoved);
+      surfaces.learning.removeListener(_surfacesMoved);
+      // Nobody is left to see what a learn would catch.
+      if (surfaces.learning.value != null) surfaces.stopLearning();
+    }
     _search?.dispose();
     _filenameTemplate.dispose();
     _scroll.dispose();

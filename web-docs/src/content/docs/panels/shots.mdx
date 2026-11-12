@@ -1,0 +1,83 @@
+---
+title: Shots
+description: Every shot of the composition in time order, each with its graded picture.
+sidebar:
+  order: 8.3
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The Shots panel lists every [shot](/use/grading/#shots) of the composition in time order,
+each as a tile with its graded picture.
+
+<Shot file="shots.png" caption="The Shots panel, the current shot outlined in the accent." eager/>
+
+## The tiles
+
+- The picture is the shot alone, with its grade, at its middle frame. It is made again after
+  the shot's stack changes.
+- The number sits top left, outlined in the accent while the shot has a grade switched on.
+- The shot's name sits under the picture, and its version's name when it has more than one.
+- A dot marks a shot in a [grade group](/use/grading/#groups), in the group's colour.
+- The current shot has an accent border, and the other picked shots a stronger hairline.
+
+The tiles run across the panel, or down it when the panel is taller than wide.
+
+## The header
+
+How many shots there are, **All**, **Graded** and **Ungraded**, which filter the tiles,
+**Clip colour** and **Lightbox**.
+
+**Clip colour** shows only the shots of one label colour: the clip's own, else its layer's.
+Its menu offers **Every colour** and the Timeline's label chips.
+
+## The Lightbox
+
+**Lightbox**, also on the menu and `Ctrl+Alt+L`, fills the window with the Shots panel as a
+grid of large tiles in time order, about four across a full window and never wider than
+the composition. Its tiles, filters, menus
+and still drops work as the panel's do. Press it again, or `Escape`, to put the panel
+back.
+
+## Picking shots
+
+- Click a tile to make it the current shot. Its layer is selected, a clip is picked as the
+  [Cut timeline](/use/cutting/) picks it, and the playhead moves to the shot's first frame if
+  it was outside.
+- `Ctrl`+click adds a shot to the pick, or takes it out.
+- `Shift`+click picks every shot between the last one clicked and this one.
+- Double-click a tile to bring up the Cut timeline for a clip in it, else the Timeline.
+
+`↑` and `↓` move to the previous and the next shot, and `Home` and `End` to the first and
+the last, while a Colour panel is active. See
+[The current shot](/use/grading/#the-current-shot).
+
+## The menu
+
+Right-click a tile. The rows act on that shot, and on the shots picked with it, and leave
+the current shot as it is.
+
+| Row | Does |
+| --- | --- |
+| **Copy grade** | Puts the shot's grade on the clipboard. |
+| **Paste grade** | Puts the clipboard's grade in place of the shot's. |
+| **Apply grade from previous shot** | Puts the grade of the shot before it in time in place of its own. |
+| **Apply grade from two shots back** | The same, from the shot two before it. |
+| **Reset grade** | Puts every node of the grade back to its defaults, keys dropped. |
+| **Versions ▸** | The shot's versions, ticked on the live one, then **New version**, **Duplicate version**, **Rename…** and **Delete version**. See [Versions](/use/grading/#versions). |
+| **Group ▸** | **New group from selection**, each group to join, **Rename group…** and **Delete group** while the shots share one group, and **Leave group**. See [Groups](/use/grading/#groups). |
+| **Match to current shot** | Matches the shot to the current one, read at the playhead when it is in the current shot. |
+| **Grab still** | Keeps the shot's frame at the playhead in the Gallery, or its middle frame when the playhead is outside it. |
+| **Export LUT…** | Writes the shot's grade as a 33-point `.cube` for Video. |
+| **Shots in a grid** | Shows the picked shots in the Viewer's [grid](/use/grading/#the-grid). With more than one picked. |
+| **Lightbox** | Shows or hides the Lightbox. |
+
+Drop a still from the [Gallery](/panels/gallery/) on a tile to put its grade in place of the
+shot's, as one undo step.
+
+## Related
+
+- [Grading](/use/grading/)
+- [Grade](/panels/grade/)
+- [Gallery](/panels/gallery/)
+- [Cutting](/use/cutting/)

@@ -1,0 +1,331 @@
+---
+title: Correction
+description: "A whole grade node: wheels, adjustments, curves, a qualifier and windows."
+---
+
+Correction is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+One node of a grade: wheels, log wheels, adjustments, an RGB mixer, curves and hue curves,
+keyed by a qualifier, four windows and the Matte. The grade is worked in its **Space**, and
+the key says where it lands: white grades, black leaves the picture as it came. A fresh
+Correction passes the picture on untouched. The [Grade panel](/panels/grade/) edits it
+page by page; see [Grading](/use/grading/).
+
+Exposure, Temperature and Tint act on the linear picture, then the HDR zones, before it is
+put into the Space. The rest runs in this order: Offset, Lift, Gamma, Gain, the log wheels,
+Lum mix, Contrast, Shadows and Highlights, the mixer, Hue with Saturation and Colour boost,
+Midtone detail, the curves, the soft clip, then the hue curves.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Space** | Dropdown | Video · Log · Linear | Video | - |
+| **Combine** | Dropdown | Serial · Parallel · Layer | Serial | - |
+| **Lift** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Gamma** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Gain** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Offset** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Shadow** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Midtone** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Highlight** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Low range** | Slider | 0 to 1 | 0.333 | - |
+| **High range** | Slider | 0 to 1 | 0.55 | - |
+| **Exposure** | Slider | -5 to 5; down to -20 and up to 20 | 0 | - |
+| **Temperature** | Slider | -150 to 150; down to -200 and up to 200 | 0 | - |
+| **Tint** | Slider | -150 to 150; down to -200 and up to 200 | 0 | - |
+| **Contrast** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Pivot** | Slider | 0 to 1 | 0.435 | - |
+| **Saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Adjust › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Lum mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Colour boost** | Slider | -100 to 100 | 0 | - |
+| **Shadows** | Slider | -100 to 100 | 0 | - |
+| **Highlights** | Slider | -100 to 100 | 0 | - |
+| **Midtone detail** | Slider | -100 to 100 | 0 | - |
+| **Global balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Black offset** | Slider | -0.05 to 0.05; down to -0.1 and up to 0.1 | 0 | - |
+| **Falloff** | Slider | 0 to 4 | 2 | - |
+| **Black balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Black exposure** | Slider | -4 to 4; down to -16 and up to 16 | 0 | - |
+| **Black saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Black range** | Slider | -8 to 8; down to -16 and up to 16 | -3 | - |
+| **Dark balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Dark exposure** | Slider | -4 to 4; down to -16 and up to 16 | 0 | - |
+| **Dark saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Dark range** | Slider | -8 to 8; down to -16 and up to 16 | -1.5 | - |
+| **Shadow balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Shadow exposure** | Slider | -4 to 4; down to -16 and up to 16 | 0 | - |
+| **Shadow saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Shadow range** | Slider | -8 to 8; down to -16 and up to 16 | 1 | - |
+| **Light balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Light exposure** | Slider | -4 to 4; down to -16 and up to 16 | 0 | - |
+| **Light saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Light range** | Slider | -8 to 8; down to -16 and up to 16 | -1 | - |
+| **Highlight balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Highlight exposure** | Slider | -4 to 4; down to -16 and up to 16 | 0 | - |
+| **Highlight saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Highlight range** | Slider | -8 to 8; down to -16 and up to 16 | 1.5 | - |
+| **Specular balance** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Specular exposure** | Slider | -4 to 4; down to -16 and up to 16 | 0 | - |
+| **Specular saturation** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Specular range** | Slider | -8 to 8; down to -16 and up to 16 | 4 | - |
+| **Red output** | Colour | Each channel -2 to 2, scene-linear | 1, 0, 0, 1 | - |
+| **Green output** | Colour | Each channel -2 to 2, scene-linear | 0, 1, 0, 1 | - |
+| **Blue output** | Colour | Each channel -2 to 2, scene-linear | 0, 0, 1, 1 | - |
+| **Keep luma** | Checkbox | On or off | Off | - |
+| **Luma** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Red** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Green** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Blue** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **High soft clip** | Slider | 0 to 100 | 0 | - |
+| **Low soft clip** | Slider | 0 to 100 | 0 | - |
+| **Hue v hue** | Curve | 2 to 32 points in the unit square | A flat line across the middle | - |
+| **Hue v sat** | Curve | 2 to 32 points in the unit square | A flat line across the middle | - |
+| **Hue v lum** | Curve | 2 to 32 points in the unit square | A flat line across the middle | - |
+| **Lum v sat** | Curve | 2 to 32 points in the unit square | A flat line across the middle | - |
+| **Sat v sat** | Curve | 2 to 32 points in the unit square | A flat line across the middle | - |
+| **Sat v lum** | Curve | 2 to 32 points in the unit square | A flat line across the middle | - |
+| **Qualifier** | Dropdown | Off · HSL · RGB · Luma · 3D | Off | - |
+| **Use hue** | Checkbox | On or off | On | - |
+| **Hue and saturation › Hue** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Hue width** | Slider | 0 to 360 | 60 | Degrees |
+| **Hue softness** | Slider | 0 to 180 | 20 | Degrees |
+| **Hue symmetry** | Slider | -100 to 100 | 0 | - |
+| **Use saturation** | Checkbox | On or off | On | - |
+| **Saturation low** | Slider | 0 to 100 | 0 | Per cent |
+| **Saturation high** | Slider | 0 to 100 | 100 | Per cent |
+| **Saturation softness** | Slider | 0 to 100 | 10 | Per cent |
+| **Use luma** | Checkbox | On or off | On | - |
+| **Luma low** | Slider | 0 to 100 | 0 | Per cent |
+| **Luma high** | Slider | 0 to 100 | 100 | Per cent |
+| **Luma softness** | Slider | 0 to 100 | 10 | Per cent |
+| **Red low** | Slider | 0 to 100 | 0 | Per cent |
+| **Red high** | Slider | 0 to 100 | 100 | Per cent |
+| **Green low** | Slider | 0 to 100 | 0 | Per cent |
+| **Green high** | Slider | 0 to 100 | 100 | Per cent |
+| **Blue low** | Slider | 0 to 100 | 0 | Per cent |
+| **Blue high** | Slider | 0 to 100 | 100 | Per cent |
+| **RGB › Softness** | Slider | 0 to 100 | 10 | Per cent |
+| **Keep samples** | Points | Up to 32 points | None | - |
+| **Keep sample luma** | Points | Up to 32 points | None | - |
+| **Drop samples** | Points | Up to 32 points | None | - |
+| **Drop sample luma** | Points | Up to 32 points | None | - |
+| **Size** | Slider | 0 to 100 | 20 | - |
+| **3D › Softness** | Slider | 0 to 100 | 20 | - |
+| **Denoise** | Slider | 0 to 100 | 0 | - |
+| **Clean black** | Slider | 0 to 100 | 0 | - |
+| **Clean white** | Slider | 0 to 100 | 0 | - |
+| **Black clip** | Slider | 0 to 100 | 0 | Per cent |
+| **White clip** | Slider | 0 to 100 | 100 | Per cent |
+| **Blur radius** | Slider | 0 to 100 | 0 | Pixels at composition size |
+| **Grow** | Slider | -20 to 20 | 0 | Pixels at composition size |
+| **Matte finesse › Invert** | Checkbox | On or off | Off | - |
+| **Window 1** | Dropdown | Off · Ellipse · Rectangle · Polygon · Gradient | Off | - |
+| **Window 1 › Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Window 1 › Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Window 1 › Width** | Slider | 0 to 3840; higher | 768 | Pixels at composition size |
+| **Window 1 › Height** | Slider | 0 to 2160; higher | 432 | Pixels at composition size |
+| **Window 1 › Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Window 1 › Roundness** | Slider | 0 to 100 | 0 | Per cent |
+| **Window 1 › Outer softness** | Slider | 0 to 1000; higher | 40 | Pixels at composition size |
+| **Window 1 › Inner softness** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
+| **Window 1 › Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Window 1 › Invert** | Checkbox | On or off | Off | - |
+| **Window 1 › Subtract** | Checkbox | On or off | Off | - |
+| **Window 1 › Points** | Points | Up to 32 points | None | - |
+| **Window 1 › Smooth** | Checkbox | On or off | On | - |
+| **Window 2** | Dropdown | Off · Ellipse · Rectangle · Polygon · Gradient | Off | - |
+| **Window 2 › Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Window 2 › Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Window 2 › Width** | Slider | 0 to 3840; higher | 768 | Pixels at composition size |
+| **Window 2 › Height** | Slider | 0 to 2160; higher | 432 | Pixels at composition size |
+| **Window 2 › Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Window 2 › Roundness** | Slider | 0 to 100 | 0 | Per cent |
+| **Window 2 › Outer softness** | Slider | 0 to 1000; higher | 40 | Pixels at composition size |
+| **Window 2 › Inner softness** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
+| **Window 2 › Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Window 2 › Invert** | Checkbox | On or off | Off | - |
+| **Window 2 › Subtract** | Checkbox | On or off | Off | - |
+| **Window 2 › Points** | Points | Up to 32 points | None | - |
+| **Window 2 › Smooth** | Checkbox | On or off | On | - |
+| **Window 3** | Dropdown | Off · Ellipse · Rectangle · Polygon · Gradient | Off | - |
+| **Window 3 › Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Window 3 › Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Window 3 › Width** | Slider | 0 to 3840; higher | 768 | Pixels at composition size |
+| **Window 3 › Height** | Slider | 0 to 2160; higher | 432 | Pixels at composition size |
+| **Window 3 › Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Window 3 › Roundness** | Slider | 0 to 100 | 0 | Per cent |
+| **Window 3 › Outer softness** | Slider | 0 to 1000; higher | 40 | Pixels at composition size |
+| **Window 3 › Inner softness** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
+| **Window 3 › Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Window 3 › Invert** | Checkbox | On or off | Off | - |
+| **Window 3 › Subtract** | Checkbox | On or off | Off | - |
+| **Window 3 › Points** | Points | Up to 32 points | None | - |
+| **Window 3 › Smooth** | Checkbox | On or off | On | - |
+| **Window 4** | Dropdown | Off · Ellipse · Rectangle · Polygon · Gradient | Off | - |
+| **Window 4 › Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Window 4 › Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Window 4 › Width** | Slider | 0 to 3840; higher | 768 | Pixels at composition size |
+| **Window 4 › Height** | Slider | 0 to 2160; higher | 432 | Pixels at composition size |
+| **Window 4 › Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Window 4 › Roundness** | Slider | 0 to 100 | 0 | Per cent |
+| **Window 4 › Outer softness** | Slider | 0 to 1000; higher | 40 | Pixels at composition size |
+| **Window 4 › Inner softness** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
+| **Window 4 › Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Window 4 › Invert** | Checkbox | On or off | Off | - |
+| **Window 4 › Subtract** | Checkbox | On or off | Off | - |
+| **Window 4 › Points** | Points | Up to 32 points | None | - |
+| **Window 4 › Smooth** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Node** groups **Space**, **Combine**.
+- **Wheels** groups **Lift**, **Gamma**, **Gain**, **Offset**.
+- **Log wheels** groups **Shadow**, **Midtone**, **Highlight**, **Low range**, **High range**, and starts closed.
+- **Adjust** groups **Exposure**, **Temperature**, **Tint**, **Contrast**, **Pivot**, **Saturation**, **Hue**, **Lum mix**, **Colour boost**, **Shadows**, **Highlights**, **Midtone detail**, and starts closed.
+- **HDR** groups **Global balance**, **Black offset**, **Falloff**, **Black balance**, **Black exposure**, **Black saturation**, **Black range**, **Dark balance**, **Dark exposure**, **Dark saturation**, **Dark range**, **Shadow balance**, **Shadow exposure**, **Shadow saturation**, **Shadow range**, **Light balance**, **Light exposure**, **Light saturation**, **Light range**, **Highlight balance**, **Highlight exposure**, **Highlight saturation**, **Highlight range**, **Specular balance**, **Specular exposure**, **Specular saturation**, **Specular range**, and starts closed.
+- **Mixer** groups **Red output**, **Green output**, **Blue output**, **Keep luma**, and starts closed.
+- **Curves** groups **Luma**, **Red**, **Green**, **Blue**, **High soft clip**, **Low soft clip**, and starts closed.
+- **Hue curves** groups **Hue v hue**, **Hue v sat**, **Hue v lum**, **Lum v sat**, **Sat v sat**, **Sat v lum**, and starts closed.
+- **Hue and saturation** groups **Use hue**, **Hue**, **Hue width**, **Hue softness**, **Hue symmetry**, **Use saturation**, **Saturation low**, **Saturation high**, **Saturation softness**, **Use luma**, and starts closed, and appears while **Qualifier** is HSL.
+- **Luma** groups **Luma low**, **Luma high**, **Luma softness**, and starts closed, and appears while **Qualifier** is HSL or Luma.
+- **RGB** groups **Red low**, **Red high**, **Green low**, **Green high**, **Blue low**, **Blue high**, **Softness**, and starts closed, and appears while **Qualifier** is RGB.
+- **3D** groups **Keep samples**, **Keep sample luma**, **Drop samples**, **Drop sample luma**, **Size**, **Softness**, and starts closed, and appears while **Qualifier** is 3D.
+- **Matte finesse** groups **Denoise**, **Clean black**, **Clean white**, **Black clip**, **White clip**, **Blur radius**, **Grow**, **Invert**, and starts closed, and appears while **Qualifier** is HSL or RGB or Luma or 3D.
+- **Window 1** groups **Centre X**, **Centre Y**, **Width**, **Height**, **Angle**, **Roundness**, **Outer softness**, **Inner softness**, **Opacity**, **Invert**, **Subtract**, **Points**, **Smooth**, and starts closed, and appears while **Window 1** is Ellipse or Rectangle or Polygon or Gradient.
+- **Window 2** groups **Centre X**, **Centre Y**, **Width**, **Height**, **Angle**, **Roundness**, **Outer softness**, **Inner softness**, **Opacity**, **Invert**, **Subtract**, **Points**, **Smooth**, and starts closed, and appears while **Window 2** is Ellipse or Rectangle or Polygon or Gradient.
+- **Window 3** groups **Centre X**, **Centre Y**, **Width**, **Height**, **Angle**, **Roundness**, **Outer softness**, **Inner softness**, **Opacity**, **Invert**, **Subtract**, **Points**, **Smooth**, and starts closed, and appears while **Window 3** is Ellipse or Rectangle or Polygon or Gradient.
+- **Window 4** groups **Centre X**, **Centre Y**, **Width**, **Height**, **Angle**, **Roundness**, **Outer softness**, **Inner softness**, **Opacity**, **Invert**, **Subtract**, **Points**, **Smooth**, and starts closed, and appears while **Window 4** is Ellipse or Rectangle or Polygon or Gradient.
+- **Roundness** is editable while **Window 1** is set to Rectangle.
+- **Points** is editable while **Window 1** is set to Polygon.
+- **Smooth** is editable while **Window 1** is set to Polygon.
+- **Roundness** is editable while **Window 2** is set to Rectangle.
+- **Points** is editable while **Window 2** is set to Polygon.
+- **Smooth** is editable while **Window 2** is set to Polygon.
+- **Roundness** is editable while **Window 3** is set to Rectangle.
+- **Points** is editable while **Window 3** is set to Polygon.
+- **Smooth** is editable while **Window 3** is set to Polygon.
+- **Roundness** is editable while **Window 4** is set to Rectangle.
+- **Points** is editable while **Window 4** is set to Polygon.
+- **Smooth** is editable while **Window 4** is set to Polygon.
+- **Matte** joins the node's key: white grades, black leaves the picture alone. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Space**: where the grade is worked. **Video** is the working linear under a 2.4 gamma,
+  **Log** is ACEScct, and **Linear** is the working linear as it is.
+- **Combine**: how the node meets the one above it. **Serial** grades what the node above
+  made. **Parallel** grades the same picture as the node above and adds its change to theirs.
+  **Layer** grades the same picture and lays its result over theirs through its **Blend**, by
+  its key and Mix. A Correction with nothing above it, or under another effect, is Serial.
+- **Lift** raises the shadows towards a colour and leaves white where it is.
+- **Gamma** bends the mid-tones.
+- **Gain** multiplies, scaling the picture from black.
+- **Offset** adds the same amount at every level, before the other three wheels.
+- **Shadow**, **Midtone** and **Highlight** add colour to the dark, middle and bright parts
+  of the picture.
+- **Low range** is the luma where shadows give way to mid-tones, and **High range** where
+  mid-tones give way to highlights.
+- **Exposure**: stops of light, on the linear picture.
+- **Temperature** and **Tint**: blue to orange and green to magenta, the
+  [Temperature](/effects/colour/temperature/) effect's maths.
+- **Contrast** spreads the levels away from the **Pivot**, or draws them in below 100.
+- **Pivot**: the level contrast turns about, in the grading space.
+- **Saturation** scales colour against luma.
+- **Hue** turns every colour round the colour wheel. Luma stays.
+- **Lum mix** at 100 lets the wheels change brightness. At 0 they change colour only.
+- **Colour boost** raises or lowers saturation, the weak colours more than the strong ones.
+- **Shadows** and **Highlights** brighten or darken the dark half and the bright half of the
+  picture.
+- **Midtone detail** raises or lowers local contrast in the mid-tones.
+- **Global balance** leans the whole picture's colour, in stops a channel, its brightness
+  kept.
+- **Black offset** raises or lowers the darkest levels of the linear picture.
+- **Falloff**: how many stops each HDR zone fades in over.
+- **Black**, **Dark**, **Shadow**, **Light**, **Highlight** and **Specular** are the HDR
+  zones, by brightness in stops from mid grey. Black, Dark and Shadow reach down from their
+  **range**, the other three up from it. Each has a **balance**, in stops a channel with its
+  brightness kept, an **exposure** in stops and a **saturation**. Where zones overlap, their
+  changes add up.
+- **Red output**, **Green output** and **Blue output**: how much red, green and blue make
+  each output channel.
+- **Keep luma** puts back the luma the mixer moved.
+- **Luma**, **Red**, **Green** and **Blue**: tone curves. Each colour curve acts on its own
+  channel, then Luma on all three.
+- **High soft clip** bends the brightest levels so they ease towards white. **Low soft clip**
+  eases the darkest towards black.
+- **Hue v hue** turns one hue towards another.
+- **Hue v sat** saturates or desaturates by hue.
+- **Hue v lum** brightens or darkens by hue.
+- **Lum v sat** saturates or desaturates by brightness.
+- **Sat v sat** saturates or desaturates by saturation.
+- **Sat v lum** brightens or darkens by saturation.
+- **Qualifier**: what the key is picked on: **HSL**, **RGB**, **Luma** or **3D**. **Off**
+  keys everything.
+- **Use hue**, **Use saturation** and **Use luma** leave that range out of an HSL key while
+  off.
+- **Hue** is the middle of the hue range, red at 0°. **Hue width** is how wide it is, **Hue
+  softness** how far the key fades past each edge, and **Hue symmetry** moves the width to
+  one side of the middle.
+- **Saturation low**, **Saturation high** and **Saturation softness**, and **Luma low**,
+  **Luma high** and **Luma softness**: each range's edges, and how far the key fades past
+  them.
+- **Red low** to **Blue high**: each channel's range for an RGB key. **Softness** is the fade
+  past all of them.
+- **Keep samples** and **Drop samples**: the colours a 3D key keeps and leaves out, up to 32
+  each, sampled by strokes on the [Viewer](/use/grading/#the-3d-qualifier). **Keep sample
+  luma** and **Drop sample luma** hold each sample's luma.
+- **Size**: how far round each sample a 3D key reaches. **Softness**, under **3D**, is how
+  far past Size it fades.
+- **Denoise** softens the picture the key is judged on.
+- **Clean black** and **Clean white** push a weak key's grey towards black and towards white.
+- **Black clip** and **White clip**: the least and the most the key can be.
+- **Blur radius** blurs the key.
+- **Grow** widens the key, or narrows it below 0.
+- **Invert**, under **Matte finesse**, keys everything the qualifier left out.
+- **Window 1** to **Window 4**: the slot's shape. **Ellipse**, **Rectangle**, **Polygon** or
+  **Gradient**, or **Off**.
+- **Centre X**, **Centre Y**, **Width**, **Height** and **Angle** place the shape. At angle 0
+  a gradient keys the part above its centre line.
+- **Roundness** rounds a rectangle's corners.
+- **Outer softness** fades the window past its edge, and **Inner softness** inside it.
+- **Opacity**: how much the window keys.
+- **Invert**, in a window's group, keys outside the shape.
+- **Subtract** cuts the window out of the slots before it. Otherwise it joins them.
+- **Points**: a polygon's points, drawn on the [Viewer](/panels/viewer/). A polygon of fewer
+  than three points is off.
+- **Smooth** draws a polygon as a curve through its points.
+- **Mix**: how much of the grade replaces the picture.
+- **Matte** and **Invert** join another layer's brightness to the node's key; see
+  [Effects](/use/effects/). A key wire from a Correction above can feed it instead; see
+  [The node graph](/use/nodes/#key-wires).
+
+## Related
+
+- [Grading](/use/grading/)
+- [Grade panel](/panels/grade/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Curves](/effects/colour/curves/)
+- [Group grade](/effects/colour/group-grade/)
+- [CDL](/effects/colour/cdl/)
+- [Colour warper](/effects/colour/colour-warper/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

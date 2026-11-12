@@ -467,6 +467,10 @@ Map<String, DrivenParam> drivenParamsIn(BridgeLayerGraph graph) {
             graphNodeKey(BridgeNodeRef.effect(effect)),
             'output'
           ),
+        BridgeOutputRef_EffectKey(:final effect) => (
+            graphNodeKey(BridgeNodeRef.effect(effect)),
+            'key'
+          ),
       };
       final source = byRef[fromKey];
       if (source == null) continue;
@@ -799,6 +803,10 @@ bool graphNoStreamPorts(List<BridgePort> inputs, String matchName) {
     BridgeOutputRef_EffectOutput(:final effect) => (
         graphNodeKey(BridgeNodeRef.effect(effect)),
         'output'
+      ),
+    BridgeOutputRef_EffectKey(:final effect) => (
+        graphNodeKey(BridgeNodeRef.effect(effect)),
+        'key'
       ),
   };
   final (toKey, toPort) = _inputEnd(e);
@@ -2077,6 +2085,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       BridgeOutputRef_SourceMatte() => 'matte',
       BridgeOutputRef_EffectData(:final port) => port,
       BridgeOutputRef_EffectOutput() => 'output',
+      BridgeOutputRef_EffectKey() => 'key',
     };
     final i = box.outputs.indexWhere((p) => p.id == portId);
     final at = box.socket(portId, false);
@@ -2110,12 +2119,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (_driverIdOf(node) case final driver?) {
       return BridgeOutputRef.driver(node: driver, port: port.id);
     }
-    // A **stack effect's** declared data output, or its picture, which only
-    // ever goes into the Matte of an effect below it.
+    // A **stack effect's** declared data output, or its picture or a
+    // Correction's key, which only ever go into the Matte of an effect below.
     if (_effectIdOf(node) case final effect?) {
-      return port.portType == BridgePortType.image
-          ? BridgeOutputRef.effectOutput(effect: effect)
-          : BridgeOutputRef.effectData(effect: effect, port: port.id);
+      return switch (port.portType) {
+        BridgePortType.image => BridgeOutputRef.effectOutput(effect: effect),
+        BridgePortType.matte => BridgeOutputRef.effectKey(effect: effect),
+        _ => BridgeOutputRef.effectData(effect: effect, port: port.id),
+      };
     }
     return null;
   }
@@ -2201,7 +2212,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           graphNodeKey(BridgeNodeRef.driver(node)),
         BridgeOutputRef_SourceMatte() => 'source',
         BridgeOutputRef_EffectData(:final effect) ||
-        BridgeOutputRef_EffectOutput(:final effect) =>
+        BridgeOutputRef_EffectOutput(:final effect) ||
+        BridgeOutputRef_EffectKey(:final effect) =>
           graphNodeKey(BridgeNodeRef.effect(effect)),
       };
 

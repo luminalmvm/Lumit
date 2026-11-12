@@ -1,0 +1,69 @@
+---
+title: Gallery
+description: Stills kept with the grade that made them, in albums every project sees.
+sidebar:
+  order: 8.4
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The Gallery keeps **stills**: frames as the Viewer showed them, each with the grade of the
+shot it was grabbed from. See [Stills and the Gallery](/use/grading/#stills-and-the-gallery).
+
+<Shot file="gallery.png" caption="The Gallery's Stills album, a still selected." eager/>
+
+Stills are kept in albums in the library's **Stills** folder, so every project sees them.
+The first album is called **Stills**.
+
+## The header
+
+- **Album** lists the albums, ticked on the one shown, then **New album…**, **Rename
+  album…** and **Delete album**. Deleting an album deletes its stills, after asking.
+- **Grab still** keeps the current shot's frame at the playhead in the album shown, through
+  the Viewer's colour view. `Ctrl+Alt+G` does the same.
+
+## Memories
+
+A strip of eight numbered slots sits above the stills, each a grade kept in the project.
+A filled slot shows the shot it was kept from, or its number.
+
+- Click a filled slot to put its grade in place of the grade on every picked shot.
+- Right-click a slot for **Apply memory**, **Keep the current grade here** and **Clear
+  memory**.
+
+See [Memories](/use/grading/#memories).
+
+## The stills
+
+Each still shows its picture and its name. A new still is named by its shot and the
+Viewer's clock, as `faces-warm.mp4 1:16`. A line under the name gives the shot and timecode
+the name leaves out.
+
+- Click a still to select it. `Ctrl`+click adds a still to the selection, or takes it out,
+  and `Shift`+click selects every still from the last one clicked.
+- Double-click a still to make it the Viewer's [reference](/use/grading/#comparing-against-a-reference).
+- Hold `Alt` over a still to see its grade on the current shot. Nothing is written.
+- Drag a still onto a tile in the [Shots panel](/panels/shots/) to put its grade in place of
+  that shot's.
+
+Right-click a still:
+
+| Row | Does |
+| --- | --- |
+| **Apply grade** | Puts the still's grade in place of the current shot's. |
+| **Apply grade to picked shots** | The same, on every picked shot. With more than one picked. |
+| **Compare** | Makes the still the Viewer's reference. |
+| **Stills in a grid** | Shows the selected stills in the Viewer's [grid](/use/grading/#the-grid). With more than one selected. |
+| **Export still…** | Writes the still's picture as a PNG. |
+| **Export grade as LUT…** | Writes the still's grade as a 33-point `.cube` for Video, titled with the still's name. |
+| **Rename…** | Renames the still. |
+| **Move to** | Moves the still to another album, one row an album. |
+| **Delete** | Deletes the still, after asking. |
+
+A still renamed or moved stays the reference. A still deleted stops being it.
+
+## Related
+
+- [Grading](/use/grading/)
+- [Shots](/panels/shots/)
+- [Viewer](/panels/viewer/)

@@ -1,0 +1,185 @@
+---
+title: Grade
+description: The current shot's current node, a page at a time.
+sidebar:
+  order: 8.1
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The Grade panel edits the current node of the current shot. See [Grading](/use/grading/).
+
+<Shot file="grade-panel.png" caption="The Grade panel on the Wheels page, with Adjust beside it." eager/>
+
+## The header
+
+| Control | Does |
+| --- | --- |
+| **Shot** | The current shot's name, how many layers or clips an edit lands on, or **Group pre** or **Group post** while a group's grade is in view. |
+| **Nodes** | A chip a node, numbered in stack order and named on hover. A click makes it current, and a right-click opens the node's menu. A bypassed node is dimmed. **+** adds a serial node after the current one. |
+| **Version** | The live version's name. A click lists the versions, with **New version**, **Duplicate version**, **Rename…** and **Delete version**, then **Versions in a grid** with more than one. Hidden while a group's grade is in view. |
+| **Before** | Held, shows the shot without its grade. |
+| **Reset grade** | Puts every node of the grade back to its defaults. A keyed row takes its default at the playhead. |
+
+Right-click the panel for **Reset node**, **Bypass node**, **Reveal in Effect controls** and
+**Delete node**, then **Add serial node**, **Add parallel node**, **Add layer node** and
+**Add outside node**, then **Reset grade**, **Bypass grade**, **Copy grade**, **Paste
+grade** and **Remove grade**.
+
+## The pages
+
+The pages sit under the header, as buttons or, in a narrow panel, a list. A dot marks each
+page whose rows the current node has changed. Beside them, a reset puts the page's rows
+back. A panel at least 1000 pixels wide shows Adjust beside Wheels, except in HDR, and
+Look beside Match.
+A panel under 520 pixels wide and more than twice as tall shows every page, each under a
+heading that twirls it open.
+
+Every number scrubs, types and goes back to its default on a double-click. `Shift` moves
+it finely. A right-click on a row offers its reset, its keys and its expression. A keyed row
+shows in the animated colour, and a row an expression drives stands down.
+
+While **Group pre** or **Group post** is in view in the [Grade nodes](/panels/grade-nodes/)
+panel, every control edits that group's grade. The first touch adds a Correction at the end
+of it. On a [shared node](/use/grading/#shared-nodes), every control edits the shared node.
+
+### Wheels
+
+**Wheels**, **Bars**, **Log** and **HDR** show the wheels four ways, each marked with a dot
+while its rows are changed.
+
+- **Wheels**: **Lift**, **Gamma**, **Gain** and **Offset**. Drag inside a wheel to move its
+  colour, and its bar to move its master. Double-click a wheel to reset its colour. Under
+  it, its name and four numbers: **Y**, the master, then red, green and blue, each with a
+  tick in its colour.
+- **Bars**: each wheel as four upright bars, master, red, green and blue. A drag is relative,
+  and a double-click puts one bar back.
+- **Log**: **Shadow**, **Midtone**, **Highlight** and **Offset**, with **Low range** and
+  **High range** first in the row of numbers under them.
+- **HDR**: the zone strip, then a cell for each zone, **Black**, **Dark**, **Shadow**,
+  **Light**, **Highlight** and **Specular**, and **Global**. See [HDR](#hdr).
+
+Under the wheels, except in HDR, a row of numbers: **Temperature**, **Tint**,
+**Contrast**, **Pivot**, **Saturation**, **Hue** and **Lum mix**.
+
+#### HDR
+
+The zone strip runs from 8 stops under mid grey to 8 over. Each zone is a line showing how
+much of it reaches each stop, with a notch at its range. Drag a notch to move the range,
+`Shift` for finer, and double-click it to reset it.
+
+Each zone's cell has a balance wheel with no master, the zone's name, then **Exp**, **Sat**
+and **Range**. **Global** has the **Global balance** wheel, **Black offset** and
+**Falloff**. The cells sit seven across where each has room, else in rows.
+
+### Adjust
+
+A slider each for **Exposure**, **Temperature**, **Tint**, **Contrast**, **Pivot**,
+**Saturation**, **Hue**, **Lum mix**, **Colour boost**, **Shadows**, **Highlights** and
+**Midtone detail**. **Pick a neutral**, beside Temperature, arms the dropper: what it picks
+on the picture is made neutral, through Temperature and Tint, as one undo step.
+
+**Mixer** is three rows of three: how much red, green and blue make each output channel.
+**Keep luma** puts back the luma the mixer moved.
+
+### Curves
+
+**Custom** is the tone curves, **Luma**, **Red**, **Green** and **Blue**, with **High soft
+clip** and **Low soft clip**. The other six are the hue curves: **Hue v hue**, **Hue v
+sat**, **Hue v lum**, **Lum v sat**, **Sat v sat** and **Sat v lum**.
+
+On a hue curve:
+
+- The flat line across the middle changes nothing.
+- A click on the line adds a point. Drag a point to move it, or off the plot to remove it.
+- Double-click a point to put it back on the middle line. Right-click for **Delete point** and
+  **Reset curve**.
+- A curve whose input is hue wraps round, off the right edge and in at the left.
+- Under a hue curve, a swatch for each of red, yellow, green, cyan, blue and magenta drops
+  three points on that hue.
+- **Pick on the picture** arms the dropper, and drops three points where the picked colour
+  sits on the curve.
+
+### Qualifier
+
+**Off**, **HSL**, **RGB**, **Luma** or **3D**, then **Pick**, **Add to pick** and
+**Subtract from pick**, which arm the picture; see
+[The qualifier](/use/grading/#the-qualifier).
+
+Each range is a bar with a box over it. The box's top corners move its edges, the handles
+under it set the softness, and a drag inside the box moves the whole range. The hue bar
+wraps. HSL's bars each have a tick that leaves that range out. The numbers sit under each
+bar.
+
+**3D** shows a **Keep** row and a **Drop** row: how many samples there are, a swatch for
+each, and **Clear**, which empties them and forgets the strokes that made them. **Size**
+and **Softness** sit under them. See [The 3D qualifier](/use/grading/#the-3d-qualifier).
+
+**Finesse** has **Denoise**, **Clean black**, **Clean white**, **Black clip**, **White
+clip**, **Blur radius** and **Grow**, then **Invert**.
+
+**Highlight**, beside the page's name, turns the matte view to Highlight, and off again. A
+right-click offers **Off**, **Highlight** and **Key**.
+
+### Windows
+
+A line for each of the four windows: its number, then **Ellipse**, **Rectangle**,
+**Polygon** and **Gradient**. A shape's button turns the window on as that shape, and
+pressed again turns it off. A click on a line picks that window, and the Viewer shows its
+handles.
+
+The picked window's rows: **Outer softness**, **Inner softness**, **Opacity**, **Roundness**
+on a rectangle, **Invert**, **Subtract**, and **Smooth** on a polygon.
+
+**Track back**, **Stop** and **Track forwards** track the picked window, with a bar for how
+far the track has got. See [Tracking a window](/use/grading/#tracking-a-window).
+
+### Match
+
+- **Auto balance**.
+- **Match to**, the shot or still to match to, then **Match**, and **Compare**, which makes
+  it the Viewer's reference.
+- **Show chart**, then **Match chart**, and the mean ΔE before and after.
+
+See [Matching](/use/grading/#matching).
+
+### Look
+
+- **Looks**: the library's looks, and **Save look…** at the foot of the list.
+- **LUT**: a `.cube` file for the shot's first LUT node, with a clear button, and its **Mix**.
+- **Export LUT**: the size, 17, 33 or 65, the pictures it is for, **Video**, **Log** or
+  **sRGB**, and **Export…**.
+- **CDL**: **Import…** adds a CDL node after the current node, and **Export…** writes the
+  current Correction or CDL node.
+
+See [Looks and LUTs](/use/grading/#looks-and-luts) and [CDL](/use/grading/#cdl).
+
+## Other nodes
+
+A node that is not a Correction shows its own rows in place of the pages, under its name.
+
+### CDL
+
+**Space**, then **Slope**, **Offset** and **Power**, a number a channel, then
+**Saturation** and **Mix**. See [CDL](/effects/colour/cdl/).
+
+### Colour warper
+
+The mesh over a hue rim, the picture's own colours faint under it, the mesh at rest in
+hairline and the moved mesh over it.
+
+- Drag a point to move it, `Shift` for finer. Each drag is one undo step.
+- Double-click a point to put it back.
+- Right-click the mesh to put every point back.
+
+**Resolution**, **Keep luma**, **Strength** and **Mix** sit beside the mesh, or under it in
+a panel under 640 pixels wide. See [Colour warper](/effects/colour/colour-warper/).
+
+## Related
+
+- [Grading](/use/grading/)
+- [Grade nodes](/panels/grade-nodes/)
+- [Correction](/effects/colour/correction/)
+- [CDL](/effects/colour/cdl/)
+- [Colour warper](/effects/colour/colour-warper/)
+- [Effect controls](/panels/effect-controls/)
