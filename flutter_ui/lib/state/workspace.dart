@@ -789,6 +789,19 @@ class Workspace extends ChangeNotifier {
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
+  /// How each Scopes panel is set up, by the panel's instance number: its
+  /// layout, each slot's instrument and options, and the trace brightness.
+  /// Opaque to this file, so the panel decides what it keeps. A panel never
+  /// opened has no entry.
+  final Map<int, Map<String, dynamic>> scopeSetups = {};
+
+  /// Keep a Scopes panel's setup. Saved without notifying: only that panel
+  /// reads it, and it already holds the same values.
+  void setScopeSetup(int instance, Map<String, dynamic> setup) {
+    scopeSetups[instance] = setup;
+    save();
+  }
+
   /// Whether the start-up splash lights its card with the theme's accent
   /// rather than Lumit's own green and blue. Off by default, so the splash
   /// looks like Lumit whatever the chrome.
@@ -2337,6 +2350,9 @@ class Workspace extends ChangeNotifier {
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'scope_setups': {
+          for (final e in scopeSetups.entries) '${e.key}': e.value,
+        },
         'themed_splash': themedSplash,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
@@ -2543,6 +2559,14 @@ class Workspace extends ChangeNotifier {
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    scopeSetups
+      ..clear()
+      ..addAll({
+        if (j['scope_setups'] case final Map<dynamic, dynamic> setups)
+          for (final MapEntry(:key, :value) in setups.entries)
+            if (int.tryParse('$key') case final int n when value is Map)
+              n: value.cast<String, dynamic>(),
+      });
     themedSplash = j['themed_splash'] == true;
     favouriteEffects
       ..clear()

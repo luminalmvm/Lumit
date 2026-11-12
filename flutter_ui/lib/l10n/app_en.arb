@@ -29173,6 +29173,38 @@
   "@vectorFileType": {
     "description": "A file type in the system's Save dialogue of the Lottie and SVG window, and in the Import dialogue: a Lottie or dotLottie file."
   },
+  "scopeChromaticity": "CIE chromaticity",
+  "@scopeChromaticity": {
+    "description": "The name of a scope plotting each pixel's colour on the CIE 1931 xy chart, with the visible spectrum's outline and the Rec.709, P3 and Rec.2020 gamuts. CIE is the standard abbreviation."
+  },
+  "scopeLayoutOne": "One scope",
+  "@scopeLayoutOne": {
+    "description": "Scopes panel layout picker and menu: the panel shows one instrument."
+  },
+  "scopeLayoutTwo": "Two scopes",
+  "@scopeLayoutTwo": {
+    "description": "Scopes panel layout picker and menu: the panel shows two instruments side by side."
+  },
+  "scopeLayoutFour": "Four scopes",
+  "@scopeLayoutFour": {
+    "description": "Scopes panel layout picker and menu: the panel shows four instruments in a square."
+  },
+  "scopeZoom": "2x",
+  "@scopeZoom": {
+    "description": "Scopes panel: draws the vectorscope at twice the size, for pictures with little colour. Read as two times."
+  },
+  "scopeBrightness": "Brightness",
+  "@scopeBrightness": {
+    "description": "Scopes panel menu: a slider for how bright the traces are drawn."
+  },
+  "scopeScalePercent": "Percent",
+  "@scopeScalePercent": {
+    "description": "Scopes panel menu: the waveform's scale is numbered 0 to 100. Ticked while chosen."
+  },
+  "scopeScaleTenBit": "10-bit",
+  "@scopeScaleTenBit": {
+    "description": "Scopes panel menu: the waveform's and histogram's scales are numbered in 10-bit code values, 0 to 1023. Ticked while chosen."
+  },
   "fxShapePointCount": "{count, plural, =0{No points} =1{1 point} other{{count} points}}",
   "@fxShapePointCount": {
     "description": "Effect controls: how many points a window's outline has. The points are drawn in the Viewer.",

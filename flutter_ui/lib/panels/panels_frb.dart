@@ -124,7 +124,8 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.timeline => const TimelinePanelFrb(),
       Panel.effectControls => const EffectControlsPanelFrb(),
       Panel.effectsAndPresets => const EffectsPresetsPanelFrb(),
-      Panel.scopes => const ScopesPanelFrb(),
+      // Each Scopes panel keeps its own layout and instruments.
+      Panel.scopes => ScopesPanelFrb(instance: pane.instance),
       Panel.grade => const GradePanelFrb(),
       Panel.hierarchy => const HierarchyPanelFrb(),
       Panel.easing => const EasingPanelFrb(),
