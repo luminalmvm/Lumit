@@ -292,17 +292,20 @@ class _WheelPainter extends CustomPainter {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.shortestSide / 2;
     final rect = Rect.fromCircle(center: c, radius: r);
-    // The sweep runs clockwise on screen and our angles anticlockwise, so red
-    // starts at minus its angle and the hues count down from there.
+    // The sweep runs clockwise from three o'clock and our angles
+    // anticlockwise, so the hue at each step counts down from red's angle. It
+    // starts at zero and runs the full circle: a sweep doesn't wrap below
+    // zero, so starting it at red's angle left a hard seam at three o'clock.
     const steps = 24;
     canvas.drawCircle(
       c,
       r,
       Paint()
         ..shader = SweepGradient(
-          startAngle: -_angles[0] * math.pi / 180,
-          endAngle: (360 - _angles[0]) * math.pi / 180,
-          colors: [for (var i = 0; i <= steps; i++) _hue(-i * 360 / steps)],
+          colors: [
+            for (var i = 0; i <= steps; i++)
+              _hue(((-i * 360 / steps - _angles[0]) % 360 + 360) % 360)
+          ],
         ).createShader(rect),
     );
     // Grey in the middle: the centre is no lean at all.
