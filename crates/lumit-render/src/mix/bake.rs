@@ -2,6 +2,7 @@
 //! sound, and its Volume and Pan as a constant or an envelope.
 
 use lumit_core::anim::{Animation, Property};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -45,6 +46,28 @@ pub fn chain_bake(
     rate: u32,
     offline: bool,
 ) -> Option<(Vec<f32>, u32)> {
+    chain_bake_until(
+        chain,
+        samples,
+        start_frame,
+        rate,
+        offline,
+        &AtomicBool::new(false),
+    )
+}
+
+/// [`chain_bake`], given up between blocks once `cancel` is raised: `None`
+/// then, the same answer as a chain that opened nothing, so a caller that
+/// can raise it checks the flag before keeping the answer.
+#[must_use]
+pub fn chain_bake_until(
+    chain: &AudioChain,
+    samples: &[f32],
+    start_frame: i64,
+    rate: u32,
+    offline: bool,
+    cancel: &AtomicBool,
+) -> Option<(Vec<f32>, u32)> {
     use lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
 
     let frames = samples.len() / 2;
@@ -56,19 +79,7 @@ pub fn chain_bake(
     // and therefore how many blocks the run is — known. Baking a whole
     // envelope for a blur that turns out not to be a plugin would be work for
     // nothing, so opening is handed one time point rather than the envelope.
-    let mut opened = Vec::new();
-    for instance in chain.effects.iter().filter(|e| e.enabled) {
-        let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&instance.effect.match_name)
-        else {
-            continue;
-        };
-        let first = bake_values(chain, instance, def, start_frame, 1, rate)
-            .pop()
-            .unwrap_or_default();
-        if let Some(processor) = crate::voice::open_audio(instance, def, &first, rate, offline) {
-            opened.push((instance, def, processor));
-        }
-    }
+    let opened = open_links(chain, start_frame, rate, offline);
     if opened.is_empty() {
         return None;
     }
@@ -94,21 +105,63 @@ pub fn chain_bake(
             },
         )
         .collect();
-    let out = lumit_core::fx::audio_chain::run_chain(&links, samples);
+    let out = lumit_core::fx::audio_chain::run_chain_until(&links, samples, cancel)?;
     // The badge, per link (AP5, docs/12 §2.3): a link that shipped any block
     // dry files the host's own sentence against *its* instance — the same
     // table an OFX frame files into, read by the same `badge_of` — and a link
     // whose every block came back takes any stale badge off. Filed here, on
     // the bake, because this is the one place that knows which link refused.
     for ((id, dry), link) in ids.iter().zip(&out.dry_by_link).zip(&links) {
-        let sentence = (*dry > 0).then(|| {
-            link.processor
-                .last_error()
-                .unwrap_or_else(|| "the plugin did not process this sound".to_owned())
-        });
-        crate::gpufx::ofx::note(*id, sentence);
+        file_badge(*id, link.processor.as_ref(), *dry > 0);
     }
     Some((out.samples, out.latency))
+}
+
+/// One effect of a chain, opened, with its instance and definition.
+pub(super) type Opened<'a> = (
+    &'a lumit_core::model::EffectInstance,
+    &'static dyn lumit_core::fx::registry::EffectDef,
+    Arc<dyn lumit_core::fx::audio_chain::AudioProcessor>,
+);
+
+/// Open every switched-on effect of `chain` that the catalogue opens as
+/// audio, in order, each with its rows' values at `start_frame`: the one way
+/// a bake and a node's rack stream open a chain.
+pub(super) fn open_links(
+    chain: &AudioChain,
+    start_frame: i64,
+    rate: u32,
+    offline: bool,
+) -> Vec<Opened<'_>> {
+    let mut opened = Vec::new();
+    for instance in chain.effects.iter().filter(|e| e.enabled) {
+        let Some(def) = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&instance.effect.match_name)
+        else {
+            continue;
+        };
+        let first = rows_of(instance, def).map_or_else(Vec::new, |rows| {
+            rows.at(chain, instance.id, start_frame, rate)
+        });
+        if let Some(processor) = crate::voice::open_audio(instance, def, &first, rate, offline) {
+            opened.push((instance, def, processor));
+        }
+    }
+    opened
+}
+
+/// File the badge for effect `id`: the host's own sentence when it shipped
+/// a block dry, else take any stale one off.
+pub(super) fn file_badge(
+    id: Uuid,
+    processor: &dyn lumit_core::fx::audio_chain::AudioProcessor,
+    refused: bool,
+) {
+    let sentence = refused.then(|| {
+        processor
+            .last_error()
+            .unwrap_or_else(|| "the plugin did not process this sound".to_owned())
+    });
+    crate::gpufx::ofx::note(id, sentence);
 }
 
 /// Run a job's **two** chains over its placed span: the clip's own rack
@@ -125,6 +178,9 @@ pub fn chain_bake(
 /// because that is where the sound it is handed now begins; the returned
 /// latency is the two summed, and the caller places the run that many frames
 /// earlier.
+///
+/// `cancel` stops either bake between blocks, with `None` (see
+/// [`chain_bake_until`]).
 #[must_use]
 pub fn job_bake(
     job: &AudioJob,
@@ -132,39 +188,36 @@ pub fn job_bake(
     start_frame: i64,
     rate: u32,
     offline: bool,
+    cancel: &AtomicBool,
 ) -> Option<(Vec<f32>, u32)> {
     let clip = job
         .clip_chain
         .as_ref()
-        .and_then(|chain| chain_bake(chain, samples, start_frame, rate, offline));
+        .and_then(|chain| chain_bake_until(chain, samples, start_frame, rate, offline, cancel));
     let (dry, head): (&[f32], u32) = match &clip {
         Some((wet, latency)) => (wet, *latency),
         None => (samples, 0),
     };
-    let layer = job
-        .chain
-        .as_ref()
-        .and_then(|chain| chain_bake(chain, dry, start_frame - i64::from(head), rate, offline));
+    let layer = job.chain.as_ref().and_then(|chain| {
+        chain_bake_until(
+            chain,
+            dry,
+            start_frame - i64::from(head),
+            rate,
+            offline,
+            cancel,
+        )
+    });
     match layer {
         Some((wet, latency)) => Some((wet, latency.saturating_add(head))),
         None => clip,
     }
 }
 
-/// What one effect instance's rows hold at each block start.
-///
-/// A row reads its own keyframes unless a wire feeds it, in which case it reads
-/// the wire — the same substitution the picture's resolve makes, held to the
-/// same declared hard range, so a plugin parameter is driven
-/// like everything else. An instance with nothing animated and nothing wired
-/// bakes **one** entry, which the chain then holds past the end: an
-/// un-automated plugin costs no per-block work at all.
-///
-/// ponytail: the driver walk is given no [`lumit_core::fx::registry::AudioTap`], so an
-/// *Audio level* driver wired into a plugin parameter reads nothing here.
-/// Handing it the real tap would mix a window of the comp per block — tens of
-/// thousands of mixes for a song. Bake the tap's levels once at control rate
-/// and index them, when a duck-driven plugin is a thing somebody asks for.
+/// What one effect instance's rows hold at each block start. An instance
+/// with nothing animated and nothing wired bakes **one** entry, which the
+/// chain then holds past the end: an un-automated plugin costs no per-block
+/// work at all.
 fn bake_values(
     chain: &AudioChain,
     instance: &lumit_core::model::EffectInstance,
@@ -173,17 +226,46 @@ fn bake_values(
     blocks: usize,
     rate: u32,
 ) -> Vec<Vec<(lumit_core::fx::params::ParamId, f64)>> {
-    use lumit_core::fx::{audio_chain::AUDIO_BLOCK_FRAMES, params::ParamId, resolved::hard_range};
-    use lumit_core::graph::{InputRef, NodeRef};
-    use lumit_core::model::EffectValue;
+    use lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
+    let Some(rows) = rows_of(instance, def) else {
+        return Vec::new();
+    };
+    let n = if rows.moves(chain, instance.id) {
+        blocks.max(1)
+    } else {
+        1
+    };
+    (0..n)
+        .map(|block| {
+            rows.at(
+                chain,
+                instance.id,
+                start_frame + (block * AUDIO_BLOCK_FRAMES) as i64,
+                rate,
+            )
+        })
+        .collect()
+}
 
-    /// One automatable row: what it is called, what it holds, and how far it
-    /// may be pushed.
-    struct Row<'a> {
-        id: ParamId,
-        property: std::borrow::Cow<'a, lumit_core::anim::Property>,
-        hard: (Option<f64>, Option<f64>),
-    }
+/// One automatable row: what it is called, what it holds, and how far it may
+/// be pushed.
+struct Row<'a> {
+    id: lumit_core::fx::params::ParamId,
+    property: std::borrow::Cow<'a, lumit_core::anim::Property>,
+    hard: (Option<f64>, Option<f64>),
+}
+
+/// The rows of one effect instance a processor is handed, read block by
+/// block by [`Rows::at`]: what a bake and a rack stream both evaluate.
+pub(super) struct Rows<'a>(Vec<Row<'a>>);
+
+/// `instance`'s automatable rows, or `None` when it has none.
+pub(super) fn rows_of<'a>(
+    instance: &'a lumit_core::model::EffectInstance,
+    def: &'static dyn lumit_core::fx::registry::EffectDef,
+) -> Option<Rows<'a>> {
+    use lumit_core::fx::{params::ParamId, resolved::hard_range};
+    use lumit_core::model::EffectValue;
 
     let rows: Vec<Row<'_>> = def
         .schema()
@@ -210,50 +292,80 @@ fn bake_values(
             })
         })
         .collect();
-    if rows.is_empty() {
-        return Vec::new();
-    }
-    let node = NodeRef::Effect(instance.id);
-    let wired =
-        chain.graph.edges.iter().any(
-            |edge| matches!(&edge.to, InputRef::Param { node: target, .. } if *target == node),
-        );
-    let animated = wired || rows.iter().any(|row| row.property.is_animated());
-    let n = if animated { blocks.max(1) } else { 1 };
+    (!rows.is_empty()).then_some(Rows(rows))
+}
 
-    (0..n)
-        .map(|block| {
-            let t = (start_frame + (block * AUDIO_BLOCK_FRAMES) as i64) as f64 / f64::from(rate);
-            let lt = t - chain.offset_s;
-            let drivers = if wired {
-                let context = Arc::new(lumit_core::expression::ExpressionContext {
-                    document: Arc::clone(&chain.doc),
-                    comp: Some(chain.comp),
-                    layer: Some(chain.layer),
-                    comp_time: t - chain.base_s,
-                    current_depth: 0,
-                    inputs: None,
-                });
-                lumit_core::fx::drivers::resolve_drivers(&chain.graph, lt, context, None)
-            } else {
-                lumit_core::fx::drivers::ResolvedDrivers::default()
-            };
-            rows.iter()
-                .map(|row| {
-                    let value = drivers
-                        .param(node, row.id)
-                        .map(|v| f64::from(v.as_f32()))
-                        .unwrap_or_else(|| row.property.value_at(lt));
-                    // `max`/`min` rather than `clamp`, which panics on a
-                    // reversed pair (14-ENGINEERING-RULES §4).
-                    let value = value
-                        .max(row.hard.0.unwrap_or(f64::NEG_INFINITY))
-                        .min(row.hard.1.unwrap_or(f64::INFINITY));
-                    (row.id, value)
-                })
-                .collect()
-        })
-        .collect()
+/// Whether a wire in `chain`'s graph feeds a row of effect `id`.
+fn wired(chain: &AudioChain, id: Uuid) -> bool {
+    use lumit_core::graph::{InputRef, NodeRef};
+    let node = NodeRef::Effect(id);
+    chain
+        .graph
+        .edges
+        .iter()
+        .any(|edge| matches!(&edge.to, InputRef::Param { node: target, .. } if *target == node))
+}
+
+impl Rows<'_> {
+    /// Whether any row can hold a different value from one block to the next:
+    /// keys, or a wire.
+    pub(super) fn moves(&self, chain: &AudioChain, id: Uuid) -> bool {
+        wired(chain, id) || self.0.iter().any(|row| row.property.is_animated())
+    }
+
+    /// What every row holds at timeline frame `frame`, for effect `id` of
+    /// `chain`.
+    ///
+    /// A row reads its own keyframes unless a wire feeds it, in which case it
+    /// reads the wire — the same substitution the picture's resolve makes,
+    /// held to the same declared hard range, so a plugin parameter is driven
+    /// like everything else.
+    ///
+    /// ponytail: the driver walk is given no
+    /// [`lumit_core::fx::registry::AudioTap`], so an *Audio level* driver
+    /// wired into a plugin parameter reads nothing here. Handing it the real
+    /// tap would mix a window of the comp per block — tens of thousands of
+    /// mixes for a song. Bake the tap's levels once at control rate and index
+    /// them, when a duck-driven plugin is a thing somebody asks for.
+    pub(super) fn at(
+        &self,
+        chain: &AudioChain,
+        id: Uuid,
+        frame: i64,
+        rate: u32,
+    ) -> Vec<(lumit_core::fx::params::ParamId, f64)> {
+        let node = lumit_core::graph::NodeRef::Effect(id);
+        let t = frame as f64 / f64::from(rate);
+        let lt = t - chain.offset_s;
+        let drivers = if wired(chain, id) {
+            let context = Arc::new(lumit_core::expression::ExpressionContext {
+                document: Arc::clone(&chain.doc),
+                comp: Some(chain.comp),
+                layer: Some(chain.layer),
+                comp_time: t - chain.base_s,
+                current_depth: 0,
+                inputs: None,
+            });
+            lumit_core::fx::drivers::resolve_drivers(&chain.graph, lt, context, None)
+        } else {
+            lumit_core::fx::drivers::ResolvedDrivers::default()
+        };
+        self.0
+            .iter()
+            .map(|row| {
+                let value = drivers
+                    .param(node, row.id)
+                    .map(|v| f64::from(v.as_f32()))
+                    .unwrap_or_else(|| row.property.value_at(lt));
+                // `max`/`min` rather than `clamp`, which panics on a
+                // reversed pair (14-ENGINEERING-RULES §4).
+                let value = value
+                    .max(row.hard.0.unwrap_or(f64::NEG_INFINITY))
+                    .min(row.hard.1.unwrap_or(f64::INFINITY));
+                (row.id, value)
+            })
+            .collect()
+    }
 }
 
 /// Bake one job's **Volume and Pan** — its own properties times every
@@ -363,14 +475,14 @@ pub(super) fn gain_bake(
 
 /// Whether `property` can change over time: keys, or an expression, which
 /// is read again at every control point.
-fn moves(property: &Property) -> bool {
+pub(super) fn moves(property: &Property) -> bool {
     property.is_animated() || matches!(property.animation, Animation::Expression(_))
 }
 
 /// `property` at layer time `lt`. An expression is worked out in its layer's
 /// scope at mixed-timeline time `t`, with the context a picture row's
 /// expression gets, so `time` and the layer and comp it reads are its own.
-fn read(property: &Property, lt: f64, t: f64, scope: Option<&ExpressionScope>) -> f64 {
+pub(super) fn read(property: &Property, lt: f64, t: f64, scope: Option<&ExpressionScope>) -> f64 {
     let Some(scope) = scope.filter(|_| matches!(property.animation, Animation::Expression(_)))
     else {
         return property.value_at(lt);

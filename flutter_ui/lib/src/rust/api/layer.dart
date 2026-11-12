@@ -15,6 +15,7 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'graph_looks.dart';
+import 'layer/clip_peaks.dart';
 import 'mixer.dart';
 import 'model.dart';
 import 'model_rows.dart';
@@ -3122,6 +3123,15 @@ class LayerReference {
           buckets: buckets,
           multiwave: multiwave);
 
+  /// This layer's samples over `[start_seconds, end_seconds)` of the clock
+  /// [`Self::audio_peaks`] takes, mixed to one channel as its wave is.
+  /// Empty for a layer with no sound of its own, or a window holding more
+  /// than 16,384 frames. Not sync: it decodes the window.
+  Future<BridgeAudioSamples> audioSamples(
+          {required double startSeconds, required double endSeconds}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAudioSamples(
+          that: this, startSeconds: startSeconds, endSeconds: endSeconds);
+
   /// One window of this layer's audio as a **spectrogram**: what the
   /// spectral lane mode draws, in the same window-fetch shape the peaks take —
   /// the visible stretch of the source, one column per pixel, so the drawn
@@ -3267,6 +3277,24 @@ class LayerReference {
           endSeconds: endSeconds,
           buckets: buckets,
           multiwave: multiwave,
+          stereo: stereo);
+
+  /// One Sequence clip's samples over `[start_seconds, end_seconds)` of its
+  /// own placed clock, clamped to the clip, as [`Self::clip_audio_peaks`]
+  /// takes it. With `stereo`, left and right apart where the sound has
+  /// two. Empty for a clip with no sound of its own (a multicam clip
+  /// included), or a window holding more than 16,384 frames. Not sync: it
+  /// decodes the window.
+  Future<BridgeAudioSamples> clipAudioSamples(
+          {required UuidValue clip,
+          required double startSeconds,
+          required double endSeconds,
+          required bool stereo}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClipAudioSamples(
+          that: this,
+          clip: clip,
+          startSeconds: startSeconds,
+          endSeconds: endSeconds,
           stereo: stereo);
 
   /// One Sequence clip's audio as a **spectrogram** - the twin of
@@ -4283,7 +4311,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceNormaliseClips(
           that: this, clips: clips, targetDb: targetDb);
 
-  /// The Volume this layer needs for its loudest sample, over the stretch of
+  /// The Gain this layer needs for its loudest sample, over the stretch of
   /// the file it plays, to land at `target_db`. None for a layer with no file
   /// of its own to read, or one with nothing but silence on it.
   ///
@@ -4596,7 +4624,8 @@ class LayerReference {
   void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
 
-  /// Set the layer's own level before its rack and Volume, in dB.
+  /// Set the layer's own level before its rack and Volume, in dB, held to
+  /// -60 to +24 as a clip's gain line is.
   void setAudioGainDb({required double db}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAudioGainDb(that: this, db: db);
 

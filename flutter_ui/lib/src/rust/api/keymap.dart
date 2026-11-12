@@ -256,6 +256,9 @@ enum BridgeKeyContext {
   cut,
   captions,
   transcript,
+
+  /// The Mixer, where keys act on the picked strips.
+  mixer,
   ;
 }
 

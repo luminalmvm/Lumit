@@ -6963,6 +6963,54 @@
   "@keyNewAudioLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewBus": "New bus",
+  "@keyNewBus": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a bus, a layer that mixes the sound routed to it."
+  },
+  "keyPreviousStrip": "Previous strip",
+  "@keyPreviousStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyNextStrip": "Next strip",
+  "@keyNextStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyRaiseTheFaderBy05Db": "Raise the fader by 0.5 dB",
+  "@keyRaiseTheFaderBy05Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyLowerTheFaderBy05Db": "Lower the fader by 0.5 dB",
+  "@keyLowerTheFaderBy05Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyRaiseTheFaderBy01Db": "Raise the fader by 0.1 dB",
+  "@keyRaiseTheFaderBy01Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyLowerTheFaderBy01Db": "Lower the fader by 0.1 dB",
+  "@keyLowerTheFaderBy01Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyReturnTheFaderTo0Db": "Return the fader to 0 dB",
+  "@keyReturnTheFaderTo0Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyMuteOrUnmuteTheStrip": "Mute or unmute the strip",
+  "@keyMuteOrUnmuteTheStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keySoloOrUnsoloTheStrip": "Solo or unsolo the strip",
+  "@keySoloOrUnsoloTheStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keySoloTheStripAlone": "Solo the strip alone",
+  "@keySoloTheStripAlone": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyNextAutomationMode": "Next automation mode",
+  "@keyNextAutomationMode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
   "keyNewProject": "New project",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -18915,6 +18963,14 @@
   "histSetLoudnessTarget": "Set loudness target",
   "@histSetLoudnessTarget": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histRecordAutomation": "Record automation",
+  "@histRecordAutomation": {
+    "description": "A row of the Edit > History window: the keys one automation pass wrote while the composition played. Sent by the engine as English and looked up here."
+  },
+  "histNormaliseMix": "Normalise mix",
+  "@histNormaliseMix": {
+    "description": "A row of the Edit > History window: the master fader moved so the whole mix meets a loudness. Sent by the engine as English and looked up here."
   },
   "captionsCannotAddHere": "No caption can go at the playhead.",
   "@captionsCannotAddHere": {

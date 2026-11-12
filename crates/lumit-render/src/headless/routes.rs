@@ -1,4 +1,6 @@
-//! Buses and sends in the audio jobs walk.
+//! Buses and sends of a nested comp, in the audio jobs walk. At the comp
+//! being mixed they are the desk's ([`crate::mix::graph`]), unless the walk
+//! is asked to fold them in.
 //!
 //! A Bus layer makes no sound of its own. What is routed to it arrives as
 //! jobs carrying one more [`Carrier`]: the bus's Volume and Pan, and its rack.
@@ -16,13 +18,12 @@ use uuid::Uuid;
 pub(super) struct Bus {
     id: Uuid,
     carrier: Carrier,
-    /// The bus's span on the mixed timeline: it passes nothing outside it.
-    span: (f64, f64),
     heard: bool,
     solo: bool,
 }
 
-/// The comp's buses. A bus with its audible switch off still routes, and
+/// The comp's buses. A bus passes sound for the whole comp, whatever its in
+/// and out points. A bus with its audible switch off still routes, and
 /// silences what goes into it.
 pub(super) fn buses(doc: &Arc<Document>, comp: &Composition, base_s: f64) -> Vec<Bus> {
     comp.layers
@@ -41,10 +42,6 @@ pub(super) fn buses(doc: &Arc<Document>, comp: &Composition, base_s: f64) -> Vec
                     retime: None,
                     scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, l.id, base_s),
                 },
-                span: (
-                    l.in_point.0.to_f64() + base_s,
-                    l.out_point.0.to_f64() + base_s,
-                ),
                 heard: l.switches.audible,
                 solo: l.switches.solo,
             }
@@ -55,10 +52,9 @@ pub(super) fn buses(doc: &Arc<Document>, comp: &Composition, base_s: f64) -> Vec
 /// Whether `layer` feeds a soloed bus. Soloing a bus solos what goes into it.
 pub(super) fn feeds_solo(buses: &[Bus], layer: &Layer) -> bool {
     let routes = &layer.audio_routes;
-    buses
-        .iter()
-        .filter(|b| b.solo)
-        .any(|b| routes.output == Some(b.id) || routes.sends.iter().any(|s| s.bus == b.id))
+    buses.iter().filter(|b| b.solo).any(|b| {
+        routes.output == Some(b.id) || routes.sends.iter().any(|s| s.bus == b.id && !s.muted)
+    })
 }
 
 /// Route the jobs `layer` has just added (`jobs[from..]`) to its buses.
@@ -95,7 +91,7 @@ pub(super) fn route(
                 if top && bus.carrier.chain.is_some() {
                     job.layer = bus.id;
                 }
-                jobs.extend(within(job, bus.span));
+                jobs.push(job);
             }
         }
         // Into a bus that is switched off: nothing.
@@ -103,7 +99,7 @@ pub(super) fn route(
         // To a layer that is gone or is not a bus: the master.
         None => jobs.extend(own.iter().cloned()),
     }
-    for send in &routes.sends {
+    for send in routes.sends.iter().filter(|s| !s.muted) {
         let Some(bus) = bus(send.bus).filter(|b| b.heard) else {
             continue;
         };
@@ -134,9 +130,7 @@ pub(super) fn route(
             if top {
                 job.layer = bus.id;
             }
-            if let Some(job) = within(job, bus.span) {
-                jobs.push(job);
-            }
+            jobs.push(job);
         }
     }
 }
@@ -182,41 +176,88 @@ fn before_fader(job: &mut AudioJob, depth: usize) {
     }
 }
 
-/// `job` cut to `span`, or `None` where nothing of it is left.
-fn within(mut job: AudioJob, span: (f64, f64)) -> Option<AudioJob> {
-    job.in_s = job.in_s.max(span.0);
-    job.out_s = job.out_s.min(span.1);
-    (job.out_s > job.in_s).then_some(job)
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::super::tests::{push_comp, push_footage_item, push_layer, seed_has_audio};
     use super::super::AudioJobsBuilder;
-    use crate::mix::stage::{bus_runs, PlacedJob};
+    use crate::mix::graph::build_graph;
+    use crate::mix::live::RackBakes;
     use lumit_core::anim::Property;
-    use lumit_core::model::{LayerKind, ProjectItem};
+    use lumit_core::model::{Document, LayerKind, ProjectItem};
     use lumit_core::routes::{AudioRoutes, AudioSend};
+    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use uuid::Uuid;
+
+    /// A comp of `layers` footage layers and `buses` Bus layers after them,
+    /// every footage layer playing the same file.
+    fn desk(layers: usize, buses: usize) -> (Document, Uuid, Vec<Uuid>) {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        seed_has_audio(song);
+        let comp = push_comp(&mut doc, "mix", 32, 32);
+        for _ in 0..layers {
+            push_layer(&mut doc, comp, LayerKind::Footage { item: song });
+        }
+        for _ in 0..buses {
+            push_layer(&mut doc, comp, LayerKind::Null);
+        }
+        let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
+            unreachable!()
+        };
+        for l in &mut c.layers[layers..] {
+            l.audio_only = true;
+        }
+        let ids = c.layers.iter().map(|l| l.id).collect();
+        (doc, comp, ids)
+    }
+
+    /// The level the master hears a second of steady 0.1 at, half way in,
+    /// with every layer playing it.
+    fn heard(doc: &Document, comp: Uuid) -> f32 {
+        let doc = Arc::new(doc.clone());
+        let c = doc.comp(comp).unwrap().clone();
+        let jobs = AudioJobsBuilder::new().audio_jobs(&doc, &c);
+        let level = lumit_audio::stream::Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
+            rate: 48_000,
+            samples: vec![0.1; 96_000],
+        }));
+        let (plan, _) = build_graph(
+            &doc,
+            &c,
+            jobs,
+            &|_| Some(Arc::clone(&level)),
+            48_000,
+            1.0,
+            &mut RackBakes::default(),
+            None,
+            true,
+            &AtomicBool::new(false),
+            None,
+        )
+        .unwrap();
+        plan.frame_at(24_000).0
+    }
+
+    fn db(db: f64) -> f32 {
+        lumit_audio::mix::db_to_gain(db)
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-5
+    }
 
     /// One layer goes out through a bus, another stays on the master and sends
     /// to it from before its Volume. Each reaches the master at the gain the
     /// routing says, and a bus switched off silences what goes into it.
     #[test]
     fn output_and_sends_reach_the_master_through_the_bus() {
-        let mut doc = lumit_core::model::Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        seed_has_audio(song);
-        let comp = push_comp(&mut doc, "mix", 32, 32);
-        push_layer(&mut doc, comp, LayerKind::Footage { item: song });
-        push_layer(&mut doc, comp, LayerKind::Footage { item: song });
-        push_layer(&mut doc, comp, LayerKind::Null);
+        let (mut doc, comp, ids) = desk(2, 1);
         let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
             unreachable!()
         };
-        let bus = c.layers[2].id;
-        c.layers[2].audio_only = true;
+        let bus = ids[2];
         c.layers[2].volume_db = Property::fixed(-6.0);
         c.layers[0].audio_routes.output = Some(bus);
         c.layers[1].volume_db = Property::fixed(-20.0);
@@ -226,52 +267,91 @@ mod tests {
                 bus,
                 level_db: Property::fixed(-6.0),
                 pre: true,
+                muted: false,
             }],
         };
+        // Out through the bus at -6, the dry sound at -20, and the send
+        // skipping the -20 for -6 and the bus's -6.
+        let want = 0.1 * (db(-6.0) + db(-20.0) + db(-12.0));
+        let got = heard(&doc, comp);
+        assert!(near(got, want), "{got} for {want}");
 
-        let mix = |doc: &lumit_core::model::Document| {
-            let c = doc.comp(comp).unwrap().clone();
-            let jobs = AudioJobsBuilder::new().audio_jobs(&Arc::new(doc.clone()), &c);
-            let samples = [0.0f32; 2];
-            let placed: Vec<PlacedJob<'_>> = jobs
-                .iter()
-                .map(|job| PlacedJob {
-                    job,
-                    start_frame: 0,
-                    samples: &samples,
-                })
-                .collect();
-            let runs = bus_runs(&placed, 48_000, true);
-            runs.iter()
-                .map(|r| (r.layer, r.gain[0]))
-                .collect::<Vec<_>>()
+        // The send muted sends nothing, and the rest is as it was.
+        let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
+            unreachable!()
         };
-        let db = |db: f64| lumit_audio::mix::db_to_gain(db);
-        let near = |a: f32, b: f32| (a - b).abs() < 1e-5;
-        let c = doc.comp(comp).unwrap();
-        let (a, b) = (c.layers[0].id, c.layers[1].id);
-
-        let runs = mix(&doc);
-        assert_eq!(runs.len(), 3);
-        assert!(
-            runs[0].0 == a && near(runs[0].1, db(-6.0)),
-            "out through the bus"
-        );
-        assert!(
-            runs[1].0 == b && near(runs[1].1, db(-20.0)),
-            "the dry sound"
-        );
-        assert!(
-            runs[2].0 == bus && near(runs[2].1, db(-12.0)),
-            "the send skips the -20 and meters on the bus"
-        );
+        c.layers[1].audio_routes.sends[0].muted = true;
+        let got = heard(&doc, comp);
+        let want = 0.1 * (db(-6.0) + db(-20.0));
+        assert!(near(got, want), "a muted send: {got} for {want}");
+        let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
+            unreachable!()
+        };
+        c.layers[1].audio_routes.sends[0].muted = false;
 
         let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
             unreachable!()
         };
         c.layers[2].switches.audible = false;
-        let runs = mix(&doc);
-        assert_eq!(runs.len(), 1, "only the dry sound is left");
-        assert_eq!(runs[0].0, b);
+        let got = heard(&doc, comp);
+        assert!(
+            near(got, 0.1 * db(-20.0)),
+            "only the dry sound is left: {got}"
+        );
+    }
+
+    /// **A bus feeds a bus, and a solo keeps the paths it needs.** A layer
+    /// goes through one bus into another and on to the master, at each
+    /// fader's gain. Soloing it, and a layer that sends to a third bus, keeps
+    /// both of their buses heard and silences a layer that only goes
+    /// straight to the master. That third bus solo safe keeps its own way
+    /// out, but lets in nothing that is not soloed.
+    #[test]
+    fn a_bus_feeds_a_bus_and_a_solo_keeps_its_buses() {
+        let (mut doc, comp, ids) = desk(3, 3);
+        let (x, z, y) = (ids[3], ids[4], ids[5]);
+        let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
+            unreachable!()
+        };
+        // Layer 0 through X into Z, every fader at -6.
+        c.layers[0].volume_db = Property::fixed(-6.0);
+        c.layers[0].audio_routes.output = Some(x);
+        c.layers[3].volume_db = Property::fixed(-6.0);
+        c.layers[3].audio_routes.output = Some(z);
+        c.layers[4].volume_db = Property::fixed(-6.0);
+        // Layer 1 straight out; layer 2 straight out and sending to Y at -12.
+        c.layers[2].audio_routes.sends = vec![AudioSend {
+            bus: y,
+            level_db: Property::fixed(-12.0),
+            pre: false,
+            muted: false,
+        }];
+        let got = heard(&doc, comp);
+        let want = 0.1 * (db(-18.0) + 1.0 + 1.0 + db(-12.0));
+        assert!(near(got, want), "everything: {got} for {want}");
+
+        let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
+            unreachable!()
+        };
+        c.layers[0].switches.solo = true;
+        c.layers[2].switches.solo = true;
+        let got = heard(&doc, comp);
+        let want = 0.1 * (db(-18.0) + 1.0 + db(-12.0));
+        assert!(
+            near(got, want),
+            "the soloed two and their buses: {got} for {want}"
+        );
+
+        let ProjectItem::Composition(c) = doc.item_mut(comp).unwrap() else {
+            unreachable!()
+        };
+        c.layers[2].switches.solo = false;
+        c.layers[5].switches.solo_safe = true;
+        let got = heard(&doc, comp);
+        let want = 0.1 * db(-18.0);
+        assert!(
+            near(got, want),
+            "nothing sent into the safe bus: {got} for {want}"
+        );
     }
 }

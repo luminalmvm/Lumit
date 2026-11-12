@@ -87,7 +87,15 @@ pub fn start(
         return Err(format!("export: unknown format '{codec}'"));
     }
     let span = Span::of(c, &spec);
-    let sound = frame::sound(&spec, c, audio, &span);
+    let sound = frame::sound(
+        &spec,
+        &doc,
+        c,
+        audio,
+        &span,
+        &AtomicBool::new(false),
+        &mut |_| {},
+    );
     let mut renderer = HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
     renderer.refuse_substitution();
     renderer.sync_colour(&doc);

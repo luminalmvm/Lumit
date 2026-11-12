@@ -284,6 +284,18 @@ impl ActionId {
             "layer.project.from.camera" => "Project from camera",
             "layer.new.sequence" => "New Sequence layer",
             "layer.new.audio" => "New Audio layer",
+            "layer.new.bus" => "New bus",
+            "mixer.strip.prev" => "Previous strip",
+            "mixer.strip.next" => "Next strip",
+            "mixer.fader.up" => "Raise the fader by 0.5 dB",
+            "mixer.fader.down" => "Lower the fader by 0.5 dB",
+            "mixer.fader.up.fine" => "Raise the fader by 0.1 dB",
+            "mixer.fader.down.fine" => "Lower the fader by 0.1 dB",
+            "mixer.fader.reset" => "Return the fader to 0 dB",
+            "mixer.mute" => "Mute or unmute the strip",
+            "mixer.solo" => "Solo or unsolo the strip",
+            "mixer.solo.alone" => "Solo the strip alone",
+            "mixer.automation.next" => "Next automation mode",
             "layer.settings" => "Layer settings",
             "layer.blend.next" => "Next blend mode",
             "layer.blend.prev" => "Previous blend mode",
@@ -421,12 +433,14 @@ pub enum KeyContext {
     Captions,
     /// The Transcript panel, where keys act on the selected words.
     Transcript,
+    /// The Mixer, where keys act on the picked strips.
+    Mixer,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 12] = [
+    pub const ALL: [KeyContext; 13] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -439,6 +453,7 @@ impl KeyContext {
         KeyContext::Cut,
         KeyContext::Captions,
         KeyContext::Transcript,
+        KeyContext::Mixer,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -460,6 +475,7 @@ impl KeyContext {
             KeyContext::Cut => "Cut timeline",
             KeyContext::Captions => "Captions panel",
             KeyContext::Transcript => "Transcript panel",
+            KeyContext::Mixer => "Mixer",
         }
     }
 }

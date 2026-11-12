@@ -34,8 +34,8 @@ pub(super) fn open(wanted: Option<String>, rx: Receiver<Cmd>) -> Option<Opened> 
             }
         };
         // The engine lives here for the session; each command is a plan swap
-        // or an atomic store — nothing slow, nothing that can block the
-        // realtime callback.
+        // or an atomic store, or a start waiting a moment for its sound to
+        // be ready — nothing that can block the realtime callback.
         while let Ok(cmd) = rx.recv() {
             apply(&engine, cmd);
         }
@@ -92,11 +92,10 @@ fn apply(engine: &AudioEngine, cmd: Cmd) {
     match cmd {
         Cmd::Load { plan, start, play } => {
             engine.load_plan(plan);
-            if let Some(s) = start {
-                engine.seek_seconds(s);
-            }
-            if play {
-                engine.play();
+            match (start, play) {
+                (s, true) => engine.start_at(s.unwrap_or(0.0)),
+                (Some(s), false) => engine.seek_seconds(s),
+                (None, false) => {}
             }
         }
         Cmd::Swap(plan) => engine.swap_plan(plan),
@@ -105,7 +104,10 @@ fn apply(engine: &AudioEngine, cmd: Cmd) {
         Cmd::Mute(m) => engine.set_muted(m),
         Cmd::Slow(s) => engine.set_slow(s),
         Cmd::Seek(s) => engine.seek_seconds(s),
+        Cmd::Start(s) => engine.start_at(s),
         Cmd::Scrub { at, len } => engine.scrub(at, len),
+        Cmd::Jog(at) => engine.jog(at),
+        Cmd::JogEnd => engine.jog_end(),
         Cmd::Unload => engine.unload(),
     }
 }

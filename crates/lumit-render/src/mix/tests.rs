@@ -7,6 +7,9 @@ use uuid::Uuid;
 use super::bake::{job_bake, volume_bake};
 use super::jobs::{AudioChain, AudioJob, Carrier, ClipFade, ExpressionScope};
 use super::mixdown::{audio_samples_through, mixdown_prepared};
+use crate::headless::tests::{push_comp, push_footage_item, push_layer, seed_has_audio};
+use crate::headless::AudioJobsBuilder;
+use lumit_core::model::{LayerKind, ProjectItem};
 
 /// Volume baking (docs/09 §6): a static Volume is exactly its constant
 /// gain; a keyframed fade becomes a control-rate envelope sampled in
@@ -283,8 +286,8 @@ fn a_panned_and_faded_clip_mixes_the_same_in_both_paths() {
         frames,
         1.0,
     );
-    let plan = lumit_audio::mix::MixPlan {
-        clips: vec![lumit_audio::mix::PlacedClip {
+    let plan = lumit_audio::plan::MixPlan::single(
+        vec![lumit_audio::plan::PlacedClip {
             source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                 rate,
                 samples: samples.clone(),
@@ -294,11 +297,11 @@ fn a_panned_and_faded_clip_mixes_the_same_in_both_paths() {
             len: frames,
             gain,
             envelope: Some(Arc::new(envelope)),
-            meter: 0,
+            node: 0,
+            silent: false,
         }],
-        total_frames: frames,
-        master_gain: 1.0,
-    };
+        frames,
+    );
     for i in (0..frames).step_by(97) {
         let (l, r) = plan.frame_at(i);
         assert!(
@@ -421,9 +424,9 @@ fn loudest(samples: &[f32]) -> f32 {
 /// docs/impl/audio-timeline.md §4).
 ///
 /// A gain of +6 dB on the clip and a limiter on the row. The gain drives
-/// the sound over the ceiling and the limiter, hearing it afterwards,
-/// holds it there; the other order would let the +6 straight out. So the
-/// peak alone says which way round the two racks ran.
+/// the sound over the ceiling and the limiter, hearing it afterwards on the
+/// layer's node, holds it there; the other order would let the +6 straight
+/// out. So the peak alone says which way round the two racks ran.
 ///
 /// Each rack arrives as `None` when its switch is off: the clip's `fx`
 /// and the layer's `switches.fx`, both pinned where the jobs are built.
@@ -435,18 +438,30 @@ fn a_clips_rack_runs_ahead_of_the_rows_and_a_missing_rack_is_not_run() {
     let frames = rate as usize / 4;
     // A quarter second at half scale, which is a whisker under the −6 dB
     // ceiling the limiter is set to below.
-    let input: Vec<f32> = (0..frames)
-        .flat_map(|n| {
-            let phase = std::f64::consts::TAU * 220.0 * n as f64 / f64::from(rate);
-            [phase.sin() as f32 * 0.5; 2]
-        })
-        .collect();
+    let input = tone(rate, frames, 0.5);
     let ceiling = 10f32.powf(-6.0 / 20.0);
     let gain = || Some(audio_rack("audio_gain", &[("gain", 6.0)]));
-    let limiter = || Some(audio_rack("audio_limiter", &[("ceiling", -6.0)]));
+    let limiter = || vec![audio_effect("audio_limiter", &[("ceiling", -6.0)])];
 
-    let (both, _) = job_bake(&racked_job(gain(), limiter()), &input, 0, rate, true)
-        .expect("two racks, two effects");
+    let mut doc = Document::new();
+    let song = push_footage_item(&mut doc, "song.wav");
+    seed_has_audio(song);
+    let comp = push_comp(&mut doc, "mix", 32, 32);
+    push_layer(&mut doc, comp, LayerKind::Footage { item: song });
+    let through = |clip: Option<Arc<AudioChain>>, row: Vec<lumit_core::model::EffectInstance>| {
+        let mut doc = doc.clone();
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
+            c.layers[0].effects = row;
+        }
+        let doc = Arc::new(doc);
+        let c = doc.comp(comp).unwrap().clone();
+        let mut job = AudioJobsBuilder::new().audio_jobs(&doc, &c).remove(0);
+        job.out_s = 0.25;
+        job.clip_chain = clip;
+        mixdown_prepared(&doc, &c, &[(Arc::clone(&input), job)], rate, 0.25)
+    };
+
+    let both = through(gain(), limiter());
     assert!(
         loudest(&both) < ceiling * 1.05,
         "the limiter heard the +6 dB: peak {}",
@@ -455,8 +470,7 @@ fn a_clips_rack_runs_ahead_of_the_rows_and_a_missing_rack_is_not_run() {
 
     // The clip's rack alone: the +6 dB comes out untouched, which is what
     // the other order would have produced above.
-    let (clip_only, _) =
-        job_bake(&racked_job(gain(), None), &input, 0, rate, true).expect("the clip's rack");
+    let clip_only = through(gain(), Vec::new());
     assert!(
         loudest(&clip_only) > ceiling * 1.8,
         "nothing held the gain back: peak {}",
@@ -465,25 +479,46 @@ fn a_clips_rack_runs_ahead_of_the_rows_and_a_missing_rack_is_not_run() {
 
     // The row's rack alone: the sound was already under the ceiling, so
     // the limiter leaves it where it was.
-    let (row_only, _) =
-        job_bake(&racked_job(None, limiter()), &input, 0, rate, true).expect("the row's rack");
+    let row_only = through(None, limiter());
     assert!(loudest(&row_only) < ceiling * 1.05);
+    assert!(loudest(&row_only) > ceiling * 0.8, "and it was heard");
 
     // And neither rack is the mix untouched, byte for byte.
     assert!(
-        job_bake(&racked_job(None, None), &input, 0, rate, true).is_none(),
+        job_bake(
+            &racked_job(None, None),
+            &input.samples,
+            0,
+            rate,
+            true,
+            &std::sync::atomic::AtomicBool::new(false)
+        )
+        .is_none(),
         "no rack, no bake"
     );
 }
 
+/// A quarter-second-ish 220 Hz tone at `level`, both sides.
+fn tone(rate: u32, frames: usize, level: f32) -> Arc<lumit_media::audio::AudioBuffer> {
+    Arc::new(lumit_media::audio::AudioBuffer {
+        rate,
+        samples: (0..frames)
+            .flat_map(|n| {
+                let phase = std::f64::consts::TAU * 220.0 * n as f64 / f64::from(rate);
+                [phase.sin() as f32 * level; 2]
+            })
+            .collect(),
+    })
+}
+
 /// **A Precomp layer's rack hears the sum, and the layer's Volume rides
-/// on what comes back** (docs/09 §3.1, the bus stage).
+/// on what comes back** (docs/09 §3.1): the rack runs on the layer's node.
 ///
-/// Two copies of the same half-scale tone arrive through one Precomp
-/// layer whose rack is a limiter set to −6 dB. Either one alone is already
-/// under that ceiling, so only the sum can move the limiter: if the rack
-/// were run per source the two would come out untouched and add to full
-/// scale. The peak alone therefore says whether the sum existed.
+/// Two copies of the same half-scale tone play inside a comp placed through
+/// one Precomp layer whose rack is a limiter set to −6 dB. Either one alone
+/// is already under that ceiling, so only the sum can move the limiter: if
+/// the rack were run per source the two would come out untouched and add to
+/// full scale. The peak alone therefore says whether the sum existed.
 ///
 /// Then the same mix with the Precomp layer at −6 dB. The fader is
 /// **after** the insert, so it halves the held sum; riding inside the rack
@@ -494,49 +529,43 @@ fn a_precomp_layers_rack_hears_the_summed_comp() {
     let rate = 48_000u32;
     let frames = rate as usize / 4;
     let ceiling = 10f32.powf(-6.0 / 20.0);
-    let tone = Arc::new(lumit_media::audio::AudioBuffer {
-        rate,
-        samples: (0..frames)
-            .flat_map(|n| {
-                let phase = std::f64::consts::TAU * 220.0 * n as f64 / f64::from(rate);
-                [phase.sin() as f32 * 0.5; 2]
-            })
-            .collect(),
-    });
-    let bus = |volume_db: f64| Carrier {
-        volume: lumit_core::anim::Property::fixed(volume_db),
-        pan: lumit_core::anim::Property::zero(),
-        offset_s: 0.0,
-        fade: None,
-        chain: Some(audio_rack("audio_limiter", &[("ceiling", -6.0)])),
-        retime: None,
-        scope: None,
-    };
-    let row = Uuid::now_v7();
-    let through = |carrier: Carrier| {
-        let one = |item: Uuid| {
-            let mut job = racked_job(None, None);
-            job.item = item;
-            job.layer = row;
-            job.out_s = 0.25;
-            job.carriers = vec![carrier.clone()];
-            job
-        };
-        let decoded = [
-            (Arc::clone(&tone), one(Uuid::now_v7())),
-            (Arc::clone(&tone), one(Uuid::now_v7())),
-        ];
-        mixdown_prepared(&decoded, rate, 0.25, 1.0)
+    let half = tone(rate, frames, 0.5);
+
+    let mut doc = Document::new();
+    let song = push_footage_item(&mut doc, "song.wav");
+    seed_has_audio(song);
+    let inner = push_comp(&mut doc, "inner", 32, 32);
+    push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+    push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+    let outer = push_comp(&mut doc, "outer", 32, 32);
+    push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
+    let through = |volume_db: f64, racked: bool| {
+        let mut doc = doc.clone();
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            c.layers[0].volume_db = lumit_core::anim::Property::fixed(volume_db);
+            if racked {
+                c.layers[0].effects = vec![audio_effect("audio_limiter", &[("ceiling", -6.0)])];
+            }
+        }
+        let doc = Arc::new(doc);
+        let c = doc.comp(outer).unwrap().clone();
+        let decoded: Vec<_> = AudioJobsBuilder::new()
+            .audio_jobs(&doc, &c)
+            .into_iter()
+            .map(|job| (Arc::clone(&half), job))
+            .collect();
+        assert_eq!(decoded.len(), 2);
+        mixdown_prepared(&doc, &c, &decoded, rate, 0.25)
     };
 
-    let held = through(bus(0.0));
+    let held = through(0.0, true);
     assert!(
         loudest(&held) < ceiling * 1.05 && loudest(&held) > ceiling * 0.5,
         "the limiter heard both sources at once: peak {}",
         loudest(&held)
     );
 
-    let quieter = through(bus(-6.0));
+    let quieter = through(-6.0, true);
     assert!(
         (loudest(&quieter) - loudest(&held) * ceiling).abs() < 0.02,
         "the Precomp layer's Volume rides on what the rack gave back: \
@@ -545,16 +574,95 @@ fn a_precomp_layers_rack_hears_the_summed_comp() {
         loudest(&held)
     );
 
-    // And with no rack on the carrier nothing is summed early: the two
-    // sources reach full scale and the master's own ceiling holds them.
-    let mut plain = bus(0.0);
-    plain.chain = None;
-    let open = through(plain);
+    // And with no rack nothing is summed early: the two sources reach full
+    // scale and the master's own limiter holds them.
+    let open = through(0.0, false);
     assert!(
         loudest(&open) > ceiling * 1.5,
-        "a carrier with no rack places its sources as it always did: \
+        "a Precomp layer with no rack places its sources as it always did: \
          peak {}",
         loudest(&open)
+    );
+}
+
+/// **An export made to a loudness lands on it**: the mix is measured, the
+/// master moved by the difference and the limiter holds the true peak under
+/// the ceiling, so a delivery spec is met without a second tool.
+///
+/// A quiet tone with a short loud burst five times a second: lifting it to
+/// the target pushes every burst well past the ceiling, and the limiter
+/// takes back more than a unit of the lift, which a second measure puts
+/// right.
+#[test]
+fn an_export_made_to_a_loudness_lands_within_half_a_unit() {
+    let rate = 48_000u32;
+    let frames = 3 * rate as usize;
+    let mut samples = tone(rate, frames, 0.07).samples.clone();
+    for start in (0..frames).step_by(rate as usize / 5) {
+        for n in start..(start + rate as usize / 500).min(frames) {
+            let phase = std::f32::consts::TAU * 1000.0 * (n - start) as f32 / rate as f32;
+            samples[n * 2] += phase.sin() * 0.6;
+            samples[n * 2 + 1] += phase.sin() * 0.6;
+        }
+    }
+    let clicks = Arc::new(lumit_media::audio::AudioBuffer { rate, samples });
+    let mut doc = Document::new();
+    let song = push_footage_item(&mut doc, "song.wav");
+    seed_has_audio(song);
+    let comp = push_comp(&mut doc, "mix", 32, 32);
+    push_layer(&mut doc, comp, LayerKind::Footage { item: song });
+    let doc = Arc::new(doc);
+    let c = doc.comp(comp).unwrap().clone();
+    let jobs = AudioJobsBuilder::new().audio_jobs(&doc, &c);
+    let source = Source::whole(Arc::clone(&clicks));
+    let (mut plan, _) = super::graph::build_graph(
+        &doc,
+        &c,
+        jobs,
+        &|_| Some(Arc::clone(&source)),
+        rate,
+        3.0,
+        &mut super::live::RackBakes::default(),
+        None,
+        true,
+        &std::sync::atomic::AtomicBool::new(false),
+        None,
+    )
+    .unwrap();
+
+    let (lufs, true_peak_db) = (-16.0, -1.0);
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let measured = super::render::measure(&plan, rate, &stop, &mut |_| {})
+        .unwrap()
+        .integrated;
+    assert!(measured < lufs - 3.0, "the tone starts quieter: {measured}");
+    let lifted = 0.6 * 10f64.powf((lufs - measured) / 20.0);
+    assert!(lifted > 1.0, "the bursts go past the ceiling: {lifted}");
+    let mut once = plan.clone();
+    once.ceiling = lumit_audio::mix::db_to_gain(true_peak_db);
+    super::render::lift(&mut once, lufs - measured);
+    let once = super::render::measure(&once, rate, &stop, &mut |_| {})
+        .unwrap()
+        .integrated;
+    assert!(
+        lufs - once > 1.0,
+        "one lift by the difference lands over a unit short: {once}"
+    );
+    super::render::aim(&mut plan, rate, lufs, true_peak_db, &stop, &mut |_| {}).unwrap();
+    let out = super::render::render(Arc::new(plan), rate, true, &mut |_| {});
+
+    let mut meter = lumit_audio::loudness::Loudness::new(rate);
+    meter.add(&out);
+    let reading = meter.reading();
+    assert!(
+        (f64::from(reading.integrated) - lufs).abs() < 0.5,
+        "integrated {} for a target of {lufs}",
+        reading.integrated
+    );
+    let peak_db = 20.0 * f64::from(reading.true_peak).log10();
+    assert!(
+        peak_db <= true_peak_db + 0.05,
+        "true peak {peak_db} dB over the {true_peak_db} dB ceiling"
     );
 }
 
@@ -578,7 +686,15 @@ fn a_click_through_the_distortion_lands_at_the_same_comp_time() {
         None,
         Some(audio_rack("audio_distortion", &[("drive", 0.0)])),
     );
-    let (wet, latency) = job_bake(&job, &input, 0, rate, true).expect("the distortion opens");
+    let (wet, latency) = job_bake(
+        &job,
+        &input,
+        0,
+        rate,
+        true,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .expect("the distortion opens");
     assert!(latency > 0, "the half-band pair's delay is reported");
     let peak = (0..wet.len() / 2)
         .max_by(|a, b| wet[a * 2].abs().total_cmp(&wet[b * 2].abs()))

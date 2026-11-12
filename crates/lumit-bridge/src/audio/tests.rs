@@ -15,6 +15,58 @@ fn state_tests() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// An empty comp to build in: the jobs the tests hand in name layers it
+/// does not have, so each layer they name is a strip of its own.
+fn bare() -> (Arc<Document>, lumit_core::model::Composition) {
+    use lumit_core::time::{Duration, FrameRate, Rational};
+    let comp = lumit_core::model::Composition {
+        graph: None,
+        master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
+        lighting: Default::default(),
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name: "Mix".into(),
+        width: 1920,
+        height: 1080,
+        frame_rate: FrameRate::new(30, 1).expect("30 fps"),
+        duration: Duration(Rational::new(10, 1).expect("10 s")),
+        background: lumit_core::model::LinearColour([0.0, 0.0, 0.0, 0.0]),
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    (Arc::new(Document::new()), comp)
+}
+
+/// The plan the engine would play for `jobs`, and the layer of each node.
+fn plan_of(
+    jobs: &[AudioJob],
+    decoded: &HashMap<Uuid, Arc<lumit_media::audio::AudioBuffer>>,
+    rate: u32,
+    duration_s: f64,
+) -> (Arc<MixPlan>, Vec<Uuid>) {
+    let (doc, comp) = bare();
+    let (plan, info) = build_plan(&doc, &comp, jobs, decoded, rate, duration_s);
+    (plan, info.nodes.iter().map(|n| n.layer).collect())
+}
+
+/// The export's mix of `decoded`, through the desk.
+fn baked(
+    decoded: &[(Arc<lumit_media::audio::AudioBuffer>, AudioJob)],
+    rate: u32,
+    duration_s: f64,
+) -> Vec<f32> {
+    let (doc, comp) = bare();
+    lumit_render::mix::mixdown::mixdown_prepared(&doc, &comp, decoded, rate, duration_s)
+}
+
 fn job(path: &str, in_s: f64, out_s: f64, offset_s: f64) -> AudioJob {
     let item = Uuid::now_v7();
     AudioJob {
@@ -42,8 +94,21 @@ fn job(path: &str, in_s: f64, out_s: f64, offset_s: f64) -> AudioJob {
 /// change it — the exact edits that must re-plan (docs/09 §6).
 #[test]
 fn the_signature_tracks_everything_that_changes_the_sound() {
-    let a = vec![job("a.mp4", 0.0, 5.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
-    let same = vec![job("a.mp4", 0.0, 5.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
+    // The same rows each time: which strip a job sums into is part of the mix.
+    let rows = |mut jobs: Vec<AudioJob>| {
+        for (i, j) in jobs.iter_mut().enumerate() {
+            j.layer = Uuid::from_u128(i as u128 + 1);
+        }
+        jobs
+    };
+    let a = rows(vec![
+        job("a.mp4", 0.0, 5.0, 0.0),
+        job("b.mp4", 1.0, 3.0, 1.0),
+    ]);
+    let same = rows(vec![
+        job("a.mp4", 0.0, 5.0, 0.0),
+        job("b.mp4", 1.0, 3.0, 1.0),
+    ]);
     let sig = jobs_signature(&a, 10.0, 0.0);
     assert_eq!(
         sig,
@@ -51,20 +116,29 @@ fn the_signature_tracks_everything_that_changes_the_sound() {
         "identical mixes agree"
     );
 
-    let moved = vec![job("a.mp4", 0.5, 5.5, 0.5), job("b.mp4", 1.0, 3.0, 1.0)];
+    let moved = rows(vec![
+        job("a.mp4", 0.5, 5.5, 0.5),
+        job("b.mp4", 1.0, 3.0, 1.0),
+    ]);
     assert_ne!(sig, jobs_signature(&moved, 10.0, 0.0), "a move re-plans");
 
-    let trimmed = vec![job("a.mp4", 0.0, 4.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
+    let trimmed = rows(vec![
+        job("a.mp4", 0.0, 4.0, 0.0),
+        job("b.mp4", 1.0, 3.0, 1.0),
+    ]);
     assert_ne!(sig, jobs_signature(&trimmed, 10.0, 0.0), "a trim re-plans");
 
-    let removed = vec![job("a.mp4", 0.0, 5.0, 0.0)];
+    let removed = rows(vec![job("a.mp4", 0.0, 5.0, 0.0)]);
     assert_ne!(
         sig,
         jobs_signature(&removed, 10.0, 0.0),
         "a mute/delete re-plans"
     );
 
-    let mut louder = vec![job("a.mp4", 0.0, 5.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
+    let mut louder = rows(vec![
+        job("a.mp4", 0.0, 5.0, 0.0),
+        job("b.mp4", 1.0, 3.0, 1.0),
+    ]);
     louder[0].volume = Property::fixed(-6.0);
     assert_ne!(
         sig,
@@ -95,13 +169,13 @@ fn build_plan_places_decoded_clips_and_skips_missing_ones() {
             samples: vec![0.25; 4 * rate as usize * 2], // 4 s of quiet tone
         }),
     );
-    let (plan, strips) = build_plan(&[placed.clone(), missing], &decoded, rate, 5.0, 0.0);
+    let (plan, strips) = plan_of(&[placed.clone(), missing.clone()], &decoded, rate, 5.0);
     assert_eq!(
         strips,
-        vec![placed.layer],
-        "only the job that actually sounds claims a meter slot"
+        vec![placed.layer, missing.layer],
+        "each row with a job is a strip, the one that cannot be read meters nought"
     );
-    assert_eq!(plan.clips[0].meter, 0);
+    assert_eq!(plan.clips[0].node, 0);
     assert_eq!(plan.total_frames, 5 * rate as usize);
     assert_eq!(plan.clips.len(), 1, "the undecoded job contributes nothing");
     // The layer starts at comp second 1 and sounds for its 2-second span.
@@ -127,8 +201,7 @@ fn build_plan_places_decoded_clips_and_skips_missing_ones() {
 fn build_plan_sums_a_precomp_layers_rack_onto_one_strip() {
     let rate = 48_000u32;
     let ceiling = 10f32.powf(-6.0 / 20.0);
-    let mut limiter =
-        lumit_core::fx::builtins::instantiate("audio_limiter").expect("a limiter");
+    let mut limiter = lumit_core::fx::builtins::instantiate("audio_limiter").expect("a limiter");
     for param in &mut limiter.params {
         if param.id == "ceiling" {
             param.value = lumit_core::model::EffectValue::Float(Property::fixed(-6.0));
@@ -170,7 +243,7 @@ fn build_plan_sums_a_precomp_layers_rack_onto_one_strip() {
             }),
         );
     }
-    let (plan, strips) = build_plan(&[a, b], &decoded, rate, 1.0, 0.0);
+    let (plan, strips) = plan_of(&[a, b], &decoded, rate, 1.0);
     assert_eq!(
         plan.clips.len(),
         1,
@@ -181,7 +254,7 @@ fn build_plan_sums_a_precomp_layers_rack_onto_one_strip() {
         vec![row],
         "the bus meters on the Precomp layer's row"
     );
-    assert_eq!(plan.clips[0].meter, 0);
+    assert_eq!(plan.clips[0].node, 0);
     let (l, r) = plan.frame_at(rate as usize / 2);
     assert!(
         l.abs() < ceiling * 1.05 && r.abs() < ceiling * 1.05,
@@ -211,30 +284,30 @@ fn meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded() {
     for j in [&a, &b, &c] {
         decoded.insert(j.item, tone());
     }
-    let (plan, strips) = build_plan(&[a.clone(), b, c.clone()], &decoded, rate, 1.0, 0.0);
+    let (plan, strips) = plan_of(&[a.clone(), b, c.clone()], &decoded, rate, 1.0);
     assert_eq!(strips, vec![a.layer, c.layer], "one slot per strip");
     assert_eq!(
-        plan.clips.iter().map(|c| c.meter).collect::<Vec<_>>(),
+        plan.clips.iter().map(|c| c.node).collect::<Vec<_>>(),
         vec![0, 0, 1],
         "the shared row's two sources meter onto the one slot"
     );
 
-    // More strips than the bank holds: the first MAX_STRIPS are metered,
+    // More strips than the bank holds: the first MAX_NODES are metered,
     // the rest play with no bar rather than being dropped from the mix.
-    let many: Vec<AudioJob> = (0..lumit_audio::meter::MAX_STRIPS + 3)
+    let many: Vec<AudioJob> = (0..lumit_audio::plan::MAX_NODES + 3)
         .map(|_| job("x.wav", 0.0, 1.0, 0.0))
         .collect();
     let mut decoded = HashMap::new();
     for j in &many {
         decoded.insert(j.item, tone());
     }
-    let (plan, strips) = build_plan(&many, &decoded, rate, 1.0, 0.0);
+    let (plan, strips) = plan_of(&many, &decoded, rate, 1.0);
     assert_eq!(plan.clips.len(), many.len(), "every source still sounds");
-    assert_eq!(strips.len(), lumit_audio::meter::MAX_STRIPS);
+    assert_eq!(strips.len(), lumit_audio::plan::MAX_NODES);
     assert_eq!(
         plan.clips
             .iter()
-            .filter(|c| c.meter == lumit_audio::mix::NO_METER)
+            .filter(|c| c.node == lumit_audio::plan::NONE)
             .count(),
         3,
         "the three past the bank have no bar"
@@ -297,9 +370,7 @@ impl lumit_core::fx::audio_chain::AudioProcessor for TestInsert {
         values: &[(lumit_core::fx::params::ParamId, f64)],
         steady: i64,
     ) -> bool {
-        if self.refuse
-            == Some(steady as usize / lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES)
-        {
+        if self.refuse == Some(steady as usize / lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES) {
             return false;
         }
         let g = values
@@ -451,7 +522,7 @@ fn the_insert_runs_before_the_fader_not_after_it() {
         Property::fixed(1.0),
     )]));
 
-    let baked = lumit_render::mix::mixdown::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+    let baked = baked(&[(source, one)], rate, 1.0);
     let half = lumit_audio::mix::db_to_gain(-6.0);
     assert!(
         (baked[0] - 0.5 * half).abs() < 1e-5,
@@ -492,14 +563,7 @@ fn an_animated_plugin_parameter_bakes_per_block_and_repeats_exactly() {
         sweep,
     )]));
 
-    let bake = || {
-        lumit_render::mix::mixdown::mixdown_prepared(
-            &[(Arc::clone(&source), one.clone())],
-            rate,
-            1.0,
-            1.0,
-        )
-    };
+    let bake = || baked(&[(Arc::clone(&source), one.clone())], rate, 1.0);
     let first = bake();
     assert_eq!(first, bake(), "two bakes of one project are identical");
 
@@ -536,7 +600,7 @@ fn a_refused_block_ships_dry_and_the_rest_still_plays() {
         "clap:lumit.test.refuse",
         Property::fixed(1.0),
     )]));
-    let baked = lumit_render::mix::mixdown::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+    let baked = baked(&[(source, one)], rate, 1.0);
 
     let block = lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
     let inside = (4 * block + block / 2) * 2;
@@ -577,7 +641,7 @@ fn a_latent_plugin_is_placed_earlier_by_exactly_its_latency() {
     )]));
     let mut decoded = HashMap::new();
     decoded.insert(one.item, source);
-    let (plan, _) = build_plan(&[one], &decoded, rate, 3.0, 0.0);
+    let (plan, _) = plan_of(&[one], &decoded, rate, 3.0);
 
     let clip = &plan.clips[0];
     assert_eq!(
@@ -657,13 +721,8 @@ fn a_shaped_crossfade_with_a_clip_effect_mixes_the_same_in_both_paths() {
     let mut decoded = HashMap::new();
     decoded.insert(a.item, Arc::clone(&a_source));
     decoded.insert(b.item, Arc::clone(&b_source));
-    let (plan, _) = build_plan(&[a.clone(), b.clone()], &decoded, rate, 2.0, 0.0);
-    let baked = lumit_render::mix::mixdown::mixdown_prepared(
-        &[(a_source, a), (b_source, b)],
-        rate,
-        2.0,
-        1.0,
-    );
+    let (plan, _) = plan_of(&[a.clone(), b.clone()], &decoded, rate, 2.0);
+    let baked = baked(&[(a_source, a), (b_source, b)], rate, 2.0);
 
     for i in 0..(2 * rate as usize) {
         let (l, r) = plan.frame_at(i);
@@ -692,6 +751,7 @@ fn the_signature_tracks_the_fades_and_both_racks() {
     use lumit_core::sequence::FadeShape;
     let one = |fade, clip_chain, chain| {
         let mut j = job("a.mp4", 0.0, 5.0, 0.0);
+        j.layer = Uuid::nil();
         j.fade = fade;
         j.clip_chain = clip_chain;
         j.chain = chain;

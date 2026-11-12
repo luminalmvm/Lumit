@@ -48,6 +48,8 @@ pub enum BridgeKeyContext {
     Cut,
     Captions,
     Transcript,
+    /// The Mixer, where keys act on the picked strips.
+    Mixer,
 }
 
 impl From<BridgeKeyContext> for KeyContext {
@@ -65,6 +67,7 @@ impl From<BridgeKeyContext> for KeyContext {
             BridgeKeyContext::Cut => KeyContext::Cut,
             BridgeKeyContext::Captions => KeyContext::Captions,
             BridgeKeyContext::Transcript => KeyContext::Transcript,
+            BridgeKeyContext::Mixer => KeyContext::Mixer,
         }
     }
 }
@@ -84,6 +87,7 @@ impl From<KeyContext> for BridgeKeyContext {
             KeyContext::Cut => BridgeKeyContext::Cut,
             KeyContext::Captions => BridgeKeyContext::Captions,
             KeyContext::Transcript => BridgeKeyContext::Transcript,
+            KeyContext::Mixer => BridgeKeyContext::Mixer,
         }
     }
 }

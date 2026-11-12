@@ -2100,6 +2100,18 @@ Map<String, String> get _built => {
       "New Null layer": l10n.keyNewNullLayer,
       "New Sequence layer": l10n.keyNewSequenceLayer,
       "New Audio layer": l10n.keyNewAudioLayer,
+      "New bus": l10n.keyNewBus,
+      "Previous strip": l10n.keyPreviousStrip,
+      "Next strip": l10n.keyNextStrip,
+      "Raise the fader by 0.5 dB": l10n.keyRaiseTheFaderBy05Db,
+      "Lower the fader by 0.5 dB": l10n.keyLowerTheFaderBy05Db,
+      "Raise the fader by 0.1 dB": l10n.keyRaiseTheFaderBy01Db,
+      "Lower the fader by 0.1 dB": l10n.keyLowerTheFaderBy01Db,
+      "Return the fader to 0 dB": l10n.keyReturnTheFaderTo0Db,
+      "Mute or unmute the strip": l10n.keyMuteOrUnmuteTheStrip,
+      "Solo or unsolo the strip": l10n.keySoloOrUnsoloTheStrip,
+      "Solo the strip alone": l10n.keySoloTheStripAlone,
+      "Next automation mode": l10n.keyNextAutomationMode,
       "Zoom in": l10n.keyZoomIn,
       "Zoom out": l10n.keyZoomOut,
       "Zoom to fit": l10n.keyZoomToFit,
@@ -2201,6 +2213,7 @@ Map<String, String> get _built => {
       "Go to the previous caption": l10n.keyGoToThePreviousCaption,
       "Go to the next caption": l10n.keyGoToTheNextCaption,
       "Transcript panel": l10n.keyTranscriptPanel,
+      "Mixer": l10n.panelMixer,
       "Delete the selected words and close the gap":
           l10n.keyDeleteTheSelectedWordsAndCloseTheGap,
       "Delete the selected words and leave a gap":
@@ -2412,6 +2425,8 @@ Map<String, String> get _built => {
       "Edit master automation": l10n.histEditMasterAutomation,
       "Set master automation mode": l10n.histSetMasterAutomationMode,
       "Set loudness target": l10n.histSetLoudnessTarget,
+      "Record automation": l10n.histRecordAutomation,
+      "Normalise mix": l10n.histNormaliseMix,
       // The mark the Audio timeline writes, which reads in the history under
       // the same words the row carries.
       "Sound mix": l10n.timelineSoundMix,

@@ -4,14 +4,20 @@
 //! (`run`) and the browser build's (`web`) both come through here, so the two
 //! cannot make different files.
 
-use lumit_core::model::Composition;
+use lumit_audio::plan::MixPlan;
+use lumit_core::model::{Composition, Document};
 use lumit_core::pixels::{Channel, Resample};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use super::{
     frame_span, pack_frame, AlphaMode, AudioLayout, Channels, ColourTransform, Crop, ExportSpec,
 };
+use crate::mix::graph::{build_graph, GraphInfo};
 use crate::mix::jobs::AudioJob;
-use crate::mix::mixdown::{audio_samples_through, mixdown_at};
+use crate::mix::live::RackBakes;
+use crate::mix::mixdown::audio_samples_through;
+use crate::mix::render::{aim, render};
 
 /// The stretch of the composition an export writes, and the rate it writes it at.
 pub(super) struct Span {
@@ -59,33 +65,87 @@ impl Span {
 
 /// The comp's audio, mixed exactly as playback mixes it, then cut to the
 /// export range and padded so sound and picture end together. `None` when the
-/// file carries no sound.
+/// file carries no sound, or the export was stopped. `on_progress` is handed
+/// how far through the mixing runs it is, 0 to 1.
 pub(super) fn sound(
     spec: &ExportSpec,
+    doc: &Arc<Document>,
     comp: &Composition,
     jobs: &[AudioJob],
     span: &Span,
+    cancel: &AtomicBool,
+    on_progress: &mut dyn FnMut(f64),
 ) -> Option<Vec<f32>> {
-    let rate = spec.audio_rate;
     // Sound only joins a container that can hold it: a folder of stills has
     // nowhere to put it, and the dialogue says so rather than silently
     // dropping it. An audio-only export is nothing *but* sound, so the
     // include-audio tick has no say there.
-    let caps = spec.format.caps();
-    let wants_audio = caps.audio && (spec.include_audio || !caps.video);
+    //
     // A silent comp exported as sound still writes silence of the right
     // length — an empty .wav would look like a failure that wasn't one — but
     // a video export of a silent comp carries no audio stream at all rather
     // than a mute one.
-    if !wants_audio || (jobs.is_empty() && caps.video) {
+    if !carries_sound(spec) || (jobs.is_empty() && spec.format.caps().video) {
         return None;
     }
-    let full = mixdown_at(
-        jobs,
+    let rate = spec.audio_rate;
+    let (mut plan, _) = desk(spec, doc, comp, jobs, cancel)?;
+    let full = match spec.loudness {
+        Some(target) => {
+            aim(
+                &mut plan,
+                rate,
+                target.lufs,
+                target.true_peak_db,
+                cancel,
+                &mut |f| on_progress(f * 0.5),
+            )?;
+            render(Arc::new(plan), rate, true, &mut |f| {
+                on_progress(0.5 + f * 0.5)
+            })
+        }
+        None => render(Arc::new(plan), rate, true, on_progress),
+    };
+    Some(cut(spec, span, &full))
+}
+
+/// Whether the file carries sound at all.
+pub(super) fn carries_sound(spec: &ExportSpec) -> bool {
+    let caps = spec.format.caps();
+    caps.audio && (spec.include_audio || !caps.video)
+}
+
+/// The comp's desk as an export plays it: built offline, files read through
+/// the pool. `None` when the export was stopped.
+pub(super) fn desk(
+    spec: &ExportSpec,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    jobs: &[AudioJob],
+    cancel: &AtomicBool,
+) -> Option<(MixPlan, GraphInfo)> {
+    let rate = spec.audio_rate;
+    let pool = lumit_audio::stream::pool();
+    build_graph(
+        doc,
+        comp,
+        jobs.to_vec(),
+        &|job| Some(pool.source(&job.sound, rate)),
         rate,
         comp.duration.0.to_f64(),
-        lumit_audio::mix::db_to_gain(comp.master_volume_db),
-    );
+        &mut RackBakes::default(),
+        None,
+        true,
+        cancel,
+        None,
+    )
+    .ok()
+}
+
+/// A whole mix cut to the export range and padded so sound and picture end
+/// together, folded to the spec's layout.
+pub(super) fn cut(spec: &ExportSpec, span: &Span, full: &[f32]) -> Vec<f32> {
+    let rate = spec.audio_rate;
     // The cut starts where the range starts on the comp's own clock, and
     // covers the output's duration — total frames at the *output* rate —
     // so sound and picture end together whatever rate was chosen.
@@ -96,10 +156,10 @@ pub(super) fn sound(
     // The mix is stereo throughout — playback's own mix, so preview and
     // export cannot disagree — and folds down once, at the very end,
     // where nothing else reads it.
-    Some(match spec.audio_layout {
+    match spec.audio_layout {
         AudioLayout::Stereo => cut,
         AudioLayout::Mono => lumit_audio::mix::downmix_to_mono(&cut),
-    })
+    }
 }
 
 /// The frame the file is delivered at, before any rule of the codec's.

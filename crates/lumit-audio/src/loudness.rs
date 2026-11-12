@@ -1,6 +1,7 @@
-//! Loudness as a mix is delivered against: short-term and integrated loudness
-//! in LUFS, and the true peak, measured on the master as ITU-R BS.1770-4 and
-//! EBU R128 define them.
+//! Loudness as a mix is delivered against: momentary, short-term and
+//! integrated loudness in LUFS, the loudness range, and the true peak,
+//! measured on the master as ITU-R BS.1770-4, EBU R128 and EBU Tech 3342
+//! define them.
 //!
 //! The callback hands [`Loudness::add`] every frame it gives the device and
 //! publishes the reading once per buffer beside the bars. The state is fixed
@@ -10,15 +11,24 @@
 //! - **K-weighting** is the standard's two filters: a shelf that lifts what
 //!   the head hears more of, and a low cut. Each channel is filtered, squared
 //!   and summed with a weight of one.
-//! - **Short-term** is the mean of the last three seconds, in 100 ms steps.
+//! - **Momentary** is the mean of the last 400 ms, and **short-term** of the
+//!   last three seconds, both in 100 ms steps.
 //! - **Integrated** gates 400 ms blocks that overlap by three quarters: blocks
 //!   under -70 LUFS are dropped, then blocks more than 10 LU under the mean of
 //!   the rest. The blocks are kept as a histogram of a tenth of a LU a bin,
 //!   holding each bin's exact energy, so an hour costs what a second does and
 //!   the only rounding is which side of the relative gate a block inside that
 //!   one bin falls.
+//! - **Loudness range** takes a short-term reading every 100 ms once three
+//!   seconds are in hand, drops those under -70 LUFS and then those more than
+//!   20 LU under the mean of the rest, and is the spread between the 10th and
+//!   95th percentiles of what is left. Kept in a histogram like the integrated
+//!   one.
 //! - **True peak** is the loudest point of the output upsampled four times,
-//!   since the measure began.
+//!   since the measure began. The upsampler is shared with the master's
+//!   limiter ([`crate::limiter`]).
+//!
+//! Runs on the audio callback (and in an export's own mix), owned by it.
 
 use crate::meter::LoudnessReading;
 
@@ -34,6 +44,9 @@ const ABSOLUTE_GATE: f64 = -70.0;
 /// Blocks this many LU under the loudness of what passed the absolute gate
 /// are dropped as well.
 const RELATIVE_GATE: f64 = 10.0;
+
+/// The loudness range's relative gate, in LU under the short-term mean.
+const RANGE_GATE: f64 = 20.0;
 
 /// The histogram's bins: a tenth of a LU each, from the absolute gate up to
 /// +10 LUFS, louder than anything under the master ceiling can read.
@@ -99,7 +112,7 @@ fn k_weighting(rate: f64) -> [Biquad; 2] {
 
 /// The upsampler's taps: a windowed sinc cut at the input's Nyquist, split
 /// into four phases, each scaled so a steady level comes through unchanged.
-fn upsampler() -> [[f64; TAPS]; PHASES] {
+fn upsampler_taps() -> [[f64; TAPS]; PHASES] {
     use std::f64::consts::PI;
     let len = PHASES * TAPS;
     let centre = (len as f64 - 1.0) / 2.0;
@@ -122,6 +135,60 @@ fn upsampler() -> [[f64; TAPS]; PHASES] {
         }
     }
     phases
+}
+
+/// A stereo signal upsampled four times, for its true peak: the loudest point
+/// between the samples as well as on them. About six samples late: the
+/// filter's half length.
+#[derive(Clone, Debug)]
+pub(crate) struct Upsampler {
+    taps: [[f64; TAPS]; PHASES],
+    /// The last `TAPS` samples of each channel, newest first.
+    history: [[f64; TAPS]; 2],
+}
+
+impl Upsampler {
+    pub(crate) fn new() -> Self {
+        Self {
+            taps: upsampler_taps(),
+            history: [[0.0; TAPS]; 2],
+        }
+    }
+
+    /// One sample into `channel` (0 or 1), answering the loudest absolute
+    /// value of it and of the four points the upsampler makes.
+    #[inline]
+    pub(crate) fn peak(&mut self, channel: usize, x: f64) -> f64 {
+        let Some(history) = self.history.get_mut(channel) else {
+            return x.abs();
+        };
+        history.copy_within(..TAPS - 1, 1);
+        history[0] = x;
+        let mut peak = x.abs();
+        for phase in &self.taps {
+            let y: f64 = phase.iter().zip(history.iter()).map(|(h, s)| h * s).sum();
+            peak = peak.max(y.abs());
+        }
+        peak
+    }
+
+    /// Forget the samples before.
+    pub(crate) fn clear(&mut self) {
+        self.history = [[0.0; TAPS]; 2];
+    }
+}
+
+/// Put a reading of mean square `energy` in a histogram, unless it is under
+/// the absolute gate. True when it went in.
+fn bin_of(energy: f64, counts: &mut [u32; BINS], energies: &mut [f64; BINS]) -> bool {
+    let loudness = lufs(energy);
+    if loudness <= ABSOLUTE_GATE {
+        return false;
+    }
+    let bin = (((loudness - ABSOLUTE_GATE) / BIN_WIDTH) as usize).min(BINS - 1);
+    counts[bin] = counts[bin].saturating_add(1);
+    energies[bin] += energy;
+    true
 }
 
 /// One sample through a channel's K-weighting.
@@ -157,12 +224,16 @@ pub struct Loudness {
     /// The gated blocks: how many fell in each bin, and their energy.
     counts: [u32; BINS],
     energy: [f64; BINS],
-    upsampler: [[f64; TAPS]; PHASES],
-    /// The last `TAPS` samples of each channel, newest first.
-    history: [[f64; TAPS]; 2],
-    /// What is published: LUFS, and the true peak as an amplitude.
+    /// The short-term readings for the loudness range, binned the same way.
+    range_counts: [u32; BINS],
+    range_energy: [f64; BINS],
+    upsampler: Upsampler,
+    /// What is published: LUFS, the range in LU, and the true peak as an
+    /// amplitude.
+    momentary: f64,
     short_term: f64,
     integrated: f64,
+    range: f64,
     true_peak: f64,
 }
 
@@ -182,10 +253,13 @@ impl Loudness {
             filled: 0,
             counts: [0; BINS],
             energy: [0.0; BINS],
-            upsampler: upsampler(),
-            history: [[0.0; TAPS]; 2],
+            range_counts: [0; BINS],
+            range_energy: [0.0; BINS],
+            upsampler: Upsampler::new(),
+            momentary: f64::NEG_INFINITY,
             short_term: f64::NEG_INFINITY,
             integrated: f64::NEG_INFINITY,
+            range: 0.0,
             true_peak: 0.0,
         }
     }
@@ -195,8 +269,8 @@ impl Loudness {
     pub fn add(&mut self, frames: &[f32]) {
         for frame in frames.chunks_exact(2) {
             let (l, r) = (f64::from(frame[0]), f64::from(frame[1]));
-            self.peak(0, l);
-            self.peak(1, r);
+            let peak = self.upsampler.peak(0, l).max(self.upsampler.peak(1, r));
+            self.true_peak = self.true_peak.max(peak);
             let [left, right] = &mut self.weighting;
             let (wl, wr) = (weigh(left, l), weigh(right, r));
             self.step_sum += wl * wl + wr * wr;
@@ -222,7 +296,8 @@ impl Loudness {
         self.step_sum = 0.0;
         self.step_count = 0;
         self.filled = 0;
-        self.history = [[0.0; TAPS]; 2];
+        self.upsampler.clear();
+        self.momentary = f64::NEG_INFINITY;
         self.short_term = f64::NEG_INFINITY;
     }
 
@@ -231,7 +306,10 @@ impl Loudness {
         self.pause();
         self.counts = [0; BINS];
         self.energy = [0.0; BINS];
+        self.range_counts = [0; BINS];
+        self.range_energy = [0.0; BINS];
         self.integrated = f64::NEG_INFINITY;
+        self.range = 0.0;
         self.true_peak = 0.0;
     }
 
@@ -239,22 +317,11 @@ impl Loudness {
     #[must_use]
     pub fn reading(&self) -> LoudnessReading {
         LoudnessReading {
+            momentary: self.momentary as f32,
             short_term: self.short_term as f32,
             integrated: self.integrated as f32,
+            range: self.range as f32,
             true_peak: self.true_peak as f32,
-        }
-    }
-
-    /// One sample into a channel's upsampler, keeping the loudest point.
-    #[inline]
-    fn peak(&mut self, channel: usize, x: f64) {
-        let history = &mut self.history[channel];
-        history.copy_within(..TAPS - 1, 1);
-        history[0] = x;
-        self.true_peak = self.true_peak.max(x.abs());
-        for phase in &self.upsampler {
-            let y: f64 = phase.iter().zip(history.iter()).map(|(h, s)| h * s).sum();
-            self.true_peak = self.true_peak.max(y.abs());
         }
     }
 
@@ -267,19 +334,59 @@ impl Loudness {
         self.step_sum = 0.0;
         self.step_count = 0;
         let frames = f64::from(self.step_frames);
-        self.short_term = lufs(self.last(self.filled) / (self.filled as f64 * frames));
+        let short = self.last(self.filled) / (self.filled as f64 * frames);
+        self.short_term = lufs(short);
+        let recent = self.filled.min(BLOCK_STEPS);
+        self.momentary = lufs(self.last(recent) / (recent as f64 * frames));
+        if self.filled == SHORT_STEPS
+            && bin_of(short, &mut self.range_counts, &mut self.range_energy)
+        {
+            self.range = self.spread();
+        }
         if self.filled < BLOCK_STEPS {
             return;
         }
         let block = self.last(BLOCK_STEPS) / (BLOCK_STEPS as f64 * frames);
-        let loudness = lufs(block);
-        if loudness <= ABSOLUTE_GATE {
-            return;
+        if bin_of(block, &mut self.counts, &mut self.energy) {
+            self.integrated = self.gated();
         }
-        let bin = (((loudness - ABSOLUTE_GATE) / BIN_WIDTH) as usize).min(BINS - 1);
-        self.counts[bin] = self.counts[bin].saturating_add(1);
-        self.energy[bin] += block;
-        self.integrated = self.gated();
+    }
+
+    /// The loudness range of the short-term readings binned so far: the 95th
+    /// percentile less the 10th, over those that pass the relative gate.
+    fn spread(&self) -> f64 {
+        let (count, energy) = (0..BINS).fold((0u64, 0.0), |(c, e), bin| {
+            (
+                c + u64::from(self.range_counts[bin]),
+                e + self.range_energy[bin],
+            )
+        });
+        if count == 0 {
+            return 0.0;
+        }
+        let gate = lufs(energy / count as f64) - RANGE_GATE;
+        let first = (((gate - ABSOLUTE_GATE) / BIN_WIDTH).round().max(0.0) as usize).min(BINS);
+        let kept: u64 = self.range_counts[first..]
+            .iter()
+            .map(|&c| u64::from(c))
+            .sum();
+        if kept == 0 {
+            return 0.0;
+        }
+        // The readings at these places in loudness order, counted from 0.
+        let place = |p: f64| ((kept - 1) as f64 * p + 0.5) as u64;
+        let at = |want: u64| {
+            let mut seen = 0u64;
+            for bin in first..BINS {
+                let n = u64::from(self.range_counts[bin]);
+                if n > 0 && seen + n > want {
+                    return lufs(self.range_energy[bin] / n as f64);
+                }
+                seen += n;
+            }
+            f64::NEG_INFINITY
+        };
+        (at(place(0.95)) - at(place(0.10))).max(0.0)
     }
 
     /// The sum of the newest `n` finished steps, oldest first.
@@ -313,30 +420,55 @@ impl Loudness {
 mod tests {
     use super::*;
 
-    /// A 1 kHz tone at -23 dBFS in both channels reads -23 LUFS short-term and
-    /// integrated, and its true peak is its own level, at either common rate.
+    /// A 1 kHz tone of `level_db` dBFS in both channels, `seconds` long.
+    fn tone(rate: u32, level_db: f64, seconds: f64) -> Vec<f32> {
+        let level = 10f64.powf(level_db / 20.0);
+        (0..(f64::from(rate) * seconds) as usize)
+            .flat_map(|n| {
+                let s = (level
+                    * (2.0 * std::f64::consts::PI * 1000.0 * n as f64 / f64::from(rate)).sin())
+                    as f32;
+                [s, s]
+            })
+            .collect()
+    }
+
+    /// A 1 kHz tone at -23 dBFS in both channels reads -23 LUFS momentary,
+    /// short-term and integrated, a range of nought, and its true peak is its
+    /// own level, at either common rate.
     #[test]
     fn a_tone_at_minus_23_reads_minus_23() {
         for rate in [44_100u32, 48_000] {
             let mut meter = Loudness::new(rate);
-            let level = 10f64.powf(-23.0 / 20.0);
-            let frames: Vec<f32> = (0..rate as usize * 10)
-                .flat_map(|n| {
-                    let s = (level
-                        * (2.0 * std::f64::consts::PI * 1000.0 * n as f64 / f64::from(rate)).sin())
-                        as f32;
-                    [s, s]
-                })
-                .collect();
+            let frames = tone(rate, -23.0, 10.0);
             // In callback-sized pieces, as it arrives.
             for buffer in frames.chunks(441 * 2) {
                 meter.add(buffer);
             }
             let read = meter.reading();
+            assert!((read.momentary + 23.0).abs() < 0.1, "{rate}: {read:?}");
             assert!((read.short_term + 23.0).abs() < 0.1, "{rate}: {read:?}");
             assert!((read.integrated + 23.0).abs() < 0.1, "{rate}: {read:?}");
+            assert!(read.range.abs() < 0.2, "{rate}: {read:?}");
             let peak_db = 20.0 * read.true_peak.log10();
             assert!((peak_db + 23.0).abs() < 0.2, "{rate}: {read:?}");
         }
+    }
+
+    /// Ten seconds each of -20 and -30 LUFS, three times over: the short-term
+    /// readings sit at the two levels most of the time, so the loudness range
+    /// is the ten LU between them.
+    #[test]
+    fn two_alternating_levels_read_their_spread_as_the_range() {
+        let rate = 48_000;
+        let mut meter = Loudness::new(rate);
+        for n in 0..6 {
+            let db = if n % 2 == 0 { -20.0 } else { -30.0 };
+            for buffer in tone(rate, db, 10.0).chunks(480 * 2) {
+                meter.add(buffer);
+            }
+        }
+        let read = meter.reading();
+        assert!((read.range - 10.0).abs() < 0.3, "{read:?}");
     }
 }

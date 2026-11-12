@@ -43,6 +43,16 @@ impl AudioFormat {
     }
 }
 
+/// The loudness an export is made to: a first run measures the mix, the
+/// master moves by the difference, and the limiter holds the true peak.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExportLoudness {
+    /// Integrated loudness, in LUFS.
+    pub lufs: f64,
+    /// The highest true peak, in dBTP.
+    pub true_peak_db: f64,
+}
+
 /// What the export writes: a video file, an animated GIF or WebP, one still image per
 /// frame, or sound with no picture at all.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]

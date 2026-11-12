@@ -95,11 +95,13 @@ void main() {
         p.feed.read = () => [
               BridgeAudioMeter(
                 layer: '',
+                kind: BridgeMeterKind.master,
                 peakLeft: i / 10,
                 peakRight: i / 10,
                 rmsLeft: i / 20,
                 rmsRight: i / 20,
                 clipped: false,
+                gainReductionDb: 0,
               ),
             ];
         p.feed.tick();

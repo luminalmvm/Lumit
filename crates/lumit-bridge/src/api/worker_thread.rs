@@ -24,6 +24,7 @@ mod cut;
 mod dropper;
 mod item;
 mod panics;
+mod shuttle;
 mod views;
 #[cfg(target_arch = "wasm32")]
 mod web;
@@ -2107,7 +2108,7 @@ struct Playback {
     /// Counting down rather than up. A reverse leg ends after frame zero.
     reverse: bool,
     /// How many frames each step of the leg covers: 1, or a shuttle's 2, 4 or
-    /// 8. Above 1 the leg has no sound and runs on the wall clock.
+    /// 8. Above 1 the leg runs on the wall clock, heard through the jog.
     speed: u64,
     /// How many times slower than the comp's rate the leg plays. `fps` is
     /// already divided by it; the sound still counts the comp's seconds.
@@ -2249,8 +2250,8 @@ impl Playback {
         seconds / f64::from(self.slow)
     }
 
-    /// Whether the leg has no sound to follow, so the wall clock times it: a
-    /// reverse leg, or a shuttle faster than the comp's rate.
+    /// Whether the leg has no mix to follow, so the wall clock times it and
+    /// the jog sounds it ([`shuttle`]): a reverse leg, or a fast shuttle.
     fn silent(&self) -> bool {
         self.reverse || self.speed > 1
     }
@@ -2585,16 +2586,16 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
     ) {
         AudioChase::Hold => {
             playback.audio_held_for_picture = true;
-            crate::api::audio::audio_pause();
+            crate::api::audio::audio_hold_for_picture();
         }
         AudioChase::Start => {
             playback.audio_held_for_picture = false;
-            crate::api::audio::audio_seek(playback.sound_at(frame as f64 / fps + heard_late()));
+            crate::api::audio::audio_resync(playback.sound_at(frame as f64 / fps + heard_late()));
             resume_audio();
             playback.settle_audio();
         }
         AudioChase::Catch => {
-            crate::api::audio::audio_seek(playback.sound_at(frame as f64 / fps + heard_late()));
+            crate::api::audio::audio_resync(playback.sound_at(frame as f64 / fps + heard_late()));
             playback.settle_audio();
         }
         AudioChase::Leave => {}
@@ -3508,6 +3509,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             start_audio(playback.comp.id, start, document, playback.slow);
             playback.settle_audio();
         }
+        shuttle::follow(playback);
     }
 
     // Present first: at a frame boundary the due picture goes out BEFORE the
@@ -3546,9 +3548,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // it, so a stop resumes filling from where the user actually is.
             state.last_shown = Some((playback.view, playback.comp.clone(), frame, playback.scale));
             state.fill_exhausted = false;
-            // Not on a reverse leg: it has no sound, and a late picture would
-            // otherwise hold the mix so that eight on-time pictures start
-            // the forward mix again under a backward picture.
+            // Not on a reverse leg, which the jog sounds: no forward mix.
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
                 chase_audio(playback, frame, late);
             }

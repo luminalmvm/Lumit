@@ -194,6 +194,25 @@ pub struct ChainOutput {
 /// existed.
 #[must_use]
 pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
+    let never = std::sync::atomic::AtomicBool::new(false);
+    run_chain_until(chain, input, &never).unwrap_or_else(|| ChainOutput {
+        samples: input.to_vec(),
+        dry_blocks: 0,
+        dry_by_link: vec![0; chain.len()],
+        latency: 0,
+        tail: 0,
+    })
+}
+
+/// [`run_chain`], given up between blocks once `stop` is raised: `None` then,
+/// and nothing of the run is kept. A long bake a newer edit has made stale
+/// stops within a block of being asked.
+#[must_use]
+pub fn run_chain_until(
+    chain: &[ChainLink],
+    input: &[f32],
+    stop: &std::sync::atomic::AtomicBool,
+) -> Option<ChainOutput> {
     let frames = input.len() / AUDIO_CHANNELS;
     let latency: u32 = chain
         .iter()
@@ -205,13 +224,13 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
         .map(|link| link.processor.tail())
         .fold(0u32, u32::saturating_add);
     if chain.is_empty() || frames == 0 {
-        return ChainOutput {
+        return Some(ChainOutput {
             samples: input.to_vec(),
             dry_blocks: 0,
             dry_by_link: vec![0; chain.len()],
             latency: 0,
             tail: 0,
-        };
+        });
     }
 
     // Denormals off for the whole loop, restored on the way out. A reverb
@@ -248,6 +267,9 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
         }
         link.processor.look(&src, &link.values);
         for (b, flag) in wet.iter_mut().enumerate() {
+            if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
             let at = b * AUDIO_BLOCK_SAMPLES;
             let end = at + AUDIO_BLOCK_SAMPLES;
             let values = link
@@ -270,13 +292,13 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
     }
 
     src.truncate(wanted * AUDIO_CHANNELS);
-    ChainOutput {
+    Some(ChainOutput {
         samples: src,
         dry_blocks,
         dry_by_link,
         latency,
         tail,
-    }
+    })
 }
 
 /// Crossfade the wet signal to and from the dry one across every edge of a dry

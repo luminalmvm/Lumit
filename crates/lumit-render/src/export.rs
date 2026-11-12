@@ -1350,6 +1350,10 @@ pub struct ExportSpec {
     pub gif: lumit_media::encode::gif::GifOptions,
     /// What happens to the comp's caption layers.
     pub captions: captions::CaptionsOut,
+    /// The loudness the sound is made to, or None for the mix as it stands.
+    pub loudness: Option<format::ExportLoudness>,
+    /// Each top-level bus also written to a file of its own beside this one.
+    pub stems: bool,
 }
 
 impl Default for ExportSpec {
@@ -1378,6 +1382,8 @@ impl Default for ExportSpec {
             when_done: WhenDone::default(),
             gif: lumit_media::encode::gif::GifOptions::default(),
             captions: captions::CaptionsOut::default(),
+            loudness: None,
+            stems: false,
         }
     }
 }
@@ -1574,7 +1580,8 @@ pub fn start(
         let stop = || flag.load(Ordering::Relaxed);
         let result = captions::write_files(&doc, comp_id, &out_path, &spec, &stop)
             .map(|written| sidecars = written)
-            .and_then(|()| run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened));
+            .and_then(|()| run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened))
+            .and_then(|()| sound_only::write_stems(&doc, comp_id, &audio, &out_path, &spec, &flag));
         // No half files, but only a file this export began. One that failed
         // before it opened anything has written nothing, and an image
         // sequence never writes to the name it was given, so whatever is
@@ -1630,8 +1637,18 @@ fn run(
 
     let rate = spec.audio_rate;
     let chans = usize::from(spec.audio_layout.channels());
-    let audio_mix = frame::sound(spec, comp, audio_jobs, &span);
-    if audio_mix.is_some() && cancel.load(Ordering::Relaxed) {
+    // Sound alone counts its mixing runs as the export's progress, the
+    // writing taking the last share.
+    let alone = matches!(spec.format, ExportFormat::Audio(_));
+    let runs = if spec.loudness.is_some() { 2 } else { 1 };
+    let mixed = total * runs / (runs + 1);
+    let audio_mix = frame::sound(spec, doc, comp, audio_jobs, &span, cancel, &mut |f| {
+        if alone {
+            let frame = (f * mixed as f64) as usize;
+            let _ = tx.send(ExportEvent::Progress { frame, total });
+        }
+    });
+    if cancel.load(Ordering::Relaxed) {
         return Ok(());
     }
 
@@ -1644,7 +1661,7 @@ fn run(
             format,
             spec,
             audio_mix.as_deref(),
-            total,
+            (mixed, total),
             tx,
             cancel,
         );

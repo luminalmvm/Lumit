@@ -1,11 +1,14 @@
-//! The live plan playback reads, and the rack bakes it keeps between builds.
+//! The jobs placed as clips on their nodes, and the rack bakes kept between
+//! builds.
 
-use lumit_audio::mix::MixPlan;
+use lumit_audio::plan::PlacedClip;
 use lumit_audio::stream::Source;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use super::bake::{job_bake, volume_bake};
+use super::graph::Cancelled;
 use super::jobs::{AudioChain, AudioJob, Retimed};
 use super::mixdown::{buses, dry_run, place};
 use super::stage::{in_a_bus, RunOf};
@@ -20,21 +23,24 @@ use super::stage::{in_a_bus, RunOf};
 /// rack on two hundred clips ran two hundred racks for every trim anywhere.
 /// A bake depends only on the stretch of file it was given, where that sits
 /// on the timeline, and the racks themselves, so a job that matches the last
-/// build on all three is handed the same sound back.
+/// build on all three is handed the same sound back. A node's rack that has
+/// to hear its whole input is kept the same way, by what it heard.
 ///
 /// Holds what the last plan held and no more: a build takes what it can use
-/// and leaves behind only what it used.
+/// and leaves behind only what it used. A build that is stopped leaves it as
+/// it was.
 #[derive(Default)]
 pub struct RackBakes {
     held: Vec<(BakeKey, Baked)>,
+    pub(super) whole: Vec<(WholeKey, Baked)>,
     /// Whatever else the racks' answers depend on that the keys cannot see:
     /// the caller's own stamp, and a changed one empties the lot.
-    stamp: u64,
+    pub(super) stamp: u64,
 }
 
 /// What a job's racks came to: the processed sound and the latency it is
 /// placed early by, or `None` where neither rack opened anything as audio.
-type Baked = Option<(Arc<Source>, u32)>;
+pub(super) type Baked = Option<(Arc<Source>, u32)>;
 
 #[derive(PartialEq)]
 struct BakeKey {
@@ -52,6 +58,16 @@ struct BakeKey {
     retime: Option<Arc<Retimed>>,
 }
 
+/// What a whole-input node rack heard: its chain, where its input starts and
+/// the input's own fingerprint.
+#[derive(PartialEq)]
+pub(super) struct WholeKey {
+    pub chain: Arc<AudioChain>,
+    pub rate: u32,
+    pub start_frame: i64,
+    pub heard: [u8; 32],
+}
+
 impl RackBakes {
     /// Forget every bake unless `stamp` is the one they were made under. The
     /// caller folds in what a rack's sound depends on beyond the job itself,
@@ -59,6 +75,7 @@ impl RackBakes {
     pub fn stamped(&mut self, stamp: u64) {
         if self.stamp != stamp {
             self.held.clear();
+            self.whole.clear();
             self.stamp = stamp;
         }
     }
@@ -68,67 +85,64 @@ impl RackBakes {
     pub fn bytes(&self) -> usize {
         self.held
             .iter()
-            .filter_map(|(_, baked)| baked.as_ref())
+            .map(|(_, baked)| baked)
+            .chain(self.whole.iter().map(|(_, baked)| baked))
+            .filter_map(Option::as_ref)
             .map(|(source, _)| source.frames().unwrap_or(0) * 2 * std::mem::size_of::<f32>())
             .sum()
     }
 }
 
-/// Place the jobs on the comp strip as a live [`MixPlan`], and say which
-/// mixer strip each of its meter slots belongs to.
+/// Place the jobs as clips, each on the node `node_of` names for its strip
+/// ([`AudioJob::layer`]).
 ///
-/// The same placement, racks, bus stage and Volume bake the export mixes with
-/// ([`super::mixdown::mixdown_counting`]), in the same order, so playback sounds like the
-/// file. Two things are said differently. The racks run in realtime and not
-/// offline. And a job with no rack on it reads nothing here: it names its
-/// source and the stretch it plays, and the blocks are decoded as the
-/// playhead nears them. A job whose source `source_of` does not know
-/// contributes nothing.
+/// The same placement, racks, bus stage and gain bake whether the plan is
+/// played or exported. A job with no rack on it reads nothing here: it names
+/// its source and the stretch it plays, and the blocks are decoded as the
+/// mix nears them. Offline every file's exact length is found and racks run
+/// their slower path. A job whose source `source_of` does not know, or knows
+/// at another rate, contributes nothing.
 ///
-/// `bakes` carries each racked job's processed sound from one build to the
-/// next ([`RackBakes`]).
-pub fn live_plan(
+/// `cancel` stops it between jobs and between rack blocks; the bakes are then
+/// left as they were.
+pub(super) fn place_clips(
     jobs: &[AudioJob],
     source_of: &dyn Fn(&AudioJob) -> Option<Arc<Source>>,
+    node_of: &dyn Fn(Uuid) -> u16,
     rate: u32,
-    duration_s: f64,
-    master_db: f64,
+    offline: bool,
     bakes: &mut RackBakes,
-) -> (Arc<MixPlan>, Vec<Uuid>) {
-    let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
+    cancel: &AtomicBool,
+) -> Result<Vec<PlacedClip>, Cancelled> {
+    let stopped = || cancel.load(Ordering::Relaxed);
     let sourced: Vec<(Arc<Source>, &AudioJob)> = jobs
         .iter()
         .filter_map(|job| Some((source_of(job).filter(|s| s.rate() == rate)?, job)))
         .collect();
-    // Meter slots in first-sounding order, one per strip: several jobs from
-    // one Precomp layer share its slot, and past the bank's size the extras
-    // play unmetered rather than being dropped.
-    let mut strips: Vec<Uuid> = Vec::new();
-    let mut slot_of = |layer: Uuid| {
-        let slot = match strips.iter().position(|s| *s == layer) {
-            Some(at) => at,
-            None => {
-                strips.push(layer);
-                strips.len() - 1
-            }
-        };
-        u8::try_from(slot)
-            .ok()
-            .filter(|s| usize::from(*s) < lumit_audio::meter::MAX_STRIPS)
-            .unwrap_or(lumit_audio::mix::NO_METER)
-    };
     let mut kept: Vec<(BakeKey, Baked)> = Vec::new();
+    // Stopped part way: what was taken goes back, and nothing new is kept.
+    let give_back = |bakes: &mut RackBakes, kept: Vec<(BakeKey, Baked)>| {
+        bakes.held.extend(kept);
+        Err(Cancelled)
+    };
     let mut clips = Vec::with_capacity(sourced.len());
-    let mut buses = buses(&sourced, rate, false).into_iter().peekable();
+    let staged = buses(&sourced, rate, offline, cancel);
+    if stopped() {
+        return Err(Cancelled);
+    }
+    let mut staged = staged.into_iter().peekable();
     for (index, (source, job)) in sourced.iter().enumerate() {
+        if stopped() {
+            return give_back(bakes, kept);
+        }
         if in_a_bus(job) {
-            // The bus stage: everything arriving through a Precomp layer that
-            // carries a rack was summed and run through it, and comes back as
-            // one run of its own on that layer's strip (docs/09 §3.1).
-            if let Some((_, run)) = buses.next_if(|(at, _)| *at == index) {
+            // The bus stage: everything arriving through a nested comp's
+            // rack or retime was summed and run through it, and comes back as
+            // one run of its own on the strip it arrives on (docs/09 §3.1).
+            if let Some((_, run)) = staged.next_if(|(at, _)| *at == index) {
                 if let RunOf::Bus(samples) = run.of {
                     let frames = samples.len() / 2;
-                    clips.push(lumit_audio::mix::PlacedClip {
+                    clips.push(PlacedClip {
                         source: Source::whole(Arc::new(lumit_media::audio::AudioBuffer {
                             rate,
                             samples,
@@ -138,7 +152,8 @@ pub fn live_plan(
                         len: frames,
                         gain: run.gain,
                         envelope: run.envelope.map(Arc::new),
-                        meter: slot_of(run.layer),
+                        node: node_of(run.layer),
+                        silent: false,
                     });
                 }
             }
@@ -150,16 +165,16 @@ pub fn live_plan(
         let placed = if job.retime.is_some() {
             Some(((job.in_s * f64::from(rate)).round() as i64, 0, 0))
         } else {
-            place(source, job, rate, racked)
+            place(source, job, rate, racked || offline)
         };
         let Some((start_frame, src_start, len)) = placed else {
             continue;
         };
-        // The clip's insert chain and then the layer's, ahead of Volume and
-        // Pan. The processed span **replaces** the file in the plan, so the
-        // realtime callback plays finished sound and never waits on a
-        // plugin's process; a job whose stacks open nothing keeps its file
-        // and reads it in blocks like any other.
+        // The clip's insert chain (and a strip's own where it has no node of
+        // its own), ahead of the gains. The processed span **replaces** the
+        // file in the plan, so the mix plays finished sound and never waits
+        // on a plugin; a job whose stacks open nothing keeps its file and
+        // reads it in blocks like any other.
         let baked: Baked = if racked {
             let key = BakeKey {
                 item: job.item,
@@ -174,8 +189,8 @@ pub fn live_plan(
             };
             let baked = match bakes.held.iter().position(|(k, _)| *k == key) {
                 Some(at) => bakes.held.swap_remove(at).1,
-                None => dry_run(source, job, rate, false).and_then(|(at, dry)| {
-                    let (samples, latency) = job_bake(job, &dry, at, rate, false)
+                None => dry_run(source, job, rate, offline).and_then(|(at, dry)| {
+                    let (samples, latency) = job_bake(job, &dry, at, rate, offline, cancel)
                         .or_else(|| job.retime.is_some().then_some((dry, 0)))?;
                     Some((
                         Source::whole(Arc::new(lumit_media::audio::AudioBuffer { rate, samples })),
@@ -183,6 +198,9 @@ pub fn live_plan(
                     ))
                 }),
             };
+            if stopped() {
+                return give_back(bakes, kept);
+            }
             kept.push((key, baked.clone()));
             baked
         } else {
@@ -199,24 +217,17 @@ pub fn live_plan(
             None => (Arc::clone(source), start_frame, src_start, len),
         };
         let (gain, envelope) = volume_bake(job, start_frame, len, rate);
-        clips.push(lumit_audio::mix::PlacedClip {
+        clips.push(PlacedClip {
             source,
             start_frame,
             src_start,
             len,
             gain,
             envelope: envelope.map(Arc::new),
-            meter: slot_of(job.layer),
+            node: node_of(job.layer),
+            silent: false,
         });
     }
     bakes.held = kept;
-    strips.truncate(lumit_audio::meter::MAX_STRIPS);
-    (
-        Arc::new(MixPlan {
-            clips,
-            total_frames,
-            master_gain: lumit_audio::mix::db_to_gain(master_db),
-        }),
-        strips,
-    )
+    Ok(clips)
 }

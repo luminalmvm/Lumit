@@ -41,6 +41,9 @@ pub struct AudioSend {
     /// Sent from before the layer's Volume and Pan rather than after them.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pre: bool,
+    /// Kept with its level but sending nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub muted: bool,
 }
 
 impl Layer {

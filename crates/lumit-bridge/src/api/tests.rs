@@ -1851,10 +1851,32 @@ fn audible_jobs(
         .audio_jobs(&doc, &composition)
         .into_iter()
         .map(|mut job| {
+            // Which row it sits on, and the document its expressions would
+            // read: neither is what it sounds like.
             job.layer = Uuid::nil();
+            job.scope = None;
+            for carrier in &mut job.carriers {
+                carrier.scope = None;
+            }
             job
         })
         .collect()
+}
+
+/// The document as it stands and `comp` in it, for building its desk.
+#[cfg(feature = "media")]
+fn doc_of(
+    project: &ProjectReference,
+    comp: &CompositionReference,
+) -> (
+    std::sync::Arc<lumit_core::model::Document>,
+    lumit_core::model::Composition,
+) {
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let composition = doc.comp(comp.id).expect("the comp is there").clone();
+    (doc, composition)
 }
 
 /// Sixteen-bit mono PCM, a tenth of a second of silence: enough of a file for
@@ -2794,7 +2816,8 @@ fn the_packed_mix_plays_the_same_samples() {
                 ));
             }
         }
-        let (plan, _strips) = crate::audio::build_plan(&jobs, &decoded, RATE, duration_s, 0.0);
+        let (doc, c) = doc_of(&project, &comp);
+        let (plan, _info) = crate::audio::build_plan(&doc, &c, &jobs, &decoded, RATE, duration_s);
         (0..plan.total_frames)
             .map(|i| plan.frame_at(i))
             .collect::<Vec<_>>()
@@ -10490,7 +10513,9 @@ fn two_stream_recording(
 /// lasts.
 #[cfg(feature = "media")]
 fn mix_of(project: &ProjectReference, comp: &CompositionReference) -> Vec<f32> {
-    lumit_render::mix::mixdown::mixdown(&audible_jobs(project, comp), 48_000, 4.0)
+    let (doc, c) = doc_of(project, comp);
+    let jobs = audible_jobs(project, comp);
+    lumit_render::mix::mixdown::mixdown(&doc, &c, jobs, 48_000, 4.0, true, None, &mut |_| {})
 }
 
 /// The furthest apart two mixes are at any sample.
@@ -10541,14 +10566,21 @@ fn audio_streams_split_onto_rows_and_merge_back_sounding_the_same() {
     // rows, read through the pool it plays from.
     let jobs = audible_jobs(&project, &comp);
     let pool = lumit_audio::stream::pool();
-    let (plan, _strips) = lumit_render::mix::live::live_plan(
-        &jobs,
+    let (doc, c) = doc_of(&project, &comp);
+    let (plan, _info) = lumit_render::mix::graph::build_graph(
+        &doc,
+        &c,
+        jobs,
         &|job| Some(pool.source(&job.sound, 48_000)),
         48_000,
         4.0,
-        0.0,
         &mut lumit_render::mix::live::RackBakes::default(),
-    );
+        None,
+        false,
+        &std::sync::atomic::AtomicBool::new(false),
+        None,
+    )
+    .expect("built");
     plan.warm(0, plan.total_frames);
     let played: Vec<f32> = (0..plan.total_frames)
         .flat_map(|i| {

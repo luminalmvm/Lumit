@@ -14,6 +14,9 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
     duration_s.to_bits().hash(&mut h);
     master_db.to_bits().hash(&mut h);
     for j in jobs {
+        // Which strip it sums into: the same sound moved to another row is
+        // another desk.
+        j.layer.hash(&mut h);
         j.sound.hash(&mut h);
         j.in_s.to_bits().hash(&mut h);
         j.out_s.to_bits().hash(&mut h);
@@ -72,6 +75,34 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
             }
         }
     }
+    h.finish()
+}
+
+/// What the desk reads that the jobs do not carry: each top-level layer's
+/// routing, sends, solo, solo safe, lower behind, Gain, Volume and Pan, a
+/// Bus layer's rack, and the comp's master keys and loudness target. Debug
+/// text where a field is a structure, as the chains are folded.
+pub(crate) fn desk_signature(comp: &lumit_core::model::Composition) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for l in &comp.layers {
+        l.id.hash(&mut h);
+        l.is_bus().hash(&mut h);
+        (l.switches.audible, l.switches.solo, l.switches.solo_safe).hash(&mut h);
+        format!("{:?}{:?}", l.audio_routes, l.duck).hash(&mut h);
+        l.audio_gain_db.to_bits().hash(&mut h);
+        hash_animation(&mut h, &l.volume_db.animation);
+        hash_animation(&mut h, &l.pan.animation);
+        if l.is_bus() && !l.effects.is_empty() {
+            format!("{:?}", l.effects).hash(&mut h);
+            super::rack_stamp().hash(&mut h);
+        }
+    }
+    comp.master_volume_db.to_bits().hash(&mut h);
+    if let Some(keys) = &comp.master_keys {
+        hash_animation(&mut h, keys);
+    }
+    format!("{:?}", comp.loudness_target).hash(&mut h);
     h.finish()
 }
 

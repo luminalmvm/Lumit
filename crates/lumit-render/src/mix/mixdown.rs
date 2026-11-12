@@ -1,66 +1,121 @@
-//! The mixdown an export writes, and the reads and placement the live plan
-//! shares with it.
+//! The mixdown an export writes, and the reads and placement every plan
+//! shares.
 
 use lumit_audio::stream::Source;
+use lumit_core::model::{Composition, Document};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use super::bake::{job_bake, volume_bake};
+use super::bake::job_bake;
+use super::graph::build_graph;
 use super::jobs::{AudioJob, Retimed};
-use super::stage::{bus_runs, in_a_bus, MixRun, PlacedJob, RunOf};
+use super::live::RackBakes;
+use super::render::render;
+use super::stage::{bus_runs, in_a_bus, MixRun, PlacedJob};
 
-/// Decode every audio job (resampled to `rate`), lay each on the comp strip
-/// at its offset and trim, and sum — the one mixdown all comp audio flows
-/// through: preview playback, beat detection, and export, so they cannot
+/// **The comp's mix**, as an export writes it: the jobs built into the comp's
+/// desk ([`build_graph`], offline) and played from frame 0 with every rack
+/// run in order ([`render`]), so preview, beat detection and export cannot
 /// disagree about what the comp sounds like.
-pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
-    mixdown_at(jobs, rate, duration_s, 1.0)
-}
-
-/// As [`mixdown`], through a composition's **master fader** (linear gain) —
-/// what the export writes and what playback hears. `mixdown` itself
-/// stays at unity for the reader that wants the mix *before* the desk: beat
-/// detection, whose onsets are relative, and which must not lose its beats
-/// because somebody pulled the master down.
-pub fn mixdown_at(jobs: &[AudioJob], rate: u32, duration_s: f64, master_gain: f32) -> Vec<f32> {
-    mixdown_counting(jobs, rate, duration_s, master_gain, &mut |_| {})
-}
-
-/// As [`mixdown_at`], counting the jobs off as each one is summed.
 ///
-/// Decoding is where a mixdown spends its seconds. Each job reads only the
-/// stretch of its file it places, through the pool the mixer plays from
-/// ([`lumit_audio::stream`]), is added to the sum and let go: a cut of two
-/// thousand clips holds the sum and one clip at a time, where it used to hold
-/// two thousand whole files. `on_decoded` is handed how many of `jobs` are
-/// done, and it is called for a source that would not decode as well as for
-/// one that did.
-pub fn mixdown_counting(
-    jobs: &[AudioJob],
+/// `desk` false leaves the master's fader and limiter out (a plain clamp at
+/// the ceiling stays): the mix before the desk, for beat detection, whose
+/// onsets are relative and must not be lost because somebody pulled the
+/// master down. `listen` is a layer asked for by name, heard whatever its
+/// switches and any solo say ([`build_graph`]). `on_progress` is handed how
+/// far through the run is, 0 to 1.
+///
+/// Each file is read through the pool the mixer plays from
+/// ([`lumit_audio::stream`]) as the run reaches it; what is held whole is the
+/// mix and any racked clip's baked sound.
+#[allow(clippy::too_many_arguments)]
+pub fn mixdown(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    jobs: Vec<AudioJob>,
     rate: u32,
     duration_s: f64,
-    master_gain: f32,
-    on_decoded: &mut dyn FnMut(usize),
+    desk: bool,
+    listen: Option<uuid::Uuid>,
+    on_progress: &mut dyn FnMut(f64),
 ) -> Vec<f32> {
     let pool = lumit_audio::stream::pool();
-    let sourced: Vec<(Arc<Source>, &AudioJob)> = jobs
-        .iter()
-        .map(|job| (pool.source(&job.sound, rate), job))
-        .collect();
-    mix_sources(&sourced, rate, duration_s, master_gain, on_decoded)
+    mix_sources(
+        doc,
+        comp,
+        jobs,
+        &|job| Some(pool.source(&job.sound, rate)),
+        rate,
+        duration_s,
+        desk,
+        listen,
+        on_progress,
+    )
 }
 
-/// As [`mixdown`], but over buffers already in memory.
+/// As [`mixdown`], through the desk, over buffers already in memory: each job
+/// sounds from the buffer paired with a job of the same item and sound.
 pub fn mixdown_prepared(
-    decoded: &[(std::sync::Arc<lumit_media::audio::AudioBuffer>, AudioJob)],
+    doc: &Arc<Document>,
+    comp: &Composition,
+    decoded: &[(Arc<lumit_media::audio::AudioBuffer>, AudioJob)],
     rate: u32,
     duration_s: f64,
-    master_gain: f32,
 ) -> Vec<f32> {
-    let sourced: Vec<(Arc<Source>, &AudioJob)> = decoded
-        .iter()
-        .map(|(b, j)| (Source::whole(Arc::clone(b)), j))
-        .collect();
-    mix_sources(&sourced, rate, duration_s, master_gain, &mut |_| {})
+    let jobs = decoded.iter().map(|(_, j)| j.clone()).collect();
+    let source_of = |job: &AudioJob| {
+        decoded
+            .iter()
+            .find(|(_, j)| j.item == job.item && j.sound == job.sound)
+            .map(|(b, _)| Source::whole(Arc::clone(b)))
+    };
+    mix_sources(
+        doc,
+        comp,
+        jobs,
+        &source_of,
+        rate,
+        duration_s,
+        true,
+        None,
+        &mut |_| {},
+    )
+}
+
+/// The desk built offline over `source_of`'s sources and played whole.
+#[allow(clippy::too_many_arguments)]
+fn mix_sources(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    jobs: Vec<AudioJob>,
+    source_of: &dyn Fn(&AudioJob) -> Option<Arc<Source>>,
+    rate: u32,
+    duration_s: f64,
+    desk: bool,
+    listen: Option<uuid::Uuid>,
+    on_progress: &mut dyn FnMut(f64),
+) -> Vec<f32> {
+    let never = AtomicBool::new(false);
+    let built = build_graph(
+        doc,
+        comp,
+        jobs,
+        source_of,
+        rate,
+        duration_s,
+        &mut RackBakes::default(),
+        None,
+        true,
+        &never,
+        listen,
+    );
+    let Ok((mut plan, _)) = built else {
+        return Vec::new();
+    };
+    if !desk {
+        plan.master = lumit_audio::plan::Fader::default();
+    }
+    render(Arc::new(plan), rate, desk, on_progress)
 }
 
 /// Where a job lands: [`lumit_audio::mix::place_on_timeline`] over its
@@ -175,6 +230,7 @@ pub(super) fn buses(
     sourced: &[(Arc<Source>, &AudioJob)],
     rate: u32,
     offline: bool,
+    cancel: &AtomicBool,
 ) -> Vec<(usize, MixRun)> {
     /// One member of some bus, read and its own racks run.
     struct Member<'a> {
@@ -187,22 +243,25 @@ pub(super) fn buses(
         .iter()
         .enumerate()
         .filter(|(_, (_, job))| in_a_bus(job))
+        .take_while(|_| !cancel.load(std::sync::atomic::Ordering::Relaxed))
         .filter_map(|(index, (source, job))| {
             let (start_frame, dry) = dry_run(source, job, rate, offline)?;
-            Some(match job_bake(job, &dry, start_frame, rate, offline) {
-                Some((wet, latency)) => Member {
-                    index,
-                    job,
-                    start_frame: start_frame - i64::from(latency),
-                    samples: wet,
+            Some(
+                match job_bake(job, &dry, start_frame, rate, offline, cancel) {
+                    Some((wet, latency)) => Member {
+                        index,
+                        job,
+                        start_frame: start_frame - i64::from(latency),
+                        samples: wet,
+                    },
+                    None => Member {
+                        index,
+                        job,
+                        start_frame,
+                        samples: dry,
+                    },
                 },
-                None => Member {
-                    index,
-                    job,
-                    start_frame,
-                    samples: dry,
-                },
-            })
+            )
         })
         .collect();
     if members.is_empty() {
@@ -216,80 +275,10 @@ pub(super) fn buses(
             samples: &m.samples,
         })
         .collect();
-    bus_runs(&staged, rate, offline)
+    bus_runs(&staged, rate, offline, cancel)
         .into_iter()
         .map(|run| (members[run.first].index, run))
         .collect()
-}
-
-/// The shared placement and sum over sources (each at `rate`), the way an
-/// export wants it: every sample the one a decode of the whole file holds,
-/// every rack run offline, and nothing held longer than it takes to add it.
-///
-/// The runs are added in the order of the jobs, a bus where its first job
-/// stands, which is the order the live plan plays them in: the two sum the
-/// same numbers in the same order.
-fn mix_sources(
-    sourced: &[(Arc<Source>, &AudioJob)],
-    rate: u32,
-    duration_s: f64,
-    master_gain: f32,
-    on_done: &mut dyn FnMut(usize),
-) -> Vec<f32> {
-    let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
-    let mut out = vec![0.0f32; total_frames * 2];
-    // The bus stage first: a Precomp layer carrying a rack sums what arrives
-    // through it and the rack hears the sum, which is the one thing no amount
-    // of per-job arithmetic can do.
-    let mut buses = buses(sourced, rate, true).into_iter().peekable();
-    for (index, (source, job)) in sourced.iter().enumerate() {
-        if in_a_bus(job) {
-            if let Some((_, run)) = buses.next_if(|(at, _)| *at == index) {
-                if let RunOf::Bus(samples) = &run.of {
-                    lumit_audio::mix::add_placed(
-                        &mut out,
-                        &lumit_audio::mix::PlacedAudio {
-                            start_frame: run.start_frame,
-                            samples,
-                            gain: run.gain,
-                            envelope: run.envelope,
-                        },
-                    );
-                }
-            }
-        } else if let Some((start_frame, dry)) = dry_run(source, job, rate, true) {
-            // The export runs the chains **offline** (docs/impl/audio-plugins.md
-            // §3): no deadline, and the plugin may take its slower path.
-            //
-            // Latency compensation: the processed run is the placed span plus
-            // the chain's own delay, put down that many frames earlier so the
-            // wet sound lands where the dry did. Its length is the run's own,
-            // not the span's, which is what lets a tail ring on past the out
-            // point.
-            let (samples, start_frame) = match job_bake(job, &dry, start_frame, rate, true) {
-                Some((wet, latency)) => (wet, start_frame - i64::from(latency)),
-                None => (dry, start_frame),
-            };
-            let (gain, envelope) = volume_bake(job, start_frame, samples.len() / 2, rate);
-            lumit_audio::mix::add_placed(
-                &mut out,
-                &lumit_audio::mix::PlacedAudio {
-                    start_frame,
-                    samples: &samples,
-                    gain,
-                    envelope,
-                },
-            );
-        }
-        on_done(index + 1);
-    }
-    for s in &mut out {
-        *s = (*s * master_gain).clamp(
-            -lumit_audio::mix::MASTER_CEILING,
-            lumit_audio::mix::MASTER_CEILING,
-        );
-    }
-    out
 }
 
 /// How many audio samples (per channel) belong before the end of video

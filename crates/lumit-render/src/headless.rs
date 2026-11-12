@@ -3078,12 +3078,21 @@ impl HeadlessRenderer {
 /// Volumes. A soloed sound silences non-soloed audio per comp, as a soloed
 /// picture hides the other pictures. The has-audio probe result is cached per item, so each file is probed
 /// at most once per session.
+///
+/// At the comp being mixed the walk leaves routing and solo to the desk
+/// ([`crate::mix::graph::build_graph`]): each layer's jobs are filed under it
+/// as they are, a muted layer has none, and the Bus layers and muted strips
+/// are read off the comp by the desk itself. A [`Self::folded`] builder
+/// still folds them into the jobs, for a reader that sums jobs without a
+/// desk.
 #[derive(Default)]
 pub struct AudioJobsBuilder {
     /// The one layer that is heard whatever the switches say — see
     /// [`AudioJobsBuilder::layer_audio_jobs`]. `None` for every ordinary mix,
     /// which is the comp as it actually sounds.
     heard: Option<Uuid>,
+    /// Route and solo the comp being mixed in the jobs, as a nested comp is.
+    fold: bool,
 }
 
 /// How many audio streams each footage **item** carries, probed once per
@@ -3175,22 +3184,14 @@ fn audio_chain_of(
 /// the family is asked here rather than left to the chain to answer when it
 /// opens: a picture effect on a Precomp layer is the ordinary case, and it
 /// must not put a whole nested comp through the bus stage for nothing.
-fn bus_chain_of(
+pub(crate) fn bus_chain_of(
     doc: &Arc<Document>,
     comp: &Composition,
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
 ) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
-    let sounds = layer.effects.iter().filter(|e| e.enabled).any(|e| {
-        lumit_core::fx::builtins::audio_plugin_id(&e.effect.match_name).is_some()
-            || lumit_core::fx::catalogue::BUILTIN_DEFS
-                .get(&e.effect.match_name)
-                .is_some_and(|def| {
-                    def.schema().category == lumit_core::fx::schema::FxCategory::Audio
-                })
-    });
-    if !sounds {
+    if !crate::mix::rack_stream::sounds(&layer.effects) {
         return None;
     }
     audio_chain_of(doc, comp, layer, offset_s, base_s)
@@ -3247,6 +3248,17 @@ impl AudioJobsBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A builder whose jobs carry the comp's own routing and solo, as a
+    /// nested comp's do: buses as carriers, sends as copies, a solo as
+    /// silence. For the Audio level tap, which sums jobs without a desk.
+    #[must_use]
+    pub fn folded() -> Self {
+        Self {
+            fold: true,
+            ..Self::default()
+        }
     }
 
     /// The comp's audio jobs (empty for a silent comp) — the same list export,
@@ -3343,8 +3355,17 @@ impl AudioJobsBuilder {
             }
             return;
         }
-        // Only a soloed layer that makes a sound silences the rest, as in
-        // After Effects: soloing a title to look at it leaves the music playing.
+        // At the comp being mixed, routing and solo are the desk's.
+        if strip.is_none() && !self.fold {
+            for layer in &comp.layers {
+                self.walk_layer(
+                    doc, comp, layer, false, base_s, window, carriers, strip, visited, jobs,
+                );
+            }
+            return;
+        }
+        // Only a soloed layer that makes a sound silences the rest: soloing a
+        // title to look at it leaves the music playing.
         let any_solo = comp
             .layers
             .iter()
@@ -4475,7 +4496,7 @@ fn crop_texture(
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
+pub(crate) mod tests {
     /// The shared-target pool's eviction rule, which needs no graphics card to
     /// be true and so is tested where every machine runs it
     /// (docs/impl/multi-viewer.md §2.2).
@@ -4619,7 +4640,7 @@ mod tests {
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
     /// so a probe here costs a `stat` and never FFmpeg.
-    pub(super) fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
+    pub(crate) fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
         let id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
@@ -4643,12 +4664,12 @@ mod tests {
     /// Tell the has-audio memo that `item` carries sound, so a test can place a
     /// song without a file on disk. Ids are fresh per test, so seeding one says
     /// nothing about anybody else's.
-    pub(super) fn seed_has_audio(item: Uuid) {
+    pub(crate) fn seed_has_audio(item: Uuid) {
         AUDIO_STREAMS.lock().unwrap().insert(item, 1);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
-    pub(super) fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
+    pub(crate) fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
         let layer = lumit_core::model::Layer {
             graph: Default::default(),
             markers: Vec::new(),
@@ -4691,7 +4712,7 @@ mod tests {
     }
 
     /// An empty composition added to `doc`, returning its id.
-    pub(super) fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
+    pub(crate) fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,

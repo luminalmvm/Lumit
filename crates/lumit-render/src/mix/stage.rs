@@ -3,7 +3,9 @@
 
 use uuid::Uuid;
 
-use super::bake::{chain_bake, gain_bake};
+use std::sync::atomic::AtomicBool;
+
+use super::bake::{chain_bake_until, gain_bake};
 use super::jobs::{AudioJob, Carrier};
 use super::mixdown::read_retimed;
 
@@ -68,10 +70,18 @@ pub struct MixRun {
 ///
 /// A job under no rack at all comes back as [`RunOf::Job`] with exactly the
 /// gain [`super::bake::volume_bake`] bakes, so a mix with no rack in it is the mix it was.
+///
+/// `cancel` stops the racks between blocks; what comes back then is not to be
+/// kept.
 #[must_use]
-pub fn bus_runs(placed: &[PlacedJob<'_>], rate: u32, offline: bool) -> Vec<MixRun> {
+pub fn bus_runs(
+    placed: &[PlacedJob<'_>],
+    rate: u32,
+    offline: bool,
+    cancel: &AtomicBool,
+) -> Vec<MixRun> {
     let all: Vec<usize> = (0..placed.len()).collect();
-    runs_at(placed, &all, 0, rate, offline)
+    runs_at(placed, &all, 0, rate, offline, cancel)
 }
 
 /// The first carrier at or past `depth` that holds a rack or a retime: where
@@ -105,6 +115,7 @@ fn runs_at(
     depth: usize,
     rate: u32,
     offline: bool,
+    cancel: &AtomicBool,
 ) -> Vec<MixRun> {
     let mut out: Vec<MixRun> = Vec::new();
     // The buses already summed, so the rest of a bus's jobs are passed over
@@ -148,7 +159,7 @@ fn runs_at(
                     && bus_mark(&placed[j].job.carriers[at]) == Some(mark)
             })
             .collect();
-        let inner = runs_at(placed, &group, at + 1, rate, offline);
+        let inner = runs_at(placed, &group, at + 1, rate, offline, cancel);
         // The sum spans from the earliest run to the latest, which may reach
         // before the bus's own span: a rack inside it has already placed its
         // sound early to answer for its latency.
@@ -206,7 +217,7 @@ fn runs_at(
         let baked = carrier
             .chain
             .as_ref()
-            .and_then(|chain| chain_bake(chain, &sum, first, rate, offline));
+            .and_then(|chain| chain_bake_until(chain, &sum, first, rate, offline, cancel));
         let (samples, start_frame) = match baked {
             // Placed the rack's latency earlier, exactly as a job's own rack
             // is, so the processed bus lands where the dry sum did.

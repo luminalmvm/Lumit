@@ -2409,7 +2409,7 @@ impl CompositionReference {
     ///
     /// `speed` is how many times the comp's rate the leg runs at, 1 for
     /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
-    /// keeps time by skipping frames, in either direction, and is silent.
+    /// keeps time by skipping frames, either way, heard through the jog.
     ///
     /// `slow` is how many times slower than the comp's rate the leg plays,
     /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
@@ -2431,12 +2431,12 @@ impl CompositionReference {
         slow: u32,
         until: Option<u64>,
     ) -> Result<(), BridgeError> {
-        // ponytail: sound plays forwards at the comp's rate only. Pitch-shifted
-        // or reversed sound is out of scope: it needs a resampling mix, and
-        // the audio clock scaled to match before it could be master.
+        // The mix plays forwards at the comp's rate only. A reversed or fast
+        // leg is heard through the jog instead, its pitch following, and the
+        // wall clock is master (the worker's `shuttle`).
         let audio = if reverse || speed != 1 {
             // The forward leg's mix is still running: stop it, and give the
-            // worker nothing to start.
+            // worker no mix to start.
             crate::api::audio::audio_pause();
             None
         } else {

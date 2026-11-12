@@ -18,7 +18,7 @@ use crate::api::{
     BridgeError,
 };
 
-mod clip_peaks;
+pub mod clip_peaks;
 
 /// The layer-styles seam's own tests. Its own file beside the module
 /// rather than a corner of `api/tests.rs`, because what it exercises is one
