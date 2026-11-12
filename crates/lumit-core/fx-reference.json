@@ -30537,6 +30537,31 @@
       "matte_role": "own"
     },
     {
+      "slug": "group-grade",
+      "match_name": "grade_group",
+      "label": "Group grade",
+      "version": 1,
+      "category": "Colour",
+      "category_slug": "colour",
+      "params": [
+        {
+          "id": "part",
+          "label": "Part",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Pre",
+            "Post",
+            "Shared"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "lens-flare",
       "match_name": "lens_flare",
       "label": "Lens flare",

@@ -73,6 +73,7 @@ fn float_layer_comp(
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         blend: Default::default(),
         masks,
         paint,

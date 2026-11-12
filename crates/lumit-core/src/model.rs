@@ -3312,6 +3312,9 @@ pub struct Layer {
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
+    /// The other versions of the layer's grade ([`crate::grade::versions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade_versions: Option<crate::grade::versions::GradeVersions>,
     /// The layer's **style stack** (docs/impl/layer-styles.md §1): the
     /// shadow, glow, overlay and stroke a layer wears rather than the effects it
     /// carries.
@@ -4197,6 +4200,12 @@ pub struct Document {
     /// project. Nothing draws from it. Absent from the file when empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
+    /// The grade groups ([`crate::grade::groups`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grade_groups: Vec<crate::grade::groups::GradeGroup>,
+    /// The grade memories ([`crate::grade::memories`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grade_memories: Vec<crate::grade::memories::GradeMemory>,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
     /// (docs/10-FILE-FORMAT.md §1.2).
@@ -4547,6 +4556,8 @@ impl Document {
             colour: ColourManagement::default(),
             swatches: Vec::new(),
             notes: String::new(),
+            grade_groups: Vec::new(),
+            grade_memories: Vec::new(),
             ui_state: None,
             extra: serde_json::Map::new(),
         }
@@ -4935,6 +4946,7 @@ mod tests {
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5317,6 +5329,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5637,6 +5650,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),

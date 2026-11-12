@@ -525,8 +525,11 @@ pub fn collect_comp_jobs(
             continue;
         }
         // As the build draws it, so a layer a clip's effect reads is decoded.
-        let worn =
-            lumit_core::sequence::worn_at(l, lumit_core::time::layer_time(t, l.start_offset.0));
+        let worn = lumit_core::grade::groups::worn_at(
+            doc,
+            l,
+            lumit_core::time::layer_time(t, l.start_offset.0),
+        );
         let l = worn.as_ref().unwrap_or(l);
         if l.switches.visible
             && (in_span(l) || moment_in_span(idx, l))
@@ -629,7 +632,7 @@ pub fn collect_comp_jobs(
         let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
         // As the build draws it, so a clip's temporal effect is planned its
         // neighbours.
-        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let worn = lumit_core::grade::groups::worn_at(doc, layer, lt);
         let layer = worn.as_ref().unwrap_or(layer);
         match &layer.kind {
             // No footage source to decode (an adjustment layer processes
@@ -1747,6 +1750,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
@@ -1885,6 +1889,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
@@ -2033,6 +2038,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),
@@ -2222,6 +2228,7 @@ mod tests {
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: lumit_core::model::BlendMode::default(),
             masks: Vec::new(),

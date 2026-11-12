@@ -784,6 +784,12 @@ pub struct Correction {
 /// size.
 pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
+/// The Viewer's matte view on this node: 0 off, 2 Key, and Highlight over
+/// grey 1, black 3, white 4 or the picture in black and white 5. Only a
+/// preview copy carries the row it is read from
+/// ([`crate::grade::matte_view`]).
+pub const DERIVED_MATTE_VIEW: ParamId = ParamId::new("derived.matte_view");
+
 /// Correction's behaviour.
 pub struct CorrectionDef;
 
@@ -794,11 +800,18 @@ impl EffectDef for CorrectionDef {
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let pk = Correction::read(p).packed(p.float(DERIVED_PX_SCALE, 1.0));
-        cpu::correction(rgba, w, h, &pk, &[]);
+        match combine::matte_view_of(p) {
+            0 => cpu::correction(rgba, w, h, &pk, &[]),
+            view => cpu::matte_view(rgba, w, h, &pk, view),
+        }
     }
 
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+        let row = cx.inst.param(crate::grade::matte_view::MATTE_VIEW_ROW);
+        if let Some(crate::model::EffectValue::Choice(view)) = row {
+            push(DERIVED_MATTE_VIEW, Value::Float(*view as f32));
+        }
     }
 }
 

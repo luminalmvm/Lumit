@@ -428,7 +428,7 @@ fn feed_comp(
         let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         // As the build draws it: a Sequence layer wearing its clip's effects
         // and blend mode, so a change to either retires the frame.
-        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let worn = lumit_core::grade::groups::worn_at(doc, layer, lt);
         // The builder reads a layer's own moments off the layer itself.
         moments::feed_own_moments(h, doc, comp, layer, t, quality, stamper, visited)?;
         let layer = worn.as_ref().unwrap_or(layer);
@@ -2966,6 +2966,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),

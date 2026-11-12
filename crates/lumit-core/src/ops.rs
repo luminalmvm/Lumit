@@ -262,6 +262,12 @@ pub enum Op {
         layer: Uuid,
         inputs: Option<Box<crate::model::EffectInstance>>,
     },
+    /// Replace a layer's stored grade versions ([`crate::grade::versions`]).
+    SetLayerGradeVersions {
+        comp: Uuid,
+        layer: Uuid,
+        versions: Option<Box<crate::grade::versions::GradeVersions>>,
+    },
     /// Replace a layer's whole **driver graph**: its drivers, its wires and
     /// its canvas positions.
     ///
@@ -811,6 +817,14 @@ pub enum Op {
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
     },
+    /// Replace the grade groups whole ([`crate::grade::groups`]).
+    SetGradeGroups {
+        groups: Vec<crate::grade::groups::GradeGroup>,
+    },
+    /// Replace the grade memories whole ([`crate::grade::memories`]).
+    SetGradeMemories {
+        memories: Vec<crate::grade::memories::GradeMemory>,
+    },
     /// Replace the project's notes whole. It changes no pixel.
     SetNotes {
         notes: String,
@@ -979,6 +993,7 @@ impl Op {
             Op::SetLayerEffects { .. } => "Edit effects",
             Op::SetLayerStyles { .. } => "Edit layer styles",
             Op::SetLayerGraphInputs { .. } => "Edit node graph inputs",
+            Op::SetLayerGradeVersions { .. } => "Edit grade versions",
             Op::SetLayerGraph { .. } => "Edit drivers",
             Op::SetLayerFx { .. } => "Fx switch",
             Op::SetLayerThreeD { .. } => "3D switch",
@@ -1042,6 +1057,10 @@ impl Op {
             Op::SetColourDepth { .. } => "Set colour depth",
             Op::SetGraphRoom { .. } => "Set node graph overscan",
             Op::SetProjectSwatches { .. } => "Edit swatches",
+            // Its own commands name their steps, so this is what an effect
+            // edit in a group's grade reads as.
+            Op::SetGradeGroups { .. } => "Edit effects",
+            Op::SetGradeMemories { .. } => "Store memory",
             Op::SetNotes { .. } => "Edit notes",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"
@@ -1101,6 +1120,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerStyles { comp, layer, .. }
         | Op::SetLayerGraphInputs { comp, layer, .. }
+        | Op::SetLayerGradeVersions { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
@@ -1579,6 +1599,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 inputs: previous.map(Box::new),
+            })
+        }
+        Op::SetLayerGradeVersions {
+            comp,
+            layer,
+            versions,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.grade_versions, versions.as_deref().cloned());
+            Ok(Op::SetLayerGradeVersions {
+                comp: *comp,
+                layer: *layer,
+                versions: previous.map(Box::new),
             })
         }
         Op::SetLayerGraph { comp, layer, graph } => {
@@ -2612,6 +2650,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.swatches, swatches.clone());
             Ok(Op::SetProjectSwatches { swatches: previous })
         }
+        Op::SetGradeGroups { groups } => Ok(Op::SetGradeGroups {
+            groups: std::mem::replace(&mut doc.grade_groups, groups.clone()),
+        }),
+        Op::SetGradeMemories { memories } => Ok(Op::SetGradeMemories {
+            memories: std::mem::replace(&mut doc.grade_memories, memories.clone()),
+        }),
         Op::SetNotes { notes } => {
             let previous = std::mem::replace(&mut doc.notes, notes.clone());
             Ok(Op::SetNotes { notes: previous })

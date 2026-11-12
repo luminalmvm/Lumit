@@ -180,6 +180,7 @@ pub fn stress_document(p: &StressParams) -> Document {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
@@ -240,6 +241,8 @@ pub fn stress_document(p: &StressParams) -> Document {
         // the fixture's bytes are the same as they were before swatches.
         swatches: Vec::new(),
         notes: String::new(),
+        grade_groups: Vec::new(),
+        grade_memories: Vec::new(),
         // The fixture caches wherever the application is set to, like any
         // ordinary project.
         cache_location: None,

@@ -3902,7 +3902,7 @@ fn comp_walk(
         let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         // A Sequence layer wears the effects and blend mode of the clip it is
         // showing, so everything below reads the one stack.
-        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let worn = lumit_core::grade::groups::worn_at(doc, layer, lt);
         let layer = worn.as_ref().unwrap_or(layer);
         // The true frame time in this layer's own time base, for effects a
         // held/sub-frame re-render must not re-sample (docs/impl/
@@ -7222,6 +7222,7 @@ mod parent_placement_tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -8035,6 +8036,7 @@ mod render_below_at_tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -8536,6 +8538,7 @@ mod render_below_at_tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -8690,6 +8693,7 @@ mod render_below_at_tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),

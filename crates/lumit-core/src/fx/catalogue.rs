@@ -130,6 +130,7 @@ use super::effects::{
     fractal_noise::{FractalNoise, FractalNoiseDef},
     gamma::{Gamma, GammaDef},
     glow::{Glow, GlowDef},
+    grade_group::{GradeGroup, GradeGroupDef},
     gradient::{Gradient, GradientDef},
     grid::{Grid, GridDef},
     hue_saturation::{HueSaturation, HueSaturationDef},
@@ -427,6 +428,8 @@ crate::catalogue![
     PhotoFilterDef => PhotoFilter,
     BlackAndWhiteDef => BlackAndWhite,
     ShadowHighlightDef => ShadowHighlight,
+    // A grade group's place in a member's stack, at the Colour family's end.
+    GradeGroupDef => GradeGroup,
     LensFlareDef => LensFlare,
     LensDirtDef => LensDirt,
     FilmDef => Film,

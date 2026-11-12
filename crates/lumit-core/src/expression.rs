@@ -978,6 +978,7 @@ mod tests {
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             markers: Vec::new(),
             paint: Default::default(),

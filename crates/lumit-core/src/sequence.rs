@@ -216,6 +216,9 @@ pub struct Clip {
     /// sets nothing, which is every clip of anything but a template.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inputs: Option<EffectInstance>,
+    /// The other versions of the clip's grade ([`crate::grade::versions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade_versions: Option<crate::grade::versions::GradeVersions>,
     /// The whole stack's bypass, the clip's twin of the layer's fx switch.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub fx: bool,
@@ -302,6 +305,7 @@ impl Clip {
             fade_out: Fade::default(),
             effects: Vec::new(),
             inputs: None,
+            grade_versions: None,
             fx: true,
             gain_db: 0.0,
             link: None,
@@ -711,6 +715,7 @@ impl Clip {
                 .inputs
                 .as_ref()
                 .and_then(|i| respawn(std::slice::from_ref(i)).pop()),
+            grade_versions: crate::grade::versions::respawned(&self.grade_versions, Rational::ZERO),
             transition: self
                 .transition
                 .as_ref()
@@ -814,6 +819,7 @@ impl Clip {
             fade_in: self.fade_in,
             fade_out: Fade::default(),
             effects: respawn(&self.effects),
+            grade_versions: crate::grade::versions::respawned(&self.grade_versions, Rational::ZERO),
             fx: self.fx,
             gain_db: self.gain_db,
             link: self.link,
@@ -858,6 +864,12 @@ impl Clip {
                 }
                 inputs.pop()
             }),
+            grade_versions: crate::grade::versions::respawned(
+                &self.grade_versions,
+                Rational::ZERO
+                    .checked_sub(tau_clip)
+                    .unwrap_or(Rational::ZERO),
+            ),
             fx: self.fx,
             gain_db: self.gain_db,
             link: self.link,
@@ -1244,6 +1256,8 @@ pub fn overwrite_with(clips: &[Clip], dropped: Uuid) -> Vec<Clip> {
                 right.id = Uuid::now_v7();
                 right.fade_in = Fade::default();
                 right.effects = respawn(&right.effects);
+                right.grade_versions =
+                    crate::grade::versions::respawned(&right.grade_versions, Rational::ZERO);
                 out.push(right);
             }
             continue;

@@ -11,7 +11,7 @@
 //! Only a Correction joins. Any other effect is Serial and starts a new run,
 //! and so does a Correction with nothing above it.
 
-use super::{cpu, packed::Packed, Correction, DERIVED_PX_SCALE};
+use super::{cpu, packed::Packed, Correction, DERIVED_MATTE_VIEW, DERIVED_PX_SCALE};
 use crate::fx::params::{ParamId, Params, ResolvedFx, ResolvedStack};
 use crate::fx::registry::EffectMetadata;
 use crate::fx::schema::{EffectSchema, MIX_ID};
@@ -100,6 +100,17 @@ pub fn layer(acc: &mut [f32], graded: &[f32], key: Option<&[f32]>, mode: u32, mi
     }
 }
 
+/// The matte view a node's own kernel draws: none for a node whose Combine
+/// row joins a run, as the run draws its view ([`Run::end`]).
+#[must_use]
+pub fn matte_view_of(p: Params<'_>) -> u32 {
+    if p.choice(COMBINE, 0) == 0 {
+        p.float(DERIVED_MATTE_VIEW, 0.0) as u32
+    } else {
+        0
+    }
+}
+
 /// Where a run stands as a stack is walked on the CPU.
 #[derive(Default)]
 pub struct Run {
@@ -135,23 +146,31 @@ impl Run {
         self.combine == Combine::Layer
     }
 
-    /// After the node drew `rgba`: the run's picture, back in `rgba`.
+    /// After the node drew `rgba`: the run's picture, back in `rgba`. A node
+    /// with the Viewer's matte view on draws its grade as usual (see
+    /// [`matte_view_of`]), and the view goes over the run's picture here, the
+    /// key read off the run's input as the node reads it.
     pub fn end(&mut self, rgba: &mut [f32], w: u32, h: u32, op: &ResolvedFx<'_>) {
         let (Some(mut acc), Some(input)) = (self.acc.take(), self.input.as_ref()) else {
             return;
         };
+        let p = op.params;
+        let pk = Correction::read(p).packed(p.float(DERIVED_PX_SCALE, 1.0));
         match self.combine {
             Combine::Serial => return,
             Combine::Parallel => parallel(&mut acc, rgba, input),
             Combine::Layer => {
-                let p = op.params;
-                let pk = Correction::read(p).packed(p.float(DERIVED_PX_SCALE, 1.0));
                 let key = cpu::correction_key(input, w, h, &pk, &[]);
                 let mut graded = input.clone();
                 cpu::correction(&mut graded, w, h, &graded_packed(p), &[]);
                 let (mode, mix) = layer_mix(op.def.schema(), p);
                 layer(&mut acc, &graded, key.as_deref(), mode, mix);
             }
+        }
+        let view = p.float(DERIVED_MATTE_VIEW, 0.0) as u32;
+        if view != 0 {
+            let key = cpu::correction_key(input, w, h, &pk, &[]);
+            cpu::matte_shown(&mut acc, key.as_deref(), view);
         }
         rgba.copy_from_slice(&acc);
     }

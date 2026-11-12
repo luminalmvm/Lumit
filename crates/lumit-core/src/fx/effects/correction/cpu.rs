@@ -72,6 +72,55 @@ pub fn correction_key(
     Some(key)
 }
 
+/// What the Viewer's matte view draws in mid grey, scene linear.
+pub const MATTE_VIEW_GREY: f32 = 0.18;
+
+/// The node's matte view over `rgba`: `view` 2 is the key in black and
+/// white, opaque, and the rest the graded picture where the key is over a
+/// backdrop ([`matte_shown`]). The twin of the GPU's: the key pass, then the
+/// backdrop and the matte dissolve, or the matte prepare for 2.
+pub fn matte_view(rgba: &mut [f32], w: u32, h: u32, pk: &Packed, view: u32) {
+    let key = correction_key(rgba, w, h, pk, &[]);
+    if view != 2 {
+        correction(rgba, w, h, pk, &[]);
+    }
+    matte_shown(rgba, key.as_deref(), view);
+}
+
+/// What Highlight shows where the key is not, drawn from the node's picture:
+/// grey for 1, black for 3, white for 4, and for 5 the picture in black and
+/// white (Tint at its rest, which maps each pixel to its luma).
+pub fn matte_backdrop(rgba: &mut [f32], view: u32) {
+    match view {
+        3 => cpu::fill(rgba, [0.0; 3], 1.0),
+        4 => cpu::fill(rgba, [1.0; 3], 1.0),
+        5 => cpu::tint(rgba, [0.0; 3], [1.0; 3], 1.0),
+        _ => cpu::fill(rgba, [MATTE_VIEW_GREY; 3], 1.0),
+    }
+}
+
+/// The matte view drawn over `rgba`, the picture the node made, with its
+/// `key` (`None` keys every pixel whole).
+pub fn matte_shown(rgba: &mut [f32], key: Option<&[f32]>, view: u32) {
+    let back = (view != 2).then(|| {
+        let mut back = rgba.to_vec();
+        matte_backdrop(&mut back, view);
+        back
+    });
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let k = key
+            .map_or(1.0, |k| k.get(i).copied().unwrap_or(1.0))
+            .clamp(0.0, 1.0);
+        let Some(b) = back.as_ref().and_then(|b| b.get(i * 4..i * 4 + 4)) else {
+            px.copy_from_slice(&[k, k, k, 1.0]);
+            continue;
+        };
+        for c in 0..4 {
+            px[c] = b[c] * (1.0 - k) + px[c] * k;
+        }
+    }
+}
+
 /// The Correction over `rgba` (premultiplied, four floats a pixel). `matte` is
 /// the prepared matte, empty when none is bound.
 pub fn correction(rgba: &mut [f32], w: u32, h: u32, pk: &Packed, matte: &[f32]) {

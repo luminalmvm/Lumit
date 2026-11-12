@@ -325,6 +325,7 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -418,6 +419,7 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -2847,6 +2849,7 @@ fn marker_rig(
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -5247,6 +5250,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -6224,6 +6228,7 @@ pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -7592,7 +7597,10 @@ fn every_effect_carries_a_matte_row() {
             s.category,
             FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
         ) || s.category.is_driver()
-            || matches!(s.match_name, "camera_track" | "planar_track" | "smoke")
+            || matches!(
+                s.match_name,
+                "camera_track" | "planar_track" | "smoke" | "grade_group"
+            )
         {
             assert_eq!(
                 s.matte,

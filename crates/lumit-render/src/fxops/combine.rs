@@ -4,7 +4,7 @@
 
 use lumit_core::fx::effects::correction::combine::{self, Combine};
 use lumit_core::fx::effects::correction::packed::Packed;
-use lumit_core::fx::effects::correction::{Correction, DERIVED_PX_SCALE};
+use lumit_core::fx::effects::correction::{Correction, DERIVED_MATTE_VIEW, DERIVED_PX_SCALE};
 use lumit_core::fx::params::{Params, ResolvedFx, ResolvedStack};
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_gpu::fx::correction::CorrectionOp;
@@ -102,7 +102,9 @@ impl Run {
         self.input.as_ref() == Some(t)
     }
 
-    /// After the node drew `out` from the run's input: the run's picture.
+    /// After the node drew `out` from the run's input: the run's picture. A
+    /// node with the Viewer's matte view on has drawn its grade, and the view
+    /// goes over the run's picture here, keyed off the run's input.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn end(
         &mut self,
@@ -118,14 +120,43 @@ impl Run {
             return out;
         };
         let input = fit_centred(ctx, input.clone(), w, h);
+        let joined = self.join(fx, ctx, acc, out, &input, w, h, node, matte);
+        let view = node.params.float(DERIVED_MATTE_VIEW, 0.0) as u32;
+        if view == 0 {
+            return joined;
+        }
+        let pk = packed(node.params);
+        let words = pk.words(matte.is_some());
+        let key = fx.correction_key_picture(ctx, &input, w, h, matte, &op(&pk, &words));
+        let shown = crate::gpufx_correction::matte_shown(fx, ctx, &joined, key, w, h, view);
+        if joined != input {
+            ctx.recycle(joined);
+        }
+        shown
+    }
+
+    /// The node's grade `out` joined to what the run made, `acc`.
+    #[allow(clippy::too_many_arguments)]
+    fn join(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        acc: Tex,
+        out: Tex,
+        input: &Tex,
+        w: u32,
+        h: u32,
+        node: &ResolvedFx<'_>,
+        matte: Option<&Tex>,
+    ) -> Tex {
         let p = node.params;
         match self.combine {
             Combine::Serial => out,
             Combine::Parallel => {
                 let pk = packed(p);
                 let words = pk.words(false);
-                let sum = fx.correction_parallel(ctx, &acc, &out, &input, w, h, &op(&pk, &words));
-                if out != input && out != acc {
+                let sum = fx.correction_parallel(ctx, &acc, &out, input, w, h, &op(&pk, &words));
+                if out != *input && out != acc {
                     ctx.recycle(out);
                 }
                 sum
@@ -133,14 +164,14 @@ impl Run {
             Combine::Layer => {
                 let pk = packed(p);
                 let words = pk.words(matte.is_some());
-                let key = fx.correction_key(ctx, &input, w, h, matte, &op(&pk, &words));
+                let key = fx.correction_key(ctx, input, w, h, matte, &op(&pk, &words));
                 let full = combine::graded_packed(p);
                 let words = full.words(false);
-                let graded = fx.correction(ctx, &input, w, h, None, &op(&full, &words));
+                let graded = fx.correction(ctx, input, w, h, None, &op(&full, &words));
                 let (mode, mix) = combine::layer_mix(node.def.schema(), p);
                 let over = if mode != 0 || mix < 1.0 {
                     let over = fx.blend_mix(ctx, &acc, &graded, w, h, mode, mix);
-                    if graded != input {
+                    if graded != *input {
                         ctx.recycle(graded);
                     }
                     over
@@ -152,7 +183,7 @@ impl Run {
                 };
                 let laid = fx.matte_mix(ctx, &acc, &over, &key, w, h, false);
                 ctx.recycle(key);
-                if over != input {
+                if over != *input {
                     ctx.recycle(over);
                 }
                 laid

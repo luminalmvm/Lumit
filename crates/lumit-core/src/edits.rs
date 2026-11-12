@@ -110,6 +110,7 @@ pub fn base_layer(
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: lumit_core::model::BlendMode::Normal,
         masks: Vec::new(),
@@ -427,6 +428,7 @@ pub fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
+        crate::grade::versions::respawn(&mut copy.grade_versions);
         copy.parent = match copy.parent {
             Some(p) if !here(p) => copy_of(layers, p, here, copies, ids),
             kept => kept,

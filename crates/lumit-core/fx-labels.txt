@@ -714,6 +714,7 @@ Grit
 Ground
 Ground height
 Group
+Group grade
 Group name
 Grow
 Grow max
@@ -1215,9 +1216,11 @@ Position
 Position x
 Position y
 Position z
+Post
 Posterize
 Posterize time
 Power
+Pre
 Pre-delay
 Preserve luminance
 Preserve luminosity
@@ -1435,6 +1438,7 @@ Shake
 Shape
 Shapes
 Share of frame
+Shared
 Sharp colours
 Sharpen
 Shift per row

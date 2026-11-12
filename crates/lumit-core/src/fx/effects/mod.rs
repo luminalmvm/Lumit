@@ -71,6 +71,7 @@ pub mod flow_points;
 pub mod fractal_noise;
 pub mod gamma;
 pub mod glow;
+pub mod grade_group;
 pub mod gradient;
 pub mod grid;
 pub mod grid_lines;
