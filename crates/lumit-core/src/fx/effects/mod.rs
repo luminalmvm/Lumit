@@ -139,6 +139,7 @@ pub mod spherize;
 pub mod split_channels;
 pub mod sprite_flare;
 pub mod srgb_curve;
+pub mod stabilise;
 pub mod stroke;
 pub mod switch;
 pub mod temperature;

@@ -9217,6 +9217,484 @@
       "matte_role": "own"
     },
     {
+      "slug": "stabilise",
+      "match_name": "stabilise",
+      "label": "Stabilise",
+      "version": 1,
+      "category": "Distortion",
+      "category_slug": "distortion",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Stabilise",
+            "Reverse"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "stabilised",
+          "label": "Stabilised layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "result",
+          "label": "Result",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Smooth motion",
+            "No motion"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "smoothness",
+          "label": "Smoothness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 300.0
+        },
+        {
+          "id": "reference",
+          "label": "Reference",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 60.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "use_frame",
+          "label": "Use this frame",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "method",
+          "label": "Method",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Position",
+            "Scale and rotation",
+            "Perspective"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "keep_scale",
+          "label": "Keep scale",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "rolling_shutter",
+          "label": "Rolling shutter",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Off",
+            "Reduce"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "edges",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Show",
+            "Crop",
+            "Crop and scale",
+            "Fill"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "max_scale",
+          "label": "Maximum scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 150.0,
+          "slider_min": 100.0,
+          "slider_max": 300.0,
+          "hard_min": 100.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "margin",
+          "label": "Safe margin",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 25.0,
+          "hard_min": 0.0,
+          "hard_max": 45.0
+        },
+        {
+          "id": "steady_crop",
+          "label": "Steady crop",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "extra_scale",
+          "label": "Extra scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 50.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "fill_from",
+          "label": "Fill from",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.5,
+          "slider_min": 0.1,
+          "slider_max": 3.0,
+          "hard_min": 0.1,
+          "hard_max": 10.0
+        },
+        {
+          "id": "fill_feather",
+          "label": "Fill feather",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "trim_left",
+          "label": "Trim left",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "trim_top",
+          "label": "Trim top",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "trim_right",
+          "label": "Trim right",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "trim_bottom",
+          "label": "Trim bottom",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "density",
+          "label": "Feature density",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Low",
+            "Normal",
+            "High"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "use_masks",
+          "label": "Use masks",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "show_points",
+          "label": "Show points",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "point_size",
+          "label": "Point size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 10.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "stabilised"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "mode",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "result",
+            "smoothness",
+            "reference",
+            "use_frame",
+            "method",
+            "keep_scale",
+            "rolling_shutter"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "mode",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "Edges",
+          "params": [
+            "edges",
+            "max_scale",
+            "margin",
+            "steady_crop",
+            "extra_scale",
+            "fill_from",
+            "fill_feather"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "mode",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "Trim",
+          "params": [
+            "trim_left",
+            "trim_top",
+            "trim_right",
+            "trim_bottom"
+          ],
+          "collapsed": true,
+          "visible_when": {
+            "param": "mode",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "Analysis",
+          "params": [
+            "density",
+            "use_masks",
+            "frames",
+            "show_points",
+            "point_size"
+          ],
+          "collapsed": true,
+          "visible_when": {
+            "param": "mode",
+            "values": [
+              0
+            ]
+          }
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "analyse",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "cancel",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "smoothness",
+          "on": "result",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "reference",
+          "on": "result",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "use_frame",
+          "on": "result",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "max_scale",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "margin",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "steady_crop",
+          "on": "edges",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "steady_crop",
+          "on": "edges",
+          "cond": "choice_is_not",
+          "value": 3
+        },
+        {
+          "param": "fill_from",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "fill_feather",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "trim_left",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "trim_top",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "trim_right",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "trim_bottom",
+          "on": "edges",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "point_size",
+          "on": "show_points",
+          "cond": "bool_is",
+          "value": true
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
       "slug": "fill",
       "match_name": "fill",
       "label": "Fill",

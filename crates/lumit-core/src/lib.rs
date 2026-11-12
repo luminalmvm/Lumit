@@ -62,6 +62,8 @@ pub mod sequence;
 pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.
 pub mod shared;
+/// Stabilise: the path, the edges and the plan a frame is drawn with.
+pub mod stabilise;
 pub mod store;
 /// Graphics templates: a composition with controls a placed copy can set.
 pub mod template;

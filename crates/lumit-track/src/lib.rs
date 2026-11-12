@@ -72,6 +72,7 @@ pub mod planar;
 mod pyramid;
 pub mod segment;
 pub mod solve;
+pub mod stabilise;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

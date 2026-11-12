@@ -2996,6 +2996,10 @@ fn run(
         captions::Embedded::of(doc, comp_id, spec, &|| cancel.load(Ordering::Relaxed));
     let hidden = captions::leave_out(doc, comp_id, spec);
     let doc = hidden.as_ref().unwrap_or(doc);
+    // A Stabilise drawn before its analysis lands would go out unsteadied.
+    // No progress is sent until it has, so the queue reads Preparing and the
+    // strip stays at nought meanwhile.
+    crate::stabilise::hold_export(doc, comp_id, cancel);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
     let span = frame::Span::of(comp, spec);
     let (out_fps, total) = (span.out_fps, span.total);

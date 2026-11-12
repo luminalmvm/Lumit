@@ -101,6 +101,8 @@ pub mod sent;
 mod sidecar;
 pub mod sim;
 pub mod source;
+/// Stabilise's analysis: its job, queue and sidecar.
+pub mod stabilise;
 pub mod standin;
 pub mod track;
 mod trails;

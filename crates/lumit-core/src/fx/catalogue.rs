@@ -191,6 +191,7 @@ use super::effects::{
     split_channels::{SplitChannels, SplitChannelsDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
     srgb_curve::{SrgbCurve, SrgbCurveDef},
+    stabilise::{Stabilise, StabiliseDef},
     stroke::{Stroke, StrokeDef},
     switch::{Switch, SwitchDef},
     temperature::{Temperature, TemperatureDef},
@@ -281,6 +282,9 @@ crate::catalogue![
     WaveWarpDef => WaveWarp,
     BezierWarpDef => BezierWarp,
     WarpDef => Warp,
+    // Stabilise, at the Distortion family's end: it moves the picture, as
+    // Corner pin does, only by a measured amount.
+    StabiliseDef => Stabilise,
     // The Generate family, in docs/08 §3.34–§3.37 order.
     FillDef => Fill,
     GradientDef => Gradient,
