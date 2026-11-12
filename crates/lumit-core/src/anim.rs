@@ -19,7 +19,8 @@ use serde::{Deserialize, Serialize};
 pub enum SideInterp {
     Hold,
     Linear,
-    /// AE-compatible: speed in value-units/second, influence in (0, 1].
+    /// AE-compatible: speed in value-units/second, influence a fraction of
+    /// the span from [`MIN_INFLUENCE`] to [`MAX_INFLUENCE`].
     Bezier {
         speed: f64,
         influence: f64,
@@ -115,6 +116,34 @@ pub const EASY_EASE: SideInterp = SideInterp::Bezier {
     speed: 0.0,
     influence: 1.0 / 3.0,
 };
+
+/// The shortest a handle may reach, as a fraction of its span.
+pub const MIN_INFLUENCE: f64 = 1e-3;
+
+/// The furthest a handle may reach, as a fraction of its span: 1000%.
+pub const MAX_INFLUENCE: f64 = 10.0;
+
+/// The influences a span's cubic is built from, given the two its sides store.
+///
+/// A handle may reach past the neighbouring key, but time must never run
+/// backwards along the span. That holds exactly when `a + b - sqrt(a * b)` is
+/// at most 1. Inside the old box, both at most 1, it always holds, so those
+/// pairs come back untouched and every older curve stays bit-identical. A pair
+/// that reaches too far is scaled down in proportion onto that edge. The
+/// stored handles stay where they were put.
+#[must_use]
+pub fn span_influences(a: f64, b: f64) -> (f64, f64) {
+    let a = a.clamp(MIN_INFLUENCE, MAX_INFLUENCE);
+    let b = b.clamp(MIN_INFLUENCE, MAX_INFLUENCE);
+    if a <= 1.0 && b <= 1.0 {
+        return (a, b);
+    }
+    let f = a + b - (a * b).sqrt();
+    if f <= 1.0 {
+        return (a, b);
+    }
+    (a / f, b / f)
+}
 
 /// One side of a key eased as After Effects describes it: a speed in the
 /// property's units a second, and an influence as a per cent of the span,
@@ -337,16 +366,18 @@ fn span_cubic(keys: &[Keyframe], i: usize) -> CubicSpan {
     let chord = (b.value - a.value) / (t2 - t1);
     let (s1, b1) = side_params(resolved_side(keys, i, true), chord);
     let (s2, b2) = side_params(resolved_side(keys, i + 1, false), chord);
+    let (b1, b2) = span_influences(b1, b2);
     CubicSpan::from_ae(t1, a.value, t2, b.value, s1, b1, s2, b2)
 }
 
 /// A side's (speed, influence). Takes a side that has already been through
 /// [`resolved_side`], so an automatic one never reaches here as itself; the
 /// fallback treats one that does as straight, which is the calmest wrong
-/// answer rather than a panic in an engine crate.
+/// answer rather than a panic in an engine crate. The influence is as stored,
+/// and [`span_influences`] bounds it.
 fn side_params(side: SideInterp, chord_slope: f64) -> (f64, f64) {
     match side {
-        SideInterp::Bezier { speed, influence } => (speed, influence.clamp(1e-3, 1.0)),
+        SideInterp::Bezier { speed, influence } => (speed, influence),
         // Linear (or hold-in, which only matters as an out-side) on the chord.
         _ => (chord_slope, 1.0 / 3.0),
     }
@@ -465,9 +496,10 @@ impl CubicSpan {
     /// This span's leaving side, as the AE speed/influence pair a keyframe
     /// stores — the exact inverse of [`Self::from_ae`]'s first handle.
     ///
-    /// Influence is clamped into the range [`side_params`] allows, so a handle
-    /// that came out of a split at a very small parameter still describes a
-    /// side the evaluator will accept.
+    /// Influence is clamped to [`MIN_INFLUENCE`] and [`MAX_INFLUENCE`], so a
+    /// handle that came out of a split at a very small parameter still
+    /// describes a side the evaluator will accept. Half of a split span can
+    /// need more than 1, so the planted key keeps the curve exactly.
     #[must_use]
     pub fn out_side(&self) -> SideInterp {
         let dt = self.x[3] - self.x[0];
@@ -475,12 +507,12 @@ impl CubicSpan {
         if dt <= 0.0 || dx.abs() < 1e-12 {
             return SideInterp::Bezier {
                 speed: 0.0,
-                influence: 1e-3,
+                influence: MIN_INFLUENCE,
             };
         }
         SideInterp::Bezier {
             speed: (self.y[1] - self.y[0]) / dx,
-            influence: (dx / dt).clamp(1e-3, 1.0),
+            influence: (dx / dt).clamp(MIN_INFLUENCE, MAX_INFLUENCE),
         }
     }
 
@@ -492,12 +524,12 @@ impl CubicSpan {
         if dt <= 0.0 || dx.abs() < 1e-12 {
             return SideInterp::Bezier {
                 speed: 0.0,
-                influence: 1e-3,
+                influence: MIN_INFLUENCE,
             };
         }
         SideInterp::Bezier {
             speed: (self.y[3] - self.y[2]) / dx,
-            influence: (dx / dt).clamp(1e-3, 1.0),
+            influence: (dx / dt).clamp(MIN_INFLUENCE, MAX_INFLUENCE),
         }
     }
 

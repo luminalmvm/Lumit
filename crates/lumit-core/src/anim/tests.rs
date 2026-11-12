@@ -225,6 +225,26 @@ fn inserting_a_key_preserves_the_curve() {
         ),
         (SideInterp::Linear, EASY_EASE),
         (SideInterp::Linear, SideInterp::Linear),
+        (
+            SideInterp::Bezier {
+                speed: 0.0,
+                influence: 0.9,
+            },
+            SideInterp::Bezier {
+                speed: 0.0,
+                influence: 0.95,
+            },
+        ),
+        (
+            SideInterp::Bezier {
+                speed: 3.0,
+                influence: 1.2,
+            },
+            SideInterp::Bezier {
+                speed: -1.0,
+                influence: 0.3,
+            },
+        ),
     ] {
         let mut p = Property {
             animation: Animation::Keyframed(vec![
@@ -286,12 +306,15 @@ proptest! {
 
     /// Evaluation stays within the hull of the two key values whenever
     /// both handles point "inward" (no overshoot without overshooting
-    /// handles) — and is always finite.
+    /// handles), and is always finite. With flat handles only time running
+    /// backwards could break the order, so handles reaching past the
+    /// neighbouring key must keep it too.
     #[test]
     fn no_spurious_overshoot(
-        b1 in 0.001f64..=1.0,
-        b2 in 0.001f64..=1.0,
+        b1 in MIN_INFLUENCE..=MAX_INFLUENCE,
+        b2 in MIN_INFLUENCE..=MAX_INFLUENCE,
         t in 0.0f64..=1.0,
+        t2 in 0.0f64..=1.0,
     ) {
         let keys = [
             key(rat(0,1), 0.0, SideInterp::Bezier { speed: 0.0, influence: b1 }),
@@ -300,6 +323,9 @@ proptest! {
         let v = evaluate(&keys, t).unwrap();
         prop_assert!(v.is_finite());
         prop_assert!((-1e-9..=1.0 + 1e-9).contains(&v));
+        let (early, late) = if t < t2 { (t, t2) } else { (t2, t) };
+        let (v1, v2) = (evaluate(&keys, early).unwrap(), evaluate(&keys, late).unwrap());
+        prop_assert!(v1 <= v2 + 1e-9, "{v1} at {early} after {v2} at {late}");
     }
 }
 
