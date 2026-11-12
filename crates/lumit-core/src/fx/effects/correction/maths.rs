@@ -41,6 +41,12 @@
 //!   for `d >= 0` and `1 − ss(lo, lo + S, −d)` below. `k_s = band(s, …)`,
 //!   `k_l = band(Y, …)`. `k = k_h·k_s·k_l`, a factor left out when its Use
 //!   switch is off. RGB: `band` on each channel, multiplied. Luma: `band(Y)`.
+//! - 3D, on `v_in`: near a sample `n = 1 − ss(size, size + soft, d)`, `d` the
+//!   distance in `(Y/2, Cb, Cr)`, size and soft over 100 times 0.25.
+//!   `k = keep · (1 − drop)`, each the most `n` over its samples; with no kept
+//!   sample `keep = 1`, with no dropped one `drop = 0`. The samples are the
+//!   rows `qual_3d_keep` and `qual_3d_drop` (`2Cb, 2Cr` a point) and
+//!   `qual_3d_keep_luma` and `qual_3d_drop_luma` (`Y` the first number).
 //! - Clean: `k = clamp((k − 0.49·black)/(1 − 0.49·white − 0.49·black), 0, 1)`
 //!   (black, white as 0..1). Clip: `k = min(max(k, black clip), white clip)`.
 //!   Then Grow (a min or max over a square, as the Matte key's), Blur (the
@@ -57,9 +63,10 @@
 //!   then times opacity. Slots combine in order from 0 (from 1 when the first
 //!   window on subtracts): `acc = max(acc, w)`, or `acc·(1 − w)` to subtract.
 //!
-//! **3. Grade**, on `v = E(u · 2^exposure · g)`, `g` Temperature's gains
+//! **3. Grade**, on `v = E(Z(u · 2^exposure · g))`, `g` Temperature's gains
 //! `(max(1 + 0.75t, 0), max(1 − 0.75k, 0), max(1 − 0.75t, 0))`, `t` and `k`
-//! the Temperature and Tint over 100. Then in this order:
+//! the Temperature and Tint over 100, and `Z` the HDR zones
+//! ([`hdr`](super::hdr)), still in scene linear. Then in this order:
 //! 1. `y0 = luma(v)`; `v += offset`; `v += lift·(1 − v)`;
 //!    `v = sgnpow(v, 2^(−2·gamma))`; `v *= gain`.
 //! 2. Log wheels: `y = luma(v)`, `s = ss(low − 0.1, low + 0.1, y)`,
@@ -278,6 +285,23 @@ pub fn qualify(v: [f32; 3], q: &Qualifier) -> f32 {
             .map(|c| band(v[c], q.rgb_lo[c], q.rgb_hi[c], q.rgb_soft))
             .product(),
         3 => band(luma(v), q.lum[0], q.lum[1], q.lum[2]),
+        4 => {
+            let c = ycc(v);
+            let near = |s: &[f32; 3]| {
+                let d = [0.5 * (c[0] - s[0]), c[1] - s[1], c[2] - s[2]];
+                let d = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                1.0 - ss(q.reach[0], q.reach[0] + q.reach[1], d)
+            };
+            let most = |at: &[[f32; 3]], n: u32| {
+                at.iter().take(n as usize).map(near).fold(0.0f32, f32::max)
+            };
+            let keep = if q.samples[0] == 0 {
+                1.0
+            } else {
+                most(&q.keep_at, q.samples[0])
+            };
+            keep * (1.0 - most(&q.drop_at, q.samples[1]))
+        }
         _ => 1.0,
     };
     let k = ((k - q.clean[0]) / (q.clean[1] - q.clean[0])).clamp(0.0, 1.0);
@@ -416,7 +440,11 @@ pub fn grade(o: [f32; 4], key: f32, detail: f32, pk: &Packed) -> [f32; 4] {
     let space = pk.space;
     let u = unpremult(o);
     let vin = u.map(|c| encode(c, space));
-    let mut v = [0, 1, 2].map(|c| encode(u[c] * pk.pre_gain[c], space));
+    let mut ug = [0, 1, 2].map(|c| u[c] * pk.pre_gain[c]);
+    if pk.hdr.on {
+        ug = super::hdr::zones(ug, &pk.hdr);
+    }
+    let mut v = ug.map(|c| encode(c, space));
 
     // Wheels.
     let y0 = luma(v);

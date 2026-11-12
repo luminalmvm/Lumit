@@ -26721,6 +26721,318 @@
           "hard_max": 100.0
         },
         {
+          "id": "hdr_balance",
+          "label": "Global balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_black_offset",
+          "label": "Black offset",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -0.05,
+          "slider_max": 0.05,
+          "hard_min": -0.1,
+          "hard_max": 0.1
+        },
+        {
+          "id": "hdr_falloff",
+          "label": "Falloff",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "hdr_black_balance",
+          "label": "Black balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_black_exposure",
+          "label": "Black exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_black_saturation",
+          "label": "Black saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hdr_black_range",
+          "label": "Black range",
+          "kind": "float",
+          "unit": "raw",
+          "default": -3.0,
+          "slider_min": -8.0,
+          "slider_max": 8.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_dark_balance",
+          "label": "Dark balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_dark_exposure",
+          "label": "Dark exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_dark_saturation",
+          "label": "Dark saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hdr_dark_range",
+          "label": "Dark range",
+          "kind": "float",
+          "unit": "raw",
+          "default": -1.5,
+          "slider_min": -8.0,
+          "slider_max": 8.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_shadow_balance",
+          "label": "Shadow balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_shadow_exposure",
+          "label": "Shadow exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_shadow_saturation",
+          "label": "Shadow saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hdr_shadow_range",
+          "label": "Shadow range",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -8.0,
+          "slider_max": 8.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_light_balance",
+          "label": "Light balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_light_exposure",
+          "label": "Light exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_light_saturation",
+          "label": "Light saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hdr_light_range",
+          "label": "Light range",
+          "kind": "float",
+          "unit": "raw",
+          "default": -1.0,
+          "slider_min": -8.0,
+          "slider_max": 8.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_highlight_balance",
+          "label": "Highlight balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_highlight_exposure",
+          "label": "Highlight exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_highlight_saturation",
+          "label": "Highlight saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hdr_highlight_range",
+          "label": "Highlight range",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.5,
+          "slider_min": -8.0,
+          "slider_max": 8.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_specular_balance",
+          "label": "Specular balance",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "hdr_specular_exposure",
+          "label": "Specular exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "hdr_specular_saturation",
+          "label": "Specular saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hdr_specular_range",
+          "label": "Specular range",
+          "kind": "float",
+          "unit": "raw",
+          "default": 4.0,
+          "slider_min": -8.0,
+          "slider_max": 8.0,
+          "hard_min": -16.0,
+          "hard_max": 16.0
+        },
+        {
           "id": "mixer_red",
           "label": "Red output",
           "kind": "colour",
@@ -26961,7 +27273,8 @@
             "Off",
             "HSL",
             "RGB",
-            "Luma"
+            "Luma",
+            "3D"
           ],
           "dividers_after": []
         },
@@ -27165,6 +27478,52 @@
           "kind": "slider",
           "unit": "percent",
           "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "qual_3d_keep",
+          "label": "Keep samples",
+          "kind": "shape",
+          "unit": "raw"
+        },
+        {
+          "id": "qual_3d_keep_luma",
+          "label": "Keep sample luma",
+          "kind": "shape",
+          "unit": "raw"
+        },
+        {
+          "id": "qual_3d_drop",
+          "label": "Drop samples",
+          "kind": "shape",
+          "unit": "raw"
+        },
+        {
+          "id": "qual_3d_drop_luma",
+          "label": "Drop sample luma",
+          "kind": "shape",
+          "unit": "raw"
+        },
+        {
+          "id": "qual_3d_size",
+          "label": "Size",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "qual_3d_soft",
+          "label": "Softness",
+          "kind": "slider",
+          "unit": "raw",
+          "default": 20.0,
           "slider_min": 0.0,
           "slider_max": 100.0,
           "hard_min": 0.0,
@@ -27900,6 +28259,39 @@
           "collapsed": true
         },
         {
+          "label": "HDR",
+          "params": [
+            "hdr_balance",
+            "hdr_black_offset",
+            "hdr_falloff",
+            "hdr_black_balance",
+            "hdr_black_exposure",
+            "hdr_black_saturation",
+            "hdr_black_range",
+            "hdr_dark_balance",
+            "hdr_dark_exposure",
+            "hdr_dark_saturation",
+            "hdr_dark_range",
+            "hdr_shadow_balance",
+            "hdr_shadow_exposure",
+            "hdr_shadow_saturation",
+            "hdr_shadow_range",
+            "hdr_light_balance",
+            "hdr_light_exposure",
+            "hdr_light_saturation",
+            "hdr_light_range",
+            "hdr_highlight_balance",
+            "hdr_highlight_exposure",
+            "hdr_highlight_saturation",
+            "hdr_highlight_range",
+            "hdr_specular_balance",
+            "hdr_specular_exposure",
+            "hdr_specular_saturation",
+            "hdr_specular_range"
+          ],
+          "collapsed": true
+        },
+        {
           "label": "Mixer",
           "params": [
             "mixer_red",
@@ -27991,6 +28383,24 @@
           }
         },
         {
+          "label": "3D",
+          "params": [
+            "qual_3d_keep",
+            "qual_3d_keep_luma",
+            "qual_3d_drop",
+            "qual_3d_drop_luma",
+            "qual_3d_size",
+            "qual_3d_soft"
+          ],
+          "collapsed": true,
+          "visible_when": {
+            "param": "qual_mode",
+            "values": [
+              4
+            ]
+          }
+        },
+        {
           "label": "Matte finesse",
           "params": [
             "qual_denoise",
@@ -28008,7 +28418,8 @@
             "values": [
               1,
               2,
-              3
+              3,
+              4
             ]
           }
         },

@@ -6,6 +6,7 @@
 //! reads the same struct written out by [`Packed::words`] and [`Packed::data`],
 //! so neither path redoes any of it.
 
+use super::hdr::{Hdr, HDR_WORDS};
 use super::Correction;
 use crate::fx::cpu;
 use crate::fx::params::CurvePoints;
@@ -39,7 +40,7 @@ pub const HUE_FLAT: [[f32; 2]; 2] = [[0.0, 0.5], [1.0, 0.5]];
 /// The qualifier, ready to key with.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Qualifier {
-    /// 0 off, 1 HSL, 2 RGB, 3 Luma.
+    /// 0 off, 1 HSL, 2 RGB, 3 Luma, 4 3D.
     pub mode: u32,
     /// The hue centre, in turns from red.
     pub hue: f32,
@@ -65,6 +66,16 @@ pub struct Qualifier {
     pub denoise_px: f32,
     pub blur_px: f32,
     pub grow_px: f32,
+    /// The 3D key's samples as `Y, Cb, Cr`, the first `samples[0]` kept and
+    /// the first `samples[1]` dropped.
+    pub keep_at: [[f32; 3]; SHAPE_MAX_POINTS],
+    pub drop_at: [[f32; 3]; SHAPE_MAX_POINTS],
+    pub samples: [u32; 2],
+    /// How far round a sample the 3D key reaches, and its softness, in
+    /// `Y, Cb, Cr` distance with luma counted at half.
+    pub reach: [f32; 2],
+    /// Where the samples start in [`Packed::data`], kept then dropped.
+    pub samples_at: u32,
 }
 
 /// One window, ready to draw.
@@ -136,12 +147,13 @@ pub struct Packed {
     pub hue_curves_on: bool,
     pub qual: Qualifier,
     pub windows: [Window; 4],
+    pub hdr: Hdr,
     /// The [`TABLES`] curve tables, then the window outlines.
     pub data: Vec<f32>,
 }
 
 /// How many `vec4`s [`Packed::words`] writes: the WGSL `Params` struct.
-pub const WORDS: usize = 24 + 5 * 4;
+pub const WORDS: usize = 24 + 5 * 4 + HDR_WORDS + 2;
 
 impl Packed {
     /// Whether the qualifier keys anything.
@@ -211,6 +223,13 @@ impl Packed {
             [q.clean[0], q.clean[1], q.clip[0], q.clip[1]],
             [b(self.qualifier_on()), b(matte), b(self.windows_on()), 0.0],
         ];
+        out[58] = [
+            q.samples_at as f32,
+            q.samples[0] as f32,
+            q.samples[1] as f32,
+            0.0,
+        ];
+        out[59] = [q.reach[0], q.reach[1], 0.0, 0.0];
         out[..24].copy_from_slice(&head);
         for (i, w) in self.windows.iter().enumerate() {
             let flags = b(w.invert) + 2.0 * b(w.subtract);
@@ -221,8 +240,23 @@ impl Packed {
             out[at + 3] = w.bbox;
             out[at + 4] = [w.poly[0] as f32, w.poly[1] as f32, 0.0, 0.0];
         }
+        out[44..58].copy_from_slice(&self.hdr.words());
         out
     }
+}
+
+/// How far apart two 3D samples are at Size 100.
+pub const REACH: f32 = 0.25;
+
+/// A 3D key's samples from its two Shape rows: Cb and Cr doubled in the
+/// first, luma first in the second.
+fn samples(chroma: &ShapePoints, luma: &ShapePoints) -> [[f32; 3]; SHAPE_MAX_POINTS] {
+    let mut out = [[0.0; 3]; SHAPE_MAX_POINTS];
+    for (i, (slot, c)) in out.iter_mut().zip(chroma.points()).enumerate() {
+        let y = luma.points().get(i).map_or(0.0, |p| p[0]);
+        *slot = [y, 0.5 * c[0], 0.5 * c[1]];
+    }
+    out
 }
 
 /// Hue curves bake round the circle: the point at hue 1 is the point at hue
@@ -494,7 +528,7 @@ impl Correction {
         }
 
         let q = Qualifier {
-            mode: if self.qual_mode <= 3 {
+            mode: if self.qual_mode <= 4 {
                 self.qual_mode
             } else {
                 0
@@ -528,7 +562,17 @@ impl Correction {
             denoise_px: (self.qual_denoise / 100.0).clamp(0.0, 1.0) * DENOISE_PX * px_scale,
             blur_px: self.qual_blur.max(0.0),
             grow_px: self.qual_grow,
+            keep_at: samples(&self.qual_3d_keep, &self.qual_3d_keep_luma),
+            drop_at: samples(&self.qual_3d_drop, &self.qual_3d_drop_luma),
+            samples: [self.qual_3d_keep.len(), self.qual_3d_drop.len()].map(|n| n as u32),
+            reach: [self.qual_3d_size, self.qual_3d_soft].map(|v| REACH * v.max(0.0) / 100.0),
+            samples_at: data.len() as u32,
         };
+        for (at, n) in [(&q.keep_at, q.samples[0]), (&q.drop_at, q.samples[1])] {
+            for s in at.iter().take(n as usize) {
+                data.extend_from_slice(s);
+            }
+        }
 
         let mut pk = Packed {
             space: if self.space <= 2 { self.space } else { 0 },
@@ -560,6 +604,7 @@ impl Correction {
             hue_curves_on,
             qual: q,
             windows,
+            hdr: Hdr::of(self),
             data,
         };
         pk.neutral = pk.mix == 0.0 || pk.at_rest();
@@ -589,5 +634,6 @@ impl Packed {
             && !self.curves_on
             && self.knees == [0.0, 1.0]
             && !self.hue_curves_on
+            && !self.hdr.on
     }
 }

@@ -18,6 +18,11 @@ struct Win {
     e: vec4<f32>,  // outline start, outline count
 };
 
+struct Zone {
+    a: vec4<f32>,  // balance rgb (stops), exposure (stops)
+    b: vec4<f32>,  // range (stops from grey), saturation factor
+};
+
 struct Params {
     g0: vec4<f32>,         // space, mix, lum mix, key on
     pre_gain: vec4<f32>,   // rgb; w = midtone detail on
@@ -44,6 +49,11 @@ struct Params {
     q6: vec4<f32>,         // clean low, clean high, clip low, clip high
     k0: vec4<f32>,         // qualifier on, matte on, windows on
     win: array<Win, 4>,
+    h0: vec4<f32>,         // hdr on, falloff, black offset
+    h_bal: vec4<f32>,      // global balance, stops
+    zone: array<Zone, 6>,  // Black, Dark, Shadow, Light, Highlight, Specular
+    q7: vec4<f32>,         // 3D samples' start in data, kept, dropped
+    q8: vec4<f32>,         // 3D size, softness
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -172,6 +182,18 @@ fn table_at(t: i32, x: f32) -> f32 {
     return a + (entry(t, i + 1) - a) * f;
 }
 
+// The most a 3D sample run (n samples from data[at], Y Cb Cr each) keys c.
+fn near_most(c: vec3<f32>, at: u32, n: u32) -> f32 {
+    var most = 0.0;
+    for (var i = 0u; i < n; i = i + 1u) {
+        let k = at + 3u * i;
+        let d = vec3<f32>(0.5 * (c.x - data[k]), c.y - data[k + 1u], c.z - data[k + 2u]);
+        let dd = sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        most = max(most, 1.0 - ss(p.q8.x, p.q8.x + p.q8.y, dd));
+    }
+    return most;
+}
+
 fn qualify(v: vec3<f32>) -> f32 {
     let mode = i32(p.q0.x);
     var k = 1.0;
@@ -199,6 +221,15 @@ fn qualify(v: vec3<f32>) -> f32 {
             * band(v.b, p.q4.z, p.q5.z, p.q4.w);
     } else if (mode == 3) {
         k = band(luma(v), p.q3.x, p.q3.y, p.q3.z);
+    } else if (mode == 4) {
+        let c = ycc(v);
+        let at = u32(p.q7.x);
+        let kept = u32(p.q7.y);
+        var keep = 1.0;
+        if (kept > 0u) {
+            keep = near_most(c, at, kept);
+        }
+        k = keep * (1.0 - near_most(c, at + 3u * kept, u32(p.q7.z)));
     }
     k = clamp((k - p.q6.x) / (p.q6.y - p.q6.x), 0.0, 1.0);
     return min(max(k, p.q6.z), p.q6.w);
@@ -310,11 +341,52 @@ fn v_in(o: vec4<f32>, space: i32) -> vec3<f32> {
     return vec3<f32>(encode(u.r, space), encode(u.g, space), encode(u.b, space));
 }
 
+// == hdr::weight.
+fn zone_weight(i: i32, s: f32, range: f32, width: f32) -> f32 {
+    if (i < 3) {
+        return 1.0 - ss(range - width, range, s);
+    }
+    return ss(range, range + width, s);
+}
+
+// == hdr::zones: the HDR zones over a scene-linear colour.
+fn hdr(u: vec3<f32>) -> vec3<f32> {
+    let y = luma(u);
+    let s = clamp(log2(max(y, 0.18 * exp2(-16.0)) / 0.18), -16.0, 16.0);
+    var b = p.h_bal.rgb;
+    var e = 0.0;
+    var sat = 1.0;
+    for (var i = 0; i < 6; i = i + 1) {
+        let z = p.zone[i];
+        let w = zone_weight(i, s, z.b.x, p.h0.y);
+        let we = zone_weight(i, s, z.b.x, max(p.h0.y, 1.5 * abs(z.a.w)));
+        b = b + w * z.a.rgb;
+        e = e + we * z.a.w;
+        sat = sat + w * (z.b.y - 1.0);
+    }
+    sat = max(sat, 0.0);
+    var t = u * exp2(b);
+    let lt = luma(t);
+    if (y > 0.0 && lt > 0.0) {
+        t = t * (y / lt);
+    }
+    let gain = exp2(e);
+    var out: vec3<f32>;
+    for (var c = 0; c < 3; c = c + 1) {
+        let v = (y + sat * (t[c] - y)) * gain;
+        out[c] = v + p.h0.z * (1.0 - ss(0.0, 0.18, v));
+    }
+    return out;
+}
+
 fn grade(o: vec4<f32>, key: f32, detail: f32) -> vec4<f32> {
     let space = i32(p.g0.x);
     let u = unpremult(o);
     let vin = vec3<f32>(encode(u.r, space), encode(u.g, space), encode(u.b, space));
-    let ug = u * p.pre_gain.rgb;
+    var ug = u * p.pre_gain.rgb;
+    if (p.h0.x != 0.0) {
+        ug = hdr(ug);
+    }
     var v = vec3<f32>(encode(ug.r, space), encode(ug.g, space), encode(ug.b, space));
 
     // Wheels.

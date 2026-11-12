@@ -11,6 +11,7 @@
 31 Hz
 35 mm
 35 mm stills
+3D
 3D point
 4 kHz
 500 Hz
@@ -149,7 +150,12 @@ Bezier warp
 BiRefNet
 Bias
 Black and white
+Black balance
 Black clip
+Black exposure
+Black offset
+Black range
+Black saturation
 Blades
 Blend
 Blobs
@@ -382,6 +388,10 @@ Cyans
 Cycle
 Cycle evolution
 Damping
+Dark balance
+Dark exposure
+Dark range
+Dark saturation
 Darken
 Darker
 Darker colour
@@ -448,6 +458,8 @@ Draw along
 Drift
 Drive
 Drivers
+Drop sample luma
+Drop samples
 Drop shadow
 Drop the rest
 Droplets
@@ -658,6 +670,7 @@ Glass
 Glass curvature
 Glass dirt
 Glitch hit
+Global balance
 Glow
 Glow colour
 Glow distortion
@@ -703,6 +716,7 @@ Grow
 Grow max
 Grow min
 H line rel width
+HDR
 HSL
 Hairs
 Halation
@@ -727,10 +741,13 @@ High range
 High soft clip
 Highlight
 Highlight amount
+Highlight balance
 Highlight boost
 Highlight colour
 Highlight exposure
 Highlight opacity
+Highlight range
+Highlight saturation
 Highlight threshold
 Highlight tonal width
 Highlights
@@ -818,6 +835,8 @@ Jumpy
 Keep in picked
 Keep inside
 Keep luma
+Keep sample luma
+Keep samples
 Keep scale
 Key
 Key out safe
@@ -867,11 +886,15 @@ Life jitter
 Lifespan
 Lift
 Light
+Light balance
 Light colour
 Light direction
 Light distance (m)
+Light exposure
 Light flicker
 Light from
+Light range
+Light saturation
 Light size
 Light tint
 Light wrap
@@ -1394,10 +1417,14 @@ Set number
 Shade colour
 Shadow
 Shadow amount
+Shadow balance
 Shadow colour
+Shadow exposure
 Shadow highlight
 Shadow only
 Shadow opacity
+Shadow range
+Shadow saturation
 Shadow strength
 Shadow tonal width
 Shadows
@@ -1484,6 +1511,10 @@ Sparks
 Sparks from
 Spatial
 Spatial by size
+Specular balance
+Specular exposure
+Specular range
+Specular saturation
 Speed
 Speed jitter
 Speed max

@@ -185,8 +185,34 @@ fn cases(w: u32, h: u32) -> Vec<(&'static str, Correction, bool)> {
     luma.win1_points = ShapePoints::sanitised(&[[-1.0, -1.0], [1.0, -0.5], [0.0, 1.0]]);
     luma.mix = 60.0;
 
+    let mut hdr = rest();
+    hdr.hdr_falloff = 1.5;
+    hdr.hdr_balance = [0.05, 0.0, -0.05, 1.0];
+    hdr.hdr_black_offset = 0.01;
+    hdr.hdr_black_saturation = 50.0;
+    hdr.hdr_shadow_exposure = 0.7;
+    hdr.hdr_shadow_balance = [0.0, 0.1, 0.2, 1.0];
+    hdr.hdr_light_exposure = -1.2;
+    hdr.hdr_light_saturation = 140.0;
+    hdr.hdr_specular_range = 2.0;
+    hdr.hdr_specular_exposure = -2.0;
+
+    // Kept round an orange and a teal, dropped round a dark red; Y, Cb, Cr
+    // as the video space reads them.
+    let mut d3 = wheels(0);
+    d3.qual_mode = 4;
+    d3.qual_3d_keep = ShapePoints::sanitised(&[[-0.4, 0.3], [0.2, -0.3]]);
+    d3.qual_3d_keep_luma = ShapePoints::sanitised(&[[0.6, 0.0], [0.5, 0.0]]);
+    d3.qual_3d_drop = ShapePoints::sanitised(&[[-0.1, 0.4]]);
+    d3.qual_3d_drop_luma = ShapePoints::sanitised(&[[0.3, 0.0]]);
+    d3.qual_3d_size = 30.0;
+    d3.qual_3d_soft = 40.0;
+    d3.qual_blur = 1.5;
+
     vec![
         ("at rest", rest(), false),
+        ("3d qualifier", d3, false),
+        ("hdr zones", hdr, false),
         ("wheels in video", wheels(0), false),
         ("wheels in log with detail", log, false),
         ("curves and hue curves", curves, false),

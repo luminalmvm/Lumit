@@ -9,11 +9,18 @@
 //! untouched. The maths is written out in [`maths`].
 //!
 //! Combine says how the node meets the one above it in the stack. The stack
-//! reads it; this effect draws every node as Serial.
+//! reads it ([`combine`]); this effect draws every node as Serial.
+//!
+//! Row ids are fixed: the Grade panel and the solvers write them by name. The
+//! HDR twirl's rows are `hdr_*`, listed in [`hdr`]. The 3D qualifier (Qualifier
+//! 4) keys on `qual_3d_keep`, `qual_3d_keep_luma`, `qual_3d_drop`,
+//! `qual_3d_drop_luma`, `qual_3d_size` and `qual_3d_soft`, how they are stored
+//! written out in [`maths`].
 
 pub mod combine;
 pub mod cpu;
 pub mod groups;
+pub mod hdr;
 pub mod maths;
 pub mod packed;
 
@@ -35,7 +42,7 @@ pub const SPACE_OPTIONS: [&str; 3] = ["Video", "Log", "Linear"];
 pub const COMBINE_OPTIONS: [&str; 3] = ["Serial", "Parallel", "Layer"];
 
 /// What the qualifier keys on.
-pub const QUALIFIER_OPTIONS: [&str; 4] = ["Off", "HSL", "RGB", "Luma"];
+pub const QUALIFIER_OPTIONS: [&str; 5] = ["Off", "HSL", "RGB", "Luma", "3D"];
 
 /// A window's shape.
 pub const WINDOW_OPTIONS: [&str; 5] = ["Off", "Ellipse", "Rectangle", "Polygon", "Gradient"];
@@ -176,6 +183,234 @@ pub struct Correction {
     )]
     pub midtone_detail: f32,
 
+    /// The colour of the whole picture, stops a channel, luma kept.
+    #[colour(label = "Global balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_balance: [f32; 4],
+    /// Lifts or sinks the darkest level, easing into the rest, scene linear.
+    #[slider(
+        label = "Black offset",
+        min = -0.05,
+        max = 0.05,
+        default = 0.0,
+        hard_min = -0.1,
+        hard_max = 0.1,
+        unit = Raw
+    )]
+    pub hdr_black_offset: f32,
+    /// How softly every zone fades in from its range, stops.
+    #[bounded(label = "Falloff", min = 0.0, max = 4.0, default = 2.0, unit = Raw)]
+    pub hdr_falloff: f32,
+    /// The colour of the deepest blacks, stops a channel, luma kept.
+    #[colour(label = "Black balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_black_balance: [f32; 4],
+    /// Brightens or darkens the deepest blacks, stops.
+    #[slider(
+        label = "Black exposure",
+        min = -4.0,
+        max = 4.0,
+        default = 0.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_black_exposure: f32,
+    /// Colourfulness in the deepest blacks.
+    #[slider(
+        label = "Black saturation",
+        min = 0.0,
+        max = 200.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub hdr_black_saturation: f32,
+    /// Where the zone starts, stops from grey; it reaches this and below.
+    #[slider(
+        label = "Black range",
+        min = -8.0,
+        max = 8.0,
+        default = -3.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_black_range: f32,
+    /// The colour of the darks, stops a channel, luma kept.
+    #[colour(label = "Dark balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_dark_balance: [f32; 4],
+    /// Brightens or darkens the darks, stops.
+    #[slider(
+        label = "Dark exposure",
+        min = -4.0,
+        max = 4.0,
+        default = 0.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_dark_exposure: f32,
+    /// Colourfulness in the darks.
+    #[slider(
+        label = "Dark saturation",
+        min = 0.0,
+        max = 200.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub hdr_dark_saturation: f32,
+    /// Where the zone starts, stops from grey; it reaches this and below.
+    #[slider(
+        label = "Dark range",
+        min = -8.0,
+        max = 8.0,
+        default = -1.5,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_dark_range: f32,
+    /// The colour of everything below grey, stops a channel, luma kept.
+    #[colour(label = "Shadow balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_shadow_balance: [f32; 4],
+    /// Brightens or darkens everything below grey, stops.
+    #[slider(
+        label = "Shadow exposure",
+        min = -4.0,
+        max = 4.0,
+        default = 0.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_shadow_exposure: f32,
+    /// Colourfulness in everything below grey.
+    #[slider(
+        label = "Shadow saturation",
+        min = 0.0,
+        max = 200.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub hdr_shadow_saturation: f32,
+    /// Where the zone starts, stops from grey; it reaches this and below.
+    #[slider(
+        label = "Shadow range",
+        min = -8.0,
+        max = 8.0,
+        default = 1.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_shadow_range: f32,
+    /// The colour of everything above grey, stops a channel, luma kept.
+    #[colour(label = "Light balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_light_balance: [f32; 4],
+    /// Brightens or darkens everything above grey, stops.
+    #[slider(
+        label = "Light exposure",
+        min = -4.0,
+        max = 4.0,
+        default = 0.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_light_exposure: f32,
+    /// Colourfulness in everything above grey.
+    #[slider(
+        label = "Light saturation",
+        min = 0.0,
+        max = 200.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub hdr_light_saturation: f32,
+    /// Where the zone starts, stops from grey; it reaches this and above.
+    #[slider(
+        label = "Light range",
+        min = -8.0,
+        max = 8.0,
+        default = -1.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_light_range: f32,
+    /// The colour of the brights, stops a channel, luma kept.
+    #[colour(label = "Highlight balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_highlight_balance: [f32; 4],
+    /// Brightens or darkens the brights, stops.
+    #[slider(
+        label = "Highlight exposure",
+        min = -4.0,
+        max = 4.0,
+        default = 0.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_highlight_exposure: f32,
+    /// Colourfulness in the brights.
+    #[slider(
+        label = "Highlight saturation",
+        min = 0.0,
+        max = 200.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub hdr_highlight_saturation: f32,
+    /// Where the zone starts, stops from grey; it reaches this and above.
+    #[slider(
+        label = "Highlight range",
+        min = -8.0,
+        max = 8.0,
+        default = 1.5,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_highlight_range: f32,
+    /// The colour of the brightest glints, stops a channel, luma kept.
+    #[colour(label = "Specular balance", default = [0.0, 0.0, 0.0, 1.0], min = -1.0, max = 1.0)]
+    pub hdr_specular_balance: [f32; 4],
+    /// Brightens or darkens the brightest glints, stops.
+    #[slider(
+        label = "Specular exposure",
+        min = -4.0,
+        max = 4.0,
+        default = 0.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_specular_exposure: f32,
+    /// Colourfulness in the brightest glints.
+    #[slider(
+        label = "Specular saturation",
+        min = 0.0,
+        max = 200.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub hdr_specular_saturation: f32,
+    /// Where the zone starts, stops from grey; it reaches this and above.
+    #[slider(
+        label = "Specular range",
+        min = -8.0,
+        max = 8.0,
+        default = 4.0,
+        hard_min = -16.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
+    pub hdr_specular_range: f32,
+
     /// What red is made of.
     #[colour(label = "Red output", default = [1.0, 0.0, 0.0, 1.0], min = -2.0, max = 2.0)]
     pub mixer_red: [f32; 4],
@@ -302,6 +537,24 @@ pub struct Correction {
     /// How far past each range the key fades.
     #[bounded(label = "Softness", min = 0.0, max = 100.0, default = 10.0, unit = Percent)]
     pub qual_rgb_soft: f32,
+    /// The colours a 3D key keeps: Cb and Cr, doubled, one point a sample.
+    #[shape(label = "Keep samples")]
+    pub qual_3d_keep: ShapePoints,
+    /// Each kept sample's luma, as the first number of its point.
+    #[shape(label = "Keep sample luma")]
+    pub qual_3d_keep_luma: ShapePoints,
+    /// The colours a 3D key leaves out, as the kept ones are stored.
+    #[shape(label = "Drop samples")]
+    pub qual_3d_drop: ShapePoints,
+    /// Each dropped sample's luma, as the first number of its point.
+    #[shape(label = "Drop sample luma")]
+    pub qual_3d_drop_luma: ShapePoints,
+    /// How far round each sample the 3D key reaches.
+    #[bounded(label = "Size", min = 0.0, max = 100.0, default = 20.0, unit = Raw)]
+    pub qual_3d_size: f32,
+    /// How far past Size the 3D key fades.
+    #[bounded(label = "Softness", min = 0.0, max = 100.0, default = 20.0, unit = Raw)]
+    pub qual_3d_soft: f32,
     /// Softens the picture the key is judged on.
     #[bounded(label = "Denoise", min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
     pub qual_denoise: f32,
