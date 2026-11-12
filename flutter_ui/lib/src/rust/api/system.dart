@@ -6,6 +6,10 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `card_memory`, `free_memory_bytes`, `low_memory_floor`, `memory_low`, `short_of_memory`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Card`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+
 /// What this process is actually holding, in bytes, or 0 where it cannot be
 /// asked — the number the operating system's own monitor shows.
 ///
@@ -31,12 +35,29 @@ int residentMemoryBytes() =>
 int systemMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemSystemMemoryBytes();
 
+/// Whether this computer is running on battery or saving power, which on a
+/// laptop holds the graphics card at low clocks: a frame that takes a few
+/// milliseconds plugged in can take ten times that. The status line says so,
+/// because somebody whose editor is slow rarely suspects the power plan.
+///
+/// Windows: on battery, or Battery saver on (`GetSystemPowerStatus`). Linux:
+/// a mains supply reporting offline beside a battery, or the platform
+/// profile at `low-power`. False elsewhere and where it cannot be asked.
+bool powerSaving() => BridgeLib.instance.api.crateApiSystemPowerSaving();
+
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
-/// On Windows, the *first* adapter DXGI enumerates, which is the one the
-/// renderer takes too. A machine with a discrete card behind an integrated one
-/// would report the integrated adapter's memory; that is a smaller ceiling than
-/// the truth, which errs the safe way for a budget.
+/// On Windows, the dedicated memory of the adapter the renderer opened, matched
+/// by its PCI ids ([`lumit_gpu::adapter_ids`]); before the renderer has opened
+/// one, the hardware adapter with the most, which is the one it asks for.
+///
+/// It used to be the *first* adapter DXGI enumerates. On a laptop with an
+/// integrated card and a discrete one (an Intel UHD and an Nvidia MX, say) the
+/// first is the integrated card, whose dedicated memory is a token 128 MB,
+/// while the renderer draws on the discrete one. The governor then held a 2 GB
+/// card to about 90 MB, and every frame ran the degradation ladder: work
+/// refused, frames tiled, kernels sent to the processor. That is not "errs the
+/// safe way", it is a machine made many times slower than it is.
 ///
 /// macOS and Linux answer through the graphics API the engine already links —
 /// Metal's recommended working-set size, or the largest device-local Vulkan

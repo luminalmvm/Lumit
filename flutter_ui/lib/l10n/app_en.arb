@@ -11138,6 +11138,14 @@
   "@tipStopAnimating": {
     "description": "Tooltip on the stopwatch when the property is already animated. One or two words."
   },
+  "tipPowerSaving": "This computer is on battery or saving power, which slows the graphics card. Plug it in and choose the best performance power mode.",
+  "@tipPowerSaving": {
+    "description": "Tooltip on the Power saving word in the bottom strip."
+  },
+  "powerSaving": "Power saving",
+  "@powerSaving": {
+    "description": "Word in the bottom strip while the laptop is on battery or in a power saver mode. One or two words."
+  },
   "tipStopMeasuring": "Stop measuring",
   "@tipStopMeasuring": {
     "description": "Tooltip on the hourglass in the bottom strip, when measuring is on. One or two words."

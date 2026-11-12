@@ -145,6 +145,9 @@ features = [
     "Win32_Media",
     # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
     "Win32_Storage_FileSystem",
+    # `GetSystemPowerStatus`, so the status line can say the laptop is on
+    # battery or saving power (`power_saving`).
+    "Win32_System_Power",
 ]
 
 # The live endpoint's pipe. The browser build has no other programs to talk to.

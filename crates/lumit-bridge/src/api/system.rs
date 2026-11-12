@@ -264,6 +264,59 @@ pub(crate) fn free_memory_bytes() -> u64 {
     }
 }
 
+/// Whether this computer is running on battery or saving power, which on a
+/// laptop holds the graphics card at low clocks: a frame that takes a few
+/// milliseconds plugged in can take ten times that. The status line says so,
+/// because somebody whose editor is slow rarely suspects the power plan.
+///
+/// Windows: on battery, or Battery saver on (`GetSystemPowerStatus`). Linux:
+/// a mains supply reporting offline beside a battery, or the platform
+/// profile at `low-power`. False elsewhere and where it cannot be asked.
+#[frb(sync)]
+pub fn power_saving() -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+        let mut status = SYSTEM_POWER_STATUS::default();
+        // SAFETY: a zeroed, correctly sized struct the call fills; the result
+        // is checked before it is read.
+        if unsafe { GetSystemPowerStatus(&mut status) }.is_err() {
+            return false;
+        }
+        // 0 is offline (on battery), 1 online, 255 unknown; flag 1 is
+        // Battery saver.
+        status.ACLineStatus == 0 || status.SystemStatusFlag == 1
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let read = |path: std::path::PathBuf| {
+            std::fs::read_to_string(path)
+                .map(|s| s.trim().to_owned())
+                .unwrap_or_default()
+        };
+        if read("/sys/firmware/acpi/platform_profile".into()) == "low-power" {
+            return true;
+        }
+        let Ok(supplies) = std::fs::read_dir("/sys/class/power_supply") else {
+            return false;
+        };
+        let (mut battery, mut mains_off) = (false, false);
+        for supply in supplies.flatten() {
+            let path = supply.path();
+            match read(path.join("type")).as_str() {
+                "Battery" => battery = true,
+                "Mains" => mains_off |= read(path.join("online")) == "0",
+                _ => {}
+            }
+        }
+        battery && mains_off
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        false
+    }
+}
+
 /// One `/proc/meminfo` figure in bytes, or 0.
 #[cfg(target_os = "linux")]
 fn meminfo_bytes(field: &str) -> u64 {
