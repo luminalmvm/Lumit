@@ -328,15 +328,102 @@ pub fn scan_reporting(
         .iter()
         .flat_map(|dir| bundle::scan_dir(dir))
         .collect();
+    let file = EMPTY_FILE.lock().ok().and_then(|slot| slot.clone());
+    let mut known = match (&file, options.hosting) {
+        (Some(file), Hosting::Broker) => Some((KnownEmpty::load(file), false)),
+        _ => None,
+    };
     for (index, binary) in binaries.iter().enumerate() {
         bundle(binary, index, binaries.len());
         match options.hosting {
-            Hosting::Broker => scan_through_broker(binary, options, register, &mut outcome),
+            Hosting::Broker => {
+                scan_through_broker(binary, options, register, &mut outcome, &mut known);
+            }
             Hosting::InProcess => scan_in_process(binary, options, register, &mut outcome),
         }
     }
+    if let (Some(file), Some((list, true))) = (&file, &known) {
+        list.save(file);
+    }
     renote_paths();
     outcome
+}
+
+/// Where the bundles that held nothing this host can drive are remembered
+/// between sessions, once the frontend has said ([`remember_empty_bundles_in`]).
+static EMPTY_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Remember the bundles a scan found holding no effect this host can drive
+/// in `file`, so the next session's scan does not start a broker for them.
+///
+/// A machine with another editor's plugin folder installed (a colour suite,
+/// a transitions pack) can hold dozens of bundles Lumit cannot use, and each
+/// one cost a process started, a library loaded off the disk and a describe,
+/// at every start, only to be refused again. A bundle is known by its path,
+/// its size and when it was written, and the list by the Lumit version that
+/// made it, so a changed bundle or a new Lumit asks it again. Only a bundle
+/// that answered and offered nothing is remembered: one that would not start
+/// or timed out may only have been slow this once.
+pub fn remember_empty_bundles_in(file: PathBuf) {
+    if let Ok(mut slot) = EMPTY_FILE.lock() {
+        *slot = Some(file);
+    }
+}
+
+/// The remembered list: the Lumit version that wrote it and each bundle's
+/// `(size, written)` by path.
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+struct KnownEmpty {
+    version: String,
+    bundles: BTreeMap<String, (u64, u128)>,
+}
+
+impl KnownEmpty {
+    fn load(file: &std::path::Path) -> Self {
+        std::fs::read(file)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<KnownEmpty>(&bytes).ok())
+            .filter(|known| known.version == env!("CARGO_PKG_VERSION"))
+            .unwrap_or_else(|| KnownEmpty {
+                version: env!("CARGO_PKG_VERSION").to_owned(),
+                bundles: BTreeMap::new(),
+            })
+    }
+
+    fn save(&self, file: &std::path::Path) {
+        if let Ok(bytes) = serde_json::to_vec(self) {
+            if let Some(dir) = file.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(file, bytes);
+        }
+    }
+
+    fn holds(&self, binary: &std::path::Path) -> bool {
+        stamp(binary).is_some_and(|now| {
+            self.bundles.get(&binary.to_string_lossy().into_owned()) == Some(&now)
+        })
+    }
+
+    fn note(&mut self, binary: &std::path::Path) {
+        if let Some(now) = stamp(binary) {
+            self.bundles
+                .insert(binary.to_string_lossy().into_owned(), now);
+        }
+    }
+}
+
+/// A binary's size and when it was last written, in nanoseconds since the
+/// epoch, or `None` where the file cannot be read.
+fn stamp(binary: &std::path::Path) -> Option<(u64, u128)> {
+    let meta = std::fs::metadata(binary).ok()?;
+    let written = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    Some((meta.len(), written))
 }
 
 /// One bundle, hosted in a broker process of its own.
@@ -345,7 +432,15 @@ fn scan_through_broker(
     options: &ScanOptions,
     register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,
     outcome: &mut ScanOutcome,
+    known: &mut Option<(KnownEmpty, bool)>,
 ) {
+    if known.as_ref().is_some_and(|(list, _)| list.holds(binary)) {
+        outcome.skipped.push(skip_line(
+            binary,
+            "it holds no effect this host can drive (as at the last scan)",
+        ));
+        return;
+    }
     let mut broker = match Broker::spawn(BrokerConfig::new(binary, SCAN_FRAME)) {
         Ok(broker) => broker,
         Err(error) => {
@@ -367,6 +462,10 @@ fn scan_through_broker(
         outcome
             .skipped
             .push(skip_line(binary, "it holds no effect this host can drive"));
+        if let Some((list, changed)) = known.as_mut() {
+            list.note(binary);
+            *changed = true;
+        }
         return;
     }
     let shared = Arc::new(SharedBroker::new(broker));
@@ -556,4 +655,40 @@ fn known(match_name: &str) -> bool {
 /// One line of the scan report: which bundle, and what happened.
 fn skip_line(binary: &std::path::Path, why: &str) -> String {
     format!("{}: {why}", binary.display())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod known_empty_tests {
+    use super::KnownEmpty;
+
+    /// A bundle remembered as empty is skipped while it is unchanged, asked
+    /// again once it changes, and the list is dropped by another version.
+    #[test]
+    fn a_remembered_bundle_is_known_until_it_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let binary = dir.path().join("empty.ofx");
+        std::fs::write(&binary, b"one").unwrap();
+        let file = dir.path().join("known.json");
+
+        let mut list = KnownEmpty::load(&file);
+        assert!(!list.holds(&binary));
+        list.note(&binary);
+        list.save(&file);
+        assert!(KnownEmpty::load(&file).holds(&binary));
+
+        std::fs::write(&binary, b"changed").unwrap();
+        assert!(
+            !KnownEmpty::load(&file).holds(&binary),
+            "a changed bundle is asked again"
+        );
+
+        list.note(&binary);
+        list.version = "0.0.0".to_owned();
+        list.save(&file);
+        assert!(
+            !KnownEmpty::load(&file).holds(&binary),
+            "another version's list is dropped"
+        );
+    }
 }
