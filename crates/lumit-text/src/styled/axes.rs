@@ -41,7 +41,8 @@ pub(super) fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block
     // The shaper's own advances, which a font without an advance table still
     // varies through its outlines' end points, the way it shaped the line.
     let base_shaper = harfrust::ShaperFont::new(&face.shaper);
-    let mut keys: Vec<Vec<([u8; 4], i32)>> = Vec::new();
+    let mut keys: std::collections::HashMap<Vec<([u8; 4], i32)>, usize> =
+        std::collections::HashMap::new();
     // The width each letter gains, by its place in `laid.glyphs`.
     let mut gains = vec![0.0f32; laid.glyphs.len()];
     let base = |tag: [u8; 4]| face.place_on(tag).unwrap_or(f32::NAN);
@@ -58,13 +59,10 @@ pub(super) fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block
             continue;
         }
         let key = place_key(&moves);
-        let place = if let Some(i) = keys.iter().position(|k| *k == key) {
-            i
-        } else {
-            keys.push(key);
+        let place = *keys.entry(key).or_insert_with(|| {
             laid.places.push(face.varied(&moves));
             laid.places.len() - 1
-        };
+        });
         glyph.place = Some(place);
         let Some(varied) = laid.places.get(place) else {
             continue;
