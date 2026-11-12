@@ -252,6 +252,16 @@ pub struct TrackSettings {
     /// Live tracks in a bucket below which the bucket is detected into again
     /// (§2's re-detection).
     pub redetect_below: usize,
+    /// Pyramid levels a track is refined through once the frame's own motion
+    /// has been measured from a sample of tracks, or a flow seed handed in.
+    /// Zero follows every track through all [`Self::levels`] from its own
+    /// constant-speed guess, which is what the camera solve has always done.
+    pub seeded_levels: usize,
+    /// Whether a patch may stretch and turn as it is followed (the affine
+    /// warp the zoom detector reads) or only slide. A slide is a third of the
+    /// arithmetic, and enough wherever the frame's motion is fitted from
+    /// hundreds of patches rather than read off one.
+    pub affine: bool,
 }
 
 impl Default for TrackSettings {
@@ -270,6 +280,8 @@ impl Default for TrackSettings {
             ncc_floor: 0.8,
             ncc_refresh: 0.95,
             redetect_below: 1,
+            seeded_levels: 0,
+            affine: true,
         }
     }
 }
