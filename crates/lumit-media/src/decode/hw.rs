@@ -101,25 +101,80 @@ unsafe impl Sync for Shared {}
 /// half of the NVIDIA driver is often a package of its own.
 #[cfg(target_os = "linux")]
 fn find_device() -> Option<Shared> {
+    let mut why = Vec::new();
     let cuda = ffi::AV_HWDEVICE_TYPE_CUDA;
-    if crate::vaapi::loads(&["libcuda.so.1", "libnvcuvid.so.1"]).is_ok() {
-        if let Ok(device) = AVHWDeviceContext::create(cuda, None, None, 0) {
-            return Some(Shared(device, cuda));
-        }
+    say("hardware decode: trying cuda");
+    match crate::vaapi::loads(&["libcuda.so.1", "libnvcuvid.so.1"]) {
+        Ok(()) => match AVHWDeviceContext::create(cuda, None, None, 0) {
+            Ok(device) => {
+                say("hardware decode: cuda");
+                return Some(Shared(device, cuda));
+            }
+            Err(e) => why.push(format!("cuda: {e}")),
+        },
+        Err(e) => why.push(e),
     }
     let vaapi = ffi::AV_HWDEVICE_TYPE_VAAPI;
-    crate::vaapi::libva_loads().ok()?;
-    // Only the render node, so FFmpeg never falls back to libva's X11 half.
-    let drm = rsmpeg::avutil::AVDictionary::new(c"connection_type", c"drm", 0);
-    (128..192).find_map(|n| {
-        let node = format!("/dev/dri/renderD{n}");
-        if !std::path::Path::new(&node).exists() {
-            return None;
+    say("hardware decode: trying vaapi");
+    match crate::vaapi::libva_loads() {
+        Ok(()) => {
+            // Only the render node, so FFmpeg never falls back to libva's X11 half.
+            let drm = rsmpeg::avutil::AVDictionary::new(c"connection_type", c"drm", 0);
+            let found = (128..192).find_map(|n| {
+                let node = format!("/dev/dri/renderD{n}");
+                if !std::path::Path::new(&node).exists() {
+                    return None;
+                }
+                let path = std::ffi::CString::new(node.clone()).ok()?;
+                let device = AVHWDeviceContext::create(vaapi, Some(&path), Some(&drm), 0).ok()?;
+                Some((Shared(device, vaapi), node))
+            });
+            if let Some((shared, node)) = found {
+                say(&format!("hardware decode: vaapi ({node})"));
+                return Some(shared);
+            }
+            why.push("vaapi: no render node opened".into());
         }
-        let path = std::ffi::CString::new(node).ok()?;
-        let device = AVHWDeviceContext::create(vaapi, Some(&path), Some(&drm), 0).ok()?;
-        Some(Shared(device, vaapi))
-    })
+        Err(e) => why.push(e.to_string()),
+    }
+    say(&format!("hardware decode: none ({})", why.join("; ")));
+    None
+}
+
+/// One line to whoever [`super::report_hardware_to`] named.
+fn say(line: &str) {
+    if let Some(sink) = super::HARDWARE_REPORT.get() {
+        sink(line);
+    }
+}
+
+/// [`say`], once for each line. Capped, since an error can name a frame.
+fn say_once(line: String) {
+    static SAID: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let new = {
+        let mut said = SAID.lock().unwrap_or_else(PoisonError::into_inner);
+        let new = said.len() < 32 && !said.contains(&line);
+        if new {
+            said.push(line.clone());
+        }
+        new
+    };
+    if new {
+        say(&line);
+    }
+}
+
+/// A kind of stream by name, as "cuda h264 yuv422p10le".
+fn kind_name((device, codec, format): Kind) -> String {
+    let device = rsmpeg::avutil::hwdevice_get_type_name(device).map(|n| n.to_string_lossy());
+    let codec = AVCodec::find_decoder(codec).map(|c| c.name().to_string_lossy().into_owned());
+    let format = rsmpeg::avutil::get_pix_fmt_name(format).map(|n| n.to_string_lossy());
+    format!(
+        "{} {} {}",
+        device.unwrap_or_default(),
+        codec.unwrap_or_default(),
+        format.unwrap_or_default()
+    )
 }
 
 /// Whether a device of this type is offered the stream: a layout it can hand
@@ -294,6 +349,12 @@ impl VideoDecoder {
             .flatten();
         let agrees = same_samples(planar.as_ref().unwrap_or(frame), &theirs);
         judge(kind, agrees);
+        let said = if agrees {
+            "agrees"
+        } else {
+            "disagrees, using software"
+        };
+        say(&format!("hardware decode: {} {said}", kind_name(kind)));
         if agrees {
             Ok(())
         } else {
@@ -318,6 +379,7 @@ impl VideoDecoder {
         let device = device_type(&self.decoder);
         let kind = (self.decoder.codec_id, self.decoder.sw_pix_fmt);
         self.drop_to_software()?;
+        say_once(format!("hardware decode: dropped to software: {err}"));
         let frame = self.decode_exact_once(n)?;
         if let Some(device) = device.filter(|d| *d != ffi::AV_HWDEVICE_TYPE_D3D11VA) {
             let kind = (device, kind.0, kind.1);

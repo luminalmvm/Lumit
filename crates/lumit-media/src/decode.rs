@@ -215,6 +215,16 @@ pub fn set_hardware_decode(allow: bool) {
     HARDWARE_DECODE.store(allow, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Where hardware decode says which device it found, what each check against
+/// software found, and why it stepped back to software.
+static HARDWARE_REPORT: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
+
+/// Send hardware decode's diagnostic lines to `sink`. The bridge sets it, so
+/// they reach the file a bug report is asked for.
+pub fn report_hardware_to(sink: fn(&str)) {
+    let _ = HARDWARE_REPORT.set(sink);
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl VideoDecoder {
     pub fn open(src: impl Into<MediaSource>, index: FrameIndex) -> Result<Self, MediaError> {
