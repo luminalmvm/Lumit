@@ -101,8 +101,8 @@ double logSliderTravel(double value, double min, double max) {
 const double effectCellWidth = 78;
 
 /// How many characters a choice's option can hold and still read whole in the
-/// ordinary dropdown.
-const int _longChoice = 18;
+/// ordinary dropdown. A longer one takes the column.
+const int _longChoice = 15;
 
 /// The gap between a value well and whatever rides beside it — the mockup's
 /// own 6 (§12A.3).
