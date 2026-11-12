@@ -290,3 +290,85 @@ fn wgsl_correction_matches_the_cpu_oracle() {
         assert_eq!(gpu, run(), "{name}: the GPU Correction must be bit-stable");
     }
 }
+
+/// CDL and the colour warper against their CPU twins: a graded case each,
+/// and at rest the picture untouched.
+#[test]
+fn wgsl_cdl_and_warper_match_the_cpu_oracle() {
+    use lumit_core::fx::effects::{cdl::Cdl, colour_warper::ColourWarper};
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (48u32, 32u32);
+    let img = picture(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    let mut cdl = Cdl::read(Params::EMPTY);
+    cdl.space = 1;
+    cdl.slope = [1.1, 0.95, 1.05, 1.0];
+    cdl.offset = [0.02, -0.01, 0.0, 1.0];
+    cdl.power = [0.9, 1.0, 1.2, 1.0];
+    cdl.saturation = 0.8;
+    cdl.mix = 80.0;
+    let mut warp = ColourWarper::read(Params::EMPTY);
+    warp.resolution = 1;
+    let mut moves = vec![[0.02, -0.01]];
+    for i in 0..24 {
+        let a = i as f32 * 0.7;
+        moves.push([0.08 * a.sin(), 0.06 * (1.3 * a).cos()]);
+    }
+    warp.points = ShapePoints::sanitised(&moves);
+    warp.strength = 90.0;
+    let mut warp_luma = warp;
+    warp_luma.resolution = 0;
+    warp_luma.keep_luma = false;
+
+    let words = |name: &str| match name {
+        "cdl" => (cdl.packed().words(), cdl.packed().neutral),
+        "warper" => (warp.packed().words(), warp.packed().neutral),
+        _ => (warp_luma.packed().words(), warp_luma.packed().neutral),
+    };
+    let cpu_of = |name: &str| {
+        let mut out = img.clone();
+        for px in out.chunks_exact_mut(4) {
+            let o = [px[0], px[1], px[2], px[3]];
+            let v = match name {
+                "cdl" => cdl.packed().pixel(o),
+                "warper" => warp.packed().pixel(o),
+                _ => warp_luma.packed().pixel(o),
+            };
+            px.copy_from_slice(&v);
+        }
+        out
+    };
+    for name in ["cdl", "warper", "warper without keep luma"] {
+        let (words, neutral) = words(name);
+        assert!(!neutral, "{name}: graded rows must not read as rest");
+        let cpu = cpu_of(name);
+        let run = || {
+            let out = if name == "cdl" {
+                fx.cdl(&ctx, &tex, w, h, &words)
+            } else {
+                fx.colour_warper(&ctx, &tex, w, h, &words)
+            };
+            readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+        let gpu = run();
+        assert!(
+            cpu.iter().zip(&img).any(|(a, b)| (a - b).abs() > 1e-2),
+            "{name}: the grade must change the picture"
+        );
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+            .fold(0.0f32, f32::max);
+        assert!(worst < 1e-2, "{name}: worst difference {worst}");
+        assert!(gpu.iter().all(|v| v.is_finite()), "{name}: not finite");
+        assert_eq!(gpu, run(), "{name}: must be bit-stable");
+    }
+    assert!(Cdl::read(Params::EMPTY).packed().neutral);
+    assert!(ColourWarper::read(Params::EMPTY).packed().neutral);
+}

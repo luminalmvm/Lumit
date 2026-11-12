@@ -217,6 +217,7 @@ Burst interval
 Bursts
 By strength
 Bypass
+CDL
 Camera
 Camera kick
 Camera track
@@ -314,6 +315,7 @@ Colour noise
 Colour overlay
 Colour ramp
 Colour variation
+Colour warper
 Colours
 Column mix
 Column widths
@@ -483,6 +485,7 @@ Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Eight hues
 Ektachrome 100
 Ektar 100
 Electric
@@ -1452,6 +1455,7 @@ Simulation
 Sine
 Single
 Single layer, straw
+Six hues
 Size
 Size by
 Size from

@@ -29,6 +29,8 @@ pub mod environment;
 /// Film's passes, built on first use.
 pub mod film;
 pub mod generate;
+/// CDL and the colour warper, built on first use.
+pub mod grade_fx;
 pub mod grid_lines;
 pub mod ground;
 pub mod jolt;
@@ -399,6 +401,7 @@ pub struct FxEngine {
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
     film: film::LazyFilm,
+    grade: grade_fx::LazyGrade,
     correction: correction::LazyCorrection,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer

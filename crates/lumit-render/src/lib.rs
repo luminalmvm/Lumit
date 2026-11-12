@@ -70,6 +70,7 @@ mod gpufx_correction;
 mod gpufx_crop;
 mod gpufx_denoise;
 mod gpufx_film;
+mod gpufx_grade;
 mod gpufx_jolt;
 mod gpufx_luma_fade;
 mod gpufx_particulate;
