@@ -552,6 +552,11 @@ fn sync_caches(state: &mut WorkerState) {
     // The decoded-frame pool's share of the memory report. Published on
     // the same turn as the rest, so the numbers a report adds up were all read
     // at one moment rather than across a second of drift.
+    // Short of memory: give back the colder half of the memory cache before
+    // the machine starts paging (checked at most once a second).
+    // The idle fill is not woken for it: refilling what was just given back
+    // is the opposite of the point.
+    let _ = crate::framecache::trim_if_memory_low();
     let (decoded_bytes, decoders) = state.renderer.decode_memory();
     crate::framecache::decode::publish(decoded_bytes as u64, decoders as u64);
     crate::framecache::disk::publish_pending_parks(state.disk.pending_parks() as u64);
@@ -4568,7 +4573,9 @@ fn watched<R>(
     render: impl FnOnce(&mut WorkerState, &mut WorkerResponseStream) -> R,
 ) -> R {
     state.renderer.watch_frames(true);
-    state.renderer.measure_frames(measure && crate::profiling::wanted());
+    state
+        .renderer
+        .measure_frames(measure && crate::profiling::wanted());
     let out = render(state, stream);
     state.renderer.watch_frames(false);
     state.renderer.measure_frames(false);

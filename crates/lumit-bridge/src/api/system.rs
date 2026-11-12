@@ -249,10 +249,87 @@ pub(crate) fn free_memory_bytes() -> u64 {
         }
         0
     }
-    #[cfg(not(windows))]
+    // `MemAvailable`: what can be had without swapping, which counts the page
+    // cache the kernel would give up, unlike `MemFree`.
+    #[cfg(target_os = "linux")]
+    {
+        meminfo_bytes("MemAvailable:")
+    }
+    // macOS keeps memory full of cache by design, so a "free" figure there
+    // reads low on a machine with plenty to spare; it answers "not known",
+    // and its pressure level is asked instead ([`memory_low`]).
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         0
     }
+}
+
+/// One `/proc/meminfo` figure in bytes, or 0.
+#[cfg(target_os = "linux")]
+fn meminfo_bytes(field: &str) -> u64 {
+    std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .find(|line| line.starts_with(field))
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|kb| kb.parse::<u64>().ok())
+        })
+        .map_or(0, |kb| kb * 1024)
+}
+
+/// Whether the machine is short of memory now: less free than
+/// [`low_memory_floor`] of what it has on Windows and Linux, and the system's
+/// own pressure level at warning or worse on macOS. False where it cannot be
+/// asked.
+pub(crate) fn memory_low() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // 1 normal, 2 warning, 4 critical.
+        extern "C" {
+            fn sysctlbyname(
+                name: *const std::os::raw::c_char,
+                oldp: *mut std::os::raw::c_void,
+                oldlenp: *mut usize,
+                newp: *mut std::os::raw::c_void,
+                newlen: usize,
+            ) -> std::os::raw::c_int;
+        }
+        let mut level: u32 = 0;
+        let mut len = std::mem::size_of::<u32>();
+        // SAFETY: a NUL-terminated name, a u32 the size the sysctl writes and
+        // its length, and the null/0 pair for a read; the return code is
+        // checked before the value is read.
+        let ret = unsafe {
+            sysctlbyname(
+                c"kern.memorystatus_vm_pressure_level".as_ptr(),
+                std::ptr::from_mut(&mut level).cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        ret == 0 && level >= 2
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        short_of_memory(system_memory_bytes(), free_memory_bytes())
+    }
+}
+
+/// The free memory under which the machine counts as short: a tenth of it,
+/// and never under 512 MiB. Close to what After Effects left the system by
+/// default on a small machine, and well before Windows' own low-memory
+/// signal, which comes when the page file is already busy.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn low_memory_floor(total: u64) -> u64 {
+    (total / 10).max(512 << 20)
+}
+
+/// [`memory_low`]'s rule on two figures, either of them 0 for "not known".
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn short_of_memory(total: u64, free: u64) -> bool {
+    total > 0 && free > 0 && free < low_memory_floor(total)
 }
 
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
@@ -336,6 +413,27 @@ fn card_memory(cards: &[Card], renderer: Option<(u32, u32)>) -> u64 {
         .map(|c| c.dedicated)
         .or_else(|| hardware().map(|c| c.dedicated).max())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::short_of_memory;
+
+    const GB: u64 = 1 << 30;
+    const MB: u64 = 1 << 20;
+
+    #[test]
+    fn short_is_under_a_tenth_and_never_under_half_a_gigabyte() {
+        // An 8 GB laptop at 92% has about 650 MB free: short.
+        assert!(short_of_memory(8 * GB, 650 * MB));
+        assert!(!short_of_memory(8 * GB, 1200 * MB));
+        // A small machine still keeps half a gigabyte.
+        assert!(short_of_memory(4 * GB, 450 * MB));
+        assert!(!short_of_memory(32 * GB, 4 * GB));
+        // Not known is never short.
+        assert!(!short_of_memory(0, 100 * MB));
+        assert!(!short_of_memory(8 * GB, 0));
+    }
 }
 
 #[cfg(test)]

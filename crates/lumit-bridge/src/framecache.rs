@@ -194,6 +194,17 @@ impl Cache {
         self.evict_until_fits(0);
     }
 
+    /// Give back the least recently used half of what is held, keeping the
+    /// budget. Answers whether anything went.
+    fn trim_half(&mut self) -> bool {
+        let before = self.used;
+        let budget = self.budget;
+        self.budget = before / 2;
+        self.evict_until_fits(0);
+        self.budget = budget;
+        self.used < before
+    }
+
     /// Throw away every cached frame. Keeps the configured budget and the
     /// lifetime hit/miss counters.
     fn clear(&mut self) {
@@ -516,6 +527,31 @@ pub(crate) fn size_to_machine(vram: u64, ram: u64, free: u64) {
         with_cache(|c| c.set_budget(budget.max(DEFAULT_BUDGET_BYTES)));
     }
     vram::size_to_machine(share(vram, 4));
+}
+
+/// When the machine runs short of memory, give back the least recently used
+/// half of the memory cache, as After Effects CS6 shrank its cache when the
+/// system was low on memory. Asked once a worker turn and checks the machine
+/// at most once a second.
+///
+/// The budget stays what it was: the frames come back as they are drawn
+/// again, and a machine that stays short loses half again a second later. A
+/// frame given back here is only drawn again; one left here, on a machine
+/// paging to a hard disk, stops everything.
+pub(crate) fn trim_if_memory_low() -> bool {
+    static CHECKED: Mutex<Option<web_time::Instant>> = Mutex::new(None);
+    {
+        let mut checked = CHECKED.lock().unwrap_or_else(|p| p.into_inner());
+        let now = web_time::Instant::now();
+        if checked.is_some_and(|at| now.duration_since(at) < std::time::Duration::from_secs(1)) {
+            return false;
+        }
+        *checked = Some(now);
+    }
+    if !crate::api::system::memory_low() {
+        return false;
+    }
+    with_cache(|c| c.trim_half())
 }
 
 /// Empty the cache now (Settings → Clear cache).
@@ -1131,6 +1167,26 @@ mod tests {
         assert_eq!(budget, 32);
         assert_eq!(entries, 2);
         assert_eq!(used, 32);
+    }
+
+    /// Short of memory, the least recently used half goes and the budget
+    /// stays, so the cache fills again once the machine has room.
+    #[test]
+    fn a_trim_gives_back_the_colder_half_and_keeps_the_budget() {
+        let _guard = cache_test_guard();
+        let comp = uuid::Uuid::now_v7();
+        let mut cache = Cache::new(64);
+        for (key, frame) in [(A, 0), (B, 1), (C, 2), (4, 3)] {
+            cache.put(key, entry(16, at(comp, frame, 1000)));
+        }
+        assert!(cache.get(&A).is_some());
+        assert!(cache.trim_half());
+        let (used, budget, entries, _, _) = cache.stats();
+        assert_eq!((used, budget, entries), (32, 64, 2));
+        assert!(cache.get(&A).is_some(), "the frame just used stays");
+        assert!(cache.get(&B).is_none() && cache.get(&C).is_none());
+        let mut empty = Cache::new(64);
+        assert!(!empty.trim_half(), "nothing held, nothing given back");
     }
 
     /// **The Scopes were showing the picture a frame used to be.** Reported on
