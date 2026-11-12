@@ -1278,23 +1278,30 @@ class LumitUiState extends ChangeNotifier {
     if (!on) requestFrame();
   }
 
-  /// Follows a press of Caps Lock into [viewerSuspended] while the setting
-  /// asks for it. Only the Caps Lock key itself, so the deck's mark can
-  /// suspend or resume and the next key typed leaves that alone. Never takes
-  /// the key: it only looks at the lock, which the keyboard has already
-  /// turned by the time a key down reaches here.
-  bool _capsLockWatch(KeyEvent event) {
-    if (workspace.performance.capsLockSuspends &&
-        event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.capsLock) {
-      _followLock();
-    }
+  /// Follows Caps Lock into [viewerSuspended] while the setting asks for it.
+  ///
+  /// Every key event looks at the lock, and only a *change* of the lock moves
+  /// the Viewer. Windows reports Caps Lock as a key down at each press, macOS
+  /// as a down when it locks and an up when it unlocks, and Linux can bring
+  /// the lock along with any other key; comparing the lock with the last one
+  /// seen works the same on all three. And a key typed after the deck's eye was
+  /// pressed leaves the eye's choice alone, since the lock did not change.
+  /// Never takes the key.
+  bool _capsLockWatch(KeyEvent _) {
+    if (workspace.performance.capsLockSuspends) _followLock();
     return false;
   }
 
-  void _followLock() => setViewerSuspended(HardwareKeyboard
-      .instance.lockModesEnabled
-      .contains(KeyboardLockMode.capsLock));
+  /// The lock as last seen, so only a change of it counts.
+  bool? _capsLocked;
+
+  void _followLock({bool force = false}) {
+    final locked = HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.capsLock);
+    if (!force && locked == _capsLocked) return;
+    _capsLocked = locked;
+    setViewerSuspended(locked);
+  }
 
   bool _capsLockWatching = false;
 
@@ -1305,7 +1312,7 @@ class LumitUiState extends ChangeNotifier {
       HardwareKeyboard.instance.addHandler(_capsLockWatch);
       _capsLockWatching = true;
       // A lock already on when the setting is turned on counts at once.
-      _followLock();
+      _followLock(force: true);
     } else if (!want && _capsLockWatching) {
       HardwareKeyboard.instance.removeHandler(_capsLockWatch);
       _capsLockWatching = false;

@@ -146,7 +146,7 @@ class PerformanceSettings {
         'full_res_drag_previews': fullResDragPreviews,
         'drag_resolution_limit': dragResolutionLimit,
         'wireframe_drags': wireframeDrags,
-        'caps_lock_suspends': capsLockSuspends,
+        'caps_lock_suspends_viewer': capsLockSuspends,
         'decode_at_shown_size': decodeAtShownSize,
         'hardware_decode': hardwareDecode,
         if (largestPicture != null) 'largest_picture': largestPicture,
@@ -182,7 +182,9 @@ class PerformanceSettings {
             ? j['drag_resolution_limit'] as int
             : 0,
         wireframeDrags: j['wireframe_drags'] == true,
-        capsLockSuspends: j['caps_lock_suspends'] != false,
+        // A new key: builds that had this off by default wrote false under
+        // the old one, which is not a choice anybody made.
+        capsLockSuspends: j['caps_lock_suspends_viewer'] != false,
         decodeAtShownSize: j['decode_at_shown_size'] != false,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
