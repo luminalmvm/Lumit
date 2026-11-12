@@ -49,8 +49,8 @@ The Flatpak reads the home folder and anything mounted under `/media`, `/run/med
 
 ## Importing video freezes the computer
 
-Turn off **Settings ▸ Preview and cache ▸ Hardware video decoding** and open the project
-again.
+On Windows, turn off **Settings ▸ Preview and cache ▸ Hardware video decoding** and open
+the project again.
 
 ## There is no sound
 
