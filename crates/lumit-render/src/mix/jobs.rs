@@ -65,6 +65,48 @@ pub struct AudioJob {
     /// The retime the sound plays through, for a layer or clip that isn't at
     /// its source's own speed. `None` plays the file as it is.
     pub retime: Option<Arc<Retimed>>,
+    /// Where an expression on the Volume or Pan is worked out. `None` reads
+    /// one with no layer or comp behind it.
+    pub scope: Option<Arc<ExpressionScope>>,
+}
+
+/// The layer a Volume, Pan or send level sits on, so an expression on it is
+/// read with that layer's document, comp, layer and comp time, as a picture
+/// row's is. Carried for the bake, which runs long after the walk that found
+/// the layer.
+#[derive(Clone)]
+pub struct ExpressionScope {
+    pub doc: Arc<lumit_core::model::Document>,
+    pub comp: Uuid,
+    pub layer: Uuid,
+    /// Where the layer's comp starts on the mixed timeline.
+    pub base_s: f64,
+}
+
+impl ExpressionScope {
+    /// The scope of `layer` in `comp`, whose time 0 sits at `base_s` on the
+    /// mixed timeline, ready to hang on a job or a carrier.
+    #[must_use]
+    pub fn of(
+        doc: &Arc<lumit_core::model::Document>,
+        comp: Uuid,
+        layer: Uuid,
+        base_s: f64,
+    ) -> Option<Arc<Self>> {
+        Some(Arc::new(Self {
+            doc: Arc::clone(doc),
+            comp,
+            layer,
+            base_s,
+        }))
+    }
+}
+
+/// As [`DrivenVolume`]'s: the document handle is not compared.
+impl PartialEq for ExpressionScope {
+    fn eq(&self, other: &Self) -> bool {
+        self.comp == other.comp && self.layer == other.layer && self.base_s == other.base_s
+    }
 }
 
 /// A retime the sound follows: at comp time `t` it plays source second
@@ -285,6 +327,8 @@ pub struct Carrier {
     /// through this carrier is summed and the sum read through the map, ahead
     /// of the rack. `None` on a carrier that plays at its own speed.
     pub retime: Option<std::sync::Arc<BusRetime>>,
+    /// Where an expression on this carrier's Volume or Pan is worked out.
+    pub scope: Option<Arc<ExpressionScope>>,
 }
 
 /// A retime on a whole comp's sound: what arrives through a [`Carrier`] is

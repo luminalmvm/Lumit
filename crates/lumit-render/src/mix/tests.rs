@@ -5,7 +5,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::bake::{job_bake, volume_bake};
-use super::jobs::{AudioChain, AudioJob, Carrier, ClipFade};
+use super::jobs::{AudioChain, AudioJob, Carrier, ClipFade, ExpressionScope};
 use super::mixdown::{audio_samples_through, mixdown_prepared};
 
 /// Volume baking (docs/09 §6): a static Volume is exactly its constant
@@ -32,6 +32,7 @@ fn volume_bake_static_gain_and_animated_envelope() {
         chain: None,
         clip_chain: None,
         retime: None,
+        scope: None,
     };
     let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
     assert!(env.is_none(), "static volume needs no envelope");
@@ -78,6 +79,7 @@ fn volume_bake_static_gain_and_animated_envelope() {
         fade: None,
         chain: None,
         retime: None,
+        scope: None,
     }];
     let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
     assert!(env.is_none());
@@ -94,6 +96,7 @@ fn volume_bake_static_gain_and_animated_envelope() {
         fade: None,
         chain: None,
         retime: None,
+        scope: None,
     }];
     let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
     assert!(env.is_some(), "an animated carrier forces the envelope");
@@ -117,6 +120,7 @@ fn volume_bake_static_gain_and_animated_envelope() {
         fade: None,
         chain: None,
         retime: None,
+        scope: None,
     }];
     let (g, _) = volume_bake(&opposed, 0, 48_000, 48_000);
     assert!(
@@ -138,6 +142,27 @@ fn volume_bake_static_gain_and_animated_envelope() {
         env.gain_at(47_000)[1] > env.gain_at(47_000)[0],
         "and ends on the right"
     );
+
+    // An expression on the Volume is read at every control point, in its
+    // layer's comp time: here 0 dB at the comp's start falling to the knee a
+    // second later, on a comp that starts 1 s into the mix.
+    let mut driven = job(Property::zero(), 1.0);
+    driven
+        .volume
+        .set_animation(Animation::Expression("-100.0 * time".into()));
+    driven.scope = Some(Arc::new(ExpressionScope {
+        doc: Arc::new(Document::new()),
+        comp: Uuid::nil(),
+        layer: Uuid::nil(),
+        base_s: 1.0,
+    }));
+    let (_, env) = volume_bake(&driven, 48_000, 48_000, 48_000);
+    let env = env.expect("an expression on the Volume forces the envelope");
+    assert!(
+        (env.gain_at(0)[0] - 1.0).abs() < 1e-3,
+        "unity at comp time 0"
+    );
+    assert_eq!(env.gain_at(48_000), [0.0, 0.0], "silent a second later");
 }
 
 /// A **clip crossfade** is two opposed equal-power ramps: each
@@ -243,6 +268,7 @@ fn a_panned_and_faded_clip_mixes_the_same_in_both_paths() {
         chain: None,
         clip_chain: None,
         retime: None,
+        scope: None,
     };
 
     let (gain, envelope) = volume_bake(&job, 0, frames, rate);
@@ -381,6 +407,7 @@ fn racked_job(clip: Option<Arc<AudioChain>>, row: Option<Arc<AudioChain>>) -> Au
         chain: row,
         clip_chain: clip,
         retime: None,
+        scope: None,
     }
 }
 
@@ -483,6 +510,7 @@ fn a_precomp_layers_rack_hears_the_summed_comp() {
         fade: None,
         chain: Some(audio_rack("audio_limiter", &[("ceiling", -6.0)])),
         retime: None,
+        scope: None,
     };
     let row = Uuid::now_v7();
     let through = |carrier: Carrier| {

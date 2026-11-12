@@ -7,7 +7,7 @@
 //! hear it the same way. A send is a copy of the layer's jobs with its level as
 //! one more carrier inside the bus's.
 
-use crate::mix::jobs::{AudioChain, AudioJob, Carrier};
+use crate::mix::jobs::{AudioChain, AudioJob, Carrier, ExpressionScope};
 use lumit_core::model::{Composition, Document, Layer};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -39,6 +39,7 @@ pub(super) fn buses(doc: &Arc<Document>, comp: &Composition, base_s: f64) -> Vec
                     fade: None,
                     chain: super::bus_chain_of(doc, comp, l, offset_s, base_s),
                     retime: None,
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, l.id, base_s),
                 },
                 span: (
                     l.in_point.0.to_f64() + base_s,
@@ -119,6 +120,14 @@ pub(super) fn route(
                 fade: None,
                 chain: None,
                 retime: None,
+                // The send's level is the sending layer's row, so an
+                // expression on it reads that layer.
+                scope: bus.carrier.scope.as_ref().map(|s| {
+                    Arc::new(ExpressionScope {
+                        layer: layer.id,
+                        ..(**s).clone()
+                    })
+                }),
             };
             job.carriers
                 .splice(depth..depth, [bus.carrier.clone(), level]);

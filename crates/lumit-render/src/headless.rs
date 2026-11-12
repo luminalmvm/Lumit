@@ -3211,6 +3211,7 @@ fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::mix::job
         fade: None,
         chain: None,
         retime: None,
+        scope: None,
     })
 }
 
@@ -3434,6 +3435,7 @@ impl AudioJobsBuilder {
                     chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
                     clip_chain: None,
                     retime: retime.map(Arc::new),
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
                 });
             }
             LayerKind::Precomp { comp: nested_id } => {
@@ -3507,6 +3509,7 @@ impl AudioJobsBuilder {
                     // ahead of the Volume and Pan beside it here.
                     chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
                     retime,
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
                 });
                 inner.extend(master_carrier(nested, offset_s));
                 visited.push(*nested_id);
@@ -3807,6 +3810,7 @@ impl AudioJobsBuilder {
                     // The retime is the clip's, so it goes on the innermost
                     // carrier and is heard ahead of both racks.
                     retime: if rack.is_none() { retime.clone() } else { None },
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
                 });
                 // The clip's own rack is a bus inside the row's, so it
                 // hears the comp first, as a footage clip's rack hears its
@@ -3819,6 +3823,7 @@ impl AudioJobsBuilder {
                         fade: None,
                         chain: Some(rack),
                         retime,
+                        scope: None,
                     });
                 }
                 inner.extend(master_carrier(nested, nested_s));
@@ -3862,6 +3867,7 @@ impl AudioJobsBuilder {
                 chain: chain.clone(),
                 clip_chain: clip_chain_of(doc, comp, layer, clip, start_s, base_s),
                 retime: retime.map(Arc::new),
+                scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
             });
         }
     }

@@ -764,6 +764,7 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_
             clip: None,
             clip_chain: None,
             retime: None,
+            scope: None,
         }];
         let (plan, strips) = lumit_render::mix::live::live_plan(
             &jobs,
@@ -1048,6 +1049,7 @@ mod tests {
             chain: None,
             clip_chain: None,
             retime: None,
+            scope: None,
         }
     }
 
@@ -1163,6 +1165,7 @@ mod tests {
                 base_s: 0.0,
             })),
             retime: None,
+            scope: None,
         };
         let row = Uuid::now_v7();
         let one = || {

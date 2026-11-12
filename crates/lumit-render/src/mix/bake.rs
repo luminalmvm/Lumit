@@ -1,10 +1,11 @@
 //! The racks and the gains baked for one job: what its effects make of its
 //! sound, and its Volume and Pan as a constant or an envelope.
 
+use lumit_core::anim::{Animation, Property};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::jobs::{AudioChain, AudioJob, Carrier};
+use super::jobs::{AudioChain, AudioJob, Carrier, ExpressionScope};
 
 /// Open the chain and play `samples` (interleaved stereo, the job's placed
 /// span) through it — the **one** function the live plan and the export both
@@ -301,9 +302,14 @@ pub(super) fn gain_bake(
                 .driven
                 .as_ref()
                 .and_then(|d| d.db_at(t))
-                .unwrap_or_else(|| job.volume.value_at(t - job.offset_s));
+                .unwrap_or_else(|| read(&job.volume, t - job.offset_s, t, job.scope.as_deref()));
             g = lumit_audio::mix::db_to_gain(volume_db);
-            lr = lumit_audio::mix::pan_gains(job.pan.value_at(t - job.offset_s));
+            lr = lumit_audio::mix::pan_gains(read(
+                &job.pan,
+                t - job.offset_s,
+                t,
+                job.scope.as_deref(),
+            ));
             // A clip's own crossfade ramps multiply in too: they are the
             // join's, not the layer's, and they ride on whatever the Volume is
             // doing.
@@ -312,26 +318,32 @@ pub(super) fn gain_bake(
             }
         }
         for c in carriers {
-            g *= lumit_audio::mix::db_to_gain(c.volume.value_at(t - c.offset_s));
+            g *= lumit_audio::mix::db_to_gain(read(
+                &c.volume,
+                t - c.offset_s,
+                t,
+                c.scope.as_deref(),
+            ));
             if let Some(fade) = &c.fade {
                 g *= fade.gain_at(t);
             }
-            let cp = lumit_audio::mix::pan_gains(c.pan.value_at(t - c.offset_s));
+            let cp =
+                lumit_audio::mix::pan_gains(read(&c.pan, t - c.offset_s, t, c.scope.as_deref()));
             lr[0] *= cp[0];
             lr[1] *= cp[1];
         }
         [lr[0] * g, lr[1] * g]
     };
     let animated = own.is_some_and(|job| {
-        job.volume.is_animated()
-            || job.pan.is_animated()
+        moves(&job.volume)
+            || moves(&job.pan)
             || job.fade.is_some_and(|f| f.is_active())
             // A driven Volume follows the sound, which moves whether or not any
             // keyframe does — always an envelope, never a constant.
             || job.driven.is_some()
-    }) || carriers.iter().any(|c| {
-        c.volume.is_animated() || c.pan.is_animated() || c.fade.is_some_and(|f| f.is_active())
-    });
+    }) || carriers
+        .iter()
+        .any(|c| moves(&c.volume) || moves(&c.pan) || c.fade.is_some_and(|f| f.is_active()));
     if !animated {
         return (gain_at(0.0), None);
     }
@@ -347,4 +359,29 @@ pub(super) fn gain_bake(
         [1.0, 1.0],
         Some(lumit_audio::mix::GainEnvelope { stride, points }),
     )
+}
+
+/// Whether `property` can change over time: keys, or an expression, which
+/// is read again at every control point.
+fn moves(property: &Property) -> bool {
+    property.is_animated() || matches!(property.animation, Animation::Expression(_))
+}
+
+/// `property` at layer time `lt`. An expression is worked out in its layer's
+/// scope at mixed-timeline time `t`, with the context a picture row's
+/// expression gets, so `time` and the layer and comp it reads are its own.
+fn read(property: &Property, lt: f64, t: f64, scope: Option<&ExpressionScope>) -> f64 {
+    let Some(scope) = scope.filter(|_| matches!(property.animation, Animation::Expression(_)))
+    else {
+        return property.value_at(lt);
+    };
+    let context = Arc::new(lumit_core::expression::ExpressionContext {
+        document: Arc::clone(&scope.doc),
+        comp: Some(scope.comp),
+        layer: Some(scope.layer),
+        comp_time: t - scope.base_s,
+        current_depth: 0,
+        inputs: None,
+    });
+    property.value_at_with_context(lt, context)
 }
