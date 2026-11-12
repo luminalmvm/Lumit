@@ -4553,15 +4553,22 @@ fn profile_of(
 /// The closing report is sent whatever happened inside, including a frame that
 /// faulted or one served straight from the cache with no report at all: a bar
 /// that was started must always be ended.
+///
+/// `measure` is false for a live drag's frame. Measuring waits for the card
+/// at every layer and every effect, which on a slow card is most of a drag
+/// tick, and a drag frame is provisional anyway: the release commits and the
+/// committed frame comes back through here measured, so the Time column
+/// reads the frame that stays rather than one that was already replaced.
 #[frb(ignore)]
 fn watched<R>(
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
     frame: u64,
+    measure: bool,
     render: impl FnOnce(&mut WorkerState, &mut WorkerResponseStream) -> R,
 ) -> R {
     state.renderer.watch_frames(true);
-    state.renderer.measure_frames(crate::profiling::wanted());
+    state.renderer.measure_frames(measure && crate::profiling::wanted());
     let out = render(state, stream);
     state.renderer.watch_frames(false);
     state.renderer.measure_frames(false);
@@ -4612,7 +4619,7 @@ fn render_comp(
     // Not a 3D viewport's draft, which is never banked, so it never pushes
     // the Viewer's own frames out.
     let cacheable = !view.is_some_and(|v| v.draft);
-    watched(state, stream, req.frame, |state, stream| {
+    watched(state, stream, req.frame, true, |state, stream| {
         publish_frame(
             state,
             req.comp.id,
@@ -4679,7 +4686,7 @@ fn render_item(
     // Not `last_shown`: the fill, the cache bar and the drags follow the
     // active composition view, and this item's scratch comp is none of those.
     let comp = req.of.comp_id();
-    watched(state, stream, req.frame, |state, stream| {
+    watched(state, stream, req.frame, true, |state, stream| {
         publish_frame(
             state,
             comp,
@@ -4991,7 +4998,7 @@ fn publish_preview(
         std::sync::Arc::new(document),
     );
     let scale = crate::realtime::drag_scale(comp_width, comp_height, asked);
-    watched(state, stream, frame, |state, stream| {
+    watched(state, stream, frame, false, |state, stream| {
         publish_frame(
             state,
             comp.id,
