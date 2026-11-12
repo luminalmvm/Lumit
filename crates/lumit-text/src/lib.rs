@@ -14,6 +14,7 @@ use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
 use lumit_core::model::{LinearColour, TextDocument};
 use lumit_core::text::{GlyphXform, ParagraphStyle, TextAnimator, TextStyle};
 
+mod block_key;
 pub mod fonts;
 mod styled;
 
@@ -63,9 +64,8 @@ impl<'a> TextBlock<'a> {
         }
     }
 
-    /// One unstyled line, which draws the way every Text layer drew before
-    /// there was a style, so old projects and their cached frames stay as
-    /// they were.
+    /// One unstyled line, which draws as every Text layer drew before there
+    /// was a style, so old projects and their cached frames stay as they were.
     fn plain(&self) -> bool {
         let unstyled = self.style.is_default() && self.paragraph.is_default();
         unstyled && !self.boxed && !self.text.contains(['\n', '\r'])

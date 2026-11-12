@@ -33,7 +33,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub(crate) mod fx_key;
-mod kept_raster;
+pub(crate) mod kept_raster;
 mod raster_scale;
 pub(crate) mod shading;
 
@@ -1956,7 +1956,6 @@ fn comp_walk(
                 })
             }
             LayerKind::Solid { def } => doc.solid(*def).filter(|_| in_span(layer)).map(|sd| {
-                let px = solid_rgba(sd.colour);
                 // A flat colour is normally an 8×8 tile stretched to size —
                 // but a mask gates *pixels* and a stroke paints them, so both
                 // want the solid at its real size to work on.
@@ -1982,16 +1981,13 @@ fn comp_walk(
                 // destroys. A colour plate with nothing on it still gets the
                 // tile, which is the case the optimisation was written for.
                 //
-                // **What this costs**, named so nobody has to measure it twice:
-                // a solid carrying any effect now builds and uploads its real
-                // raster every frame — about eight megabytes at 1080p — where
-                // it used to build 256 bytes. That is the same order as one
-                // working texture of the stack that is about to run, so it is
-                // not the dominant cost of an effected solid, but it is not
-                // free either. If it ever shows up in a budget, the fix is to
-                // keep the small upload and stretch it on the card before the
-                // stack runs, rather than to make this predicate cleverer —
-                // a cleverer predicate is how the bug happened.
+                // **What this costs**: a solid carrying any effect builds its real
+                // raster, about eight megabytes at 1080p, instead of 256 bytes. The
+                // kept shelf holds it, so it is built and uploaded once while its
+                // colour and size stay the same.
+                //
+                // Do not make this predicate cleverer: a cleverer predicate is how
+                // the bug happened.
                 let plain = layer.masks.is_empty()
                     && layer.paint.is_empty()
                     && !layer.effects.iter().any(|e| e.enabled)
@@ -2006,7 +2002,7 @@ fn comp_walk(
                     && shading::shading_lights(comp, layer, t_comp, &context).is_empty();
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
-                    Arc::new(px_tile(&px, tw, th)),
+                    kept_raster::solid(sd.colour, tw, th),
                     tw,
                     th,
                     (sd.width as f32, sd.height as f32),
