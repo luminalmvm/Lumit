@@ -1913,7 +1913,7 @@ class _Picture extends StatelessWidget {
                   )
                 : const SizedBox.expand();
             // Suspended, the picture stays as it was, and says so across its
-            // top, as After Effects' red bar does.
+            // bottom, a red bar as After Effects has.
             return Stack(
               fit: StackFit.passthrough,
               children: [
@@ -1926,7 +1926,7 @@ class _Picture extends StatelessWidget {
                     return Positioned(
                       left: 0,
                       right: 0,
-                      top: 0,
+                      bottom: 0,
                       child: IgnorePointer(
                         child: Container(
                           key: const ValueKey('viewer-suspended'),
