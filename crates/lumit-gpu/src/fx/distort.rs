@@ -402,6 +402,41 @@ struct BezierWarpParams {
     frame: [f32; 4],
 }
 
+/// One resolved Mesh warp. Mirrors
+/// `lumit_core::fx::effects::mesh_warp::MeshWarpParams`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeshWarpOp {
+    pub rows: u32,
+    pub columns: u32,
+    /// The crossings row by row, as fractions of the frame.
+    pub pts: Vec<[f32; 2]>,
+    /// Newton steps a pixel, 1..=12.
+    pub steps: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+    /// Where the frame sits on the raster, `[x, y, width, height]`. A zero
+    /// width is the whole raster.
+    pub frame: [f32; 4],
+}
+
+/// The most crossings the kernel's uniform holds, two to a vec4.
+const MESH_WARP_MAX_VERTICES: usize = 1024;
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MeshWarpParams {
+    rows: u32,
+    cols: u32,
+    steps: u32,
+    count: u32,
+    mix_amt: f32,
+    matte_on: f32,
+    _pad0: u32,
+    _pad1: u32,
+    frame: [f32; 4],
+    pts: [[f32; 4]; MESH_WARP_MAX_VERTICES / 2],
+}
+
 /// One resolved Warp (docs/08 §3.56). Mirrors
 /// `lumit_core::fx::cpu::WarpParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -553,6 +588,60 @@ impl FxEngine {
                     [0.0, 0.0, w as f32, h as f32]
                 },
             }),
+        );
+        out
+    }
+
+    /// Apply one Mesh warp to a linear working texture, returning a new
+    /// texture of the same size. A grid that does not fit the kernel, or does
+    /// not match its own size, is drawn flat.
+    pub fn mesh_warp(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        matte: Option<&wgpu::Texture>,
+        op: &MeshWarpOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-mesh-warp-out");
+        let count = ((op.rows + 1) * (op.columns + 1)) as usize;
+        let mut params = MeshWarpParams {
+            rows: op.rows.max(1),
+            cols: op.columns.max(1),
+            steps: op.steps,
+            count: count as u32,
+            mix_amt: op.mix,
+            matte_on: f32::from(matte.is_some()),
+            _pad0: 0,
+            _pad1: 0,
+            frame: if op.frame[2] > 0.0 {
+                op.frame
+            } else {
+                [0.0, 0.0, w as f32, h as f32]
+            },
+            pts: [[0.0; 4]; MESH_WARP_MAX_VERTICES / 2],
+        };
+        if count > MESH_WARP_MAX_VERTICES || op.pts.len() != count {
+            params.mix_amt = 0.0;
+        } else {
+            for (i, pt) in op.pts.iter().enumerate() {
+                let slot = &mut params.pts[i / 2];
+                let half = (i % 2) * 2;
+                slot[half] = pt[0];
+                slot[half + 1] = pt[1];
+            }
+        }
+        self.dispatch_matted(
+            ctx,
+            &self.mesh_warp,
+            src,
+            src,
+            matte,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params),
         );
         out
     }

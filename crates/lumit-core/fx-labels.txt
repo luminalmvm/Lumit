@@ -66,6 +66,7 @@ Angle control
 Angle offset
 Angular
 Animate
+Animate mesh
 Animation
 Anticlockwise
 Anywhere
@@ -895,6 +896,7 @@ Measure
 Median
 Merge
 Merge points
+Mesh warp
 Metallic
 Method
 Micro Four Thirds
@@ -1180,6 +1182,7 @@ Repeat words
 Replace colour
 Replace method
 Reset interval
+Reset mesh
 Resolution
 Resonance
 Result

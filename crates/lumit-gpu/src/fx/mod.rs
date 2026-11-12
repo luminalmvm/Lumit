@@ -229,6 +229,9 @@ pub struct FxEngine {
     /// pixel by Newton's method — the first kernel in the catalogue to *solve*
     /// for its sample position rather than compute one.
     bezier_warp: wgpu::ComputePipeline,
+    /// Mesh warp: the picture bent by a grid of points, inverted per pixel
+    /// by Newton's method as Bezier warp is.
+    mesh_warp: wgpu::ComputePipeline,
     /// Warp (docs/08 §3.56): the thirteen bend presets, one kernel.
     warp: wgpu::ComputePipeline,
     /// Roughen edges (docs/08 §3.57), the second pass: the blurred alpha re-cut

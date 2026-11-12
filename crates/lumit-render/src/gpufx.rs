@@ -409,6 +409,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Ripple,
     &WaveWarp,
     &BezierWarp,
+    &MeshWarp,
     &Warp,
     &RoughenEdges,
     &Median,
@@ -2018,6 +2019,44 @@ impl GpuEffect for BezierWarp {
                 steps: b.steps,
                 mix: b.mix,
                 frame: b.frame,
+            },
+        )
+    }
+}
+
+struct MeshWarp;
+impl GpuEffect for MeshWarp {
+    fn match_name(&self) -> &'static str {
+        "mesh_warp"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let m = effects::mesh_warp::MeshWarp::packed_in(p);
+        // A flat grid changes nothing, so it costs nothing.
+        if m.is_flat() {
+            return tex.clone();
+        }
+        fx.mesh_warp(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::distort::MeshWarpOp {
+                rows: m.rows,
+                columns: m.columns,
+                pts: m.pts,
+                steps: m.steps,
+                mix: m.mix,
+                frame: m.frame,
             },
         )
     }

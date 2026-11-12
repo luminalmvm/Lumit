@@ -398,6 +398,7 @@ impl FxEngine {
         let ripple_mod = module(include_str!("../fx_ripple.wgsl"), "fx-ripple");
         let wave_warp_mod = module(include_str!("../fx_wavewarp.wgsl"), "fx-wave-warp");
         let bezier_warp_mod = module(include_str!("../fx_bezierwarp.wgsl"), "fx-bezier-warp");
+        let mesh_warp_mod = module(include_str!("../fx_meshwarp.wgsl"), "fx-mesh-warp");
         let warp_mod = module(include_str!("../fx_warp.wgsl"), "fx-warp");
         let roughen_edges_mod = module(
             &format!("{noise_core}{}", include_str!("../fx_roughenedges.wgsl")),
@@ -556,6 +557,7 @@ impl FxEngine {
         let ripple = pipeline(&ripple_mod, "fx-ripple", "ripple");
         let wave_warp = pipeline(&wave_warp_mod, "fx-wave-warp", "wave_warp");
         let bezier_warp = pipeline(&bezier_warp_mod, "fx-bezier-warp", "bezier_warp");
+        let mesh_warp = pipeline(&mesh_warp_mod, "fx-mesh-warp", "mesh_warp");
         let warp = pipeline(&warp_mod, "fx-warp", "warp");
         let roughen_edges = pipeline(&roughen_edges_mod, "fx-roughen-edges", "roughen_edges");
         let median = pipeline(&median_mod, "fx-median", "median");
@@ -718,6 +720,7 @@ impl FxEngine {
             ripple: ripple.wait(),
             wave_warp: wave_warp.wait(),
             bezier_warp: bezier_warp.wait(),
+            mesh_warp: mesh_warp.wait(),
             warp: warp.wait(),
             roughen_edges: roughen_edges.wait(),
             median: median.wait(),

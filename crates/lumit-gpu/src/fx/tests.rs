@@ -10698,6 +10698,78 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
     );
 }
 
+/// Mesh warp's kernel against its CPU oracle: a flat grid is the picture to
+/// the bit, a crossing pulled bends it, and one pulled far still finds its way
+/// from the nearest crossing.
+#[test]
+fn wgsl_mesh_warp_matches_the_cpu_oracle() {
+    use lumit_core::fx::effects::mesh_warp::{mesh_warp, rest, MeshWarpParams};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = smooth_corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    let flat = |rows: u32, columns: u32| {
+        let mut pts = Vec::new();
+        for r in 0..=rows {
+            for c in 0..=columns {
+                let (x, y) = rest(rows, columns, r, c);
+                pts.push([(x / 100.0) as f32, (y / 100.0) as f32]);
+            }
+        }
+        MeshWarpParams {
+            rows,
+            columns,
+            pts,
+            steps: 8,
+            mix: 1.0,
+            frame: [0.0; 4],
+        }
+    };
+    let mut pulled = flat(2, 2);
+    pulled.pts[4] = [0.62, 0.45];
+    let mut far = flat(3, 3);
+    far.pts[5] = [0.6, 0.55];
+    let mut mixed = pulled.clone();
+    mixed.mix = 0.5;
+    for (name, m) in [
+        ("identity", flat(4, 3)),
+        ("pulled", pulled),
+        ("far", far),
+        ("mixed", mixed),
+    ] {
+        let mut cpu = img.clone();
+        mesh_warp(&mut cpu, w, h, &m);
+        let out = fx.mesh_warp(
+            &ctx,
+            &tex,
+            w,
+            h,
+            None,
+            &MeshWarpOp {
+                rows: m.rows,
+                columns: m.columns,
+                pts: m.pts.clone(),
+                steps: m.steps,
+                mix: m.mix,
+                frame: m.frame,
+            },
+        );
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_diff(&cpu, &gpu);
+        eprintln!("mesh_warp {name}: worst {worst}");
+        assert!(worst < 2e-2, "{name}: worst diff {worst}");
+        match name {
+            "identity" => assert_eq!(gpu, img, "a flat grid must be the identity"),
+            _ => assert!(gpu != img, "{name}: the grid must bend something"),
+        }
+    }
+}
+
 /// The §1.6 oracle for Warp (docs/08 §3.56): all thirteen styles, on the smooth
 /// corpus and by absolute difference — the distort batch's rule.
 ///
