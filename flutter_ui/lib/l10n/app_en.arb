@@ -29775,6 +29775,34 @@
   "@panelGallery": {
     "description": "Panel name: the Colour workspace's stills, kept with their grades in albums."
   },
+  "gradeCompareWipe": "Wipe",
+  "@gradeCompareWipe": {
+    "description": "Viewer, a grade's reference: the reference shows past an upright divider that can be dragged."
+  },
+  "gradeCompareWipeAcross": "Wipe across",
+  "@gradeCompareWipeAcross": {
+    "description": "Viewer, a grade's reference: the reference shows below a level divider that can be dragged."
+  },
+  "gradeCompareSplit": "Split",
+  "@gradeCompareSplit": {
+    "description": "Viewer, a grade's reference: the same part of the picture and the reference side by side."
+  },
+  "gradeCompareDifference": "Difference",
+  "@gradeCompareDifference": {
+    "description": "Viewer, a grade's reference: shows only where the picture and the reference differ."
+  },
+  "gradeCompareMix": "Mix",
+  "@gradeCompareMix": {
+    "description": "Viewer, a grade's reference: the reference faded over the picture; the divider sets how much."
+  },
+  "gradeCompareShow": "Show reference",
+  "@gradeCompareShow": {
+    "description": "Viewer reference menu: show or hide the reference without forgetting it. A toggle."
+  },
+  "gradeCompareClear": "Clear reference",
+  "@gradeCompareClear": {
+    "description": "Viewer reference menu and the chip's close button: stop comparing and forget the reference."
+  },
   "galleryFirstAlbum": "Stills",
   "@galleryFirstAlbum": {
     "description": "Gallery panel: the album stills go to while the library has no album yet."
@@ -30168,6 +30196,10 @@
   "@gradeGridShots": {
     "description": "Shots panel menu, and the Viewer's grid chip: the Viewer shows the picked shots side by side in a grid."
   },
+  "gradeGridClose": "Close the grid",
+  "@gradeGridClose": {
+    "description": "Tooltip of the cross on the Viewer's grid chip: the Viewer shows the picture again."
+  },
   "gradeMemoryKept": "Kept in memory {slot}",
   "@gradeMemoryKept": {
     "description": "Notice when the current shot's grade has been kept in one of the eight memories. {slot} is its number, 1 to 8.",
@@ -30357,6 +30389,22 @@
   "gradeQualClear": "Clear",
   "@gradeQualClear": {
     "description": "Button at the end of the Keep or Drop row on the Grade panel's Qualifier page in 3D mode: forget those samples."
+  },
+  "gradeBackdropGrey": "Over grey",
+  "@gradeBackdropGrey": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over mid grey."
+  },
+  "gradeBackdropBlack": "Over black",
+  "@gradeBackdropBlack": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over black."
+  },
+  "gradeBackdropWhite": "Over white",
+  "@gradeBackdropWhite": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over white."
+  },
+  "gradeBackdropMono": "Over black and white",
+  "@gradeBackdropMono": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over the same picture in black and white."
   },
   "gradeFilterColour": "Clip colour",
   "@gradeFilterColour": {

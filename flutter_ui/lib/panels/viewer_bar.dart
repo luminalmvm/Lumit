@@ -31,6 +31,7 @@ import '../widgets/time_readout.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_camera.dart' show activeCameraAt;
 import 'viewer_menus.dart';
+import 'viewer_grade.dart' show ViewerGradeChips;
 import 'viewer_overlays.dart';
 import 'viewer_panel_frb.dart' show showViewerBackgroundPicker;
 import 'viewer_progress_bar.dart';
@@ -372,6 +373,8 @@ class ViewerBar extends StatelessWidget {
             ],
           ]),
         ),
+        // A grade's reference and the matte view, while either is on.
+        const ViewerGradeChips(),
         const _BarSeam(),
         // The exposure (docs/07 §2.2 item 12), at the end of the run because
         // its number comes and goes. A preview only, and the header's colour
