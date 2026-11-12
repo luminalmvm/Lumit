@@ -221,6 +221,144 @@ fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_s
     lumit_render::roto::clear();
 }
 
+/// A matte on the left quarter of the frame only, solid and then half, so a
+/// crop round the centre or a darkened edge shows as a different picture.
+fn quarter_matte() -> Vec<u8> {
+    (0..COMP)
+        .flat_map(|_| (0..COMP).map(|x| [255u8, 128, 0, 0][(x / 8).min(3) as usize]))
+        .collect()
+}
+
+/// **A matte cuts the same place when the Viewer decodes the footage smaller.**
+///
+/// The matte is filed at the file's own size and the preview tiers decode
+/// below it, so the matte has to be scaled to the decode rather than cut
+/// round its centre.
+#[test]
+fn a_matte_cuts_the_same_place_at_a_reduced_preview_size() {
+    use lumit_core::edits::{base_layer, centred_transform, new_comp_ops, CompSettings};
+    use lumit_core::model::{FootageItem, MediaRef};
+    use lumit_core::ops::{apply, Op};
+    use lumit_render::plan::Quality;
+
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("white.png");
+    {
+        let out = std::io::BufWriter::new(std::fs::File::create(&file).unwrap());
+        let mut png = png::Encoder::new(out, COMP, COMP);
+        png.set_color(png::ColorType::Rgba);
+        png.set_depth(png::BitDepth::Eight);
+        let white = vec![255u8; (COMP * COMP * 4) as usize];
+        png.write_header()
+            .unwrap()
+            .write_image_data(&white)
+            .unwrap();
+    }
+
+    let mut doc = Document::new();
+    let settings = CompSettings {
+        width: COMP,
+        height: COMP,
+        frame_rate: FrameRate::new(30, 1).unwrap(),
+        background: [0.0, 0.0, 0.0, 1.0],
+        ..CompSettings::default()
+    };
+    let (comp, ops) = new_comp_ops(&doc, settings, None);
+    for op in &ops {
+        apply(&mut doc, op).unwrap();
+    }
+    let item = Uuid::now_v7();
+    doc.items.push(ProjectItem::Footage(FootageItem {
+        sequence: None,
+        id: item,
+        name: "white.png".into(),
+        media: MediaRef {
+            relative_path: "white.png".into(),
+            absolute_path: file.to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+        colour_space: None,
+        source_layer: None,
+        interpretation: Default::default(),
+    }));
+    let mut footage = base_layer(
+        "cut me".into(),
+        LayerKind::Footage { item },
+        doc.comp(comp).unwrap().duration.0,
+        centred_transform(f64::from(COMP), f64::from(COMP), COMP, COMP),
+    );
+    let mut brush = lumit_core::fx::builtins::instantiate("roto_brush").unwrap();
+    brush.roto = Some(RotoBlock {
+        base_frame: Some(0),
+        strokes: vec![RotoStroke {
+            id: Uuid::now_v7(),
+            points: vec![(4.0, 32.0), (12.0, 32.0)],
+            radius: 3.0,
+            kind: RotoStrokeKind::Foreground,
+            frame: 0,
+        }],
+        prompts: Vec::new(),
+    });
+    let instance = brush.id;
+    footage.effects = vec![brush];
+    apply(
+        &mut doc,
+        &Op::AddLayer {
+            comp,
+            index: 0,
+            layer: Box::new(footage),
+        },
+    )
+    .unwrap();
+    let doc = Arc::new(doc);
+
+    lumit_render::roto::clear();
+    let run = lumit_render::roto::run_from_planes(
+        COMP,
+        COMP,
+        30.0,
+        1,
+        &[(0, [1u8; 32], quarter_matte())],
+    )
+    .expect("a run");
+    lumit_render::roto::publish(instance, run);
+
+    let mut half_kept = None;
+    for (tier, quality) in [
+        ("full", Quality::default()),
+        (
+            "half",
+            Quality {
+                divisor: 2,
+                ..Quality::default()
+            },
+        ),
+    ] {
+        let (cut, w, _) = r
+            .render_preview(&doc, comp, 0, quality, 1.0)
+            .expect("the matted render");
+        assert_eq!(px(&cut, w, 4)[0], 255, "{tier}: the left quarter is kept");
+        let half = i32::from(px(&cut, w, 12)[0]);
+        let full = *half_kept.get_or_insert(half);
+        assert!(
+            (half - full).abs() <= 6,
+            "{tier}: the half matte reads {half}, not {full}"
+        );
+        assert_eq!(
+            px(&cut, w, CUT),
+            [0, 0, 0, 255],
+            "{tier}: the rest is cut away"
+        );
+    }
+    lumit_render::roto::clear();
+}
+
 /// **A Roto brush box in a node graph cuts by the matte of the file its picture
 /// comes from**, the planes tier's own test one tier along.
 ///
