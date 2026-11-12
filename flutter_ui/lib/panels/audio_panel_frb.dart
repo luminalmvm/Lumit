@@ -716,6 +716,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                   TextEditingController(text: picked.info.name)),
               renameAction: null,
               duplicateAction: null,
+              normaliseTargetDb: ui.workspace.normaliseTargetDb,
               onChanged: () {
                 ui.model.refresh();
                 comp.audioPrepare();

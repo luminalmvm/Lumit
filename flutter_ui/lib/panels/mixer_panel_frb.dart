@@ -703,6 +703,7 @@ class _MixerStripState extends State<_MixerStrip> {
         onChanged: widget.onChanged,
         renameAction: null,
         duplicateAction: null,
+        normaliseTargetDb: ui.workspace.normaliseTargetDb,
       ),
     );
   }
