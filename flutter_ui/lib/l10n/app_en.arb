@@ -9948,6 +9948,26 @@
   "@settingsWireframeWhileDragging": {
     "description": "Settings window: a drag shows each layer as the outline of its rectangle, and the release shows the frame."
   },
+  "settingsDecodeAtShownSize": "Decode footage at shown size",
+  "@settingsDecodeAtShownSize": {
+    "description": "Settings window: a footage layer shown smaller than its own size is decoded for the preview no larger than it is shown. Export always decodes at full size."
+  },
+  "tipShownSize": "Shown size",
+  "@tipShownSize": {
+    "description": "Tooltip on the Viewer deck's mark for Decode footage at shown size: lit while footage shown smaller is decoded smaller for the preview."
+  },
+  "tipWireframeDrags": "Wireframe drags",
+  "@tipWireframeDrags": {
+    "description": "Tooltip on the Viewer deck's mark for Wireframe while dragging: lit while a drag shows each layer as the outline of its rectangle."
+  },
+  "tipSuspendUpdates": "Suspend updates",
+  "@tipSuspendUpdates": {
+    "description": "Tooltip on the Viewer deck's eye mark while the Viewer updates: pressing it keeps the picture as it is while edits go on (Caps Lock does the same)."
+  },
+  "tipResumeUpdates": "Resume updates",
+  "@tipResumeUpdates": {
+    "description": "Tooltip on the Viewer deck's eye mark while Viewer updates are suspended: pressing it draws the frame again and follows edits."
+  },
   "settingsCapsLockSuspendsViewer": "Caps Lock suspends Viewer updates",
   "@settingsCapsLockSuspendsViewer": {
     "description": "Settings window: while Caps Lock is on, the Viewer keeps its picture and draws the frame once it is off."

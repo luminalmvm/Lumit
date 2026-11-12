@@ -88,6 +88,11 @@ class PerformanceSettings {
   /// On by default, as there.
   bool capsLockSuspends;
 
+  /// **Decode footage at shown size**: a plain 2D footage layer shown
+  /// smaller than its own size is decoded for the preview no larger than it is
+  /// shown. Export always decodes at full size. On by default.
+  bool decodeAtShownSize;
+
   /// Whether footage is decoded by the graphics card's video unit. On by
   /// default. Off is slower, and is the way out when a graphics driver
   /// misbehaves with it.
@@ -125,6 +130,7 @@ class PerformanceSettings {
     this.dragResolutionLimit = 0,
     this.wireframeDrags = false,
     this.capsLockSuspends = true,
+    this.decodeAtShownSize = true,
     this.hardwareDecode = true,
     this.largestPicture,
   });
@@ -141,6 +147,7 @@ class PerformanceSettings {
         'drag_resolution_limit': dragResolutionLimit,
         'wireframe_drags': wireframeDrags,
         'caps_lock_suspends': capsLockSuspends,
+        'decode_at_shown_size': decodeAtShownSize,
         'hardware_decode': hardwareDecode,
         if (largestPicture != null) 'largest_picture': largestPicture,
       };
@@ -176,6 +183,7 @@ class PerformanceSettings {
             : 0,
         wireframeDrags: j['wireframe_drags'] == true,
         capsLockSuspends: j['caps_lock_suspends'] != false,
+        decodeAtShownSize: j['decode_at_shown_size'] != false,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
         largestPicture: _positiveInt(j['largest_picture']),

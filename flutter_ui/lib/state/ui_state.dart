@@ -61,7 +61,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setHardwareDecode,
         setLargestPicture,
         setWireframeDrags;
-import 'package:lumit_flutter/src/rust/api/shell.dart' as shell show setLiveUpdate;
+import 'package:lumit_flutter/src/rust/api/shell.dart' as shell
+    show setDecodeAtShownSize, setLiveUpdate;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
@@ -1255,21 +1256,45 @@ class LumitUiState extends ChangeNotifier {
   /// once updates resume.
   final ValueNotifier<bool> viewerSuspended = ValueNotifier(false);
 
+  /// **Wireframe while dragging**, from Settings → Performance or the deck.
+  void setWireframeWhileDragging(bool on) {
+    workspace.performance.wireframeDrags = on;
+    setWireframeDrags(on_: on);
+    workspace.settingsChanged();
+  }
+
+  /// **Decode footage at shown size**, from Settings → Performance or the
+  /// deck. The frame under the playhead is drawn again at the new size.
+  void setDecodeAtShownSize(bool on) {
+    workspace.performance.decodeAtShownSize = on;
+    shell.setDecodeAtShownSize(on_: on);
+    workspace.settingsChanged();
+    requestFrame();
+  }
+
   void setViewerSuspended(bool on) {
     if (viewerSuspended.value == on) return;
     viewerSuspended.value = on;
     if (!on) requestFrame();
   }
 
-  /// Follows Caps Lock into [viewerSuspended] while the setting asks for it.
-  /// Never takes the key: it only looks at the lock.
-  bool _capsLockWatch(KeyEvent _) {
-    if (workspace.performance.capsLockSuspends) {
-      setViewerSuspended(HardwareKeyboard.instance.lockModesEnabled
-          .contains(KeyboardLockMode.capsLock));
+  /// Follows a press of Caps Lock into [viewerSuspended] while the setting
+  /// asks for it. Only the Caps Lock key itself, so the deck's mark can
+  /// suspend or resume and the next key typed leaves that alone. Never takes
+  /// the key: it only looks at the lock, which the keyboard has already
+  /// turned by the time a key down reaches here.
+  bool _capsLockWatch(KeyEvent event) {
+    if (workspace.performance.capsLockSuspends &&
+        event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.capsLock) {
+      _followLock();
     }
     return false;
   }
+
+  void _followLock() => setViewerSuspended(HardwareKeyboard
+      .instance.lockModesEnabled
+      .contains(KeyboardLockMode.capsLock));
 
   bool _capsLockWatching = false;
 
@@ -1280,10 +1305,7 @@ class LumitUiState extends ChangeNotifier {
       HardwareKeyboard.instance.addHandler(_capsLockWatch);
       _capsLockWatching = true;
       // A lock already on when the setting is turned on counts at once.
-      _capsLockWatch(const KeyUpEvent(
-          physicalKey: PhysicalKeyboardKey.capsLock,
-          logicalKey: LogicalKeyboardKey.capsLock,
-          timeStamp: Duration.zero));
+      _followLock();
     } else if (!want && _capsLockWatching) {
       HardwareKeyboard.instance.removeHandler(_capsLockWatch);
       _capsLockWatching = false;
@@ -3070,6 +3092,7 @@ class LumitUiState extends ChangeNotifier {
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setDragResolutionLimit(divisor: perf.dragResolutionLimit);
     setWireframeDrags(on_: perf.wireframeDrags);
+    shell.setDecodeAtShownSize(on_: perf.decodeAtShownSize);
     followCapsLock();
     setHardwareDecode(on_: perf.hardwareDecode);
     final largest = perf.largestPicture;

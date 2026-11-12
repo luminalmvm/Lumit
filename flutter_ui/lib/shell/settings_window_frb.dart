@@ -3814,11 +3814,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ),
           _flag(t, 'settings-wireframe-drags',
               l10n.settingsWireframeWhileDragging,
-              value: ui.workspace.performance.wireframeDrags, set: (on) {
-            ui.workspace.performance.wireframeDrags = on;
-            setWireframeDrags(on_: on);
-            ui.workspace.settingsChanged();
-          }),
+              value: ui.workspace.performance.wireframeDrags,
+              set: ui.setWireframeWhileDragging),
+          _flag(t, 'settings-decode-at-shown-size',
+              l10n.settingsDecodeAtShownSize,
+              value: ui.workspace.performance.decodeAtShownSize,
+              set: ui.setDecodeAtShownSize),
           _flag(t, 'settings-caps-lock-suspends',
               l10n.settingsCapsLockSuspendsViewer,
               value: ui.workspace.performance.capsLockSuspends, set: (on) {
