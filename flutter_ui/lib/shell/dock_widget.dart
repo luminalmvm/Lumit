@@ -82,6 +82,8 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // A primary's name, its track and its number; the wheels stack under
       // this.
       Panel.grade => 200,
+      // One still across, its name under it.
+      Panel.gallery => 160,
       // The header's scope switch and the add button; the canvas zooms.
       Panel.gradeNodes => 160,
       // The count and the filter; the strip scrolls.

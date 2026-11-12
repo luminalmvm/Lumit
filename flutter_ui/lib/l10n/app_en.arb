@@ -29771,6 +29771,90 @@
   "@fxKey": {
     "description": "Graph panel — the socket on a Correction box that hands its key to another effect's Matte."
   },
+  "panelGallery": "Gallery",
+  "@panelGallery": {
+    "description": "Panel name: the Colour workspace's stills, kept with their grades in albums."
+  },
+  "galleryFirstAlbum": "Stills",
+  "@galleryFirstAlbum": {
+    "description": "Gallery panel: the album stills go to while the library has no album yet."
+  },
+  "galleryGrab": "Grab still",
+  "@galleryGrab": {
+    "description": "Gallery panel header button: keep the current shot at the playhead as a still."
+  },
+  "galleryRenameStill": "Rename still",
+  "@galleryRenameStill": {
+    "description": "Title of the dialog that renames a still in the Gallery."
+  },
+  "galleryDeleteStillAsk": "Delete {name}?",
+  "@galleryDeleteStillAsk": {
+    "description": "Gallery panel: asked before a still's files are deleted. {name} is the still's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "galleryNewAlbum": "New album",
+  "@galleryNewAlbum": {
+    "description": "Title of the dialog that makes a new album in the Gallery."
+  },
+  "galleryNewAlbumRow": "New album…",
+  "@galleryNewAlbumRow": {
+    "description": "Gallery album menu: make a new album. Opens a dialog."
+  },
+  "galleryAlbumN": "Album {n}",
+  "@galleryAlbumN": {
+    "description": "Gallery: the name a new album is offered. {n} counts from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "galleryRenameAlbum": "Rename album",
+  "@galleryRenameAlbum": {
+    "description": "Title of the dialog that renames the album shown in the Gallery."
+  },
+  "galleryRenameAlbumRow": "Rename album…",
+  "@galleryRenameAlbumRow": {
+    "description": "Gallery album menu: rename the album shown. Opens a dialog."
+  },
+  "galleryDeleteAlbum": "Delete album",
+  "@galleryDeleteAlbum": {
+    "description": "Gallery album menu: delete the album shown and its stills."
+  },
+  "galleryDeleteAlbumAsk": "Delete {name} and its stills?",
+  "@galleryDeleteAlbumAsk": {
+    "description": "Gallery panel: asked before an album is deleted. {name} is the album's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "galleryApply": "Apply grade",
+  "@galleryApply": {
+    "description": "Gallery still menu: lay the still's grade on the current shot in place of its own."
+  },
+  "galleryApplyPicked": "Apply grade to picked shots",
+  "@galleryApplyPicked": {
+    "description": "Gallery still menu: lay the still's grade on every picked shot."
+  },
+  "galleryCompare": "Compare",
+  "@galleryCompare": {
+    "description": "Gallery still menu: compare the Viewer's picture against this still."
+  },
+  "galleryMoveTo": "Move to {album}",
+  "@galleryMoveTo": {
+    "description": "Gallery still menu: move the still to another album. {album} is that album's name.",
+    "placeholders": {
+      "album": {
+        "type": "String"
+      }
+    }
+  },
   "gradeCompare": "Compare",
   "@gradeCompare": {
     "description": "Grade panel, Match page: compare the Viewer's picture against the shot or still picked in Match to."
@@ -30076,9 +30160,50 @@
   "@gradeGridVersions": {
     "description": "Grade panel versions menu, and the Viewer's grid chip: the Viewer shows every grade version of the current shot side by side in a grid."
   },
+  "gradeGridStills": "Stills in a grid",
+  "@gradeGridStills": {
+    "description": "Gallery still menu, and the Viewer's grid chip: the Viewer shows the stills picked in the Gallery side by side in a grid."
+  },
   "gradeGridShots": "Shots in a grid",
   "@gradeGridShots": {
     "description": "Shots panel menu, and the Viewer's grid chip: the Viewer shows the picked shots side by side in a grid."
+  },
+  "gradeMemoryKept": "Kept in memory {slot}",
+  "@gradeMemoryKept": {
+    "description": "Notice when the current shot's grade has been kept in one of the eight memories. {slot} is its number, 1 to 8.",
+    "placeholders": {
+      "slot": {
+        "type": "int"
+      }
+    }
+  },
+  "galleryMemoryApply": "Apply memory",
+  "@galleryMemoryApply": {
+    "description": "Gallery, right-click on a memory slot: the grade kept there takes the place of the grade on the picked shots."
+  },
+  "galleryMemoryStore": "Keep the current grade here",
+  "@galleryMemoryStore": {
+    "description": "Gallery, right-click on a memory slot: the current shot's grade is kept in this slot, in place of what it held."
+  },
+  "galleryMemoryClear": "Clear memory",
+  "@galleryMemoryClear": {
+    "description": "Gallery, right-click on a memory slot: empties the slot."
+  },
+  "galleryExportStill": "Export still…",
+  "@galleryExportStill": {
+    "description": "Gallery still menu: writes the still's picture as a PNG file. Opens a save dialog."
+  },
+  "galleryExportLut": "Export grade as LUT…",
+  "@galleryExportLut": {
+    "description": "Gallery still menu: writes the still's grade as a .cube LUT file. Opens a save dialog."
+  },
+  "galleryStillExported": "Still exported",
+  "@galleryStillExported": {
+    "description": "Notice when a still's picture has been written as a PNG."
+  },
+  "galleryExportFailed": "The still could not be exported",
+  "@galleryExportFailed": {
+    "description": "Notice when a still's picture could not be written where the user chose."
   },
   "gradeKeyInvert": "Invert key",
   "@gradeKeyInvert": {

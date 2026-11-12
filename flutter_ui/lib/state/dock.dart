@@ -25,6 +25,9 @@ enum Panel {
   /// over the Colour effects that do the work. The Colour workspace's own.
   grade,
 
+  /// Stills kept with their grades, in albums, to compare and grade from.
+  gallery,
+
   /// The current shot's grade as nodes, from its picture to what it shows.
   gradeNodes,
 
@@ -120,6 +123,7 @@ enum Panel {
         Panel.effectsAndPresets => l10n.panelEffectsAndPresets,
         Panel.scopes => l10n.panelScopes,
         Panel.grade => l10n.panelGrade,
+        Panel.gallery => l10n.panelGallery,
         Panel.gradeNodes => l10n.panelGradeNodes,
         Panel.shots => l10n.panelShots,
         Panel.hierarchy => l10n.panelHierarchy,
