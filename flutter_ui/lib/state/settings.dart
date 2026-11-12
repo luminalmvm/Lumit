@@ -85,7 +85,7 @@ class PerformanceSettings {
   bool wireframeDrags;
 
   /// Whether Caps Lock suspends the Viewer's updates, as in After Effects.
-  /// Off by default, so a Caps Lock left on while typing changes nothing.
+  /// On by default, as there.
   bool capsLockSuspends;
 
   /// Whether footage is decoded by the graphics card's video unit. On by
@@ -124,7 +124,7 @@ class PerformanceSettings {
     this.fullResDragPreviews = false,
     this.dragResolutionLimit = 0,
     this.wireframeDrags = false,
-    this.capsLockSuspends = false,
+    this.capsLockSuspends = true,
     this.hardwareDecode = true,
     this.largestPicture,
   });
@@ -175,7 +175,7 @@ class PerformanceSettings {
             ? j['drag_resolution_limit'] as int
             : 0,
         wireframeDrags: j['wireframe_drags'] == true,
-        capsLockSuspends: j['caps_lock_suspends'] == true,
+        capsLockSuspends: j['caps_lock_suspends'] != false,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
         largestPicture: _positiveInt(j['largest_picture']),

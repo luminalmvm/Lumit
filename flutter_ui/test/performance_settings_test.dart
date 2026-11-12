@@ -6,20 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/settings.dart';
 
 void main() {
-  test('an older file reads as Auto, no wireframe, no Caps Lock', () {
+  test('an older file reads as Auto, no wireframe, Caps Lock on', () {
     final p = PerformanceSettings.fromJson(const {});
     expect(p.dragResolutionLimit, 0);
     expect(p.wireframeDrags, isFalse);
-    expect(p.capsLockSuspends, isFalse);
+    expect(p.capsLockSuspends, isTrue);
   });
 
   test('the drag settings round-trip, and an odd limit is Auto', () {
     final p = PerformanceSettings(
-        dragResolutionLimit: 8, wireframeDrags: true, capsLockSuspends: true);
+        dragResolutionLimit: 8, wireframeDrags: true, capsLockSuspends: false);
     final back = PerformanceSettings.fromJson(p.toJson());
     expect(back.dragResolutionLimit, 8);
     expect(back.wireframeDrags, isTrue);
-    expect(back.capsLockSuspends, isTrue);
+    expect(back.capsLockSuspends, isFalse);
     expect(
         PerformanceSettings.fromJson(const {'drag_resolution_limit': 3})
             .dragResolutionLimit,
