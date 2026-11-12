@@ -4,6 +4,7 @@
 // settings never move, and two machines' edits merge without one eating the
 // other.
 
+import 'dart:convert';
 import 'dart:io' hide Platform;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -88,5 +89,20 @@ void main() {
       // Added there, and removed there.
       'new': 2,
     });
+
+    // Saved easings travel as the text of their file. One added on each
+    // machine, one changed here and removed there: all three stand.
+    String easings(List<Object> list) =>
+        const JsonEncoder.withIndent('  ').convert(list);
+    final merged = mergeSettings(
+      {'easings': easings([{'name': 'Snap', 'v': 1}])},
+      {'easings': easings([{'name': 'Snap', 'v': 2}, {'name': 'Mine'}])},
+      {'easings': easings([{'name': 'Theirs'}])},
+    ) as Map<String, dynamic>;
+    expect(jsonDecode(merged['easings'] as String), [
+      {'name': 'Snap', 'v': 2},
+      {'name': 'Mine'},
+      {'name': 'Theirs'},
+    ]);
   });
 }

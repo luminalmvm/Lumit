@@ -177,7 +177,52 @@ Object? mergeSettings(Object? base, Object? local, Object? remote) {
     }
     return merged;
   }
-  return _same(local, base) ? remote : local;
+  return _mergeNamed(base, local, remote) ??
+      (_same(local, base) ? remote : local);
+}
+
+/// Lists of named entries, such as the saved easings (kept as the text of
+/// their file), merged an entry at a time, so an easing added here and
+/// another added there both stand. An entry changed on one side takes that
+/// side, changed on both takes this machine's, and one removed on one side
+/// goes unless the other changed it. This machine's order is kept, with the
+/// other's new entries after. Null when the values are not such lists.
+Object? _mergeNamed(Object? base, Object? local, Object? remote) {
+  if ((local is String) != (remote is String)) return null;
+  List<Map<dynamic, dynamic>>? entries(Object? value) {
+    var list = value;
+    if (value is String) {
+      try {
+        list = jsonDecode(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (list is! List || list.any((e) => e is! Map || e['name'] is! String)) {
+      return null;
+    }
+    return list.cast<Map<dynamic, dynamic>>();
+  }
+
+  final here = entries(local), there = entries(remote);
+  if (here == null || there == null) return null;
+  Map<Object?, Map<dynamic, dynamic>> named(List<Map<dynamic, dynamic>> l) =>
+      {for (final e in l) e['name']: e};
+  final was = named(entries(base) ?? const []);
+  final mine = named(here), theirs = named(there);
+  final merged = <Map<dynamic, dynamic>>[];
+  for (final name in {...mine.keys, ...theirs.keys}) {
+    final (l, r, b) = (mine[name], theirs[name], was[name]);
+    final entry = l == null
+        ? (_same(r, b) ? null : r)
+        : r == null
+            ? (_same(l, b) ? null : l)
+            : (_same(l, b) ? r : l);
+    if (entry != null) merged.add(entry);
+  }
+  return local is String
+      ? const JsonEncoder.withIndent('  ').convert(merged)
+      : merged;
 }
 
 bool _same(Object? a, Object? b) => jsonEncode(a) == jsonEncode(b);
