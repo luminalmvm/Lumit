@@ -187,6 +187,14 @@ An effect's **Matte** socket takes a wire as well as the layer picker on its row
 An effect's **Output** wired into the Matte of an effect below it mattes that effect by its
 picture. The wire is taken off if the two swap places.
 
+### Key wires
+
+A [Correction](/effects/colour/correction/) box has a **Key** output: the node's key, its
+Matte times its qualifier times its windows. Wired into the Matte of any effect below it,
+the key mattes that effect, which then works only where the key is white. A key wire into a
+Correction joins that node's key. Only a Correction has a Key. See
+[Grading](/use/grading/#key-wires).
+
 **Particulate** and the rest of the points family have a socket of their own, for another 
 box to read the point stream.
 

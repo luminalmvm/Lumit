@@ -67,6 +67,7 @@ const CONTROL = {
   layer: "Layer",
   mask_path: "Masks",
   curve: "Curve",
+  shape: "Points",
 };
 
 /** What a colour-name row lists, by the config list it draws from. */
@@ -136,6 +137,8 @@ function rangeCell(p) {
       return "This layer's masks";
     case "curve":
       return "2 to 32 points in the unit square";
+    case "shape":
+      return "Up to 32 points";
     default:
       return "-";
   }
@@ -169,7 +172,13 @@ function defaultCell(p) {
     case "mask_path":
       return p.self_default ? "First mask" : "None";
     case "curve":
-      return "The identity diagonal";
+      // A hue curve rests as a flat line across the middle, a tone curve as
+      // the diagonal.
+      return p.default?.every(([, y]) => y === 0.5)
+        ? "A flat line across the middle"
+        : "The identity diagonal";
+    case "shape":
+      return "None";
     default:
       return "-";
   }
