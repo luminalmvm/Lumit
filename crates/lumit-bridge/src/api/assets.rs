@@ -18,6 +18,8 @@ use uuid::Uuid;
 use crate::api::{effect::BridgeScalar, layer::LayerReference, solid::SolidReference, BridgeError};
 
 pub(crate) mod animators;
+pub(crate) mod style;
+use style::{paragraph_of, read_paragraph, read_style, restyle_shift, style_of};
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -101,6 +103,9 @@ pub struct BridgeTextStyle {
     /// The face inside the family, such as "Bold Italic". Empty is the
     /// family's regular face.
     pub face: String,
+    /// A variable font's axes, set for the whole layer on top of the face.
+    pub axes: Vec<BridgeFontAxisValue>,
+    pub axis_spacing: BridgeAxisSpacing,
     /// Baseline to baseline in px. Unset is auto, 120 % of the size.
     pub leading: Option<f64>,
     pub kerning: BridgeKerning,
@@ -188,9 +193,21 @@ pub enum BridgeSelectorBasis {
 pub enum BridgeSelectorShape {
     Square,
     Ramp,
+    Smooth,
 }
 
-/// Which stretch of the words an animator reaches, in per cent of the run.
+/// How a selector picks its letters: by place in the words, or by how near
+/// they are to a target layer.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorKind {
+    Range,
+    Proximity,
+    Wiggly,
+}
+
+/// Which stretch of the words an animator reaches, in per cent of the run, or
+/// for a Proximity selector which letters are near its target.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeRangeSelector {
@@ -199,6 +216,91 @@ pub struct BridgeRangeSelector {
     pub offset: BridgeScalar,
     pub basis: BridgeSelectorBasis,
     pub shape: BridgeSelectorShape,
+    pub kind: BridgeSelectorKind,
+    /// The layer a Proximity selector measures from, in the same comp.
+    pub target: Option<Uuid>,
+    /// Px in the text layer's own pixels.
+    pub radius: BridgeScalar,
+    pub invert: bool,
+    /// A Wiggly selector: the range of weights, per cent, how often they
+    /// change course a second, how much the letters wander together, per
+    /// cent, and which wander.
+    pub min_amount: BridgeScalar,
+    pub max_amount: BridgeScalar,
+    pub wiggles: BridgeScalar,
+    pub correlation: BridgeScalar,
+    pub seed: u32,
+}
+
+/// One font axis an animator moves its letters along: a tag such as `wght`
+/// and the place on it, in the font's own numbers.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeAnimatorAxis {
+    pub tag: String,
+    pub value: BridgeScalar,
+}
+
+/// A place the whole layer is set at on one of its font's axes.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeFontAxisValue {
+    pub tag: String,
+    pub value: f64,
+}
+
+/// How letters make room for each other while animators move them on the
+/// font's axes: Variable font spacing.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeAxisSpacing {
+    Adaptive,
+    PerCharacter,
+    Default,
+}
+
+/// One axis of a variable font, as the Text panel shows it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeFontAxis {
+    /// The four-letter tag, such as `wght`.
+    pub tag: String,
+    /// What the font calls it, such as "Weight".
+    pub name: String,
+    pub min: f64,
+    pub max: f64,
+    /// The font's own default place on it.
+    pub default_value: f64,
+    /// Where the chosen face sits on it, which an unset axis reads as.
+    pub face: f64,
+    /// An axis the font asks not to be shown.
+    pub hidden: bool,
+}
+
+/// The axes of a family's face: empty for a font that doesn't vary, or one
+/// not installed here. Not sync, since it may read the font's file.
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn text_font_axes(family: String, face: String) -> Vec<BridgeFontAxis> {
+    lumit_text::fonts::axes(&family, &face)
+        .into_iter()
+        .map(|a| BridgeFontAxis {
+            tag: a.tag,
+            name: a.name,
+            min: a.min,
+            max: a.max,
+            default_value: a.default,
+            face: a.face,
+            hidden: a.hidden,
+        })
+        .collect()
+}
+
+/// The installed families with axes of their own, for the Text panel's
+/// Variable fonts only filter.
+#[must_use]
+pub fn text_variable_font_families() -> Vec<String> {
+    lumit_text::fonts::variable_families()
 }
 
 /// One animator group: what a reached letter is asked to do, and the range
@@ -224,6 +326,12 @@ pub struct BridgeTextAnimator {
     pub fill_r: BridgeScalar,
     pub fill_g: BridgeScalar,
     pub fill_b: BridgeScalar,
+    /// The font axes the reached letters are set along, at most eight on a
+    /// layer.
+    pub axes: Vec<BridgeAnimatorAxis>,
+    /// The property groups the animator lists, in the order added; `None`
+    /// lists them all.
+    pub properties: Option<Vec<String>>,
 }
 
 /// A solid asset's definition.
@@ -812,159 +920,6 @@ pub(crate) fn text_document_of(
         paragraph: paragraph_of(document.paragraph),
         extra: serde_json::Map::new(),
     })
-}
-
-/// How far the anchor has to move for `after` to sit where `before` sat. The
-/// live preview and the committed write both ask here, so a value being
-/// dragged draws what letting go of it will write.
-#[frb(ignore)]
-pub(crate) fn restyle_shift(
-    before: &lumit_core::model::TextDocument,
-    after: &lumit_core::model::TextDocument,
-) -> (f64, f64) {
-    // A line on a path already has its room and its corner at the layer's
-    // origin, so nothing there moves.
-    let straight = before.path.is_none() && after.path.is_none();
-    // Retyping the words alone leaves the anchor where it is.
-    let restyled = before.size != after.size
-        || before.style != after.style
-        || before.paragraph != after.paragraph
-        || before.animators.is_empty() != after.animators.is_empty();
-    if !(straight && restyled) {
-        return (0.0, 0.0);
-    }
-    let (was, now) = (reference_point(before), reference_point(after));
-    (now.0 - was.0, now.1 - was.1)
-}
-
-/// The point of a block that a restyle leaves where it is: the first
-/// baseline, at the side the lines line up on. In the layer's own pixels.
-fn reference_point(document: &lumit_core::model::TextDocument) -> (f64, f64) {
-    use lumit_core::text::TextAlign;
-    let l = lumit_text::layout(
-        &lumit_text::TextBlock::of(document, &document.text),
-        !document.animators.is_empty(),
-    );
-    let x = match document.paragraph.align {
-        TextAlign::Left => l.left,
-        TextAlign::Centre => (l.left + l.right) * 0.5,
-        TextAlign::Right => l.right,
-    };
-    let y = l.lines.first().map_or(0.0, |line| line.baseline);
-    (f64::from(x), f64::from(y))
-}
-
-fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
-    use lumit_core::text::{Caps, Kerning, Script};
-    BridgeTextStyle {
-        family: style.family.clone(),
-        face: style.face.clone(),
-        leading: style.leading,
-        kerning: match style.kerning {
-            Kerning::Off => BridgeKerning::Off,
-            Kerning::Metrics => BridgeKerning::Metrics,
-        },
-        tracking: style.tracking,
-        scale_x: style.scale_x,
-        scale_y: style.scale_y,
-        baseline_shift: style.baseline_shift,
-        caps: match style.caps {
-            Caps::Normal => BridgeCaps::Normal,
-            Caps::All => BridgeCaps::All,
-            Caps::Small => BridgeCaps::Small,
-        },
-        script: match style.script {
-            Script::Normal => BridgeScript::Normal,
-            Script::Superscript => BridgeScript::Superscript,
-            Script::Subscript => BridgeScript::Subscript,
-        },
-        faux_bold: style.faux_bold,
-        faux_italic: style.faux_italic,
-        ligatures: style.ligatures,
-        fill_on: style.fill_on,
-        stroke_on: style.stroke_on,
-        stroke: colour_of(style.stroke),
-        stroke_width: style.stroke_width,
-        stroke_over: style.stroke_over,
-        strokes_together: style.strokes_together,
-    }
-}
-
-fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
-    use lumit_core::text::{Caps, Kerning, Script};
-    lumit_core::text::TextStyle {
-        family: style.family,
-        face: style.face,
-        leading: style.leading.filter(|l| l.is_finite() && *l >= 0.0),
-        kerning: match style.kerning {
-            BridgeKerning::Off => Kerning::Off,
-            BridgeKerning::Metrics => Kerning::Metrics,
-        },
-        tracking: style.tracking,
-        scale_x: style.scale_x,
-        scale_y: style.scale_y,
-        baseline_shift: style.baseline_shift,
-        caps: match style.caps {
-            BridgeCaps::Normal => Caps::Normal,
-            BridgeCaps::All => Caps::All,
-            BridgeCaps::Small => Caps::Small,
-        },
-        script: match style.script {
-            BridgeScript::Normal => Script::Normal,
-            BridgeScript::Superscript => Script::Superscript,
-            BridgeScript::Subscript => Script::Subscript,
-        },
-        faux_bold: style.faux_bold,
-        faux_italic: style.faux_italic,
-        ligatures: style.ligatures,
-        fill_on: style.fill_on,
-        stroke_on: style.stroke_on,
-        stroke: linear_of(style.stroke),
-        stroke_width: style.stroke_width,
-        stroke_over: style.stroke_over,
-        strokes_together: style.strokes_together,
-        extra: serde_json::Map::new(),
-    }
-}
-
-fn read_paragraph(paragraph: &lumit_core::text::ParagraphStyle) -> BridgeParagraphStyle {
-    use lumit_core::text::TextAlign;
-    BridgeParagraphStyle {
-        align: match paragraph.align {
-            TextAlign::Left => BridgeTextAlign::Left,
-            TextAlign::Centre => BridgeTextAlign::Centre,
-            TextAlign::Right => BridgeTextAlign::Right,
-        },
-        box_width: Some(paragraph.box_width).filter(|w| *w > 0.0),
-        justify: paragraph.justify,
-        indent_left: paragraph.indent_left,
-        indent_right: paragraph.indent_right,
-        indent_first: paragraph.indent_first,
-        space_before: paragraph.space_before,
-        space_after: paragraph.space_after,
-    }
-}
-
-fn paragraph_of(paragraph: BridgeParagraphStyle) -> lumit_core::text::ParagraphStyle {
-    use lumit_core::text::TextAlign;
-    lumit_core::text::ParagraphStyle {
-        align: match paragraph.align {
-            BridgeTextAlign::Left => TextAlign::Left,
-            BridgeTextAlign::Centre => TextAlign::Centre,
-            BridgeTextAlign::Right => TextAlign::Right,
-        },
-        box_width: paragraph
-            .box_width
-            .filter(|w| w.is_finite() && *w > 0.0)
-            .unwrap_or(0.0),
-        justify: paragraph.justify,
-        indent_left: paragraph.indent_left,
-        indent_right: paragraph.indent_right,
-        indent_first: paragraph.indent_first,
-        space_before: paragraph.space_before,
-        space_after: paragraph.space_after,
-        extra: serde_json::Map::new(),
-    }
 }
 
 /// Slide an animatable number by `delta` without changing its shape — every

@@ -10480,6 +10480,127 @@
   "@textAnimatorShapeRamp": {
     "description": "Option in the Animators section's Shape picker: the movement rises evenly from nothing at the range's start to the whole way at its end."
   },
+  "textAnimatorShapeSmooth": "Smooth",
+  "@textAnimatorShapeSmooth": {
+    "description": "Option in the Animators section's Shape picker: a ramp eased in and out, so the letters at either end of the slope barely move."
+  },
+  "textAnimatorSelector": "Selector",
+  "@textAnimatorSelector": {
+    "description": "Label of the picker in the Animators section that chooses how an animator picks its letters: by a range of the words, or by how near they are to another layer."
+  },
+  "textAnimatorSelectorRange": "Range",
+  "@textAnimatorSelectorRange": {
+    "description": "Option in the Animators section's Selector picker: the letters are picked by a stretch of the words, in per cent."
+  },
+  "textAnimatorSelectorProximity": "Proximity",
+  "@textAnimatorSelectorProximity": {
+    "description": "Option in the Animators section's Selector picker: the letters are picked by how near they are to a target layer, such as a null."
+  },
+  "textAnimatorSelectorWiggly": "Wiggly",
+  "@textAnimatorSelectorWiggly": {
+    "description": "Option in the Animators section's Selector picker: each letter's share wanders on its own over time, as After Effects' Wiggly selector."
+  },
+  "textAnimatorProperty": "Property",
+  "@textAnimatorProperty": {
+    "description": "Submenu of a text animator's Add menu listing what the animator can change: Position, Rotation, Scale, Opacity, Fill offset and the variable font's axes."
+  },
+  "textAnimatorMinAmount": "Min amount",
+  "@textAnimatorMinAmount": {
+    "description": "A Wiggly selector's number: the least share a letter wanders down to, in per cent."
+  },
+  "textAnimatorMaxAmount": "Max amount",
+  "@textAnimatorMaxAmount": {
+    "description": "A Wiggly selector's number: the most share a letter wanders up to, in per cent."
+  },
+  "textAnimatorWiggles": "Wiggles/second",
+  "@textAnimatorWiggles": {
+    "description": "A Wiggly selector's number: how many times a second each letter's share changes course."
+  },
+  "textAnimatorCorrelation": "Correlation",
+  "@textAnimatorCorrelation": {
+    "description": "A Wiggly selector's number, in per cent: how much the letters wander together. 100 moves them as one."
+  },
+  "textAnimatorSeed": "Random seed",
+  "@textAnimatorSeed": {
+    "description": "A Wiggly selector's number: picks another wander for the same settings."
+  },
+  "textAnimatorTarget": "Target",
+  "@textAnimatorTarget": {
+    "description": "Label of the layer picker for a Proximity selector: the layer whose anchor the letters are measured from."
+  },
+  "textAnimatorRadius": "Radius",
+  "@textAnimatorRadius": {
+    "description": "Label of a Proximity selector's number: how far from the target layer a letter is still reached, in pixels."
+  },
+  "textAnimatorInvert": "Invert",
+  "@textAnimatorInvert": {
+    "description": "Label of a Proximity selector's checkbox: the letters far from the target are moved and the near ones are left alone."
+  },
+  "textAnimatorAddAxis": "Add font axis",
+  "@textAnimatorAddAxis": {
+    "description": "Menu in the Animators section listing the variable font's axes (Weight, Width and so on) an animator can move the letters along."
+  },
+  "textAnimatorAxisLabel": "Font axis {name}",
+  "@textAnimatorAxisLabel": {
+    "description": "Name of an animator's row that sets the letters on one of the variable font's axes, as After Effects names it. {name} is the axis's name, such as Weight.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "textAxisWeight": "Weight",
+  "@textAxisWeight": {
+    "description": "The standard name of a variable font's weight (wght) axis, shown when the font does not name it."
+  },
+  "textAxisWidth": "Width",
+  "@textAxisWidth": {
+    "description": "The standard name of a variable font's width (wdth) axis, shown when the font does not name it."
+  },
+  "textAxisSlant": "Slant",
+  "@textAxisSlant": {
+    "description": "The standard name of a variable font's slant (slnt) axis, shown when the font does not name it."
+  },
+  "textAxisItalic": "Italic",
+  "@textAxisItalic": {
+    "description": "The standard name of a variable font's italic (ital) axis, shown when the font does not name it."
+  },
+  "textAxisOpticalSize": "Optical size",
+  "@textAxisOpticalSize": {
+    "description": "The standard name of a variable font's optical size (opsz) axis, shown when the font does not name it."
+  },
+  "textAnimatorAxesFull": "A layer moves at most 8 font axes",
+  "@textAnimatorAxesFull": {
+    "description": "Shown in place of the Add font axis menu once a text layer's animators move eight axes, the most it can."
+  },
+  "textFontAxes": "Variable font axes",
+  "@textFontAxes": {
+    "description": "Tooltip of the Text panel button that opens the variable font's axes (Weight, Width, Slant and so on) for the whole layer."
+  },
+  "textFontAxesReset": "Reset axes",
+  "@textFontAxesReset": {
+    "description": "Button in the Text panel's variable font axes pop-up that puts every axis back where the chosen face sets it."
+  },
+  "textVariableOnly": "Variable fonts only",
+  "@textVariableOnly": {
+    "description": "Checkbox in the Text panel that limits the font list to variable fonts, the ones with axes."
+  },
+  "textAxisSpacing": "Variable font spacing",
+  "@textAxisSpacing": {
+    "description": "Label in the Text panel: how the letters make room for each other while animators move them on the font's axes."
+  },
+  "textAxisSpacingAdaptive": "Adaptive",
+  "@textAxisSpacingAdaptive": {
+    "description": "Option of Variable font spacing: each letter takes the room it needs and every line lines up again, so centred words stay centred."
+  },
+  "textAxisSpacingPerCharacter": "Per character",
+  "@textAxisSpacingPerCharacter": {
+    "description": "Option of Variable font spacing: every letter keeps its room and grows about its middle, so nothing else on the line moves."
+  },
+  "textAxisSpacingDefault": "Default",
+  "@textAxisSpacingDefault": {
+    "description": "Option of Variable font spacing: each letter takes the room it needs and the line grows from its start."
+  },
   "textAnimatorShapeSquare": "Square",
   "@textAnimatorShapeSquare": {
     "description": "Option in the Animators section's Shape picker: letters inside the range move the whole way, letters outside do not move."

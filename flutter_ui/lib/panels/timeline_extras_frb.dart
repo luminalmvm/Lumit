@@ -1902,8 +1902,15 @@ class _TimelineRulerState extends State<TimelineRuler> {
       Rect.fromCenter(center: _pointer, width: 40, height: 0));
 
   void _scrubBy(DragUpdateDetails d) {
-    _seek(d.localPosition.dx);
     _pointer = d.globalPosition;
+    // From the global position, through the ruler as it stands now. The
+    // drag's own local position is measured through the transform taken at
+    // the press, so once the edge scroll had moved the lanes, every move of
+    // the pointer put the playhead back by however far they had scrolled.
+    final box = context.findRenderObject() as RenderBox?;
+    _seek(box != null && box.attached
+        ? box.globalToLocal(d.globalPosition).dx
+        : d.localPosition.dx);
     if (_edgeScroll == null) {
       final scrollable = Scrollable.maybeOf(context, axis: Axis.horizontal);
       if (scrollable == null) return;

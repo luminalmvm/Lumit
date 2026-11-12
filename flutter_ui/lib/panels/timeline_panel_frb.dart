@@ -116,6 +116,8 @@ import 'timeline_group_row_frb.dart';
 import 'timeline_outline_row_frb.dart' show renameLayerInView;
 import 'transform_rows_frb.dart';
 import 'viewer_tool_cursor.dart' show handPanLayer;
+import 'text_animator_rows_frb.dart'
+    show TextAnimatorValue, removeTextAnimatorValue, removeTextAnimators;
 
 // The parts this file was split into (the split rule): every name they
 // hold was reachable through this file before the split, and still is.
@@ -747,10 +749,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
       : {..._selectedProperties};
 
-  /// Forget any selected property at or below [path], and any keyframes of
+  /// Forget any selected property below [path], and any keyframes of
   /// theirs the marquee had caught.
   void _dropSelectionUnder(String path) {
-    _selectedProperties.removeWhere((p) => p == path || isUnderPath(path, p));
+    // The heading itself stays picked: it is still on show, and a click that
+    // shuts it is the same click that picks it, for Delete to act on.
+    _selectedProperties.removeWhere((p) => isUnderPath(path, p));
     _laneKeySelection.removeWhere((id) {
       final hash = id.lastIndexOf('#');
       if (hash <= 0) return false;
@@ -1374,6 +1378,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Whose curves the graph draws.
   GraphScope _graphScope = GraphScope.selected;
+
+  /// Whether the graph last showed a selected layer's curves because nothing
+  /// was picked ([_shownChannels]). A key clicked there then picks nothing:
+  /// picking its property ended the fallback, and the layer's other curves
+  /// went from the graph the moment one of their neighbours' keys was taken.
+  bool _graphLayerFallback = false;
 
   final GlobalKey<GraphEditorFrbState> _graphPane = GlobalKey();
 
@@ -2686,6 +2696,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
         _deleteSelectedMasks() ||
         _deleteSelectedShapeEntries() ||
+        _deleteSelectedAnimators() ||
         _deleteSelectedEffects() ||
         _deleteSequenceClip();
   }
@@ -2746,6 +2757,79 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     setState(() => _selectedProperties.removeWhere((path) {
           final owner = layerIdOfPath(path);
           return owner != null && isUnderPath(contentsPath(owner), path);
+        }));
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    return true;
+  }
+
+  /// Delete the picked text animator rows, returning whether there was one:
+  /// **Animators** takes every animator off its layer, an animator's heading
+  /// that animator, and one of its rows that property (a font axis, or a
+  /// group put back and off the animator's list). One write per layer and
+  /// pick, each its own undo step.
+  bool _deleteSelectedAnimators() {
+    if (!mounted) return false;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    // Per layer: everything, the animators, and the rows by animator.
+    final all = <String>{};
+    final whole = <String, Set<int>>{};
+    final rows = <String, List<(int, TextAnimatorValue)>>{};
+    for (final path in _selectedProperties) {
+      final layerId = layerIdOfPath(path);
+      if (layerId == null) continue;
+      final head = animatorsPath(layerId);
+      if (path == head) {
+        all.add(layerId);
+        continue;
+      }
+      if (!path.startsWith('$head/')) continue;
+      final parts = path.substring(head.length + 1).split('/');
+      final index = int.tryParse(parts.first);
+      if (index == null) continue;
+      if (parts.length == 1) {
+        (whole[layerId] ??= {}).add(index);
+      } else if (parts.length == 2) {
+        final value = TextAnimatorValue.values
+            .where((v) => v.name == parts[1])
+            .firstOrNull;
+        if (value != null) (rows[layerId] ??= []).add((index, value));
+      }
+    }
+    if (all.isEmpty && whole.isEmpty && rows.isEmpty) return false;
+    var deleted = false;
+    for (final entry in ui.model.layers) {
+      final id = entry.layer.internallayerId.toString();
+      try {
+        if (all.contains(id)) {
+          if (entry.layer.getText()?.animators.isEmpty ?? true) continue;
+          removeTextAnimators(entry.layer);
+          deleted = true;
+          continue;
+        }
+        // The rows first, while the indices still name their animators.
+        // Axes from the last slot down, so each still names its axis.
+        final picked = (rows[id] ?? <(int, TextAnimatorValue)>[])
+          ..sort((a, b) => b.$2.index - a.$2.index);
+        for (final (index, value) in picked) {
+          if (whole[id]?.contains(index) ?? false) continue;
+          deleted |= removeTextAnimatorValue(entry.layer, index, value);
+        }
+        final gone = (whole[id]?.toList() ?? [])..sort((a, b) => b - a);
+        for (final index in gone) {
+          if (index < entry.layer.getText()!.animators.length) {
+            removeTextAnimators(entry.layer, index: index);
+            deleted = true;
+          }
+        }
+      } catch (_) {
+        // Gone between the draw and the press; nothing left to delete.
+      }
+    }
+    if (!deleted) return false;
+    setState(() => _selectedProperties.removeWhere((path) {
+          final owner = layerIdOfPath(path);
+          return owner != null && isUnderPath(animatorsPath(owner), path);
         }));
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
     ui.model.refresh();
@@ -3564,25 +3648,44 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _lastReveal = null;
         return;
       }
+      // `U`: the keyed rows and the headings over them, and nothing else. The
+      // rows decide which layers open, as the menu's reveal does: the engine's
+      // groups know nothing of a shape's or a mask's own keys, so a circle
+      // keyed on its Size left its layer shut.
+      if (_revealTaps == 1) {
+        final ids = {for (final l in layers) l.internallayerId.toString()};
+        final entries = [
+          for (final entry in ui.model.layers)
+            if (ids.contains(entry.layer.internallayerId.toString())) entry
+        ];
+        final rows = layerRows(
+          layers: entries,
+          open: _open,
+          rowHeight: 1,
+          hasAudio: _hasAudio,
+          hasPicture: _hasPicture,
+          sequenceExtra: _sequenceExtra,
+          flowParams: _flowParams,
+          volumeDb: _volumeDb,
+          driven: _driven,
+          reveal: {for (final id in ids) id: RevealFilter.keyframed},
+          revealPicked: _revealPicked,
+        );
+        for (final row in rows) {
+          if (row.foldRows.isEmpty) continue;
+          _setOpen(row.id, true);
+          _revealed[row.id] = RevealFilter.keyframed;
+        }
+        return;
+      }
       for (final layer in layers) {
         final id = layer.internallayerId.toString();
-        final groups = layer.revealGroups(
-          kind: _revealTaps == 1
-              ? BridgeRevealKind.animated
-              : BridgeRevealKind.modified,
-        );
+        final groups = layer.revealGroups(kind: BridgeRevealKind.modified);
         // Nothing qualifies: leave the layer shut rather than opening it onto
         // a list of headings the reveal just said were empty.
         if (!groups.any) continue;
         _setOpen(id, true);
-        // `U`: the keyed rows and the headings over them, and nothing else.
-        // The group paths below are what `UU` opens — a heading opened by path
-        // shows everything under it, which is exactly what the first tap is
-        // not for.
-        if (_revealTaps == 1) {
-          _revealed[id] = RevealFilter.keyframed;
-          continue;
-        }
+        // `UU`: a heading opened by path shows everything under it.
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
           // The drivers on the layer's graph come in the same list, and
@@ -4043,6 +4146,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ui.selectedLayerIds.isNotEmpty
         ? GraphScope.layer
         : _graphScope;
+    _graphLayerFallback = scope != _graphScope;
     if (scope == GraphScope.selected) return picked;
     final layers = {
       ...ui.selectedLayerIds.map((id) => '$id'),
@@ -4079,6 +4183,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Keys picked on dashed curves pick those curves' properties too.
   void _pickKeyRows(List<GraphChannel> shown) {
+    if (_graphLayerFallback) return;
     for (final id in _graphKeySelection) {
       final hash = id.lastIndexOf('#');
       if (hash <= 0) continue;
@@ -4137,6 +4242,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   void _zoomDragEnd() {
     _zoomAnchorHeld = false;
+  }
+
+  /// The graph's `Ctrl`+middle-button drag: the time axis zoomed by [factor],
+  /// at once, about the frame under the drag's start, which [anchorX] names in
+  /// content pixels on the drag's first call.
+  void _zoomGraphTime(double factor, double? anchorX, TimelineAxis axis) {
+    if (anchorX != null) {
+      _zoomAnchorViewportX = anchorX - (_hLane.hasClients ? _hLane.offset : 0);
+      _zoomAnchorFrame = axis.frameAtExact(anchorX);
+      _zoomAnchorHeld = true;
+    }
+    _zoomMotion.goTo((_zoomMotion.target * factor).clamp(1.0, _maxZoom),
+        motion: MotionSpec.still);
   }
 
   /// Point the flight's anchor at the playhead — held where it is if it is on
@@ -5563,6 +5681,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     },
                                     onChanged: ui.model.refresh,
                                     onWheelTime: (e, x) => _wheel(e, x, axis),
+                                    onPanTime: (dx) => _scrollBy(_hLane, dx),
+                                    onZoomTime: (f, x) =>
+                                        _zoomGraphTime(f, x, axis),
+                                    onZoomTimeEnd: _zoomDragEnd,
                                     scope: _graphScope,
                                     onLens: (lens) => setState(() {
                                       _graphLens = lens;

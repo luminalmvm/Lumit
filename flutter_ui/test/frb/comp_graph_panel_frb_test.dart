@@ -21,6 +21,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/comp_graph_panel.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show cachedListParameters, defaultEffectValue;
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -46,6 +48,25 @@ const String _cat = 'fx-console-cat-';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(initEngineForTests);
+
+  test('a group folded shut keeps its first row in a box', () {
+    const fx = 'clone_to_points';
+    final params = cachedListParameters(fx);
+    final values = {
+      for (final p in params)
+        if (defaultEffectValue(p.kind) case final v?) p.id: v,
+    };
+    List<String> open() =>
+        [for (final p in compBoxRows(fx, params, values, {}).open) p.id];
+    // At its defaults, Time offset is on view under its heading, and the
+    // rows it switches on are not.
+    expect(open(), contains('time_offset'));
+    expect(open(), isNot(contains('time_samples')));
+    expect(compBoxRows(fx, params, values, {}).kickers['time_offset'], 'Time');
+    // Switched on, the whole group shows.
+    values['time_offset'] = const BridgeEffectValue.choice(1);
+    expect(open(), containsAll(['time_offset', 'time_step', 'time_samples']));
+  });
 
   group('Node graph canvas (frb)', () {
     /// A project holding one node graph, fronted, and one comp beside it.

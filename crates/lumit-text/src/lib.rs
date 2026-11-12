@@ -162,6 +162,112 @@ pub fn words_box(document: &TextDocument, text: &str) -> Option<[f64; 4]> {
     ])
 }
 
+/// The middle of each character of `layer`'s words `line` at layer time `lt`,
+/// in the layer's own pixels and where the letter is drawn without its
+/// animators: what a Proximity selector measures from. What
+/// `lumit_core::text::install_glyph_middles` is handed.
+#[must_use]
+pub fn glyph_middles(
+    layer: &lumit_core::model::Layer,
+    document: &TextDocument,
+    line: &str,
+    lt: f64,
+) -> Vec<Option<[f32; 2]>> {
+    let block = TextBlock::of(document, line);
+    let spine = document
+        .path
+        .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
+        .filter(|p| !p.is_empty());
+    let laid = layout(&block, spine.is_none() && !document.animators.is_empty());
+    let mut out = vec![None; line.chars().count()];
+    let half = (laid.ascent - laid.descent) * 0.5;
+    #[allow(clippy::cast_possible_truncation)] // px
+    let mut along = document.path_offset.value_at(lt) as f32;
+    for row in &laid.lines {
+        let first = row.carets.first().copied().unwrap_or(0.0);
+        for (k, pair) in row.carets.windows(2).enumerate() {
+            let mid = (pair[0] + pair[1]) * 0.5;
+            let at = match &spine {
+                None => Some([mid, row.baseline - half]),
+                Some(path) => {
+                    let total = path.length();
+                    let mut s = along + mid - first;
+                    if path.closed && total > 0.0 {
+                        s = s.rem_euclid(total);
+                    }
+                    (0.0..=total).contains(&s).then(|| {
+                        let (p, tan) = (path.point_at(s), path.tangent_at(s));
+                        [p[0] + tan[1] * half, p[1] - tan[0] * half]
+                    })
+                }
+            };
+            if let Some(slot) = out.get_mut(row.start + k) {
+                *slot = at;
+            }
+        }
+        along += row.carets.last().copied().unwrap_or(first) - first;
+    }
+    out
+}
+
+/// **Text drawn as large as it is shown.** [`rasterise`] at `zoom` raster
+/// pixels to each of the layer's own, as After Effects draws a text layer:
+/// a layer scaled up, or inside a parent scaled up, is drawn that large, so
+/// its letters never blur. The raster grows by `zoom`; the layer keeps its
+/// own size (the second answer), for the placement to draw it at.
+///
+/// A `zoom` of 1 or less is [`rasterise`] itself, byte for byte.
+#[must_use]
+pub fn rasterise_at(
+    block: &TextBlock<'_>,
+    xforms: &[GlyphXform],
+    zoom: f32,
+) -> (RasterText, (u32, u32)) {
+    if !zoom.is_finite() || zoom <= 1.0 + 1e-3 {
+        let plain = rasterise(block, xforms);
+        let size = (plain.width, plain.height);
+        return (plain, size);
+    }
+    // The layer's own size is its layout box, the raster [`rasterise`] makes.
+    // An unstyled line is laid out and cropped by the plain path, so the
+    // larger drawing is fitted into that same frame and nothing moves as the
+    // layer crosses 100 %.
+    let laid = layout(block, !xforms.is_empty());
+    let fit = block.plain().then(|| {
+        let line = laid.lines.first();
+        (
+            [
+                line.and_then(|l| l.carets.first().copied())
+                    .unwrap_or(laid.left),
+                line.map_or(0.0, |l| l.baseline),
+            ],
+            (laid.width, laid.height),
+        )
+    });
+    let raster = styled::rasterise_zoomed(block, xforms, zoom, fit);
+    if raster.width <= 1 && raster.height <= 1 {
+        return (raster, (1, 1));
+    }
+    (raster, (laid.width, laid.height))
+}
+
+/// [`rasterise_along`] drawn `zoom` times as large, the same way.
+#[must_use]
+pub fn rasterise_along_at(
+    block: &TextBlock<'_>,
+    path: &MaskPolyline,
+    offset: f32,
+    width: u32,
+    height: u32,
+    xforms: &[GlyphXform],
+    zoom: f32,
+) -> RasterText {
+    if !zoom.is_finite() || zoom <= 1.0 + 1e-3 {
+        return rasterise_along(block, path, offset, width, height, xforms);
+    }
+    styled::rasterise_on_path(block, path, offset, width, height, xforms, zoom)
+}
+
 /// Draw a block along `path` into a `width` × `height` buffer, the box
 /// [`path_box`] hands out.
 #[must_use]
@@ -178,7 +284,7 @@ pub fn rasterise_along(
             block.text, block.size, block.fill, path, offset, width, height, xforms,
         )
     } else {
-        styled::rasterise_on_path(block, path, offset, width, height, xforms)
+        styled::rasterise_on_path(block, path, offset, width, height, xforms, 1.0)
     }
 }
 
@@ -1441,7 +1547,7 @@ mit",
     #[test]
     fn an_animated_line_is_deterministic() {
         use lumit_core::anim::Property;
-        use lumit_core::text::{glyph_xforms, SelectorShape, TextAnimator};
+        use lumit_core::text::{glyph_xforms, selector::SelectorShape, TextAnimator};
         let mut a = TextAnimator::new("Cascade");
         a.selector.shape = SelectorShape::Ramp;
         a.position_y = Property::fixed(-20.0);

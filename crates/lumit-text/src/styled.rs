@@ -24,6 +24,9 @@ use zeno::{Angle, Command, Fill, Join, Mask, PathBuilder, Stroke, Transform};
 use crate::fonts::Face;
 use crate::{animator_margin, BlockLayout, BlockLine, GlyphOutline, RasterText, TextBlock};
 
+mod axes;
+use axes::{face_of, respace};
+
 /// The largest a styled letter is set, in px.
 const MAX_SIZE: f32 = 2000.0;
 /// The most pixels a block is allowed to ask for, so a long title at a huge
@@ -54,6 +57,12 @@ struct Placed {
     advance: f32,
     /// Px per font unit, before the style's own scale.
     scale: f32,
+    /// The place on the font's axes an animator set this letter at, as an
+    /// index into [`Laid::places`]. `None` is the layer's own place.
+    place: Option<usize>,
+    /// How far the letter is drawn off its pen position, which is how a letter
+    /// grows about its middle under Per character spacing.
+    nudge: f32,
 }
 
 struct Line {
@@ -80,6 +89,8 @@ struct Laid {
     size: f32,
     scale_x: f32,
     scale_y: f32,
+    /// The places on the font's axes the animators set letters at.
+    places: Vec<harfrust::Font>,
 }
 
 impl Laid {
@@ -314,6 +325,8 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
                     dy: -lift - dy,
                     advance,
                     scale,
+                    place: None,
+                    nudge: 0.0,
                 });
                 match spans.last_mut() {
                     Some(span) if span.0 == k => span.2 = pen + advance,
@@ -491,11 +504,12 @@ fn lay(block: &TextBlock<'_>, face: &Face) -> Laid {
         size,
         scale_x,
         scale_y,
+        places: Vec::new(),
     }
 }
 
 pub(crate) fn layout(block: &TextBlock<'_>, animated: bool) -> BlockLayout {
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
+    let face = face_of(block);
     let laid = lay(block, &face);
     let margin = if animated {
         animator_margin(laid.size)
@@ -632,7 +646,11 @@ fn placements(
         let Some(place) = run.place(laid, glyph, flat_x) else {
             continue;
         };
-        let matrix = animated(glyph_matrix(glyph, laid, slanted), glyph.advance, &x);
+        let matrix = animated(
+            glyph_matrix(glyph, laid, slanted).then_translate(glyph.nudge, 0.0),
+            glyph.advance,
+            &x,
+        );
         out.push((i, matrix.then(&place), x));
     }
     out
@@ -708,6 +726,9 @@ fn paint<'s>(
     }
 }
 
+/// Draw the laid words into a `w` × `h` raster, `zoom` raster pixels to each
+/// of the layer's own: a layer shown larger than its own size is drawn that
+/// large, so its letters stay sharp.
 fn draw(
     block: &TextBlock<'_>,
     face: &Face,
@@ -715,6 +736,7 @@ fn draw(
     run: &Run<'_>,
     xforms: &[GlyphXform],
     (w, h): (u32, u32),
+    zoom: f32,
 ) -> Vec<u8> {
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
     let Some(font) = face.font() else {
@@ -723,13 +745,16 @@ fn draw(
     let style = block.style;
     let outlines = font.outline_glyphs();
     let location = LocationRef::new(face.shaper.normalized_coords());
-    let mut paths: HashMap<u32, Vec<Command>> = HashMap::new();
+    // A letter is drawn at its own place on the font's axes, so one shape
+    // per glyph and place.
+    let mut paths: HashMap<(u32, Option<usize>), Vec<Command>> = HashMap::new();
     let stroke_colour = lumit_core::pixels::solid_rgba(style.stroke);
     let stroke_width = finite(style.stroke_width).max(0.0);
 
-    let mut outline = Stroke::new(stroke_width);
+    // Widths in the layer's own pixels, drawn `zoom` times as wide.
+    let mut outline = Stroke::new(stroke_width * zoom);
     outline.join(Join::Miter).miter_limit(4.0).scale(false);
-    let mut bold = Stroke::new(laid.size * FAUX_BOLD);
+    let mut bold = Stroke::new(laid.size * FAUX_BOLD * zoom);
     bold.join(Join::Round).scale(false);
     let stroked = style.stroke_on && stroke_width > 0.0;
     // Letter by letter, each letter's fill and outline go down together. All
@@ -747,10 +772,15 @@ fn draw(
             (upper, lower)
         };
         for (i, matrix, x) in placements(laid, run, xforms, style.faux_italic) {
+            let matrix = matrix.then_scale(zoom, zoom);
             let Some(glyph) = laid.glyphs.get(i) else {
                 continue;
             };
-            let path = paths.entry(glyph.glyph).or_insert_with(|| {
+            let path = paths.entry((glyph.glyph, glyph.place)).or_insert_with(|| {
+                let location = glyph
+                    .place
+                    .and_then(|p| laid.places.get(p))
+                    .map_or(location, |f| LocationRef::new(f.normalized_coords()));
                 let mut pen = Path(Vec::new());
                 if let Some(outline) = outlines.get(skrifa::GlyphId::new(glyph.glyph)) {
                     // A glyph that fails to draw is left out, the frame carries on.
@@ -792,14 +822,28 @@ fn draw(
 }
 
 pub(crate) fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
-    let laid = lay(block, &face);
+    rasterise_zoomed(block, xforms, 1.0, None)
+}
+
+/// [`rasterise`] drawn `zoom` times as large, the raster's own size grown
+/// with it. `fit` lays the words into another raster's frame instead of the
+/// styled one's: its left edge and first baseline, and its size, in the
+/// layer's own pixels. That is how an unstyled line, which the plain path
+/// lays out and crops tighter, is drawn larger exactly where it sat.
+pub(crate) fn rasterise_zoomed(
+    block: &TextBlock<'_>,
+    xforms: &[GlyphXform],
+    zoom: f32,
+    fit: Option<([f32; 2], (u32, u32))>,
+) -> RasterText {
+    let face = face_of(block);
+    let mut laid = lay(block, &face);
+    respace(&mut laid, &face, xforms, block);
     let margin = if xforms.is_empty() {
         0.0
     } else {
         animator_margin(laid.size)
     };
-    let (width, height) = laid.raster_size(margin);
     if laid.glyphs.is_empty() {
         return RasterText {
             width: 1,
@@ -807,16 +851,26 @@ pub(crate) fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterT
             rgba: vec![0; 4],
         };
     }
-    let run = Run::Straight {
-        origin: laid.origin(margin),
+    let first = laid.lines.first().map_or(0.0, |l| l.baseline);
+    let (origin, (width, height)) = match fit {
+        Some(([left, baseline], size)) => ([left, baseline - first], size),
+        None => (laid.origin(margin), laid.raster_size(margin)),
     };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
+    let (width, height) = (
+        (width as f32 * zoom).round().max(1.0) as u32,
+        (height as f32 * zoom).round().max(1.0) as u32,
+    );
+    let run = Run::Straight { origin };
     RasterText {
         width,
         height,
-        rgba: draw(block, &face, &laid, &run, xforms, (width, height)),
+        rgba: draw(block, &face, &laid, &run, xforms, (width, height), zoom),
     }
 }
 
+/// A block along `path` into a `width` × `height` raster of the layer's own
+/// pixels, drawn `zoom` times as large (the raster with it).
 pub(crate) fn rasterise_on_path(
     block: &TextBlock<'_>,
     path: &MaskPolyline,
@@ -824,8 +878,13 @@ pub(crate) fn rasterise_on_path(
     width: u32,
     height: u32,
     xforms: &[GlyphXform],
+    zoom: f32,
 ) -> RasterText {
-    let (w, h) = (width.max(1), height.max(1));
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
+    let (w, h) = (
+        (width.max(1) as f32 * zoom).round().max(1.0) as u32,
+        (height.max(1) as f32 * zoom).round().max(1.0) as u32,
+    );
     if path.is_empty() || !path.length().is_finite() {
         return RasterText {
             width: w,
@@ -833,13 +892,14 @@ pub(crate) fn rasterise_on_path(
             rgba: vec![0u8; (w as usize) * (h as usize) * 4],
         };
     }
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
-    let laid = lay(block, &face);
+    let face = face_of(block);
+    let mut laid = lay(block, &face);
+    respace(&mut laid, &face, xforms, block);
     let run = Run::Along { path, offset };
     RasterText {
         width: w,
         height: h,
-        rgba: draw(block, &face, &laid, &run, xforms, (w, h)),
+        rgba: draw(block, &face, &laid, &run, xforms, (w, h), zoom),
     }
 }
 
@@ -848,7 +908,7 @@ pub(crate) fn outlines(
     path: Option<&MaskPolyline>,
     offset: f32,
 ) -> Vec<GlyphOutline> {
-    let face = crate::fonts::face(&block.style.family, &block.style.face);
+    let face = face_of(block);
     let Some(font) = face.font() else {
         return Vec::new();
     };

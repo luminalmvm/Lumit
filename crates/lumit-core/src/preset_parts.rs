@@ -66,7 +66,7 @@ pub fn keyed_rows(group: &TransformGroup) -> Vec<KeyedRow> {
 
 /// Every animatable number on an animator, so a new row can't be missed by the
 /// one thing that moves them.
-fn animator_rows(animator: &mut TextAnimator) -> [&mut Property; 15] {
+fn animator_rows(animator: &mut TextAnimator) -> Vec<&mut Property> {
     let TextAnimator {
         selector,
         position_x,
@@ -81,12 +81,18 @@ fn animator_rows(animator: &mut TextAnimator) -> [&mut Property; 15] {
         fill_r,
         fill_g,
         fill_b,
+        axes,
         ..
     } = animator;
-    [
+    let mut rows = vec![
         &mut selector.start,
         &mut selector.end,
         &mut selector.offset,
+        &mut selector.radius,
+        &mut selector.min_amount,
+        &mut selector.max_amount,
+        &mut selector.wiggles,
+        &mut selector.correlation,
         position_x,
         position_y,
         rotation,
@@ -99,7 +105,9 @@ fn animator_rows(animator: &mut TextAnimator) -> [&mut Property; 15] {
         fill_r,
         fill_g,
         fill_b,
-    ]
+    ];
+    rows.extend(axes.iter_mut().map(|a| &mut a.value));
+    rows
 }
 
 impl PresetParts {

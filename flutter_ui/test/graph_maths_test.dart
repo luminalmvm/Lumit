@@ -60,6 +60,50 @@ void main() {
     });
   });
 
+  group('keysWithKeyOnCurve', () {
+    // A key planted on a curve leaves the curve where it was, at every
+    // moment: it used to take a third's influence and bend the span.
+    test('an eased span keeps its curve through the new key', () {
+      const out =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.9));
+      const inn =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: -20, influence: 0.6));
+      final keys = [
+        key(0, 1, 100, interpOut: out),
+        key(2, 1, 0, interpIn: inn),
+      ];
+      for (final at in [rat(1, 2), rat(1, 1), rat(7, 4)]) {
+        final grown = keysWithKeyOnCurve(keys, at);
+        expect(grown, hasLength(3));
+        for (var t = 0.0; t <= 2; t += 1 / 64) {
+          expect(evaluateKeys(grown, t), closeTo(evaluateKeys(keys, t), 1e-6),
+              reason: 'at $t, with a key at ${rationalSeconds(at)}');
+        }
+      }
+    });
+
+    test('automatic neighbours keep the curve too', () {
+      const auto = BridgeSideInterp.auto(
+          BridgeAutoSide(clamped: false, speed: 0, influence: 1 / 3));
+      final keys = [
+        key(0, 1, 0, interpOut: auto),
+        key(1, 1, 60, interpIn: auto, interpOut: auto),
+        key(3, 1, 10, interpIn: auto),
+      ];
+      final grown = keysWithKeyOnCurve(keys, rat(2, 1));
+      for (var t = 0.0; t <= 3; t += 1 / 64) {
+        expect(evaluateKeys(grown, t), closeTo(evaluateKeys(keys, t), 1e-6));
+      }
+    });
+
+    test('a straight span stays straight and linear', () {
+      final keys = [key(0, 1, 0), key(2, 1, 10)];
+      final grown = keysWithKeyOnCurve(keys, rat(1, 1));
+      expect(grown[1].value, closeTo(5, 1e-9));
+      expect(grown[1].interpIn, isA<BridgeSideInterp_Linear>());
+    });
+  });
+
   group('evaluateKeys', () {
     test('the easy-ease midpoint is the value midpoint', () {
       // Symmetric flat handles: the curve is odd about the centre, so the
@@ -240,6 +284,34 @@ void main() {
       expect(gridValues(double.negativeInfinity, 0, 360), isEmpty);
       expect(gridValues(double.nan, 1, 360), isEmpty);
       expect(gridValues(0, double.nan, 360), isEmpty);
+    });
+  });
+
+  // Blender's View2D steps (view2d_draw.cc): divided by 2, 3 or 5 from the
+  // base while the lines stay 45 px apart, doubled until they are, hundredths
+  // below one.
+  group('gridSteps', () {
+    test('values step from a base of ten', () {
+      expect(gridSteps(100, 450, 10), (10.0, 5.0));
+      expect(gridSteps(1000, 450, 10), (160.0, 80.0),
+          reason: 'doubled up from ten');
+      expect(gridSteps(1, 450, 10).$1, 0.25, reason: 'hundredths below one');
+    });
+
+    test('frames step from the frame rate', () {
+      expect(gridSteps(600, 1200, 60).$1, 30);
+    });
+
+    test('no minor lines where they would crowd', () {
+      expect(gridSteps(50, 450, 10), (5.0, null),
+          reason: "fifths of a 45 px step would be 9 px apart");
+    });
+
+    test('labels take their places from the step', () {
+      expect(gridStepLabel(20, 10), '20');
+      expect(gridStepLabel(1.5, 0.5), '1.5');
+      expect(gridStepLabel(0.25, 0.25), '0.25');
+      expect(gridStepLabel(-0.0001, 0.005), '0.000');
     });
   });
 }

@@ -21,6 +21,7 @@ import '../theme/theme.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
 import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'gradient_stops_popover.dart';
@@ -908,6 +909,9 @@ class AnimatorValueRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
+  /// Picks the row, so Delete can take its property off the animator.
+  final VoidCallback? onLabelTap;
+
   const AnimatorValueRow({super.key, 
     required this.comp,
     required this.layer,
@@ -918,6 +922,7 @@ class AnimatorValueRow extends StatefulWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
+    this.onLabelTap,
   });
 
   @override
@@ -968,15 +973,43 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
           keys,
           const SizedBox(width: 4),
           Expanded(
-            child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
-                style: t.body, overflow: TextOverflow.ellipsis),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              key: ValueKey<String>('$_rowKey-label'),
+              onTap: widget.onLabelTap,
+              child: Text(
+                  t.propertyCase(
+                      textAnimatorValueLabel(widget.value, widget.animator)),
+                  style: t.body,
+                  overflow: TextOverflow.ellipsis),
+            ),
           ),
           if (keys.trailingNavigator case final nav?) nav,
           SizedBox(
             width: widget.valueColumn.width,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: SizedBox(width: 72, child: _field()),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(width: 72, child: _field()),
+                  // A font axis comes off the animator here, as beside it in
+                  // the Effect controls panel.
+                  if (textAnimatorAxisIndex(widget.value) != null)
+                    HouseButton(
+                      key: ValueKey<String>('$_rowKey-remove'),
+                      small: true,
+                      frameless: true,
+                      onPressed: () {
+                        if (removeTextAnimatorValue(
+                            widget.layer, widget.index, widget.value)) {
+                          widget.onChanged();
+                        }
+                      },
+                      child: const Text('×'),
+                    ),
+                ],
+              ),
             ),
           ),
           SizedBox(width: widget.valueColumn.rightInset),
@@ -1121,6 +1154,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         colour: documentColour(byte(rgb[0]), byte(rgb[1]), byte(rgb[2]), 255),
         // A shape's colours are scene-linear, so the picker counts in 0—1
         // rather than in bytes.
+        linear: true,
         scale: ColourScale.unit,
         onPicked: (p) => _writeAll([
           for (final (channel, v) in [p.r, p.g, p.b].indexed)
@@ -1674,6 +1708,7 @@ class ShapePaintRow extends StatelessWidget {
               ShapePaint.gradientColour => ColourSwatchButton(
                   key: ValueKey<String>(key),
                   colour: _shown(item.gradientColour ?? _defaultEnd),
+                  linear: true,
                   scale: ColourScale.unit,
                   onPicked: (p) => _write((i) => shapeItemWith(i,
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
@@ -1741,3 +1776,152 @@ List<Widget> globalAddRows(
             child: Text(shapeAddLabel(add)),
           ),
     ];
+
+/// One of a text animator's selector choices in the Timeline: the same
+/// control as in the Effect controls panel, in the value column, so the
+/// selector reads whole in both places.
+class AnimatorSettingRow extends StatelessWidget {
+  final LayerReference layer;
+  final int index;
+  final BridgeTextAnimator animator;
+  final AnimatorSetting setting;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+
+  /// Picks the row.
+  final VoidCallback? onLabelTap;
+
+  const AnimatorSettingRow({
+    super.key,
+    required this.layer,
+    required this.index,
+    required this.animator,
+    required this.setting,
+    required this.valueColumn,
+    required this.onChanged,
+    this.onLabelTap,
+  });
+
+  void _put(BridgeRangeSelector next) {
+    try {
+      writeTextAnimator(layer, index, animatorWith(animator, selector: next));
+      onChanged();
+    } catch (_) {
+      // The animator or its layer went away between the draw and the click.
+    }
+  }
+
+  String get _label => switch (setting) {
+        AnimatorSetting.selector => l10n.textAnimatorSelector,
+        AnimatorSetting.target => l10n.textAnimatorTarget,
+        AnimatorSetting.basis => l10n.textAnimatorBasis,
+        AnimatorSetting.shape => l10n.textAnimatorShape,
+        AnimatorSetting.invert => l10n.textAnimatorInvert,
+        AnimatorSetting.seed => l10n.textAnimatorSeed,
+      };
+
+  Widget _control(BuildContext context) {
+    final s = animator.selector;
+    final key = ValueKey<String>('tl-anim-$index-${setting.name}');
+    return switch (setting) {
+      AnimatorSetting.selector => BareDropdown<BridgeSelectorKind>(
+          key: key,
+          dense: true,
+          value: s.kind,
+          options: BridgeSelectorKind.values,
+          label: (k) => switch (k) {
+            BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
+            BridgeSelectorKind.proximity => l10n.textAnimatorSelectorProximity,
+            BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
+          },
+          onChanged: (k) =>
+              _put(animatorWithSelectorKind(animator, k).selector),
+        ),
+      AnimatorSetting.target => LayerPicker(
+          key: key,
+          dense: true,
+          layers:
+              Provider.of<LumitUiState>(context, listen: false).model.layers,
+          value: s.target,
+          empty: l10n.none,
+          missing: l10n.missingLayer,
+          offered: (l) => l.layer.internallayerId != layer.internallayerId,
+          onChanged: (picked) => _put(picked == null
+              ? selectorWith(s, clearTarget: true)
+              : selectorWith(s, target: picked)),
+        ),
+      AnimatorSetting.basis => BareDropdown<BridgeSelectorBasis>(
+          key: key,
+          dense: true,
+          value: s.basis,
+          options: BridgeSelectorBasis.values,
+          label: (b) => switch (b) {
+            BridgeSelectorBasis.characters => l10n.textAnimatorBasisCharacters,
+            BridgeSelectorBasis.words => l10n.textAnimatorBasisWords,
+          },
+          onChanged: (b) => _put(selectorWith(s, basis: b)),
+        ),
+      AnimatorSetting.shape => BareDropdown<BridgeSelectorShape>(
+          key: key,
+          dense: true,
+          value: s.shape,
+          options: BridgeSelectorShape.values,
+          label: (v) => switch (v) {
+            BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
+            BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
+            BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
+          },
+          onChanged: (v) => _put(selectorWith(s, shape: v)),
+        ),
+      AnimatorSetting.invert => Align(
+          alignment: Alignment.centerLeft,
+          child: HouseCheckbox(
+            key: key,
+            value: s.invert,
+            onChanged: (on) => _put(selectorWith(s, invert: on)),
+          ),
+        ),
+      AnimatorSetting.seed => SizedBox(
+          width: 72,
+          child: DragValueField(
+            key: key,
+            value: s.seed,
+            min: 0,
+            max: 99999,
+            resetTo: 0,
+            decimals: 0,
+            onChanged: (v) =>
+                _put(selectorWith(s, seed: v.round().clamp(0, 99999).toInt())),
+          ),
+        ),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        // Where a keyed row's stopwatch stands, so the names line up.
+        const SizedBox(width: iconSize + 8),
+        Expanded(
+          child: GestureDetector(
+            key: ValueKey<String>('tl-anim-$index-${setting.name}-label'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onLabelTap,
+            child: Text(t.propertyCase(_label),
+                style: t.body, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        SizedBox(
+          width: valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 130, child: _control(context)),
+          ),
+        ),
+        SizedBox(width: valueColumn.rightInset),
+      ],
+    );
+  }
+}

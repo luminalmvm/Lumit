@@ -849,6 +849,66 @@ void main() {
       expect(stops.first.position, isA<BridgeScalar_Keyframed>());
     });
 
+    /// `U` opens a shape layer onto a shape's own keyed row: the reveal asks
+    /// the rows, and a shape's keys are on rows the engine's groups do not
+    /// list.
+    testWidgets('U reveals a shape\'s own keyed row', (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
+          time: p.comp.timeOfFrame(frame: frame),
+          value: value,
+          interpIn: const BridgeSideInterp.linear(),
+          interpOut: const BridgeSideInterp.linear());
+      p.comp.addShapeLayer(
+        name: 'Circle',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Circle',
+            vertices: [corner(0, 0), corner(60, 0), corner(60, 40)],
+            closed: true,
+            fill: const BridgeColour(
+                r: BridgeScalar.static_(1),
+                g: BridgeScalar.static_(0),
+                b: BridgeScalar.static_(0),
+                a: BridgeScalar.static_(1)),
+            stroke: null,
+            strokeWidth: const BridgeScalar.static_(0),
+            opacity: BridgeScalar.keyframed([key(0, 100), key(12, 0)]),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            gradientStartOpacity: const BridgeScalar.static_(100),
+            gradientEndOpacity: const BridgeScalar.static_(100),
+            gradientStops: const [],
+            combine: 0,
+            hidden: false,
+            fillHidden: false,
+            strokeHidden: false,
+            pathKeys: const [],
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyU);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyU);
+      await tester.pumpAndSettle();
+      expect(find.text('Contents'), findsOneWidget,
+          reason: 'the heading over the keyed row');
+      expect(find.text('Opacity'), findsOneWidget,
+          reason: 'the shape\'s keyed Opacity, and not the layer\'s');
+      expect(find.text('Transform'), findsNothing);
+    });
+
     /// Dropping footage with nothing open offers to make the composition it
     /// would go in, rather than dead-ending on the placeholder: the drag used
     /// to lift, show its feedback and drop into nothing.

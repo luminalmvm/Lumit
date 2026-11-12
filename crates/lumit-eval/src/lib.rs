@@ -2334,7 +2334,12 @@ fn feed_source(
             // the same frame and may share it, and a swept range keys per frame
             // because its weights change per frame. A layer with no animators
             // feeds nothing at all and keeps the key it has always had.
-            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt) {
+            // A Proximity selector's letters are weighed against where its
+            // target is now, so a target dragged across the words keys each
+            // frame apart.
+            for x in
+                lumit_core::text::layer_glyph_xforms(doc, owner, layer, document, &line, comp_time)
+            {
                 for v in [
                     x.position[0],
                     x.position[1],
@@ -2347,6 +2352,12 @@ fn feed_source(
                     x.fill[2],
                 ] {
                     h.update(&v.to_le_bytes());
+                }
+                // Where the letter is set on its font's axes.
+                for i in 0..usize::from(x.axes.len) {
+                    h.update(&x.axes.tags[i]);
+                    h.update(&x.axes.keep[i].to_le_bytes());
+                    h.update(&x.axes.add[i].to_le_bytes());
                 }
             }
         }
