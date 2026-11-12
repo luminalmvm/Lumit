@@ -8,9 +8,10 @@ use lumit_core::model::Composition;
 use lumit_core::pixels::{Channel, Resample};
 
 use super::{
-    audio_samples_through, frame_span, mixdown_at, pack_frame, AlphaMode, AudioJob, AudioLayout,
-    Channels, ColourTransform, Crop, ExportSpec,
+    frame_span, pack_frame, AlphaMode, AudioLayout, Channels, ColourTransform, Crop, ExportSpec,
 };
+use crate::mix::jobs::AudioJob;
+use crate::mix::mixdown::{audio_samples_through, mixdown_at};
 
 /// The stretch of the composition an export writes, and the rate it writes it at.
 pub(super) struct Span {

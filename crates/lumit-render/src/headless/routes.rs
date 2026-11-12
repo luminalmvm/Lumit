@@ -3,11 +3,11 @@
 //! A Bus layer makes no sound of its own. What is routed to it arrives as
 //! jobs carrying one more [`Carrier`]: the bus's Volume and Pan, and its rack.
 //! The bus stage that already sums a Precomp layer's sound for its rack
-//! ([`crate::export::bus_runs`]) then sums the bus too, so playback and export
+//! ([`crate::mix::stage::bus_runs`]) then sums the bus too, so playback and export
 //! hear it the same way. A send is a copy of the layer's jobs with its level as
 //! one more carrier inside the bus's.
 
-use crate::export::{AudioChain, AudioJob, Carrier};
+use crate::mix::jobs::{AudioChain, AudioJob, Carrier};
 use lumit_core::model::{Composition, Document, Layer};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -185,7 +185,7 @@ fn within(mut job: AudioJob, span: (f64, f64)) -> Option<AudioJob> {
 mod tests {
     use super::super::tests::{push_comp, push_footage_item, push_layer, seed_has_audio};
     use super::super::AudioJobsBuilder;
-    use crate::export::{bus_runs, PlacedJob};
+    use crate::mix::stage::{bus_runs, PlacedJob};
     use lumit_core::anim::Property;
     use lumit_core::model::{LayerKind, ProjectItem};
     use lumit_core::routes::{AudioRoutes, AudioSend};

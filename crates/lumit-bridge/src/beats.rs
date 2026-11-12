@@ -200,10 +200,15 @@ fn analyse(
     // The mixdown, counting the sources off: the engine decides the fraction,
     // and one source decoded out of however many is what it can honestly see.
     let sources = jobs.len() as f64;
-    let samples =
-        lumit_render::export::mixdown_counting(&jobs, RATE, duration_seconds, 1.0, &mut |done| {
+    let samples = lumit_render::mix::mixdown::mixdown_counting(
+        &jobs,
+        RATE,
+        duration_seconds,
+        1.0,
+        &mut |done| {
             on_progress(MIX_SHARE * done as f64 / sources);
-        });
+        },
+    );
     let delta =
         lumit_audio::beat::delta_from_sensitivity(options.sensitivity_percent.clamp(0, 100) as u8);
     let analysis = lumit_audio::beat::analyse_stereo(&samples, RATE, delta);

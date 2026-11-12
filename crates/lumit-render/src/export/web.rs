@@ -18,10 +18,11 @@ use uuid::Uuid;
 
 use super::frame::{self, Pack, Span};
 use super::{
-    apply_render_overrides, audio_samples_through, fps_rational, AudioJob, ExportEvent,
-    ExportFormat, ExportHandle, ExportSpec,
+    apply_render_overrides, fps_rational, ExportEvent, ExportFormat, ExportHandle, ExportSpec,
 };
 use crate::headless::HeadlessRenderer;
+use crate::mix::jobs::AudioJob;
+use crate::mix::mixdown::audio_samples_through;
 
 /// Frames composited and on their way off the card at once.
 const IN_FLIGHT: usize = 2;

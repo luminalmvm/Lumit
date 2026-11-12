@@ -26,7 +26,7 @@
 //! matrix in this file's tests.
 
 use crate::decode::{CompFrame, CompJob, DecodePool};
-use crate::export::AudioJob;
+use crate::mix::jobs::AudioJob;
 use crate::plan::{plan_comp_frame, Quality};
 use crate::source::{SourceProbe, SourceProbes};
 use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectItem};
@@ -3115,7 +3115,7 @@ fn driven_volume_of(
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::DrivenVolume>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::DrivenVolume>> {
     use lumit_core::graph::{InputRef, NodeRef, OUT_VOLUME_PORT};
     let wired = layer.graph.edges.iter().any(|e| {
         matches!(
@@ -3124,7 +3124,7 @@ fn driven_volume_of(
         )
     });
     wired.then(|| {
-        std::sync::Arc::new(crate::export::DrivenVolume {
+        std::sync::Arc::new(crate::mix::jobs::DrivenVolume {
             doc: Arc::clone(doc),
             comp: comp.id,
             layer: layer.id,
@@ -3153,11 +3153,11 @@ fn audio_chain_of(
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
     if layer.effects.is_empty() || !layer.switches.fx {
         return None;
     }
-    Some(std::sync::Arc::new(crate::export::AudioChain {
+    Some(std::sync::Arc::new(crate::mix::jobs::AudioChain {
         doc: Arc::clone(doc),
         comp: comp.id,
         layer: layer.id,
@@ -3181,7 +3181,7 @@ fn bus_chain_of(
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
     let sounds = layer.effects.iter().filter(|e| e.enabled).any(|e| {
         lumit_core::fx::builtins::audio_plugin_id(&e.effect.match_name).is_some()
             || lumit_core::fx::catalogue::BUILTIN_DEFS
@@ -3203,8 +3203,8 @@ fn bus_chain_of(
 ///
 /// It goes last, so it sits inside the bus: the rack hears the comp at the
 /// level its own master fader sets, and the parent's insert comes after it.
-fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::export::Carrier> {
-    (nested.master_volume_db != 0.0).then(|| crate::export::Carrier {
+fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::mix::jobs::Carrier> {
+    (nested.master_volume_db != 0.0).then(|| crate::mix::jobs::Carrier {
         volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
         pan: lumit_core::anim::Property::zero(),
         offset_s,
@@ -3227,11 +3227,11 @@ fn clip_chain_of(
     clip: &lumit_core::sequence::Clip,
     start_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
     if clip.effects.is_empty() || !clip.fx {
         return None;
     }
-    Some(std::sync::Arc::new(crate::export::AudioChain {
+    Some(std::sync::Arc::new(crate::mix::jobs::AudioChain {
         doc: Arc::clone(doc),
         comp: comp.id,
         layer: layer.id,
@@ -3306,7 +3306,7 @@ impl AudioJobsBuilder {
         comp: &Composition,
         base_s: f64,
         window: (f64, f64),
-        carriers: &[crate::export::Carrier],
+        carriers: &[crate::mix::jobs::Carrier],
         // The mixer strip everything found down this branch belongs to — the
         // outermost layer of the comp being mixed (`None` at the top, where
         // each layer is its own strip). See `AudioJob::layer`.
@@ -3382,7 +3382,7 @@ impl AudioJobsBuilder {
         any_solo: bool,
         base_s: f64,
         window: (f64, f64),
-        carriers: &[crate::export::Carrier],
+        carriers: &[crate::mix::jobs::Carrier],
         strip: Option<Uuid>,
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
@@ -3402,7 +3402,7 @@ impl AudioJobsBuilder {
         let offset_s = layer.start_offset.0.to_f64() + base_s;
         // A retimed layer's sound follows its map: a footage layer's file is
         // read through it, and a Precomp's whole mix is.
-        let retime = layer.retime.as_ref().map(|map| crate::export::Retimed {
+        let retime = layer.retime.as_ref().map(|map| crate::mix::jobs::Retimed {
             map: map.clone(),
             origin_s: offset_s,
             held: None,
@@ -3470,7 +3470,7 @@ impl AudioJobsBuilder {
                     );
                     let start = first - layer.start_offset.0.to_f64();
                     let length = layer.out_point.0.to_f64() - first;
-                    Some(crate::export::Retimed {
+                    Some(crate::mix::jobs::Retimed {
                         map: lumit_core::template::time::copy_map(timing, ends, start, length)?,
                         origin_s: offset_s,
                         held: None,
@@ -3480,7 +3480,7 @@ impl AudioJobsBuilder {
                 // Retimed, the comp is heard over the stretch of its own time
                 // the map reaches, and the sum read through the map.
                 let retime = retime.map(|retime| {
-                    Arc::new(crate::export::BusRetime {
+                    Arc::new(crate::mix::jobs::BusRetime {
                         retime,
                         zero_s: offset_s,
                         span: (in_s, out_s),
@@ -3488,7 +3488,7 @@ impl AudioJobsBuilder {
                 });
                 let reach = match &retime {
                     Some(bus) => {
-                        let Some((lo, hi)) = crate::export::retimed_reach(&bus.retime, bus.span)
+                        let Some((lo, hi)) = crate::mix::jobs::retimed_reach(&bus.retime, bus.span)
                         else {
                             return;
                         };
@@ -3497,7 +3497,7 @@ impl AudioJobsBuilder {
                     None => (in_s, out_s),
                 };
                 let mut inner = carriers.to_vec();
-                inner.push(crate::export::Carrier {
+                inner.push(crate::mix::jobs::Carrier {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
@@ -3567,7 +3567,7 @@ impl AudioJobsBuilder {
         in_s: f64,
         out_s: f64,
         offset_s: f64,
-        carriers: &[crate::export::Carrier],
+        carriers: &[crate::mix::jobs::Carrier],
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
@@ -3615,7 +3615,7 @@ impl AudioJobsBuilder {
             // a footage clip's file is read through it, and a comp clip's mix.
             let retime = clip.retime.as_ref().map(|map| {
                 let (a, b) = (clip.source_in.to_f64(), clip.source_out.to_f64());
-                crate::export::Retimed {
+                crate::mix::jobs::Retimed {
                     map: map.clone(),
                     origin_s: offset_s + clip.place_start.to_f64(),
                     held: Some((a.min(b), a.max(b))),
@@ -3704,7 +3704,7 @@ impl AudioJobsBuilder {
             let stored = |seconds: lumit_core::time::Rational| seconds.to_f64().max(0.0).min(span);
             let head_overlap = overlap(true);
             let tail_overlap = overlap(false);
-            let fade = crate::export::ClipFade {
+            let fade = crate::mix::jobs::ClipFade {
                 start_s,
                 head_s: if head_overlap > 0.0 {
                     head_overlap
@@ -3761,7 +3761,7 @@ impl AudioJobsBuilder {
                         lumit_core::fx::effects::template::ends,
                     );
                     let length = clip.place_duration.to_f64();
-                    Some(crate::export::Retimed {
+                    Some(crate::mix::jobs::Retimed {
                         map: lumit_core::template::time::copy_map(responsive?, ends, 0.0, length)?,
                         origin_s: offset_s + first,
                         held: None,
@@ -3778,7 +3778,7 @@ impl AudioJobsBuilder {
                 // Retimed, the comp is heard over the stretch of its own time
                 // the map reaches, and the sum read through the map.
                 let retime = retime.map(|retime| {
-                    Arc::new(crate::export::BusRetime {
+                    Arc::new(crate::mix::jobs::BusRetime {
                         retime,
                         zero_s: nested_s,
                         span: (clip_in, clip_out),
@@ -3786,7 +3786,7 @@ impl AudioJobsBuilder {
                 });
                 let reach = match &retime {
                     Some(bus) => {
-                        let Some((lo, hi)) = crate::export::retimed_reach(&bus.retime, bus.span)
+                        let Some((lo, hi)) = crate::mix::jobs::retimed_reach(&bus.retime, bus.span)
                         else {
                             continue;
                         };
@@ -3796,7 +3796,7 @@ impl AudioJobsBuilder {
                 };
                 let rack = clip_chain_of(doc, comp, layer, clip, start_s, base_s);
                 let mut inner = carriers.to_vec();
-                inner.push(crate::export::Carrier {
+                inner.push(crate::mix::jobs::Carrier {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
@@ -3812,7 +3812,7 @@ impl AudioJobsBuilder {
                 // hears the comp first, as a footage clip's rack hears its
                 // file ahead of the row's.
                 if let Some(rack) = rack {
-                    inner.push(crate::export::Carrier {
+                    inner.push(crate::mix::jobs::Carrier {
                         volume: lumit_core::anim::Property::zero(),
                         pan: lumit_core::anim::Property::zero(),
                         offset_s: start_s,
@@ -5583,7 +5583,7 @@ mod tests {
         let driven = job.driven.as_ref().expect("the wire rides the job");
         assert_eq!(driven.db_at(0.5), Some(-40.0));
 
-        let (gain, envelope) = crate::export::volume_bake(job, 0, 48_000, 48_000);
+        let (gain, envelope) = crate::mix::bake::volume_bake(job, 0, 48_000, 48_000);
         assert_eq!(gain, [1.0, 1.0], "driven is always an envelope");
         let envelope = envelope.expect("driven is always an envelope");
         let want = lumit_audio::mix::db_to_gain(-40.0);
@@ -5603,7 +5603,7 @@ mod tests {
         let c = plain.comp(comp).expect("comp").clone();
         let jobs = builder.audio_jobs(&Arc::new(plain), &c);
         assert!(jobs[0].driven.is_none(), "no wire, no handle");
-        let (gain, envelope) = crate::export::volume_bake(&jobs[0], 0, 48_000, 48_000);
+        let (gain, envelope) = crate::mix::bake::volume_bake(&jobs[0], 0, 48_000, 48_000);
         assert_eq!(envelope, None);
         assert_eq!(gain, [1.0, 1.0], "0 dB unity, straight off the keyframes");
     }
@@ -5780,7 +5780,7 @@ mod tests {
         // A hundred points a second from the clip's start: silent at the
         // start, half way up a quarter of a second in, then at the clip's
         // own level.
-        let (_, envelope) = crate::export::volume_bake(job, 3 * 48_000, 2 * 48_000, 48_000);
+        let (_, envelope) = crate::mix::bake::volume_bake(job, 3 * 48_000, 2 * 48_000, 48_000);
         let envelope = envelope.expect("a fade is an envelope");
         let level = lumit_audio::mix::db_to_gain(-6.0);
         for (point, want) in [(0, 0.0), (25, 0.5 * level), (50, level), (150, level)] {

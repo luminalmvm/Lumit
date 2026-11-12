@@ -1839,7 +1839,7 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
 fn audible_jobs(
     project: &ProjectReference,
     comp: &CompositionReference,
-) -> Vec<lumit_render::export::AudioJob> {
+) -> Vec<lumit_render::mix::jobs::AudioJob> {
     let state = project.state().expect("state");
     let state = state.read().expect("read");
     let doc = state.store.snapshot();
@@ -10487,7 +10487,7 @@ fn two_stream_recording(
 /// lasts.
 #[cfg(feature = "media")]
 fn mix_of(project: &ProjectReference, comp: &CompositionReference) -> Vec<f32> {
-    lumit_render::export::mixdown(&audible_jobs(project, comp), 48_000, 4.0)
+    lumit_render::mix::mixdown::mixdown(&audible_jobs(project, comp), 48_000, 4.0)
 }
 
 /// The furthest apart two mixes are at any sample.
@@ -10538,13 +10538,13 @@ fn audio_streams_split_onto_rows_and_merge_back_sounding_the_same() {
     // rows, read through the pool it plays from.
     let jobs = audible_jobs(&project, &comp);
     let pool = lumit_audio::stream::pool();
-    let (plan, _strips) = lumit_render::export::live_plan(
+    let (plan, _strips) = lumit_render::mix::live::live_plan(
         &jobs,
         &|job| Some(pool.source(&job.sound, 48_000)),
         48_000,
         4.0,
         0.0,
-        &mut lumit_render::export::RackBakes::default(),
+        &mut lumit_render::mix::live::RackBakes::default(),
     );
     plan.warm(0, plan.total_frames);
     let played: Vec<f32> = (0..plan.total_frames)

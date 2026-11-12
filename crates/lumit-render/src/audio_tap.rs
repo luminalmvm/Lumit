@@ -170,7 +170,7 @@ pub struct DocumentAudio<'a> {
     pre_duck: bool,
     /// The comp's audio jobs — what the mixer sums — built at most once per
     /// frame, and only when something actually asks for the mix.
-    jobs: std::sync::OnceLock<Vec<crate::export::AudioJob>>,
+    jobs: std::sync::OnceLock<Vec<crate::mix::jobs::AudioJob>>,
 }
 
 impl<'a> DocumentAudio<'a> {
@@ -202,7 +202,7 @@ impl<'a> DocumentAudio<'a> {
     }
 
     /// The comp's audio jobs, built once per tap.
-    fn jobs(&self) -> &[crate::export::AudioJob] {
+    fn jobs(&self) -> &[crate::mix::jobs::AudioJob] {
         self.jobs.get_or_init(|| {
             let mut jobs = crate::headless::AudioJobsBuilder::new().audio_jobs(self.doc, self.comp);
             if self.pre_duck {
@@ -235,7 +235,7 @@ impl<'a> DocumentAudio<'a> {
             }
         }
         // The lock is let go for the mixdown, as it is for a decode.
-        let jobs: Vec<crate::export::AudioJob> = self
+        let jobs: Vec<crate::mix::jobs::AudioJob> = self
             .jobs()
             .iter()
             // ponytail: a driver doesn't hear a retimed layer yet. Read it
@@ -249,7 +249,7 @@ impl<'a> DocumentAudio<'a> {
             .cloned()
             .collect();
         let analysed = (!jobs.is_empty()).then(|| {
-            let stereo = crate::export::mixdown_at(
+            let stereo = crate::mix::mixdown::mixdown_at(
                 &jobs,
                 TAP_RATE,
                 self.comp.duration.0.to_f64(),
@@ -335,7 +335,7 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
     /// detection all mix from — and the summing is
     /// [`lumit_audio::mix::mix_stereo`] over
     /// [`place_on_timeline`](lumit_audio::mix::place_on_timeline) placements at
-    /// [`crate::export::volume_bake`] gains, which is exactly
+    /// [`crate::mix::bake::volume_bake`] gains, which is exactly
     /// `export::mix_decoded` restricted to a window. Preview and export read
     /// the same numbers because they run this same function at the same
     /// `t_comp`, with the master ceiling applied as the mixer applies it.
@@ -375,7 +375,7 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
         let jobs = self.jobs();
         let decoded: Vec<(
             Arc<lumit_media::audio::AudioBuffer>,
-            &crate::export::AudioJob,
+            &crate::mix::jobs::AudioJob,
         )> = jobs
             .iter()
             // ponytail: a driver doesn't hear a retimed layer yet. Read it
@@ -406,7 +406,7 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
                 }
                 let skip = (from - start) as usize;
                 let len = (to - from) as usize;
-                let (gain, envelope) = crate::export::volume_bake(job, from, len, TAP_RATE);
+                let (gain, envelope) = crate::mix::bake::volume_bake(job, from, len, TAP_RATE);
                 let head = (src_start + skip) * 2;
                 Some(lumit_audio::mix::PlacedAudio {
                     start_frame: from - first,
@@ -489,7 +489,7 @@ impl lumit_core::fx::registry::AudioTap for DocumentAudio<'_> {
 /// [`DocumentAudio::strip`] reads, folded down to eight bytes.
 ///
 /// **What the reading uses, and nothing else**: each job's file, strip, clip
-/// and placement, the gains [`crate::export::volume_bake`] bakes (Volume, Pan,
+/// and placement, the gains [`crate::mix::bake::volume_bake`] bakes (Volume, Pan,
 /// the carriers, a clip's fade and a *Duck under* wire) and the master fader.
 /// The layers' insert chains are left out because the reading does not run
 /// them (see [`DocumentAudio::strip`]), so a plugin knob that cannot change

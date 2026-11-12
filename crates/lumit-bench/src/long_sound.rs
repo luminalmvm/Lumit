@@ -22,8 +22,9 @@ use std::time::Instant;
 use lumit_audio::mix::MixPlan;
 use lumit_audio::stream::{self, Pool};
 use lumit_core::model::Document;
-use lumit_render::export::{live_plan, AudioJob, RackBakes};
 use lumit_render::headless::AudioJobsBuilder;
+use lumit_render::mix::jobs::AudioJob;
+use lumit_render::mix::live::{live_plan, RackBakes};
 use uuid::Uuid;
 
 use crate::long_comp::{self, FPS, FRAMES, MONTAGE_START};

@@ -42,8 +42,8 @@
 #![cfg(feature = "media")]
 
 use lumit_audio::mix::MixPlan;
-use lumit_render::export::AudioJob;
 use lumit_render::headless::AudioJobsBuilder;
+use lumit_render::mix::jobs::AudioJob;
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -154,7 +154,7 @@ struct AudioState {
     jobs: AudioJobsBuilder,
     /// What the racks made of each racked job in the plan that is loaded, so
     /// the next build runs only the racks an edit changed.
-    bakes: lumit_render::export::RackBakes,
+    bakes: lumit_render::mix::live::RackBakes,
     /// How much sound the engine had played as silence when it was last
     /// asked, so each shortfall is noted once ([`clock`]).
     starved: u64,
@@ -195,7 +195,7 @@ impl AudioState {
             loaded_preview: None,
             pending_prepare: None,
             jobs: AudioJobsBuilder::new(),
-            bakes: lumit_render::export::RackBakes::default(),
+            bakes: lumit_render::mix::live::RackBakes::default(),
             starved: 0,
             meter_strips: Vec::new(),
             loaded_plan: None,
@@ -296,7 +296,7 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
 /// handful of entries.
 fn hash_chain(
     h: &mut std::collections::hash_map::DefaultHasher,
-    chain: &lumit_render::export::AudioChain,
+    chain: &lumit_render::mix::jobs::AudioChain,
 ) {
     use std::hash::Hash;
     format!("{:?}", chain.effects).hash(h);
@@ -340,7 +340,7 @@ fn hash_animation(
 /// and say which mixer strip each meter slot belongs to: [`strips`]'s answer,
 /// and what a plan's `meter` indices point into.
 ///
-/// [`lumit_render::export::live_plan`] over whole buffers, which is how the
+/// [`lumit_render::mix::live::live_plan`] over whole buffers, which is how the
 /// tests hold the plan against the export. A job whose item is not in
 /// `decoded` contributes nothing. The mix the engine plays is built by the
 /// same function over the files themselves ([`prepare_once`]).
@@ -352,7 +352,7 @@ pub(crate) fn build_plan(
     duration_s: f64,
     master_db: f64,
 ) -> (Arc<MixPlan>, Vec<Uuid>) {
-    lumit_render::export::live_plan(
+    lumit_render::mix::live::live_plan(
         jobs,
         &|job| {
             decoded
@@ -362,7 +362,7 @@ pub(crate) fn build_plan(
         rate,
         duration_s,
         master_db,
-        &mut lumit_render::export::RackBakes::default(),
+        &mut lumit_render::mix::live::RackBakes::default(),
     )
 }
 
@@ -602,7 +602,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::model::Document>) {
     };
     bakes.stamped(rack_stamp());
     let pool = lumit_audio::stream::pool();
-    let (plan, strips) = lumit_render::export::live_plan(
+    let (plan, strips) = lumit_render::mix::live::live_plan(
         &jobs,
         &|job| Some(pool.source(&job.sound, rate)),
         rate,
@@ -765,13 +765,13 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::audio::SoundSource, start_
             clip_chain: None,
             retime: None,
         }];
-        let (plan, strips) = lumit_render::export::live_plan(
+        let (plan, strips) = lumit_render::mix::live::live_plan(
             &jobs,
             &|_| Some(Arc::clone(&source)),
             rate,
             duration_s,
             0.0,
-            &mut lumit_render::export::RackBakes::default(),
+            &mut lumit_render::mix::live::RackBakes::default(),
         );
         // Decoded where it is about to start, so the press is heard from its
         // first sample.
@@ -1148,12 +1148,12 @@ mod tests {
                 param.value = lumit_core::model::EffectValue::Float(Property::fixed(-6.0));
             }
         }
-        let carrier = lumit_render::export::Carrier {
+        let carrier = lumit_render::mix::jobs::Carrier {
             volume: Property::zero(),
             pan: Property::zero(),
             offset_s: 0.0,
             fade: None,
-            chain: Some(Arc::new(lumit_render::export::AudioChain {
+            chain: Some(Arc::new(lumit_render::mix::jobs::AudioChain {
                 doc: Arc::new(lumit_core::model::Document::new()),
                 comp: Uuid::nil(),
                 layer: Uuid::nil(),
@@ -1426,8 +1426,8 @@ mod tests {
     /// The chain a job carries for `effects`.
     fn chain_of(
         effects: Vec<lumit_core::model::EffectInstance>,
-    ) -> Arc<lumit_render::export::AudioChain> {
-        Arc::new(lumit_render::export::AudioChain {
+    ) -> Arc<lumit_render::mix::jobs::AudioChain> {
+        Arc::new(lumit_render::mix::jobs::AudioChain {
             doc: Arc::new(lumit_core::model::Document::new()),
             comp: Uuid::now_v7(),
             layer: Uuid::now_v7(),
@@ -1464,7 +1464,7 @@ mod tests {
             Property::fixed(1.0),
         )]));
 
-        let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+        let baked = lumit_render::mix::mixdown::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
         let half = lumit_audio::mix::db_to_gain(-6.0);
         assert!(
             (baked[0] - 0.5 * half).abs() < 1e-5,
@@ -1506,7 +1506,7 @@ mod tests {
         )]));
 
         let bake = || {
-            lumit_render::export::mixdown_prepared(
+            lumit_render::mix::mixdown::mixdown_prepared(
                 &[(Arc::clone(&source), one.clone())],
                 rate,
                 1.0,
@@ -1549,7 +1549,7 @@ mod tests {
             "clap:lumit.test.refuse",
             Property::fixed(1.0),
         )]));
-        let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+        let baked = lumit_render::mix::mixdown::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
 
         let block = lumit_core::fx::audio_chain::AUDIO_BLOCK_FRAMES;
         let inside = (4 * block + block / 2) * 2;
@@ -1619,8 +1619,8 @@ mod tests {
         end_s: f64,
         tail_s: f64,
         tail_shape: lumit_core::sequence::FadeShape,
-    ) -> lumit_render::export::ClipFade {
-        lumit_render::export::ClipFade {
+    ) -> lumit_render::mix::jobs::ClipFade {
+        lumit_render::mix::jobs::ClipFade {
             start_s,
             head_s,
             head_shape,
@@ -1671,8 +1671,12 @@ mod tests {
         decoded.insert(a.item, Arc::clone(&a_source));
         decoded.insert(b.item, Arc::clone(&b_source));
         let (plan, _) = build_plan(&[a.clone(), b.clone()], &decoded, rate, 2.0, 0.0);
-        let baked =
-            lumit_render::export::mixdown_prepared(&[(a_source, a), (b_source, b)], rate, 2.0, 1.0);
+        let baked = lumit_render::mix::mixdown::mixdown_prepared(
+            &[(a_source, a), (b_source, b)],
+            rate,
+            2.0,
+            1.0,
+        );
 
         for i in 0..(2 * rate as usize) {
             let (l, r) = plan.frame_at(i);
