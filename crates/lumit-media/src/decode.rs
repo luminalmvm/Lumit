@@ -36,6 +36,8 @@ use rsmpeg::UnsafeDerefMut;
 #[cfg(not(target_arch = "wasm32"))]
 mod fields;
 #[cfg(not(target_arch = "wasm32"))]
+mod hw;
+#[cfg(not(target_arch = "wasm32"))]
 use fields::{field_planes, weave_planes};
 
 /// How wide a decoded frame's samples are, and what they already mean.
@@ -165,7 +167,7 @@ fn open_codec_ctx(
     unsafe {
         ctx.deref_mut().thread_count = thread_cap(par.width, par.height);
     }
-    let hardware = try_hw && attach_d3d11va(codec, &mut ctx);
+    let hardware = try_hw && hw::attach_d3d11va(codec, &mut ctx);
     ctx.open(None)?;
     Ok((ctx, hardware))
 }
@@ -195,36 +197,6 @@ fn thread_cap(width: i32, height: i32) -> i32 {
     } else {
         i32::try_from(cap.max(1)).unwrap_or(1)
     }
-}
-
-/// Attach a D3D11VA hardware device to `ctx` when this codec supports
-/// device-context hardware decode (docs/impl/media-io.md §4, v1 baseline).
-/// libav's default format negotiation then selects the hardware path on its
-/// own. False — leaving the context untouched for software — when there is no
-/// support or no device; never an error.
-#[cfg(windows)]
-fn attach_d3d11va(codec: &AVCodec, ctx: &mut AVCodecContext) -> bool {
-    let supported = (0..).map_while(|i| codec.hw_config(i)).any(|c| {
-        c.device_type == ffi::AV_HWDEVICE_TYPE_D3D11VA
-            && (c.methods & ffi::AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0
-    });
-    if !supported {
-        return false;
-    }
-    match rsmpeg::avutil::AVHWDeviceContext::create(ffi::AV_HWDEVICE_TYPE_D3D11VA, None, None, 0) {
-        Ok(device) => {
-            ctx.set_hw_device_ctx(device);
-            true
-        }
-        Err(_) => false,
-    }
-}
-
-/// The macOS sibling is VideoToolbox and lands with the macOS pass;
-/// until then every other platform decodes in software, on all cores.
-#[cfg(not(any(windows, target_arch = "wasm32")))]
-fn attach_d3d11va(_codec: &AVCodec, _ctx: &mut AVCodecContext) -> bool {
-    false
 }
 
 /// Whether a decoder may use the graphics card's video unit. An application
@@ -565,7 +537,7 @@ impl VideoDecoder {
                     // hardware path is made to look exactly like software
                     // before the shared RGBA step.
                     if sw.format == ffi::AV_PIX_FMT_NV12 {
-                        deinterleave_to_yuv420p(&sw)?
+                        hw::deinterleave_to_yuv420p(&sw)?
                     } else {
                         sw
                     }
@@ -607,42 +579,6 @@ impl VideoDecoder {
             }
         }
     }
-}
-
-/// Repack a hardware-transferred NV12 frame as planar yuv420p. Same-size
-/// point "scale" through swscale is a lossless plane copy plus chroma
-/// deinterleave — no values change, only the memory layout, so the shared
-/// RGBA conversion behaves identically to the software decoder's output.
-#[cfg(not(target_arch = "wasm32"))]
-fn deinterleave_to_yuv420p(src: &AVFrame) -> Result<AVFrame, MediaError> {
-    let mut sws = SwsContext::get_context(
-        src.width,
-        src.height,
-        src.format,
-        src.width,
-        src.height,
-        ffi::AV_PIX_FMT_YUV420P,
-        ffi::SWS_POINT,
-        None,
-        None,
-        None,
-    )
-    .ok_or_else(|| MediaError::Ffmpeg("nv12 repack context creation failed".into()))?;
-    let mut out = AVFrame::new();
-    out.set_width(src.width);
-    out.set_height(src.height);
-    out.set_format(ffi::AV_PIX_FMT_YUV420P);
-    out.alloc_buffer()
-        .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-    sws.scale_frame(src, 0, src.height, &mut out)?;
-    // Keep what the file says about its colour, which the RGBA tap reads.
-    // SAFETY: both frames are valid and ours; this copies plain fields and
-    // side data, never the planes.
-    #[allow(unsafe_code)]
-    unsafe {
-        ffi::av_frame_copy_props(out.as_mut_ptr(), src.as_ptr());
-    }
-    Ok(out)
 }
 
 /// The luma tap: the same swscale call the RGBA path makes, asking for gray8 at
