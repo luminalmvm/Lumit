@@ -181,7 +181,8 @@ fn still_moves(contents: &[ShapeEntry]) -> bool {
         || serde_json::to_value(contents).map_or(true, |v| moves(&v))
 }
 
-/// A Text layer's words at layer time `lt`, comp time `t_comp`, rasterised.
+/// A Text layer's words at layer time `lt`, comp time `t_comp`, rasterised,
+/// and the raster's name.
 pub(super) fn text(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -189,7 +190,7 @@ pub(super) fn text(
     document: &TextDocument,
     (lt, t_comp): (f64, f64),
     context: &Arc<ExpressionContext>,
-) -> LayerRaster {
+) -> (LayerRaster, Option<u128>) {
     // The words at *this* layer time — a plain document hands back
     // what was typed; an expression-driven one is evaluated here,
     // which is what makes a caption able to print a live value.
@@ -268,18 +269,18 @@ pub(super) fn text(
             natural: (natural.0 as f32, natural.1 as f32),
         }
     });
-    (Arc::clone(&r.rgba), r.w, r.h, r.natural)
+    ((Arc::clone(&r.rgba), r.w, r.h, r.natural), Some(name))
 }
 
-/// A Shape layer's art at layer time `lt`, rasterised. `None` when it has
-/// nothing to draw.
+/// A Shape layer's art at layer time `lt`, rasterised, and the raster's name
+/// when it has one. `None` when it has nothing to draw.
 pub(super) fn shape(
     comp: &Composition,
     layer: &Layer,
     contents: &[ShapeEntry],
     (lt, t_comp): (f64, f64),
     context: &Arc<ExpressionContext>,
-) -> Option<LayerRaster> {
+) -> Option<(LayerRaster, Option<u128>)> {
     let contents = lumit_core::shape::contents_at(contents, lt, context);
     let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, lt)?;
     let natural_w = (x1 - x0).max(1.0);
@@ -305,7 +306,8 @@ pub(super) fn shape(
     // Art that came back unfrozen draws differently at each time, so its
     // name carries the time.
     let at = (matches!(contents, Cow::Borrowed(_)) && still_moves(&contents)).then_some(lt);
-    let rgba = match shape_name(&contents, (w, h), [x0, y0, x1, y1], at) {
+    let name = shape_name(&contents, (w, h), [x0, y0, x1, y1], at);
+    let rgba = match name {
         Some(name) => {
             let r = kept(name, || KeptRaster {
                 rgba: Arc::new(make()),
@@ -317,5 +319,5 @@ pub(super) fn shape(
         }
         None => Arc::new(make()),
     };
-    Some((rgba, w, h, (natural_w as f32, natural_h as f32)))
+    Some(((rgba, w, h, (natural_w as f32, natural_h as f32)), name))
 }

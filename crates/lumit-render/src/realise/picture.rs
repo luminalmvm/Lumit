@@ -272,7 +272,7 @@ impl Realiser<'_> {
                 &graphs,
                 fx_ms.as_mut(),
                 // The per-effect cache, for a source the builder
-                // could name; a nested comp, text or shape runs as before.
+                // could name; one it could not runs as before.
                 l.fx_input_key.map(|key| (self.fx_cache, key)),
             )
         };

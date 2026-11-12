@@ -1911,6 +1911,21 @@ fn comp_walk(
         )
     };
 
+    // The names of the text and shape rasters this walk made, by layer and
+    // layer time, for the effect cache. Only looked up, so the map's order
+    // decides nothing.
+    let raster_names: std::cell::RefCell<HashMap<(Uuid, u64), u128>> = Default::default();
+    let named = |layer: &lumit_core::model::Layer,
+                 lt: f64,
+                 (raster, name): (kept_raster::LayerRaster, Option<u128>)| {
+        if let Some(name) = name {
+            raster_names
+                .borrow_mut()
+                .insert((layer.id, lt.to_bits()), name);
+        }
+        raster
+    };
+
     // One layer's own picture at layer time `lt`, alone: its source pixels with
     // its paint stamped in and its masks gating them, and nothing else — no
     // effects, no transform, no puppet. What [`pixels_for`] is built on, and
@@ -2008,15 +2023,18 @@ fn comp_walk(
                     (sd.width as f32, sd.height as f32),
                 )
             }),
-            LayerKind::Text { document } => in_span(layer)
-                .then(|| kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context)),
+            LayerKind::Text { document } => in_span(layer).then(|| {
+                let made = kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context);
+                named(layer, lt, made)
+            }),
             // Vector art: rasterised at the size the frame is being drawn at,
             // into its own bounding box, which is also the layer's natural
             // size. Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
                 .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context))
-                .flatten(),
+                .flatten()
+                .map(|made| named(layer, lt, made)),
             LayerKind::Precomp { .. } => None, // handled as Nested below
             LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
             // A light is something other layers SEE. It has no picture
@@ -4838,9 +4856,15 @@ fn comp_walk(
         // exactly what the stack runs on (`op_keys` folds in the raster size,
         // so the render scale is covered).
         let fx_input_key = match &source {
-            DrawSource::Pixels { tex_w, tex_h, .. } => {
-                fx_key::fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
-            }
+            DrawSource::Pixels { tex_w, tex_h, .. } => fx_key::fx_input_key(
+                doc,
+                layer,
+                pixels_by_layer,
+                &raster_names.borrow(),
+                lt,
+                *tex_w,
+                *tex_h,
+            ),
             // On Flow the stack runs on the picture between two frames,
             // which is neither frame's.
             DrawSource::Nested { key, flow, .. } => key.filter(|_| flow.is_none()),
