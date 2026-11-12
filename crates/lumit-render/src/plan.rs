@@ -26,8 +26,9 @@ use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
 use lumit_core::fx::temporal::FlowWant;
 use lumit_core::model::{Composition, Document, LayerKind};
-use std::path::PathBuf;
+use media_source::media_source;
 use uuid::Uuid;
+mod media_source;
 mod synthesis_key;
 
 /// While the user is actively scrubbing or dragging, footage decodes at most
@@ -198,45 +199,6 @@ pub struct PlanContext<'a> {
     /// yes to until the frame is realised (`FxCache::pin_nested`), or a yes
     /// here becomes a nested comp realised from no pixels.
     pub held: Option<HeldNested<'a>>,
-}
-
-/// The decode source for one footage item: the file its pixels are read from
-/// (already resolved through the proxy rule) and — for a numbered run of
-/// stills — the rate to read the run at.
-///
-/// The rate rides only when the file *is* the item's own media. A proxy is one
-/// file standing in for the whole run, so reading it as a sequence would be
-/// reading files that are not there. The same goes for a source layer or a
-/// render pass: a proxy has no layers or passes to pick from.
-fn media_source(
-    doc: &Document,
-    item: Uuid,
-    media: &lumit_core::model::MediaRef,
-) -> lumit_media::sequence::MediaSource {
-    let footage = match doc.item(item) {
-        Some(lumit_core::model::ProjectItem::Footage(f)) => Some(f),
-        _ => None,
-    };
-    let (sequence_fps, source_layer, render_pass) = match footage {
-        Some(f) if std::ptr::eq(&f.media, media) => (
-            f.sequence_fps(),
-            f.source_layer,
-            f.interpretation.render_pass.clone(),
-        ),
-        _ => (None, None, None),
-    };
-    lumit_media::sequence::MediaSource {
-        path: PathBuf::from(&media.absolute_path),
-        sequence_fps,
-        source_layer,
-        render_pass,
-        // A proxy is the same frames, so it is read the way its original is.
-        interpret: footage
-            .map(crate::source::interpretation)
-            .unwrap_or_default(),
-        stamp: None,
-    }
-    .stamped()
 }
 
 /// The neighbour frames a Precomp or adjustment layer's stack reads at layer
@@ -525,8 +487,11 @@ pub fn collect_comp_jobs(
             continue;
         }
         // As the build draws it, so a layer a clip's effect reads is decoded.
-        let worn =
-            lumit_core::sequence::worn_at(l, lumit_core::time::layer_time(t, l.start_offset.0));
+        let worn = lumit_core::grade::groups::worn_at(
+            doc,
+            l,
+            lumit_core::time::layer_time(t, l.start_offset.0),
+        );
         let l = worn.as_ref().unwrap_or(l);
         if l.switches.visible
             && (in_span(l) || moment_in_span(idx, l))
@@ -629,7 +594,7 @@ pub fn collect_comp_jobs(
         let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
         // As the build draws it, so a clip's temporal effect is planned its
         // neighbours.
-        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let worn = lumit_core::grade::groups::worn_at(doc, layer, lt);
         let layer = worn.as_ref().unwrap_or(layer);
         match &layer.kind {
             // No footage source to decode (an adjustment layer processes

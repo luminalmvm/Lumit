@@ -355,29 +355,7 @@
   },
   "gradeBalance": "Balance",
   "@gradeBalance": {
-    "description": "Grade panel: the heading over the three colour wheels (lift, gamma, gain)."
-  },
-  "gradePrimaries": "Primaries",
-  "@gradePrimaries": {
-    "description": "Grade panel: the heading over the primary sliders (exposure, contrast, saturation, temperature, tint)."
-  },
-  "gradeBypassPart": "{part, select, balance{Bypass balance} primaries{Bypass primaries} curves{Bypass curves} look{Bypass look} exposure{Bypass exposure} contrast{Bypass contrast} saturation{Bypass saturation} other{Bypass temperature and tint}}",
-  "@gradeBypassPart": {
-    "description": "Grade panel menu on a section heading or a row: switches that part of the grade off, or back on. Ticked while off. {part} names it: a section (balance, primaries, curves, look) or, on a primaries row, the one effect behind it; temperature and tint are one effect.",
-    "placeholders": {
-      "part": {
-        "type": "String"
-      }
-    }
-  },
-  "gradeRemovePart": "{part, select, balance{Remove balance} primaries{Remove primaries} curves{Remove curves} look{Remove look} exposure{Remove exposure} contrast{Remove contrast} saturation{Remove saturation} other{Remove temperature and tint}}",
-  "@gradeRemovePart": {
-    "description": "Grade panel menu on a section heading or a row: removes that part of the grade's effects from the layer. {part} names it, as in gradeBypassPart.",
-    "placeholders": {
-      "part": {
-        "type": "String"
-      }
-    }
+    "description": "Grade panel, Match page: label of the row with Auto balance, which takes the cast out of the shot."
   },
   "gradeCopy": "Copy grade",
   "@gradeCopy": {
@@ -7335,14 +7313,6 @@
   "@keySwitchThePickedClipsToTheirPreviousTake": {
     "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the previous of its takes. Vegas puts this on Shift+T."
   },
-  "keyCopyTheLayerSGrade": "Copy the layer's grade",
-  "@keyCopyTheLayerSGrade": {
-    "description": "Keyboard shortcut action: puts the selected layer's colour effects on the effect clipboard."
-  },
-  "keyPasteTheGradeOntoTheSelectedLayers": "Paste the grade onto the selected layers",
-  "@keyPasteTheGradeOntoTheSelectedLayers": {
-    "description": "Keyboard shortcut action: the grade on the clipboard takes the place of the grade on every selected layer."
-  },
   "keyPasteAClipSAttributesOntoThePickedClips": "Paste a clip's attributes onto the picked clips",
   "@keyPasteAClipSAttributesOntoThePickedClips": {
     "description": "Keyboard shortcut action in the Cut timeline: the copied clip's settings, such as its effects, are given to the picked clips. Vegas puts this on Ctrl+Shift+V."
@@ -7927,16 +7897,24 @@
   },
   "keymapPresetLoaded": "{name} loaded.",
   "@keymapPresetLoaded": {
-    "description": "Settings window, Shortcuts: shown beside the Preset buttons after one is pressed. {name} is the button's own label, such as Lumit default, After Effects or Vegas.",
+    "description": "Settings window, Shortcuts: shown beside the Preset list after a choice in it. {name} is the choice's own label, such as Lumit default, After Effects, Vegas or the name of a saved set.",
     "placeholders": {
       "name": {
         "type": "String"
       }
     }
   },
+  "keymapSaveSet": "Save as set…",
+  "@keymapSaveSet": {
+    "description": "Settings window, Shortcuts: the last choice in the Preset list. It keeps the shortcuts in force under a name, listed with the presets from then on."
+  },
+  "keymapSaveSetTitle": "Save shortcut set",
+  "@keymapSaveSetTitle": {
+    "description": "Title of the small window that asks what to call a saved set of shortcuts."
+  },
   "keymapLumitDefault": "Lumit default",
   "@keymapLumitDefault": {
-    "description": "Button that loads Lumit's own set of keyboard shortcuts."
+    "description": "Settings window, Shortcuts: the name of Lumit's own set of keyboard shortcuts, in the Preset list and the drag choices."
   },
   "keymapNoMatches": "No shortcut matches that.",
   "@keymapNoMatches": {
@@ -15804,7 +15782,7 @@
   },
   "settingsPreset": "Preset",
   "@settingsPreset": {
-    "description": "Settings window, Shortcuts: the name of the row whose buttons load a whole set of shortcuts at once."
+    "description": "Settings window, Shortcuts: the name of the row whose list puts a whole set of shortcuts in force at once."
   },
   "settingsResetPage": "Reset page",
   "@settingsResetPage": {
@@ -16577,6 +16555,10 @@
   "menuExportQueue": "Export queue…",
   "@menuExportQueue": {
     "description": "Window menu: opens the export queue window."
+  },
+  "menuLibrary": "Library…",
+  "@menuLibrary": {
+    "description": "Window menu: opens the Library window, which lists presets, fonts, themes and the rest of what a person keeps to use again."
   },
   "compGroupFrame": "Frame",
   "@compGroupFrame": {
@@ -22591,6 +22573,10 @@
   "@keyOpenTheExportQueue": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyOpenTheLibrary": "Open the library",
+  "@keyOpenTheLibrary": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyOpenLumitHelp": "Open Lumit help",
   "@keyOpenLumitHelp": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -23602,6 +23588,439 @@
   "@syncStatusOff": {
     "description": "Line in the profile card for a Pro account whose profile has sync switched off."
   },
+  "libraryTitle": "Library",
+  "@libraryTitle": {
+    "description": "Title strip of the Library window."
+  },
+  "librarySearch": "Search library",
+  "@librarySearch": {
+    "description": "Placeholder in the Library window's search field."
+  },
+  "libraryAll": "All",
+  "@libraryAll": {
+    "description": "First row of the Library window's sidebar: every kind of item together."
+  },
+  "libraryKindPresets": "Presets",
+  "@libraryKindPresets": {
+    "description": "A kind of library item: effect, animation, material and node-group presets."
+  },
+  "libraryKindStyles": "Styles",
+  "@libraryKindStyles": {
+    "description": "A kind of library item: interface styles."
+  },
+  "libraryKindThemes": "Themes",
+  "@libraryKindThemes": {
+    "description": "A kind of library item: colour themes."
+  },
+  "libraryKindFonts": "Fonts",
+  "@libraryKindFonts": {
+    "description": "A kind of library item: font files."
+  },
+  "libraryKindShortcuts": "Shortcut sets",
+  "@libraryKindShortcuts": {
+    "description": "A kind of library item: saved keyboard shortcut sets."
+  },
+  "libraryKindLenses": "Lenses",
+  "@libraryKindLenses": {
+    "description": "A kind of library item: lens profiles."
+  },
+  "libraryKindFlares": "Flares",
+  "@libraryKindFlares": {
+    "description": "A kind of library item: lens flare designs."
+  },
+  "libraryKindExports": "Export presets",
+  "@libraryKindExports": {
+    "description": "A kind of library item: saved export settings."
+  },
+  "libraryKindLuts": "LUTs",
+  "@libraryKindLuts": {
+    "description": "A kind of library item: colour look-up tables."
+  },
+  "libraryKindTemplates": "Templates",
+  "@libraryKindTemplates": {
+    "description": "A kind of library item: project templates. Listed only when there are some."
+  },
+  "libraryBindings": "{n, plural, =1{1 binding} other{{n} bindings}}",
+  "@libraryBindings": {
+    "description": "The detail line of a shortcut set in the Library window: how many keys it binds.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryElements": "{n, plural, =1{1 element} other{{n} elements}}",
+  "@libraryElements": {
+    "description": "The detail line of a flare in the Library window: how many elements it is made of.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryEntries": "{n, plural, =1{1 entry} other{{n} entries}}",
+  "@libraryEntries": {
+    "description": "The detail line of the export presets in the Library window: how many presets the file holds.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryUndoAction": "{action, select, delete{Undo delete} rename{Undo rename} restore{Undo restore} keepOnlyHere{Undo keep only here} removeHere{Undo remove from this computer} get{Undo get} resolve{Undo the choice} other{Undo}}",
+  "@libraryUndoAction": {
+    "description": "Menu row in the Library window that takes the last action back, named after the action. The item's name follows it.",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRedoAction": "{action, select, delete{Redo delete} rename{Redo rename} restore{Redo restore} keepOnlyHere{Redo keep only here} removeHere{Redo remove from this computer} get{Redo get} resolve{Redo the choice} other{Redo}}",
+  "@libraryRedoAction": {
+    "description": "Menu row in the Library window that does the undone action again, named after the action. The item's name follows it.",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryNeedsYou": "Needs you",
+  "@libraryNeedsYou": {
+    "description": "Sidebar row and item mark in the Library window: items changed on two computers that wait for the person to pick a version."
+  },
+  "libraryRecentlyDeleted": "Recently deleted",
+  "@libraryRecentlyDeleted": {
+    "description": "Sidebar row in the Library window: items deleted in the last 30 days, which can still be restored."
+  },
+  "libraryComputers": "Computers",
+  "@libraryComputers": {
+    "description": "Heading in the Library window's sidebar over the account's computers."
+  },
+  "libraryThisComputer": "This computer",
+  "@libraryThisComputer": {
+    "description": "The computer Lumit is running on, in the Library window's computer list and conflict cards."
+  },
+  "librarySeenNow": "now",
+  "@librarySeenNow": {
+    "description": "Beside a computer in the Library window that is signed in right now."
+  },
+  "libraryAgoMinutes": "{n} min",
+  "@libraryAgoMinutes": {
+    "description": "How long ago a computer was last seen, in minutes. Beside its name in the Library window.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryAgoHours": "{n} h",
+  "@libraryAgoHours": {
+    "description": "How long ago a computer was last seen, in hours.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryAgoDays": "{n} d",
+  "@libraryAgoDays": {
+    "description": "How long ago a computer was last seen, in days.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryStatusInSync": "In sync",
+  "@libraryStatusInSync": {
+    "description": "Status in the Library window's title strip when every computer has the same library."
+  },
+  "libraryStatusOffline": "Offline",
+  "@libraryStatusOffline": {
+    "description": "Status in the Library window's title strip when the server cannot be reached and nothing waits to go up."
+  },
+  "libraryStatusOfflineWaiting": "Offline · {n} waiting",
+  "@libraryStatusOfflineWaiting": {
+    "description": "Status in the Library window's title strip when the server cannot be reached: how many changes wait to go up.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryStatusNeedsYou": "Needs you · {n}",
+  "@libraryStatusNeedsYou": {
+    "description": "Status in the Library window's title strip: how many items wait for the person to pick a version.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryStatusFailed": "Couldn't sync",
+  "@libraryStatusFailed": {
+    "description": "Status in the Library window's title strip when the last pass failed."
+  },
+  "libraryStatusLocal": "On this computer",
+  "@libraryStatusLocal": {
+    "description": "Status in the Library window's title strip without Lumit Pro or signed out: the library is kept on this computer only."
+  },
+  "libraryOnThisComputer": "On this computer",
+  "@libraryOnThisComputer": {
+    "description": "Switch over a kind's list in the Library window: whether that kind is kept on this computer."
+  },
+  "libraryEmpty": "Nothing here yet",
+  "@libraryEmpty": {
+    "description": "Line in the middle of the Library window when the chosen kind has no items."
+  },
+  "libraryGet": "Get",
+  "@libraryGet": {
+    "description": "Button on a Library item kept in the account but not on this computer. Fetches it and keeps it here from then on."
+  },
+  "libraryRemoveHere": "Remove from this computer",
+  "@libraryRemoveHere": {
+    "description": "Action on a Library item: stop keeping it on this computer. The account keeps it."
+  },
+  "libraryKeepOnlyHere": "Keep only on this computer",
+  "@libraryKeepOnlyHere": {
+    "description": "Action on a Library item: never send it to the account."
+  },
+  "libraryKeepOnlyHereAsk": "Remove {name} from the account?",
+  "@libraryKeepOnlyHereAsk": {
+    "description": "Question before Keep only on this computer on an item the account already holds. The copy on this computer stays.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryKeepOnlyHereYes": "Keep only here",
+  "@libraryKeepOnlyHereYes": {
+    "description": "The yes button of that question."
+  },
+  "libraryShareAgain": "Sync it again",
+  "@libraryShareAgain": {
+    "description": "Action on a Library item kept only on this computer: send it to the account again."
+  },
+  "libraryDeleteForever": "Delete forever",
+  "@libraryDeleteForever": {
+    "description": "Action on a recently deleted Library item: remove it from the account for good."
+  },
+  "libraryDeleteForeverAsk": "Delete {name} forever?",
+  "@libraryDeleteForeverAsk": {
+    "description": "Question before an item is removed from Recently deleted for good.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRestore": "Restore",
+  "@libraryRestore": {
+    "description": "Button on a version in a Library item's history, and on a recently deleted item."
+  },
+  "librarySaveCopy": "Save as a copy",
+  "@librarySaveCopy": {
+    "description": "Menu row on a version in a Library item's history: keep that version as a new item beside the current one."
+  },
+  "libraryCurrent": "Current",
+  "@libraryCurrent": {
+    "description": "Beside the newest version in a Library item's history."
+  },
+  "libraryWhere": "Where",
+  "@libraryWhere": {
+    "description": "Heading in the Library window's detail pane over each computer and whether it has the item."
+  },
+  "libraryHistory": "History",
+  "@libraryHistory": {
+    "description": "Heading in the Library window's detail pane over the item's versions."
+  },
+  "libraryWhereUpToDate": "Up to date",
+  "@libraryWhereUpToDate": {
+    "description": "A computer holds the newest version of a Library item."
+  },
+  "libraryWhereOlder": "Older version",
+  "@libraryWhereOlder": {
+    "description": "A computer holds an older version of a Library item."
+  },
+  "libraryWhereNotKept": "Not kept",
+  "@libraryWhereNotKept": {
+    "description": "A computer does not keep a Library item or its kind."
+  },
+  "libraryStateWaiting": "Waiting to go up",
+  "@libraryStateWaiting": {
+    "description": "A Library item changed here that has not reached the account yet."
+  },
+  "libraryStateComing": "Coming down",
+  "@libraryStateComing": {
+    "description": "A Library item on its way from the account to this computer."
+  },
+  "libraryStateNotHere": "Not on this computer",
+  "@libraryStateNotHere": {
+    "description": "A Library item the account holds that is not kept on this computer."
+  },
+  "libraryStateOnlyHere": "Only on this computer",
+  "@libraryStateOnlyHere": {
+    "description": "A Library item kept on this computer and never sent to the account."
+  },
+  "libraryStateTooBig": "Too big to sync",
+  "@libraryStateTooBig": {
+    "description": "A Library item larger than the server takes."
+  },
+  "libraryCannotWrite": "Its name can't be kept on this computer",
+  "@libraryCannotWrite": {
+    "description": "Why a Library item the account holds is not on this computer: the item's name, or a name inside it, is one this system cannot write."
+  },
+  "libraryStateNoRoom": "No room in the account",
+  "@libraryStateNoRoom": {
+    "description": "A Library item that cannot go up because the account's storage is full."
+  },
+  "libraryKeepThisOne": "Keep this one",
+  "@libraryKeepThisOne": {
+    "description": "Button on a Library conflict: keep this computer's version."
+  },
+  "libraryKeepTheOther": "Keep the other",
+  "@libraryKeepTheOther": {
+    "description": "Button on a Library conflict: take the other computer's version."
+  },
+  "libraryKeepBoth": "Keep both",
+  "@libraryKeepBoth": {
+    "description": "Button on a Library conflict: keep both versions, this computer's renamed after it."
+  },
+  "libraryChosen": "{n} chosen",
+  "@libraryChosen": {
+    "description": "Detail pane of the Library window when several items are selected.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryDeleted": "Deleted {name}",
+  "@libraryDeleted": {
+    "description": "Notice after a Library item is deleted, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryDeletedMany": "Deleted {n} items",
+  "@libraryDeletedMany": {
+    "description": "Notice after several Library items are deleted, with Undo beside it.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryRenamed": "Renamed to {name}",
+  "@libraryRenamed": {
+    "description": "Notice after a Library item is renamed, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRestored": "Restored {name}",
+  "@libraryRestored": {
+    "description": "Notice after a version of a Library item is restored, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRemovedHere": "Removed {name} from this computer",
+  "@libraryRemovedHere": {
+    "description": "Notice after a Library item stops being kept on this computer, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryKeptOnlyHere": "{name} stays on this computer",
+  "@libraryKeptOnlyHere": {
+    "description": "Notice after Keep only on this computer, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryResolved": "Kept {name}",
+  "@libraryResolved": {
+    "description": "Notice after a Library conflict is settled, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryAdded": "Added {n}",
+  "@libraryAdded": {
+    "description": "Notice after files are added to the library: how many.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryExported": "Exported {n}",
+  "@libraryExported": {
+    "description": "Notice after Library items are written to a .lumlibrary file: how many.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryImport": "Import…",
+  "@libraryImport": {
+    "description": "Footer button of the Library window: take a .lumlibrary file in."
+  },
+  "libraryExport": "Export…",
+  "@libraryExport": {
+    "description": "Footer button of the Library window: write the chosen items, or all of them, to a .lumlibrary file."
+  },
+  "libraryAdd": "Add…",
+  "@libraryAdd": {
+    "description": "Footer button of the Library window: pick files to add to the library."
+  },
+  "libraryFileType": "Lumit library",
+  "@libraryFileType": {
+    "description": "File type name in the open and save dialogues for .lumlibrary files."
+  },
+  "libraryStorageLine": "Library {library} · {used} of {limit} used",
+  "@libraryStorageLine": {
+    "description": "Footer line of the Library window: the library's share of the account's storage, and the account's use of its allowance.",
+    "placeholders": {
+      "library": {
+        "type": "String"
+      },
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "librarySyncWithPro": "Sync it with",
+  "@librarySyncWithPro": {
+    "description": "Footer of the Library window without Lumit Pro, followed by the Pro badge. Pressing it opens the Lumit Pro window."
+  },
+  "libraryUndo": "Undo",
+  "@libraryUndo": {
+    "description": "Button beside a Library notice that takes the last action back."
+  },
+  "libraryFontSample": "The quick brown fox jumps over the lazy dog",
+  "@libraryFontSample": {
+    "description": "The sample line drawn in a font's own face in the Library window. A sentence that uses every letter of the language."
+  },
   "signInTitle": "Sign in",
   "@signInTitle": {
     "description": "Title strip of the sign-in window."
@@ -23821,11 +24240,11 @@
   "@proFeatureRelayBody": {
     "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
   },
-  "proFeatureSyncTitle": "Settings on every device",
+  "proFeatureSyncTitle": "Settings and library on every device",
   "@proFeatureSyncTitle": {
     "description": "Second feature in the Lumit Pro window."
   },
-  "proFeatureSyncBody": "Shortcuts, themes, workspaces, and presets follow you.",
+  "proFeatureSyncBody": "Shortcuts and workspaces follow you. So do presets, fonts and themes.",
   "@proFeatureSyncBody": {
     "description": "What the second Lumit Pro feature does."
   },
@@ -24718,6 +25137,14 @@
   "@settingsSyncNow": {
     "description": "Button in the Sync group of Settings."
   },
+  "settingsLibrary": "Library",
+  "@settingsLibrary": {
+    "description": "Row in the Sync group of Settings ▸ Account: the library's sync status, with a button that opens the Library window."
+  },
+  "settingsOpenLibrary": "Open library",
+  "@settingsOpenLibrary": {
+    "description": "Button on the Library row of Settings ▸ Account ▸ Sync. Opens the Library window."
+  },
   "syncGroupAppearance": "Appearance and themes",
   "@syncGroupAppearance": {
     "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
@@ -24736,10 +25163,6 @@
   },
   "syncGroupLibrary": "Easings, expressions and favourites",
   "@syncGroupLibrary": {
-    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
-  },
-  "syncGroupPresets": "Effect presets",
-  "@syncGroupPresets": {
     "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
   },
   "shareCloud": "Lumit relay",
@@ -29656,5 +30079,1593 @@
   "vectorFileType": "Lottie",
   "@vectorFileType": {
     "description": "A file type in the system's Save dialogue of the Lottie and SVG window, and in the Import dialogue: a Lottie or dotLottie file."
+  },
+  "scopeChromaticity": "CIE chromaticity",
+  "@scopeChromaticity": {
+    "description": "The name of a scope plotting each pixel's colour on the CIE 1931 xy chart, with the visible spectrum's outline and the Rec.709, P3 and Rec.2020 gamuts. CIE is the standard abbreviation."
+  },
+  "scopeLayoutOne": "One scope",
+  "@scopeLayoutOne": {
+    "description": "Scopes panel layout picker and menu: the panel shows one instrument."
+  },
+  "scopeLayoutTwo": "Two scopes",
+  "@scopeLayoutTwo": {
+    "description": "Scopes panel layout picker and menu: the panel shows two instruments side by side."
+  },
+  "scopeLayoutFour": "Four scopes",
+  "@scopeLayoutFour": {
+    "description": "Scopes panel layout picker and menu: the panel shows four instruments in a square."
+  },
+  "scopeZoom": "2x",
+  "@scopeZoom": {
+    "description": "Scopes panel: draws the vectorscope at twice the size, for pictures with little colour. Read as two times."
+  },
+  "scopeBrightness": "Brightness",
+  "@scopeBrightness": {
+    "description": "Scopes panel menu: a slider for how bright the traces are drawn."
+  },
+  "scopeScalePercent": "Percent",
+  "@scopeScalePercent": {
+    "description": "Scopes panel menu: the waveform's scale is numbered 0 to 100. Ticked while chosen."
+  },
+  "scopeScaleTenBit": "10-bit",
+  "@scopeScaleTenBit": {
+    "description": "Scopes panel menu: the waveform's and histogram's scales are numbered in 10-bit code values, 0 to 1023. Ticked while chosen."
+  },
+  "fxAdjust": "Adjust",
+  "@fxAdjust": {
+    "description": "Effect controls: a group of rows on Correction: exposure, temperature, contrast, saturation and the like."
+  },
+  "fxBlackClip": "Black clip",
+  "@fxBlackClip": {
+    "description": "Effect controls: a control on Correction: the least the qualifier's key may be."
+  },
+  "fxBlueHigh": "Blue high",
+  "@fxBlueHigh": {
+    "description": "Effect controls: a control on Correction: the most blue the qualifier keys."
+  },
+  "fxBlueLow": "Blue low",
+  "@fxBlueLow": {
+    "description": "Effect controls: a control on Correction: the least blue the qualifier keys."
+  },
+  "fxBlueOutput": "Blue output",
+  "@fxBlueOutput": {
+    "description": "Effect controls: a control on Correction's mixer: what the blue channel is made of."
+  },
+  "fxBlurRadius": "Blur radius",
+  "@fxBlurRadius": {
+    "description": "Effect controls: a control on Correction: how far the qualifier's key is softened."
+  },
+  "fxCleanBlack": "Clean black",
+  "@fxCleanBlack": {
+    "description": "Effect controls: a control on Correction: pushes the greys of the qualifier's key towards black."
+  },
+  "fxCleanWhite": "Clean white",
+  "@fxCleanWhite": {
+    "description": "Effect controls: a control on Correction: pushes the greys of the qualifier's key towards white."
+  },
+  "fxColourBoost": "Colour boost",
+  "@fxColourBoost": {
+    "description": "Effect controls: a control on Correction: saturation that favours the less colourful parts of the picture."
+  },
+  "fxCorrection": "Correction",
+  "@fxCorrection": {
+    "description": "Name of an effect: one whole grade node, with wheels, curves, a qualifier and windows."
+  },
+  "fxGreenHigh": "Green high",
+  "@fxGreenHigh": {
+    "description": "Effect controls: a control on Correction: the most green the qualifier keys."
+  },
+  "fxGreenLow": "Green low",
+  "@fxGreenLow": {
+    "description": "Effect controls: a control on Correction: the least green the qualifier keys."
+  },
+  "fxGreenOutput": "Green output",
+  "@fxGreenOutput": {
+    "description": "Effect controls: a control on Correction's mixer: what the green channel is made of."
+  },
+  "fxHsl": "HSL",
+  "@fxHsl": {
+    "description": "Effect controls: an option of Correction's Qualifier: key on hue, saturation and luma. Usually left as the letters."
+  },
+  "fxHighRange": "High range",
+  "@fxHighRange": {
+    "description": "Effect controls: a control on Correction: where the highlights start for the log wheels."
+  },
+  "fxHighSoftClip": "High soft clip",
+  "@fxHighSoftClip": {
+    "description": "Effect controls: a control on Correction: rolls the brightest values off gently before white."
+  },
+  "fxHighlight": "Highlight",
+  "@fxHighlight": {
+    "description": "Effect controls: a control on Correction: the log wheel that moves the highlights."
+  },
+  "fxHueCurves": "Hue curves",
+  "@fxHueCurves": {
+    "description": "Effect controls: a group of rows on Correction: the curves that change colour by hue, luma or saturation."
+  },
+  "fxHueSoftness": "Hue softness",
+  "@fxHueSoftness": {
+    "description": "Effect controls: a control on Correction: how far past the hue width the key fades."
+  },
+  "fxHueSymmetry": "Hue symmetry",
+  "@fxHueSymmetry": {
+    "description": "Effect controls: a control on Correction: leans the keyed run of hues to one side of its centre."
+  },
+  "fxHueVHue": "Hue v hue",
+  "@fxHueVHue": {
+    "description": "Effect controls: a control on Correction: a curve that turns each hue by an amount set per hue. Short for hue against hue."
+  },
+  "fxHueVLum": "Hue v lum",
+  "@fxHueVLum": {
+    "description": "Effect controls: a control on Correction: a curve that brightens or darkens each hue. Short for hue against luma."
+  },
+  "fxHueVSat": "Hue v sat",
+  "@fxHueVSat": {
+    "description": "Effect controls: a control on Correction: a curve that sets saturation per hue. Short for hue against saturation."
+  },
+  "fxHueWidth": "Hue width",
+  "@fxHueWidth": {
+    "description": "Effect controls: a control on Correction: how wide a run of hues the qualifier keys."
+  },
+  "fxInnerSoftness": "Inner softness",
+  "@fxInnerSoftness": {
+    "description": "Effect controls: a control on Correction: how far a window's edge fades inwards."
+  },
+  "fxKeepLuma": "Keep luma",
+  "@fxKeepLuma": {
+    "description": "Effect controls: a control on Correction's mixer: puts the brightness back where the mixer found it."
+  },
+  "fxLog": "Log",
+  "@fxLog": {
+    "description": "Effect controls: an option of Correction's Space: grade on a log picture (ACEScct)."
+  },
+  "fxLogWheels": "Log wheels",
+  "@fxLogWheels": {
+    "description": "Effect controls: a group of rows on Correction: shadow, midtone and highlight wheels with their ranges."
+  },
+  "fxLowRange": "Low range",
+  "@fxLowRange": {
+    "description": "Effect controls: a control on Correction: where the shadows end for the log wheels."
+  },
+  "fxLowSoftClip": "Low soft clip",
+  "@fxLowSoftClip": {
+    "description": "Effect controls: a control on Correction: rolls the darkest values off gently before black."
+  },
+  "fxLumMix": "Lum mix",
+  "@fxLumMix": {
+    "description": "Effect controls: a control on Correction: how much the wheels may change brightness. Lum is short for luminance."
+  },
+  "fxLumVSat": "Lum v sat",
+  "@fxLumVSat": {
+    "description": "Effect controls: a control on Correction: a curve that sets saturation by brightness. Short for luma against saturation."
+  },
+  "fxLumaHigh": "Luma high",
+  "@fxLumaHigh": {
+    "description": "Effect controls: a control on Correction: the brightest luma the qualifier keys."
+  },
+  "fxLumaLow": "Luma low",
+  "@fxLumaLow": {
+    "description": "Effect controls: a control on Correction: the darkest luma the qualifier keys."
+  },
+  "fxLumaSoftness": "Luma softness",
+  "@fxLumaSoftness": {
+    "description": "Effect controls: a control on Correction: how far past the luma range the key fades."
+  },
+  "fxMatteFinesse": "Matte finesse",
+  "@fxMatteFinesse": {
+    "description": "Effect controls: a group of rows on Correction that tidy the qualifier's key."
+  },
+  "fxMidtone": "Midtone",
+  "@fxMidtone": {
+    "description": "Effect controls: a control on Correction: the log wheel that moves the midtones."
+  },
+  "fxMidtoneDetail": "Midtone detail",
+  "@fxMidtoneDetail": {
+    "description": "Effect controls: a control on Correction: local contrast in the midtones."
+  },
+  "fxMixer": "Mixer",
+  "@fxMixer": {
+    "description": "Effect controls: a group of rows on Correction: each output channel made from the three inputs."
+  },
+  "fxNode": "Node",
+  "@fxNode": {
+    "description": "Effect controls: a group of rows on Correction: where the grade is worked and how it joins the node above."
+  },
+  "fxOuterSoftness": "Outer softness",
+  "@fxOuterSoftness": {
+    "description": "Effect controls: a control on Correction: how far a window's edge fades outwards."
+  },
+  "fxParallel": "Parallel",
+  "@fxParallel": {
+    "description": "Effect controls: an option of Correction's Combine: this node grades the same picture as the one above, beside it."
+  },
+  "fxPivot": "Pivot",
+  "@fxPivot": {
+    "description": "Effect controls: a control on Correction: the value contrast turns about."
+  },
+  "fxPolygon": "Polygon",
+  "@fxPolygon": {
+    "description": "Effect controls: an option of a Correction window's shape: an outline drawn point by point."
+  },
+  "fxQualifier": "Qualifier",
+  "@fxQualifier": {
+    "description": "Effect controls: a control on Correction: what the key is pulled on, hue and saturation, RGB or luma."
+  },
+  "fxRgb": "RGB",
+  "@fxRgb": {
+    "description": "Effect controls: a group of rows on Correction, and an option of its Qualifier: key on red, green and blue. Usually left as the letters."
+  },
+  "fxRedHigh": "Red high",
+  "@fxRedHigh": {
+    "description": "Effect controls: a control on Correction: the most red the qualifier keys."
+  },
+  "fxRedLow": "Red low",
+  "@fxRedLow": {
+    "description": "Effect controls: a control on Correction: the least red the qualifier keys."
+  },
+  "fxRedOutput": "Red output",
+  "@fxRedOutput": {
+    "description": "Effect controls: a control on Correction's mixer: what the red channel is made of."
+  },
+  "fxSatVLum": "Sat v lum",
+  "@fxSatVLum": {
+    "description": "Effect controls: a control on Correction: a curve that brightens or darkens by saturation. Short for saturation against luma."
+  },
+  "fxSatVSat": "Sat v sat",
+  "@fxSatVSat": {
+    "description": "Effect controls: a control on Correction: a curve that sets saturation by saturation. Short for saturation against saturation."
+  },
+  "fxSaturationHigh": "Saturation high",
+  "@fxSaturationHigh": {
+    "description": "Effect controls: a control on Correction: the most saturation the qualifier keys."
+  },
+  "fxSaturationLow": "Saturation low",
+  "@fxSaturationLow": {
+    "description": "Effect controls: a control on Correction: the least saturation the qualifier keys."
+  },
+  "fxSaturationSoftness": "Saturation softness",
+  "@fxSaturationSoftness": {
+    "description": "Effect controls: a control on Correction: how far past the saturation range the key fades."
+  },
+  "fxSerial": "Serial",
+  "@fxSerial": {
+    "description": "Effect controls: an option of Correction's Combine: this node grades what the one above made, the usual way."
+  },
+  "fxShadow": "Shadow",
+  "@fxShadow": {
+    "description": "Effect controls: a control on Correction: the log wheel that moves the shadows."
+  },
+  "fxUseHue": "Use hue",
+  "@fxUseHue": {
+    "description": "Effect controls: a control on Correction: whether the qualifier keys on hue."
+  },
+  "fxUseLuma": "Use luma",
+  "@fxUseLuma": {
+    "description": "Effect controls: a control on Correction: whether the qualifier keys on luma."
+  },
+  "fxUseSaturation": "Use saturation",
+  "@fxUseSaturation": {
+    "description": "Effect controls: a control on Correction: whether the qualifier keys on saturation."
+  },
+  "fxVideo": "Video",
+  "@fxVideo": {
+    "description": "Effect controls: an option of Correction's Space: grade on a gamma 2.4 picture, as a video looks."
+  },
+  "fxWheels": "Wheels",
+  "@fxWheels": {
+    "description": "Effect controls: a group of rows on Correction: the lift, gamma, gain and offset wheels."
+  },
+  "fxWhiteClip": "White clip",
+  "@fxWhiteClip": {
+    "description": "Effect controls: a control on Correction: the most the qualifier's key may be."
+  },
+  "fxWindow1": "Window 1",
+  "@fxWindow1": {
+    "description": "Effect controls: a control on Correction: the first of four windows, by its shape. Off leaves the picture unlimited."
+  },
+  "fxWindow2": "Window 2",
+  "@fxWindow2": {
+    "description": "Effect controls: a control on Correction: the second of four windows, by its shape."
+  },
+  "fxWindow3": "Window 3",
+  "@fxWindow3": {
+    "description": "Effect controls: a control on Correction: the third of four windows, by its shape."
+  },
+  "fxWindow4": "Window 4",
+  "@fxWindow4": {
+    "description": "Effect controls: a control on Correction: the fourth of four windows, by its shape."
+  },
+  "fxShapePointCount": "{count, plural, =0{No points} =1{1 point} other{{count} points}}",
+  "@fxShapePointCount": {
+    "description": "Effect controls: how many points a window's outline has. The points are drawn in the Viewer.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fxGroupGrade": "Group grade",
+  "@fxGroupGrade": {
+    "description": "Effect name: where a grade group's shared grade runs in a member shot's stack, before or after the shot's own grade."
+  },
+  "fxGradePre": "Pre",
+  "@fxGradePre": {
+    "description": "Group grade's Part option: the group's grade that runs before the shot's own grade."
+  },
+  "fxGradePost": "Post",
+  "@fxGradePost": {
+    "description": "Group grade's Part option: the group's grade that runs after the shot's own grade."
+  },
+  "histEditGradeVersions": "Edit grade versions",
+  "@histEditGradeVersions": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot's stored grade versions changed."
+  },
+  "histNewGradeVersion": "New grade version",
+  "@histNewGradeVersion": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a new version of a shot's grade made and shown."
+  },
+  "histSwitchGradeVersion": "Switch grade version",
+  "@histSwitchGradeVersion": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: another version of a shot's grade shown in place of the one that was."
+  },
+  "histRenameGradeVersion": "Rename grade version",
+  "@histRenameGradeVersion": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a version of a shot's grade renamed."
+  },
+  "histDeleteGradeVersion": "Delete grade version",
+  "@histDeleteGradeVersion": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a version of a shot's grade deleted."
+  },
+  "histNewGradeGroup": "New grade group",
+  "@histNewGradeGroup": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade group made: shots sharing a grade before and after their own."
+  },
+  "histRenameGradeGroup": "Rename grade group",
+  "@histRenameGradeGroup": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade group renamed."
+  },
+  "histDeleteGradeGroup": "Delete grade group",
+  "@histDeleteGradeGroup": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade group deleted, and taken off every shot in it."
+  },
+  "histJoinGradeGroup": "Join grade group",
+  "@histJoinGradeGroup": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot put in a grade group."
+  },
+  "histLeaveGradeGroup": "Leave grade group",
+  "@histLeaveGradeGroup": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot taken out of its grade group."
+  },
+  "settingsGroupControlSurfaces": "Control surfaces",
+  "@settingsGroupControlSurfaces": {
+    "description": "Settings window, General page: heading over the Tangent panel and MIDI controller settings, hardware for grading by hand."
+  },
+  "settingsTangentPanels": "Tangent panels",
+  "@settingsTangentPanels": {
+    "description": "Settings window: a switch, off by default. On, Lumit talks to Tangent grading panels through Tangent's own Hub program."
+  },
+  "settingsTangentWaiting": "Waiting for Tangent Hub",
+  "@settingsTangentWaiting": {
+    "description": "Settings window: under the Tangent panels switch while it is on and Tangent's Hub program is not running."
+  },
+  "settingsTangentConnected": "Connected to {panels}",
+  "@settingsTangentConnected": {
+    "description": "Settings window: under the Tangent panels switch once Tangent's Hub answers. panels is Tangent's own panel names joined with commas, as in Element-Tk, Element-Mf.",
+    "placeholders": {
+      "panels": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsMidiDevices": "MIDI devices",
+  "@settingsMidiDevices": {
+    "description": "Settings window: row shown when there are no MIDI input devices to choose. Otherwise each device has its own row with its own name and a switch."
+  },
+  "settingsMidiNone": "None found",
+  "@settingsMidiNone": {
+    "description": "Settings window: under the MIDI devices row when the system lists no MIDI inputs."
+  },
+  "settingsMidiLearn": "MIDI learn",
+  "@settingsMidiLearn": {
+    "description": "Settings window: row with a list of what a MIDI control can drive and a Learn button. Pick a target, press Learn, then move a knob or press a key on the device."
+  },
+  "settingsMidiLearnButton": "Learn",
+  "@settingsMidiLearnButton": {
+    "description": "Settings window: button that waits for the next control moved on a MIDI device and ties it to the target chosen beside it."
+  },
+  "settingsMidiLearning": "Move a control",
+  "@settingsMidiLearning": {
+    "description": "Settings window: the Learn button's label while it waits for a control to be moved on a MIDI device. Pressing it again stops waiting."
+  },
+  "settingsMidiNote": "Note {number}, channel {channel}",
+  "@settingsMidiNote": {
+    "description": "Settings window: a learned MIDI key or pad, as in Note 36, channel 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "channel": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMidiCc": "CC {number}, channel {channel}",
+  "@settingsMidiCc": {
+    "description": "Settings window: a learned MIDI controller (knob, fader or encoder) by its controller number, as in CC 21, channel 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "channel": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMidiCc14": "CC {number} 14-bit, channel {channel}",
+  "@settingsMidiCc14": {
+    "description": "Settings window: a learned high-resolution MIDI controller, which sends its value as a pair of controller numbers.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "channel": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMidiAbsolute": "Absolute",
+  "@settingsMidiAbsolute": {
+    "description": "Settings window: how a learned MIDI controller is read. A knob or fader that sends where it is."
+  },
+  "settingsMidiTwosComplement": "Relative, two's complement",
+  "@settingsMidiTwosComplement": {
+    "description": "Settings window: how a learned MIDI controller is read. An endless encoder that sends 1 for a step up and 127 for a step down."
+  },
+  "settingsMidiSignBit": "Relative, sign bit",
+  "@settingsMidiSignBit": {
+    "description": "Settings window: how a learned MIDI controller is read. An endless encoder that sends 1 for a step up and 65 for a step down."
+  },
+  "settingsMidiOffset64": "Relative, offset 64",
+  "@settingsMidiOffset64": {
+    "description": "Settings window: how a learned MIDI controller is read. An endless encoder that sends 65 for a step up and 63 for a step down."
+  },
+  "settingsMidiRemove": "Remove",
+  "@settingsMidiRemove": {
+    "description": "Settings window: button on a learned MIDI control's row that forgets it."
+  },
+  "surfaceWheelX": "{wheel} X",
+  "@surfaceWheelX": {
+    "description": "A grading wheel's left and right movement, as a MIDI control can drive it, as in Lift X.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceWheelY": "{wheel} Y",
+  "@surfaceWheelY": {
+    "description": "A grading wheel's up and down movement, as a MIDI control can drive it, as in Lift Y.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceWheelMaster": "{wheel} master",
+  "@surfaceWheelMaster": {
+    "description": "A grading wheel's master, which moves all three colour channels together, as in Lift master.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceShadow": "Shadow",
+  "@surfaceShadow": {
+    "description": "A grading log wheel: the darkest part of the picture."
+  },
+  "surfaceMidtone": "Midtone",
+  "@surfaceMidtone": {
+    "description": "A grading log wheel: the middle of the picture's range."
+  },
+  "surfaceHighlight": "Highlight",
+  "@surfaceHighlight": {
+    "description": "A grading log wheel: the brightest part of the picture."
+  },
+  "surfaceLowRange": "Low range",
+  "@surfaceLowRange": {
+    "description": "Grading: where the log wheels' shadows end."
+  },
+  "surfaceHighRange": "High range",
+  "@surfaceHighRange": {
+    "description": "Grading: where the log wheels' highlights begin."
+  },
+  "surfacePivot": "Pivot",
+  "@surfacePivot": {
+    "description": "Grading: the level contrast turns about."
+  },
+  "surfaceHue": "Hue",
+  "@surfaceHue": {
+    "description": "Grading: turns every colour round the colour wheel."
+  },
+  "surfaceLumMix": "Lum mix",
+  "@surfaceLumMix": {
+    "description": "Grading: how much the wheels change brightness as well as colour."
+  },
+  "surfaceColourBoost": "Colour boost",
+  "@surfaceColourBoost": {
+    "description": "Grading: raises the saturation of the less saturated colours most."
+  },
+  "surfaceMidtoneDetail": "Midtone detail",
+  "@surfaceMidtoneDetail": {
+    "description": "Grading: local contrast in the middle tones."
+  },
+  "surfaceShotPrevious": "Previous shot",
+  "@surfaceShotPrevious": {
+    "description": "A control surface action: grade the shot before this one."
+  },
+  "surfaceShotNext": "Next shot",
+  "@surfaceShotNext": {
+    "description": "A control surface action: grade the shot after this one."
+  },
+  "surfaceNodePrevious": "Previous node",
+  "@surfaceNodePrevious": {
+    "description": "A control surface action: work on the grade node before this one."
+  },
+  "surfaceNodeNext": "Next node",
+  "@surfaceNodeNext": {
+    "description": "A control surface action: work on the grade node after this one."
+  },
+  "surfaceNodeAddSerial": "Add serial node",
+  "@surfaceNodeAddSerial": {
+    "description": "A control surface action: add a grade node after this one, taking its picture."
+  },
+  "surfaceNodeAddParallel": "Add parallel node",
+  "@surfaceNodeAddParallel": {
+    "description": "A control surface action: add a grade node beside this one, both taking the same picture."
+  },
+  "surfaceNodeAddLayer": "Add layer node",
+  "@surfaceNodeAddLayer": {
+    "description": "A control surface action: add a grade node laid over this one."
+  },
+  "surfaceNodeAddOutside": "Add outside node",
+  "@surfaceNodeAddOutside": {
+    "description": "A control surface action: add a grade node that grades what this node's key leaves out."
+  },
+  "surfaceNodeBypass": "Bypass node",
+  "@surfaceNodeBypass": {
+    "description": "A control surface action: switch the current grade node off or back on."
+  },
+  "surfaceNodeReset": "Reset node",
+  "@surfaceNodeReset": {
+    "description": "A control surface action: put every control of the current grade node back."
+  },
+  "surfaceResetWheel": "Reset {wheel}",
+  "@surfaceResetWheel": {
+    "description": "A control surface action: put one grading wheel back, as in Reset Lift.",
+    "placeholders": {
+      "wheel": {
+        "type": "String"
+      }
+    }
+  },
+  "surfaceGradeBypass": "Bypass grade",
+  "@surfaceGradeBypass": {
+    "description": "A control surface action: show the shot without its grade, or with it again."
+  },
+  "surfaceStillGrab": "Grab still",
+  "@surfaceStillGrab": {
+    "description": "A control surface action: keep the frame on screen and its grade in the gallery."
+  },
+  "surfacePlayStop": "Play or stop",
+  "@surfacePlayStop": {
+    "description": "A control surface action: start or stop playback."
+  },
+  "surfaceFrameBack": "Back a frame",
+  "@surfaceFrameBack": {
+    "description": "A control surface action: move the playhead one frame back."
+  },
+  "surfaceFrameForward": "Forward a frame",
+  "@surfaceFrameForward": {
+    "description": "A control surface action: move the playhead one frame on."
+  },
+  "surfacePageWheels": "Wheels page",
+  "@surfacePageWheels": {
+    "description": "A control surface action: show the Grade panel's wheels as wheels."
+  },
+  "surfacePageBars": "Bars page",
+  "@surfacePageBars": {
+    "description": "A control surface action: show the Grade panel's wheels as bars."
+  },
+  "surfacePageLog": "Log page",
+  "@surfacePageLog": {
+    "description": "A control surface action: show the Grade panel's log wheels."
+  },
+  "gradeWheels": "Wheels",
+  "@gradeWheels": {
+    "description": "Grade panel: the page with the colour wheels, and the wheel mode that draws them as wheels."
+  },
+  "gradeAdjust": "Adjust",
+  "@gradeAdjust": {
+    "description": "Grade panel: the page with every primary number as a slider."
+  },
+  "gradeQualifier": "Qualifier",
+  "@gradeQualifier": {
+    "description": "Grade panel: the page that picks which part of the picture the node grades, by colour or brightness."
+  },
+  "gradeWindows": "Windows",
+  "@gradeWindows": {
+    "description": "Grade panel: the page with the node's four shapes that limit where it grades."
+  },
+  "gradeMatch": "Match",
+  "@gradeMatch": {
+    "description": "Grade panel: the page that sets the grade from the picture, and the button that matches the shot to the chosen one."
+  },
+  "gradeLooks": "Looks",
+  "@gradeLooks": {
+    "description": "Grade panel, Look page: label of the row with the saved looks picker."
+  },
+  "gradeBars": "Bars",
+  "@gradeBars": {
+    "description": "Grade panel, Wheels page: the mode that draws each wheel as four upright bars."
+  },
+  "gradeLog": "Log",
+  "@gradeLog": {
+    "description": "Grade panel, Wheels page: the mode that shows the log wheels, Shadow, Midtone and Highlight."
+  },
+  "gradeMixer": "Mixer",
+  "@gradeMixer": {
+    "description": "Grade panel, Adjust page: heading over the RGB mixer, what each output channel takes from red, green and blue."
+  },
+  "gradeCustom": "Custom",
+  "@gradeCustom": {
+    "description": "Grade panel, Curves page: the luma, red, green and blue curves, as against the hue curves."
+  },
+  "gradeResetPage": "Reset page",
+  "@gradeResetPage": {
+    "description": "Grade panel: tooltip on the button that puts the page's controls back to their defaults."
+  },
+  "gradeResetNode": "Reset node",
+  "@gradeResetNode": {
+    "description": "Grade panel menu: puts every control of the current node back to its default."
+  },
+  "gradeBypassNode": "Bypass node",
+  "@gradeBypassNode": {
+    "description": "Grade panel menu: switches the current node off, or back on. Ticked while it is off."
+  },
+  "gradeDeleteNode": "Delete node",
+  "@gradeDeleteNode": {
+    "description": "Grade panel menu: removes the current node from the shot."
+  },
+  "gradeAddSerial": "Add serial node",
+  "@gradeAddSerial": {
+    "description": "Grade panel menu, and the tooltip on the plus beside the node numbers: adds a node after the current one, fed by it."
+  },
+  "gradeAddParallel": "Add parallel node",
+  "@gradeAddParallel": {
+    "description": "Grade panel menu: adds a node beside the current one, both fed the same picture, their changes added."
+  },
+  "gradeAddLayer": "Add layer node",
+  "@gradeAddLayer": {
+    "description": "Grade panel menu: adds a node beside the current one, both fed the same picture, the lower one laid over the upper."
+  },
+  "gradeAddOutside": "Add outside node",
+  "@gradeAddOutside": {
+    "description": "Grade panel menu: adds a node that grades everything the current node's key leaves out."
+  },
+  "gradeVersionFirst": "Version 1",
+  "@gradeVersionFirst": {
+    "description": "Grade panel header: the name on the versions button for a shot that has only the one grade."
+  },
+  "gradeVersionNew": "New version",
+  "@gradeVersionNew": {
+    "description": "Grade panel, versions menu: adds an empty grade version to the shot and shows it."
+  },
+  "gradeVersionDuplicate": "Duplicate version",
+  "@gradeVersionDuplicate": {
+    "description": "Grade panel, versions menu: adds a version holding a copy of the grade showing."
+  },
+  "gradeVersionDelete": "Delete version",
+  "@gradeVersionDelete": {
+    "description": "Grade panel, versions menu: deletes the version showing."
+  },
+  "gradeVersionRenameTitle": "Rename version",
+  "@gradeVersionRenameTitle": {
+    "description": "Grade panel: title of the box that renames the grade version showing."
+  },
+  "gradeHue": "Hue",
+  "@gradeHue": {
+    "description": "Grade panel, Qualifier page: name of the hue range bar."
+  },
+  "gradeSaturation": "Saturation",
+  "@gradeSaturation": {
+    "description": "Grade panel, Qualifier page: name of the saturation range bar."
+  },
+  "gradeLuma": "Luma",
+  "@gradeLuma": {
+    "description": "Grade panel, Qualifier page: name of the luma range bar."
+  },
+  "gradeRed": "Red",
+  "@gradeRed": {
+    "description": "Grade panel: the red channel, on the qualifier's red range bar and the red swatch under a hue curve."
+  },
+  "gradeGreen": "Green",
+  "@gradeGreen": {
+    "description": "Grade panel: the green channel, on the qualifier's green range bar and the green swatch under a hue curve."
+  },
+  "gradeBlue": "Blue",
+  "@gradeBlue": {
+    "description": "Grade panel: the blue channel, on the qualifier's blue range bar and the blue swatch under a hue curve."
+  },
+  "gradeYellow": "Yellow",
+  "@gradeYellow": {
+    "description": "Grade panel, Curves page: tooltip on the yellow swatch under a hue curve, which drops three points on yellow."
+  },
+  "gradeCyan": "Cyan",
+  "@gradeCyan": {
+    "description": "Grade panel, Curves page: tooltip on the cyan swatch under a hue curve, which drops three points on cyan."
+  },
+  "gradeMagenta": "Magenta",
+  "@gradeMagenta": {
+    "description": "Grade panel, Curves page: tooltip on the magenta swatch under a hue curve, which drops three points on magenta."
+  },
+  "gradeFinesse": "Finesse",
+  "@gradeFinesse": {
+    "description": "Grade panel, Qualifier page: heading over the controls that clean up the key: denoise, clip, blur and grow."
+  },
+  "gradePick": "Pick",
+  "@gradePick": {
+    "description": "Grade panel, Qualifier page: tooltip on the tool that takes the qualifier's range from a part of the picture."
+  },
+  "gradePickAdd": "Add to pick",
+  "@gradePickAdd": {
+    "description": "Grade panel, Qualifier page: tooltip on the tool that widens the range to take in another part of the picture."
+  },
+  "gradePickSubtract": "Subtract from pick",
+  "@gradePickSubtract": {
+    "description": "Grade panel, Qualifier page: tooltip on the tool that pulls the range in to leave out a part of the picture."
+  },
+  "gradePickOnPicture": "Pick on the picture",
+  "@gradePickOnPicture": {
+    "description": "Grade panel, Curves page: tooltip on the eyedropper that drops three points where the picked colour sits on the hue curve."
+  },
+  "gradeHighlight": "Highlight",
+  "@gradeHighlight": {
+    "description": "Grade panel, Qualifier page: tooltip on the button that shows the picture only where the node's key is, grey elsewhere. Also a row in its menu."
+  },
+  "gradeMatteOff": "Off",
+  "@gradeMatteOff": {
+    "description": "Grade panel, Highlight button menu: shows the picture as usual."
+  },
+  "gradeMatteKey": "Key",
+  "@gradeMatteKey": {
+    "description": "Grade panel, Highlight button menu: shows the node's key in black and white."
+  },
+  "gradeWindowN": "Window {n}",
+  "@gradeWindowN": {
+    "description": "Grade panel, Windows page: the name of one of the node's four shapes. {n} is 1 to 4.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "gradeTrack": "Track",
+  "@gradeTrack": {
+    "description": "Grade panel, Windows page: label of the row that tracks the picked window across the shot."
+  },
+  "gradeTrackBack": "Track back",
+  "@gradeTrackBack": {
+    "description": "Grade panel, Windows page: tooltip on the button that tracks the window from the playhead back to the start of the shot."
+  },
+  "gradeTrackForwards": "Track forwards",
+  "@gradeTrackForwards": {
+    "description": "Grade panel, Windows page: tooltip on the button that tracks the window from the playhead to the end of the shot."
+  },
+  "gradeTrackStop": "Stop",
+  "@gradeTrackStop": {
+    "description": "Grade panel, Windows page: tooltip on the button that stops a track. The frames done are kept."
+  },
+  "gradeTrackLost": "Tracking lost at frame {frame}",
+  "@gradeTrackLost": {
+    "description": "Notice when a window track loses what it follows. {frame} is the comp frame.",
+    "placeholders": {
+      "frame": {
+        "type": "int"
+      }
+    }
+  },
+  "gradeAutoBalance": "Auto balance",
+  "@gradeAutoBalance": {
+    "description": "Grade panel, Match page: button that takes the cast out of the shot and sets its black and white points."
+  },
+  "gradeMatchTo": "Match to",
+  "@gradeMatchTo": {
+    "description": "Grade panel, Match page: label of the row that picks a shot or still to match the current shot to."
+  },
+  "gradeNoShots": "No shots",
+  "@gradeNoShots": {
+    "description": "Grade panel, Match page: shown in the Match to picker when there is nothing to match to."
+  },
+  "gradeChart": "Chart",
+  "@gradeChart": {
+    "description": "Grade panel, Match page: label of the row for matching a colour chart in the shot."
+  },
+  "gradeShowChart": "Show chart",
+  "@gradeShowChart": {
+    "description": "Grade panel, Match page: tick that shows the colour chart grid on the Viewer, to place over the chart in the shot."
+  },
+  "gradeMatchChart": "Match chart",
+  "@gradeMatchChart": {
+    "description": "Grade panel, Match page: button that sets the node from the chart under the grid."
+  },
+  "gradeChartError": "ΔE {before} → {after}",
+  "@gradeChartError": {
+    "description": "Grade panel, Match page: the average colour error over the chart's patches before and after Match chart. Both are numbers with one decimal.",
+    "placeholders": {
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "gradeExportLut": "Export LUT",
+  "@gradeExportLut": {
+    "description": "Grade panel, Look page: label of the row that writes the shot's grade as a .cube file for another application."
+  },
+  "gradeSpaceVideo": "Video",
+  "@gradeSpaceVideo": {
+    "description": "Grade panel, Look page: the exported LUT works on Rec. 709 video, a 2.4 gamma."
+  },
+  "gradeSpaceLog": "Log",
+  "@gradeSpaceLog": {
+    "description": "Grade panel, Look page: the exported LUT works on ACEScct log."
+  },
+  "gradeLutExported": "LUT exported",
+  "@gradeLutExported": {
+    "description": "Notice when the shot's grade has been written as a LUT."
+  },
+  "gradeLutFailed": "The LUT could not be written",
+  "@gradeLutFailed": {
+    "description": "Notice when writing the LUT failed, for instance a folder that will not take the file."
+  },
+  "gradeClipCount": "{count} clips",
+  "@gradeClipCount": {
+    "description": "Grade panel header, in place of the clip's name while more than one Cut clip is picked: every edit lands on all of them. {count} is always 2 or more.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fxKey": "Key",
+  "@fxKey": {
+    "description": "Graph panel — the socket on a Correction box that hands its key to another effect's Matte."
+  },
+  "panelGallery": "Gallery",
+  "@panelGallery": {
+    "description": "Panel name: the Colour workspace's stills, kept with their grades in albums."
+  },
+  "gradeCompareWipe": "Wipe",
+  "@gradeCompareWipe": {
+    "description": "Viewer, a grade's reference: the reference shows past an upright divider that can be dragged."
+  },
+  "gradeCompareWipeAcross": "Wipe across",
+  "@gradeCompareWipeAcross": {
+    "description": "Viewer, a grade's reference: the reference shows below a level divider that can be dragged."
+  },
+  "gradeCompareSplit": "Split",
+  "@gradeCompareSplit": {
+    "description": "Viewer, a grade's reference: the same part of the picture and the reference side by side."
+  },
+  "gradeCompareDifference": "Difference",
+  "@gradeCompareDifference": {
+    "description": "Viewer, a grade's reference: shows only where the picture and the reference differ."
+  },
+  "gradeCompareMix": "Mix",
+  "@gradeCompareMix": {
+    "description": "Viewer, a grade's reference: the reference faded over the picture; the divider sets how much."
+  },
+  "gradeCompareShow": "Show reference",
+  "@gradeCompareShow": {
+    "description": "Viewer reference menu: show or hide the reference without forgetting it. A toggle."
+  },
+  "gradeCompareClear": "Clear reference",
+  "@gradeCompareClear": {
+    "description": "Viewer reference menu and the chip's close button: stop comparing and forget the reference."
+  },
+  "galleryFirstAlbum": "Stills",
+  "@galleryFirstAlbum": {
+    "description": "Gallery panel: the album stills go to while the library has no album yet."
+  },
+  "galleryGrab": "Grab still",
+  "@galleryGrab": {
+    "description": "Gallery panel header button: keep the current shot at the playhead as a still."
+  },
+  "galleryRenameStill": "Rename still",
+  "@galleryRenameStill": {
+    "description": "Title of the dialog that renames a still in the Gallery."
+  },
+  "galleryDeleteStillAsk": "Delete {name}?",
+  "@galleryDeleteStillAsk": {
+    "description": "Gallery panel: asked before a still's files are deleted. {name} is the still's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "galleryNewAlbum": "New album",
+  "@galleryNewAlbum": {
+    "description": "Title of the dialog that makes a new album in the Gallery."
+  },
+  "galleryNewAlbumRow": "New album…",
+  "@galleryNewAlbumRow": {
+    "description": "Gallery album menu: make a new album. Opens a dialog."
+  },
+  "galleryAlbumN": "Album {n}",
+  "@galleryAlbumN": {
+    "description": "Gallery: the name a new album is offered. {n} counts from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "galleryRenameAlbum": "Rename album",
+  "@galleryRenameAlbum": {
+    "description": "Title of the dialog that renames the album shown in the Gallery."
+  },
+  "galleryRenameAlbumRow": "Rename album…",
+  "@galleryRenameAlbumRow": {
+    "description": "Gallery album menu: rename the album shown. Opens a dialog."
+  },
+  "galleryDeleteAlbum": "Delete album",
+  "@galleryDeleteAlbum": {
+    "description": "Gallery album menu: delete the album shown and its stills."
+  },
+  "galleryDeleteAlbumAsk": "Delete {name} and its stills?",
+  "@galleryDeleteAlbumAsk": {
+    "description": "Gallery panel: asked before an album is deleted. {name} is the album's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "galleryApply": "Apply grade",
+  "@galleryApply": {
+    "description": "Gallery still menu: lay the still's grade on the current shot in place of its own."
+  },
+  "galleryApplyPicked": "Apply grade to picked shots",
+  "@galleryApplyPicked": {
+    "description": "Gallery still menu: lay the still's grade on every picked shot."
+  },
+  "galleryCompare": "Compare",
+  "@galleryCompare": {
+    "description": "Gallery still menu: compare the Viewer's picture against this still."
+  },
+  "galleryMoveTo": "Move to {album}",
+  "@galleryMoveTo": {
+    "description": "Gallery still menu: move the still to another album. {album} is that album's name.",
+    "placeholders": {
+      "album": {
+        "type": "String"
+      }
+    }
+  },
+  "gradeCompare": "Compare",
+  "@gradeCompare": {
+    "description": "Grade panel, Match page: compare the Viewer's picture against the shot or still picked in Match to."
+  },
+  "panelGradeNodes": "Grade nodes",
+  "@panelGradeNodes": {
+    "description": "Name of the panel that draws the current shot's grade as numbered nodes joined left to right. A tab title and a Window > Panels row."
+  },
+  "panelShots": "Shots",
+  "@panelShots": {
+    "description": "Name of the panel that lists every shot of the composition in time order, a graded picture each. A tab title and a Window > Panels row."
+  },
+  "menuGrade": "Grade",
+  "@menuGrade": {
+    "description": "Layer menu: the submenu holding the commands on the current shot's grade (add nodes, bypass, reset, grab a still, auto balance, export a LUT)."
+  },
+  "gradeStillsAlbum": "Stills",
+  "@gradeStillsAlbum": {
+    "description": "The name given to the first album of stills, made when Grab still is used before any album exists."
+  },
+  "gradeStillGrabbed": "Still grabbed",
+  "@gradeStillGrabbed": {
+    "description": "Notice after Grab still: the frame at the playhead and the shot's grade were kept in the Gallery."
+  },
+  "gradeStillFailed": "The still could not be grabbed",
+  "@gradeStillFailed": {
+    "description": "Notice when Grab still could not write the still to the library."
+  },
+  "gradeGrabStill": "Grab still",
+  "@gradeGrabStill": {
+    "description": "Menu row (Layer > Grade, the Shots panel's menu): keep the frame at the playhead and the current shot's grade as a still in the Gallery."
+  },
+  "gradeExportLutEllipsis": "Export LUT…",
+  "@gradeExportLutEllipsis": {
+    "description": "Menu row (Layer > Grade, the Shots panel's menu): write the shot's grade as a .cube LUT file. Opens a save dialog."
+  },
+  "gradeCopyNode": "Copy node",
+  "@gradeCopyNode": {
+    "description": "Grade nodes panel menu: put this node on the effect clipboard."
+  },
+  "gradePasteNode": "Paste node",
+  "@gradePasteNode": {
+    "description": "Grade nodes panel menu: put the effects on the clipboard into the grade as nodes, after this one."
+  },
+  "gradeScopeShot": "Shot",
+  "@gradeScopeShot": {
+    "description": "Grade nodes panel header, first of the choices of whose nodes are shown: the shot's own grade."
+  },
+  "gradeScopeGroupPre": "Group pre",
+  "@gradeScopeGroupPre": {
+    "description": "Grade nodes panel header: the shot's group's grade that comes before every member's own grade."
+  },
+  "gradeScopeGroupPost": "Group post",
+  "@gradeScopeGroupPost": {
+    "description": "Grade nodes panel header: the shot's group's grade that comes after every member's own grade."
+  },
+  "gradeApplyPrevious": "Apply grade from previous shot",
+  "@gradeApplyPrevious": {
+    "description": "Shots panel menu: the grade of the shot before this one in time takes the place of this shot's grade."
+  },
+  "gradeMatchToCurrent": "Match to current shot",
+  "@gradeMatchToCurrent": {
+    "description": "Shots panel menu: change this shot's grade so its colours match the current shot's."
+  },
+  "gradeVersions": "Versions",
+  "@gradeVersions": {
+    "description": "Shots panel menu: the submenu listing the shot's grade versions, with New, Duplicate, Rename and Delete."
+  },
+  "gradeGroup": "Group",
+  "@gradeGroup": {
+    "description": "Shots panel menu: the submenu putting the shots into a grade group, moving them to another, or taking them out."
+  },
+  "gradeGroupNew": "New group from selection",
+  "@gradeGroupNew": {
+    "description": "Shots panel menu, Group submenu: make a grade group holding the picked shots."
+  },
+  "gradeGroupLeave": "Leave group",
+  "@gradeGroupLeave": {
+    "description": "Shots panel menu, Group submenu: take the picked shots out of their grade group."
+  },
+  "gradeFilterAll": "All",
+  "@gradeFilterAll": {
+    "description": "Shots panel header, first of three filter choices: every shot."
+  },
+  "gradeFilterGraded": "Graded",
+  "@gradeFilterGraded": {
+    "description": "Shots panel header filter: only the shots with a grade switched on."
+  },
+  "gradeFilterUngraded": "Ungraded",
+  "@gradeFilterUngraded": {
+    "description": "Shots panel header filter: only the shots with no grade switched on."
+  },
+  "keyCopyTheShotSGrade": "Copy the shot's grade",
+  "@keyCopyTheShotSGrade": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Puts the current shot's colour effects on the effect clipboard. The shot is the clip picked in the Cut timeline, else the selected layer."
+  },
+  "keyPasteTheGradeOntoThePickedShots": "Paste the grade onto the picked shots",
+  "@keyPasteTheGradeOntoThePickedShots": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The grade on the clipboard takes the place of the grade on every picked clip or selected layer."
+  },
+  "keyAddASerialNode": "Add a serial node",
+  "@keyAddASerialNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction after the current grade node, grading what it makes."
+  },
+  "keyAddAParallelNode": "Add a parallel node",
+  "@keyAddAParallelNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction beside the current grade node, reading the same picture; their changes are added together."
+  },
+  "keyAddALayerNode": "Add a layer node",
+  "@keyAddALayerNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction beside the current grade node, laid over it."
+  },
+  "keyAddAnOutsideNode": "Add an outside node",
+  "@keyAddAnOutsideNode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a Correction that grades everything outside the current node's key."
+  },
+  "keyChangeTheMatteView": "Change the matte view",
+  "@keyChangeTheMatteView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Steps the Viewer through off, highlight (the picture only where the node's key is) and the key in black and white."
+  },
+  "keyGrabAStill": "Grab a still",
+  "@keyGrabAStill": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Keeps the frame at the playhead and the shot's grade in the Gallery."
+  },
+  "keyPreviousShot": "Previous shot",
+  "@keyPreviousShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the shot before the current one current."
+  },
+  "keyNextShot": "Next shot",
+  "@keyNextShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the shot after the current one current."
+  },
+  "keyFirstShot": "First shot",
+  "@keyFirstShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the first shot of the composition current."
+  },
+  "keyLastShot": "Last shot",
+  "@keyLastShot": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Makes the last shot of the composition current."
+  },
+  "keyApplyThePreviousShotSGrade": "Apply the previous shot's grade",
+  "@keyApplyThePreviousShotSGrade": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. The grade of the shot before the current one takes the place of its grade."
+  },
+  "keyShowOrHideTheReference": "Show or hide the reference",
+  "@keyShowOrHideTheReference": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. Shows or hides the still or shot the Viewer compares the picture with."
+  },
+  "keyColourPanels": "Colour panels",
+  "@keyColourPanels": {
+    "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Colour workspace's grading panels: Grade, Grade nodes, Shots and Gallery."
+  },
+  "histApplyGrade": "Apply grade",
+  "@histApplyGrade": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: another shot's or a still's grade put on shots in place of theirs."
+  },
+  "histAddNode": "Add node",
+  "@histAddNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node added to a shot."
+  },
+  "histBypassNode": "Bypass node",
+  "@histBypassNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node switched off or on."
+  },
+  "histResetNode": "Reset node",
+  "@histResetNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node's values put back to their defaults."
+  },
+  "histDeleteNode": "Delete node",
+  "@histDeleteNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node removed."
+  },
+  "histMoveNode": "Move node",
+  "@histMoveNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node dragged to another place in the grade."
+  },
+  "histPasteNode": "Paste node",
+  "@histPasteNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: copied effects put into a grade as nodes."
+  },
+  "histBypassGrade": "Bypass grade",
+  "@histBypassGrade": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: every grade node on the shots switched off or on."
+  },
+  "histResetGrade": "Reset grade",
+  "@histResetGrade": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: every grade node on the shots put back to its defaults."
+  },
+  "histAutoBalance": "Auto balance",
+  "@histAutoBalance": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot's colour cast taken out and its black and white points set."
+  },
+  "histMatchShot": "Match shot",
+  "@histMatchShot": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shot's grade changed to match another shot."
+  },
+  "gradeShotCount": "{count, plural, =1{1 shot} other{{count} shots}}",
+  "@gradeShotCount": {
+    "description": "Shots panel header: how many shots the composition has. {count} is 1 or more.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fxHdr": "HDR",
+  "@fxHdr": {
+    "description": "Effect controls: a group of controls on Correction: six tonal zones, each with its own colour, exposure and saturation. HDR as in high dynamic range."
+  },
+  "fxGlobalBalance": "Global balance",
+  "@fxGlobalBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of the whole picture, brightness kept."
+  },
+  "fxBlackOffset": "Black offset",
+  "@fxBlackOffset": {
+    "description": "Effect controls: a control on Correction, in its HDR group: lifts or sinks the darkest level of the picture."
+  },
+  "fxBlackBalance": "Black balance",
+  "@fxBlackBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of the deepest blacks, brightness kept."
+  },
+  "fxBlackExposure": "Black exposure",
+  "@fxBlackExposure": {
+    "description": "Effect controls: a control on Correction, in its HDR group: brightens or darkens the deepest blacks, in stops."
+  },
+  "fxBlackSaturation": "Black saturation",
+  "@fxBlackSaturation": {
+    "description": "Effect controls: a control on Correction, in its HDR group: colourfulness in the deepest blacks."
+  },
+  "fxBlackRange": "Black range",
+  "@fxBlackRange": {
+    "description": "Effect controls: a control on Correction, in its HDR group: where the Black zone starts, in stops from mid grey."
+  },
+  "fxDarkBalance": "Dark balance",
+  "@fxDarkBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of the darks, brightness kept."
+  },
+  "fxDarkExposure": "Dark exposure",
+  "@fxDarkExposure": {
+    "description": "Effect controls: a control on Correction, in its HDR group: brightens or darkens the darks, in stops."
+  },
+  "fxDarkSaturation": "Dark saturation",
+  "@fxDarkSaturation": {
+    "description": "Effect controls: a control on Correction, in its HDR group: colourfulness in the darks."
+  },
+  "fxDarkRange": "Dark range",
+  "@fxDarkRange": {
+    "description": "Effect controls: a control on Correction, in its HDR group: where the Dark zone starts, in stops from mid grey."
+  },
+  "fxShadowBalance": "Shadow balance",
+  "@fxShadowBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of everything below mid grey, brightness kept."
+  },
+  "fxShadowExposure": "Shadow exposure",
+  "@fxShadowExposure": {
+    "description": "Effect controls: a control on Correction, in its HDR group: brightens or darkens everything below mid grey, in stops."
+  },
+  "fxShadowSaturation": "Shadow saturation",
+  "@fxShadowSaturation": {
+    "description": "Effect controls: a control on Correction, in its HDR group: colourfulness in everything below mid grey."
+  },
+  "fxShadowRange": "Shadow range",
+  "@fxShadowRange": {
+    "description": "Effect controls: a control on Correction, in its HDR group: where the Shadow zone starts, in stops from mid grey."
+  },
+  "fxLightBalance": "Light balance",
+  "@fxLightBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of everything above mid grey, brightness kept."
+  },
+  "fxLightExposure": "Light exposure",
+  "@fxLightExposure": {
+    "description": "Effect controls: a control on Correction, in its HDR group: brightens or darkens everything above mid grey, in stops."
+  },
+  "fxLightSaturation": "Light saturation",
+  "@fxLightSaturation": {
+    "description": "Effect controls: a control on Correction, in its HDR group: colourfulness in everything above mid grey."
+  },
+  "fxLightRange": "Light range",
+  "@fxLightRange": {
+    "description": "Effect controls: a control on Correction, in its HDR group: where the Light zone starts, in stops from mid grey."
+  },
+  "fxHighlightBalance": "Highlight balance",
+  "@fxHighlightBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of the brights, brightness kept."
+  },
+  "fxHighlightSaturation": "Highlight saturation",
+  "@fxHighlightSaturation": {
+    "description": "Effect controls: a control on Correction, in its HDR group: colourfulness in the brights."
+  },
+  "fxHighlightRange": "Highlight range",
+  "@fxHighlightRange": {
+    "description": "Effect controls: a control on Correction, in its HDR group: where the Highlight zone starts, in stops from mid grey."
+  },
+  "fxSpecularBalance": "Specular balance",
+  "@fxSpecularBalance": {
+    "description": "Effect controls: a control on Correction, in its HDR group: the colour of the brightest glints, brightness kept."
+  },
+  "fxSpecularExposure": "Specular exposure",
+  "@fxSpecularExposure": {
+    "description": "Effect controls: a control on Correction, in its HDR group: brightens or darkens the brightest glints, in stops."
+  },
+  "fxSpecularSaturation": "Specular saturation",
+  "@fxSpecularSaturation": {
+    "description": "Effect controls: a control on Correction, in its HDR group: colourfulness in the brightest glints."
+  },
+  "fxSpecularRange": "Specular range",
+  "@fxSpecularRange": {
+    "description": "Effect controls: a control on Correction, in its HDR group: where the Specular zone starts, in stops from mid grey."
+  },
+  "fx3d": "3D",
+  "@fx3d": {
+    "description": "Effect controls: a choice of Correction's Qualifier, and the group of controls it shows: a key on colours picked by strokes on the picture, in three dimensions of colour."
+  },
+  "fxKeepSamples": "Keep samples",
+  "@fxKeepSamples": {
+    "description": "Effect controls: a control on Correction, in its 3D qualifier group: the colours the key keeps, picked on the picture."
+  },
+  "fxKeepSampleLuma": "Keep sample luma",
+  "@fxKeepSampleLuma": {
+    "description": "Effect controls: a control on Correction, in its 3D qualifier group: the brightness of each colour the key keeps."
+  },
+  "fxDropSamples": "Drop samples",
+  "@fxDropSamples": {
+    "description": "Effect controls: a control on Correction, in its 3D qualifier group: the colours the key leaves out, picked on the picture."
+  },
+  "fxDropSampleLuma": "Drop sample luma",
+  "@fxDropSampleLuma": {
+    "description": "Effect controls: a control on Correction, in its 3D qualifier group: the brightness of each colour the key leaves out."
+  },
+  "histShareNode": "Share node",
+  "@histShareNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node made into one shared by several shots, so changing it in one changes it in all."
+  },
+  "histUnshareNode": "Unshare node",
+  "@histUnshareNode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a shared grade node turned back into a separate copy in each shot that used it."
+  },
+  "fxCdl": "CDL",
+  "@fxCdl": {
+    "description": "Effect controls: the name of an effect: a grade as ten numbers in the ASC Color Decision List format (slope, offset and power per channel, and saturation), as sets and other grading tools exchange it. CDL is a format name; keep it."
+  },
+  "fxColourWarper": "Colour warper",
+  "@fxColourWarper": {
+    "description": "Effect controls: the name of an effect: a mesh laid over the colour wheel whose points are dragged to move whole families of colour, hue and saturation together."
+  },
+  "fxSixHues": "Six hues",
+  "@fxSixHues": {
+    "description": "Effect controls: a choice of Colour warper's Resolution: the mesh has six spokes round the colour wheel."
+  },
+  "fxEightHues": "Eight hues",
+  "@fxEightHues": {
+    "description": "Effect controls: a choice of Colour warper's Resolution: the mesh has eight spokes round the colour wheel."
+  },
+  "fxShared": "Shared",
+  "@fxShared": {
+    "description": "Effect controls: a choice of Group grade's Part: the effect stands for a grade node shared by several shots."
+  },
+  "gradeApplySecond": "Apply grade from two shots back",
+  "@gradeApplySecond": {
+    "description": "Shots panel menu: the grade of the shot two before this one in time takes the place of this shot's grade."
+  },
+  "gradeLightbox": "Lightbox",
+  "@gradeLightbox": {
+    "description": "Shots panel header button and menu row: the Shots panel fills the window as a grid of large pictures of every shot. Click again or press Escape to leave."
+  },
+  "gradeGridVersions": "Versions in a grid",
+  "@gradeGridVersions": {
+    "description": "Grade panel versions menu, and the Viewer's grid chip: the Viewer shows every grade version of the current shot side by side in a grid."
+  },
+  "gradeGridStills": "Stills in a grid",
+  "@gradeGridStills": {
+    "description": "Gallery still menu, and the Viewer's grid chip: the Viewer shows the stills picked in the Gallery side by side in a grid."
+  },
+  "gradeGridShots": "Shots in a grid",
+  "@gradeGridShots": {
+    "description": "Shots panel menu, and the Viewer's grid chip: the Viewer shows the picked shots side by side in a grid."
+  },
+  "gradeGridClose": "Close the grid",
+  "@gradeGridClose": {
+    "description": "Tooltip of the cross on the Viewer's grid chip: the Viewer shows the picture again."
+  },
+  "gradeMemoryKept": "Kept in memory {slot}",
+  "@gradeMemoryKept": {
+    "description": "Notice when the current shot's grade has been kept in one of the eight memories. {slot} is its number, 1 to 8.",
+    "placeholders": {
+      "slot": {
+        "type": "int"
+      }
+    }
+  },
+  "galleryMemoryApply": "Apply memory",
+  "@galleryMemoryApply": {
+    "description": "Gallery, right-click on a memory slot: the grade kept there takes the place of the grade on the picked shots."
+  },
+  "galleryMemoryStore": "Keep the current grade here",
+  "@galleryMemoryStore": {
+    "description": "Gallery, right-click on a memory slot: the current shot's grade is kept in this slot, in place of what it held."
+  },
+  "galleryMemoryClear": "Clear memory",
+  "@galleryMemoryClear": {
+    "description": "Gallery, right-click on a memory slot: empties the slot."
+  },
+  "galleryExportStill": "Export still…",
+  "@galleryExportStill": {
+    "description": "Gallery still menu: writes the still's picture as a PNG file. Opens a save dialog."
+  },
+  "galleryExportLut": "Export grade as LUT…",
+  "@galleryExportLut": {
+    "description": "Gallery still menu: writes the still's grade as a .cube LUT file. Opens a save dialog."
+  },
+  "galleryStillExported": "Still exported",
+  "@galleryStillExported": {
+    "description": "Notice when a still's picture has been written as a PNG."
+  },
+  "galleryExportFailed": "The still could not be exported",
+  "@galleryExportFailed": {
+    "description": "Notice when a still's picture could not be written where the user chose."
+  },
+  "gradeKeyInvert": "Invert key",
+  "@gradeKeyInvert": {
+    "description": "Grade nodes panel, right-click on a key wire: the node takes the opposite of the key it is fed, so it grades what the other node leaves alone."
+  },
+  "gradeKeyRemove": "Remove key wire",
+  "@gradeKeyRemove": {
+    "description": "Grade nodes panel, right-click on a key wire: the wire from one node's key to another node goes."
+  },
+  "gradeGroupRename": "Rename group…",
+  "@gradeGroupRename": {
+    "description": "Shots panel menu, Group submenu: renames the grade group the pressed shot is in. Opens a box to type the name."
+  },
+  "gradeGroupRenameTitle": "Rename group",
+  "@gradeGroupRenameTitle": {
+    "description": "Title of the box that renames a grade group."
+  },
+  "gradeGroupDelete": "Delete group",
+  "@gradeGroupDelete": {
+    "description": "Shots panel menu, Group submenu: deletes the grade group the pressed shot is in, and its grades from every shot in it. Asks first."
+  },
+  "gradeGroupDeleteAsk": "Delete {name} and its grades?",
+  "@gradeGroupDeleteAsk": {
+    "description": "Asked before a grade group is deleted. Its shots keep their own grades. {name} is the group's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "keyApplyTheGradeFromTwoShotsBack": "Apply the grade from two shots back",
+  "@keyApplyTheGradeFromTwoShotsBack": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. The grade of the shot two before the current one takes the place of its grade."
+  },
+  "keyShowOrHideTheLightbox": "Show or hide the Lightbox",
+  "@keyShowOrHideTheLightbox": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Colour workspace shortcut. The Shots panel fills the window as a grid of large pictures, or goes back."
+  },
+  "histApplyMemory": "Apply memory",
+  "@histApplyMemory": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a kept grade memory put on shots in place of their grade."
+  },
+  "histStoreMemory": "Store memory",
+  "@histStoreMemory": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade kept in one of the project's eight memories, or a memory emptied."
+  },
+  "histWireKey": "Wire key",
+  "@histWireKey": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: one grade node's key wired into another node, in the Grade nodes panel."
+  },
+  "histRemoveKeyWire": "Remove key wire",
+  "@histRemoveKeyWire": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a key wire between two grade nodes removed."
+  },
+  "histInvertKey": "Invert key",
+  "@histInvertKey": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a grade node set to take the opposite of the key it is fed."
+  },
+  "gradeHdr": "HDR",
+  "@gradeHdr": {
+    "description": "A mode tab on the Grade panel's Wheels page, beside Wheels, Bars and Log: the six HDR zone wheels, each grading a band of brightness counted in stops."
+  },
+  "gradeZoneBlack": "Black",
+  "@gradeZoneBlack": {
+    "description": "The name under the first HDR zone wheel on the Grade panel: the deepest blacks."
+  },
+  "gradeZoneDark": "Dark",
+  "@gradeZoneDark": {
+    "description": "The name under the second HDR zone wheel on the Grade panel: the darks, inside the shadows."
+  },
+  "gradeZoneShadow": "Shadow",
+  "@gradeZoneShadow": {
+    "description": "The name under the third HDR zone wheel on the Grade panel: everything from its range down."
+  },
+  "gradeZoneLight": "Light",
+  "@gradeZoneLight": {
+    "description": "The name under the fourth HDR zone wheel on the Grade panel: everything from its range up."
+  },
+  "gradeZoneHighlight": "Highlight",
+  "@gradeZoneHighlight": {
+    "description": "The name under the fifth HDR zone wheel on the Grade panel: the highlights, inside the lights."
+  },
+  "gradeZoneSpecular": "Specular",
+  "@gradeZoneSpecular": {
+    "description": "The name under the sixth HDR zone wheel on the Grade panel: the very brightest points, such as glints."
+  },
+  "gradeZoneGlobal": "Global",
+  "@gradeZoneGlobal": {
+    "description": "The name under the last wheel of the Grade panel's HDR mode: the colour of the whole picture, with Black offset and Falloff under it."
+  },
+  "gradeZoneExposure": "Exp",
+  "@gradeZoneExposure": {
+    "description": "Short label above a number under an HDR zone wheel on the Grade panel: the zone's exposure in stops. Keep it very short; the cell is narrow."
+  },
+  "gradeZoneSaturation": "Sat",
+  "@gradeZoneSaturation": {
+    "description": "Short label above a number under an HDR zone wheel on the Grade panel: the zone's saturation in per cent. Keep it very short; the cell is narrow."
+  },
+  "gradeZoneRange": "Range",
+  "@gradeZoneRange": {
+    "description": "Short label above a number under an HDR zone wheel on the Grade panel: where the zone starts, in stops from mid grey. Keep it very short; the cell is narrow."
+  },
+  "gradeCdl": "CDL",
+  "@gradeCdl": {
+    "description": "A row name on the Grade panel's Look page, and the file type in the open and save dialogues: an ASC colour decision list, the slope, offset, power and saturation a grade can be passed between programs as."
+  },
+  "gradeCdlPick": "Which correction",
+  "@gradeCdlPick": {
+    "description": "Title of the window that opens when an imported colour decision file holds several corrections: each answer is one correction's id as the file names it."
+  },
+  "gradeCdlFailed": "The CDL couldn't be read",
+  "@gradeCdlFailed": {
+    "description": "Notice when Import CDL fails: the file isn't a colour decision list Lumit can read, or the shot refused the node."
+  },
+  "gradeCdlExportFailed": "The CDL couldn't be written",
+  "@gradeCdlExportFailed": {
+    "description": "Notice when Export CDL fails: the node isn't one a CDL can hold, or the file couldn't be written."
+  },
+  "gradeCdlExported": "CDL exported",
+  "@gradeCdlExported": {
+    "description": "Notice after Export CDL wrote the node exactly."
+  },
+  "gradeCdlFitted": "CDL exported, fitted",
+  "@gradeCdlFitted": {
+    "description": "Notice after Export CDL wrote a node that needs more than slope, offset, power and saturation: the nearest CDL was fitted to it, so it is close rather than exact."
+  },
+  "gradeImportCdl": "Import CDL…",
+  "@gradeImportCdl": {
+    "description": "Menu row in Layer > Grade and on a grade node's right-click: read a colour decision file and add it as a CDL node after the current node."
+  },
+  "gradeExportCdl": "Export CDL…",
+  "@gradeExportCdl": {
+    "description": "Menu row in Layer > Grade and on a grade node's right-click: write the node as a colour decision file. Offered on a Correction or a CDL node."
+  },
+  "gradeAddWarper": "Add colour warper node",
+  "@gradeAddWarper": {
+    "description": "Menu row in Layer > Grade and in the Grade nodes panel's add menu: add a Colour warper node, a mesh over the colour wheel whose points are dragged to move colours."
+  },
+  "gradeAddShared": "Add shared node",
+  "@gradeAddShared": {
+    "description": "Submenu in the Grade nodes panel's add menu: every shared node by its name, to use in this shot too. Edits to a shared node show in every shot that uses it."
+  },
+  "gradeShareNode": "Share with picked shots",
+  "@gradeShareNode": {
+    "description": "Row on a grade node's right-click in the Grade nodes panel: the node becomes a shared node, used by this shot and every other picked shot; editing it anywhere edits it everywhere."
+  },
+  "gradeUnshareNode": "Unshare",
+  "@gradeUnshareNode": {
+    "description": "Row on a shared node's right-click in the Grade nodes panel: every shot that used it gets its own copy, and the node is no longer shared."
+  },
+  "gradeQualKeep": "Keep",
+  "@gradeQualKeep": {
+    "description": "Row name on the Grade panel's Qualifier page in 3D mode: the colours the 3D key keeps, picked by drawing on the Viewer, with their count and swatches."
+  },
+  "gradeQualDrop": "Drop",
+  "@gradeQualDrop": {
+    "description": "Row name on the Grade panel's Qualifier page in 3D mode: the colours the 3D key leaves out, picked by drawing with Subtract, with their count and swatches."
+  },
+  "gradeQualClear": "Clear",
+  "@gradeQualClear": {
+    "description": "Button at the end of the Keep or Drop row on the Grade panel's Qualifier page in 3D mode: forget those samples."
+  },
+  "surfacePageHdr": "HDR page",
+  "@surfacePageHdr": {
+    "description": "A control surface action: show the Grade panel's HDR zone wheels."
+  },
+  "gradeBackdropGrey": "Over grey",
+  "@gradeBackdropGrey": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over mid grey."
+  },
+  "gradeBackdropBlack": "Over black",
+  "@gradeBackdropBlack": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over black."
+  },
+  "gradeBackdropWhite": "Over white",
+  "@gradeBackdropWhite": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over white."
+  },
+  "gradeBackdropMono": "Over black and white",
+  "@gradeBackdropMono": {
+    "description": "Viewer bar matte chip menu: Highlight shows the picture where the key is over the same picture in black and white."
+  },
+  "gradeFilterColour": "Clip colour",
+  "@gradeFilterColour": {
+    "description": "Shots panel header button tooltip: show only the shots with one label colour, the colour the Timeline gives the layer or clip."
+  },
+  "gradeFilterAnyColour": "Every colour",
+  "@gradeFilterAnyColour": {
+    "description": "Shots panel clip colour menu: show the shots of every label colour."
+  },
+  "gradeNodeThumbnails": "Node thumbnails",
+  "@gradeNodeThumbnails": {
+    "description": "Grade nodes panel header button tooltip: each node shows a small picture of what it puts out."
   }
 }

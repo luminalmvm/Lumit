@@ -91,6 +91,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         retime: None,
         interpolation: lumit_core::retime::Interpolation::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: lumit_core::model::BlendMode::default(),
         masks: Vec::new(),

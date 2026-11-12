@@ -92,12 +92,18 @@ pub(super) fn viewed_through(
         Some(look) => crate::api::template::rows::looked(look, document),
         None => document,
     };
+    let document = match view.and_then(|v| v.matte) {
+        Some(matte) => lumit_core::grade::matte_view::apply(&document, matte)
+            .map_or(document, std::sync::Arc::new),
+        None => document,
+    };
     let Some(ViewLatch {
         comp: comp_id,
         pose,
         draft,
         canvas,
         display,
+        ..
     }) = view
     else {
         return document;
@@ -220,6 +226,37 @@ pub(super) fn close_view(state: &mut WorkerState, view: u32) {
         state.angles = None;
     }
     state.renderer.drop_view_targets(view);
+}
+
+/// Latch one view's matte view, keeping its 3D view: a latch with no pose
+/// stands for the matte view alone and goes when it does.
+#[frb(ignore)]
+pub(super) fn set_matte_view(
+    state: &mut WorkerState,
+    view: u32,
+    matte: Option<lumit_core::grade::matte_view::MatteView>,
+) {
+    let latch = match state.camera_views.get(&view).copied() {
+        Some(latch) => Some(ViewLatch { matte, ..latch }),
+        None => matte.map(|m| ViewLatch {
+            comp: m.shot.comp,
+            pose: None,
+            draft: false,
+            canvas: (0, 0),
+            display: Default::default(),
+            matte: Some(m),
+        }),
+    };
+    let alone = |l: &ViewLatch| {
+        l.matte.is_none()
+            && l.pose.is_none()
+            && !l.draft
+            && l.canvas == (0, 0)
+            && l.display == Default::default()
+    };
+    let latch = latch.filter(|l| !alone(l));
+    let ground = state.grounds.get(&view).copied();
+    set_view(state, view, latch, ground);
 }
 
 /// Latch one view's 3D view and its ground, the way [`set_prefix`] latches

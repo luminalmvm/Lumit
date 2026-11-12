@@ -234,6 +234,41 @@ Future<String?> pickFrameSaveLocation(String suggestedName) async {
   return '$path.png';
 }
 
+/// Where to write a grade as a `.cube` LUT, or null when cancelled.
+Future<String?> pickLutSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.fxLut, extensions: const ['cube']),
+    ],
+    suggestedName: '$suggestedName.cube',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.cube')) return path;
+  return '$path.cube';
+}
+
+/// Pick a colour decision (`.cdl`, `.cc` or `.ccc`) to import, or null when
+/// cancelled.
+Future<String?> pickCdlToOpen() async => (await openFile(acceptedTypeGroups: [
+      XTypeGroup(label: l10n.gradeCdl, extensions: const ['cdl', 'cc', 'ccc']),
+    ]))
+        ?.path;
+
+/// Where to export a node as a colour decision, or null when cancelled. A
+/// `.cdl` is written as a decision list, anything else as a `.cc`.
+Future<String?> pickCdlSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.gradeCdl, extensions: const ['cc', 'cdl']),
+    ],
+    suggestedName: '$suggestedName.cc',
+  ))
+      ?.path;
+  if (path == null) return null;
+  final lower = path.toLowerCase();
+  return lower.endsWith('.cc') || lower.endsWith('.cdl') ? path : '$path.cc';
+}
+
 /// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;
@@ -608,4 +643,33 @@ Future<String?> pickCaptionsSaveLocation(
       ?.path;
   if (path == null || path.toLowerCase().endsWith('.$extension')) return path;
   return '$path.$extension';
+}
+
+/// The `.lumlibrary` type group: a zip of library items, which Export writes
+/// and Import takes in.
+XTypeGroup _libraryGroup() =>
+    XTypeGroup(label: l10n.libraryFileType, extensions: const ['lumlibrary']);
+
+/// Pick a library file to import, or null when the dialogue was cancelled.
+Future<String?> pickLibraryToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_libraryGroup()]);
+  return file?.path;
+}
+
+/// Where to write a library file, or null when cancelled.
+Future<String?> pickLibrarySaveLocation() async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [_libraryGroup()],
+    suggestedName: 'library.lumlibrary',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.lumlibrary')) return path;
+  return '$path.lumlibrary';
+}
+
+/// Files to add to the library, of any kind: the library sorts them by
+/// extension. Empty when cancelled.
+Future<List<String>> pickLibraryFiles() async {
+  final files = await openFiles(acceptedTypeGroups: [_anyGroup()]);
+  return droppedPaths(files);
 }

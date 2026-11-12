@@ -467,7 +467,9 @@ pub fn driven_param(
     let v = match from {
         OutputRef::Driver { node, port } => ev.output(*node, port, lt, 0),
         OutputRef::EffectData { effect, port } => ev.effect_number(*effect, port, lt),
-        OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+        OutputRef::SourceMatte | OutputRef::EffectOutput { .. } | OutputRef::EffectKey { .. } => {
+            None
+        }
     }?;
     Some(f64::from(v.as_f32()))
 }
@@ -902,7 +904,9 @@ impl Eval<'_> {
             // unwired, which is the documented no-op rather than a wrong
             // number — and is unreachable through a validated document, where
             // the type check refused it at commit.
-            OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+            OutputRef::SourceMatte
+            | OutputRef::EffectOutput { .. }
+            | OutputRef::EffectKey { .. } => None,
         }
     }
 
@@ -989,7 +993,9 @@ impl Eval<'_> {
             // not a stream and was refused at commit by the type check.
             OutputRef::Driver { node, .. } => self.tap_stream(*node, t, depth),
             // A texture is not a stream either.
-            OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+            OutputRef::SourceMatte
+            | OutputRef::EffectOutput { .. }
+            | OutputRef::EffectKey { .. } => None,
         }
     }
 
@@ -2288,6 +2294,7 @@ mod tests {
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             markers: Vec::new(),
             paint: Default::default(),
@@ -2807,6 +2814,7 @@ mod tests {
                 switches: Switches::default(),
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 markers: Vec::new(),
                 paint: Default::default(),
@@ -3105,55 +3113,6 @@ mod tests {
         );
     }
 
-    /// A refused expression pushes nothing, and the parameter it is wired to
-    /// resolves to its own stored value — the same calm the walk gives a
-    /// bypassed driver or a spent budget. Every kind of refusal: a runtime
-    /// error, a syntax error, a name not in scope, a result of the wrong
-    /// shape, an infinity, and no text at all.
-    #[test]
-    fn a_refused_expression_pushes_nothing_and_the_wired_parameter_keeps_its_keyframes() {
-        let mut blur = inst("blur");
-        set(&mut blur, "radius", 40.0);
-        let radius = |source: &str| -> f32 {
-            let e = expression(source);
-            let graph = LayerGraph {
-                edges: vec![edge(&e, "value", NodeRef::Effect(blur.id), "radius")],
-                nodes: vec![e],
-                ..LayerGraph::default()
-            };
-            let drivers = resolve_drivers(&graph, 0.5, ctx(), None);
-            assert!(drivers.is_empty(), "{source:?} carried something");
-            crate::fx::resolved::resolve_stack_temporal_named(
-                std::slice::from_ref(&blur),
-                &drivers,
-                0.5,
-                0.5,
-                1000.0,
-                1.0,
-                &MarkerContext::NONE,
-                ctx(),
-            )
-            .1
-            .get(0)
-            .expect("one op")
-            .params
-            .float(ParamId::new("radius"), -1.0)
-        };
-        for refused in [
-            "1 / 0",
-            "1 +",
-            "no_such_name * 2",
-            "\"words\"",
-            "[1]",
-            "[1, 2, 3, 4, 5]",
-            "1.0 / 0.0",
-            "",
-            "   ",
-        ] {
-            assert_eq!(radius(refused), 40.0, "{refused:?}: the stored keyframe");
-        }
-    }
-
     /// The expression reads the frame's `time`: two times, two numbers; the
     /// same time twice, the same number. Nothing else moves it.
     #[test]
@@ -3392,4 +3351,6 @@ mod tests {
         let count = |lt| driver_out(&node, "count", lt, context.clone(), Some(&Steps));
         assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);
     }
+
+    mod refused_expression;
 }

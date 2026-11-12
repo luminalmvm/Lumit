@@ -50,6 +50,9 @@ import 'shape_entries.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
+import 'viewer_grade.dart';
+import 'viewer_grade_grid.dart';
+import 'viewer_grade_windows.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_noise_sample.dart';
 import 'viewer_follow.dart';
@@ -774,6 +777,10 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
+            // A grade's reference, wiped or blended against the picture.
+            if (showPicture)
+              ViewerReferenceLayer(
+                  uiState: uiState, comp: comp, viewId: viewId, fitted: fitted),
             // Why there is no picture, on a machine where the runner had to
             // refuse it. Over the picture's place and under everything else.
             const Positioned.fill(child: ViewerGpuMismatchNotice()),
@@ -1277,6 +1284,33 @@ class ViewerStage extends StatelessWidget {
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
               ),
+            // The grading tools: the windows, the qualifier's pick and the
+            // chart, over the layer controls so their drags win.
+            ViewerGradeTools(
+              uiState: uiState,
+              comp: comp,
+              viewId: viewId,
+              fitted: fitted,
+              compSize: Size(
+                compSize.width.toDouble(),
+                compSize.height.toDouble(),
+              ),
+              windows: ViewerGradeWindows(
+                uiState: uiState,
+                comp: comp,
+                fitted: fitted,
+                compSize: Size(
+                  compSize.width.toDouble(),
+                  compSize.height.toDouble(),
+                ),
+                mapOf: (layer) =>
+                    _boxes().where((b) => b.id == layer).firstOrNull?.map,
+              ),
+            ),
+            // The split-screen grid stands in for the picture while it is up.
+            if (showPicture)
+              ViewerGradeGrid(
+                  uiState: uiState, comp: comp, viewId: viewId, fitted: fitted),
             // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a

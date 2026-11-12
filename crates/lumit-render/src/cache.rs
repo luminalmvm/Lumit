@@ -198,6 +198,18 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         Some(out)
     }
 
+    /// The library's LUT a row is read from when its own file is missing, so
+    /// the frame is named by the file it was drawn with.
+    fn file_on_this_machine(&self, path: &str) -> Option<String> {
+        crate::library_luts::found(path)
+    }
+
+    /// What a library font's files hold, for a Text layer drawn with one, so
+    /// the frames drawn before it arrived or after it left are not served.
+    fn font_identity(&self, family: &str) -> Option<[u8; 32]> {
+        lumit_text::fonts::library_identity(family)
+    }
+
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
         // A 3D model is never probed, so it is named by its file as it is on
         // disk now, or a model saved over would keep its old frames.
@@ -565,6 +577,7 @@ mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),

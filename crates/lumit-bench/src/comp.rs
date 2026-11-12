@@ -275,6 +275,7 @@ pub(crate) fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),

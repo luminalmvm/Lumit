@@ -12,7 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'theme.dart';
 import 'theme_tokens.dart';
 
-/// A user-made theme, as saved in the workspace file.
+/// A user-made theme, kept as a file in the library (theme_file.dart).
 class CustomTheme {
   /// What the user called it. Also its identity — the dropdown shows it and
   /// the workspace stores the selection by it, so two cannot share one.

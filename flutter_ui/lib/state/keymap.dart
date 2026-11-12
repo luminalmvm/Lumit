@@ -15,15 +15,20 @@
 // those live — [KeymapState] stores the engine's JSON verbatim and never looks
 // inside it.
 
+import 'dart:io' hide Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show SingleActivator;
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 
+import '../l10n/strings.dart';
 import '../src/rust/api/keymap.dart';
 import 'os_keys.dart';
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The keys the keymap names in words, by the logical key Flutter reports.
 ///
@@ -351,14 +356,16 @@ class KeymapState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _adopt(List<BridgeKeymapGroup> groups) {
+  /// [groups] in force, taken whole from [set] (as [Workspace.keymapSet]
+  /// spells it) or from an edit when null.
+  void _adopt(List<BridgeKeymapGroup> groups, {String? set}) {
     _groups = groups;
     _conflicts = keymapConflicts();
     _shadows = keymapShadows();
     _wheel = keymapWheel();
     _breakHandles = keymapBreakHandles();
     _indexChords();
-    _store();
+    _store(set: set);
     notifyListeners();
   }
 
@@ -388,7 +395,132 @@ class KeymapState extends ChangeNotifier {
 
   /// Replace the whole keymap with a shipped preset.
   Future<void> loadPreset(BridgeKeymapPreset preset) async {
-    _adopt(await keymapLoadPreset(preset: preset));
+    _adopt(await keymapLoadPreset(preset: preset), set: preset.name);
+  }
+
+  /// The shipped preset or the saved set's name the keymap was last taken
+  /// from whole, or null when a binding has changed since or the set has
+  /// gone.
+  Object? get inForce {
+    final set = _workspace?.keymapSet;
+    // Nothing stored is the shipped keymap, untouched.
+    if (set == null && _workspace?.keymapJson == null) {
+      return BridgeKeymapPreset.lumit;
+    }
+    if (set == null) return null;
+    if (set.endsWith('.$_setExtension')) {
+      final name = set.substring(0, set.length - _setExtension.length - 1);
+      return sets.contains(name) ? name : null;
+    }
+    return BridgeKeymapPreset.values.asNameMap()[set];
+  }
+
+  // --- Saved sets ----------------------------------------------------------
+  //
+  // A set is a keymap kept under a name, as a `.lumkeys` file in the
+  // library's shortcuts folder, holding exactly what Export writes.
+
+  static const String _setExtension = 'lumkeys';
+
+  List<String> _sets = const [];
+  String? _setsFrom;
+
+  /// The saved sets by name, read again when the library has moved to
+  /// another profile's folder.
+  List<String> get sets {
+    if (_setsFrom != Workspace.shortcutsFolder()) _readSets();
+    return _sets;
+  }
+
+  /// Read the shortcuts folder again, after something else changed it.
+  void reloadSets() {
+    _readSets();
+    notifyListeners();
+  }
+
+  void _readSets() {
+    final folder = Workspace.shortcutsFolder();
+    _setsFrom = folder;
+    try {
+      _sets = [
+        for (final file in Directory(folder).listSync().whereType<File>())
+          if (file.path.endsWith('.$_setExtension'))
+            file.path
+                .split(RegExp(r'[\\/]'))
+                .last
+                .replaceFirst(RegExp('\\.$_setExtension\$'), ''),
+      ]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    } on FileSystemException {
+      _sets = const [];
+    }
+  }
+
+  File _setFile(String name) => File('${Workspace.shortcutsFolder()}'
+      '${Platform.pathSeparator}$name.$_setExtension');
+
+  /// The name a set is saved under: what the person typed, with what a file
+  /// name cannot hold taken out.
+  static String _setName(String name) =>
+      name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '').trim();
+
+  /// Keep the keymap in force as a set called [name], over one of that
+  /// name. Returns the name it was saved under, or null when it could not
+  /// be.
+  String? saveSet(String name) {
+    final named = _setName(name);
+    if (named.isEmpty || named.startsWith('.')) return null;
+    try {
+      final file = _setFile(named);
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync(keymapToJson());
+    } on FileSystemException {
+      return null;
+    }
+    _store(set: '$named.$_setExtension');
+    reloadSets();
+    return named;
+  }
+
+  /// Use the set called [name]. Null on success, else why not.
+  Future<String?> useSet(String name) async {
+    final String text;
+    try {
+      text = await _setFile(name).readAsString();
+    } on FileSystemException {
+      return l10n.keymapFileUnreadable;
+    }
+    return fromJson(text, set: '$name.$_setExtension');
+  }
+
+  void deleteSet(String name) {
+    try {
+      _setFile(name).deleteSync();
+    } on FileSystemException {
+      // Already gone.
+    }
+    reloadSets();
+  }
+
+  /// Give a set a new name, never over another's. Returns the name it has.
+  String renameSet(String from, String to) {
+    final named = _setName(to);
+    if (named.isEmpty || named.startsWith('.') || named == from) return from;
+    // Only a change of case may land on a file that is there already: on
+    // Windows that file is this one.
+    if (named.toLowerCase() != from.toLowerCase() &&
+        _setFile(named).existsSync()) {
+      return from;
+    }
+    try {
+      _setFile(from).renameSync(_setFile(named).path);
+    } on FileSystemException {
+      return from;
+    }
+    if (_workspace?.keymapSet == '$from.$_setExtension') {
+      _store(set: '$named.$_setExtension');
+    }
+    reloadSets();
+    return named;
   }
 
   /// The whole keymap as text, for "Export keymap…". The same format the
@@ -397,9 +529,9 @@ class KeymapState extends ChangeNotifier {
 
   /// Take a keymap from text — an imported file, or the stored blob. Returns
   /// null on success or the engine's words when the text is not a keymap.
-  Future<String?> fromJson(String json) async {
+  Future<String?> fromJson(String json, {String? set}) async {
     try {
-      _adopt(await keymapFromJson(json: json));
+      _adopt(await keymapFromJson(json: json), set: set);
       return null;
     } on AnyhowException catch (e) {
       return e.message;
@@ -426,7 +558,7 @@ class KeymapState extends ChangeNotifier {
     if (stored == null || stored.isEmpty) {
       await loadPreset(BridgeKeymapPreset.lumit);
     } else {
-      await fromJson(stored);
+      await fromJson(stored, set: _workspace?.keymapSet);
     }
   }
 
@@ -444,9 +576,9 @@ class KeymapState extends ChangeNotifier {
     }
   }
 
-  void _store() {
+  void _store({String? set}) {
     final workspace = _workspace;
     if (workspace == null) return;
-    workspace.setKeymapJson(keymapToJson());
+    workspace.setKeymapJson(keymapToJson(), set: set);
   }
 }

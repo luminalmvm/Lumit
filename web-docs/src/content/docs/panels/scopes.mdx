@@ -9,7 +9,7 @@ import Shot from "../../../components/Shot.astro";
 
 Scopes read the frame the Viewer previews. Open the panel with **Window ▸ Panels ▸ Scopes**.
 
-The picker at the top chooses one of four scopes.
+The picker at the top chooses one of five scopes.
 
 | Scope | Shows |
 | --- | --- |
@@ -17,49 +17,69 @@ The picker at the top chooses one of four scopes.
 | **RGB parade** | The red, green and blue waveforms side by side. |
 | **Vectorscope** | Hue and saturation on a colour wheel. |
 | **Histogram** | How many pixels sit at each level, as luma or per channel. |
+| **CIE chromaticity** | Each pixel's colour on the CIE 1931 xy diagram. Pixels near black are left out. |
 
 **Luma** and **RGB** beside the picker choose the reading of the Waveform and the
-Histogram.
-
-Right-click the trace to change the scope, its reading, the graticule or the colours.
-
-| Row | Does |
-| --- | --- |
-| **Waveform**, **RGB parade**, **Vectorscope**, **Histogram** | Picks the scope. |
-| **Luma**, **RGB** | Picks the reading. Greyed on the RGB parade and the Vectorscope. |
-| **Graticule** | Shows or hides the scale. |
-| **Theme colours** | Draws the scope in the theme's colours. Off, it is drawn in its own fixed colours. |
-
-The menu stays open while rows are picked.
+Histogram. **2x** beside it draws the Vectorscope at twice the size.
 
 <Shot file="scopes.png" caption="The waveform reading the current frame." eager/>
 
-## The scales
+## Layouts
 
-- **Waveform** and **RGB parade**: lines at 0, 25, 50, 75 and 100. 0 is black and 100 is
-  white. The parade has a line between each channel's third of the width.
+The picker at the panel's top right chooses **One scope**, **Two scopes** or **Four
+scopes**. Two sit side by side, and four in two rows of two. Each scope has its own header,
+with its picker and options. A second Scopes panel keeps its own layout and scopes.
+
+## The scale
+
+The graticule is drawn over each trace:
+
+- **Waveform** and **RGB parade**: five lines, numbered 0, 25, 50, 75 and 100 in
+  **Percent**, or 0, 256, 512, 768 and 1023 in **10-bit**. The lowest is black and the
+  highest is white. The parade has a line between each channel's third of the width.
 - **Vectorscope**: rings at a quarter, a half, three quarters and the whole of the radius,
-  a cross through the centre, targets for red, green, blue, magenta, yellow and cyan, and
-  the skin-tone line.
-- **Histogram**: levels 0, 64, 128, 192 and 255 across. Its height is scaled to the
-  tallest column.
+  a cross through the centre, targets where 75% red, magenta, blue, cyan, green and yellow
+  bars land, and the skin tone line.
+- **Histogram**: five levels across, from 0 to 255 in **Percent**, or 0 to 1023 in
+  **10-bit**. Its height is scaled to the tallest column.
+- **CIE chromaticity**: the spectral locus, the Rec. 709, P3 and Rec. 2020 gamuts, and the
+  D65 white point.
 
-## What is read
+## The menu
 
-The scope reads the open composition at the playhead, at the preview resolution the Viewer
-is using and through the active view's [3D view](/use/camera/#3d-views). It is drawn again
-when the playhead moves and when the picture changes, a value being dragged included.
+Right-click a scope for its menu. The menu stays open while rows are picked.
 
-With a [3D viewport](/use/camera/#3d-viewport) active, the scope reads another view of the
-same composition.
+| Row | Does |
+| --- | --- |
+| **Waveform**, **RGB parade**, **Vectorscope**, **Histogram**, **CIE chromaticity** | Picks the scope. |
+| **Luma**, **RGB** | Picks the reading. Greyed on the RGB parade, the Vectorscope and CIE chromaticity. |
+| **2x** | Draws the Vectorscope at twice the size. Greyed on the other scopes. |
+| **One scope**, **Two scopes**, **Four scopes** | Picks the layout. |
+| **Graticule** | Shows or hides the scale. |
+| **Percent**, **10-bit** | Picks how the scale is numbered. |
+| **Theme colours** | Draws the scopes in the theme's colours. Off, they are drawn in their own fixed colours. |
+| **Brightness** | Draws the traces fainter or stronger, from 25% to 400%. |
 
-With no composition open the panel reads *No composition selected*.
+The scope, its reading and **2x** belong to the scope that was right-clicked. The layout,
+the scale and the brightness belong to the panel.
 
 **Theme colours** is the same switch as **Edit ▸ Settings ▸ Appearance ▸ Viewer ▸ Scopes
 use theme colour**.
+
+## What is read
+
+The scopes read the open composition at the playhead, at the preview resolution the Viewer
+is using and through the active view's [3D view](/use/camera/#3d-views). They are drawn
+again when the playhead moves and when the picture changes, a value being dragged included.
+
+With a [3D viewport](/use/camera/#3d-viewport) active, the scopes read another view of the
+same composition.
+
+With no composition open the panel reads *No composition selected*.
 
 ## Related
 
 - [Viewer](/panels/viewer/)
 - [Colour management](/use/colour-management/)
+- [Grading](/use/grading/)
 - [Effects](/use/effects/)

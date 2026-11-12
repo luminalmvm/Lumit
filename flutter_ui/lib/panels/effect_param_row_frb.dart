@@ -1264,6 +1264,29 @@ class EffectParamRowFrb extends StatelessWidget {
         }
         return Text('—', style: t.small);
 
+      // An outline is drawn in the Viewer. Here it is a count, and a way to
+      // clear it.
+      case BridgeParamKind_Shape():
+        if (value case BridgeEffectValue_Shape(:final field0)) {
+          return Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(l10n.fxShapePointCount(field0.length), style: t.small),
+            if (field0.isNotEmpty)
+              LumitTooltip(
+                message: l10n.tipResetParameter,
+                child: HouseButton(
+                  key: ValueKey<String>('fx-shape-reset-$id-${param.id}'),
+                  frameless: true,
+                  small: true,
+                  padding: const EdgeInsets.all(1),
+                  onPressed: () => _set(const BridgeEffectValue.shape([])),
+                  child: LumitIcon(LumitIcons.reset,
+                      size: 12, colour: t.textMuted),
+                ),
+              ),
+          ]);
+        }
+        return Text('—', style: t.small);
+
       case BridgeParamKind_Angle(:final dialStep):
         if (value case BridgeEffectValue_Float(:final field0)) {
           return _angleControl(
@@ -3525,10 +3548,12 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       // control, not the storage.
       BridgeParamKind_Slider(:final default_) =>
         BridgeEffectValue.float(BridgeScalar.static_(default_)),
-      // Every curve's default is the identity diagonal — there is
-      // nothing per-parameter to declare, which is why the kind carries no
-      // fields.
-      BridgeParamKind_Curve() => curveValue(curveIdentity),
+      // The declared shape: the diagonal for a tone curve, the flat middle
+      // line for a hue curve.
+      BridgeParamKind_Curve(:final default_) =>
+        curveValue(curvePointsOf(default_)),
+      // A fresh outline has no points.
+      BridgeParamKind_Shape() => const BridgeEffectValue.shape([]),
     };
 
 /// Whether [value] is what [fallback] declares, to the precision a number field
@@ -3618,6 +3643,11 @@ class EffectStackEditor {
   /// effects and its styles, exactly as the engine's own shared instance
   /// lookup does. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? groupStack;
+
+  /// Whether [groupStack] is a grade group's list or a shared grade node's.
+  /// The engine stages those by their ids for a preview, so their drags show
+  /// as they go, as a layer's own rows do.
+  bool gradeList = false;
 
   /// Where a **clip's** stack is read from (docs/impl/audio-timeline.md §4),
   /// set by the Audio timeline while it is showing a clip's rows - the same
@@ -3753,7 +3783,7 @@ class EffectStackEditor {
     //
     // A clip's rows do preview: the staged list is found by its ids on the
     // clip that holds it, and a picture clip's stack is on the picture.
-    if (groupStack != null) return;
+    if (groupStack != null && !gradeList) return;
     if (drivers) {
       _throttle.request(() => comp.renderFrameWithDriverPreview(
             frame: frame,

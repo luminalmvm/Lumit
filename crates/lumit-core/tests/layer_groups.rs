@@ -49,6 +49,7 @@ fn layer(name: &str) -> Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: BlendMode::Normal,
         masks: Vec::new(),

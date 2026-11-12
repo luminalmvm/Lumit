@@ -1052,6 +1052,12 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
     List<Float32List> field0,
   ) = BridgeEffectValue_Curve;
 
+  /// An outline's points, `[x, y]` in `-1..1` of its box, in order. Crosses
+  /// as written; the engine straightens what it reads.
+  const factory BridgeEffectValue.shape(
+    List<Float32List> field0,
+  ) = BridgeEffectValue_Shape;
+
   /// A name from the OCIO config, as the config spells it; empty is unset.
   /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
   const factory BridgeEffectValue.text(
@@ -1444,8 +1450,16 @@ sealed class BridgeParamKind with _$BridgeParamKind {
 
   /// A tone curve, drawn as a curve editor. The panel edits the
   /// point list itself; there is no range to declare, because the points
-  /// live in the unit square by definition.
-  const factory BridgeParamKind.curve() = BridgeParamKind_Curve;
+  /// live in the unit square by definition. `default` is the shape Reset
+  /// goes back to: the diagonal for a tone curve, the flat middle line for
+  /// a hue curve.
+  const factory BridgeParamKind.curve({
+    required List<Float32List> default_,
+  }) = BridgeParamKind_Curve;
+
+  /// An outline inside a box, as up to 32 points in `-1..1` of it. The
+  /// row shows how many there are; the Viewer draws them.
+  const factory BridgeParamKind.shape() = BridgeParamKind_Shape;
 
   /// A closed range, drawn as a track and thumb with the value
   /// beside it. `min`/`max` are the travel *and* the hard bound — that is

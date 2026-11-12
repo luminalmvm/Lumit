@@ -4,6 +4,7 @@
 pub mod bring;
 mod dirs;
 pub mod fixtures;
+pub mod library_home;
 pub mod pack;
 pub mod plugins;
 pub mod template_file;
@@ -1023,11 +1024,10 @@ pub fn media_index_dir() -> Option<PathBuf> {
 /// The user's effect-preset library directory (docs/07-UI-SPEC.md §7) — where
 /// `.lumfx` presets saved from a layer's effect stack live, so the Effects &
 /// Presets browser can list and apply them. Global (shared across projects),
-/// in the platform's roaming app-data area beside the config. `None` only when
-/// the platform has no home directory; callers create it lazily.
+/// in the profile's library home ([`library_home`]), as every library folder
+/// below is. `None` only when the platform has no home directory.
 pub fn presets_dir() -> Option<PathBuf> {
-    let dirs = dirs::project_dirs()?;
-    Some(dirs.data_dir().join("presets"))
+    library_home::in_library("presets")
 }
 
 /// The user's graphics template library: the `.lumt` files saved to it, with
@@ -1035,23 +1035,20 @@ pub fn presets_dir() -> Option<PathBuf> {
 /// ([`template_file`]). Beside the effect presets. `None` only when the
 /// platform has no home directory; callers create it lazily.
 pub fn templates_dir() -> Option<PathBuf> {
-    let dirs = dirs::project_dirs()?;
-    Some(dirs.data_dir().join("templates"))
+    library_home::in_library("templates")
 }
 
 /// The user's own lenses, as `.lens` files: saved from the lens window and
 /// offered to every project. Beside the effect presets. `None` only when the
 /// platform has no home directory; callers create it lazily.
 pub fn lenses_dir() -> Option<PathBuf> {
-    let dirs = dirs::project_dirs()?;
-    Some(dirs.data_dir().join("lenses"))
+    library_home::in_library("lenses")
 }
 
 /// The user's own flare designs, as `.flare` files saved from the Flare
 /// window. Beside the lenses, and lazily made the same way.
 pub fn flares_dir() -> Option<PathBuf> {
-    let dirs = dirs::project_dirs()?;
-    Some(dirs.data_dir().join("flares"))
+    library_home::in_library("flares")
 }
 
 /// Where the user's own **export** presets live (docs/07 §11) — one small
@@ -1064,8 +1061,7 @@ pub fn flares_dir() -> Option<PathBuf> {
 /// platform has no home directory; the library then lives for the session and
 /// says so rather than failing.
 pub fn export_presets_path() -> Option<PathBuf> {
-    let dirs = dirs::project_dirs()?;
-    Some(dirs.data_dir().join("export-presets.json"))
+    library_home::in_library("export-presets.json")
 }
 
 /// Where the **export defaults** live — what the export dialogue opens on when
@@ -2455,52 +2451,6 @@ mod tests {
         );
     }
 
-    /// A Sequence layer's **clips** convert too — the second half of the
-    /// migration, and the one that would otherwise have left the sequence view
-    /// editing a representation nothing else spoke.
-    #[test]
-    fn a_clips_segment_store_becomes_the_retime_property() {
-        use lumit_core::retime::Retime;
-        use lumit_core::time::Rational;
-
-        let store = Retime::constant_speed(
-            Rational::new(4, 1).unwrap(),
-            Rational::ZERO,
-            Rational::new(2, 1).unwrap(),
-        );
-        let doc = serde_json::json!({
-            "comps": [{
-                "layers": [{
-                    "kind": { "Sequence": { "clips": [{
-                        "id": Uuid::now_v7(),
-                        "source": { "Footage": Uuid::now_v7() },
-                        "source_in": [0, 1],
-                        "source_out": [8, 1],
-                        "place_start": [0, 1],
-                        "place_duration": [4, 1],
-                        "retime": serde_json::to_value(&store).unwrap(),
-                    }]}}
-                }]
-            }]
-        });
-
-        let out = run_migrations(MIGRATIONS, doc, (0, 1, 0));
-        // It typed as a real Clip, which is the whole test: the migration has
-        // to produce a document *this* build can read.
-        let clip: lumit_core::sequence::Clip = serde_json::from_value(
-            out["comps"][0]["layers"][0]["kind"]["Sequence"]["clips"][0].clone(),
-        )
-        .expect("a clip");
-        assert_eq!(
-            clip.constant_speed(),
-            Some(2.0),
-            "double speed before, double speed after"
-        );
-        // …and it reads the same source moments it used to.
-        assert!((clip.source_time(1.0) - store.evaluate(1.0)).abs() < 1e-6);
-        assert!((clip.source_time(3.0) - store.evaluate(3.0)).abs() < 1e-6);
-    }
-
     /// docs/10 §1: a file is walked up the chain from its own version — earlier
     /// migrations are skipped, and every step from the file version onward runs
     /// in order.
@@ -2922,6 +2872,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -3528,6 +3479,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -3590,4 +3542,6 @@ mod tests {
 {json}"
         );
     }
+
+    mod clip_segments;
 }

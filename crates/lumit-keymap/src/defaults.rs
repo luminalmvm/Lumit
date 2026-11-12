@@ -24,8 +24,8 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 #[must_use]
 pub fn default_keymap() -> Keymap {
     use KeyContext::{
-        Captions, Cut, Effects, Global, Graph, Mixer, Nodes, Panels, Project, Timeline, Tools,
-        Transcript, Viewer,
+        Captions, Colour, Cut, Effects, Global, Graph, Mixer, Nodes, Panels, Project, Timeline,
+        Tools, Transcript, Viewer,
     };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
@@ -456,6 +456,25 @@ pub fn default_keymap() -> Keymap {
         row(Transcript, "X", "transcript.mark"),
         row(Transcript, "Mod+Shift+F", "transcript.fillers"),
         row(Transcript, "Mod+Alt+P", "transcript.pauses"),
+        // --- Colour workspace ---
+        // The matte view works from the Viewer too, so it is app-wide. The
+        // rest belong to the grading panels: there Alt+L adds a layer node
+        // rather than learning noise, and the arrows and Home and End walk
+        // the shots, not the playhead.
+        row(Colour, "Alt+S", "grade.node.serial"),
+        row(Colour, "Alt+P", "grade.node.parallel"),
+        row(Colour, "Alt+L", "grade.node.layer"),
+        row(Colour, "Alt+O", "grade.node.outside"),
+        row(Global, "Shift+H", "grade.matte"),
+        row(Colour, "Mod+Alt+G", "grade.still.grab"),
+        row(Colour, "ArrowUp", "grade.shot.prev"),
+        row(Colour, "ArrowDown", "grade.shot.next"),
+        row(Colour, "Home", "grade.shot.first"),
+        row(Colour, "End", "grade.shot.last"),
+        row(Colour, "=", "grade.apply.previous"),
+        row(Colour, "-", "grade.apply.second"),
+        row(Colour, "Mod+Alt+L", "grade.lightbox"),
+        row(Colour, "Mod+Alt+C", "grade.compare"),
         // --- Mixer ---
         // The arrows walk the strips and ride the picked faders. Home takes
         // a fader back to 0 dB rather than the playhead to the start.
@@ -493,6 +512,18 @@ pub fn default_keymap() -> Keymap {
             (Viewer, format!("{d}"), format!("multicam.cut.{d}")),
         ] {
             if let Some(b) = row(context, &chord, &action) {
+                bindings.push(b);
+            }
+        }
+    }
+    // A colourist's memories: Alt and a digit lays one on, Mod+Alt and the
+    // digit keeps the current shot's grade in it.
+    for d in 1..=8u8 {
+        for (chord, action) in [
+            (format!("Alt+{d}"), format!("grade.memory.apply.{d}")),
+            (format!("Mod+Alt+{d}"), format!("grade.memory.store.{d}")),
+        ] {
+            if let Some(b) = row(Colour, &chord, &action) {
                 bindings.push(b);
             }
         }

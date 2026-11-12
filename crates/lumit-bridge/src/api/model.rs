@@ -585,6 +585,19 @@ impl LayerReference {
                 return self.commit_clips(clips);
             }
             InstanceHome::Materials => self.materials_op(edit, light_names)?,
+            InstanceHome::GradeGroup(group, part) => {
+                use lumit_core::grade::groups;
+                let doc = self.document()?;
+                let g = groups::group(&doc, group).ok_or(BridgeError::InvalidEffect)?;
+                let mut list = g.part(part).to_vec();
+                edit(&mut list)?;
+                match groups::set_list(&doc, group, part, list)
+                    .map_err(crate::api::grade_versions::refused)?
+                {
+                    Some(op) => op,
+                    None => return Ok(()),
+                }
+            }
         };
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;

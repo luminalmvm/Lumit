@@ -420,6 +420,40 @@ Script: `lumit.effect.set({ ... })`. MCP tool: `effect_set`.
 | `keys[].out.influence` | number (0.1 to 100) |  | Per cent of the span |
 | `expression` | string |  | A JavaScript expression, as After Effects writes them |
 
+## grade.get
+
+A shot's grade versions, which one is showing, and the grade group it is in.
+
+Script: `lumit.grade.get({ ... })`. MCP tool: `grade_get`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `clip` | string |  | For one clip on a sequence layer, its id |
+
+## grade.set
+
+Show another version of a shot's grade, or put the shot in a grade group, move it to another, or take it out.
+
+Script: `lumit.grade.set({ ... })`. MCP tool: `grade_set`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `clip` | string |  | For one clip on a sequence layer, its id |
+| `version` | string |  | The version's id or name |
+| `group` | string or null |  | The grade group's id or name, or null for none |
+
+## grade.groups
+
+Every grade group, with how many shots are in it.
+
+Script: `lumit.grade.groups()`. MCP tool: `grade_groups`.
+
+No arguments.
+
 ## footage.import
 
 Import files as footage items.

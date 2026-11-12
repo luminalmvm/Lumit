@@ -610,6 +610,20 @@ fn content_hash(bytes: &[u8], files: &[std::path::PathBuf], working: WorkingSpac
     u64::from_le_bytes(k) | 1
 }
 
+/// The OCIO file transform's table: the file read on its own, forward or
+/// undone, and baked. `None` for a file that will not read or will not invert,
+/// which the effect shows as a passthrough.
+#[must_use]
+pub fn file_artefact(path: &str, inverse: bool) -> Option<Artefact> {
+    let chain = lumit_colour::file::load(Path::new(path)).ok()?;
+    let chain = if inverse {
+        chain.inverted(path).ok()?
+    } else {
+        chain
+    };
+    bake(&chain, Shaper::DEFAULT).ok()
+}
+
 /// A baked artefact as the tables the graphics card takes (`lumit-gpu` depends
 /// on no other Lumit crate, so the shapes are converted rather than shared).
 #[must_use]

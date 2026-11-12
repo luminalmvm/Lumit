@@ -91,7 +91,7 @@ void main() {
         comp.renderScope(
           frame: 0,
           scale: p.uiState.viewerScale,
-          kind: 0,
+          kinds: const [0],
           colours: scopeColoursFor(LumitTheme.dark()),
           view: 0,
         );

@@ -1689,6 +1689,7 @@ impl CompositionReference {
         for effect in &mut layer.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut layer.grade_versions);
         lumit_render::passes::follow_copy(&*self.document()?, &copied.layer, &mut layer);
         // A reference only survives if what it names is here, which is only in
         // the comp it was copied from.
@@ -2331,7 +2332,7 @@ impl CompositionReference {
     /// generations to stop out-of-order frames; with the queue coalescing and a
     /// single worker there is no out-of-order case for them to fix.)
     #[frb(ignore)]
-    fn dispatch(&self, request: WorkerRequest) -> Result<(), BridgeError> {
+    pub(crate) fn dispatch(&self, request: WorkerRequest) -> Result<(), BridgeError> {
         let p = self.project()?;
         let p = p.read().map_err(|_| BridgeError::ReadFailed)?;
 
@@ -2894,19 +2895,17 @@ impl CompositionReference {
             .nearest_frame_at(lumit_core::time::CompTime(rational)))
     }
 
-    /// Ask the worker for a scope trace of `frame`.
-    ///
-    /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
-    /// `colours` is background, trace, then the R, G and B tints, each as
-    /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-    /// know what a Lumit surface looks like. `view` is the Viewer view whose
-    /// picture is read.
+    /// Ask for up to eight scope traces of `frame`, all from the one picture and
+    /// each its own reply: 0 luma waveform, 1 RGB waveform, 2 vectorscope, 3 RGB
+    /// histogram, 4 parade, 5 luma histogram, 6 CIE xy, 7 vectorscope at 2x.
+    /// `colours` is background, trace, then the R, G and B tints, each `[r, g,
+    /// b]`. `view` is the Viewer view whose picture is read.
     #[frb(sync)]
     pub fn render_scope(
         &self,
         frame: u64,
         scale: f32,
-        kind: u32,
+        kinds: Vec<u32>,
         colours: Vec<Vec<u8>>,
         view: u32,
     ) -> Result<(), BridgeError> {
@@ -2915,6 +2914,7 @@ impl CompositionReference {
         if colours.len() != 5 || colours.iter().any(|c| c.len() != 3) {
             return Err(BridgeError::InvalidScopeColours);
         }
+        let kinds = kinds.into_iter().take(8).collect();
         let mut packed = [[0_u8; 3]; 5];
         for (slot, colour) in packed.iter_mut().zip(&colours) {
             slot.copy_from_slice(colour);
@@ -2924,7 +2924,7 @@ impl CompositionReference {
             comp: self.clone(),
             frame,
             scale,
-            kind,
+            kinds,
             colours: packed,
             view,
         }))

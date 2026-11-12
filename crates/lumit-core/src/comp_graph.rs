@@ -869,6 +869,7 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         retime: None,
         interpolation: crate::retime::Interpolation::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: crate::model::BlendMode::Normal,
         masks: Vec::new(),

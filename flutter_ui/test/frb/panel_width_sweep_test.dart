@@ -26,11 +26,16 @@ import 'package:lumit_flutter/panels/caption_styles.dart';
 import 'package:lumit_flutter/panels/captions_panel_frb.dart';
 import 'package:lumit_flutter/panels/audio_panel_frb.dart';
 import 'package:lumit_flutter/panels/audio_timeline_panel_frb.dart';
+import 'package:lumit_flutter/panels/gallery_panel_frb.dart';
+import 'package:lumit_flutter/panels/grade_nodes_frb.dart';
+import 'package:lumit_flutter/panels/grade_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/mixer_panel_frb.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
 import 'package:lumit_flutter/panels/paragraph_panel_frb.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
+import 'package:lumit_flutter/panels/scopes_panel_frb.dart';
+import 'package:lumit_flutter/panels/shots_panel_frb.dart';
 import 'package:lumit_flutter/panels/text_panel_frb.dart';
 import 'package:lumit_flutter/panels/transcript_find.dart';
 import 'package:lumit_flutter/panels/transcript_panel_frb.dart';
@@ -38,6 +43,7 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/grade_target.dart';
 
 import 'frb_test_support.dart';
 
@@ -294,6 +300,79 @@ void main() {
           build: () => const TranscriptPanelFrb(),
           state: p.state,
           uiState: p.uiState);
+    });
+
+    /// Every layout, as the four-up halves the room each header has.
+    testWidgets('Scopes', (tester) async {
+      final p = populated();
+      for (final layout in ScopeLayout.values) {
+        p.uiState.workspace.scopeSetups[0] = {'layout': layout.name};
+        await sweepWidths(tester,
+            panel: Panel.scopes,
+            build: () => const ScopesPanelFrb(),
+            state: p.state,
+            uiState: p.uiState);
+      }
+    });
+
+    /// Every page on a Correction, in a tall pane and a short one.
+    testWidgets('Grade', (tester) async {
+      final p = populated();
+      p.uiState.selectedLayer.value!.addEffect(name: 'correction');
+      p.uiState.model.refresh();
+      for (final page in GradePage.values) {
+        p.uiState.grade.page.value = page;
+        for (final height in const [600.0, 300.0]) {
+          await sweepWidths(tester,
+              panel: Panel.grade,
+              build: () => const GradePanelFrb(),
+              state: p.state,
+              uiState: p.uiState,
+              height: height);
+        }
+      }
+    });
+
+    testWidgets('Gallery', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.gallery,
+          build: () => const GalleryPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    /// Two serial nodes with a parallel one beside the second, so a run's
+    /// column is what is squeezed, in a tall pane and a short one.
+    testWidgets('Grade nodes', (tester) async {
+      final p = populated();
+      final layer = p.uiState.selectedLayer.value!;
+      layer.addEffect(name: 'correction');
+      final first = layer.getEffects().last.id();
+      final second = layer.addSerialGradeNode(after: first);
+      layer.addParallelGradeNode(after: second);
+      p.uiState.model.refresh();
+      for (final height in const [600.0, 120.0]) {
+        await sweepWidths(tester,
+            panel: Panel.gradeNodes,
+            build: () => const GradeNodesPanelFrb(),
+            state: p.state,
+            uiState: p.uiState,
+            height: height);
+      }
+    });
+
+    /// Down the pane while it is taller than wide, across once it is not.
+    testWidgets('Shots', (tester) async {
+      final p = populated();
+      for (final height in const [600.0, 140.0]) {
+        await sweepWidths(tester,
+            panel: Panel.shots,
+            build: () => const ShotsPanelFrb(),
+            state: p.state,
+            uiState: p.uiState,
+            height: height);
+      }
     });
 
     // The results bar in each of its modes: a tight panel lays it out in

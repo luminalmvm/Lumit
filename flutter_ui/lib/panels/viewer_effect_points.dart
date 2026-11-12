@@ -28,6 +28,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart' show sampledExpression, timeOfFrame;
 import '../state/dock.dart' show Panel;
+import '../state/grade_target.dart' show correctionName;
 import '../widgets/controls.dart' show MenuDivider, ThemeScope;
 import 'effect_param_row_frb.dart'
     show
@@ -370,6 +371,8 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
         for (final pair in cachedListPairs(fx.name)) {
           // Denoise's sample is a square, drawn by its own layer.
           if (fx.name == denoiseMatchName && pair.x == sampleX) continue;
+          // A Correction's windows have handles of their own.
+          if (fx.name == correctionName && pair.x.startsWith('win')) continue;
           if (!whole &&
               !rows.contains('$path/${pair.x}') &&
               !rows.contains('$path/${pair.y}')) {

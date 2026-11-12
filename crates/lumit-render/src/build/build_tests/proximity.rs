@@ -44,6 +44,7 @@ fn a_proximity_selector_follows_its_null() {
         puppet: None,
         effects: Vec::new(),
         styles: Vec::new(),
+        grade_versions: None,
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };

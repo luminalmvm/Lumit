@@ -87,6 +87,7 @@ fn comp_of(path: &str, records: &[u32]) -> (Arc<Document>, Uuid) {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),

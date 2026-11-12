@@ -229,7 +229,7 @@ pub fn track_status(layer: LayerReference) -> BridgeTrackStatus {
     status
 }
 
-fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
+pub(crate) fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
     use lumit_render::track::AnalysisError;
     use lumit_track::solve::SolveError;
     match why {

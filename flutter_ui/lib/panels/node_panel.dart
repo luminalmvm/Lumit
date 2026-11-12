@@ -584,6 +584,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               graphNodeKey(BridgeNodeRef.effect(effect)),
               'output'
             ),
+          BridgeOutputRef_EffectKey(:final effect) => (
+              graphNodeKey(BridgeNodeRef.effect(effect)),
+              'key'
+            ),
         };
         final source = byRef[fromKey];
         if (source == null) continue;

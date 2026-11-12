@@ -26,6 +26,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-share-down-limit': w.shareDownLimit,
     'settings-discord-status': w.discordStatus,
     'settings-live-endpoint': w.liveEndpoint,
+    'settings-tangent-panels': w.tangentPanels,
     'settings-blender': w.blenderPath,
     'settings-scripts-folder': w.scriptsFolder,
     for (final event in ScriptEvent.values)

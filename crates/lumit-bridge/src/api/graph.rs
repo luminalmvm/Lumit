@@ -171,6 +171,8 @@ pub enum BridgeOutputRef {
     EffectData { effect: Uuid, port: String },
     /// A stack effect's picture into the Matte of an effect below it.
     EffectOutput { effect: Uuid },
+    /// A Correction's key into the Matte of an effect below it.
+    EffectKey { effect: Uuid },
 }
 
 /// Where a wire goes.
@@ -209,6 +211,7 @@ impl BridgeGraphEdge {
                 OutputRef::EffectOutput { effect } => {
                     BridgeOutputRef::EffectOutput { effect: *effect }
                 }
+                OutputRef::EffectKey { effect } => BridgeOutputRef::EffectKey { effect: *effect },
             },
             to: match &edge.to {
                 InputRef::Param { node, port } => BridgeInputRef::Param {
@@ -230,6 +233,7 @@ impl BridgeGraphEdge {
                     OutputRef::EffectData { effect, port }
                 }
                 BridgeOutputRef::EffectOutput { effect } => OutputRef::EffectOutput { effect },
+                BridgeOutputRef::EffectKey { effect } => OutputRef::EffectKey { effect },
             },
             to: match self.to {
                 BridgeInputRef::Param { node, port } => InputRef::Param {
@@ -472,6 +476,13 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             // Particulate-specific code at the seam: it declares the port, and
             // every effect that declares none is untouched.
             outputs: std::iter::once(BridgePort::of(graph::OUTPUT_PORT, effect.enabled))
+                // A Correction's key, for a wire into a Matte below.
+                .chain((effect.effect.match_name == "correction").then(|| {
+                    BridgePort::of(
+                        graph::KEY_PORT,
+                        output_wired(&OutputRef::EffectKey { effect: effect.id }),
+                    )
+                }))
                 .chain(
                     def.map(|d| d.signature().outputs())
                         .unwrap_or_default()

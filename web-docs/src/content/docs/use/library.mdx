@@ -1,0 +1,161 @@
+---
+title: Library
+description: Presets, styles, themes, fonts, LUTs, shortcut sets and templates in one place, and on every computer with Lumit Pro.
+sidebar:
+  order: 19.75
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The **library** is what you keep in Lumit to use in any project. With Lumit Pro it is the same on
+every computer signed in to your account.
+
+<Shot file="library.png" caption="The Library window." eager/>
+
+## The Library window
+
+**Window ▸ Library** opens it, as do the sync line in the profile card and **Open library** in
+**Settings ▸ Account**. It works without an account.
+
+- On the left, each kind with its count, then **Needs you** and **Recently deleted**, then the
+  computers signed in to the account.
+- In the middle, the items of the chosen kind, by folder.
+- On the right, the chosen item: where it is, its history and what can be done to it.
+- At the bottom, how much of the account's storage the library takes.
+
+| Kind | What it holds |
+| --- | --- |
+| **Presets** | Effect, animation, look and material presets, and saved node groups, by group |
+| **Styles** | Styles, with the fonts and pictures in their folders |
+| **Themes** | Your themes |
+| **Fonts** | Fonts added to the library |
+| **Shortcut sets** | Keymaps saved under a name |
+| **Lenses**, **Flares** | Saved from the Lens and Flare windows |
+| **Export presets** | Saved export settings |
+| **LUTs** | Files the LUT and OCIO effects read |
+| **Templates** | Saved [graphics templates](/use/graphics-templates/) |
+
+**Templates** is listed once there are any.
+
+## Adding to the library
+
+- **Add…** takes files of any kind the library holds and puts each in its kind.
+- Files dropped on the window are added the same way.
+- Saving a preset, a group, a theme, a style, a template, a lens or a flare adds it.
+- **Settings ▸ Shortcuts ▸ Preset ▸ Save as set…** saves the keymap in force as a shortcut set.
+  Importing a keymap file saves it as a set too.
+
+A font in the library is listed in the Text panel with the installed fonts, and text layers draw
+with it without it being installed. A library font of the same name as an installed one is used
+in its place. A LUT or OCIO effect whose file is missing reads a file of the same name from the
+library's LUTs.
+
+## Working in the window
+
+| Key | Does |
+| --- | --- |
+| Arrows, Page Up, Page Down, Home, End | Move through the list. Left and Right move between the kinds and the list |
+| Enter | Shows the item in its folder, gets it, or opens its conflict |
+| F2 | Renames it |
+| Delete | Deletes the chosen items |
+| Ctrl+A | Chooses every item listed |
+| Ctrl+F | Search |
+| Ctrl+I | Add… |
+| Ctrl+Z, Ctrl+Shift+Z | Undo and redo the last library action |
+| Esc | Clears the search, then closes the window |
+
+Delete, rename, restore, get, remove from this computer, keep only on this computer and a
+conflict's choice can be undone. **Open the library** has no key until one is set in
+**Settings ▸ Shortcuts**.
+
+## On every computer
+
+With Lumit Pro and **Keep this profile in sync** on, the library is kept in the account. An
+addition, a change or a deletion reaches the other computers within seconds while they are
+online, and when they next start otherwise. **Sync now** in **Settings ▸ Account** syncs the
+library with the settings.
+
+Each kind has an **On this computer** switch. Off, nothing of that kind comes to the computer or
+leaves it, and the account's items are listed as **Not on this computer**.
+
+| Action | What it does |
+| --- | --- |
+| **Get** | Brings an item to this computer and keeps it up to date |
+| **Remove from this computer** | Takes it off this computer. It stays in the account |
+| **Keep only on this computer** | Stops syncing it. If it is in the account, it is removed there, after a question |
+| **Sync it again** | Sends an item kept only on this computer to the account |
+| **Delete** | Deletes it on every computer. It goes to **Recently deleted** |
+
+Fonts, LUTs and the fonts packed in templates go only to computers signed in to the same
+account. They are never part of a shared project, a review link or a preview.
+
+Without a connection, changes wait and go when it returns. The window's status says
+**Offline** with the number waiting, or **No room in the account** while something does not fit.
+A press on the status syncs at once.
+
+| State | Meaning |
+| --- | --- |
+| None | Up to date |
+| **Waiting to go up** | Changed here, not yet in the account |
+| **Coming down** | In the account, on its way here |
+| **Not on this computer** | In the account, not kept here |
+| **Only on this computer** | Never sent to the account |
+| **Too big to sync** | A file over 95 MB |
+| **No room in the account** | The account's storage is full |
+| **Its name can't be kept on this computer** | A name this system can't hold |
+
+Each row has a disc for each computer, showing whether it has the newest version, an older one,
+or does not keep the item. Settings that belong to one machine, such as the cache, the audio
+device, recent projects and the interface scale, never sync.
+
+## When two computers change the same thing
+
+An item changed on two computers before either synced goes under **Needs you**, with both
+versions side by side. Nothing is replaced until you choose, and the item stops syncing until
+then.
+
+- **Keep this one** sends this computer's version.
+- **Keep the other** takes the other computer's.
+- **Keep both** renames this computer's after the computer, and takes the other.
+
+Export presets are merged by name instead: an entry changed on one computer takes that change,
+and one changed on both takes this computer's.
+
+Two computers that add different files at the same name keep both, the same way.
+
+## History
+
+Every version of an item is kept, with the computer it came from.
+
+- **Restore** makes an earlier version the newest. The one it replaces stays in the history.
+- **Save as a copy** brings an earlier version back beside the current one.
+
+A deleted item stays in **Recently deleted** for 30 days. **Restore** brings it back, and
+**Delete forever** removes it and its history at once. A file a sync replaces or deletes on a
+computer is kept beside the profile for 30 days.
+
+Older versions are thinned as [backups](/use/backup/) are.
+
+## Storage
+
+The library counts against the account's storage, with backups, review links and projects kept
+online. A file counts once, however many versions hold it.
+
+## Export and import
+
+**Export…** saves the chosen items, or the whole library, as one `.lumlibrary` file. **Import…**
+adds the items in one. Neither needs an account.
+
+## Profiles
+
+Each profile has its own library. A new profile starts with a copy of the library in use.
+
+When a profile signs in to a different account, the library already on the computer stays
+**Only on this computer**. **Sync it again** sends an item to the new account.
+
+## Related
+
+- [Profiles and accounts](/use/profiles/)
+- [Effect presets](/use/presets/)
+- [Graphics templates](/use/graphics-templates/)
+- [Backup and history](/use/backup/)

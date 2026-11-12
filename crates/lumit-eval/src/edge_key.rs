@@ -35,6 +35,10 @@ pub(super) fn feed_edge(h: &mut blake3::Hasher, edge: &lumit_core::graph::Edge) 
             h.update(&[3]);
             h.update(effect.as_bytes());
         }
+        OutputRef::EffectKey { effect } => {
+            h.update(&[4]);
+            h.update(effect.as_bytes());
+        }
     }
     match &edge.to {
         InputRef::Matte { effect } => {

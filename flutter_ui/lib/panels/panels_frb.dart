@@ -22,6 +22,8 @@ import 'easing_panel_frb.dart';
 import 'effect_controls_panel_frb.dart';
 import 'effects_presets_panel_frb.dart';
 import 'expressions_panel_frb.dart';
+import 'gallery_panel_frb.dart';
+import 'grade_nodes_frb.dart';
 import 'grade_panel_frb.dart';
 import 'graph_panel.dart';
 import 'hierarchy_panel_frb.dart';
@@ -33,6 +35,7 @@ import 'project_panel_frb.dart';
 import 'retime_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
+import 'shots_panel_frb.dart';
 import 'stagger_panel_frb.dart';
 import 'template_panel_frb.dart';
 import 'extension_panel.dart';
@@ -48,6 +51,8 @@ const Set<Panel> _changing = {
   Panel.effectControls,
   Panel.effectsAndPresets,
   Panel.grade,
+  Panel.gallery,
+  Panel.gradeNodes,
   Panel.easing,
   Panel.node,
   Panel.mixer,
@@ -69,6 +74,8 @@ const Set<Panel> _leftToRight = {
   Panel.viewer,
   Panel.timeline,
   Panel.scopes,
+  Panel.gradeNodes,
+  Panel.shots,
   Panel.easing,
   Panel.graph,
   Panel.mixer,
@@ -124,8 +131,12 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.timeline => const TimelinePanelFrb(),
       Panel.effectControls => const EffectControlsPanelFrb(),
       Panel.effectsAndPresets => const EffectsPresetsPanelFrb(),
-      Panel.scopes => const ScopesPanelFrb(),
+      // Each Scopes panel keeps its own layout and instruments.
+      Panel.scopes => ScopesPanelFrb(instance: pane.instance),
       Panel.grade => const GradePanelFrb(),
+      Panel.gallery => const GalleryPanelFrb(),
+      Panel.gradeNodes => const GradeNodesPanelFrb(),
+      Panel.shots => const ShotsPanelFrb(),
       Panel.hierarchy => const HierarchyPanelFrb(),
       Panel.easing => const EasingPanelFrb(),
       Panel.graph => const GraphPanelFrb(),

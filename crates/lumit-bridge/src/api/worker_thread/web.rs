@@ -31,12 +31,12 @@ enum Then {
 }
 
 impl Then {
-    /// Which job this is: a trace of one kind, or the dropper. Only the newest
-    /// copy of each is worth finishing.
-    fn job(&self) -> Option<u32> {
+    /// Which job this is: one asker's frame, a trace of one kind, or the
+    /// dropper. Only the newest copy of each is worth finishing.
+    fn job(&self) -> Option<(bool, u64)> {
         match self {
-            Then::Trace(req) => Some(req.kind),
-            Then::Publish(kind) => Some(*kind),
+            Then::Trace(req) => Some((false, req.lane())),
+            Then::Publish(kind) => Some((true, u64::from(*kind))),
             Then::Sample(..) => None,
         }
     }
@@ -134,12 +134,14 @@ fn land(
 ) {
     match then {
         Then::Trace(req) => {
-            match state
-                .renderer
-                .start_scope(rgba, width, height, req.kind, req.colours)
-            {
-                Ok(read) => wait_for(read, Then::Publish(req.kind), None),
-                Err(err) => note!("Scope trace failed: {err}"),
+            for &kind in &req.kinds {
+                match state
+                    .renderer
+                    .start_scope(rgba, width, height, kind, req.colours)
+                {
+                    Ok(read) => wait_for(read, Then::Publish(kind), None),
+                    Err(err) => note!("Scope trace failed: {err}"),
+                }
             }
         }
         Then::Publish(kind) => {

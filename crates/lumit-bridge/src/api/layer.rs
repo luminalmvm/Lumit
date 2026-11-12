@@ -17,8 +17,10 @@ use crate::api::{
     state::{LumitBridgeState, PROJECTS},
     BridgeError,
 };
+use map_ends::{map_end_value, map_start_value};
 
 pub mod clip_peaks;
+mod map_ends;
 mod puppet;
 
 /// The layer-styles seam's own tests. Its own file beside the module
@@ -57,6 +59,8 @@ pub(crate) enum InstanceHome {
     Materials,
     /// A Model layer's playback and part rows.
     ModelRows,
+    /// One of a grade group's two grades, which the document holds.
+    GradeGroup(Uuid, lumit_core::fx::effects::grade_group::Part),
 }
 
 /// The node graph `layer` places, when it places one.
@@ -3311,7 +3315,7 @@ impl LayerReference {
     pub fn copy_effects(&self, effects: Vec<Uuid>) -> Result<String, BridgeError> {
         let layer = self.leaving()?;
         let graph = layer.graph;
-        let stack = layer.effects;
+        let stack = crate::api::grade_shots::stack_holding(layer.effects, layer.kind, &effects);
         let full = stack.clone();
         let taken: Vec<_> = if effects.is_empty() {
             stack
@@ -5203,6 +5207,7 @@ impl LayerReference {
         for effect in &mut tail.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut tail.grade_versions);
         tail.in_point = t;
         lumit_render::passes::follow_copy(&*self.document()?, &layer, &mut tail);
 
@@ -5834,6 +5839,7 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut copy.grade_versions);
         // It isn't pointed *at* as its original was, but keeps what that points at.
         let new_id = copy.id;
         lumit_render::passes::follow_copy(&*self.document()?, &self.item()?, &mut copy);
@@ -7202,6 +7208,9 @@ impl LayerReference {
         if is_graph_inputs(&doc, &layer, instance) {
             return Ok(InstanceHome::GraphInputs);
         }
+        if let Some((group, part)) = lumit_core::grade::groups::home_of(&doc, id) {
+            return Ok(InstanceHome::GradeGroup(group, part));
+        }
         let comp = self.composition()?;
         Ok(comp
             .groups
@@ -7236,6 +7245,7 @@ impl LayerReference {
             def.schema().category == lumit_core::fx::schema::FxCategory::Compositing
         }) || name == lumit_core::comp_graph::NODE_GRAPH
             || name == lumit_core::fx::effects::template::MATCH_NAME
+            || name == lumit_core::fx::effects::grade_group::GRADE_GROUP
         {
             return Err(BridgeError::NotAStackEffect);
         }
@@ -7620,6 +7630,7 @@ impl LayerReference {
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
             .is_some_and(|def| def.schema().category.is_driver())
+            || name == lumit_core::fx::effects::grade_group::GRADE_GROUP
         {
             return Err(BridgeError::UnknownEffectName);
         }
@@ -8278,31 +8289,6 @@ pub(crate) fn trimmed(
         next = next.extend_start(start)?;
     }
     Some(next)
-}
-
-/// The last source position a map reaches — what the clip asks of its source.
-#[frb(ignore)]
-fn map_start_value(
-    map: &lumit_core::anim::Property,
-    now: lumit_core::time::Rational,
-) -> Option<lumit_core::time::Rational> {
-    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
-        return None;
-    };
-    let first = keys.first()?.value;
-    if (first - now.to_f64()).abs() < 1e-9 {
-        return None;
-    }
-    lumit_core::time::Rational::from_f64_on_grid(first, lumit_core::time::Rational::FLICK_DEN).ok()
-}
-
-fn map_end_value(map: &lumit_core::anim::Property) -> Option<lumit_core::time::Rational> {
-    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
-        return None;
-    };
-    let last = keys.last()?;
-    lumit_core::time::Rational::from_f64_on_grid(last.value, lumit_core::time::Rational::FLICK_DEN)
-        .ok()
 }
 
 /// Stand the puppet mesh preview down (see

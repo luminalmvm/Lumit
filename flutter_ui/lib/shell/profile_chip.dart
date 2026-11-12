@@ -19,11 +19,14 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/external_links.dart';
+import '../state/library.dart' show LibraryStatus;
 import '../state/profiles.dart';
 import '../state/ui_state.dart';
 import '../theme/brand.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'library_parts.dart';
+import 'library_window.dart' show showLibrary;
 import 'pro_window.dart';
 import 'settings_window_frb.dart';
 import 'sign_in_window.dart';
@@ -264,7 +267,10 @@ class _ProfileCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
                   child: account?.pro ?? false
-                      ? _SyncLine(ui: ui)
+                      ? _SyncLine(
+                          ui: ui,
+                          onOpen: (conflicts) => _leave((context) =>
+                              showLibrary(context, conflicts: conflicts)))
                       : _ProInvite(onSee: () => _leave(showProWindow)),
                 ),
                 rule,
@@ -489,41 +495,73 @@ class _ProInviteState extends State<_ProInvite> {
   }
 }
 
-/// What a person with Pro sees in its place: whether their settings are in
-/// step, and a ring that turns while they are being brought there.
+/// What a person with Pro sees in its place: whether their settings and
+/// their library are in step, and a ring that turns while they are being
+/// brought there. The library speaks first when it needs the person or is
+/// waiting offline, since that is the news. A press opens the Library.
 class _SyncLine extends StatelessWidget {
   final LumitUiState ui;
-  const _SyncLine({required this.ui});
+
+  /// Opens the Library, on Needs you when that is what the line says.
+  final void Function(bool conflicts) onOpen;
+  const _SyncLine({required this.ui, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final status = ui.profiles.status;
-    final (words, colour) = switch (status) {
-      SyncStatus.syncing => (l10n.syncStatusSyncing, t.textSecondary),
-      SyncStatus.failed => (l10n.syncStatusFailed, t.warning),
-      SyncStatus.off => (l10n.syncStatusOff, t.textMuted),
-      SyncStatus.idle => (l10n.syncStatusSynced, t.textSecondary),
-    };
-    return Row(
-      children: [
-        SizedBox(
-          width: 14,
-          height: 14,
-          child: status == SyncStatus.syncing
-              ? const SyncRing()
-              : glyph.LumitIcon(
-                  status == SyncStatus.idle ? LumitIcons.tick : LumitIcons.loop,
-                  size: 14,
-                  colour: status == SyncStatus.idle ? t.success : colour),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(words,
-              key: const ValueKey('profile-sync'),
-              style: t.small.copyWith(color: colour)),
-        ),
-      ],
+    return ListenableBuilder(
+      listenable: ui.library,
+      builder: (context, _) {
+        final status = ui.profiles.status;
+        final library = ui.library;
+        final (libraryWords, tone) = libraryStatusWords(library);
+        final libraryLeads = library.syncing &&
+            (tone == LibraryTone.warn ||
+                library.status == LibraryStatus.offline);
+        final (words, colour) = libraryLeads
+            ? (libraryWords, libraryToneColour(t, tone))
+            : switch (status) {
+                SyncStatus.syncing => (l10n.syncStatusSyncing, t.textSecondary),
+                SyncStatus.failed => (l10n.syncStatusFailed, t.warning),
+                SyncStatus.off => (l10n.syncStatusOff, t.textMuted),
+                SyncStatus.idle => (l10n.syncStatusSynced, t.textSecondary),
+              };
+        final busy = status == SyncStatus.syncing ||
+            library.status == LibraryStatus.syncing;
+        final well = !libraryLeads && status == SyncStatus.idle;
+        return HoverFill(
+          cursor: SystemMouseCursors.click,
+          radius: BorderRadius.circular(t.tokens.controlRadius),
+          child: GestureDetector(
+            key: const ValueKey('profile-sync-open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onOpen(libraryLeads && library.conflicts.isNotEmpty),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: busy
+                        ? const SyncRing()
+                        : glyph.LumitIcon(
+                            well ? LumitIcons.tick : LumitIcons.loop,
+                            size: 14,
+                            colour: well ? t.success : colour),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(words,
+                        key: const ValueKey('profile-sync'),
+                        style: t.small.copyWith(color: colour)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

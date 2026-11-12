@@ -291,11 +291,10 @@ pub struct BridgeRenderedFrame {
 #[frb(non_opaque)]
 #[derive(Clone)]
 pub struct BridgeScopeTrace {
-    /// The trace this picture *is*, echoed back from the request: 0 waveform,
-    /// 1 parade, 2 vectorscope, 3 histogram. Two panels may want traces at
-    /// once — the Scopes panel and the Levels row's histogram — and
-    /// they share one response stream, so each has to be able to tell whether
-    /// the picture that just arrived is the one it asked for.
+    /// The trace this picture *is*, one of the codes the request named (see
+    /// `render_scope`). Two panels may want traces at once, a Scopes panel and
+    /// the Levels row's histogram, and they share one response stream, so each
+    /// has to be able to tell whether the picture is one it asked for.
     pub kind: u32,
     pub rgba: Vec<u8>,
 }

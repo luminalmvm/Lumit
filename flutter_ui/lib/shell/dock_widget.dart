@@ -82,6 +82,12 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // A primary's name, its track and its number; the wheels stack under
       // this.
       Panel.grade => 200,
+      // One still across, its name under it.
+      Panel.gallery => 160,
+      // The header's scope switch and the add button; the canvas zooms.
+      Panel.gradeNodes => 160,
+      // The count and the filter; the strip scrolls.
+      Panel.shots => 200,
       Panel.hierarchy => 180,
       Panel.easing => 220,
       Panel.retime => 220,
@@ -2718,7 +2724,7 @@ List<List<Panel>> panelGroups(DockNode root) {
       Panel.effectControls,
       Panel.effectsAndPresets,
     ],
-    [Panel.scopes, Panel.grade],
+    [Panel.scopes, Panel.grade, Panel.gradeNodes, Panel.shots, Panel.gallery],
     [Panel.graph, Panel.node],
     [Panel.mixer, Panel.audio, Panel.audioTimeline],
     [Panel.cutTimeline, Panel.transcript],

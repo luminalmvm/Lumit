@@ -31,6 +31,9 @@ import '../l10n/strings.dart';
 import '../panels/keyframe_controls_frb.dart'
     show scalarWithValueAt, scaledScalar;
 import '../panels/effect_param_row_frb.dart' show offeredStyles;
+import '../panels/grade_actions.dart';
+import '../state/grade_engine.dart' show GradeNodeKind;
+import '../state/grade_target.dart' show colourWarperName;
 import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fit.dart';
 import '../panels/layer_fold_frb.dart';
@@ -1352,3 +1355,49 @@ List<MenuEntry> styleRows(LumitState app, LumitUiState ui) => [
           ),
         ),
     ];
+
+/// Layer ▸ Grade: the current shot's grade nodes and the commands on its
+/// whole grade. Each row greys out where it could not act.
+List<MenuEntry> gradeRows(
+    BuildContext context, LumitState app, LumitUiState ui) {
+  final shot = ui.gradeShot.value != null;
+  final graded = hasGrade(ui);
+  final node = currentGradeNode(ui);
+  MenuEntry add(String label, GradeNodeKind kind) => MenuEntry(
+      label,
+      canAddGradeNode(ui, kind) ? () => addGradeNode(app, ui, kind) : null,
+      action: 'grade.node.${kind.name}');
+  return [
+    add(l10n.gradeAddSerial, GradeNodeKind.serial),
+    add(l10n.gradeAddParallel, GradeNodeKind.parallel),
+    add(l10n.gradeAddLayer, GradeNodeKind.layer),
+    add(l10n.gradeAddOutside, GradeNodeKind.outside),
+    MenuEntry(
+        l10n.gradeAddWarper,
+        canAddGradeEffect(ui)
+            ? () => addGradeEffectNode(app, ui, colourWarperName)
+            : null),
+    MenuEntry.divider(),
+    MenuEntry(l10n.gradeBypassAll, graded ? () => bypassGrade(app, ui) : null,
+        checked: gradeBypassed(ui)),
+    MenuEntry(l10n.gradeResetAll, graded ? () => resetGrade(app, ui) : null),
+    MenuEntry.divider(),
+    MenuEntry(l10n.gradeGrabStill,
+        canGrabStill(ui) ? () => grabStill(app, ui) : null,
+        action: 'grade.still.grab'),
+    MenuEntry(
+        l10n.gradeAutoBalance,
+        shot && ui.selectedComp != null
+            ? () => autoBalanceShot(app, ui)
+            : null),
+    MenuEntry(l10n.gradeExportLutEllipsis,
+        graded ? () => exportShotLut(app, ui) : null),
+    MenuEntry(l10n.gradeImportCdl,
+        shot ? () => importCdlFile(context, app, ui) : null),
+    MenuEntry(
+        l10n.gradeExportCdl,
+        node != null && cdlExportable(node.name)
+            ? () => exportCdlFile(app, ui, node.id)
+            : null),
+  ];
+}

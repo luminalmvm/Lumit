@@ -63,6 +63,7 @@ folds the other pickers into one mark.
 | **3D view** | With something in depth in the composition. What the picture is looked through: the active camera, Front, Back, Left, Right, Top, Bottom, or Custom 1 to 3. With two or four views, each keeps its own, and on a 3D composition new views open on Top, Front and Right. |
 | **Take snapshot** | Photographs the picture. |
 | **Show snapshot** | With a snapshot taken. Puts the photograph back over the live picture while it is held. |
+| **Grid**, **Reference**, **Matte view** | While a [grading](/use/grading/) grid, reference or the matte view is set. See [Grading tools](#grading-tools). |
 | **Exposure** | The number shows on hover, or while it isn't zero. Drag the number; click the mark to go back to zero. |
 | **Transport** | First frame, previous frame, play or pause, next frame, last frame. |
 | **Clock** | The playhead's time, counted from the composition's [**Start timecode**](/use/compositions/). Click it to type one; a time past either end clamps. |
@@ -283,6 +284,8 @@ Other things on the picture have their own menus:
 | A ruler | Add a guide, **Lock guides**, **Clear guides**, **Units** (pixels or percent), **Rulers**. |
 | A guide | **Set position…**, **Lock guides**, **Clear guides**, **Delete guide**. A locked guide doesn't drag. |
 | The compare divider | **Off**, **Wipe**, **Split screen**, **Snapshot**, **Composition ▸**, **Swap sides**, **Reset divider**. |
+| The reference divider | **Show reference**, **Wipe**, **Wipe across**, **Split**, **Difference**, **Mix**, **Swap sides**, **Reset divider**, **Clear reference**. |
+| A grade window's handle | The window's shape, or **Off**. |
 | The "at" chip | **View here**, **Reveal in node graph**. |
 | The source view | **In**, **Out**, **Clear marks**, **Go to In**, **Go to Out**, **Insert**, **Overwrite**, **Replace**, **Fit to fill**, **Add marker**, **Clear markers**, **Reveal in Project panel**, **Close source**. |
 | A marker on the source view's strip | **Delete marker**. |
@@ -310,6 +313,37 @@ stack stopping there. Click it again for the finished picture.
 
 The chip names a box in a [node graph composition](/use/node-graphs/) the same way, and
 shows the composition with its Output wired to that box.
+
+### Grading tools
+
+In the [Colour workspace](/use/grading/) the Viewer draws the current node's tools over the
+picture, in the active view. While a group's grade or a shared node is in view, they work on
+its node.
+
+- **Grid**: the current shot's versions, the selected stills or the picked shots, side by
+  side in place of the picture. See [The grid](/use/grading/#the-grid). The chip on the
+  bottom strip names it: a click or its cross closes it, and a right-click switches what it
+  shows. `Escape` closes it too.
+- **Reference**: a still or another shot's frame, against the picture, as a wipe, a split, a
+  difference or a mix. Drag the divider, and double-click it to put it back in the middle.
+  The **Reference** chip on the bottom strip names it: a click shows or hides it, the cross
+  clears it. See [Comparing against a reference](/use/grading/#comparing-against-a-reference).
+- **Matte view**: the current node's key, as **Highlight** or **Key**. The chip on the
+  bottom strip names it, and a click turns it off. A right-click offers the three, then
+  what Highlight shows around the key: **Over grey**, **Over black**, **Over white** or
+  **Over black and white**. See [The matte view](/use/grading/#the-matte-view).
+- **Windows**: the current Correction's windows, their softness rings dashed, the picked one
+  in the accent with its handles. They show while a window is picked or the Windows page is
+  up. See [Windows](/use/grading/#windows).
+- **Pick circle**: while a qualifier pick tool is armed, a drag draws the circle it reads.
+  A right-click on the picture puts the tool down. See [The qualifier](/use/grading/#the-qualifier).
+- **Strokes**: on a node keyed in 3D, a pick tool draws a stroke in place of the circle. The
+  node's strokes so far show faintly while a tool is armed, kept ones in the accent and
+  dropped ones in the error colour. See [The 3D qualifier](/use/grading/#the-3d-qualifier).
+- **Chart**: with **Show chart** on, a 6 by 4 grid with a handle at each corner. Drag a
+  corner to move it, or the middle to move the whole chart. The middle of each patch is drawn
+  in, where it is read. Each shot keeps its own corners, which are not saved with the
+  project.
 
 ### The dropper
 

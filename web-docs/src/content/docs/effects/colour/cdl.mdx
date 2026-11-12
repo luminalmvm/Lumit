@@ -1,0 +1,65 @@
+---
+title: CDL
+description: "The ASC CDL's slope, offset, power and saturation, as version 1.2 writes them."
+---
+
+CDL is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+An ASC Color Decision List. Each channel is multiplied by **Slope**, has **Offset** added,
+is held to 0 to 1 and raised to **Power**. **Saturation** then scales colour about Rec. 709
+luma, and the result is held to 0 to 1 again. It is worked in its **Space**. A CDL with
+every row at rest passes the picture on untouched, unclamped.
+
+**Import CDL…** makes a CDL node from a `.cdl`, `.cc` or `.ccc` file; see
+[CDL](/use/grading/#cdl).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Space** | Dropdown | Video · Log · Linear | Video | - |
+| **Slope** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Offset** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Power** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Saturation** | Slider | 0 to 2; up to 10 | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Space**: the signal the numbers were made on. **Video** is the working linear under a
+  2.4 gamma, **Log** is ACEScct, and **Linear** is the working linear as it is.
+- **Slope** multiplies each channel.
+- **Offset** adds to each channel, after Slope.
+- **Power**: the exponent each channel is raised to, last.
+- **Saturation**: colourfulness about Rec. 709 luma. At 1 it changes nothing.
+- **Mix**: how much of the result replaces the picture.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Correction](/effects/colour/correction/)
+- [LUT](/effects/colour/lut/)
+- [Grading](/use/grading/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

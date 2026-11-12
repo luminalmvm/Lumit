@@ -132,6 +132,7 @@ import 'export_dialog_frb.dart';
 import 'lottie_import_frb.dart';
 import 'vector_export_frb.dart';
 import 'export_queue_frb.dart';
+import 'library_window.dart';
 import 'recovery_dialog_frb.dart';
 import 'review_links_window.dart';
 import 'run_script_frb.dart';
@@ -1772,6 +1773,7 @@ List<MenuSection> lumitMenus(
             ]),
             MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
             MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
+            MenuEntry.submenu(l10n.menuGrade, gradeRows(context, app, ui)),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuReveal, revealRows(ui)),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it
@@ -2256,6 +2258,8 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuExportQueue,
                 () => showExportQueueFrb(context: context),
                 action: 'export.queue.open'),
+            MenuEntry(l10n.menuLibrary, () => showLibrary(context),
+                action: 'library.open'),
             MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
           ]
     ),

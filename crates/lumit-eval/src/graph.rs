@@ -264,6 +264,7 @@ mod tests {
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             effects: Vec::new(),
             styles: Vec::new(),

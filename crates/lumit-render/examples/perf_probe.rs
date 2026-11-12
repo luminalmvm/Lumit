@@ -52,6 +52,7 @@ fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
