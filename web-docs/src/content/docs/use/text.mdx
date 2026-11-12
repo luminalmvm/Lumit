@@ -54,7 +54,7 @@ as one undo step. `Ctrl+6` shows or hides the panel.
 
 | Control | What it does |
 | --- | --- |
-| **Font** | The font family, from the fonts installed on this computer, each listed in its own face. **Inter (built in)** is the one Lumit carries. **Inter** lists its Regular, Bold and Black, which Lumit also carries. The list has a search box. |
+| **Font** | The font family, from the fonts installed on this computer and the fonts in the [library](/use/library/), each listed in its own face. A library font is used in place of an installed one of the same name. **Inter (built in)** is the one Lumit carries. **Inter** lists its Regular, Bold and Black, which Lumit also carries. The list has a search box. |
 | **Style** | The face inside the family: Regular, Bold, Italic. |
 | **Size** | The letter size in pixels. |
 | **Leading** | The distance from one baseline to the next, in pixels. |
@@ -221,7 +221,7 @@ the properties the animator doesn't show and the font axes it doesn't move, and
 | **Correlation** | How much the letters wander together, in per cent: at 100 as one, at 0 each on its own. |
 | **Random seed** | Picks another wander. |
 | **Based on** | Whether the selector counts **Characters** or **Words**. |
-| **Shape** | **Square**, inside the range or not, or **Ramp**, rising evenly across the range and holding past its end. **Smooth** eases in and out, and **Bounce** overshoots a little, then settles. Following the words, the shape is how each word changes over its ease. On a Proximity selector it is how the offset falls away towards the radius, and a Square one becomes Smooth when the selector is made Proximity. |
+| **Shape** | **Square**, inside the range or not, or **Ramp**, rising evenly across the range and holding past its end. **Smooth** eases in and out, and **Bounce** overshoots a little, then settles. Following the words, the shape is how each word changes over its ease. On a Proximity selector it is how the offset falls away towards the radius, and a Square one becomes Smooth when the selector is made Proximity. A Wiggly selector doesn't read it. |
 | **Position**, **Rotation**, **Scale**, **Opacity** | What a letter the selector reaches does. |
 | **Fill offset** | Three numbers, red, green and blue, added to the layer's fill colour. |
 | **Box colour**, **Box opacity** | A box behind each word the animator reaches, in the Text panel's background padding and corner radius. **Add ▸ Property ▸ Box** adds both. |
@@ -234,17 +234,25 @@ A letter half inside the range gets half the offset. A letter turns about its ow
 on the baseline, and everything an animator does happens inside the letter's own frame.
 
 Several animators on one layer **compose**: pushes, turns and tints add, scales and
-opacities multiply, and boxes lie one over the other.
+opacities multiply, and boxes lie one over the other. On a font axis each animator moves a
+letter on from where the one above left it.
 
 Only caption layers have spoken words. On any other text layer an animator following the
 words reaches no letter. With **Words said**, **Words to come** and **Characters**, each
 letter of a word changes in its turn as the word is said. Letters in no word count as said.
 
-A row of numbers has a stopwatch, bar **Ease** and **Random seed**. In the Timeline a layer
-with animators has an **Animators** heading with **Add animator**, a heading under it for
-each animator with **Add**, and a row for each of its numbers. `Delete` takes off a selected
-animator, or a selected property or font axis row. The rows draw as curves in the
-[graph editor](/panels/graph-editor/). Right-click a number for **Reset**.
+A row of numbers has a stopwatch, bar **Ease** and **Random seed**. In the Timeline a text
+layer has an **Animators** heading with **Add animator**, a heading under it for each
+animator with **Add**, and a row for each of its numbers. `Delete` takes off a selected
+animator, or a selected property or font axis row, and with the **Animators** heading
+selected, every animator. The rows draw as curves in the [graph editor](/panels/graph-editor/).
+Right-click a number for **Reset**.
+
+In the [node graph](/use/nodes/), a text layer's **Source** box has a number socket for each
+of its animators' selector numbers, font axes, and **Position**, **Rotation**, **Scale**,
+**Opacity** and **Fill offset** rows. A [driver](/use/nodes/#drivers) wired into one moves
+that number in place of its keyframes. A wire stays on its place in the list of animators:
+with an animator above it taken off, it drives the next one down.
 
 :::note[Not built yet]
 An animator has one selector. Random order is not built.
@@ -300,6 +308,7 @@ Creating masks from text is not built.
 ## Related
 
 - [Animating a title letter by letter](/tutorials/text-animators/)
+- [Animating a variable font](/tutorials/variable-font-axes/)
 - [Layers](/use/layers/)
 - [Shapes](/use/shapes/)
 - [Masks](/use/masks/)

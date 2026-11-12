@@ -62,8 +62,9 @@ The window resizes from its corner and opens where it was left.
   another and **Clear** goes back to Lumit's own. **Export finished**, **Project opened**
   and **Project saved** each name a script from that folder to run after the event, or
   **None**. See [Scripts](/use/scripts/#event-scripts).
-- **Control surfaces**: **Tangent panels**, which connects to Tangent Hub, the **MIDI
-  devices** to open, **MIDI learn**, and a row for each learned control. See
+- **Control surfaces**: **Tangent panels**, which connects to Tangent Hub, a switch for each
+  MIDI input under its own name, **MIDI learn**, and a row for each learned control. With no
+  MIDI input, **MIDI devices** reads **None found**. See
   [Control surfaces](/use/control-surfaces/).
 
 ## Appearance
@@ -146,15 +147,18 @@ Every command and its shortcut, grouped by where it works. The defaults are list
 - **Reset** on a row's right-click puts back the shortcut Lumit ships, whichever preset is
   loaded. **Reset page** loads the **Lumit default** preset.
 - A shortcut that runs two commands in one group is flagged above the table.
-- **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**. The Vegas
-  one puts split on `S`, snapping on `F8`, zoom on `↑` and `↓` and on the wheel with no key
-  held, looping on `Q`, grouping on `G` and `U`, the Cut timeline's switches on `Ctrl`+`L`,
-  `Ctrl`+`Shift`+`X` and `Alt`+`F8`, and sets **Clip drags in Cut** to **Vegas**. The other
-  two set it to **Lumit default**. See
+- **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**, then the
+  shortcut sets you have saved. **Save as set…**, last in the list, saves the keymap in
+  force under a name, in the [library](/use/library/). The row reads **Custom** once a
+  shortcut has changed since. The Vegas preset puts split on `S`, snapping on `F8`, zoom on
+  `↑` and `↓` and on the wheel with no key held, looping on `Q`, grouping on `G` and `U`,
+  the Cut timeline's switches on `Ctrl`+`L`, `Ctrl`+`Shift`+`X` and `Alt`+`F8`, and sets
+  **Clip drags in Cut** to **Vegas**. The other two presets set it to **Lumit default**, and
+  a saved set leaves it. See
   [the two presets](/reference/shortcuts/#the-after-effects-preset).
 - **Keymap file ▸ Import…** and **Export…** read and write the whole keymap as a `.json`
   file. A file that is not a keymap is refused. A command the file does not name keeps the
-  shortcut Lumit ships.
+  shortcut Lumit ships. An imported file is also saved as a set, named after the file.
 - **After Effects shortcuts ▸ Import…** reads a shortcut file saved by After Effects, the
   `.txt` in its `aeks` folder. Commands Lumit has no match for are skipped, and a command
   the file leaves out takes the After Effects preset's shortcut.
@@ -216,7 +220,7 @@ would clash in one panel swap keys.
 - **Scrub when dragging the playhead**: a plain drag on a ruler plays the sound as
   [scrubbing](/use/audio/#scrubbing) does with `Ctrl`. Off by default.
 - **Touch return**, 0 to 2000 ms, 250 by default. How long a control let go in
-  [Touch](/use/mixing/#automation) takes to glide back to its keys.
+  [Touch or Trim](/use/mixing/#automation) takes to glide back to its keys.
 
 ## Autosave
 

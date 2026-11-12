@@ -1,0 +1,66 @@
+---
+title: Animating a variable font
+description: Thicken a title's letters as a null passes them, then let their weight wander.
+sidebar:
+  order: 10
+---
+
+A text [animator](/use/text/#animators) can set each letter at a place of its own on a
+variable font's axes. Its selector says which letters, and how far.
+
+## Thicken the letters near a null
+
+**1. Add the title.** Press `Ctrl+T` for the Type tool, click in the Viewer, type the words
+and press `Enter`.
+
+**2. Pick a variable font.** In the [Text panel](/use/text/#style-it), tick **Variable fonts
+only** and choose a **Font** that lists **Weight** under **Variable font axes**.
+
+**3. Add an animator for the weight.** With the text layer selected, choose **Animation ▸
+Animate text ▸ Variable font axes ▸ Font axis Weight**. The axis starts where the font's
+**Style** sets it, and the letters stay as they were.
+
+**4. Say how heavy the letters get.** In [Effect controls](/panels/effect-controls/), open
+**Animators** and drag **Font axis Weight** up as far as it goes. Every letter is at the
+font's heaviest.
+
+**5. Make the selector Proximity.** On the animator's heading choose **Add ▸ Selector ▸
+Proximity**. **Target**, **Radius** and **Invert** replace the range rows, and **Shape**
+becomes **Smooth**. With no target the letters go back to their own weight.
+
+**6. Add a null.** Choose **Layer ▸ New ▸ Null**.
+
+**7. Point the selector at it.** Select the text layer and set **Target** to the null. The
+letters at the null's anchor point are heaviest, and the weight falls away to the letters
+200 pixels from it.
+
+**8. Set how far it reaches.** Change **Radius**.
+
+**9. Key the start of the pass.** Select the null and press `P` in the Timeline. Drag the
+null to one end of the words in the Viewer and click the stopwatch on **Position**.
+
+**10. Key the end.** Move the playhead a second later and drag the null to the other end.
+The weight passes along the words with it.
+
+**11. Hold the line still.** Select the text layer and, in the Text panel, set **Variable
+font spacing** to **Per character**. Each letter keeps the room it had and thickens about
+its middle.
+
+## Let the weight wander
+
+**1. Make the selector Wiggly.** On the animator's heading choose **Add ▸ Selector ▸
+Wiggly**. Each letter wanders between its own weight and the animator's.
+
+**2. Slow it down.** Set **Wiggles/second** to 1.
+
+**3. Send each letter its own way.** Set **Correlation** to 0. At 100 the letters move as
+one.
+
+**4. Keep the letters heavy.** Set **Min amount** to 50. No letter goes lighter than half
+way to the animator's weight.
+
+## Related
+
+- [Text](/use/text/)
+- [Animating a title letter by letter](/tutorials/text-animators/)
+- [Keyframes](/use/keyframes/)

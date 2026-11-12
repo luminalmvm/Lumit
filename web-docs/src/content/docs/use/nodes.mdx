@@ -22,6 +22,10 @@ Custom shader it draws the [shader graph](/use/shaders/#the-shader-graph).
 
 Every graph starts with **Source**, one box per effect in order, and **Layer out**.
 
+A text layer's **Source** box stands open, with a number socket for each of its
+[animators'](/use/text/#animators) numbers. Picked, it shows the layer's **Animators** in
+the Node panel.
+
 | Gesture | What it does |
 | --- | --- |
 | Drop a node onto a wire | Inserts it at that point in the stack. |
@@ -76,7 +80,8 @@ toolbar lists the three switches, **Frame selected** and **Frame all**.
 
 Each box carries two small badges. The checkbox enables or disables the box, and disabled
 the picture passes through untouched. The twirl opens the box, displaying a socket and a
-control for every parameter.
+control for every parameter. A group of rows the effect folds shut shows its first row, and
+the whole group once that row is wired or off its default.
 
 A box that reads points with nothing wired into its Points socket is marked **No
 stream**. In a shared project, a box someone else has picked wears a ring in their colour.
@@ -241,14 +246,6 @@ An effect's **Matte** socket takes a wire as well as the layer picker on its row
 An effect's **Output** wired into the Matte of an effect below it mattes that effect by its
 picture. The wire is taken off if the two swap places.
 
-### Key wires
-
-A [Correction](/effects/colour/correction/) box has a **Key** output: the node's key, its
-Matte times its qualifier times its windows. Wired into the Matte of any effect below it,
-the key mattes that effect, which then works only where the key is white. A key wire into a
-Correction joins that node's key. Only a Correction has a Key. See
-[Grading](/use/grading/#key-wires).
-
 **Particulate** and the rest of the points family have a socket of their own, for another 
 box to read the point stream.
 
@@ -260,6 +257,13 @@ Some points effects, such as [Vary points](/effects/points/vary-points/) and
 [Pick points](/effects/points/pick-points/), take a stream and hand a changed one on.
 [Merge points](/effects/points/merge-points/) has four Points sockets, and takes a
 different producer above it on each.
+
+### Key wires
+
+A [Correction](/effects/colour/correction/) box has a **Key** output, the node's
+[key](/use/grading/#nodes). Wired into the Matte of an effect below it, the key mattes that
+effect, and into another Correction it joins that node's key. The wire is taken off if the
+two swap places. See [Grading](/use/grading/#key-wires).
 
 ## Layer out
 

@@ -174,7 +174,7 @@ areas and components of Lumit.
 | **Send** | A copy of a layer's sound taken to a bus at a level of its own. |
 | **Gain** | A layer's or a clip's level before its effects and Volume. |
 | **Volume** | A layer's fader, after its effects. |
-| **Solo safe** | A layer or bus that stays heard whatever is soloed. |
+| **[Solo safe](/use/mixing/#solo-and-mute)** | A layer that stays heard whatever is soloed. |
 | **[Automation mode](/use/mixing/#automation)** | How a strip's controls write keys while the composition plays. |
 | **[Lower behind](/use/mixing/#lower-behind)** | A sound's level brought down while another is heard. |
 | **[Loudness target](/use/mixing/#loudness)** | The loudness a composition's mix is made for. |
