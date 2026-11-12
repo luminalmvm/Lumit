@@ -1195,6 +1195,23 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// How long a control let go in Touch takes to glide back to its keys, in
+  /// milliseconds.
+  int touchReturnMs = 250;
+
+  void setTouchReturnMs(int ms) {
+    touchReturnMs = ms;
+    save();
+  }
+
+  /// Whether a plain drag on a ruler sounds the comp, as a `Ctrl` drag does.
+  bool scrubOnDrag = false;
+
+  void setScrubOnDrag(bool on) {
+    scrubOnDrag = on;
+    save();
+  }
+
   /// What the others in a shared project see this person called, or null
   /// until one has been typed. The person's, not the work's, so it lives here.
   String? shareName;
@@ -2353,6 +2370,8 @@ class Workspace extends ChangeNotifier {
         'keymap': keymapJson,
         'audio_device': audioDevice,
         'audio_offset_ms': audioOffsetMs,
+        'touch_return_ms': touchReturnMs,
+        'scrub_on_drag': scrubOnDrag,
         'share_name': shareName,
         'share_router': shareOutside,
         'share_relay': shareRelay,
@@ -2513,6 +2532,8 @@ class Workspace extends ChangeNotifier {
     final device = j['audio_device'];
     audioDevice = device is String && device.isNotEmpty ? device : null;
     audioOffsetMs = j['audio_offset_ms'] as int? ?? 0;
+    touchReturnMs = (j['touch_return_ms'] as int? ?? 250).clamp(0, 2000);
+    scrubOnDrag = j['scrub_on_drag'] == true;
     final sharedAs = j['share_name'];
     shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
     // Under a new name: the old one was written as off for everybody, back

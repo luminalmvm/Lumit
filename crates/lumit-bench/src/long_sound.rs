@@ -10,7 +10,7 @@
 //!
 //! No sound card is opened. The scenarios drive the plan the way the engine's
 //! two threads do: [`MixPlan::fill_step`] is the thread that fills ahead of
-//! the playhead and [`MixPlan::mix_into`] is the callback, with the engine's
+//! the playhead and [`MixPlan::mix_block`] is the callback, with the engine's
 //! own figures for how far ahead to fill. The decoded blocks go into a pool
 //! of the scenario's own, so what is counted is this comp's sound and nothing
 //! another scenario left behind.
@@ -19,11 +19,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use lumit_audio::mix::MixPlan;
+use lumit_audio::plan::MixPlan;
 use lumit_audio::stream::{self, Pool};
 use lumit_core::model::Document;
-use lumit_render::export::{live_plan, AudioJob, RackBakes};
 use lumit_render::headless::AudioJobsBuilder;
+use lumit_render::mix::graph::build_graph;
+use lumit_render::mix::jobs::AudioJob;
+use lumit_render::mix::live::RackBakes;
 use uuid::Uuid;
 
 use crate::long_comp::{self, FPS, FRAMES, MONTAGE_START};
@@ -107,17 +109,26 @@ impl SoundHarness {
     }
 
     /// The live plan for `jobs`, its files read through `pool`.
-    fn plan(pool: &Arc<Pool>, jobs: &[AudioJob]) -> Arc<MixPlan> {
+    fn plan(&self, pool: &Arc<Pool>, jobs: &[AudioJob]) -> Arc<MixPlan> {
         let seconds = FRAMES as f64 / FPS as f64;
-        let (plan, _) = live_plan(
-            jobs,
-            &|job| Some(pool.source(&job.sound, RATE)),
-            RATE,
-            seconds,
-            0.0,
-            &mut RackBakes::default(),
-        );
-        plan
+        let never = std::sync::atomic::AtomicBool::new(false);
+        let built = self.doc.comp(self.comp).and_then(|comp| {
+            build_graph(
+                &self.doc,
+                comp,
+                jobs.to_vec(),
+                &|job| Some(pool.source(&job.sound, RATE)),
+                RATE,
+                seconds,
+                &mut RackBakes::default(),
+                None,
+                false,
+                &never,
+                None,
+            )
+            .ok()
+        });
+        Arc::new(built.map(|(plan, _)| plan).unwrap_or_default())
     }
 
     /// **B25**: the mix planned again after an edit.
@@ -135,7 +146,7 @@ impl SoundHarness {
         for _ in 0..PLAN_SAMPLES {
             let t = Instant::now();
             let jobs = self.jobs(&mut builder)?;
-            std::hint::black_box(Self::plan(&pool, &jobs));
+            std::hint::black_box(self.plan(&pool, &jobs));
             ms.push(elapsed_ms(t));
         }
         Ok(Measurement {
@@ -154,10 +165,12 @@ impl SoundHarness {
     pub fn b26_mix_one_second(&self) -> Result<Measurement, String> {
         let mut builder = AudioJobsBuilder::new();
         let pool = Pool::new(stream::DEFAULT_BUDGET_BYTES);
-        let plan = Self::plan(&pool, &self.jobs(&mut builder)?);
+        let plan = self.plan(&pool, &self.jobs(&mut builder)?);
         let second = RATE as usize;
         let last = (plan.total_frames / second).saturating_sub(1);
         let mut out = vec![0.0f32; BUFFER_FRAMES * 2];
+        let mut work = lumit_audio::block::MixWork::new(RATE);
+        let mut racks = lumit_audio::block::RingSource::default();
         let mut ms = Vec::with_capacity(MIX_SAMPLES);
         for i in 0..MIX_SAMPLES {
             let from = scatter(i, 0, last) as usize * second;
@@ -166,7 +179,14 @@ impl SoundHarness {
             let mut missed = 0;
             for buffer in 0..second / BUFFER_FRAMES {
                 let mut acc = [lumit_audio::meter::MeterAcc::default(); lumit_audio::meter::SLOTS];
-                missed += plan.mix_into(from + buffer * BUFFER_FRAMES, &mut out, Some(&mut acc));
+                missed += plan.mix_block(
+                    from + buffer * BUFFER_FRAMES,
+                    &mut out,
+                    &mut work,
+                    &mut racks,
+                    Some(&mut acc),
+                    None,
+                );
                 std::hint::black_box(&out);
             }
             ms.push(elapsed_ms(t));
@@ -196,7 +216,7 @@ impl SoundHarness {
         let hold = || stream::now().saturating_add(HOLD_MS);
         let mut builder = AudioJobsBuilder::new();
         let pool = Pool::new(stream::DEFAULT_BUDGET_BYTES);
-        let plan = Self::plan(&pool, &self.jobs(&mut builder)?);
+        let plan = self.plan(&pool, &self.jobs(&mut builder)?);
         let second = RATE as usize;
         let start = (MONTAGE_START / FPS) as usize;
 
@@ -215,6 +235,8 @@ impl SoundHarness {
         };
 
         let mut out = vec![0.0f32; second * 2];
+        let mut work = lumit_audio::block::MixWork::new(RATE);
+        let mut racks = lumit_audio::block::RingSource::default();
         let mut missed = 0;
         for s in start..start + PLAY_SECONDS {
             while plan.fill_step(
@@ -222,7 +244,7 @@ impl SoundHarness {
                 (s + lumit_audio::PLAY_AHEAD_SECONDS) * second,
                 hold(),
             ) {}
-            missed += plan.mix_into(s * second, &mut out, None);
+            missed += plan.mix_block(s * second, &mut out, &mut work, &mut racks, None, None);
         }
         if missed > 0 {
             return Err(format!("B28: {missed} frames were due and not decoded"));

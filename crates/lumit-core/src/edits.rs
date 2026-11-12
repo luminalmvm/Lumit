@@ -107,6 +107,9 @@ pub fn base_layer(
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -699,6 +702,9 @@ pub fn precompose_ops(
     let inner = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -1053,26 +1059,6 @@ pub struct CompSettings {
     pub motion_blur_limit: u32,
 }
 
-impl Default for CompSettings {
-    /// What a comp gets when nobody chose: 1920×1080, 60 fps, 30 seconds,
-    /// black, and the model's own shutter. One place decides what a comp is.
-    fn default() -> Self {
-        use lumit_core::time::{Duration, FrameRate};
-        let blur = lumit_core::model::MotionBlur::default();
-        CompSettings {
-            name: String::new(),
-            width: 1920,
-            height: 1080,
-            frame_rate: FrameRate::new(60, 1).unwrap_or(FrameRate::FPS_25),
-            duration: Duration(Rational::new(30, 1).unwrap_or(Rational::ONE)),
-            background: [0.0, 0.0, 0.0, 1.0],
-            shutter_angle: blur.shutter_angle,
-            motion_blur_samples: blur.samples,
-            motion_blur_limit: blur.limit,
-        }
-    }
-}
-
 /// A comp's length for `seconds` at `rate`. A comp shorter than one frame has
 /// nothing to show, so the floor is one frame at that rate.
 pub fn comp_duration(
@@ -1147,6 +1133,9 @@ pub fn new_comp_ops(
     let comp = Composition {
         graph,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -1336,6 +1325,8 @@ pub fn transform_ops(
     }
     ops
 }
+
+mod comp_settings;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

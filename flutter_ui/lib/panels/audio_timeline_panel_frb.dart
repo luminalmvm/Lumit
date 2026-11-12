@@ -25,7 +25,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/keymap.dart';
@@ -38,15 +37,11 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
-import '../icons/lumit_icon.dart' as glyph;
-import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb, insertEmptyLayer;
-import '../state/comp_model.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
-import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/motion.dart';
@@ -55,15 +50,21 @@ import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/marquee.dart';
 import '../widgets/smooth_zoom.dart';
-import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
+import 'audio_master_track.dart';
 import 'audio_routes_frb.dart';
 import 'audio_streams_menu_frb.dart';
+import 'audio_timeline_chrome_frb.dart';
+import 'audio_timeline_zoom.dart';
 import 'audio_timeline_clips_frb.dart';
 import 'audio_timeline_fades_frb.dart';
+import 'audio_timeline_keys_frb.dart';
 import 'audio_timeline_rows_frb.dart';
+import 'automation_lane.dart';
+import 'automation_pass_line.dart';
 import 'clip_fade_popover.dart';
 import 'clip_fades.dart';
+import 'cut_buses.dart' show cutRefuseOnBus;
 import 'cut_timeline_panel_frb.dart' show openClipInSource;
 import 'cut_timeline_tracks.dart'
     show cutClipsCopiedIn, cutClipsHeld, cutDuplicateFrames;
@@ -80,11 +81,12 @@ import '../state/share.dart';
 import '../widgets/share_marks.dart';
 import 'normalise_commands.dart';
 import 'placeholder.dart';
+import 'sound_mix_row_frb.dart' show SoundMixLane;
 import 'spectral_lane_frb.dart';
 import 'timeline_bar_frb.dart' show BarGrab;
 import 'timeline_extras_frb.dart';
 import 'timeline_key_lane_frb.dart';
-import 'timeline_lane_area_frb.dart' show SelectedKey, commitKeyGesture;
+import 'timeline_lane_area_frb.dart' show commitKeyGesture;
 import 'timeline_lane_bottom_bar_frb.dart';
 import 'timeline_layer_rows_frb.dart';
 import 'timeline_metrics_frb.dart';
@@ -93,7 +95,6 @@ import 'timeline_outline_frb.dart' show GutterScrollbar;
 import 'timeline_razor.dart';
 import 'timeline_snap.dart';
 import 'retime_commands.dart' show askToFreezeClips;
-import 'timeline_toolbar_frb.dart' show timelineChromeControl;
 import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
 
@@ -106,28 +107,6 @@ const double audioTimelineOutlineWidth = 300;
 /// The narrowest sliver of lane the seam leaves, however tight the panel is: a
 /// table of names with no time in it is not this panel.
 const double _laneFloor = 60;
-
-/// How narrow the chrome strip's search box may be squeezed before the
-/// readouts beside it give up their room instead. A well under this cannot hold
-/// its own hint on one line, and a long comp's readouts will squeeze it to
-/// nothing given the chance.
-const double audioTimelineSearchFloor = 120;
-
-/// Whether the chrome strip can carry the frame count and the comp's length
-/// beside the clock: only while the search box keeps its floor with the two of
-/// them and their gaps in the row as well. Pure, so the rule can be read off
-/// the numbers rather than off a screenshot.
-bool audioTimelineChromeCarriesCount({
-  required double strip,
-  required double clock,
-  required double count,
-  required double length,
-}) =>
-    strip - clock - outlineGap - audioTimelineSearchFloor >= count + length + 8;
-
-/// How many frames full zoom-in shows across the lanes - the layer Timeline's
-/// own number, so the two tables magnify to the same place.
-const int _framesAtFullZoom = 20;
 
 class AudioTimelinePanelFrb extends StatefulWidget {
   const AudioTimelinePanelFrb({super.key});
@@ -149,14 +128,28 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// shared, so a choice here does not change a lane there.
   final Map<String, LaneMode> _laneMode = {};
 
-  /// How many lane rows each track stands on, by track id, and how far a drag
-  /// on a row's bottom edge has travelled since the last whole row came off
-  /// it. The carry starts again at each press, so no drag spends the travel
-  /// another one banked. Two rows unless an edge has been dragged, and the
-  /// panel's own state: a height is how this table is being read rather than
-  /// anything about the comp, so the next mount opens at two again.
+  /// How many lane rows each track and each open lane stands on, by track id
+  /// and by lane id, and how far a drag on a row's bottom edge has travelled
+  /// since the last whole row came off it. The carry starts again at each
+  /// press, so no drag spends the travel another one banked. Two rows unless
+  /// an edge has been dragged, and the panel's own state: a height is how
+  /// this table is being read rather than anything about the comp, so the
+  /// next mount opens at two again.
   final Map<String, int> _trackRows = {};
   double _rowCarry = 0;
+
+  /// The Master track pinned at the foot, each bus's mix by layer id, and
+  /// the pass the open lanes draw while the comp plays.
+  final MasterTrack _master = MasterTrack();
+  final Map<String, MixPeaks> _busMix = {};
+  late final AutomationPassFeed _pass =
+      AutomationPassFeed(_ui!.playing, _ui!.playheadFrame);
+
+  /// Each converted track's clip waves, by track id, for its lanes.
+  final Map<String, ValueNotifier<Map<String, BridgeAudioPeaks>>> _clipWaves =
+      {};
+  ValueNotifier<Map<String, BridgeAudioPeaks>> _wavesOf(String id) =>
+      _clipWaves.putIfAbsent(id, () => ValueNotifier(const {}));
 
   /// The volume and pan lines across tracks, kept as the Cut timeline keeps
   /// its own.
@@ -176,12 +169,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   final Map<String, String> _peakKeys = {};
   final Map<String, BridgeSpectrogram> _spectra = {};
   final Map<String, String> _spectraKeys = {};
-
-  /// Each track's Volume scalar, read once per document revision and carried
-  /// down onto the fold rows - it is not in the read model, and a build may not
-  /// go and ask for it.
-  Map<String, BridgeScalar> _volumeDb = {};
-  int? _readsRevision;
 
   /// The two halves' vertical scrolls, kept in step: they are one table, and a
   /// name that does not line up with its lane is worse than no table at all.
@@ -207,7 +194,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   int _laneFrames = 1;
 
   double get _zoom => _zoomMotion.value;
-  double get _maxZoom => max(1.0, _laneFrames / _framesAtFullZoom.toDouble());
+  double get _maxZoom => audioMaxZoom(
+      frames: _laneFrames, fps: _ui?.model.fps ?? 0, viewport: _laneViewport);
 
   /// The clip drag in flight on each track's clip strip, by track id. The
   /// strip writes it and the fade layer stacked over the strip reads it, so the
@@ -335,6 +323,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // Kept rather than looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    // The master's level is read here and on each document change, ahead of
+    // the rebuild the same change brings, so the build reads a field.
+    _ui!.model.addListener(_onModel);
+    _onModel();
     _share = Provider.of<LumitState>(context, listen: false).share
       ..roster.addListener(_onRoster);
     _sharing = _share!.active;
@@ -353,6 +345,15 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     _share?.keys(const {}, from: 'audio');
     _escapeRelease?.call();
     _boundTools?.removeListener(_onToolChanged);
+    _ui?.model.removeListener(_onModel);
+    _master.dispose();
+    for (final mix in _busMix.values) {
+      mix.dispose();
+    }
+    _pass.dispose();
+    for (final waves in _clipWaves.values) {
+      waves.dispose();
+    }
     _ui?.activePane.removeListener(_onActivePanel);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _rename?.dispose();
@@ -374,6 +375,15 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   void _onToolChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onModel() =>
+      _master.readLevel(_ui?.selectedComp, _ui?.model.heldRevision);
+
+  /// A master write: heard on the next callback, as the Mixer's fader is.
+  void _afterMasterWrite() {
+    _afterWrite();
+    _ui?.selectedComp?.audioPrepare();
   }
 
   /// Mark the fronted comp mixed, once. A comp already marked is left alone,
@@ -768,33 +778,34 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// A **clip's** rows resolve to nothing: their paths root under the clip
   /// rather than under a layer, and the shared resolver reads a layer id. A
   /// group header's rows have always answered the same way.
-  List<GraphChannel> _keyChannels(LumitUiState ui) => graphChannels(
-        layers: ui.model.layers,
-        selected: {
-          for (final id in _laneKeys.value)
-            if (id.lastIndexOf('#') > 0) id.substring(0, id.lastIndexOf('#')),
-        }.toList(),
-      );
-
-  /// The lane selection said in channel terms: a diamond stands for its row, so
-  /// `row#i` fans out to each channel of that path.
-  Set<String> _keysOnChannels(List<GraphChannel> channels) {
-    final out = <String>{};
-    for (final id in _laneKeys.value) {
-      final hash = id.lastIndexOf('#');
-      if (hash <= 0) continue;
-      final path = id.substring(0, hash);
-      final index = int.tryParse(id.substring(hash + 1));
-      if (index == null) continue;
-      for (final channel in channels) {
-        if (channel.path != path) continue;
-        if (channel.ownKeyIndex(index) case final own?) {
-          out.add('${channel.id}#$own');
-        }
-      }
-    }
-    return out;
+  ///
+  /// A Pan or send **lane's** keys have no channel of the graph's; they come
+  /// as bare channels, so the selection fans out and Copy takes them, and
+  /// Delete and Paste write them through the lane ([deleteLaneKeys],
+  /// [pasteOnLanes]).
+  List<GraphChannel> _keyChannels(LumitUiState ui) {
+    final paths = {
+      for (final id in _laneKeys.value)
+        if (id.lastIndexOf('#') > 0) id.substring(0, id.lastIndexOf('#')),
+    }.toList();
+    return [
+      ...graphChannels(layers: ui.model.layers, selected: paths),
+      ...laneChannels(_lastTracks, paths, master: _masterKeys),
+    ];
   }
+
+  /// The master's Volume lane, for the key edits the lanes make themselves.
+  MasterLaneKeys? get _masterKeys => switch (_ui?.selectedComp) {
+        final comp? => (
+            lane: _master.lane(0, const {}),
+            write: (next) => _master.writeLevel(comp, next),
+            entry: _ui?.model.layers.firstOrNull
+          ),
+        null => null,
+      };
+
+  Set<String> _keysOnChannels(List<GraphChannel> channels) =>
+      keysOnChannels(_laneKeys.value, channels);
 
   /// Copy takes the picked keyframes, or else the picked clips, and says
   /// whether it took any - a copy that captured nothing must not swallow the
@@ -836,6 +847,20 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final channels = _keyChannels(ui);
     if (channels.isEmpty) return false;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
+    final comp = ui.selectedComp;
+    if (comp != null &&
+        pasteOnLanes(
+          tracks: _lastTracks,
+          channels: channels,
+          comp: comp,
+          playheadFrame: ui.playheadFrame.value,
+          fps: ui.model.fps,
+          fpsNum: fpsNum,
+          fpsDen: fpsDen,
+          master: _masterKeys,
+        )) {
+      _afterWrite();
+    }
     pasteKeysAtPlayhead(
       channels: channels,
       playheadFrame: ui.playheadFrame.value,
@@ -858,7 +883,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     if (selection.isEmpty) return false;
     asOneUndoStep(
       Provider.of<LumitState>(context, listen: false).project,
-      () => deleteKeysFromChannels(channels: channels, selectedKeys: selection),
+      () {
+        deleteKeysFromChannels(channels: channels, selectedKeys: selection);
+        deleteLaneKeys(
+            tracks: _lastTracks,
+            selected: _laneKeys.value,
+            master: _masterKeys);
+      },
     );
     _laneKeys.value = {};
     _afterWrite();
@@ -925,23 +956,23 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   LaneMode _modeOf(String id) => _laneMode[id] ?? LaneMode.wave;
 
-  int _rowsOf(String id) => _trackRows[id] ?? audioTrackMinRows;
-
-  /// The drag on a track's bottom edge, taken a whole lane row at a time so
-  /// the outline and the lanes step together and the wave never lands on half
-  /// a row. What the pointer has travelled short of the next row is carried,
-  /// so a slow drag arrives where a fast one does.
-  void _resizeTrack(AudioTrackRow track, double dy) {
-    final step = track.rowHeight;
-    if (step <= 0) return;
-    _rowCarry += dy;
-    final by = (_rowCarry / step).truncate();
-    if (by == 0) return;
-    _rowCarry -= by * step;
-    final was = _rowsOf(track.id);
-    final rows = (was + by).clamp(audioTrackMinRows, audioTrackMaxRows);
-    if (rows == was) return;
-    setState(() => _trackRows[track.id] = rows);
+  /// The drag on a track's or a lane's bottom edge, taken a whole lane row at
+  /// a time so the outline and the lanes step together and the wave never
+  /// lands on half a row. What the pointer has travelled short of the next
+  /// row is carried, so a slow drag arrives where a fast one does.
+  void _resizeRows(String id, double step, double dy,
+      {int min = audioTrackMinRows}) {
+    final was = _trackRows[id] ?? min;
+    final next = rowsAfterDrag(
+        was: was,
+        dy: dy,
+        carry: _rowCarry,
+        step: step,
+        min: min,
+        max: audioTrackMaxRows);
+    _rowCarry = next.carry;
+    if (next.rows == was) return;
+    setState(() => _trackRows[id] = next.rows);
   }
 
   /// The chip: Wave and Spectral, and nothing else. The stack is a picture of
@@ -977,28 +1008,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       _hasPicture[id] = entry.layer.hasPicture();
       entry.layer.hasAudio().then((has) {
         if (!mounted || _hasAudio[id] == has) return;
-        setState(() {
-          _hasAudio[id] = has;
-          // A track has a Volume scalar to read, and the document has not
-          // moved: forget the revision so the next build reads it.
-          _readsRevision = null;
-        });
+        setState(() => _hasAudio[id] = has);
       });
     }
-  }
-
-  /// The per-track answers the fold rows carry, read once per document
-  /// revision. Volume is on the read model, so this is a walk rather than a
-  /// crossing - but it still belongs out of the row builds.
-  void _refreshReads(CompModel model) {
-    final revision = model.revision;
-    if (revision != null && revision == _readsRevision) return;
-    _readsRevision = revision;
-    _volumeDb = {
-      for (final entry in model.layers)
-        if (_hasAudio[entry.layer.internallayerId.toString()] ?? false)
-          entry.layer.internallayerId.toString(): entry.info.volumeDb,
-    };
   }
 
   /// How waveforms draw. The Wave lane draws the three-band stack, the same
@@ -1009,15 +1021,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// to decide.
   WaveformStyle get _waveformStyle => WaveformStyle(
         multiwave: true,
-        // On a square-root scale, which is this panel's own: a mix is read
-        // here, and a quiet take drawn straight through is a line along the
-        // middle of a box the eye cannot tell from silence.
-        sqrtScale: true,
+        scale: Provider.of<LumitUiState>(context, listen: false)
+            .workspace
+            .interface
+            .waveformScale,
         fromBottom: Provider.of<LumitUiState>(context, listen: false)
             .workspace
             .interface
             .waveformsFromBottom,
       );
+
+  /// A mix has one band: the stack's filters want the samples it keeps none of.
+  WaveformStyle get _mixStyle => WaveformStyle(
+      multiwave: false,
+      scale: _waveformStyle.scale,
+      fromBottom: _waveformStyle.fromBottom);
 
   /// Fetch each track's picture over the stretch of audio the lanes are showing
   /// right now, so the detail follows the zoom rather than stretching one
@@ -1044,8 +1062,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     for (final track in tracks) {
       final id = track.id;
       // A converted track draws its clips' own pictures, which are fetched per
-      // clip once there are clips to fetch for.
-      if (track.entry.info.clips.isNotEmpty) continue;
+      // clip once there are clips to fetch for, and a bus draws its mix.
+      if (track.entry.info.clips.isNotEmpty || _isBus(track)) continue;
       live.add(id);
       final startOffset = rationalSeconds(track.entry.info.span.startOffset);
       final request = WaveformRequest.forView(
@@ -1083,14 +1101,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       // twice for the same window.
       if (_peakKeys[id] == key) continue;
       _peakKeys[id] = key;
-      track.entry.layer
-          .audioPeaks(
-        startSeconds: request.startSeconds,
-        endSeconds: request.endSeconds,
-        buckets: request.buckets,
-        multiwave: true,
-      )
-          .then((peaks) {
+      trackPeaks(track.entry.layer, request, secondsPerPixel).then((peaks) {
         // A later window may already have been asked for while this one was
         // decoding; the newest ask wins.
         if (!mounted || _peakKeys[id] != key) return;
@@ -1104,15 +1115,28 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     _peakKeys.removeWhere((id, _) => !live.contains(id));
     _spectra.removeWhere((id, _) => !live.contains(id));
     _spectraKeys.removeWhere((id, _) => !live.contains(id));
+    // The master's lane draws the mix, and a bus's its own, over the window.
+    if (ui.selectedComp case final comp?) {
+      void landed() => mounted ? setState(() {}) : null;
+      void again() => mounted ? _refreshPeaks(_lastTracks) : null;
+      final revision = ui.model.heldRevision;
+      _master.refreshPeaks(comp: comp, viewStart: viewStart, viewEnd: viewEnd,
+          pixels: _laneViewport, revision: revision, onPeaks: landed,
+          retry: again);
+      refreshBusMixes(_busMix, [for (final t in tracks) if (_isBus(t)) t.entry],
+          comp: comp, viewStart: viewStart, viewEnd: viewEnd,
+          pixels: _laneViewport, revision: revision, onPeaks: landed,
+          retry: again);
+    }
   }
+
+  static bool _isBus(AudioTrackRow t) =>
+      t.entry.info.kind == BridgeLayerKind.bus;
 
   /// The lanes scrolled: the visible window moved, so the pictures may want a
   /// finer summary of somewhere else. Nothing is rebuilt here - the fetch calls
   /// `setState` only when an answer actually arrives.
-  void _onLaneScroll() {
-    if (_peakKeys.isEmpty && _spectraKeys.isEmpty) return;
-    _refreshPeaks(_lastTracks);
-  }
+  void _onLaneScroll() => _refreshPeaks(_lastTracks);
 
   // ---------------------------------------------------------------- the zoom
 
@@ -1242,57 +1266,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   // ------------------------------------------------------------ the fold keys
 
-  /// How far along the comp a row's keys are drawn from their own zero.
-  ///
-  /// Zero for a track's own rows, whose keys are already in comp time. A
-  /// **clip's** parameter is keyed from the clip's start, as its Retime is, so
-  /// its keys are drawn a clip's start along and written back that far short -
-  /// `startFrame` is the clip's place with the layer's own zero already added,
-  /// which is exactly the walk the note asks for.
-  int _clipShiftOf(AudioTrackRow track, LayerFoldRow row) {
-    if (row is! FoldEffectParamRow || row.clip == null) return 0;
-    for (final clip in track.entry.info.clips) {
-      if (clip.id == row.clip) return clip.startFrame.toInt();
-    }
-    return 0;
-  }
-
-  /// Every keyframe on the twirl rows, with where it sits - the one walk the
-  /// marquee, the drag commit and the selection all read, so the three cannot
-  /// disagree about which key is where.
-  ///
-  /// [drawn] is where a clip's keys are measured: on the comp's clock, which is
-  /// where the marquee and the snap look for them, or on the clip's own, which
-  /// is what a commit writes back.
-  List<SelectedKey> _keyPlaces(List<AudioTrackRow> tracks, double fps,
-      {bool drawn = true}) {
-    final out = <SelectedKey>[];
-    var y = 0.0;
-    for (final track in tracks) {
-      final step = track.rowHeight;
-      // The track's own band comes first; the fold rows follow it.
-      y += track.laneHeight;
-      for (final row in track.drawnRows) {
-        final rowId = foldRowPath(track.id, row);
-        final keys = laneKeysOf(row);
-        final shift = drawn ? _clipShiftOf(track, row) : 0;
-        for (var i = 0; i < keys.length; i++) {
-          out.add(SelectedKey(
-            entry: track.entry,
-            row: row,
-            rowId: rowId,
-            index: i,
-            frame: laneKeyFrame(keys[i], fps) + shift,
-            top: y,
-            height: step,
-          ));
-        }
-        y += step;
-      }
-    }
-    return out;
-  }
-
   void _selectKey(String id, bool additive) {
     final next = <String>{..._laneKeys.value};
     if (additive) {
@@ -1335,7 +1308,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
     _bindTools(ui);
     _refreshProbes(ui.model.layers);
-    _refreshReads(ui.model);
     // Which layers are tracks, and which of them are read-only picture rows.
     // The same rule the layer Timeline reads from the other side.
     final view = timelineViewLayers(
@@ -1359,7 +1331,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       open: _open,
       rowHeight: t.density.laneRow,
       trackRows: _trackRows,
-      volumeDb: _volumeDb,
       busNames: {
         for (final l in ui.model.layers)
           if (l.info.kind == BridgeLayerKind.bus)
@@ -1382,15 +1353,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       layers: [for (final track in tracks) track.entry],
       compMarkers: markersOf(comp),
       keyRows: [
-        for (final track in tracks)
+        for (final track in tracks) ...[
+          for (final lane in track.lanes)
+            (
+              rowId: lane.id,
+              frames: lane.keys.map((k) => laneKeyFrame(k, fps)),
+            ),
           for (final row in track.allRows)
             (
               rowId: foldRowPath(track.id, row),
               // Where the diamonds are drawn, which is where a drag can land on
               // them: a clip's keys are its own clock's, a clip's start along.
               frames: laneKeysOf(row)
-                  .map((k) => laneKeyFrame(k, fps) + _clipShiftOf(track, row)),
+                  .map((k) => laneKeyFrame(k, fps) + clipShiftOf(track, row)),
             ),
+        ],
       ],
       playheadFrame: ui.playheadFrame.value,
       playhead: ui.playheadFrame,
@@ -1531,125 +1508,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   // ------------------------------------------------------------- the outline
 
-  /// The board's chrome strip over the column header: the playhead's time and
-  /// frame, the comp's length, and the search that narrows the list. The
-  /// layer Timeline's own pieces at its own height, less LAYERS and GRAPH -
-  /// this panel has one shape.
-  Widget _chromeStrip(LumitTheme t, LumitUiState ui) {
-    final (fpsNum, fpsDen) = ui.model.fpsExact;
-    final lastFrame = ui.model.durationFrames - 1;
-    final clockFace = t.mono.copyWith(fontSize: 11, color: t.textPrimary);
-    final countFace = t.mono.copyWith(fontSize: 10, color: t.textMuted);
-    final length = '/${ui.model.durationFrames}';
-    // What each piece takes: a readout's slot is its digits plus its own
-    // inset, and a well's hairline adds two either side of that.
-    final clockWidth = monoSlotWidth(clockFace, timecodeChars(fpsNum, fpsDen)) +
-        readoutPadding.horizontal +
-        2;
-    final countWidth = monoSlotWidth(
-            countFace, 2 + '${lastFrame < 0 ? 0 : lastFrame}'.length) +
-        readoutPadding.horizontal +
-        2;
-    return Container(
-      height: t.density.navigatorBand + t.density.timelineChromeRow,
-      color: t.surface1,
-      padding: const EdgeInsets.only(left: 10, right: 8),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          // The ladder a narrow outline goes down: the well keeps its floor,
-          // and the frame count and the comp's length go together as soon as
-          // what is left will not hold them. The clock is what stays, because
-          // a strip that cannot say the time is not worth its row.
-          final whole = audioTimelineChromeCarriesCount(
-            strip: box.maxWidth,
-            clock: clockWidth,
-            count: countWidth,
-            length: monoSlotWidth(countFace, length.length),
-          );
-          return Row(
-            children: [
-              // Both readouts stand in slots wide enough for the longest thing
-              // they can say and both can be typed into, as the Timeline's are.
-              // Only they listen to the playhead: the rest of this half stands
-              // still while it runs.
-              ValueListenableBuilder<int>(
-                valueListenable: ui.playheadFrame,
-                builder: (context, frame, _) => Row(
-                  children: [
-                    timelineChromeControl(
-                        t,
-                        TimeReadout(
-                          key: const ValueKey('atl-timecode'),
-                          frame: frame,
-                          format: (f) => timecodeOfRate(f, fpsNum, fpsDen),
-                          widthChars: timecodeChars(fpsNum, fpsDen),
-                          style: clockFace,
-                          parse: (text) =>
-                              framesOfTimecode(text, fpsNum, fpsDen),
-                          onCommit: ui.scrubTo,
-                          minFrame: 0,
-                          maxFrame: lastFrame,
-                          tooltip: l10n.tipPlayheadTime,
-                          well: true,
-                        )),
-                    if (whole) const SizedBox(width: 4),
-                    if (whole)
-                      timelineChromeControl(
-                          t,
-                          TimeReadout(
-                            key: const ValueKey('atl-frame'),
-                            frame: frame,
-                            format: (f) => 'F$f',
-                            widthChars:
-                                2 + '${lastFrame < 0 ? 0 : lastFrame}'.length,
-                            style: countFace,
-                            parse: _frameOfTyped,
-                            onCommit: ui.scrubTo,
-                            minFrame: 0,
-                            maxFrame: lastFrame,
-                            tooltip: l10n.tipFrameNumber,
-                            well: true,
-                            editFormat: (f) => '$f',
-                          )),
-                  ],
-                ),
-              ),
-              // How many frames there are in all, after the frame the playhead is
-              // on. Outside the listener, because a comp's length does not move
-              // as the playhead does.
-              if (whole) const SizedBox(width: 4),
-              if (whole) Text(length, style: countFace),
-              const SizedBox(width: outlineGap),
-              // The well takes what is left of the row and is the first to give
-              // it back, so a narrow outline still reads its clock.
-              Expanded(
-                child: timelineChromeControl(
-                  t,
-                  SizedBox(
-                    height: layerSearchWellHeight,
-                    child: HouseTextField(
-                      key: const ValueKey('atl-search'),
-                      controller: _searchField,
-                      width: 1e9,
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      hint: l10n.searchTracks,
-                      leading: glyph.LumitIcon(LumitIcons.search,
-                          size: layerSearchWellHeight - 4, colour: t.textMuted),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  /// A typed frame number, with or without the letter the readout wears.
-  static int? _frameOfTyped(String text) =>
-      int.tryParse(text.trim().replaceFirst(RegExp('^[fF]'), ''));
-
   Widget _outlineHalf(
     LumitTheme t,
     LumitUiState ui,
@@ -1669,7 +1527,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             // strip stands as tall as the navigator's band and the chrome row
             // together, then the board's column header faces the ruler's lower
             // row.
-            _chromeStrip(t, ui),
+            AudioChromeStrip(search: _searchField),
             GestureDetector(
               onSecondaryTapUp: (e) => _headerMenu(e.globalPosition),
               child: const AudioTrackHeaderRow(),
@@ -1724,7 +1582,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                             // each blank is carried up by however far the rows
                             // have scrolled.
                             blanks: [
-                              for (final b in _seamBlanks(tracks))
+                              for (final b in audioSeamBlanks(tracks))
                                 (
                                   b.$1 - (positionOf(_vOutline)?.pixels ?? 0),
                                   b.$2 - (positionOf(_vOutline)?.pixels ?? 0),
@@ -1738,12 +1596,55 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                 ],
               ),
             ),
+            // The Master, pinned under the rows on both halves so the list's
+            // arithmetic never learns it exists.
+            MasterOutlineRow(
+              open: _master.open,
+              onToggleOpen: () => setState(() => _master.open = !_master.open),
+              mode: _master.mode,
+              keyed: _master.keyed,
+              onMode: (mode) {
+                comp.setMasterAutomationMode(mode: mode);
+                _afterMasterWrite();
+              },
+              onMenu: (at) => _masterMenu(comp, at),
+            ),
+            if (_master.open) _masterLaneOutline(t, ui, comp),
             // The room the lane half's bottom bar takes, so both halves give
             // their rows the same viewport and scroll the same distance.
             SizedBox(height: t.density.secondaryRow),
           ],
         ),
       );
+
+  void _masterMenu(CompositionReference comp, Offset at) => _master.showMenu(
+      context, comp, at,
+      frame: _ui?.playheadFrame.value ?? 0, onChanged: _afterMasterWrite);
+
+  /// The master's Volume lane in the outline: the same lane a track has.
+  Widget _masterLaneOutline(
+      LumitTheme t, LumitUiState ui, CompositionReference comp) {
+    final lane = _master.lane(t.density.laneRow, _trackRows);
+    return AutomationLaneOutline(
+      key: const ValueKey<String>('atl-master-lane'),
+      comp: comp,
+      lane: lane,
+      label: laneLabel(t, lane),
+      write: (next) => _master.writeLevel(comp, next),
+      live: _master.target(comp, ui.playing),
+      pass: _pass,
+      valueColumn: const ValueColumn(90, outlineRowTrailing),
+      indent: audioLaneIndent,
+      selected: _selectedProperties.contains(lane.id),
+      onSelect: () => _pickProperty(lane.id),
+      onSeek: ui.scrubTo,
+      onChanged: _afterMasterWrite,
+      onResize: (dy) => _resizeRows(lane.id, lane.rowHeight, dy,
+          min: automationLaneMinRows),
+      onResizeStart: () => _rowCarry = 0,
+      onResizeReset: () => setState(() => _trackRows.remove(lane.id)),
+    );
+  }
 
   Widget _outlineBlock(
     LumitTheme t,
@@ -1780,7 +1681,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onRenameCommit: () => _commitRename(track),
               onRenameCancel: _cancelRename,
               onChanged: _afterWrite,
-              onResize: (dy) => _resizeTrack(track, dy),
+              onResize: (dy) => _resizeRows(track.id, track.rowHeight, dy),
               onResizeStart: () => _rowCarry = 0,
               onResizeReset: () =>
                   setState(() => _trackRows.remove(track.id)),
@@ -1805,10 +1706,49 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           // section does; the lane half plays the same entrance beside it.
           OpenReveal(
             key: ValueKey<String>('atl-open-${track.id}'),
-            open: track.drawnRows.isNotEmpty,
+            open: track.drawnRows.isNotEmpty || track.drawnLanes.isNotEmpty,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+          for (final lane in track.drawnLanes)
+            AutomationLaneOutline(
+              key: ValueKey<String>('atl-lane-${lane.id}'),
+              comp: comp,
+              lane: lane,
+              label: laneLabel(t, lane),
+              write: (next) => lane.write(track.entry, next),
+              live: lane.target(track.entry, comp: comp, playing: ui.playing),
+              valueColumn: const ValueColumn(90, outlineRowTrailing),
+              indent: audioLaneIndent,
+              selected: _selectedProperties.contains(lane.id),
+              onSelect: () => _pickProperty(lane.id),
+              onSeek: ui.scrubTo,
+              onChanged: _afterWrite,
+              locked: track.entry.info.switches.locked,
+              layer: track.entry.layer,
+              pass: _pass,
+              // A send is taken before or after the track's Volume and Pan.
+              trailing: lane.send == null
+                  ? null
+                  : HouseButton(
+                      key: ValueKey<String>('atl-send-pre-${lane.id}'),
+                      small: true,
+                      frameless: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      onPressed: () {
+                        writeSend(track.entry.layer, lane.send!.bus,
+                            pre: !lane.send!.pre);
+                        _afterWrite();
+                      },
+                      child: Text(lane.send!.pre
+                          ? l10n.audioSendPre
+                          : l10n.audioSendPost),
+                    ),
+              onResize: (dy) => _resizeRows(lane.id, lane.rowHeight, dy,
+                  min: automationLaneMinRows),
+              onResizeStart: () => _rowCarry = 0,
+              onResizeReset: () => setState(() => _trackRows.remove(lane.id)),
+            ),
           for (final row in track.drawnRows)
             FoldRow(
               key: ValueKey<String>('atl-prop-${foldRowPath(track.id, row)}'),
@@ -1819,7 +1759,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               // outline's own right edge and a fold row indents from the twirl.
               valueColumn: const ValueColumn(90, outlineRowTrailing),
               timingsColumn: const ValueColumn(0, 0),
-              baseIndent: outlineGap + switchCellWidth * 3 + outlineGap,
+              baseIndent: audioLaneIndent - 8,
               path: foldRowPath(track.id, row),
               others: theirs[foldRowPath(track.id, row)] ?? const [],
               selectedProperties: _selectedProperties,
@@ -2059,12 +1999,16 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   }
 
   /// Footage let go on the table: a clip on the track it landed on, or a new
-  /// Audio layer when it landed on none.
+  /// Audio layer when it landed on none. A bus holds no clips, so a drop on
+  /// one writes nothing and says so.
   Future<void> _dropFootage(CompositionReference comp,
       List<FootageReference> footage, Offset global) async {
     final at = _pointOnLanes(global);
     final track = at == null ? null : audioTrackAt(_lastTracks, at.dy);
     final entry = track == null ? null : _lastTracks[track].entry;
+    if (entry?.info.kind == BridgeLayerKind.bus) {
+      return cutRefuseOnBus(Provider.of<LumitState>(context, listen: false));
+    }
     if (entry != null && audioTrackTakesClips(entry.info)) {
       final frame = _laneAxis.frameAt(at!.dx);
       asOneUndoStep(
@@ -2571,9 +2515,12 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final layer = track.entry.layer;
     final info = track.entry.info;
     final picked = clip == null ? null : _menuClips(track, clip);
-    final ids = [
-      for (final (_, c) in picked ?? const <(AudioTrackRow, BridgeClip)>[]) c.id,
+    final levels = [
+      for (final (on, c) in picked ?? const <(AudioTrackRow, BridgeClip)>[])
+        (on.entry.layer, c),
     ];
+    final ids = [for (final (_, c) in levels) c.id];
+    final app = Provider.of<LumitState>(context, listen: false);
     final playhead = ui.playheadFrame.value;
     final first = clip?.startFrame.toInt() ?? info.inFrame.toInt();
     final last = clip?.endFrame.toInt() ?? info.outFrame.toInt();
@@ -2714,33 +2661,27 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               layer.setPitchFollowsSpeed(follows: !follows);
               _afterWrite();
             },
-            onNormalise: () async {
-              final app = Provider.of<LumitState>(context, listen: false);
-              final target = ui.workspace.normaliseTargetDb;
-              if (picked != null) {
-                await normaliseClips(app, target,
-                    [for (final (on, c) in picked) (on.entry.layer, c.id)],
-                    then: _afterWrite);
-              } else {
-                await normaliseLayers(app, comp, playhead, target, [track.entry],
-                    then: _afterWrite);
-              }
-            },
+            onNormalise: () => picked != null
+                ? normaliseClips(app, ui.workspace.normaliseTargetDb,
+                    [for (final (l, c) in levels) (l, c.id)],
+                    then: _afterWrite)
+                : normaliseLayers(app, comp, playhead,
+                    ui.workspace.normaliseTargetDb, [track.entry],
+                    then: _afterWrite),
             onLoudness: picked == null
                 ? null
                 : (lufs) => normaliseClips(
-                    Provider.of<LumitState>(context, listen: false),
-                    lufs,
-                    [for (final (on, c) in picked) (on.entry.layer, c.id)],
-                    then: _afterWrite,
-                    loudness: true),
+                    app, lufs, [for (final (l, c) in levels) (l, c.id)],
+                    then: _afterWrite, loudness: true),
+            onTogether: levels.length < 2
+                ? null
+                : (lufs) => normaliseTogether(
+                    app, lufs ?? ui.workspace.normaliseTargetDb,
+                    clips: levels, then: _afterWrite, loudness: lufs != null),
             // An uncut layer's bar has no clip of its own to set back.
             resetGainShown: picked != null,
-            onResetGain: picked != null && picked.any((p) => p.$2.gainDb != 0)
-                ? () => resetClipGain(
-                    Provider.of<LumitState>(context, listen: false),
-                    [for (final (on, c) in picked) (on.entry.layer, c)],
-                    then: _afterWrite)
+            onResetGain: levels.any((p) => p.$2.gainDb != 0)
+                ? () => resetClipGain(app, levels, then: _afterWrite)
                 : null,
           ),
           if (clip != null) ...[
@@ -3122,6 +3063,23 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               ],
             ),
           ),
+          // The Master's lane, pinned under the rows: the mix over the
+          // window the lanes show, following their scroll, and its Volume
+          // lane under it while the twirl is open.
+          SoundMixLane(
+            peaks: _master.peaks,
+            hScroll: _hLane,
+            secondsPerPixel:
+                axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps),
+            style: _waveformStyle,
+            onMenu: (at) => _masterMenu(comp, at),
+          ),
+          if (_master.open)
+            _master.laneArea(comp, ui.playing,
+                lane: _master.lane(t.density.laneRow, _trackRows),
+                hScroll: _hLane, axis: axis, fps: fps, fpsExact: (fpsNum, fpsDen),
+                picked: _laneKeys, onSelectKey: _selectKey, pass: _pass,
+                style: _waveformStyle, onChanged: _afterMasterWrite),
           // The board's own bottom bar: the zoom slider and the scrollbar, and
           // nothing else. No magnet - a clip gesture suspends the snap with
           // Ctrl rather than with a button.
@@ -3255,7 +3213,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                                 onSelect: (rect, additive) =>
                                     _laneKeys.value = {
                                   if (additive) ..._laneKeys.value,
-                                  ..._keysIn(rect, tracks, axis, fps),
+                                  ...audioKeysIn(rect, tracks, axis, fps),
                                 },
                                 // A click on empty ground gives up the keys and
                                 // the picked clip together: it means "nothing
@@ -3303,7 +3261,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                                       // several lane rows tall, so the seams
                                       // that would fall inside its wave are
                                       // left out; the ones bounding it stay.
-                                      blanks: _seamBlanks(tracks),
+                                      blanks: audioSeamBlanks(tracks),
                                       // Only the fraction: rounding is
                                       // invariant under whole-pixel shifts, so
                                       // a whole-pixel scroll repaints nothing.
@@ -3354,36 +3312,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     );
   }
 
-  /// Each track's own band, so the seam painter rules between tracks and not
-  /// through them, and the ground under the last one, which is not a row and
-  /// wears no lines. The twirl's rows are outside the blank and keep their
-  /// hairlines, which is what makes an open track read as a list.
-  List<(double, double)> _seamBlanks(List<AudioTrackRow> tracks) {
-    final out = <(double, double)>[];
-    var y = 0.0;
-    for (final track in tracks) {
-      out.add((y, y + track.laneHeight));
-      y += track.height;
-    }
-    return out..add((y, 1e7));
-  }
-
-  /// Every keyframe the box caught, walking the same rows the lanes draw.
-  Set<String> _keysIn(
-      Rect rect, List<AudioTrackRow> tracks, TimelineAxis axis, double fps) {
-    final caught = <String>{};
-    for (final place in _keyPlaces(tracks, fps)) {
-      if (place.top + place.height < rect.top || place.top > rect.bottom) {
-        continue;
-      }
-      final x = axis.xOf(place.frame);
-      if (x >= rect.left && x <= rect.right) {
-        caught.add('${place.rowId}#${place.index}');
-      }
-    }
-    return caught;
-  }
-
   /// The release of a lane key's drag: every key it carried written where it
   /// travelled, one undo step. Done here because the selection reaches across
   /// rows and a lane knows only its own.
@@ -3393,7 +3321,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       places: [
         // On each row's own clock: the travel is the same number in both, and
         // a clip's key is written where the clip counts from.
-        for (final place in _keyPlaces(tracks, fps, drawn: false))
+        for (final place in audioKeyPlaces(tracks, fps, drawn: false))
           if (_laneKeys.value.contains('${place.rowId}#${place.index}')) place,
       ],
       moved: moved,
@@ -3435,10 +3363,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           ),
           OpenReveal(
             key: ValueKey<String>('atl-lane-open-${track.id}'),
-            open: track.drawnRows.isNotEmpty,
+            open: track.drawnRows.isNotEmpty || track.drawnLanes.isNotEmpty,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                for (final lane in track.drawnLanes)
+                  SizedBox(
+                    height: lane.height,
+                    child: _automationLane(t, track, lane,
+                        target: lane.target(track.entry,
+                            comp: ui.selectedComp, playing: ui.playing),
+                        axis: axis,
+                        fps: fps,
+                        fpsNum: fpsNum,
+                        fpsDen: fpsDen),
+                  ),
                 for (final row in track.drawnRows)
                   SizedBox(
                     height: track.rowHeight,
@@ -3477,6 +3416,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final height = track.laneHeight;
     final clips = AudioClipStrip(
       key: ValueKey<String>('atl-clips-${track.id}'),
+      waves: _wavesOf(track.id),
       track: track,
       axis: axis,
       fps: fps,
@@ -3548,6 +3488,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               child: RepaintBoundary(
                 child: VolumeBand(
                   entry: track.entry,
+                  target: trackBand(track.entry, kind,
+                      comp: _ui!.selectedComp, playing: _ui!.playing),
                   axis: axis,
                   fps: fps,
                   fpsNum: fpsNum,
@@ -3564,14 +3506,11 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     if (info.clips.isNotEmpty) {
       return Stack(children: [clips, fades, ...bands]);
     }
-    final startOffset = rationalSeconds(info.span.startOffset);
-    final secondsPerPixel =
-        axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
-    // Canvas x 0 is the axis's left padding, comp time 0 sits a padding's width
-    // in, and the source's own clock runs from there less wherever the layer
-    // starts it.
-    final origin = -startOffset - TimelineAxis.pad * secondsPerPixel;
+    final (origin, secondsPerPixel) = audioWaveClock(track, axis, fps);
     final label = t.labelColour(info.label);
+    // A bus holds no sound of its own, so its bar is the track's length and
+    // no more: a tint, not a clip.
+    final bus = _isBus(track);
     return Stack(
       children: [
         // The bar itself, boxed as a clip is: an uncut track is a track of
@@ -3589,9 +3528,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                 final on = picked.any((l) =>
                     l.internallayerId == track.entry.layer.internallayerId);
                 final mark = ThemeScope.of(context).motion.mark;
-                // A bus holds no sound of its own, so its bar is the track's
-                // length and no more: a tint, not a clip.
-                final bus = info.kind == BridgeLayerKind.bus;
                 final fill = on ? clipFillSelectedAlpha : clipFillAlpha;
                 return AnimatedContainer(
                   duration: mark.duration,
@@ -3633,15 +3569,18 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           CustomPaint(
             key: ValueKey<String>('atl-wave-${track.id}'),
             size: Size(axis.width, height),
+            // A bus draws its mix in its own colour, as a clip its wave.
             painter: WaveformPainter(
-              peaks: _peaks[track.id],
+              peaks: bus ? _busMix[track.id]?.peaks : _peaks[track.id],
               originSeconds: origin,
               secondsPerPixel: secondsPerPixel,
               left: left,
               right: right,
-              colours: t.waveform,
-              style: _waveformStyle,
+              colours: bus ? clipWaveColours(label, t.textPrimary) : t.waveform,
+              style: bus ? _mixStyle : _waveformStyle,
               height: height,
+              gainDb: bus ? 0 : info.audioGainDb,
+              full: t.error,
             ),
           ),
         // No clips yet, so no boxes - but the bar takes the same trims and
@@ -3651,7 +3590,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         // The level as a number at the bar's own right end. A keyed level is
         // drawn on its own row under the twirl, so there is no one number to
         // say.
-        if (_levelOf(info.volumeDb) case final reading?)
+        if (audioLevelReading(info.volumeDb) case final reading?)
           Positioned(
             right: axis.width - right + 6,
             bottom: 4,
@@ -3666,15 +3605,53 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     );
   }
 
-  /// The track's level as a readout, or null while it is keyed.
-  /// Unity says nothing, so it is left off the lane.
-  String? _levelOf(BridgeScalar scalar) => switch (scalar) {
-        BridgeScalar_Static(:final field0) when field0.abs() < 0.05 => null,
-        BridgeScalar_Static(:final field0) => field0 <= volumeBandFloorDb
-            ? l10n.volumeNegInf
-            : '${field0.toStringAsFixed(1)} dB',
-        _ => null,
-      };
+  /// One automation lane's time area: the curve over the track's wave, where
+  /// the track draws one of its own, a bus's mix, or a converted track's
+  /// clip waves, faint.
+  Widget _automationLane(
+    LumitTheme t,
+    AudioTrackRow track,
+    AutomationLane lane, {
+    required BandTarget target,
+    required TimelineAxis axis,
+    required double fps,
+    required int fpsNum,
+    required int fpsDen,
+  }) {
+    final info = track.entry.info;
+    final (origin, secondsPerPixel) = audioWaveClock(track, axis, fps);
+    final bus = _isBus(track);
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: _laneKeys,
+      builder: (context, selected, _) => AutomationLaneArea(
+        key: ValueKey<String>('atl-lane-area-${lane.id}'),
+        lane: lane,
+        target: target,
+        pass: _pass,
+        comp: _ui?.selectedComp,
+        waveColours: bus
+            ? clipWaveColours(t.labelColour(info.label), t.textPrimary)
+            : null,
+        axis: axis,
+        fps: fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        height: lane.height,
+        peaks: bus ? _busMix[track.id]?.peaks : _peaks[track.id],
+        clips: info.clips,
+        clipWaves: info.clips.isEmpty ? null : _wavesOf(track.id),
+        originSeconds: origin,
+        secondsPerPixel: secondsPerPixel,
+        left: axis.xOf(info.inFrame.toInt()),
+        right: axis.xOf(info.outFrame.toInt()),
+        style: bus ? _mixStyle : _waveformStyle,
+        selected: laneSelection(selected, lane.id),
+        onSelectKey: (index, additive) =>
+            _selectKey('${lane.id}#$index', additive),
+        onChanged: _afterWrite,
+      ),
+    );
+  }
 
   /// One twirl row's lane: its diamonds, or empty room for a heading.
   Widget _foldLane(
@@ -3717,7 +3694,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         magnet: true,
         // A clip's parameter is keyed from the clip's start, so its diamonds
         // are drawn that far along - the same shift a moved bar gives its keys.
-        barShift: _clipShiftOf(track, row),
+        barShift: clipShiftOf(track, row),
         snapTargets: snap,
         selectedKeys: selected,
         stretch: _keyStretch,

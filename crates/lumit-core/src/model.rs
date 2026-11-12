@@ -502,6 +502,17 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// The master fader's keys, in comp time. When there are some they decide
+    /// the master, and [`Self::master_volume_db`] stays the level an older
+    /// Lumit reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master_keys: Option<crate::anim::Animation>,
+    /// How a move of the master fader writes [`Self::master_keys`].
+    #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
+    pub master_automation: crate::mixer::AutomationMode,
+    /// The loudness the comp's mix is made for. `None` is no target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness_target: Option<crate::mixer::LoudnessTarget>,
     /// How the comp's lights fall on its layers. Lumit's own adds the light to
     /// the picture; After Effects' lights a layer from black.
     #[serde(default, skip_serializing_if = "CompLighting::is_default")]
@@ -2082,6 +2093,9 @@ pub struct Switches {
     /// montage work pays nothing for the default.
     #[serde(default = "default_true")]
     pub accepts_lights: bool,
+    /// Solo safe: the layer keeps sounding while another layer is soloed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub solo_safe: bool,
 }
 
 impl Layer {
@@ -2257,6 +2271,7 @@ impl Default for Switches {
             shy: false,
             guide: false,
             accepts_lights: true,
+            solo_safe: false,
         }
     }
 }
@@ -3236,6 +3251,17 @@ pub struct Layer {
     /// Where the layer's sound goes: a bus instead of the master, and its sends.
     #[serde(default, skip_serializing_if = "crate::routes::AudioRoutes::is_master")]
     pub audio_routes: crate::routes::AudioRoutes,
+    /// The layer's own sound in dB before its rack and Volume: its **Gain**,
+    /// set by hand or by Normalise. Volume is the fader.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub audio_gain_db: f64,
+    /// How a fader move writes the Volume, Pan and send keys while the comp
+    /// plays.
+    #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
+    pub automation: crate::mixer::AutomationMode,
+    /// **Lower behind**: the layer drops while another layer or a bus sounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duck: Option<crate::mixer::Duck>,
     /// Retime: layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -3982,6 +4008,9 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
     }
 }
 
+// A comp is the large one, and boxing it would touch every place an item is
+// built or matched for a few bytes per item.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ProjectItem {
     Footage(FootageItem),
@@ -4853,6 +4882,8 @@ mod tests {
     use super::*;
     use crate::time::{CompTime, Rational};
 
+    mod separate_axes;
+
     fn secs(s: i64) -> CompTime {
         CompTime(Rational::new(s, 1).unwrap())
     }
@@ -4943,6 +4974,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
@@ -5281,6 +5315,9 @@ mod tests {
         let mut comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -5326,6 +5363,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5606,6 +5646,9 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -5647,6 +5690,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5818,63 +5864,6 @@ mod tests {
         }
     }
 
-    /// The `in use` badge: footage, a solid and a nested composition all count
-    /// as used the moment a layer names them, and an item nothing names does
-    /// not — whatever else the project holds.
-    #[test]
-    fn an_item_is_used_when_some_comps_layer_names_it() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let used_footage = footage.id;
-        let idle_footage = bare_footage("b.mp4", "b.mp4", "");
-        let idle_id = idle_footage.id;
-
-        let solid = SolidDef {
-            id: Uuid::now_v7(),
-            name: "White".into(),
-            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            width: 64,
-            height: 64,
-            extra: serde_json::Map::new(),
-        };
-        let solid_id = solid.id;
-
-        let mut inner = bare_comp("Inner");
-        let inner_id = inner.id;
-        inner
-            .layers
-            .push(bare_layer(LayerKind::Footage { item: used_footage }));
-
-        let mut outer = bare_comp("Outer");
-        outer
-            .layers
-            .push(bare_layer(LayerKind::Precomp { comp: inner_id }));
-        outer
-            .layers
-            .push(bare_layer(LayerKind::Solid { def: solid_id }));
-        // A drawn layer names no project item at all.
-        outer.layers.push(bare_layer(LayerKind::Adjustment));
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Footage(idle_footage));
-        doc.items.push(ProjectItem::Solid(solid));
-        doc.items.push(ProjectItem::Composition(inner));
-        doc.items.push(ProjectItem::Composition(outer));
-
-        assert!(doc.item_is_used(used_footage));
-        assert!(doc.item_is_used(solid_id));
-        assert!(
-            doc.item_is_used(inner_id),
-            "a comp placed as a layer is used"
-        );
-        assert!(!doc.item_is_used(idle_id), "nothing places this footage");
-        assert!(
-            !doc.item_is_used(doc.items[4].id()),
-            "the outer comp is in nothing, however much is in it"
-        );
-        assert!(!doc.item_is_used(Uuid::now_v7()), "an id nobody knows");
-    }
-
     /// The flowchart's question: one step each way from a comp, each
     /// neighbour once, with a mark where the nesting carries on.
     #[test]
@@ -5982,8 +5971,6 @@ mod tests {
         );
     }
 
-    mod transform_axes;
-
     /// The anti-aliasing budget bites only above 4K, and only as far as it
     /// must: 4K keeps 8×, 8K gets 2× (its attachment then costs what 4K's
     /// does), and a setting that asked for less is never raised.
@@ -6000,4 +5987,6 @@ mod tests {
         assert_eq!(Off.samples_for(7680, 4320), 1);
         assert_eq!(X8.samples_for(0, 0), 8, "an empty comp is left alone");
     }
+
+    mod item_in_use;
 }

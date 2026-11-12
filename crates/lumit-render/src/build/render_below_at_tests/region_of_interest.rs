@@ -40,6 +40,9 @@ fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),

@@ -40,7 +40,7 @@ until you close Lumit.
 | **Time** | The span, the frame rate, and overrides for motion blur and Retime blend. |
 | **Picture** | Channels and alpha, depth, bit rate, resize, crop, and the resampler. |
 | **Colour** | The space the file is written and tagged in. |
-| **Audio** | Whether sound is written, at what sample rate, sample width, channel layout and bit rate. |
+| **Audio** | Whether sound is written, at what sample rate, sample width, channel layout and bit rate, its [loudness, and stems](#loudness-and-stems). |
 | **Metadata** | Title, author, copyright, comment and created, plus any field of your own. |
 
 The frame rate starts as the composition's own; the span starts as the work area where one
@@ -116,6 +116,22 @@ The third chip on the Output row writes sound and no picture — the composition
 mix as an M4A or a WAV. The Audio section sets the sample rate (44.1, 48 or 96 kHz), the
 width (16 bit, or 24 for the uncompressed forms) and the layout (stereo, or folded down
 to mono).
+
+## Loudness and stems
+
+**Loudness**, in the Audio section, sets the loudness the mix is brought to: **Off**, the
+composition's [loudness target](/use/mixing/#loudness) as **Target**, **−14 LUFS**,
+**−16 LUFS**, **−23 LUFS**, **−24 LUFS**, or **Custom**, from −40 to −5 LUFS. **True peak**,
+from −9 to 0 dBTP, is the ceiling the master's limiter holds it under. A composition with a
+target starts on **Target**, with the target's true peak, unless a preset of your own or a
+queued export names its own Loudness, **Off** included.
+
+**Stems**, shown when the composition has a bus, writes **A file for each bus** beside the
+export, named `<file name> - <bus name>`. A stem is the bus after its own fader, without the
+master's fader, limiter or loudness, over the export's span. Beside an audio-only export it
+takes the same format, beside a ProRes file it is a WAV, and beside any other video an M4A.
+A character a file name cannot hold becomes `_`. Stopping the export removes the stems it
+wrote.
 
 ## Colour space
 

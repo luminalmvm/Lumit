@@ -25,6 +25,7 @@ import 'graph.dart';
 import 'graph_looks.dart';
 import 'import.dart';
 import 'layer.dart';
+import 'mixer.dart';
 import 'model.dart';
 import 'model_rows.dart';
 import 'multicam.dart';
@@ -878,6 +879,20 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAnimatedMaskPathsAt(
               that: this, frame: frame);
 
+  /// Hear the mix toward `frame` (fractional) at the speed of the drag,
+  /// the pitch following: call it on every move of a dragged playhead. The
+  /// transport stays stopped and the clock does not move. Before the mix
+  /// is loaded it asks for it and is silent until it lands.
+  void audioJog({required double frame}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioJog(
+          that: this, frame: frame);
+
+  /// The drag is over: the jog fades out.
+  void audioJogEnd() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioJogEnd(
+        that: this,
+      );
+
   /// This comp's **mix** summarised over `[start_seconds, end_seconds)` of
   /// comp time, in `buckets` buckets - what the Timeline's Sound mix row
   /// draws: every layer through its fader, the master and the limiter, the
@@ -894,17 +909,23 @@ class CompositionReference {
   /// shortly. One band, like a plain wave: the stack's filters want the
   /// samples, and a mix keeps none.
   ///
+  /// With `bus`, a Bus layer's lane instead: what is routed to it through
+  /// each source's fader and send level, before its own rack and fader.
+  /// Empty when that bus is not in the mix.
+  ///
   /// Not `#[frb(sync)]`: a wide window walks a fair stretch of the plan.
   Future<BridgeAudioPeaks> audioMixPeaks(
           {required double startSeconds,
           required double endSeconds,
-          required int buckets}) =>
+          required int buckets,
+          UuidValue? bus}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAudioMixPeaks(
               that: this,
               startSeconds: startSeconds,
               endSeconds: endSeconds,
-              buckets: buckets);
+              buckets: buckets,
+              bus: bus);
 
   /// Start playing this comp's audio from `start` seconds.
   void audioPlay({required double start}) =>
@@ -945,6 +966,24 @@ class CompositionReference {
           required UuidValue node}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceAutoBalance(
           that: this, layer: layer, clip: clip, frame: frame, node: node);
+
+  /// The points written so far this pass, for drawing the line being
+  /// written. Empty when nothing records. Copies the whole pass:
+  /// [`Self::automation_pass_since`] is the form to poll.
+  List<BridgeAutomationLine> automationPass() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAutomationPass(
+        that: this,
+      );
+
+  /// The points the pass has drawn since point `from` of pass `pass`, to
+  /// poll every frame: the caller keeps the pass and the `next` it was
+  /// last given. A new pass answers from its own start, under its own
+  /// number. Copies only what is new and waits on no edit.
+  BridgeAutomationPassSince automationPassSince(
+          {required int pass, required int from}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAutomationPassSince(
+              that: this, pass: pass, from: from);
 
   /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
   /// item 10). What the composite is drawn onto where nothing covers it, and
@@ -2364,6 +2403,23 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceLinkData(
           that: this, path: path, folder: folder);
 
+  BridgeLoudnessTarget? loudnessTarget() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceLoudnessTarget(
+        that: this,
+      );
+
+  BridgeAutomationMode masterAutomationMode() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMasterAutomationMode(
+        that: this,
+      );
+
+  /// The master fader: its keys when it has them, in comp time, else its
+  /// static level in dB.
+  BridgeScalar masterVolume() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMasterVolume(
+        that: this,
+      );
+
   /// This comp's **master fader**, in dB (docs/09 §3.1). 0 is unity;
   /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
   double masterVolumeDb() => BridgeLib.instance.api
@@ -2426,6 +2482,34 @@ class CompositionReference {
           frame: frame,
           node: node,
           still: still);
+
+  /// Play this comp's whole mix offline, as an export does, and measure it.
+  /// Stopped by [`cancel_measure_mix`]. A silent mix is refused.
+  Future<BridgeMixLoudness> measureMix({RustStreamSink<double>? progress}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMeasureMix(
+          that: this, progress: progress);
+
+  /// The pointer has left `target`. Stopped, or in Read, the value is
+  /// written as one undo step: a key at the playhead when the property is
+  /// keyed, else its value. In Touch and Trim the control glides back to
+  /// its keys over the touch return; in Latch and Write it holds until
+  /// playback stops.
+  ///
+  /// `playhead_seconds` is where the playhead stands, for that key; without
+  /// it the sound's own clock is taken.
+  void mixerRelease(
+          {required BridgeMixTarget target, double? playheadSeconds}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMixerRelease(
+              that: this, target: target, playheadSeconds: playheadSeconds);
+
+  /// The pointer is on `target` at `value` (dB, or -100 to 100 for a Pan):
+  /// call it on every move while held. Heard at once. While the comp plays
+  /// and the strip (or the master) is in Touch, Latch, Write or Trim, the
+  /// moves are written as keys when playback stops.
+  void mixerTouch({required BridgeMixTarget target, required double value}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMixerTouch(
+          that: this, target: target, value: value);
 
   /// Move controls to sit before the control `before`, or last with `None`,
   /// keeping their own order, and into `group` (`None` is no group).
@@ -2490,6 +2574,17 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceNewGraphInstance(
               that: this, name: name, graph: graph);
+
+  /// Measure the mix as playback hears it, through the limiter, then move
+  /// the master by what takes it to `target_lufs`: its value, or every key
+  /// by the same amount. Measured again after the move, and moved once
+  /// more where the limiter kept it over half a unit off. One undo step.
+  /// Answers the mix's loudness as measured after it.
+  Future<double> normaliseMix(
+          {required double targetLufs, RustStreamSink<double>? progress}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceNormaliseMix(
+              that: this, targetLufs: targetLufs, progress: progress);
 
   /// Paste boxes copied with [`Self::save_graph_group`] at `(x, y)`, the
   /// canvas's Ctrl+V. The same insert as a saved group but with no group
@@ -2636,7 +2731,7 @@ class CompositionReference {
   ///
   /// `speed` is how many times the comp's rate the leg runs at, 1 for
   /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
-  /// keeps time by skipping frames, in either direction, and is silent.
+  /// keeps time by skipping frames, either way, heard through the jog.
   ///
   /// `slow` is how many times slower than the comp's rate the leg plays,
   /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
@@ -3140,6 +3235,13 @@ class CompositionReference {
           colours: colours,
           view: view);
 
+  /// Whether `layer` may send or output to `bus` without the sound going
+  /// round in a circle, for a menu to ask before it offers the bus.
+  bool routeAllowed({required UuidValue layer, required UuidValue bus}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRouteAllowed(
+              that: this, layer: layer, bus: bus);
+
   /// Ask the worker for the pixels under the dropper: a `window × window`
   /// square of `frame` centred on the point `(u, v)` of the picture, each a
   /// fraction from 0 to 1 (docs/07 §6.1).
@@ -3339,11 +3441,27 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceSetLightingLikeAfterEffects(
               that: this, on_: on_);
 
+  void setLoudnessTarget({BridgeLoudnessTarget? target}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetLoudnessTarget(
+              that: this, target: target);
+
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
   void setMarkers({required List<BridgeMarker> markers}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetMarkers(
           that: this, markers: markers);
+
+  void setMasterAutomationMode({required BridgeAutomationMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetMasterAutomationMode(
+              that: this, mode: mode);
+
+  /// Set the master fader, as one undoable step. A static level clears any
+  /// keys; keys leave the static level as it is, for an older Lumit to read.
+  void setMasterVolume({required BridgeScalar value}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetMasterVolume(
+          that: this, value: value);
 
   /// Move the master fader, as one undoable step.
   ///

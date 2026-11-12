@@ -7,7 +7,8 @@
 //! the sound's: what has been mixed, less what the worklet has still to play.
 
 use crate::{
-    fill_ahead, fill_smooth, loudness, nanos, slow, AudioEngine, AudioError, Edge, Scrub, Shared,
+    block, fill_ahead, fill_smooth, loudness, nanos, rack_thread, slow, AudioEngine, AudioError,
+    Edge, Scrub, Shared,
 };
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -45,8 +46,11 @@ pub(crate) struct Output {
     scrub: Scrub,
     edge: Edge,
     stretch: slow::Stretch,
+    work: block::MixWork,
     loudness: loudness::Loudness,
     buffer: Vec<f32>,
+    /// What the rack thread does on the desktop, done here a turn at a time.
+    racks: rack_thread::RackThread,
 }
 
 impl AudioEngine {
@@ -58,14 +62,17 @@ impl AudioEngine {
                 scrub: Scrub::default(),
                 edge: Edge::default(),
                 stretch: slow::Stretch::new(rate),
+                work: block::MixWork::new(rate).owning_live(),
                 loudness: loudness::Loudness::new(rate),
                 buffer: Vec::new(),
+                racks: rack_thread::RackThread::new(rate),
             }),
             shared: Arc::new(Shared::new(None)),
             device_rate: rate,
             channels: 2,
-            // Waking it does nothing: the filling is done on every turn.
+            // Waking them does nothing: the filling is done on every turn.
             filler: std::thread::current(),
+            racks: std::thread::current(),
         })
     }
 
@@ -83,9 +90,16 @@ impl AudioEngine {
             scrub,
             edge,
             stretch,
+            work,
             loudness,
             buffer,
+            racks,
         } = &mut *output;
+        for _ in 0..FILLS_A_TURN {
+            if !rack_thread::rack_step(shared, racks) {
+                break;
+            }
+        }
         let playing = shared.playing.load(Ordering::Relaxed);
         let playhead = shared.playhead.load(Ordering::Relaxed);
         let slow = shared.slow.load(Ordering::Relaxed).max(1) as usize;
@@ -116,7 +130,7 @@ impl AudioEngine {
         let frames = (wanted as usize).saturating_sub(ahead);
         if frames > 0 {
             buffer.resize(frames * 2, 0.0);
-            fill_smooth(shared, scrub, edge, stretch, loudness, buffer, 2);
+            fill_smooth(shared, scrub, edge, stretch, work, loudness, buffer, 2);
             write(buffer);
             ahead += frames;
         }

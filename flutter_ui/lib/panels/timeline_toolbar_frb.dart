@@ -569,6 +569,7 @@ List<(String, String)> _newLayerKinds() => [
       ('layer.new.adjustment', l10n.menuAdjustment),
       ('layer.new.null', l10n.menuNull),
       ('layer.new.sequence', l10n.menuSequence),
+      ('layer.new.bus', l10n.menuBus),
     ];
 
 /// **The key commands, at the outline's foot** — the interpolation words and

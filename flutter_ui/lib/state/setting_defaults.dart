@@ -59,6 +59,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-wire-style': i.wireStyle,
     'settings-multiwave': i.multiwaveWaveforms,
     'settings-waveform-from-bottom': i.waveformsFromBottom,
+    'settings-waveform-scale': i.waveformScale,
     // Timeline
     'settings-retime-speed-lens': i.retimeOpensToSpeed,
     'settings-retime-in-seconds': i.retimeInSeconds,
@@ -86,6 +87,8 @@ final Map<String, Object?> shippedSettings = () {
     // Audio
     'settings-audio-device': w.audioDevice,
     'settings-audio-offset': w.audioOffsetMs,
+    'settings-touch-return': w.touchReturnMs,
+    'settings-scrub-on-drag': w.scrubOnDrag,
     'settings-normalise-target': w.normaliseTargetDb,
     // Autosave
     'settings-autosave-minutes': w.autosaveMinutes,

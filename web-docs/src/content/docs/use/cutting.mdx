@@ -27,19 +27,23 @@ the same composition opens in the [Timeline](/panels/timeline/) and the Audio ti
 - Any other layer with a picture draws as one plain bar on a track of its own. A Camera, a Light and a Null have no track here, and stay in the Timeline.
 - A footage layer with sound also draws its sound on a track below the line. Both tracks are
   the same layer.
+- A [Bus layer](/use/mixing/#buses) is a bus track, below the sound tracks, with the bus
+  glyph before its name. Its bar draws the mix routed into it. A clip let go on a bus track
+  is **refused**, and the status line says *Clips don't go on a bus track.*
 
 With **Settings ▸ Timeline ▸ Cut tracks in any order** on, the tracks stand in the
 composition's layer order and there is no line. Drag a track's name up or down to move it.
-With the setting off, a track moves only among the tracks on its side of the line.
+With the setting off, a track moves only among the tracks on its side of the line, and a bus
+track only among the bus tracks.
 
 Drag the lower edge of a track's header to make the track taller or shorter. Double-click
 the edge to put it back. Heights are saved with the project. Drag the headers' right edge to
 make them wider or narrower, from 120 to 480 pixels.
 
-A track's header has a **Vol** and a **Pan** slider on a sound track and a **Level** slider on
-a picture track, where the track is tall enough. Drag across one to change it, with `Ctrl`
-for finer steps. Double-click puts it back. On a keyed property the slider sets a key at the
-playhead.
+A track's header has a **Vol** and a **Pan** slider on a sound track or a bus track and a
+**Level** slider on a picture track, where the track is tall enough. Drag across one to
+change it, with `Ctrl` for finer steps. Double-click puts it back. On a keyed property the
+slider sets a key at the playhead.
 
 A track wears its layer's label colour: its clips are tinted with it and their waveforms
 drawn in it. Right-click a track's header, or a plain bar, for the layer's commands: **Rename**,
@@ -56,7 +60,8 @@ gives the picked clips a colour of their own, and **Track colour** hands it back
 A picture clip shows a strip of its frames. A retimed clip's frames follow its speed.
 
 Right-click the empty ground under the tracks for **Insert title** (`Ctrl`+`T`), **Insert
-solid**, **Insert audio layer**, **Insert video layer** and **Insert adjustment layer**. Each
+solid**, **Insert audio layer**, **Insert bus**, **Insert video layer** and **Insert
+adjustment layer**. Each
 adds a track above the selected one, or at the top. The first two are also under
 **Layer ▸ New**. With nothing selected an audio layer goes
 to the bottom. A title or a solid is five seconds long from the playhead, and a title opens
@@ -139,7 +144,9 @@ on linked clips either way.
 Right-click a sound clip for **Normalise**, which sets the gain of every picked clip so its
 loudest sample lands at **Normalise to** in [Settings](/use/settings/#audio), as one undo step,
 **Normalise loudness ▸**, which does the same for a measured loudness of −14, −16 or −23 LUFS,
-and **Reset gain**, which puts it back at 0 dB.
+and **Reset gain**, which puts it back at 0 dB. With several sound clips picked, **Normalise
+together** and **Normalise loudness together ▸** move them all by one change, so the loudest
+lands on the target and the rest keep their balance.
 
 Right-click a picture clip for **Detach audio**, which puts its sound on a sound track as a
 linked clip, and **Attach audio**, which puts it back. **Attach audio** needs the sound clip
@@ -333,9 +340,9 @@ A picture clip's linked sound clip plays at normal speed.
 
 ## Gain
 
-A sound clip's level is a line across it, at the top for 0 dB. Drag it down to turn the clip
-down, with `Ctrl` for finer steps. Double-click it to put it back at 0 dB. A readout beside
-the pointer gives the level, and the waveform shrinks with it.
+A sound clip's level is a line across it, from −60 dB at the foot to +24 dB at the top. Drag
+it to turn the clip up or down, with `Ctrl` for finer steps. Double-click it to put it back
+at 0 dB. A readout beside the pointer gives the level, and the waveform follows it.
 
 A picture clip's opacity is the same line along its top edge. Drag it down to make the clip
 see-through, and double-click it to put it back at full. Below full the line shows across
@@ -435,6 +442,7 @@ Captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
 ## Related
 
 - [Sequence layers](/use/sequence-layers/)
+- [Mixing](/use/mixing/)
 - [Editing by transcript](/use/editing-by-transcript/)
 - [Multicam](/use/multicam/)
 - [Workspaces and panels](/use/workspaces/)

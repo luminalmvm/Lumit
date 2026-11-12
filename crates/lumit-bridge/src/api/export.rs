@@ -157,6 +157,22 @@ pub struct BridgeExportSpec {
     /// What happens to the composition's own caption layers.
     #[frb(default = "BridgeCaptionsOut.burn")]
     pub captions: BridgeCaptionsOut,
+    /// The loudness the sound is made to, or none for the mix as it stands.
+    pub loudness: Option<BridgeExportLoudness>,
+    /// Each top-level bus also written to a file of its own beside this one.
+    #[frb(default = false)]
+    pub stems: bool,
+}
+
+/// The loudness an export is made to: the mix is measured, the master moved
+/// to it, and the limiter holds the true peak.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeExportLoudness {
+    /// Integrated loudness, in LUFS.
+    pub lufs: f64,
+    /// The highest true peak, in dBTP.
+    pub true_peak_db: f64,
 }
 
 /// What an export does with the composition's own caption layers.
@@ -229,6 +245,8 @@ impl Default for BridgeExportSpec {
             gif_palette_per_frame: false,
             gif_plays: 0,
             captions: BridgeCaptionsOut::Burn,
+            loudness: None,
+            stems: false,
         }
     }
 }
@@ -391,7 +409,7 @@ impl CompositionReference {
 /// of every format key it offers and disables what the answer refuses.
 #[frb(sync)]
 pub fn export_format_caps(codec: String) -> BridgeFormatCaps {
-    crate::export::format_caps(&codec)
+    crate::export::caps::format_caps(&codec)
 }
 
 /// Every sample rate an export can write sound at, in hertz and in the order

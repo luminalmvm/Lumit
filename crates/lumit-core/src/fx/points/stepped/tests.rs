@@ -132,6 +132,9 @@ fn a_collider_turned_in_3d_is_a_surface() {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),

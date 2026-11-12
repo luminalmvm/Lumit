@@ -1382,6 +1382,8 @@ mod tests {
     use crate::graph::Edge;
     use crate::model::{EffectInstance, EffectValue};
 
+    mod stagger;
+
     fn inst(match_name: &str) -> EffectInstance {
         instantiate(match_name).expect("the catalogue knows it")
     }
@@ -2211,6 +2213,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -2230,6 +2235,9 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -2725,6 +2733,9 @@ mod tests {
                 adjustment: false,
                 pitch_follows_speed: false,
                 audio_routes: Default::default(),
+                audio_gain_db: 0.0,
+                automation: Default::default(),
+                duck: None,
                 retime: None,
                 blend: Default::default(),
                 masks: Vec::new(),
@@ -2747,6 +2758,9 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -3029,55 +3043,6 @@ mod tests {
         );
     }
 
-    /// A refused expression pushes nothing, and the parameter it is wired to
-    /// resolves to its own stored value — the same calm the walk gives a
-    /// bypassed driver or a spent budget. Every kind of refusal: a runtime
-    /// error, a syntax error, a name not in scope, a result of the wrong
-    /// shape, an infinity, and no text at all.
-    #[test]
-    fn a_refused_expression_pushes_nothing_and_the_wired_parameter_keeps_its_keyframes() {
-        let mut blur = inst("blur");
-        set(&mut blur, "radius", 40.0);
-        let radius = |source: &str| -> f32 {
-            let e = expression(source);
-            let graph = LayerGraph {
-                edges: vec![edge(&e, "value", NodeRef::Effect(blur.id), "radius")],
-                nodes: vec![e],
-                ..LayerGraph::default()
-            };
-            let drivers = resolve_drivers(&graph, 0.5, ctx(), None);
-            assert!(drivers.is_empty(), "{source:?} carried something");
-            crate::fx::resolved::resolve_stack_temporal_named(
-                std::slice::from_ref(&blur),
-                &drivers,
-                0.5,
-                0.5,
-                1000.0,
-                1.0,
-                &MarkerContext::NONE,
-                ctx(),
-            )
-            .1
-            .get(0)
-            .expect("one op")
-            .params
-            .float(ParamId::new("radius"), -1.0)
-        };
-        for refused in [
-            "1 / 0",
-            "1 +",
-            "no_such_name * 2",
-            "\"words\"",
-            "[1]",
-            "[1, 2, 3, 4, 5]",
-            "1.0 / 0.0",
-            "",
-            "   ",
-        ] {
-            assert_eq!(radius(refused), 40.0, "{refused:?}: the stored keyframe");
-        }
-    }
-
     /// The expression reads the frame's `time`: two times, two numbers; the
     /// same time twice, the same number. Nothing else moves it.
     #[test]
@@ -3317,5 +3282,5 @@ mod tests {
         assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);
     }
 
-    mod stagger_stamps;
+    mod refused_expression;
 }

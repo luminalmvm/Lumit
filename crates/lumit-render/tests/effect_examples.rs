@@ -46,8 +46,9 @@
 
 mod chord;
 mod example_cube;
-mod unillustrable;
+mod oval_mask;
 
+mod skipped;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -62,7 +63,7 @@ use lumit_core::model::{
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
-use unillustrable::unillustrable;
+use oval_mask::oval_mask;
 use uuid::Uuid;
 
 /// The example frame's size: the source plate's own, and close enough to 1080p
@@ -488,6 +489,9 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
@@ -500,43 +504,6 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         effects: Vec::new(),
         styles: Vec::new(),
         switches: Switches::default(),
-        extra: serde_json::Map::new(),
-    }
-}
-
-/// An oval covering most of the frame, for the three effects that draw along a
-/// mask path (Vegas, Scribble, Stroke). Four vertices with the usual circular
-/// tangent length, which is close enough to an ellipse for a figure.
-fn oval_mask(mode: MaskMode) -> Mask {
-    let (cx, cy) = (f64::from(W) / 2.0, f64::from(H) / 2.0);
-    let (rx, ry) = (f64::from(W) * 0.3, f64::from(H) * 0.34);
-    // The magic number that turns four cubic segments into a circle.
-    let k = 0.552_284_75;
-    let (hx, hy) = (rx * k, ry * k);
-    let v = |pos: (f64, f64), tin: (f64, f64), tout: (f64, f64)| Vertex {
-        pos,
-        tan_in: tin,
-        tan_out: tout,
-    };
-    Mask {
-        id: id("Oval"),
-        name: "Oval".into(),
-        path: BezierPath {
-            vertices: vec![
-                v((cx, cy - ry), (-hx, 0.0), (hx, 0.0)),
-                v((cx + rx, cy), (0.0, -hy), (0.0, hy)),
-                v((cx, cy + ry), (hx, 0.0), (-hx, 0.0)),
-                v((cx - rx, cy), (0.0, hy), (0.0, -hy)),
-            ],
-            closed: true,
-        },
-        path_keys: Vec::new(),
-        inverted: false,
-        opacity: Property::fixed(100.0),
-        mode,
-        feather: Property::zero(),
-        vertex_feather: Vec::new(),
-        expansion: Property::zero(),
         extra: serde_json::Map::new(),
     }
 }
@@ -950,6 +917,9 @@ fn example_doc(
     doc.items.push(ProjectItem::Composition(Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -1065,7 +1035,7 @@ fn render_every_effect_example() {
         if only.as_deref().is_some_and(|o| o != e.match_name) {
             continue;
         }
-        if let Some(why) = unillustrable(e.match_name) {
+        if let Some(why) = skipped::unillustrable(e.match_name) {
             skipped.push(format!("{}: {why}", e.slug));
             continue;
         }

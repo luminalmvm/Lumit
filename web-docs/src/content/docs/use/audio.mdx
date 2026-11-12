@@ -1,6 +1,6 @@
 ---
 title: Audio
-description: Waveforms and beat markers, and how far audio support goes today.
+description: Audio layers, waveforms, audio streams, scrubbing, beat markers and the output.
 sidebar:
   order: 15
 ---
@@ -8,6 +8,7 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 Audio plays in preview, and exporting will retain audio unless specifically turned off.
+Buses, solo, gain, automation and loudness are on [Mixing](/use/mixing/).
 
 ## Audio layers
 
@@ -34,6 +35,11 @@ trimmed and retimed along with the layer.
 | --- | --- |
 | **Style** | **Plain** draws one wave. **Frequency** splits it into low, mid and high bands. |
 | **Anchor** | **Centre** draws the wave about the middle of the row. **Bottom** draws it up from the bottom. |
+| **Scale** | How the height follows the level: **Linear**, **Square root** or **Logarithmic**. **Square root** to begin with. |
+
+A wave is drawn after its clip's gain and its layer's Gain, and a column that reaches full
+scale is drawn in the error colour. Zoomed in past one sample to a pixel, the samples are
+drawn as a line, with a dot on each once they stand apart.
 
 ## Audio streams
 
@@ -80,9 +86,13 @@ first stream, or every stream mixed for either of the other two choices.
 ## Scrubbing
 
 Hold `Ctrl` and drag along the ruler of the Timeline, the Cut timeline or the Audio
-timeline to hear the composition as the playhead moves. Each frame the playhead lands on
-plays a twelfth of a second of the mix from that frame. `Ctrl`+click on the ruler plays the
-frame under the pointer.
+timeline to hear the composition as the playhead moves. It plays at the speed of the drag,
+backwards when the drag goes back, and its pitch follows the speed. A drag that comes to rest
+goes quiet. `Ctrl`+click on the ruler plays a twelfth of a second from the frame under the
+pointer.
+
+With **Settings ▸ Audio ▸ Scrub when dragging the playhead** on, a plain drag or click does
+the same.
 
 ## Beat markers
 
@@ -114,8 +124,15 @@ everything else down. Each has a switch that plays only what it takes away. See
 this machine, from −1000 to 1000 ms. Above zero holds the picture back; below zero holds
 the sound back. It applies while playing, and not to export.
 
+## Output
+
+When the output device goes away, the sound moves to another output and the status line says
+*Sound moved to another output*. When some of the sound was not ready in time, the status
+line says *Sound could not keep up*, once a playback.
+
 ## Related
 
+- [Mixing](/use/mixing/)
 - [Audio, Mixer and Audio timeline](/panels/audio/)
 - [Markers](/use/markers/)
 - [Exporting](/use/export/)

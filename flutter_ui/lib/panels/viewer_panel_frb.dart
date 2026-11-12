@@ -70,6 +70,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockOffTopLine, DockPaneHandle;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
+import '../state/audio_notices.dart';
 import '../state/dock.dart';
 import '../state/settings.dart';
 import '../state/timecode.dart';
@@ -1956,6 +1957,7 @@ class _SourceBarState extends State<SourceBar>
     var seconds = _from / _rate + elapsed.inMicroseconds / 1e6;
     if (_sound) {
       final clock = audioClock();
+      audioNotices.read(clock, Provider.of<LumitState>(context, listen: false));
       if (clock.playing) {
         _heard = true;
         seconds = clock.seconds;

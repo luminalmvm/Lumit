@@ -326,6 +326,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return WaveformStyle(
       multiwave: interface.multiwaveWaveforms,
       fromBottom: interface.waveformsFromBottom,
+      scale: interface.waveformScale,
     );
   }
 
@@ -428,6 +429,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         buckets: request.buckets,
         multiwave: bands,
       )
+          .then((peaks) => withSamples(peaks, secondsPerPixel, request,
+              (a, b) => entry.layer.audioSamples(startSeconds: a, endSeconds: b)))
           .then((peaks) {
         // A later window may already have been asked for while this one was
         // decoding; the newest ask wins, so an old answer is dropped rather
@@ -4649,6 +4652,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         flowParams: _flowParams,
         volumeDb: _volumeDb,
         driven: _driven,
+        busNames: {
+          for (final l in ui.model.layers)
+            if (l.info.kind == BridgeLayerKind.bus)
+              l.layer.internallayerId.toString(): l.info.name,
+        },
         // The strip filters the whole comp; a reveal filters only the layers
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,

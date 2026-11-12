@@ -59,6 +59,7 @@ void main() {
       multiwaveWaveforms: false,
       reduceTransparency: true,
       waveformsFromBottom: true,
+      waveformScale: WaveformScale.logarithmic,
       showToneMap: true,
       invertOrbitAcross: true,
       invertOrbitUpDown: true,
@@ -125,6 +126,7 @@ void main() {
     expect(back.multiwaveWaveforms, isFalse);
     expect(back.reduceTransparency, isTrue);
     expect(back.waveformsFromBottom, isTrue);
+    expect(back.waveformScale, WaveformScale.logarithmic);
     expect(back.showToneMap, isTrue);
     expect(back.invertOrbitAcross, isTrue);
     expect(back.invertOrbitUpDown, isTrue);
@@ -176,7 +178,7 @@ void main() {
     expect(back.transcriptLift, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 67);
+    expect(all.toJson().keys.length, 68);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

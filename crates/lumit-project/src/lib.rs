@@ -1824,6 +1824,8 @@ mod tests {
     use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
     use lumit_core::ops::apply;
 
+    mod refused;
+
     fn footage(name: &str) -> FootageItem {
         FootageItem {
             sequence: None,
@@ -2453,52 +2455,6 @@ mod tests {
         );
     }
 
-    /// A Sequence layer's **clips** convert too — the second half of the
-    /// migration, and the one that would otherwise have left the sequence view
-    /// editing a representation nothing else spoke.
-    #[test]
-    fn a_clips_segment_store_becomes_the_retime_property() {
-        use lumit_core::retime::Retime;
-        use lumit_core::time::Rational;
-
-        let store = Retime::constant_speed(
-            Rational::new(4, 1).unwrap(),
-            Rational::ZERO,
-            Rational::new(2, 1).unwrap(),
-        );
-        let doc = serde_json::json!({
-            "comps": [{
-                "layers": [{
-                    "kind": { "Sequence": { "clips": [{
-                        "id": Uuid::now_v7(),
-                        "source": { "Footage": Uuid::now_v7() },
-                        "source_in": [0, 1],
-                        "source_out": [8, 1],
-                        "place_start": [0, 1],
-                        "place_duration": [4, 1],
-                        "retime": serde_json::to_value(&store).unwrap(),
-                    }]}}
-                }]
-            }]
-        });
-
-        let out = run_migrations(MIGRATIONS, doc, (0, 1, 0));
-        // It typed as a real Clip, which is the whole test: the migration has
-        // to produce a document *this* build can read.
-        let clip: lumit_core::sequence::Clip = serde_json::from_value(
-            out["comps"][0]["layers"][0]["kind"]["Sequence"]["clips"][0].clone(),
-        )
-        .expect("a clip");
-        assert_eq!(
-            clip.constant_speed(),
-            Some(2.0),
-            "double speed before, double speed after"
-        );
-        // …and it reads the same source moments it used to.
-        assert!((clip.source_time(1.0) - store.evaluate(1.0)).abs() < 1e-6);
-        assert!((clip.source_time(3.0) - store.evaluate(3.0)).abs() < 1e-6);
-    }
-
     /// docs/10 §1: a file is walked up the chain from its own version — earlier
     /// migrations are skipped, and every step from the file version onward runs
     /// in order.
@@ -2871,6 +2827,9 @@ mod tests {
         let mut comp = lumit_core::model::Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -2911,6 +2870,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2939,6 +2901,16 @@ mod tests {
             !json.contains("\"graph\""),
             "an untouched project must carry no graph key"
         );
+        for key in [
+            "audio_gain_db",
+            "automation",
+            "duck",
+            "solo_safe",
+            "master_keys",
+            "loudness_target",
+        ] {
+            assert!(!json.contains(key), "an unmixed project writes no {key}");
+        }
 
         // 2. Open and re-save: the same bytes, so nothing was invented on load.
         let (reopened, _) = open(&a).unwrap();
@@ -3025,6 +2997,42 @@ mod tests {
             entry_bytes(&c, "project.json"),
             entry_bytes(&d, "project.json")
         );
+
+        // The mixer's settings on a layer and a comp come back whole.
+        let mut mixed = back.clone();
+        for item in &mut mixed.items {
+            if let lumit_core::model::ProjectItem::Composition(c) = item {
+                c.master_keys = Some(lumit_core::anim::Animation::Static(-3.0));
+                c.master_automation = lumit_core::mixer::AutomationMode::Touch;
+                c.loudness_target = Some(lumit_core::mixer::LoudnessTarget {
+                    lufs: -16.0,
+                    true_peak_db: -1.0,
+                });
+                for l in &mut c.layers {
+                    l.audio_gain_db = 4.5;
+                    l.automation = lumit_core::mixer::AutomationMode::Trim;
+                    l.switches.solo_safe = true;
+                    l.duck = Some(lumit_core::mixer::Duck::behind(Uuid::now_v7()));
+                }
+            }
+        }
+        let e = dir.path().join("e.lum");
+        save(&mixed, &e).unwrap();
+        let (again, _) = open(&e).unwrap();
+        let comps = |d: &lumit_core::model::Document| {
+            d.items
+                .iter()
+                .filter_map(|i| match i {
+                    lumit_core::model::ProjectItem::Composition(c) => Some(c.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            comps(&again),
+            comps(&mixed),
+            "the mixer's settings survive the file"
+        );
     }
 
     /// **A project written before node graphs existed is untouched by them**
@@ -3047,6 +3055,9 @@ mod tests {
         let plate = doc.items[0].id();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -3417,6 +3428,9 @@ mod tests {
         let mut comp = lumit_core::model::Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -3463,6 +3477,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -3530,84 +3547,5 @@ mod tests {
         );
     }
 
-    /// A `.lum` is a ZIP, and a ZIP entry's compressed size says nothing about
-    /// its decompressed one: a few hundred kilobytes of deflated zeros expand to
-    /// gigabytes. `read_to_string` believes whatever comes out of the
-    /// decompressor — so a project file somebody sent, which is what project
-    /// files are for, could take the machine's memory before a single field had
-    /// been parsed.
-    #[test]
-    fn a_project_entry_that_decompresses_without_end_is_refused() {
-        /// A reader that claims one size and produces another — which is the
-        /// whole shape of the attack, and not something a real archive library
-        /// will do on request.
-        struct Liar {
-            claims: u64,
-            produced: usize,
-        }
-        impl std::io::Read for Liar {
-            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                // Endless, like a decompressor fed a bomb.
-                buf.fill(b'x');
-                self.produced = self.produced.saturating_add(buf.len());
-                Ok(buf.len())
-            }
-        }
-        impl ZipEntry for Liar {
-            fn size(&self) -> u64 {
-                self.claims
-            }
-        }
-
-        // Honest and over the ceiling: refused from the header, having read
-        // nothing.
-        let out = entry_text(
-            Liar {
-                claims: 1 << 40,
-                produced: 0,
-            },
-            1024,
-        );
-        assert!(
-            matches!(out, Err(ProjectError::EntryTooLarge { limit: 1024, .. })),
-            "{out:?}"
-        );
-
-        // Understating its size and then never stopping: refused on the byte
-        // past the ceiling, rather than read until the memory ran out.
-        let out = entry_text(
-            Liar {
-                claims: 8,
-                produced: 0,
-            },
-            1024,
-        );
-        assert!(
-            matches!(out, Err(ProjectError::EntryTooLarge { limit: 1024, .. })),
-            "a stream that lied about its size must be caught by what it produced: {out:?}"
-        );
-
-        // And an ordinary entry is unaffected.
-        let honest = entry_text(
-            {
-                struct Short(&'static [u8]);
-                impl std::io::Read for Short {
-                    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                        std::io::Read::read(&mut self.0, buf)
-                    }
-                }
-                impl ZipEntry for Short {
-                    fn size(&self) -> u64 {
-                        3
-                    }
-                }
-                Short(b"{}\n")
-            },
-            1024,
-        )
-        .expect("an ordinary entry is read");
-        assert_eq!(honest.trim(), "{}");
-    }
-
-    mod refused_sizes;
+    mod clip_segments;
 }

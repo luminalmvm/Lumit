@@ -63,6 +63,14 @@ void main() {
     // Where a level draws inside the band, mirroring the widget's mapping.
     double yOf(double db) =>
         rect.top + 1 + (volumeBandTopDb - db) / span * (rect.height - 2);
+    // The line runs where the layer is heard, so the clicks land along it.
+    final ends = (tester
+            .widget<CustomPaint>(find.descendant(
+                of: band, matching: find.byType(CustomPaint)))
+            .painter! as VolumeBandPainter)
+        .points;
+    double xAt(double f) =>
+        rect.left + ends.first.dx + (ends.last.dx - ends.first.dx) * f;
 
     BridgeScalar volume() => p.uiState.model.heldLayers
         .firstWhere((e) => e.layer.internallayerId == id)
@@ -71,12 +79,12 @@ void main() {
 
     // --- Ctrl-click plants keys on the line, at the level it already reads.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.tapAt(Offset(rect.left + rect.width * 0.3, yOf(0)));
+    await tester.tapAt(Offset(xAt(0.3), yOf(0)));
     await tester.pump();
     expect((volume() as BridgeScalar_Keyframed).field0, hasLength(1),
         reason: 'the first click planted');
     await tester.pump();
-    await tester.tapAt(Offset(rect.left + rect.width * 0.6, yOf(0)));
+    await tester.tapAt(Offset(xAt(0.6), yOf(0)));
     await tester.pump();
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     var keys = (volume() as BridgeScalar_Keyframed).field0;
@@ -86,7 +94,7 @@ void main() {
 
     // --- A vertical drag on the second key pulls its level down.
     final gesture = await tester.startGesture(
-      Offset(rect.left + rect.width * 0.6, yOf(keys[1].value)),
+      Offset(xAt(0.6), yOf(keys[1].value)),
       kind: PointerDeviceKind.mouse,
     );
     await tester.pump(const Duration(milliseconds: 60));
@@ -104,7 +112,7 @@ void main() {
     // --- Alt-click lifts a key; lifting the last leaves the level static at
     // what the key read.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-    await tester.tapAt(Offset(rect.left + rect.width * 0.3, yOf(keys[0].value)));
+    await tester.tapAt(Offset(xAt(0.3), yOf(keys[0].value)));
     await tester.pump();
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     keys = (volume() as BridgeScalar_Keyframed).field0;

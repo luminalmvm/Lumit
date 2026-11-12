@@ -9,7 +9,7 @@
 // It takes no pointer. The panel's one listener over the lanes does the hit
 // testing, through the same pure functions this draws from.
 
-import 'dart:math' show max, min, pi, pow;
+import 'dart:math' show max, min, pi;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -46,7 +46,7 @@ const double cutReachAlpha = 0.25;
 /// the painter has no context to ask. [label] is the track's own, and
 /// [labels] the palette a clip with a colour of its own takes from.
 /// [handle] and [handleFill] are the fade handle's outline and inside, the
-/// Audio timeline's own.
+/// Audio timeline's own. [full] is a wave column that reaches full scale.
 typedef CutLaneColours = ({
   Color label,
   List<Color> labels,
@@ -59,6 +59,7 @@ typedef CutLaneColours = ({
   Color handle,
   Color handleFill,
   Color drop,
+  Color full,
 });
 
 /// The composition glyph as a picture the painters can draw, made once by
@@ -440,9 +441,11 @@ class CutTrackPainter extends CustomPainter {
   /// as the engine carries a layer of any other kind.
   void _plainBar(Canvas canvas, Size size, CutDrag? held, bool locked) {
     final info = track.entry.info;
-    var start = info.inFrame.toInt();
-    var end = info.outFrame.toInt();
-    final ripple = locked ? 0 : cutRippleOf(held);
+    // A bus carries sound for the whole comp, whatever its in and out.
+    final bus = track.bus;
+    var start = bus ? 0 : info.inFrame.toInt();
+    var end = bus ? axis.frames : info.outFrame.toInt();
+    final ripple = locked || bus ? 0 : cutRippleOf(held);
     if (ripple != 0 && start >= held!.rippleFrom!) {
       start += ripple;
       end += ripple;
@@ -452,19 +455,23 @@ class CutTrackPainter extends CustomPainter {
         Rect.fromLTWH(left, cutClipInset, width, size.height - cutClipInset * 2);
     _fill(canvas, box, colours.label, picked: false);
     // A layer's own sound row: its wave under its name. The peaks are on the
-    // layer's clock, which starts where its source does.
+    // layer's clock, which starts where its source does. A bus's mix is on
+    // the comp's.
     final own = track.kind == CutTrackKind.layerSound;
-    final summary = own ? peaks[track.id] : null;
+    final summary = own || bus ? peaks[track.id] : null;
     if (summary != null && axis.perFrame > 0 && fps > 0) {
       _waveAt(
           canvas,
           summary,
-          rationalSeconds(info.span.inPoint) -
-              rationalSeconds(info.span.startOffset),
+          bus
+              ? 0
+              : rationalSeconds(info.span.inPoint) -
+                  rationalSeconds(info.span.startOffset),
           box,
-          colours.label);
+          colours.label,
+          gainDb: bus ? 0 : info.audioGainDb);
     }
-    final header = own ? _soundHeader(box) : 0.0;
+    final header = own || bus ? _soundHeader(box) : 0.0;
     _name(canvas, info.name, box,
         gainDb: 0, from: clipEdgeWidth + 4, band: header > 0 ? header : null);
   }
@@ -735,8 +742,8 @@ class CutTrackPainter extends CustomPainter {
           ..color = colours.rising);
   }
 
-  /// A sound clip's level, as a line across it: at the top for 0 dB, lower
-  /// as it is turned down, the Audio timeline's own line.
+  /// A sound clip's level, as a line across it: at the top for its loudest,
+  /// lower as it is turned down, the Audio timeline's own line.
   void _gainLine(Canvas canvas, BridgeClip clip, Rect box) {
     final live = gain.value;
     final db = live != null && live.clip == clip.id.toString()
@@ -972,30 +979,27 @@ class CutTrackPainter extends CustomPainter {
     final slip = mine && held.tool == CutTool.slip;
     final origin = rationalSeconds(clip.placeStart) +
         (trimIn || slip ? held.shift / fps : 0);
-    // Drawn at the clip's own level, as Vegas draws it, so a clip turned
-    // down looks quieter. The line in hand counts before it is let go.
+    // Drawn at the clip's own gain and the layer's, so a clip turned down
+    // looks quieter. The line in hand counts before it is let go.
     final live = gain.value;
     final db = live != null && live.clip == clip.id.toString()
         ? live.db
         : clip.gainDb;
     _waveAt(canvas, summary, origin, box, label,
-        header: header, level: db >= 0 ? 1.0 : pow(10, db / 20).toDouble());
+        header: header, gainDb: db + track.entry.info.audioGainDb);
   }
 
   /// A wave across [box], whose left edge is [origin] on the peaks' clock,
   /// in a bright shade of [label].
   void _waveAt(Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box,
       Color label,
-      {bool header = true, double level = 1}) {
+      {bool header = true, double gainDb = 0}) {
     // Under the name's header, so the wave never runs through the name.
     final top = header ? _soundHeader(box) : 0.0;
-    final room = box.height - top;
-    final tall = max(2.0, room * level);
+    final tall = max(2.0, box.height - top);
     canvas.save();
     canvas.clipRect(box.deflate(1));
-    // Shrunk about its middle, or onto the foot where waves stand on it.
-    final drop = style.fromBottom ? room - tall : (room - tall) / 2;
-    canvas.translate(box.left, box.top + top + drop);
+    canvas.translate(box.left, box.top + top);
     WaveformPainter(
       peaks: summary,
       originSeconds: origin,
@@ -1005,6 +1009,8 @@ class CutTrackPainter extends CustomPainter {
       colours: clipWaveColours(label, colours.lift),
       style: style,
       height: tall,
+      gainDb: gainDb,
+      full: colours.full,
     ).paint(canvas, Size(box.width, tall));
     canvas.restore();
   }

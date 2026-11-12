@@ -81,6 +81,7 @@ mod grid_lines;
 mod haze;
 pub mod headless;
 pub mod media_index;
+pub mod mix;
 pub mod model;
 pub mod model_extract;
 pub mod model_layer;

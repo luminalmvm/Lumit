@@ -11,7 +11,7 @@ import 'package:uuid/uuid.dart';
 part 'export.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// What one output format can and cannot carry. The dialogue asks this
 /// of every format key it offers and disables what the answer refuses.
@@ -304,6 +304,32 @@ class BridgeExportDefaults {
           filenameTemplate == other.filenameTemplate &&
           destination == other.destination &&
           folder == other.folder;
+}
+
+/// The loudness an export is made to: the mix is measured, the master moved
+/// to it, and the limiter holds the true peak.
+class BridgeExportLoudness {
+  /// Integrated loudness, in LUFS.
+  final double lufs;
+
+  /// The highest true peak, in dBTP.
+  final double truePeakDb;
+
+  const BridgeExportLoudness({
+    required this.lufs,
+    required this.truePeakDb,
+  });
+
+  @override
+  int get hashCode => lufs.hashCode ^ truePeakDb.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExportLoudness &&
+          runtimeType == other.runtimeType &&
+          lufs == other.lufs &&
+          truePeakDb == other.truePeakDb;
 }
 
 /// What a delivery preset fills the export dialogue with.
@@ -640,6 +666,12 @@ class BridgeExportSpec {
   /// What happens to the composition's own caption layers.
   final BridgeCaptionsOut captions;
 
+  /// The loudness the sound is made to, or none for the mix as it stands.
+  final BridgeExportLoudness? loudness;
+
+  /// Each top-level bus also written to a file of its own beside this one.
+  final bool stems;
+
   const BridgeExportSpec({
     required this.preset,
     required this.codec,
@@ -682,6 +714,8 @@ class BridgeExportSpec {
     this.gifPalettePerFrame = false,
     this.gifPlays = 0,
     this.captions = BridgeCaptionsOut.burn,
+    this.loudness,
+    this.stems = false,
   });
 
   /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
@@ -731,7 +765,9 @@ class BridgeExportSpec {
       gifDither.hashCode ^
       gifPalettePerFrame.hashCode ^
       gifPlays.hashCode ^
-      captions.hashCode;
+      captions.hashCode ^
+      loudness.hashCode ^
+      stems.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -778,7 +814,9 @@ class BridgeExportSpec {
           gifDither == other.gifDither &&
           gifPalettePerFrame == other.gifPalettePerFrame &&
           gifPlays == other.gifPlays &&
-          captions == other.captions;
+          captions == other.captions &&
+          loudness == other.loudness &&
+          stems == other.stems;
 }
 
 @freezed

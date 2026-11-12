@@ -93,6 +93,9 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetCompLighting { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
+        | Op::SetMasterAutomation { comp, .. }
+        | Op::SetMasterAutomationMode { comp, .. }
+        | Op::SetLoudnessTarget { comp, .. }
         // The layer Timeline's Sound mix row stands or falls on the mark, so
         // the whole outline rebuilds and no one layer changed.
         | Op::SetSoundMix { comp, .. }
@@ -167,6 +170,10 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
         | Op::SetLayerRoutes { comp, layer, .. }
+        | Op::SetLayerAudioGain { comp, layer, .. }
+        | Op::SetLayerAutomation { comp, layer, .. }
+        | Op::SetLayerSoloSafe { comp, layer, .. }
+        | Op::SetLayerDuck { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }

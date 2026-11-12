@@ -1,4 +1,4 @@
-//! Tests for the edit helpers.
+//! Tests of the layer and asset defaults.
 
 use super::*;
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};

@@ -15,9 +15,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::str::FromStr;
 
 pub mod after_effects;
+mod chord;
 pub mod defaults;
 mod grade;
 
@@ -293,6 +293,18 @@ impl ActionId {
             "layer.project.from.camera" => "Project from camera",
             "layer.new.sequence" => "New Sequence layer",
             "layer.new.audio" => "New Audio layer",
+            "layer.new.bus" => "New bus",
+            "mixer.strip.prev" => "Previous strip",
+            "mixer.strip.next" => "Next strip",
+            "mixer.fader.up" => "Raise the fader by 0.5 dB",
+            "mixer.fader.down" => "Lower the fader by 0.5 dB",
+            "mixer.fader.up.fine" => "Raise the fader by 0.1 dB",
+            "mixer.fader.down.fine" => "Lower the fader by 0.1 dB",
+            "mixer.fader.reset" => "Return the fader to 0 dB",
+            "mixer.mute" => "Mute or unmute the strip",
+            "mixer.solo" => "Solo or unsolo the strip",
+            "mixer.solo.alone" => "Solo the strip alone",
+            "mixer.automation.next" => "Next automation mode",
             "layer.settings" => "Layer settings",
             "layer.blend.next" => "Next blend mode",
             "layer.blend.prev" => "Previous blend mode",
@@ -432,12 +444,14 @@ pub enum KeyContext {
     Transcript,
     /// The Colour workspace's panels: Grade, Grade nodes, Shots and Gallery.
     Colour,
+    /// The Mixer, where keys act on the picked strips.
+    Mixer,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 13] = [
+    pub const ALL: [KeyContext; 14] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -451,6 +465,7 @@ impl KeyContext {
         KeyContext::Captions,
         KeyContext::Transcript,
         KeyContext::Colour,
+        KeyContext::Mixer,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -473,6 +488,7 @@ impl KeyContext {
             KeyContext::Captions => "Captions panel",
             KeyContext::Transcript => "Transcript panel",
             KeyContext::Colour => "Colour panels",
+            KeyContext::Mixer => "Mixer",
         }
     }
 }
@@ -519,77 +535,6 @@ impl fmt::Display for ChordError {
 }
 
 impl std::error::Error for ChordError {}
-
-/// Normalise a bare key token: single ASCII letters upper-case (so `d` == `D`),
-/// everything else (named keys, punctuation) kept verbatim after trimming.
-fn normalise_key(raw: &str) -> String {
-    let k = raw.trim();
-    if k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()) {
-        k.to_ascii_uppercase()
-    } else {
-        k.to_string()
-    }
-}
-
-impl FromStr for Chord {
-    type Err = ChordError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut mods = Modifiers::default();
-        // The final token is always the key, even if it spells a modifier
-        // word (so `Shift` alone is the Shift *key*). The plus key is written
-        // with the sign that joins the others, so `+` and `Shift++` are read
-        // for what they are before anything is split on it: otherwise the
-        // chord would not read back, and a stored keymap holding one would
-        // not load at all.
-        let (held, key) = match s.strip_suffix('+') {
-            Some(rest) if rest.is_empty() || rest.ends_with('+') => {
-                (rest.strip_suffix('+').unwrap_or(""), "+")
-            }
-            _ => s.rsplit_once('+').unwrap_or(("", s)),
-        };
-        for tok in held.split('+').filter(|_| !held.is_empty()) {
-            match tok.trim().to_ascii_lowercase().as_str() {
-                "mod" | "cmd" | "command" | "ctrl" | "control" | "primary" => mods.primary = true,
-                "shift" => mods.shift = true,
-                "alt" | "option" | "opt" => mods.alt = true,
-                other => return Err(ChordError::UnknownModifier(other.to_string())),
-            }
-        }
-        match normalise_key(key) {
-            k if !k.is_empty() => Ok(Chord { mods, key: k }),
-            _ => Err(ChordError::Empty),
-        }
-    }
-}
-
-impl fmt::Display for Chord {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.mods.primary {
-            f.write_str("Mod+")?;
-        }
-        if self.mods.alt {
-            f.write_str("Alt+")?;
-        }
-        if self.mods.shift {
-            f.write_str("Shift+")?;
-        }
-        f.write_str(&self.key)
-    }
-}
-
-impl From<Chord> for String {
-    fn from(c: Chord) -> Self {
-        c.to_string()
-    }
-}
-
-impl TryFrom<String> for Chord {
-    type Error = ChordError;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        s.parse()
-    }
-}
 
 /// One entry of a keymap: a chord, in a context, runs an action.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

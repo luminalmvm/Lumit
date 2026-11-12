@@ -53,6 +53,7 @@ pub mod layer;
 pub mod layer_source;
 pub mod lens;
 pub mod mask_clipboard;
+pub mod mixer;
 pub mod model;
 pub mod model_rows;
 pub mod multicam;
@@ -174,6 +175,8 @@ pub enum BridgeError {
     /// time is deliberate: two disk-bound jobs share one drive and
     /// halve each other.
     AnalysisBusy,
+    /// A long run was stopped before it finished, as asked.
+    Stopped,
     /// An addon was asked to install while another one is installing. One at a
     /// time, and never a queue (docs/impl/addons.md §9).
     AddonBusy,
@@ -341,6 +344,7 @@ impl fmt::Display for BridgeError {
                 write!(f, "That layer has no words to convert")
             }
             BridgeError::AnalysisBusy => write!(f, "Another analysis is already running"),
+            BridgeError::Stopped => write!(f, "Stopped before it finished"),
             BridgeError::AddonBusy => write!(f, "Another addon is installing"),
             BridgeError::AddonInvalid(why) => write!(f, "{why}"),
             BridgeError::AddonMissing => write!(f, "That addon is not installed"),

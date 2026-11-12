@@ -36,6 +36,7 @@
 use crate::err_json;
 use serde_json::{json, Value};
 
+pub(crate) mod caps;
 mod names;
 #[cfg(target_arch = "wasm32")]
 mod web;
@@ -112,7 +113,6 @@ fn preset_default_file_name(name: &str) -> &'static str {
 
 use crate::api::export::{
     BridgeCaptionsOut, BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec,
-    BridgeFormatCaps,
 };
 use lumit_render::colour::ColourState;
 use lumit_render::export::captions::{sidecar_taken, CaptionsOut, SubtitleFormat};
@@ -333,68 +333,6 @@ fn format_key(format: lumit_render::export::format::ExportFormat) -> &'static st
     }
 }
 
-/// What one format can carry, as the dialogue reads it. A build with no encoder
-/// can carry nothing, which disables every control rather than offering choices
-/// no file will honour.
-#[cfg(feature = "media")]
-pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
-    use lumit_media::encode::BitDepth;
-    let Ok(format) = export_format(codec) else {
-        return BridgeFormatCaps::default();
-    };
-    #[cfg(target_arch = "wasm32")]
-    if !web::offers(codec) {
-        return BridgeFormatCaps::default();
-    }
-    let caps = format.caps();
-    // The page writes no metadata and states no colour space.
-    let web = cfg!(target_arch = "wasm32");
-    BridgeFormatCaps {
-        video: caps.video,
-        audio: caps.audio,
-        alpha: caps.alpha,
-        alpha_mode: caps.alpha_mode,
-        gif: caps.gif,
-        depths: caps
-            .depths
-            .iter()
-            .map(|d| match d {
-                BitDepth::Eight => 8,
-                // Half and Sixteen are both "16" to the dialogue, and never
-                // both on offer: OpenEXR carries the float depths and nothing
-                // else, every other still format the integer ones. So the
-                // number says which within a format, which is the only place
-                // it is read.
-                BitDepth::Sixteen | BitDepth::Half => 16,
-                BitDepth::Float => 32,
-            })
-            .collect(),
-        bit_rate: caps.bit_rate,
-        // Uncompressed PCM is exactly what it is; AAC has a rate to choose.
-        audio_bit_rate: caps.audio
-            && format.audio_codec(lumit_render::export::AudioDepth::Sixteen)
-                == lumit_media::encode::AudioCodec::Aac,
-        audio_24_bit: caps
-            .audio_depths
-            .contains(&lumit_render::export::AudioDepth::TwentyFour),
-        metadata: caps.metadata && !web,
-        colour_spaces: caps
-            .colour_spaces
-            .iter()
-            .take(if web { 1 } else { usize::MAX })
-            .map(lumit_render::export::ColourSpace::stored_name)
-            .collect(),
-        max_fps: caps.max_fps.unwrap_or(0),
-        // The page writes no subtitles either.
-        subtitles: caps.subtitles && !web,
-    }
-}
-
-#[cfg(not(feature = "media"))]
-pub(crate) fn format_caps(_codec: &str) -> BridgeFormatCaps {
-    BridgeFormatCaps::default()
-}
-
 /// Every sample rate an export can write sound at — the engine's own list, so
 /// the Sound row offers what the encoder was actually asked for.
 pub(crate) fn audio_rates() -> Vec<u32> {
@@ -566,6 +504,14 @@ pub(crate) fn to_export_spec(
             plays: (spec.gif_plays > 0).then_some(spec.gif_plays),
         },
         captions: captions_out(spec.captions),
+        loudness: spec
+            .loudness
+            .filter(|l| l.lufs.is_finite() && l.true_peak_db.is_finite())
+            .map(|l| lumit_render::export::format::ExportLoudness {
+                lufs: l.lufs,
+                true_peak_db: l.true_peak_db,
+            }),
+        stems: spec.stems,
     })
 }
 
@@ -670,6 +616,13 @@ pub(crate) fn from_export_spec(
             CaptionsOut::File(SubtitleFormat::Vtt) => BridgeCaptionsOut::Vtt,
             CaptionsOut::Embed => BridgeCaptionsOut::Embed,
         },
+        loudness: spec
+            .loudness
+            .map(|l| crate::api::export::BridgeExportLoudness {
+                lufs: l.lufs,
+                true_peak_db: l.true_peak_db,
+            }),
+        stems: spec.stems,
     })
 }
 

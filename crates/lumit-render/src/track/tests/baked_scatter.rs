@@ -87,6 +87,9 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
     doc.items.push(ProjectItem::Composition(Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),

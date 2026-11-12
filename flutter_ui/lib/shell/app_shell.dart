@@ -677,6 +677,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         Panel.shots ||
         Panel.gallery =>
           BridgeKeyContext.colour,
+        Panel.mixer => BridgeKeyContext.mixer,
         _ => BridgeKeyContext.global,
       };
 
@@ -973,6 +974,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'layer.new.light.point' ||
             'layer.new.solid' ||
             'layer.new.audio' ||
+            'layer.new.bus' ||
             'layer.new.sequence' ||
             'layer.new.text' ||
             'layer.new.camera' ||

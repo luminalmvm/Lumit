@@ -47,7 +47,9 @@ import 'api/import.dart';
 import 'api/interpret.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
+import 'api/layer/clip_peaks.dart';
 import 'api/lens.dart';
+import 'api/mixer.dart';
 import 'api/model.dart';
 import 'api/model_rows.dart';
 import 'api/multicam.dart';
@@ -328,6 +330,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeDrmNode dco_decode_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
+  BridgeDuck dco_decode_box_autoadd_bridge_duck(dynamic raw);
+
+  @protected
   BridgeEffectInstanceInfo dco_decode_box_autoadd_bridge_effect_instance_info(
       dynamic raw);
 
@@ -336,6 +341,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportDefaults dco_decode_box_autoadd_bridge_export_defaults(
+      dynamic raw);
+
+  @protected
+  BridgeExportLoudness dco_decode_box_autoadd_bridge_export_loudness(
       dynamic raw);
 
   @protected
@@ -389,6 +398,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeLightSettings dco_decode_box_autoadd_bridge_light_settings(dynamic raw);
 
   @protected
+  BridgeLoudnessTarget dco_decode_box_autoadd_bridge_loudness_target(
+      dynamic raw);
+
+  @protected
   BridgeMask dco_decode_box_autoadd_bridge_mask(dynamic raw);
 
   @protected
@@ -410,6 +423,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMidiControl dco_decode_box_autoadd_bridge_midi_control(dynamic raw);
+
+  @protected
+  BridgeMixTarget dco_decode_box_autoadd_bridge_mix_target(dynamic raw);
 
   @protected
   BridgeModelLook dco_decode_box_autoadd_bridge_model_look(dynamic raw);
@@ -718,6 +734,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAudioPeaks dco_decode_bridge_audio_peaks(dynamic raw);
 
   @protected
+  BridgeAudioSamples dco_decode_bridge_audio_samples(dynamic raw);
+
+  @protected
   BridgeAudioStream dco_decode_bridge_audio_stream(dynamic raw);
 
   @protected
@@ -725,6 +744,19 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAutoSide dco_decode_bridge_auto_side(dynamic raw);
+
+  @protected
+  BridgeAutomationLine dco_decode_bridge_automation_line(dynamic raw);
+
+  @protected
+  BridgeAutomationMode dco_decode_bridge_automation_mode(dynamic raw);
+
+  @protected
+  BridgeAutomationPassSince dco_decode_bridge_automation_pass_since(
+      dynamic raw);
+
+  @protected
+  BridgeAutomationPoint dco_decode_bridge_automation_point(dynamic raw);
 
   @protected
   BridgeAutosave dco_decode_bridge_autosave(dynamic raw);
@@ -952,6 +984,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeDrmNode dco_decode_bridge_drm_node(dynamic raw);
 
   @protected
+  BridgeDuck dco_decode_bridge_duck(dynamic raw);
+
+  @protected
   BridgeEffectInfo dco_decode_bridge_effect_info(dynamic raw);
 
   @protected
@@ -971,6 +1006,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportDefaults dco_decode_bridge_export_defaults(dynamic raw);
+
+  @protected
+  BridgeExportLoudness dco_decode_bridge_export_loudness(dynamic raw);
 
   @protected
   BridgeExportPreset dco_decode_bridge_export_preset(dynamic raw);
@@ -1279,6 +1317,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeLottieImport dco_decode_bridge_lottie_import(dynamic raw);
 
   @protected
+  BridgeLoudnessTarget dco_decode_bridge_loudness_target(dynamic raw);
+
+  @protected
   BridgeLutSpace dco_decode_bridge_lut_space(dynamic raw);
 
   @protected
@@ -1321,6 +1362,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMetadataField dco_decode_bridge_metadata_field(dynamic raw);
 
   @protected
+  BridgeMeterKind dco_decode_bridge_meter_kind(dynamic raw);
+
+  @protected
   BridgeMidiControl dco_decode_bridge_midi_control(dynamic raw);
 
   @protected
@@ -1331,6 +1375,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMidiMapping dco_decode_bridge_midi_mapping(dynamic raw);
+
+  @protected
+  BridgeMixLoudness dco_decode_bridge_mix_loudness(dynamic raw);
+
+  @protected
+  BridgeMixTarget dco_decode_bridge_mix_target(dynamic raw);
 
   @protected
   BridgeModelDisplay dco_decode_bridge_model_display(dynamic raw);
@@ -1827,6 +1877,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeStreamsArrival dco_decode_bridge_streams_arrival(dynamic raw);
 
   @protected
+  BridgeStripPosition dco_decode_bridge_strip_position(dynamic raw);
+
+  @protected
   BridgeStroke dco_decode_bridge_stroke(dynamic raw);
 
   @protected
@@ -2077,6 +2130,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeAudioStream> dco_decode_list_bridge_audio_stream(dynamic raw);
+
+  @protected
+  List<BridgeAutomationLine> dco_decode_list_bridge_automation_line(
+      dynamic raw);
+
+  @protected
+  List<BridgeAutomationPoint> dco_decode_list_bridge_automation_point(
+      dynamic raw);
 
   @protected
   List<BridgeAutosave> dco_decode_list_bridge_autosave(dynamic raw);
@@ -2449,6 +2510,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeStill> dco_decode_list_bridge_still(dynamic raw);
 
   @protected
+  List<BridgeStripPosition> dco_decode_list_bridge_strip_position(dynamic raw);
+
+  @protected
   List<BridgeStroke> dco_decode_list_bridge_stroke(dynamic raw);
 
   @protected
@@ -2699,8 +2763,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeDrmNode? dco_decode_opt_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
+  BridgeDuck? dco_decode_opt_box_autoadd_bridge_duck(dynamic raw);
+
+  @protected
   BridgeEffectInstanceInfo?
       dco_decode_opt_box_autoadd_bridge_effect_instance_info(dynamic raw);
+
+  @protected
+  BridgeExportLoudness? dco_decode_opt_box_autoadd_bridge_export_loudness(
+      dynamic raw);
 
   @protected
   BridgeExportSpec? dco_decode_opt_box_autoadd_bridge_export_spec(dynamic raw);
@@ -2728,6 +2799,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLightSettings? dco_decode_opt_box_autoadd_bridge_light_settings(
+      dynamic raw);
+
+  @protected
+  BridgeLoudnessTarget? dco_decode_opt_box_autoadd_bridge_loudness_target(
       dynamic raw);
 
   @protected
@@ -3220,6 +3295,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeDuck sse_decode_box_autoadd_bridge_duck(SseDeserializer deserializer);
+
+  @protected
   BridgeEffectInstanceInfo sse_decode_box_autoadd_bridge_effect_instance_info(
       SseDeserializer deserializer);
 
@@ -3229,6 +3307,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportDefaults sse_decode_box_autoadd_bridge_export_defaults(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExportLoudness sse_decode_box_autoadd_bridge_export_loudness(
       SseDeserializer deserializer);
 
   @protected
@@ -3295,6 +3377,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeLoudnessTarget sse_decode_box_autoadd_bridge_loudness_target(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMask sse_decode_box_autoadd_bridge_mask(SseDeserializer deserializer);
 
   @protected
@@ -3318,6 +3404,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMidiControl sse_decode_box_autoadd_bridge_midi_control(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMixTarget sse_decode_box_autoadd_bridge_mix_target(
       SseDeserializer deserializer);
 
   @protected
@@ -3693,6 +3783,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAudioPeaks sse_decode_bridge_audio_peaks(SseDeserializer deserializer);
 
   @protected
+  BridgeAudioSamples sse_decode_bridge_audio_samples(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeAudioStream sse_decode_bridge_audio_stream(
       SseDeserializer deserializer);
 
@@ -3702,6 +3796,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAutoSide sse_decode_bridge_auto_side(SseDeserializer deserializer);
+
+  @protected
+  BridgeAutomationLine sse_decode_bridge_automation_line(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeAutomationMode sse_decode_bridge_automation_mode(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeAutomationPassSince sse_decode_bridge_automation_pass_since(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeAutomationPoint sse_decode_bridge_automation_point(
+      SseDeserializer deserializer);
 
   @protected
   BridgeAutosave sse_decode_bridge_autosave(SseDeserializer deserializer);
@@ -3957,6 +4067,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeDrmNode sse_decode_bridge_drm_node(SseDeserializer deserializer);
 
   @protected
+  BridgeDuck sse_decode_bridge_duck(SseDeserializer deserializer);
+
+  @protected
   BridgeEffectInfo sse_decode_bridge_effect_info(SseDeserializer deserializer);
 
   @protected
@@ -3981,6 +4094,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportDefaults sse_decode_bridge_export_defaults(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExportLoudness sse_decode_bridge_export_loudness(
       SseDeserializer deserializer);
 
   @protected
@@ -4342,6 +4459,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeLoudnessTarget sse_decode_bridge_loudness_target(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeLutSpace sse_decode_bridge_lut_space(SseDeserializer deserializer);
 
   @protected
@@ -4389,6 +4510,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeMeterKind sse_decode_bridge_meter_kind(SseDeserializer deserializer);
+
+  @protected
   BridgeMidiControl sse_decode_bridge_midi_control(
       SseDeserializer deserializer);
 
@@ -4402,6 +4526,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeMidiMapping sse_decode_bridge_midi_mapping(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeMixLoudness sse_decode_bridge_mix_loudness(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMixTarget sse_decode_bridge_mix_target(SseDeserializer deserializer);
 
   @protected
   BridgeModelDisplay sse_decode_bridge_model_display(
@@ -4973,6 +5104,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeStripPosition sse_decode_bridge_strip_position(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeStroke sse_decode_bridge_stroke(SseDeserializer deserializer);
 
   @protected
@@ -5262,6 +5397,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeAudioStream> sse_decode_list_bridge_audio_stream(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeAutomationLine> sse_decode_list_bridge_automation_line(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeAutomationPoint> sse_decode_list_bridge_automation_point(
       SseDeserializer deserializer);
 
   @protected
@@ -5734,6 +5877,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeStill> sse_decode_list_bridge_still(SseDeserializer deserializer);
 
   @protected
+  List<BridgeStripPosition> sse_decode_list_bridge_strip_position(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeStroke> sse_decode_list_bridge_stroke(
       SseDeserializer deserializer);
 
@@ -6033,9 +6180,17 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeDuck? sse_decode_opt_box_autoadd_bridge_duck(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeEffectInstanceInfo?
       sse_decode_opt_box_autoadd_bridge_effect_instance_info(
           SseDeserializer deserializer);
+
+  @protected
+  BridgeExportLoudness? sse_decode_opt_box_autoadd_bridge_export_loudness(
+      SseDeserializer deserializer);
 
   @protected
   BridgeExportSpec? sse_decode_opt_box_autoadd_bridge_export_spec(
@@ -6067,6 +6222,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLightSettings? sse_decode_opt_box_autoadd_bridge_light_settings(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLoudnessTarget? sse_decode_opt_box_autoadd_bridge_loudness_target(
       SseDeserializer deserializer);
 
   @protected
@@ -6588,6 +6747,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeDrmNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_duck(
+      BridgeDuck self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_effect_instance_info(
       BridgeEffectInstanceInfo self, SseSerializer serializer);
 
@@ -6598,6 +6761,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_export_defaults(
       BridgeExportDefaults self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_export_loudness(
+      BridgeExportLoudness self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_export_spec(
@@ -6664,6 +6831,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeLightSettings self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_loudness_target(
+      BridgeLoudnessTarget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_mask(
       BridgeMask self, SseSerializer serializer);
 
@@ -6690,6 +6861,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_midi_control(
       BridgeMidiControl self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_mix_target(
+      BridgeMixTarget self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_model_look(
@@ -7074,6 +7249,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAudioPeaks self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_audio_samples(
+      BridgeAudioSamples self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_audio_stream(
       BridgeAudioStream self, SseSerializer serializer);
 
@@ -7084,6 +7263,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_auto_side(
       BridgeAutoSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_automation_line(
+      BridgeAutomationLine self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_automation_mode(
+      BridgeAutomationMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_automation_pass_since(
+      BridgeAutomationPassSince self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_automation_point(
+      BridgeAutomationPoint self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_autosave(
@@ -7373,6 +7568,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_drm_node(BridgeDrmNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_duck(BridgeDuck self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_effect_info(
       BridgeEffectInfo self, SseSerializer serializer);
 
@@ -7399,6 +7597,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_export_defaults(
       BridgeExportDefaults self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_export_loudness(
+      BridgeExportLoudness self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_export_preset(
@@ -7801,6 +8003,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeLottieImport self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_loudness_target(
+      BridgeLoudnessTarget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_lut_space(
       BridgeLutSpace self, SseSerializer serializer);
 
@@ -7854,6 +8060,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMetadataField self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_meter_kind(
+      BridgeMeterKind self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_midi_control(
       BridgeMidiControl self, SseSerializer serializer);
 
@@ -7868,6 +8078,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_midi_mapping(
       BridgeMidiMapping self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_mix_loudness(
+      BridgeMixLoudness self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_mix_target(
+      BridgeMixTarget self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_model_display(
@@ -8508,6 +8726,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeStreamsArrival self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_strip_position(
+      BridgeStripPosition self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_stroke(BridgeStroke self, SseSerializer serializer);
 
   @protected
@@ -8821,6 +9043,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_audio_stream(
       List<BridgeAudioStream> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_automation_line(
+      List<BridgeAutomationLine> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_automation_point(
+      List<BridgeAutomationPoint> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_autosave(
@@ -9299,6 +9529,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeStill> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_strip_position(
+      List<BridgeStripPosition> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_stroke(
       List<BridgeStroke> self, SseSerializer serializer);
 
@@ -9601,8 +9835,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeDrmNode? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_bridge_duck(
+      BridgeDuck? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_box_autoadd_bridge_effect_instance_info(
       BridgeEffectInstanceInfo? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_export_loudness(
+      BridgeExportLoudness? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_export_spec(
@@ -9635,6 +9877,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_light_settings(
       BridgeLightSettings? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_loudness_target(
+      BridgeLoudnessTarget? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_match_frame(
