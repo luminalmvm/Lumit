@@ -2,18 +2,20 @@
 //
 // As After Effects draws a Mesh Warp's Distortion Mesh: the lines of the grid,
 // bent as the picture is, and a point where every two of them cross. With the
-// Selection tool in hand a point can be dragged; the picture follows through
-// the same preview an effect row's drag uses, and the release writes it as one
-// undo step.
+// Selection tool in hand a point can be dragged, and a click on one shows its
+// four handles, which drag too: the two along its row and the two along its
+// column, each pair mirrored. The picture follows through the same preview an
+// effect row's drag uses, and the release writes it as one undo step.
 //
-// A crossing is two of the instance's own rows, in per cent of the layer: 0, 0
-// its upper left corner and 100, 100 its lower right. So a point is pushed
-// through the layer's own transform onto the screen, and the pointer back
-// through it, the way a mask's points are.
+// A crossing is six of the instance's own rows, in per cent of the layer: where
+// it is (0, 0 the layer's upper left corner, 100, 100 its lower right) and how
+// far its row handle and column handle reach. So a point is pushed through the
+// layer's own transform onto the screen, and the pointer back through it, the
+// way a mask's points are.
 //
 // With Animate mesh on, a drag keys every crossing at the playhead, so a key
 // holds the whole mesh, as After Effects' stopwatch on Distortion Mesh does.
-// With it off, a crossing already keyed takes a key and the others stay still.
+// With it off, a row already keyed takes a key and the others stay still.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -34,21 +36,30 @@ import 'viewer_tool_cursor.dart' show paintAnchorMark;
 String meshVertexId(int rows, int columns, int r, int c, String axis) =>
     'mesh_${rows}x${columns}_r${r}c${c}_$axis';
 
+/// The six rows of a crossing, as the engine's `mesh_warp::AXES` names them.
+const meshAxes = ['x', 'y', 'hx', 'hy', 'vx', 'vy'];
+
+/// What a press holds: the crossing itself, or one end of one of its handles.
+enum _Grip { point, rowAfter, rowBefore, columnAfter, columnBefore }
+
 /// One selected Mesh warp on one layer, as the overlay reads it.
 class _Mesh {
   final LayerBox box;
   final BridgeEffectInstanceInfo fx;
   final int rows, columns;
 
-  /// Every crossing in per cent of the layer, row by row.
-  final List<Offset> pts;
+  /// Every crossing, its row handle and its column handle, in per cent of the
+  /// layer, row by row.
+  final List<Offset> pts, hs, vs;
 
-  /// Every crossing's two rows as the document holds them, row by row.
-  final List<(BridgeScalar?, BridgeScalar?)> held;
+  /// Every crossing's six rows as the document holds them, row by row.
+  final List<List<BridgeScalar?>> held;
   final bool animate;
 
-  const _Mesh(this.box, this.fx, this.rows, this.columns, this.pts, this.held,
-      this.animate);
+  const _Mesh(this.box, this.fx, this.rows, this.columns, this.pts, this.hs,
+      this.vs, this.held, this.animate);
+
+  String get key => '${box.id}/${fx.id}';
 
   Offset toScreen(Offset pct) => box.map.toScreen(
       pct.dx / 100 * box.bounds.width, pct.dy / 100 * box.bounds.height);
@@ -59,6 +70,15 @@ class _Mesh {
     final h = box.bounds.height == 0 ? 1.0 : box.bounds.height;
     return Offset(at.dx / w * 100, at.dy / h * 100);
   }
+
+  /// Where `grip` of crossing `i` is, per cent of the layer.
+  Offset gripAt(int i, _Grip grip) => switch (grip) {
+        _Grip.point => pts[i],
+        _Grip.rowAfter => pts[i] + hs[i],
+        _Grip.rowBefore => pts[i] - hs[i],
+        _Grip.columnAfter => pts[i] + vs[i],
+        _Grip.columnBefore => pts[i] - vs[i],
+      };
 }
 
 class ViewerMeshWarp extends StatefulWidget {
@@ -92,14 +112,17 @@ class ViewerMeshWarp extends StatefulWidget {
 class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
   final EffectStackEditor _editor = EffectStackEditor();
 
-  /// The drag in flight: the mesh, the crossing, where the press was and the
-  /// point it started from, and where it is now.
+  /// The crossing whose handles are shown: its mesh's key and its index.
+  (String, int)? _picked;
+
+  /// The drag in flight: the mesh, the crossing and what of it is held, where
+  /// the press was and where the held thing started, and where it is now.
   _Mesh? _mesh;
   int _index = -1;
+  _Grip _grip = _Grip.point;
   Offset _down = Offset.zero;
   Offset _from = Offset.zero;
   Offset? _to;
-  int? _hover;
 
   LumitUiState get _ui => widget.uiState;
 
@@ -121,6 +144,7 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
           builder: (context, _) {
             final meshes = _meshes();
             if (meshes.isEmpty) return const SizedBox.shrink();
+            final select = widget.tool.group == ToolGroup.select;
             return Stack(children: [
               Positioned.fill(
                 child: IgnorePointer(
@@ -132,99 +156,80 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
                   ),
                 ),
               ),
-              if (widget.tool.group == ToolGroup.select)
-                for (final m in meshes)
-                  for (var i = 0; i < m.pts.length; i++) _grip(m, i),
+              if (select)
+                for (final m in meshes) ...[
+                  for (var i = 0; i < m.pts.length; i++)
+                    _gripWidget(m, i, _Grip.point),
+                  if (_picked case (final key, final i)
+                      when key == m.key && i < m.pts.length)
+                    for (final g in _Grip.values.skip(1)) _gripWidget(m, i, g),
+                ],
             ]);
           },
         ),
       );
 
-  /// The lines and points of one mesh on the screen.
+  /// The lines, points and shown handles of one mesh on the screen.
   _Drawn _drawn(_Mesh m) {
     final cols = m.columns + 1;
-    Offset at(int r, int c) => m.pts[r * cols + c];
-    final lines = <List<Offset>>[];
-    // Each line of the grid, bent as the engine's Catmull-Rom surface bends
-    // it, sampled eight times a cell.
+    final curves = <List<Offset>>[];
+    // Each edge of each cell, the cubic its two crossings and their handles
+    // draw, as the engine's patches have it.
     for (var r = 0; r <= m.rows; r++) {
-      lines.add([
-        for (final p in _curve([for (var c = 0; c <= m.columns; c++) at(r, c)]))
-          m.toScreen(p)
-      ]);
+      for (var c = 0; c <= m.columns; c++) {
+        final i = r * cols + c;
+        if (c < m.columns) {
+          final j = i + 1;
+          curves.add([
+            m.toScreen(m.pts[i]),
+            m.toScreen(m.pts[i] + m.hs[i]),
+            m.toScreen(m.pts[j] - m.hs[j]),
+            m.toScreen(m.pts[j]),
+          ]);
+        }
+        if (r < m.rows) {
+          final j = i + cols;
+          curves.add([
+            m.toScreen(m.pts[i]),
+            m.toScreen(m.pts[i] + m.vs[i]),
+            m.toScreen(m.pts[j] - m.vs[j]),
+            m.toScreen(m.pts[j]),
+          ]);
+        }
+      }
     }
-    for (var c = 0; c <= m.columns; c++) {
-      lines.add([
-        for (final p in _curve([for (var r = 0; r <= m.rows; r++) at(r, c)]))
-          m.toScreen(p)
-      ]);
-    }
-    final key = '${m.box.id}/${m.fx.id}';
+    final picked = switch (_picked) {
+      (final key, final i) when key == m.key && i < m.pts.length => i,
+      _ => null,
+    };
     return _Drawn(
-      lines,
+      curves,
       [for (final p in m.pts) m.toScreen(p)],
-      _mesh != null && '${_mesh!.box.id}/${_mesh!.fx.id}' == key
-          ? _index
-          : (_hover != null && _hoverKey == key ? _hover : null),
+      picked == null
+          ? const []
+          : [
+              for (final g in _Grip.values.skip(1))
+                (m.toScreen(m.pts[picked]), m.toScreen(m.gripAt(picked, g))),
+            ],
+      picked,
     );
   }
 
-  String? _hoverKey;
-
-  /// A line of crossings as a Catmull-Rom curve, the ends continued straight.
-  static List<Offset> _curve(List<Offset> pts) {
-    if (pts.length < 2) return pts;
-    Offset p(int i) {
-      if (i < 0) return pts[0] * 2 - pts[1];
-      if (i >= pts.length) {
-        return pts[pts.length - 1] * 2 - pts[pts.length - 2];
-      }
-      return pts[i];
-    }
-
-    const steps = 8;
-    final out = <Offset>[pts[0]];
-    for (var i = 0; i < pts.length - 1; i++) {
-      final p0 = p(i - 1), p1 = p(i), p2 = p(i + 1), p3 = p(i + 2);
-      for (var s = 1; s <= steps; s++) {
-        final t = s / steps, t2 = t * t, t3 = t2 * t;
-        out.add((p0 * (-t + 2 * t2 - t3) +
-                p1 * (2 - 5 * t2 + 3 * t3) +
-                p2 * (t + 4 * t2 - 3 * t3) +
-                p3 * (-t2 + t3)) *
-            0.5);
-      }
-    }
-    return out;
-  }
-
-  Widget _grip(_Mesh m, int i) {
-    final at = m.toScreen(m.pts[i]);
-    final key = '${m.box.id}/${m.fx.id}';
+  Widget _gripWidget(_Mesh m, int i, _Grip grip) {
+    final at = m.toScreen(m.gripAt(i, grip));
+    const half = Offset(gizmoAnchorSlop / 2, gizmoAnchorSlop / 2);
     return Positioned(
-      key: ValueKey<String>('viewer-mesh-point-$key-$i'),
-      left: at.dx - gizmoAnchorSlop / 2,
-      top: at.dy - gizmoAnchorSlop / 2,
+      key: ValueKey<String>('viewer-mesh-${grip.name}-${m.key}-$i'),
+      left: at.dx - half.dx,
+      top: at.dy - half.dy,
       width: gizmoAnchorSlop,
       height: gizmoAnchorSlop,
       child: MouseRegion(
         cursor: SystemMouseCursors.move,
-        onEnter: (_) => setState(() {
-          _hover = i;
-          _hoverKey = key;
-        }),
-        onExit: (_) => setState(() => _hover = null),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanDown: (d) => _start(
-              m,
-              i,
-              at +
-                  d.localPosition -
-                  const Offset(gizmoAnchorSlop / 2, gizmoAnchorSlop / 2)),
-          onPanUpdate: (d) => _move(at +
-              d.localPosition -
-              const Offset(gizmoAnchorSlop / 2, gizmoAnchorSlop / 2)),
+          onPanDown: (d) => _start(m, i, grip, at - half + d.localPosition),
+          onPanUpdate: (d) => _move(at - half + d.localPosition),
           onPanEnd: (_) => _end(),
           onPanCancel: _cancel,
         ),
@@ -232,14 +237,32 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     );
   }
 
-  void _start(_Mesh m, int i, Offset screen) {
+  void _start(_Mesh m, int i, _Grip grip, Offset screen) {
     _cancel();
     setState(() {
       _mesh = m;
       _index = i;
+      _grip = grip;
       _down = screen;
-      _from = m.pts[i];
+      _from = m.gripAt(i, grip);
+      // A press on a crossing shows its handles, as in After Effects.
+      if (grip == _Grip.point) _picked = (m.key, i);
     });
+  }
+
+  /// The two rows a drag of the held grip writes, with the values it gives
+  /// them for the held thing at `to` (per cent of the layer).
+  Map<String, double> _rowsFor(_Mesh m, Offset to) {
+    final (r, c) = (_index ~/ (m.columns + 1), _index % (m.columns + 1));
+    String id(String axis) => meshVertexId(m.rows, m.columns, r, c, axis);
+    final p = m.pts[_index];
+    return switch (_grip) {
+      _Grip.point => {id('x'): to.dx, id('y'): to.dy},
+      _Grip.rowAfter => {id('hx'): to.dx - p.dx, id('hy'): to.dy - p.dy},
+      _Grip.rowBefore => {id('hx'): p.dx - to.dx, id('hy'): p.dy - to.dy},
+      _Grip.columnAfter => {id('vx'): to.dx - p.dx, id('vy'): to.dy - p.dy},
+      _Grip.columnBefore => {id('vx'): p.dx - to.dx, id('vy'): p.dy - to.dy},
+    };
   }
 
   void _move(Offset screen) {
@@ -251,11 +274,9 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     final to = m.toPercent(m.toScreen(_from) + d);
     _to = to;
     final frame = _ui.playheadFrame.value;
-    final (r, c) = (_index ~/ (m.columns + 1), _index % (m.columns + 1));
-    for (final (axis, v) in [('x', to.dx), ('y', to.dy)]) {
-      final id = meshVertexId(m.rows, m.columns, r, c, axis);
-      _editor.live(widget.comp, m.box.layer, m.fx.id, id,
-          BridgeEffectValue.float(BridgeScalar.static_(v)),
+    for (final MapEntry(:key, :value) in _rowsFor(m, to).entries) {
+      _editor.live(widget.comp, m.box.layer, m.fx.id, key,
+          BridgeEffectValue.float(BridgeScalar.static_(value)),
           frame: frame, scale: _ui.viewerScale);
     }
   }
@@ -264,20 +285,28 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     final m = _mesh, to = _to;
     if (m != null && to != null) {
       final frame = _ui.playheadFrame.value;
+      final moved = _rowsFor(m, to);
       final cols = m.columns + 1;
       final values = <String, BridgeEffectValue>{};
       for (var i = 0; i < m.pts.length; i++) {
-        final moved = i == _index;
         final (r, c) = (i ~/ cols, i % cols);
-        final (xWas, yWas) = m.held[i];
-        // A crossing the drag did not touch is written only when the whole
-        // mesh is being keyed.
-        if (!moved && !m.animate) continue;
-        final p = moved ? to : m.pts[i];
-        values[meshVertexId(m.rows, m.columns, r, c, 'x')] =
-            BridgeEffectValue.float(_scalar(xWas, p.dx, frame, m.animate));
-        values[meshVertexId(m.rows, m.columns, r, c, 'y')] =
-            BridgeEffectValue.float(_scalar(yWas, p.dy, frame, m.animate));
+        final now = [
+          m.pts[i].dx,
+          m.pts[i].dy,
+          m.hs[i].dx,
+          m.hs[i].dy,
+          m.vs[i].dx,
+          m.vs[i].dy,
+        ];
+        for (var a = 0; a < meshAxes.length; a++) {
+          final id = meshVertexId(m.rows, m.columns, r, c, meshAxes[a]);
+          final drag = moved[id];
+          // A row the drag did not touch is written only when the whole mesh
+          // is being keyed.
+          if (drag == null && !m.animate) continue;
+          values[id] = BridgeEffectValue.float(
+              _scalar(m.held[i][a], drag ?? now[a], frame, m.animate));
+        }
       }
       _editor.writeAll(m.box.layer, m.fx.id, values);
       widget.onChanged();
@@ -326,8 +355,9 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
       if (entry == null) continue;
       for (final fx in entry.info.effects) {
         if (fx.name != 'mesh_warp' || !picked.contains(fx.id)) continue;
-        BridgeScalar? held(String id) =>
-            switch (fx.values.where((v) => v.id == id).firstOrNull?.value) {
+        // Read into a map once: a big grid holds thousands of rows.
+        final values = {for (final v in fx.values) v.id: v.value};
+        BridgeScalar? held(String id) => switch (values[id]) {
               BridgeEffectValue_Float(:final field0) => field0,
               _ => null,
             };
@@ -346,18 +376,22 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
           BridgeEffectValue_Bool(:final field0) => field0,
           _ => false,
         };
-        final pts = <Offset>[];
-        final heldRows = <(BridgeScalar?, BridgeScalar?)>[];
+        // A fresh handle reaches a third of a cell, as the engine's
+        // `rest_handles` has it.
+        final hRest = 100 / columns / 3, vRest = 100 / rows / 3;
+        final pts = <Offset>[], hs = <Offset>[], vs = <Offset>[];
+        final heldRows = <List<BridgeScalar?>>[];
         for (var r = 0; r <= rows; r++) {
           for (var c = 0; c <= columns; c++) {
-            final x = meshVertexId(rows, columns, r, c, 'x');
-            final y = meshVertexId(rows, columns, r, c, 'y');
-            pts.add(Offset(
-                number(x, c * 100 / columns), number(y, r * 100 / rows)));
-            heldRows.add((held(x), held(y)));
+            String id(String axis) => meshVertexId(rows, columns, r, c, axis);
+            pts.add(Offset(number(id('x'), c * 100 / columns),
+                number(id('y'), r * 100 / rows)));
+            hs.add(Offset(number(id('hx'), hRest), number(id('hy'), 0)));
+            vs.add(Offset(number(id('vx'), 0), number(id('vy'), vRest)));
+            heldRows.add([for (final a in meshAxes) held(id(a))]);
           }
         }
-        out.add(_Mesh(box, fx, rows, columns, pts, heldRows, animate));
+        out.add(_Mesh(box, fx, rows, columns, pts, hs, vs, heldRows, animate));
       }
     }
     return out;
@@ -366,13 +400,15 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
 
 /// One mesh as it is painted.
 class _Drawn {
-  final List<List<Offset>> lines;
+  /// Each edge of each cell as a cubic: start, two controls, end.
+  final List<List<Offset>> curves;
   final List<Offset> points;
 
-  /// The crossing under the pointer or in hand.
-  final int? lit;
+  /// The picked crossing's handles, each from the crossing to its end.
+  final List<(Offset, Offset)> handles;
+  final int? picked;
 
-  const _Drawn(this.lines, this.points, this.lit);
+  const _Drawn(this.curves, this.points, this.handles, this.picked);
 }
 
 class _MeshPainter extends CustomPainter {
@@ -388,21 +424,22 @@ class _MeshPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     for (final m in meshes) {
-      for (final l in m.lines) {
-        if (l.length < 2) continue;
-        final path = Path()..moveTo(l.first.dx, l.first.dy);
-        for (final p in l.skip(1)) {
-          path.lineTo(p.dx, p.dy);
-        }
-        canvas.drawPath(path, line);
+      final path = Path();
+      for (final c in m.curves) {
+        path
+          ..moveTo(c[0].dx, c[0].dy)
+          ..cubicTo(c[1].dx, c[1].dy, c[2].dx, c[2].dy, c[3].dx, c[3].dy);
       }
+      canvas.drawPath(path, line);
       for (var i = 0; i < m.points.length; i++) {
-        final lit = m.lit == i;
-        if (lit) {
-          canvas.drawCircle(
-              m.points[i], 4, Paint()..color = colour.withValues(alpha: 0.35));
-        }
-        paintAnchorMark(canvas, m.points[i], colour, reach: lit ? 10 : 6);
+        paintAnchorMark(canvas, m.points[i], colour,
+            reach: m.picked == i ? 10 : 6);
+      }
+      final fill = Paint()..color = colour;
+      for (final (from, to) in m.handles) {
+        canvas
+          ..drawLine(from, to, line)
+          ..drawCircle(to, 3, fill);
       }
     }
   }

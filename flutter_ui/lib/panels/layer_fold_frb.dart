@@ -2544,7 +2544,7 @@ List<LayerFoldRow> groupHeaderFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...instanceParameters(fx),
+        ...instanceParameters(fx).where((p) => !meshRowHidden(fx, p)),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 2, group: group.id));
@@ -2558,6 +2558,12 @@ List<LayerFoldRow> groupHeaderFoldRows({
 /// id, on [groupFoldPrefix]'s own terms, so nothing that expects a layer id can
 /// mistake one for it.
 String clipFoldPrefix(UuidValue clip) => 'c:$clip';
+
+/// A Mesh warp's grid rows, which the Timeline leaves out as Effect controls
+/// does: thousands of them on a big grid, and the grid is edited in the
+/// Viewer.
+bool meshRowHidden(BridgeEffectInstanceInfo fx, BridgeParamInfo param) =>
+    fx.name == 'mesh_warp' && param.id.startsWith('mesh_');
 
 /// The rows a clip's twirl shows (docs/impl/audio-timeline.md §5): a heading
 /// with the clip's name, then one heading per effect on the clip and the
@@ -2595,7 +2601,7 @@ List<LayerFoldRow> clipFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...instanceParameters(fx),
+        ...instanceParameters(fx).where((p) => !meshRowHidden(fx, p)),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 3, clip: clip.id));
@@ -3244,7 +3250,7 @@ List<LayerFoldRow> layerFoldRows({
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
           for (final param in [
-            ...instanceParameters(fx),
+            ...instanceParameters(fx).where((p) => !meshRowHidden(fx, p)),
           ]) {
             rows.add(FoldEffectParamRow(fx, param, values[param.id],
                 depth: 3, driven: driven['${fx.id}/${param.id}']));

@@ -2,8 +2,8 @@
 // Mirrors lumit_core::fx::effects::mesh_warp op for op (§1.6: the CPU is the
 // oracle).
 //
-// The crossings are fractions of the frame, row by row, two to a vec4. Between
-// them the picture follows a Catmull-Rom surface, and every pixel solves it
+// The crossings are fractions of the frame, row by row, each with its row and
+// column handle. Each cell is a bicubic Bezier patch, and every pixel solves it
 // backwards by Newton's method: from its own place first, then from the
 // crossing nearest it. Outside the bent grid is transparent.
 
@@ -17,7 +17,7 @@ struct Params {
     _pad0: u32,
     _pad1: u32,
     frame: vec4<f32>,    // where the frame sits on the raster: x, y, width, height
-    pts: array<vec4<f32>, 512>,
+    pts: array<vec4<f32>, 1536>,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -54,55 +54,35 @@ fn bilinear_transparent(sx: f32, sy: f32, size: vec2<i32>) -> vec4<f32> {
     return top * (1.0 - ty) + bottom * ty;
 }
 
-// Crossing i, row by row.
-fn at_index(i: i32) -> vec2<f32> {
-    let q = p.pts[i / 2];
-    return select(q.xy, q.zw, (i % 2) == 1);
+// Float k of the crossings' list: six to a crossing, x, y, row handle x and y,
+// column handle x and y.
+fn fl(k: i32) -> f32 {
+    let q = p.pts[k / 4];
+    let m = k % 4;
+    return select(select(select(q.w, q.z, m == 2), q.y, m == 1), q.x, m == 0);
 }
 
-fn at(r: i32, c: i32) -> vec2<f32> {
-    return at_index(r * (i32(p.cols) + 1) + c);
+fn pt(i: i32) -> vec2<f32> {
+    return vec2<f32>(fl(i * 6), fl(i * 6 + 1));
 }
 
-// == mesh_warp::vertex: a line beyond each edge continued straight on.
-fn vertex(r: i32, c: i32) -> vec2<f32> {
-    let rows = i32(p.rows);
-    let cols = i32(p.cols);
-    let r0 = clamp(r, 0, rows);
-    let c0 = clamp(c, 0, cols);
-    var rn = r0;
-    if (r < 0) { rn = 1; } else if (r > rows) { rn = rows - 1; }
-    var cn = c0;
-    if (c < 0) { cn = 1; } else if (c > cols) { cn = cols - 1; }
-    let base = at(r0, c0);
-    var out = base;
-    if (r != r0) {
-        out = 2.0 * out - at(rn, c0);
-    }
-    if (c != c0) {
-        let reflected = 2.0 * base - at(r0, cn);
-        out = out + reflected - base;
-    }
-    return out;
+fn hd(i: i32) -> vec2<f32> {
+    return vec2<f32>(fl(i * 6 + 2), fl(i * 6 + 3));
 }
 
+fn vd(i: i32) -> vec2<f32> {
+    return vec2<f32>(fl(i * 6 + 4), fl(i * 6 + 5));
+}
+
+// The cubic Bernstein weights at t.
 fn weights(t: f32) -> vec4<f32> {
-    let t2 = t * t;
-    let t3 = t2 * t;
-    return vec4<f32>(
-        0.5 * (-t + 2.0 * t2 - t3),
-        0.5 * (2.0 - 5.0 * t2 + 3.0 * t3),
-        0.5 * (t + 4.0 * t2 - 3.0 * t3),
-        0.5 * (-t2 + t3));
+    let s = 1.0 - t;
+    return vec4<f32>(s * s * s, 3.0 * s * s * t, 3.0 * s * t * t, t * t * t);
 }
 
 fn slopes(t: f32) -> vec4<f32> {
-    let t2 = t * t;
-    return vec4<f32>(
-        0.5 * (-1.0 + 4.0 * t - 3.0 * t2),
-        0.5 * (-10.0 * t + 9.0 * t2),
-        0.5 * (1.0 + 8.0 * t - 9.0 * t2),
-        0.5 * (-2.0 * t + 3.0 * t2));
+    let s = 1.0 - t;
+    return vec4<f32>(-3.0 * s * s, 3.0 * s * s - 6.0 * s * t, 6.0 * s * t - 3.0 * t * t, 3.0 * t * t);
 }
 
 struct Surface {
@@ -111,7 +91,7 @@ struct Surface {
     sv: vec2<f32>,
 };
 
-// == mesh_warp::surface.
+// == mesh_warp::cell_net and mesh_warp::surface.
 fn surface(u: f32, v: f32) -> Surface {
     let cols = f32(p.cols);
     let rows = f32(p.rows);
@@ -123,16 +103,41 @@ fn surface(u: f32, v: f32) -> Surface {
     let du = slopes(gu - f32(i));
     let wv = weights(gv - f32(j));
     let dv = slopes(gv - f32(j));
+    let per_row = i32(p.cols) + 1;
+    let a = j * per_row + i;
+    let b = a + 1;
+    let c = a + per_row;
+    let d = c + 1;
+    let pa = pt(a); let pb = pt(b); let pc = pt(c); let pd = pt(d);
+    let ha = hd(a); let hb = hd(b); let hc = hd(c); let hdd = hd(d);
+    let va = vd(a); let vb = vd(b); let vc = vd(c); let vdd = vd(d);
+    var net: array<vec2<f32>, 16>;
+    net[0] = pa;
+    net[1] = pa + ha;
+    net[2] = pb - hb;
+    net[3] = pb;
+    net[4] = pa + va;
+    net[5] = pa + ha + va;
+    net[6] = pb - hb + vb;
+    net[7] = pb + vb;
+    net[8] = pc - vc;
+    net[9] = pc + hc - vc;
+    net[10] = pd - hdd - vdd;
+    net[11] = pd - vdd;
+    net[12] = pc;
+    net[13] = pc + hc;
+    net[14] = pd - hdd;
+    net[15] = pd;
     var out: Surface;
     out.s = vec2<f32>(0.0);
     out.su = vec2<f32>(0.0);
     out.sv = vec2<f32>(0.0);
-    for (var b = 0; b < 4; b = b + 1) {
-        for (var a = 0; a < 4; a = a + 1) {
-            let q = vertex(j - 1 + b, i - 1 + a);
-            out.s = out.s + wu[a] * wv[b] * q;
-            out.su = out.su + du[a] * wv[b] * q * cols;
-            out.sv = out.sv + wu[a] * dv[b] * q * rows;
+    for (var bb = 0; bb < 4; bb = bb + 1) {
+        for (var aa = 0; aa < 4; aa = aa + 1) {
+            let q = net[bb * 4 + aa];
+            out.s = out.s + wu[aa] * wv[bb] * q;
+            out.su = out.su + du[aa] * wv[bb] * q * cols;
+            out.sv = out.sv + wu[aa] * dv[bb] * q * rows;
         }
     }
     return out;
@@ -185,7 +190,7 @@ fn mesh_warp(@builtin(global_invocation_id) gid: vec3<u32>) {
         var best = 3.4e38;
         var bi = 0;
         for (var i = 0; i < i32(p.count); i = i + 1) {
-            let q = at_index(i);
+            let q = pt(i);
             let dx = (q.x - t.x) * fw;
             let dy = (q.y - t.y) * fh;
             let d = dx * dx + dy * dy;

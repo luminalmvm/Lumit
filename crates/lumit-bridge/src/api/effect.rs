@@ -2783,13 +2783,18 @@ fn fill_derived(effect: &mut EffectInstance) -> Vec<String> {
         return Vec::new();
     };
     let mut added = Vec::new();
+    // The ids the instance holds, once: a Mesh warp's grid derives thousands
+    // of rows, and asking the list for each one was millions of comparisons
+    // on every read of the model.
+    let held: std::collections::HashSet<String> =
+        effect.params.iter().map(|p| p.id.clone()).collect();
     // `derived` answers `&'static [ParamSchema]` — a session-lived parse cache,
     // not a borrow of the instance — so the read is over before the write.
     for param in def.derived(effect) {
         let Some(value) = lumit_core::fx::builtins::default_param_value(&param.kind) else {
             continue; // a button has nothing to fill
         };
-        if !effect.params.iter().any(|have| have.id == param.id) {
+        if !held.contains(param.id) {
             effect.params.push(EffectParam {
                 id: param.id.to_owned(),
                 value,

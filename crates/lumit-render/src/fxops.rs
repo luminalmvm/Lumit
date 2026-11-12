@@ -791,6 +791,37 @@ fn places_moved(
         .collect()
 }
 
+/// Tell an op that lays something over the layer's own frame where that frame
+/// now sits, when an op before it grew the picture to spread into.
+///
+/// Mesh warp's grid is in per cent of the layer. On a picture a blur has grown
+/// by `by` on every side, the layer is the middle of it, so the grid is laid
+/// over that middle rather than stretched over the room around it. An op that
+/// was already told a frame keeps it.
+fn framed_in(
+    schema: &lumit_core::fx::schema::EffectSchema,
+    entries: &mut Vec<(
+        lumit_core::fx::params::ParamId,
+        lumit_core::fx::params::Value,
+    )>,
+    by: [u32; 2],
+    w: u32,
+    h: u32,
+) {
+    use lumit_core::fx::{params::Value, schema::FRAME_RECT};
+    if schema.match_name != "mesh_warp" || entries.iter().any(|(id, _)| *id == FRAME_RECT) {
+        return;
+    }
+    let (fw, fh) = (
+        w.saturating_sub(by[0] * 2).max(1),
+        h.saturating_sub(by[1] * 2).max(1),
+    );
+    entries.push((
+        FRAME_RECT,
+        Value::Vec4([by[0] as f32, by[1] as f32, fw as f32, fh as f32]),
+    ));
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -1231,8 +1262,11 @@ pub fn run_ops(
             &moved_paths[..]
         };
         // A points op's places are read through the camera, which has moved.
-        let moved_places = (moved != [0, 0] && slot.is_none())
-            .then(|| places_moved(resolved.def.schema(), resolved.params, moved));
+        let moved_places = (moved != [0, 0] && slot.is_none()).then(|| {
+            let mut entries = places_moved(resolved.def.schema(), resolved.params, moved);
+            framed_in(resolved.def.schema(), &mut entries, moved, w, h);
+            entries
+        });
         let op_params = moved_places.as_ref().map_or(resolved.params, |entries| {
             lumit_core::fx::params::Params::new(entries)
         });

@@ -10703,7 +10703,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
 /// from the nearest crossing.
 #[test]
 fn wgsl_mesh_warp_matches_the_cpu_oracle() {
-    use lumit_core::fx::effects::mesh_warp::{mesh_warp, rest, MeshWarpParams};
+    use lumit_core::fx::effects::mesh_warp::{mesh_warp, MeshWarpParams};
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -10713,33 +10713,22 @@ fn wgsl_mesh_warp_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
-    let flat = |rows: u32, columns: u32| {
-        let mut pts = Vec::new();
-        for r in 0..=rows {
-            for c in 0..=columns {
-                let (x, y) = rest(rows, columns, r, c);
-                pts.push([(x / 100.0) as f32, (y / 100.0) as f32]);
-            }
-        }
-        MeshWarpParams {
-            rows,
-            columns,
-            pts,
-            steps: 8,
-            mix: 1.0,
-            frame: [0.0; 4],
-        }
-    };
+    let flat = MeshWarpParams::flat;
     let mut pulled = flat(2, 2);
     pulled.pts[4] = [0.62, 0.45];
     let mut far = flat(3, 3);
-    far.pts[5] = [0.6, 0.55];
+    // Far enough that its own place is no start, short of folding the grid.
+    far.pts[5] = [0.5, 0.45];
+    let mut handled = flat(2, 2);
+    handled.hs[4] = [0.12, 0.08];
+    handled.vs[4] = [-0.05, 0.2];
     let mut mixed = pulled.clone();
     mixed.mix = 0.5;
     for (name, m) in [
         ("identity", flat(4, 3)),
         ("pulled", pulled),
         ("far", far),
+        ("handled", handled),
         ("mixed", mixed),
     ] {
         let mut cpu = img.clone();
@@ -10754,6 +10743,8 @@ fn wgsl_mesh_warp_matches_the_cpu_oracle() {
                 rows: m.rows,
                 columns: m.columns,
                 pts: m.pts.clone(),
+                hs: m.hs.clone(),
+                vs: m.vs.clone(),
                 steps: m.steps,
                 mix: m.mix,
                 frame: m.frame,

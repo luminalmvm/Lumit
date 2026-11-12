@@ -410,6 +410,10 @@ pub struct MeshWarpOp {
     pub columns: u32,
     /// The crossings row by row, as fractions of the frame.
     pub pts: Vec<[f32; 2]>,
+    /// How far each crossing's row handle reaches, fractions of the frame.
+    pub hs: Vec<[f32; 2]>,
+    /// How far each crossing's column handle reaches, fractions of the frame.
+    pub vs: Vec<[f32; 2]>,
     /// Newton steps a pixel, 1..=12.
     pub steps: u32,
     /// 0..1, blended against the unprocessed input.
@@ -419,7 +423,7 @@ pub struct MeshWarpOp {
     pub frame: [f32; 4],
 }
 
-/// The most crossings the kernel's uniform holds, two to a vec4.
+/// The most crossings the kernel's uniform holds, six floats each.
 const MESH_WARP_MAX_VERTICES: usize = 1024;
 
 #[repr(C)]
@@ -434,7 +438,7 @@ struct MeshWarpParams {
     _pad0: u32,
     _pad1: u32,
     frame: [f32; 4],
-    pts: [[f32; 4]; MESH_WARP_MAX_VERTICES / 2],
+    pts: [[f32; 4]; MESH_WARP_MAX_VERTICES * 6 / 4],
 }
 
 /// One resolved Warp (docs/08 §3.56). Mirrors
@@ -620,16 +624,28 @@ impl FxEngine {
             } else {
                 [0.0, 0.0, w as f32, h as f32]
             },
-            pts: [[0.0; 4]; MESH_WARP_MAX_VERTICES / 2],
+            pts: [[0.0; 4]; MESH_WARP_MAX_VERTICES * 6 / 4],
         };
-        if count > MESH_WARP_MAX_VERTICES || op.pts.len() != count {
+        if count > MESH_WARP_MAX_VERTICES
+            || op.pts.len() != count
+            || op.hs.len() != count
+            || op.vs.len() != count
+        {
             params.mix_amt = 0.0;
         } else {
-            for (i, pt) in op.pts.iter().enumerate() {
-                let slot = &mut params.pts[i / 2];
-                let half = (i % 2) * 2;
-                slot[half] = pt[0];
-                slot[half + 1] = pt[1];
+            for i in 0..count {
+                let six = [
+                    op.pts[i][0],
+                    op.pts[i][1],
+                    op.hs[i][0],
+                    op.hs[i][1],
+                    op.vs[i][0],
+                    op.vs[i][1],
+                ];
+                for (k, value) in six.into_iter().enumerate() {
+                    let at = i * 6 + k;
+                    params.pts[at / 4][at % 4] = value;
+                }
             }
         }
         self.dispatch_matted(

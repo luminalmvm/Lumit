@@ -2054,6 +2054,8 @@ impl GpuEffect for MeshWarp {
                 rows: m.rows,
                 columns: m.columns,
                 pts: m.pts,
+                hs: m.hs,
+                vs: m.vs,
                 steps: m.steps,
                 mix: m.mix,
                 frame: m.frame,
