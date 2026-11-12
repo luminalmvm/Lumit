@@ -17,8 +17,9 @@ the [Audio panel](/panels/audio/#audio-panel) on the right, and the
 ## What is heard
 
 - A layer plays its sound while its audible switch is on.
-- While a layer that makes sound is soloed, only the soloed layers are heard. A soloed layer
-  with no sound silences nothing.
+- While a layer that makes sound is soloed, only the soloed and the
+  [solo safe](/use/mixing/#solo-and-mute) layers are heard. A soloed layer with no sound
+  silences nothing.
 - A retimed layer or clip plays its sound at its speed. See
   [Sound](/use/retime/#sound) for **Keep pitch**.
 - The **Mute** mark on the [Viewer's deck](/panels/viewer/#the-deck) silences the output
@@ -56,7 +57,8 @@ line says so.
 Both take keyframes. A value changed while the property is animated lands on the keyframe
 under the playhead, or makes one there.
 
-- In the Timeline, twirl a layer open and then its **Audio** group for **Volume**.
+- In the Timeline, twirl a layer open and then its **Audio** group for **Volume** and
+  **Pan**.
 - The [Audio panel](/panels/audio/#selected-layer) sets Volume, Pan and fades for the
   selected layer.
 - The [Mixer](/panels/audio/#mixer) has a fader and a pan pot for every layer that makes sound,
@@ -106,8 +108,8 @@ The line across a waveform lane is the layer's Volume, with a diamond on each ke
 runs from −60 dB at the foot of the lane to +12 dB at the top, and is dragged, keyed and
 right-clicked as a volume [envelope](/use/cutting/#envelopes) is.
 
-Once a composition has been edited in the Audio timeline, its Audio layers fold away in the
-Timeline under a [Sound mix](/panels/timeline/#sound-mix) row.
+Once a composition has been edited in the Audio timeline, its Audio and Bus layers fold away
+in the Timeline under a [Sound mix](/panels/timeline/#sound-mix) row.
 
 ## Audio streams
 
@@ -156,9 +158,9 @@ first stream, or every stream mixed for either of the other two choices.
 
 Hold `Ctrl` and drag along the ruler of the Timeline, the Cut timeline or the Audio
 timeline to hear the composition as the playhead moves. It plays at the speed of the drag,
-backwards when the drag goes back, and its pitch follows the speed. A drag that comes to rest
-goes quiet. `Ctrl`+click on the ruler plays a twelfth of a second from the frame under the
-pointer.
+up to four times, backwards when the drag goes back, and its pitch follows the speed. A drag
+that comes to rest goes quiet. `Ctrl`+click on the ruler plays a twelfth of a second from
+the frame under the pointer.
 
 With **Settings ▸ Audio ▸ Scrub when dragging the playhead** on, a plain drag or click does
 the same.
@@ -228,8 +230,8 @@ the sound back. It applies while playing, and not to export.
 ## Output
 
 When the output device goes away, the sound moves to another output and the status line says
-*Sound moved to another output*. When some of the sound was not ready in time, the status
-line says *Sound could not keep up*, once a playback.
+*Sound moved to another output*. Sound that is not ready in time plays as silence, and the
+status line says *Sound could not keep up*, once a playback.
 
 ## Related
 

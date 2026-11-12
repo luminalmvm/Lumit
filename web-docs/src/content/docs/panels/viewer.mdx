@@ -63,7 +63,7 @@ folds the other pickers into one mark.
 | **3D view** | With something in depth in the composition. What the picture is looked through: the active camera, Front, Back, Left, Right, Top, Bottom, or Custom 1 to 3. With two or four views, each keeps its own, and on a 3D composition new views open on Top, Front and Right. |
 | **Take snapshot** | Photographs the picture. |
 | **Show snapshot** | With a snapshot taken. Puts the photograph back over the live picture while it is held. |
-| **Grid**, **Reference**, **Matte view** | While a [grading](/use/grading/) grid, reference or the matte view is set. See [Grading tools](#grading-tools). |
+| **Grid**, **Reference**, **Matte view** | A chip each, while a [grading](/use/grading/) grid, a reference or the matte view is set. See [Grading tools](#grading-tools). |
 | **Exposure** | The number shows on hover, or while it isn't zero. Drag the number; click the mark to go back to zero. |
 | **Transport** | First frame, previous frame, play or pause, next frame, last frame. |
 | **Clock** | The playhead's time, counted from the composition's [**Start timecode**](/use/compositions/). Click it to type one; a time past either end clamps. |
@@ -316,22 +316,23 @@ shows the composition with its Output wired to that box.
 
 ### Grading tools
 
-In the [Colour workspace](/use/grading/) the Viewer draws the current node's tools over the
-picture, in the active view. While a group's grade or a shared node is in view, they work on
-its node.
+The Viewer draws the [grading](/use/grading/) tools of the current node over the picture,
+only in the active view of the composition being graded. While a group's grade or a shared
+node is in view, they work on its node.
 
-- **Grid**: the current shot's versions, the selected stills or the picked shots, side by
-  side in place of the picture. See [The grid](/use/grading/#the-grid). The chip on the
-  bottom strip names it: a click or its cross closes it, and a right-click switches what it
-  shows. `Escape` closes it too.
-- **Reference**: a still or another shot's frame, against the picture, as a wipe, a split, a
+- **Grid**: the current shot's versions, the stills selected in the Gallery or the picked
+  shots, in place of the picture. Its chip on the bottom strip names it: a click or its
+  cross closes it, and a right-click switches what it shows. `Escape` closes it too. See
+  [The grid](/use/grading/#the-grid).
+- **Reference**: a still or another shot's frame against the picture, as a wipe, a split, a
   difference or a mix. Drag the divider, and double-click it to put it back in the middle.
-  The **Reference** chip on the bottom strip names it: a click shows or hides it, the cross
+  Its chip names the reference and its style: a click shows or hides it, and the cross
   clears it. See [Comparing against a reference](/use/grading/#comparing-against-a-reference).
-- **Matte view**: the current node's key, as **Highlight** or **Key**. The chip on the
-  bottom strip names it, and a click turns it off. A right-click offers the three, then
-  what Highlight shows around the key: **Over grey**, **Over black**, **Over white** or
-  **Over black and white**. See [The matte view](/use/grading/#the-matte-view).
+- **Matte view**: the current node's key, as **Highlight** or **Key**, on the shot alone.
+  Its chip names it, and a click turns it off. A right-click offers **Off**, **Highlight**
+  and **Key**, then what Highlight shows around the key: **Over grey**, **Over black**,
+  **Over white** or **Over black and white**. See
+  [The matte view](/use/grading/#the-matte-view).
 - **Windows**: the current Correction's windows, their softness rings dashed, the picked one
   in the accent with its handles. They show while a window is picked or the Windows page is
   up. See [Windows](/use/grading/#windows).
