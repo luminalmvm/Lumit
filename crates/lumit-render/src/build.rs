@@ -9920,9 +9920,16 @@ mod render_below_at_tests {
             .iter()
             .find(|j| j.layer == footage_id)
             .expect("planned");
-        let mut offsets: Vec<f64> = job.shutter.iter().map(|s| s.offset.round()).collect();
+        // Echo time defaults to -0.0333 s, a third of a frame of this 10 fps
+        // comp, so the four echoes sit a third of a frame apart.
+        let mut offsets: Vec<f64> = job.shutter.iter().map(|s| s.offset).collect();
         offsets.sort_by(f64::total_cmp);
-        assert_eq!(offsets, vec![-4.0, -3.0, -2.0, -1.0], "one decode per echo");
+        assert_eq!(offsets.len(), 4, "one decode per echo");
+        let step = -0.0333 * 10.0;
+        for (k, offset) in offsets.iter().rev().enumerate() {
+            let want = step * (k + 1) as f64;
+            assert!((offset - want).abs() < 1e-4, "echo {k} at {offset}, not {want}");
+        }
     }
 
     // Echo on a Precomp layer had the same fault as the plugin: every tap
