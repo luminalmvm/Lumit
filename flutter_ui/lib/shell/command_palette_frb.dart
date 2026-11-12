@@ -49,6 +49,10 @@ class PaletteCommand {
 
   /// A row for Lumit Pro, to an account without it, wears the menu's badge.
   final bool needsPro;
+
+  /// Other names it is found by, as an effect is by its name in other apps.
+  /// Searched after the label, as the Effects and presets search does.
+  final List<String> otherNames;
   final VoidCallback run;
 
   const PaletteCommand({
@@ -59,6 +63,7 @@ class PaletteCommand {
     this.disabled,
     this.icon,
     this.needsPro = false,
+    this.otherNames = const [],
     required this.run,
   });
 }
@@ -227,7 +232,9 @@ class _PaletteState extends State<_Palette> {
       // match on a last step: a subsequence over the whole path had "blur"
       // finding Blending mode › Subtract.
       final leaf = paletteScore(needle, crumbs.last);
-      final score = leaf ?? _crumbScore(needle, crumbs);
+      final score = leaf ??
+          _crumbScore(needle, crumbs) ??
+          _crumbScore(needle, widget.commands[i].otherNames);
       if (score == null) continue;
       final recency = widget.recent.indexOf(label);
       scored.add((

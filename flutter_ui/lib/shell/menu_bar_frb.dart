@@ -885,6 +885,7 @@ class LumitMenuBarFrb extends StatelessWidget {
         category: l10n.menuEffect,
         icon: mark(LumitIcon.fx),
         disabled: layers.isEmpty ? l10n.paletteNeedsLayer : null,
+        otherNames: effect.otherNames,
         run: () => addEffectToLayers(app, ui, layers, effect.name),
       ));
     }
