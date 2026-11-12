@@ -163,11 +163,11 @@ class CubicSpan {
     switch (side) {
       BridgeSideInterp_Bezier(:final field0) => (
           field0.speed,
-          field0.influence.clamp(1e-3, 1.0)
+          field0.influence.clamp(minTangentReach, maxInfluence)
         ),
       BridgeSideInterp_Auto(:final field0) => (
           autoSpeed ?? chordSlope,
-          field0.influence.clamp(1e-3, 1.0)
+          field0.influence.clamp(minTangentReach, maxInfluence)
         ),
       _ => (chordSlope, 1.0 / 3.0),
     };
@@ -277,10 +277,11 @@ CubicSpan _cubicOf(List<BridgeKeyframe> keys, int i) {
   final a = keys[i], b = keys[i + 1];
   final t1 = rationalSeconds(a.time), t2 = rationalSeconds(b.time);
   final chord = (b.value - a.value) / (t2 - t1);
-  final (s1, b1) =
+  final (s1, r1) =
       sideParams(a.interpOut, chord, _autoOf(keys, i, isOut: true));
-  final (s2, b2) =
+  final (s2, r2) =
       sideParams(b.interpIn, chord, _autoOf(keys, i + 1, isOut: false));
+  final (b1, b2) = spanInfluences(r1, r2);
   return CubicSpan.fromAe(t1, a.value, t2, b.value,
       speedOut: s1, inflOut: b1, speedIn: s2, inflIn: b2);
 }
@@ -409,10 +410,12 @@ double? influenceForAcceleration(List<BridgeKeyframe> keys, int index,
   final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
   if (dt <= 0 || a.interpOut is BridgeSideInterp_Hold) return null;
   final chord = (b.value - a.value) / dt;
-  final (s1, b1) =
+  final (s1, r1) =
       sideParams(a.interpOut, chord, _autoOf(keys, span, isOut: true));
-  final (s2, b2) =
+  final (s2, r2) =
       sideParams(b.interpIn, chord, _autoOf(keys, span + 1, isOut: false));
+  // The far side as the curve uses it.
+  final (b1, b2) = spanInfluences(r1, r2);
   final k = isOut ? chord - s1 - b2 * (s2 - s1) : s2 - chord + b1 * (s1 - s2);
   if (k.abs() < 1e-12) return null;
   final squared = 2 * k / (3 * target * dt);
@@ -438,14 +441,19 @@ BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
   final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
   if (dt <= 0 || a.interpOut is BridgeSideInterp_Hold) return null;
   final chord = (b.value - a.value) / dt;
-  final (s1, b1) =
+  final (s1, r1) =
       sideParams(a.interpOut, chord, _autoOf(keys, span, isOut: true));
-  final (s2, b2) =
+  final (s2, r2) =
       sideParams(b.interpIn, chord, _autoOf(keys, span + 1, isOut: false));
   final speed = isOut ? s1 : s2;
+  // Held to full before the speed is solved, as [side] writes it so.
   final influence =
-      influenceForAcceleration(keys, index, isOut: isOut, target: target) ??
-          (isOut ? b1 : b2);
+      (influenceForAcceleration(keys, index, isOut: isOut, target: target) ??
+              (isOut ? r1 : r2))
+          .clamp(minTangentReach, 1.0)
+          .toDouble();
+  // The far side as the curve uses it, as in [influenceForAcceleration].
+  final (b1, b2) = spanInfluences(r1, r2);
   BridgeSideInterp side(double s, double b) => BridgeSideInterp.bezier(
       BridgeBezierSide(speed: s, influence: b.clamp(1e-3, 1.0).toDouble()));
   // At the key: acceleration = 2k / (3 · b² · Δt), k as in
@@ -459,7 +467,8 @@ BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
       1e-6 * (target.abs() + 1)) {
     return side(speed, influence);
   }
-  // Solve the speed for k = 3 · target · b² · Δt / 2.
+  // Solve the speed for k = 3 · target · b² · Δt / 2. Approximate where the
+  // far side is over 1, as the scale then moves with this side.
   final k = 3 * target * influence * influence * dt / 2;
   if (isOut) {
     // k = chord − s − b2·(s2 − s) = chord − b2·s2 − s·(1 − b2)
@@ -729,9 +738,9 @@ double sideSpeedAtKey(List<BridgeKeyframe> keys, int index,
 /// reach: the neighbours point the tangent, they do not lengthen it.
 double sideInfluence(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Bezier(:final field0) =>
-        field0.influence.clamp(1e-3, 1.0).toDouble(),
+        field0.influence.clamp(minTangentReach, maxInfluence).toDouble(),
       BridgeSideInterp_Auto(:final field0) =>
-        field0.influence.clamp(1e-3, 1.0).toDouble(),
+        field0.influence.clamp(minTangentReach, maxInfluence).toDouble(),
       _ => 1.0 / 3.0,
     };
 
@@ -823,7 +832,7 @@ BridgeKeyframe keyWithEase(List<BridgeKeyframe> keys, int index, KeyEase ease) {
     return BridgeSideInterp.bezier(BridgeBezierSide(
       speed: speed ?? sideSpeedAtKey(keys, index, isOut: isOut),
       influence: (influence ?? sideInfluence(was))
-          .clamp(minTangentReach, 1.0)
+          .clamp(minTangentReach, maxInfluence)
           .toDouble(),
     ));
   }
@@ -878,10 +887,32 @@ List<BridgeKeyframe> keysWithEase(
 /// sane zoom, and no ease anyone shapes can tell the difference.
 const double minTangentReach = 1e-3;
 
-/// A dragged handle endpoint read back into (speed, influence) — the inverse
-/// of [handleEndpoint], with the reach clamped inside the span so the handle
-/// lands under the cursor, the curve stays x-monotone, and the tangent never
-/// stands exactly upright ([minTangentReach]).
+/// The furthest a tangent may reach, as a fraction of its span: 1000%. Keep
+/// in step with `MAX_INFLUENCE` in lumit-core `anim.rs`.
+const double maxInfluence = 10.0;
+
+/// The influences a span's curve is built from, given the two its sides
+/// store: lumit-core `span_influences`, the same arithmetic so the Graph
+/// editor and the render agree.
+///
+/// A pair that would make time run backwards along the span is scaled down
+/// in proportion until it no longer does. Any pair both at most 1 is never
+/// touched.
+(double, double) spanInfluences(double a, double b) {
+  final x = a.clamp(minTangentReach, maxInfluence).toDouble();
+  final y = b.clamp(minTangentReach, maxInfluence).toDouble();
+  if (x <= 1 && y <= 1) return (x, y);
+  final f = x + y - math.sqrt(x * y);
+  if (f <= 1) return (x, y);
+  return (x / f, y / f);
+}
+
+/// A dragged handle endpoint read back into (speed, influence): the inverse
+/// of [handleEndpoint], so the handle lands under the cursor. The reach may
+/// pass the neighbouring key, up to [maxInfluence] of the span, and never
+/// stands exactly upright ([minTangentReach]). Time along the curve stays in
+/// order because the curve is built from [spanInfluences], not because the
+/// handle is held back.
 ({double speed, double influence}) handleFromDrag({
   required double keyTime,
   required double keyValue,
@@ -893,8 +924,9 @@ const double minTangentReach = 1e-3;
   final dt = (neighbourTime - keyTime).abs();
   if (dt <= 1e-9) return (speed: 0, influence: 1 / 3);
   final reach = (isOut ? dragTime - keyTime : keyTime - dragTime)
-      .clamp(dt * minTangentReach, dt);
-  final influence = (reach / dt).clamp(minTangentReach, 1.0).toDouble();
+      .clamp(dt * minTangentReach, dt * maxInfluence);
+  final influence =
+      (reach / dt).clamp(minTangentReach, maxInfluence).toDouble();
   final speed = (isOut ? dragValue - keyValue : keyValue - dragValue) / reach;
   return (speed: speed, influence: influence);
 }
@@ -943,7 +975,8 @@ const double minTangentReach = 1e-3;
           neighbourTime: rationalSeconds(nb.time),
           isOut: isOut,
           speed: sideSpeedAtKey(keys, i, isOut: isOut),
-          influence: sideInfluence(side),
+          // Held to the span, so a long handle does not stretch the fit.
+          influence: sideInfluence(side).clamp(0.0, 1.0),
         );
         grow(e.value);
       }
@@ -1059,7 +1092,7 @@ BridgeSideInterp easeFromText(String text) {
     final speed = double.tryParse(parts[0]);
     final influence = double.tryParse(parts[1]);
     if (speed == null || influence == null) break;
-    final reach = influence.clamp(1e-3, 1.0).toDouble();
+    final reach = influence.clamp(minTangentReach, maxInfluence).toDouble();
     return name == 'bezier'
         ? BridgeSideInterp.bezier(
             BridgeBezierSide(speed: speed, influence: reach))
@@ -1939,7 +1972,9 @@ List<BridgeKeyframe> keysWithKeyOnCurve(
       (to.dx - from.dx).abs() < 1e-12 ? 0 : (to.dy - from.dy) / (to.dx - from.dx);
   BridgeSideInterp side(double speed, double influence) =>
       BridgeSideInterp.bezier(BridgeBezierSide(
-          speed: speed, influence: influence.clamp(1e-3, 1.0).toDouble()));
+          speed: speed,
+          influence:
+              influence.clamp(minTangentReach, maxInfluence).toDouble()));
   // The far sides of the two keys, fixed where automatic.
   final aIn = resolvedSide(sorted, i, isOut: false);
   final bOut = resolvedSide(sorted, i + 1, isOut: true);

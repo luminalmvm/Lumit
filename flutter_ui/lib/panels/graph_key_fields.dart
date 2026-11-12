@@ -113,7 +113,7 @@ class _KeyFieldsPopoverState extends State<_KeyFieldsPopover> {
                   })),
           keyFieldRow(t, l10n.graphEaseIn, 'graph-fields-in', _in,
               min: 0,
-              max: 100,
+              max: 1000,
               decimals: 0,
               suffix: l10n.unitSymbolPercent,
               set: (v) => setState(() {
@@ -122,7 +122,7 @@ class _KeyFieldsPopoverState extends State<_KeyFieldsPopover> {
                   })),
           keyFieldRow(t, l10n.graphEaseOut, 'graph-fields-out', _out,
               min: 0,
-              max: 100,
+              max: 1000,
               decimals: 0,
               suffix: l10n.unitSymbolPercent,
               set: (v) => setState(() {
