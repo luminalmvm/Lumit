@@ -119,9 +119,20 @@ pub struct Run {
     /// What the run had made before the joining node now drawing.
     acc: Option<Vec<f32>>,
     combine: Combine,
+    /// Each node's colour part only, for a LUT ([`Packed::colour_only`]).
+    pointwise: bool,
 }
 
 impl Run {
+    /// A walk for a LUT: every key and grade is its colour part only.
+    #[must_use]
+    pub fn pointwise() -> Self {
+        Self {
+            pointwise: true,
+            ..Self::default()
+        }
+    }
+
     /// Before op `i` draws on `rgba`. A joining node is handed the run's
     /// input, and what the run made is kept for [`Self::end`].
     pub fn begin(&mut self, ops: &ResolvedStack, i: usize, rgba: &mut [f32]) {
@@ -155,14 +166,21 @@ impl Run {
             return;
         };
         let p = op.params;
-        let pk = Correction::read(p).packed(p.float(DERIVED_PX_SCALE, 1.0));
+        let mut pk = Correction::read(p).packed(p.float(DERIVED_PX_SCALE, 1.0));
+        if self.pointwise {
+            pk.colour_only();
+        }
         match self.combine {
             Combine::Serial => return,
             Combine::Parallel => parallel(&mut acc, rgba, input),
             Combine::Layer => {
                 let key = cpu::correction_key(input, w, h, &pk, &[]);
+                let mut full = graded_packed(p);
+                if self.pointwise {
+                    full.colour_only();
+                }
                 let mut graded = input.clone();
-                cpu::correction(&mut graded, w, h, &graded_packed(p), &[]);
+                cpu::correction(&mut graded, w, h, &full, &[]);
                 let (mode, mix) = layer_mix(op.def.schema(), p);
                 layer(&mut acc, &graded, key.as_deref(), mode, mix);
             }

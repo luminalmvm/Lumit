@@ -147,15 +147,7 @@ impl LutCache {
         let artefact = match request {
             OcioRequest::Config(edge) => config?.artefact(edge)?,
             OcioRequest::File { path, inverse } => {
-                let chain = lumit_colour::file::load(std::path::Path::new(path)).ok()?;
-                let chain = if *inverse {
-                    chain.inverted(path).ok()?
-                } else {
-                    chain
-                };
-                std::sync::Arc::new(
-                    lumit_colour::bake::bake(&chain, lumit_colour::bake::Shaper::DEFAULT).ok()?,
-                )
+                std::sync::Arc::new(crate::colour::file_artefact(path, *inverse)?)
             }
         };
         let mut hasher = blake3::Hasher::new();

@@ -5097,7 +5097,7 @@ fn comp_walk(
 /// one op, so this list is 1:1 and in the same order as the stack's
 /// `lut` ops — the alignment `run_ops` relies on to bind LUT k to op
 /// k. Preview (here) and export build it the same way, so the two match.
-fn colour_tables(
+pub(crate) fn colour_tables(
     effects: &[lumit_core::model::EffectInstance],
     lt: f64,
 ) -> Vec<Option<crate::colour::TableRequest>> {

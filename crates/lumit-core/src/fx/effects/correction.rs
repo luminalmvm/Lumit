@@ -806,6 +806,12 @@ impl EffectDef for CorrectionDef {
         }
     }
 
+    fn apply_cpu_pointwise(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        let mut pk = Correction::read(p).packed(p.float(DERIVED_PX_SCALE, 1.0));
+        pk.colour_only();
+        cpu::correction(rgba, w, h, &pk, &[]);
+    }
+
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(DERIVED_PX_SCALE, Value::Float(cx.px_scale));
         let row = cx.inst.param(crate::grade::matte_view::MATTE_VIEW_ROW);

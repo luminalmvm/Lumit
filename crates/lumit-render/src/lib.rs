@@ -76,6 +76,7 @@ mod gpufx_luma_fade;
 mod gpufx_particulate;
 mod gpufx_srgb_curve;
 mod gpufx_timewarp;
+pub mod grade_lut;
 mod grid_lines;
 mod haze;
 pub mod headless;
