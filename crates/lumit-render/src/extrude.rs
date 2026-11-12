@@ -28,7 +28,7 @@ use crate::model_material::Look;
 const MESH_BYTES: usize = 256 << 20;
 const SCENE_BYTES: usize = 128 << 20;
 
-struct Kept<T>(Arc<T>);
+pub(crate) struct Kept<T>(pub(crate) Arc<T>);
 
 impl ByteSized for Kept<Mesh> {
     fn byte_size(&self) -> usize {
@@ -42,7 +42,7 @@ impl ByteSized for Kept<ModelScene> {
     }
 }
 
-type Shelf<T> = Mutex<Option<ByteLru<u128, Kept<T>>>>;
+pub(crate) type Shelf<T> = Mutex<Option<ByteLru<u128, Kept<T>>>>;
 
 static MESHES: Shelf<Mesh> = Mutex::new(None);
 static SCENES: Shelf<ModelScene> = Mutex::new(None);
@@ -52,7 +52,7 @@ static LAST: Mutex<Option<HashMap<Uuid, Weak<ModelScene>>>> = Mutex::new(None);
 
 /// What's on `shelf` under `key`, made and put there if it isn't. The lock is
 /// never held while it's made.
-fn kept<T>(shelf: &Shelf<T>, bytes: usize, key: u128, make: impl FnOnce() -> T) -> Arc<T>
+pub(crate) fn kept<T>(shelf: &Shelf<T>, bytes: usize, key: u128, make: impl FnOnce() -> T) -> Arc<T>
 where
     Kept<T>: ByteSized,
 {
@@ -91,6 +91,8 @@ pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
     }
     set(&MESHES, MESH_BYTES, ledger);
     set(&SCENES, SCENE_BYTES, ledger);
+    use crate::build::kept_raster::{RASTERS, RASTER_BYTES};
+    set(&RASTERS, RASTER_BYTES, ledger);
 }
 
 /// One letter, or one run of a shape's art at one of its copies.
@@ -331,7 +333,7 @@ fn mesh_key(contours: &[Vec<[f64; 2]>], profile: &Profile) -> u128 {
     name_of(&h)
 }
 
-fn name_of(h: &blake3::Hasher) -> u128 {
+pub(crate) fn name_of(h: &blake3::Hasher) -> u128 {
     let mut k = [0u8; 16];
     k.copy_from_slice(&h.finalize().as_bytes()[..16]);
     u128::from_le_bytes(k)

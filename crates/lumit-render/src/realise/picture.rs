@@ -48,7 +48,8 @@ impl Realiser<'_> {
                 // linearise pass was asking it for anyway, so the picture
                 // is the same one and the working-format copy is never
                 // made.
-                self.engine.upload_srgb8(&self.ctx, rgba, *tex_w, *tex_h)
+                let upload = |rgba: &[u8], w, h| self.engine.upload_srgb8(&self.ctx, rgba, w, h);
+                self.kept_source(rgba, *tex_w, *tex_h, *format, colour_space, true, upload)
             }
             DrawSource::Pixels {
                 rgba,
@@ -56,7 +57,11 @@ impl Realiser<'_> {
                 tex_h,
                 format,
                 colour_space,
-            } => self.upload_source(rgba, *tex_w, *tex_h, *format, colour_space),
+            } => {
+                let upload =
+                    |rgba: &[u8], w, h| self.upload_source(rgba, w, h, *format, colour_space);
+                self.kept_source(rgba, *tex_w, *tex_h, *format, colour_space, false, upload)
+            }
             DrawSource::Nested {
                 width,
                 height,
@@ -272,7 +277,7 @@ impl Realiser<'_> {
                 &graphs,
                 fx_ms.as_mut(),
                 // The per-effect cache, for a source the builder
-                // could name; a nested comp, text or shape runs as before.
+                // could name; one it could not runs as before.
                 l.fx_input_key.map(|key| (self.fx_cache, key)),
             )
         };

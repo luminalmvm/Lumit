@@ -65,5 +65,5 @@ pub(super) fn shared(
     // Not filed, or filed from a file saved over since: the decode deals with
     // both, and files what it read unless it is a stand-in.
     let px = decode(decoders, cache, req, false).ok()?;
-    filed(cache).or_else(|| Some(Arc::new(px.rgba)))
+    filed(cache).or(Some(px.rgba))
 }

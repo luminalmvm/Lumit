@@ -7,7 +7,7 @@ use uuid::Uuid;
 pub struct FramePixels {
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    pub rgba: Arc<Vec<u8>>,
     /// How wide `rgba`'s samples are: eight-bit sRGB for nearly everything,
     /// scene-linear float for a float source such as OpenEXR.
     pub format: lumit_media::decode::PixelFormat,
@@ -22,9 +22,7 @@ pub struct Request {
     pub frame: usize,
     pub target_width: Option<u32>,
     /// The file is missing (docs/07 §3.3): answer with the test-bar slate at
-    /// this size instead of decoding. Viewing a lost clip on its own must
-    /// show the same bars a comp shows for it — the Viewer previously drew
-    /// nothing at all here, which looks identical to a broken application.
+    /// this size instead of decoding, the same bars a comp shows for it.
     pub slate: Option<(u32, u32)>,
     /// Read these four named channels of the file instead of the picture it
     /// opens as (docs/08 §3.97). See [`CompJob::channels`]; `None` on every
@@ -326,11 +324,9 @@ impl lumit_cache::ByteSized for CachedFrame {
 /// so a step back across the cut costs nothing: nine. Twelve leaves room for a
 /// fourth row or a nested comp before anything is closed and opened again.
 ///
-/// ponytail: a count, the same for every file. A hardware decoder holds a
-/// device and surfaces on the card and a software one holds frames in memory,
-/// and neither is weighed. The upgrade is to charge each decoder to the
-/// governor and close by its pressure, if a project of very large files ever
-/// shows twelve to be too many.
+/// ponytail: a count, the same for every file, and what a decoder holds is not
+/// weighed. The upgrade is to charge each to the governor and close by its
+/// pressure, if a project of very large files ever shows twelve to be too many.
 pub const MAX_OPEN_DECODERS: usize = 12;
 
 /// The open decoders one decoding thread keeps, one per footage item.
@@ -374,10 +370,12 @@ impl OpenDecoders {
         self.open.remove(&item);
     }
 
-    /// The decodes that follow are for another frame of the comp. What "used
-    /// lately" means is counted in these.
+    /// The decodes that follow are for another frame, the unit "used lately"
+    /// counts in. A decoder the last frame did not use lets go of its RGBA frame.
     pub fn next_frame(&mut self) {
         self.frame += 1;
+        let idle = self.open.values_mut().filter(|o| o.0 + 1 < self.frame);
+        idle.for_each(|(_, dec)| dec.let_go_of_rgba());
     }
 
     /// The decoder for `item`, opened from `source` if it is not open already.
@@ -853,9 +851,8 @@ fn decode(
         return Ok(FramePixels {
             width: w,
             height: h,
-            rgba: lumit_media::slate::colour_bars(w, h),
-            // The slate is drawn here, in bytes, whatever the missing file
-            // would have been.
+            rgba: Arc::new(lumit_media::slate::colour_bars(w, h)),
+            // Drawn here, in bytes, whatever the missing file would have been.
             format: lumit_media::decode::PixelFormat::Srgb8,
             frame: req.frame,
             item: req.item,
@@ -880,7 +877,7 @@ fn decode(
             return Ok(FramePixels {
                 width: hit.width,
                 height: hit.height,
-                rgba: Arc::unwrap_or_clone(hit.rgba),
+                rgba: hit.rgba,
                 format: hit.format,
                 frame: req.frame,
                 item: req.item,
@@ -891,7 +888,7 @@ fn decode(
         return Ok(FramePixels {
             width: hit.width,
             height: hit.height,
-            rgba: hit.rgba.to_vec(),
+            rgba: Arc::clone(&hit.rgba),
             format: hit.format,
             frame: req.frame,
             item: req.item,
@@ -907,12 +904,13 @@ fn decode(
                 lumit_media::exr::read_channels(&path, slots).map_err(|e| e.to_string())?,
                 req.target_width,
             );
+            let rgba = Arc::new(out.rgba);
             cache.insert(
                 cache_key,
                 CachedFrame {
                     width: out.width,
                     height: out.height,
-                    rgba: Arc::new(out.rgba.clone()),
+                    rgba: Arc::clone(&rgba),
                     format: out.format,
                     once: false,
                     stamp,
@@ -921,7 +919,7 @@ fn decode(
             return Ok(FramePixels {
                 width: out.width,
                 height: out.height,
-                rgba: out.rgba,
+                rgba,
                 format: out.format,
                 frame: req.frame,
                 item: req.item,
@@ -951,18 +949,19 @@ fn decode(
         return Ok(FramePixels {
             width: out.width,
             height: out.height,
-            rgba: out.rgba,
+            rgba: Arc::new(out.rgba),
             format: out.format,
             frame,
             item: req.item,
         });
     }
+    let rgba = Arc::new(out.rgba);
     cache.insert(
         cache_key,
         CachedFrame {
             width: out.width,
             height: out.height,
-            rgba: Arc::new(out.rgba.clone()),
+            rgba: Arc::clone(&rgba),
             format: out.format,
             once: false,
             stamp,
@@ -971,7 +970,7 @@ fn decode(
     Ok(FramePixels {
         width: out.width,
         height: out.height,
-        rgba: out.rgba,
+        rgba,
         format: out.format,
         frame,
         item: req.item,
@@ -1330,7 +1329,7 @@ fn combine_pair(
     a: FramePixels,
     blend: Option<(usize, f32)>,
     flow: Option<&lumit_core::retime::FlowParams>,
-) -> Result<Vec<u8>, String> {
+) -> Result<Arc<Vec<u8>>, String> {
     let Some((ceil, w)) = blend else {
         return Ok(a.rgba);
     };
@@ -1350,18 +1349,18 @@ fn combine_pair(
     // OpenEXR (docs/impl/media-io.md §5a).
     let float = a.format == lumit_media::decode::PixelFormat::LinearF32;
     let Some(params) = flow else {
-        return Ok(if float {
+        return Ok(Arc::new(if float {
             lumit_core::pixels::blend_f32(&a.rgba, &b.rgba, w)
         } else {
             lumit_core::pixels::blend_rgba(&a.rgba, &b.rgba, w)
-        });
+        }));
     };
     let (fw, fh) = (a.width as usize, a.height as usize);
     // A phase at either end is a frame already in hand, whichever engine the
     // layer names, and both engines promise it bit for bit. Answered before
     // either is asked, so the ends of a ramp cost nothing and cannot drift.
     if let Some(frame) = lumit_ml::synthesis::endpoint(&a.rgba, &b.rgba, w) {
-        return Ok(frame.to_vec());
+        return Ok(Arc::new(frame.to_vec()));
     }
     // The model paints the frame directly and measures nothing, so it sits
     // above every line of the built-in engine's work: a field measured here
@@ -1371,7 +1370,7 @@ fn combine_pair(
         match synthesised(synthesis, &a, &b, fw, fh, w, float) {
             Ok(painted) => {
                 note_synthesis(job.layer, None);
-                return Ok(painted);
+                return Ok(Arc::new(painted));
             }
             // An export carries the refusal out and abandons the file. The
             // pre-flight turns away everything it can see from the document
@@ -1405,14 +1404,13 @@ fn combine_pair(
         true,
     );
     let engine = flow_engine.get_or_insert_with(|| flow_engine_for(gpu));
-    // The float synthesis runs on the processor rather than the card — see
-    // `synthesize_at_f32` for why — and gives the same picture the eight-bit
-    // one would, without rounding it.
-    Ok(if float {
+    // The float synthesis runs on the processor (see `synthesize_at_f32`)
+    // and gives the eight-bit one's picture without rounding it.
+    Ok(Arc::new(if float {
         engine.synthesize_at_f32(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set)
     } else {
         engine.synthesize_at(&a.rgba, &b.rgba, fw, fh, &fwd, &bwd, w, &set)
-    })
+    }))
 }
 
 /// The in-between frame as the model paints it, or the reason it did not.
@@ -1490,7 +1488,7 @@ fn decode_comp(
             FramePixels {
                 width: w,
                 height: h,
-                rgba: lumit_media::slate::colour_bars(w, h),
+                rgba: Arc::new(lumit_media::slate::colour_bars(w, h)),
                 format: lumit_media::decode::PixelFormat::Srgb8,
                 frame: job.source_frame,
                 item: job.item,
@@ -1574,7 +1572,7 @@ fn decode_comp(
                         elsewhere: Vec::new(),
                         width,
                         height,
-                        rgba: Arc::new(rgba),
+                        rgba,
                         format,
                         natural_w: job.natural_w,
                         natural_h: job.natural_h,
@@ -1659,6 +1657,7 @@ fn decode_comp(
         )?;
         // A fade or a dissolve, last, so it crossfades the pictures the two
         // clips would each have shown alone. See [`Cut::Under`] for the fit.
+        // The frame may be the cache's own, so the fade writes to a copy.
         if let Some((gain, below)) = under {
             use lumit_core::pixels;
             use lumit_media::decode::PixelFormat::{LinearF32, Srgb8};
@@ -1679,9 +1678,10 @@ fn decode_comp(
                 }
             });
             let below = below.as_ref().map(|p| p.as_slice());
+            let rgba = Arc::make_mut(&mut rgba);
             match format {
-                Srgb8 => pixels::dissolve_rgba(&mut rgba, below, gain),
-                LinearF32 => pixels::dissolve_f32(&mut rgba, below, gain),
+                Srgb8 => pixels::dissolve_rgba(rgba, below, gain),
+                LinearF32 => pixels::dissolve_f32(rgba, below, gain),
             }
         }
         layers.push(CompLayerPixels {
@@ -1690,7 +1690,7 @@ fn decode_comp(
             elsewhere: Vec::new(),
             width,
             height,
-            rgba: Arc::new(rgba),
+            rgba,
             format,
             natural_w: job.natural_w,
             natural_h: job.natural_h,

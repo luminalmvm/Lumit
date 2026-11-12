@@ -737,8 +737,8 @@ pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
 ///
 /// `cache` is the per-effect intermediate cache and the content name
 /// of `tex` — the layer's source as the draw builder named it. `None` (no
-/// store, or an input nothing can name yet: an adjustment layer's composite, a
-/// nested comp, a text or shape layer) walks the stack exactly as before. With
+/// store, or an input nothing can name: an adjustment layer's composite, a
+/// nested comp on Flow, a layer with a puppet) walks the stack as before. With
 /// both, the walk starts after the longest run of ops whose outputs are held,
 /// and files each output it makes when the cache is taking them.
 ///

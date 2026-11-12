@@ -20,6 +20,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use skrifa::string::StringId;
@@ -323,6 +324,17 @@ fn registry() -> &'static Mutex<Registry> {
 
 type Found = Option<(String, String)>;
 
+/// Moved on whenever the same words may draw differently: the library is read
+/// again, or a file adds a family a substituted face stood in for.
+static EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// How many times the fonts in force have changed. A kept picture of text
+/// folds it into its name, so none outlives the face it was drawn with.
+#[must_use]
+pub fn epoch() -> u64 {
+    EPOCH.load(Ordering::Acquire)
+}
+
 /// The answers [`by_postscript_name`] has given, forgotten when the library
 /// changes. Grows by one entry per name a project asks for.
 fn postscript_seen() -> &'static Mutex<HashMap<String, Found>> {
@@ -372,6 +384,7 @@ pub fn use_library(folder: Option<&Path>) {
         .collect();
     registry.loaded.clear();
     registry.generation = registry.generation.wrapping_add(1);
+    EPOCH.fetch_add(1, Ordering::AcqRel);
     drop(registry);
     names.sort_by_key(|n| n.to_lowercase());
     names.dedup();
@@ -552,6 +565,7 @@ pub fn register_file(path: &Path) -> Vec<String> {
     registry.files.push(path.to_path_buf());
     let named = |family: &str| added.iter().any(|a| a.eq_ignore_ascii_case(family));
     registry.loaded.retain(|(family, _), _| !named(family));
+    EPOCH.fetch_add(1, Ordering::AcqRel);
     added
 }
 
@@ -814,9 +828,14 @@ mod tests {
             boxed: false,
         };
         let with = crate::rasterise(&block, &[]);
+        let mut bigger = block;
+        bigger.size = 33.0;
+        assert_ne!(block.key_bytes(), bigger.key_bytes(), "the size is named");
 
+        let before = epoch();
         std::fs::remove_dir_all(&folder).unwrap();
         use_library(Some(&folder));
+        assert!(epoch() > before, "the epoch moves");
         assert!(library_families().is_empty());
         assert!(library_identity(&family).is_none());
         if !installed {

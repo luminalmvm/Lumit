@@ -1405,9 +1405,8 @@ impl HeadlessRenderer {
                 let Some(parts) = self.parts.as_ref() else {
                     return false;
                 };
-                // The very name the builder gives that frame, a placed graph's
-                // own Input values included, or the planner would skip decodes
-                // for a texture the realiser never finds.
+                // The name the builder gives that frame, a placed graph's Input values
+                // included, or the planner skips decodes for a texture never found.
                 let Some(key) =
                     crate::cache::NestedKeyer::nested_key_with(&keys, read, nested, lt, inputs)
                 else {
@@ -1422,6 +1421,7 @@ impl HeadlessRenderer {
             };
             if let Some(parts) = self.parts.as_ref() {
                 parts.fx_cache.borrow_mut().unpin_nested();
+                parts.flow.borrow_mut().next_frame();
             }
             let held: Option<crate::plan::HeldNested<'_>> =
                 if watcher.is_none() { Some(&held) } else { None };

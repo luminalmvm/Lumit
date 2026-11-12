@@ -33,6 +33,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub(crate) mod fx_key;
+pub(crate) mod kept_raster;
 mod raster_scale;
 pub(crate) mod shading;
 
@@ -1910,6 +1911,21 @@ fn comp_walk(
         )
     };
 
+    // The names of the text and shape rasters this walk made, by layer and
+    // layer time, for the effect cache. Only looked up, so the map's order
+    // decides nothing.
+    let raster_names: std::cell::RefCell<HashMap<(Uuid, u64), u128>> = Default::default();
+    let named = |layer: &lumit_core::model::Layer,
+                 lt: f64,
+                 (raster, name): (kept_raster::LayerRaster, Option<u128>)| {
+        if let Some(name) = name {
+            raster_names
+                .borrow_mut()
+                .insert((layer.id, lt.to_bits()), name);
+        }
+        raster
+    };
+
     // One layer's own picture at layer time `lt`, alone: its source pixels with
     // its paint stamped in and its masks gating them, and nothing else — no
     // effects, no transform, no puppet. What [`pixels_for`] is built on, and
@@ -1955,7 +1971,6 @@ fn comp_walk(
                 })
             }
             LayerKind::Solid { def } => doc.solid(*def).filter(|_| in_span(layer)).map(|sd| {
-                let px = solid_rgba(sd.colour);
                 // A flat colour is normally an 8×8 tile stretched to size —
                 // but a mask gates *pixels* and a stroke paints them, so both
                 // want the solid at its real size to work on.
@@ -1981,16 +1996,13 @@ fn comp_walk(
                 // destroys. A colour plate with nothing on it still gets the
                 // tile, which is the case the optimisation was written for.
                 //
-                // **What this costs**, named so nobody has to measure it twice:
-                // a solid carrying any effect now builds and uploads its real
-                // raster every frame — about eight megabytes at 1080p — where
-                // it used to build 256 bytes. That is the same order as one
-                // working texture of the stack that is about to run, so it is
-                // not the dominant cost of an effected solid, but it is not
-                // free either. If it ever shows up in a budget, the fix is to
-                // keep the small upload and stretch it on the card before the
-                // stack runs, rather than to make this predicate cleverer —
-                // a cleverer predicate is how the bug happened.
+                // **What this costs**: a solid carrying any effect builds its real
+                // raster, about eight megabytes at 1080p, instead of 256 bytes. The
+                // kept shelf holds it, so it is built and uploaded once while its
+                // colour and size stay the same.
+                //
+                // Do not make this predicate cleverer: a cleverer predicate is how
+                // the bug happened.
                 let plain = layer.masks.is_empty()
                     && layer.paint.is_empty()
                     && !layer.effects.iter().any(|e| e.enabled)
@@ -2005,133 +2017,24 @@ fn comp_walk(
                     && shading::shading_lights(comp, layer, t_comp, &context).is_empty();
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
-                    Arc::new(px_tile(&px, tw, th)),
+                    kept_raster::solid(sd.colour, tw, th),
                     tw,
                     th,
                     (sd.width as f32, sd.height as f32),
                 )
             }),
             LayerKind::Text { document } => in_span(layer).then(|| {
-                // The words at *this* layer time — a plain document hands back
-                // what was typed; an expression-driven one is evaluated here,
-                // which is what makes a caption able to print a live value.
-
-                let (line, spoken, _) =
-                    lumit_core::captions::show::spoken(document, context.clone());
-                let size = document.size as f32;
-                // **Text on a path**. The named mask's own flattened
-                // curve, read through the carriage every path-walking effect
-                // reads — so the glyphs and a Stroke on the same mask
-                // agree about where the curve is. A layer whose row names
-                // nothing, or a mask since deleted, flattens to an empty
-                // polyline and the line lays straight: refuse calmly, never
-                // an empty layer (docs/14 §4).
-                let spine = document
-                    .path
-                    .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
-                    .filter(|p| !p.is_empty());
-                // **The letters move separately**. What each one is
-                // asked to do is worked out here, from the animators' own
-                // keyframed numbers at this layer time; a layer with none hands
-                // back an empty list and the rasteriser takes the path it
-                // always took, byte for byte.
-                let xforms = lumit_core::text::ports::layer_glyph_xforms(
-                    doc, comp, layer, document, &line, t_comp, &spoken,
-                );
-                // An unstyled single line draws the way it always has. A
-                // styled one, or one with a line break, is set by the shaper.
-                let block = lumit_text::TextBlock::of(document, &line);
-                // **Continuously rasterised**, as a shape layer is: the words
-                // are drawn as large as the layer and its parents show them,
-                // so a small text scaled up never blurs. The placement keeps
-                // the layer's own size, and a raster too big to hold is drawn
-                // at the most it can be.
-                let shown = raster_scale::shape_raster_scale(world_placement(
-                    comp,
-                    layer,
-                    t_comp,
-                    context.clone(),
-                ));
-                let room = |w: u32, h: u32| {
-                    (SHAPE_RASTER_PIXELS / (f64::from(w.max(1)) * f64::from(h.max(1))))
-                        .sqrt()
-                        .max(1.0)
-                };
-                let (r, natural) = match &spine {
-                    Some(path) => {
-                        let (w, h) = lumit_text::path_box(path, size);
-                        let zoom = f64::from(shown).clamp(1.0, room(w, h)) as f32;
-                        let r = lumit_text::rasterise_along_at(
-                            &block,
-                            path,
-                            document.path_offset.value_at(lt) as f32,
-                            w,
-                            h,
-                            &xforms,
-                            zoom,
-                        );
-                        (r, (w.max(1), h.max(1)))
-                    }
-                    // Shown at its own size or smaller, the layer is drawn as it
-                    // always was, without laying it out twice.
-                    None if shown <= 1.0 => {
-                        let r = lumit_text::rasterise(&block, &xforms);
-                        let size = (r.width, r.height);
-                        (r, size)
-                    }
-                    None => {
-                        let own = lumit_text::layout(&block, !xforms.is_empty());
-                        let zoom = f64::from(shown).clamp(1.0, room(own.width, own.height)) as f32;
-                        lumit_text::rasterise_at(&block, &xforms, zoom)
-                    }
-                };
-                (
-                    Arc::new(r.rgba),
-                    r.width,
-                    r.height,
-                    (natural.0 as f32, natural.1 as f32),
-                )
+                let made = kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context);
+                named(layer, lt, made)
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
             // into its own bounding box, which is also the layer's natural
             // size. Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
-                .then(|| lumit_core::shape::contents_at(contents, lt, &context))
-                .and_then(|contents| {
-                    let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, lt)?;
-                    let natural_w = (x1 - x0).max(1.0);
-                    let natural_h = (y1 - y0).max(1.0);
-                    // The same reduced-resolution rule the other rasterised
-                    // kinds follow: draw at the working scale, and let the
-                    // placement matrix carry the natural size.
-                    //
-                    // **Continuously rasterised**, as After Effects draws a
-                    // shape layer: the art is drawn as large as the layer and
-                    // its parents show it, so scaling it up never blurs it.
-                    // The effects read the raster factor off the texture, so
-                    // they keep their size.
-                    let shown = raster_scale::shape_raster_scale(world_placement(
-                        comp,
-                        layer,
-                        t_comp,
-                        context.clone(),
-                    ));
-                    let most = (SHAPE_RASTER_PIXELS / (natural_w * natural_h))
-                        .sqrt()
-                        .max(1.0);
-                    let k = f64::from(shown).clamp(1.0, most);
-                    let w = (natural_w * k).round().max(1.0) as u32;
-                    let h = (natural_h * k).round().max(1.0) as u32;
-                    Some((
-                        Arc::new(lumit_core::shape::rasterise_contents(
-                            &contents, w, h, x0, y0, x1, y1, lt,
-                        )),
-                        w,
-                        h,
-                        (natural_w as f32, natural_h as f32),
-                    ))
-                }),
+                .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context))
+                .flatten()
+                .map(|made| named(layer, lt, made)),
             LayerKind::Precomp { .. } => None, // handled as Nested below
             LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
             // A light is something other layers SEE. It has no picture
@@ -2152,8 +2055,17 @@ fn comp_walk(
             // Nothing to stamp in is the ordinary layer, and it keeps the
             // bytes it arrived with: both stages return on an empty list
             // anyway, and asking for them by name is what lets a decoded frame
-            // travel to the draw shared rather than copied.
-            if !layer.paint.is_empty() || !layer.masks.is_empty() {
+            // travel to the draw shared rather than copied. Eight-bit pixels
+            // under masks none of which acts here are kept too, since full
+            // coverage leaves every alpha as it was. A float alpha times one
+            // is not always itself, so float keeps the plain test.
+            let gated = match format {
+                lumit_media::decode::PixelFormat::Srgb8 => {
+                    layer.masks.iter().any(|m| m.does_something_at(lt))
+                }
+                lumit_media::decode::PixelFormat::LinearF32 => !layer.masks.is_empty(),
+            };
+            if !layer.paint.is_empty() || gated {
                 let rgba = Arc::make_mut(&mut rgba);
                 // Paint first, masks second: a stroke is part of the layer's
                 // picture, and a mask gates the picture (docs/06 render
@@ -4953,9 +4865,15 @@ fn comp_walk(
         // exactly what the stack runs on (`op_keys` folds in the raster size,
         // so the render scale is covered).
         let fx_input_key = match &source {
-            DrawSource::Pixels { tex_w, tex_h, .. } => {
-                fx_key::fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
-            }
+            DrawSource::Pixels { tex_w, tex_h, .. } => fx_key::fx_input_key(
+                doc,
+                layer,
+                pixels_by_layer,
+                &raster_names.borrow(),
+                lt,
+                *tex_w,
+                *tex_h,
+            ),
             // On Flow the stack runs on the picture between two frames,
             // which is neither frame's.
             DrawSource::Nested { key, flow, .. } => key.filter(|_| flow.is_none()),
