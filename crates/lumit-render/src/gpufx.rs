@@ -32,6 +32,7 @@ mod audio_spectrum;
 mod energy_line;
 pub mod lfx;
 pub mod ofx;
+mod stabilise;
 
 type Tex = wgpu::Texture;
 
@@ -469,6 +470,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &energy_line::EnergyLine,
+    &stabilise::Stabilise,
     &audio_spectrum::AudioSpectrum,
     &crate::gpufx_particulate::Particulate,
     &Grid,

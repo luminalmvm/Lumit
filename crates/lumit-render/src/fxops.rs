@@ -844,6 +844,7 @@ pub fn run_ops(
                 h,
                 subs_before,
                 ops,
+                !neighbours.is_empty(),
                 tables,
                 layer_inputs,
                 flare_lens,
@@ -1714,7 +1715,7 @@ pub fn run_ops(
 /// the raster, the flare substitution count and ops `0..=k`, with
 /// each op's parameters and the identity of whatever rides beside it. `None`
 /// from the first op that binds a picture nobody named — another layer (a
-/// plate or a matte texture), the neighbour frames, the flow field, a carriage
+/// plate or a matte texture), neighbour frames, the flow field, a carriage
 /// a background analysis filed through to the end: the v1 rule is that such
 /// an op breaks the chain rather than being named by a guess.
 /// [`LayerInput::ThisLayer`] and [`LayerInput::Absent`] are functions of the
@@ -1726,6 +1727,9 @@ fn op_keys(
     h_px: u32,
     flare_substitutions: u64,
     ops: &lumit_core::fx::params::ResolvedStack,
+    // An op that takes neighbours and is handed none, as a Stabilise that
+    // does not fill is, reads nothing beyond its bag.
+    has_neighbours: bool,
     tables: &[Option<ColourTable>],
     layer_inputs: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
@@ -1932,6 +1936,15 @@ fn op_keys(
                     }
                     flare_i += 1;
                 }
+                // A plugin that failed passes its input through, which no
+                // name covers, so a plugin's op is never filed.
+                Some(AuxKind::Neighbours) => {
+                    let name = schema.match_name;
+                    broken |= has_neighbours
+                        || name.starts_with(lumit_core::fx::builtins::OFX_MATCH_PREFIX)
+                        || name.starts_with(lumit_core::fx::builtins::LFX_MATCH_PREFIX);
+                }
+                Some(AuxKind::FlowField) => broken = true,
                 Some(AuxKind::None) | None => {}
                 Some(_) => broken = true,
             }

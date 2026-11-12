@@ -22,6 +22,7 @@ use crate::pyramid::{Plane, Pyramid};
 
 /// The result of one frame-to-frame track: where the feature landed, and the
 /// linear part of the warp that took it there.
+#[derive(Clone, Copy)]
 pub(crate) struct Step {
     pub(crate) pos: [f64; 2],
     /// The 2×2 `A` of the affine warp (docs/impl/tracking.md §2's `(A, d)`).
@@ -34,10 +35,13 @@ pub(crate) struct Step {
 ///
 /// `seed` is the initial displacement guess in level-0 pixels (the
 /// constant-velocity prior, or a flow vector where one was handed in). `half` is
-/// the window half-width, so the window is `2·half + 1` on a side.
+/// the window half-width, so the window is `2·half + 1` on a side. Only the
+/// finest `levels` of the pyramid are searched: fewer when the seed is already
+/// close.
 ///
 /// `None` means the track failed: the patch left the frame at every usable
 /// level, the normal matrix was singular, or the affine part ran away.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn solve(
     prev: &Pyramid,
     cur: &Pyramid,
@@ -46,13 +50,15 @@ pub(crate) fn solve(
     half: i64,
     max_iters: usize,
     eps: f64,
+    levels: usize,
 ) -> Option<Step> {
     let mut m = [[1.0f64, 0.0], [0.0, 1.0]];
     let mut d = seed;
     let mut solved_any = false;
     let hf = half as f64;
+    let top = prev.levels.len().min(cur.levels.len()).min(levels.max(1));
 
-    for lvl in (0..prev.levels.len().min(cur.levels.len())).rev() {
+    for lvl in (0..top).rev() {
         let scale = (1usize << lvl) as f64;
         let tpl = &prev.levels[lvl];
         let img = &cur.levels[lvl];
@@ -127,6 +133,175 @@ pub(crate) fn solve(
         pos: [from[0] + d[0], from[1] + d[1]],
         a: m,
     })
+}
+
+/// [`solve`] for a patch that may only slide: two numbers rather than six.
+///
+/// A third of the arithmetic, and all a stabiliser needs. It fits the frame's
+/// motion from hundreds of patches at once, so the turn and growth come from
+/// where the patches went, not from how one patch changed shape. The step's
+/// linear part is the identity, which reads as no change of scale.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn slide(
+    prev: &Pyramid,
+    cur: &Pyramid,
+    from: [f64; 2],
+    seed: [f64; 2],
+    half: i64,
+    max_iters: usize,
+    eps: f64,
+    levels: usize,
+) -> Option<Step> {
+    let mut d = seed;
+    let mut solved_any = false;
+    let side = (2 * half + 1) as usize;
+    let top = prev.levels.len().min(cur.levels.len()).min(levels.max(1));
+    let ring = side + 2;
+    let hf = half as f64;
+    let mut t: Vec<f32> = Vec::with_capacity(side * side);
+    let mut g: Vec<[f32; 2]> = Vec::with_capacity(side * side);
+    let mut grid: Vec<f32> = Vec::with_capacity(ring * ring);
+
+    for lvl in (0..top).rev() {
+        let scale = (1usize << lvl) as f64;
+        let tpl = &prev.levels[lvl];
+        let img = &cur.levels[lvl];
+        // The template is the window round the feature itself, read between
+        // pixels. Taken round the nearest whole pixel instead, every step
+        // measures the motion half a pixel away from the feature on average,
+        // and over hundreds of steps that leans the whole path: the chained
+        // turn and growth drift, which is what No motion shows.
+        let c = [from[0] / scale, from[1] / scale];
+        if !tpl.inside(c[0], c[1], (half + 2) as f64) {
+            continue;
+        }
+        // Every pixel of the window shares the feature's fraction of a pixel,
+        // so the window and the ring round it are one fixed blend of four
+        // whole-pixel reads each, made once.
+        let (bx, by) = ((c[0] - hf - 1.0).floor(), (c[1] - hf - 1.0).floor());
+        let (Some(ix), Some(iy)) = (whole(bx), whole(by)) else {
+            continue;
+        };
+        if ix < 0
+            || iy < 0
+            || ix + ring as i64 + 1 >= tpl.w as i64
+            || iy + ring as i64 + 1 >= tpl.h as i64
+        {
+            continue;
+        }
+        let (fx, fy) = ((c[0] - hf - 1.0 - bx) as f32, (c[1] - hf - 1.0 - by) as f32);
+        let (w00, w10, w01, w11) = (
+            (1.0 - fx) * (1.0 - fy),
+            fx * (1.0 - fy),
+            (1.0 - fx) * fy,
+            fx * fy,
+        );
+        grid.clear();
+        let tw = tpl.w;
+        for r in 0..ring {
+            let row = (iy as usize + r) * tw + ix as usize;
+            for q in 0..ring {
+                let (a, b) = (row + q, row + q + tw);
+                grid.push(
+                    w00 * tpl.data[a]
+                        + w10 * tpl.data[a + 1]
+                        + w01 * tpl.data[b]
+                        + w11 * tpl.data[b + 1],
+                );
+            }
+        }
+        t.clear();
+        g.clear();
+        let (mut hxx, mut hxy, mut hyy) = (0.0f64, 0.0f64, 0.0f64);
+        for r in 1..ring - 1 {
+            for q in 1..ring - 1 {
+                let i = r * ring + q;
+                t.push(grid[i]);
+                // Central differences, as the affine template takes them.
+                let gx = 0.5 * (grid[i + 1] - grid[i - 1]);
+                let gy = 0.5 * (grid[i + ring] - grid[i - ring]);
+                hxx += f64::from(gx * gx);
+                hxy += f64::from(gx * gy);
+                hyy += f64::from(gy * gy);
+                g.push([gx, gy]);
+            }
+        }
+        let det = hxx * hyy - hxy * hxy;
+        // The affine solve's pivot floor, for the same reason: a flat or
+        // one-directional patch ends the track rather than being inverted.
+        if !det.is_finite() || det.abs() < 1e-12 {
+            return None;
+        }
+        // The level's shift, which is the window's and the feature's alike.
+        let mut dl = [d[0] / scale, d[1] / scale];
+        for _ in 0..max_iters {
+            // Where the window's top-left corner lands, split into a whole
+            // pixel and the one blend every sample of the window shares.
+            let (x0, y0) = (c[0] + dl[0] - half as f64, c[1] + dl[1] - half as f64);
+            let (fx0, fy0) = (x0.floor(), y0.floor());
+            let (Some(ix), Some(iy)) = (whole(fx0), whole(fy0)) else {
+                break;
+            };
+            if ix < 0
+                || iy < 0
+                || ix + side as i64 >= img.w as i64
+                || iy + side as i64 >= img.h as i64
+            {
+                break; // drifted off this level: keep what we have and stop
+            }
+            let (fx, fy) = ((x0 - fx0) as f32, (y0 - fy0) as f32);
+            let (w00, w10, w01, w11) = (
+                (1.0 - fx) * (1.0 - fy),
+                fx * (1.0 - fy),
+                (1.0 - fx) * fy,
+                fx * fy,
+            );
+            let iw = img.w;
+            let (mut bx, mut by) = (0.0f64, 0.0f64);
+            for r in 0..side {
+                let top_row = (iy as usize + r) * iw + ix as usize;
+                let below = top_row + iw;
+                let (mut rx, mut ry) = (0.0f32, 0.0f32);
+                for q in 0..side {
+                    let v = w00 * img.data[top_row + q]
+                        + w10 * img.data[top_row + q + 1]
+                        + w01 * img.data[below + q]
+                        + w11 * img.data[below + q + 1];
+                    let k = r * side + q;
+                    let e = v - t[k];
+                    rx += g[k][0] * e;
+                    ry += g[k][1] * e;
+                }
+                bx += f64::from(rx);
+                by += f64::from(ry);
+            }
+            // Inverse compositional for a slide: the increment is solved in the
+            // template's frame and taken back off the current shift.
+            let px = (hyy * bx - hxy * by) / det;
+            let py = (hxx * by - hxy * bx) / det;
+            dl = [dl[0] - px, dl[1] - py];
+            if !dl[0].is_finite() || !dl[1].is_finite() {
+                return None;
+            }
+            if px.hypot(py) < eps {
+                break;
+            }
+        }
+        d = [dl[0] * scale, dl[1] * scale];
+        solved_any = true;
+    }
+
+    solved_any.then_some(Step {
+        pos: [from[0] + d[0], from[1] + d[1]],
+        a: [[1.0, 0.0], [0.0, 1.0]],
+    })
+}
+
+/// A coordinate already rounded or floored, as a whole pixel. `None` for one
+/// that is not a number or is out of any frame's reach, which ends the level
+/// rather than wrapping round.
+fn whole(v: f64) -> Option<i64> {
+    (v.is_finite() && v.abs() < 1e9).then_some(v as i64)
 }
 
 /// The template's values, steepest-descent images and normal matrix — the

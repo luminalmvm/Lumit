@@ -156,6 +156,7 @@ set()})})`,
                         "use/paint",
                         "use/camera",
                         "use/tracking",
+                        "use/stabilising",
                       ],
                     },
                     {

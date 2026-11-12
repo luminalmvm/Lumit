@@ -266,6 +266,7 @@ pub(crate) fn rebuild_offsets(
             &layer.effects,
             fx_on,
             lt / comp_dt,
+            1.0 / comp_dt,
         ));
     }
     offsets.retain(|&o| o != 0);
@@ -866,6 +867,7 @@ pub fn collect_comp_jobs(
                         &layer.effects,
                         layer.switches.fx,
                         lt / comp_dt,
+                        1.0 / comp_dt,
                     );
                     for o in window.into_iter().filter(|&o| o != 0) {
                         let at = lumit_core::time::frames_on(lt, o, comp_dt);
@@ -1105,6 +1107,7 @@ pub fn collect_comp_jobs(
                         &layer.effects,
                         layer.switches.fx,
                         lt / comp_dt,
+                        1.0 / comp_dt,
                     )
                     .into_iter()
                     .filter(|&o| o != 0)

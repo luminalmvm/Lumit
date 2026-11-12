@@ -789,6 +789,106 @@
   "@fxCameraTrack": {
     "description": "Effect name in the Add effect menu — solves the camera motion of a tracked shot."
   },
+  "fxStabilise": "Stabilise",
+  "@fxStabilise": {
+    "description": "Effect name in the Add effect menu: takes the shake out of a shot, or puts another layer's shake back. Also the first option of Stabilise's Mode row: the shake is taken out."
+  },
+  "fxUseThisFrame": "Use this frame",
+  "@fxUseThisFrame": {
+    "description": "Effect controls: a button on Stabilise that holds the shot still on the frame the playhead is on."
+  },
+  "fxStabilisedLayer": "Stabilised layer",
+  "@fxStabilisedLayer": {
+    "description": "Effect controls: on Stabilise in Reverse mode, the layer whose shake is put back."
+  },
+  "fxSmoothMotion": "Smooth motion",
+  "@fxSmoothMotion": {
+    "description": "Effect controls: an option of Stabilise's Result row. Keeps the camera's own movement and takes out the shake."
+  },
+  "fxNoMotion": "No motion",
+  "@fxNoMotion": {
+    "description": "Effect controls: an option of Stabilise's Result row. Holds the shot still on one frame."
+  },
+  "fxReference": "Reference",
+  "@fxReference": {
+    "description": "Effect controls: on Stabilise, the moment of the layer every frame is held to."
+  },
+  "fxScaleAndRotation": "Scale and rotation",
+  "@fxScaleAndRotation": {
+    "description": "Effect controls: an option of Stabilise's Method row: each frame's motion is fitted as a slide, a turn and a change of size."
+  },
+  "fxPerspective": "Perspective",
+  "@fxPerspective": {
+    "description": "Effect controls: an option of Stabilise's Method row, a four-corner fit of each frame's motion."
+  },
+  "fxKeepScale": "Keep scale",
+  "@fxKeepScale": {
+    "description": "Effect controls: a switch on Stabilise that leaves the picture's growth alone, so walking towards something is not undone as a zoom."
+  },
+  "fxRollingShutter": "Rolling shutter",
+  "@fxRollingShutter": {
+    "description": "Effect controls: a row on Stabilise that takes out the skew a sensor read row by row gives a moving shot."
+  },
+  "fxReduce": "Reduce",
+  "@fxReduce": {
+    "description": "Effect controls: an option of Stabilise's Rolling shutter row. The skew is reduced."
+  },
+  "fxShow": "Show",
+  "@fxShow": {
+    "description": "Effect controls: an option of Stabilise's Edges row. The empty edges dragged into view are left showing."
+  },
+  "fxCropAndScale": "Crop and scale",
+  "@fxCropAndScale": {
+    "description": "Effect controls: an option of Stabilise's Edges row. The picture is scaled up until the moving edges are out of frame."
+  },
+  "fxMaximumScale": "Maximum scale",
+  "@fxMaximumScale": {
+    "description": "Effect controls: on Stabilise, the most the picture is scaled up to hide its edges."
+  },
+  "fxSafeMargin": "Safe margin",
+  "@fxSafeMargin": {
+    "description": "Effect controls: on Stabilise, a share of the frame on each side that may stay empty."
+  },
+  "fxSteadyCrop": "Steady crop",
+  "@fxSteadyCrop": {
+    "description": "Effect controls: on Stabilise, how still the crop holds over the shot."
+  },
+  "fxExtraScale": "Extra scale",
+  "@fxExtraScale": {
+    "description": "Effect controls: on Stabilise, scale added on top of the stabilised picture."
+  },
+  "fxFillFrom": "Fill from",
+  "@fxFillFrom": {
+    "description": "Effect controls: on Stabilise with Edges set to Fill, how far either side of a frame the empty edges are filled from."
+  },
+  "fxFillFeather": "Fill feather",
+  "@fxFillFeather": {
+    "description": "Effect controls: on Stabilise with Edges set to Fill, how soft the join is between the frame and what fills its edges."
+  },
+  "fxTrimLeft": "Trim left",
+  "@fxTrimLeft": {
+    "description": "Effect controls: on Stabilise, pixels cut off the left edge of the source before it is filled."
+  },
+  "fxTrimTop": "Trim top",
+  "@fxTrimTop": {
+    "description": "Effect controls: on Stabilise, pixels cut off the top edge of the source before it is filled."
+  },
+  "fxTrimRight": "Trim right",
+  "@fxTrimRight": {
+    "description": "Effect controls: on Stabilise, pixels cut off the right edge of the source before it is filled."
+  },
+  "fxTrimBottom": "Trim bottom",
+  "@fxTrimBottom": {
+    "description": "Effect controls: on Stabilise, pixels cut off the bottom edge of the source before it is filled."
+  },
+  "fxTrim": "Trim",
+  "@fxTrim": {
+    "description": "Effect controls: a group heading on Stabilise holding the four edge trims."
+  },
+  "fxAnalysis": "Analysis",
+  "@fxAnalysis": {
+    "description": "Effect controls: a group heading on Stabilise holding the rows that change what an analysis finds."
+  },
   "fxCamera": "Camera",
   "@fxCamera": {
     "description": "Effect controls: on Depth points, the Camera layer the points line up from."
@@ -799,7 +899,7 @@
   },
   "fxCancel": "Cancel",
   "@fxCancel": {
-    "description": "Effect controls — the button that stops a running camera solve on Camera track."
+    "description": "Effect controls — the button that stops a running camera solve on Camera track. Also on Stabilise, where it stops a running analysis."
   },
   "fxCardWipe": "Card wipe",
   "@fxCardWipe": {
@@ -1363,7 +1463,7 @@
   },
   "fxPosition": "Position",
   "@fxPosition": {
-    "description": "A Stroke layer style's Position parameter: which side of the layer's edge the thickness is spent on."
+    "description": "A Stroke layer style's Position parameter: which side of the layer's edge the thickness is spent on. Also an option of Stabilise's Method row: each frame's motion is fitted as a slide only."
   },
   "fxProducerX": "Producer x",
   "@fxProducerX": {
@@ -1443,7 +1543,7 @@
   },
   "fxResult": "Result",
   "@fxResult": {
-    "description": "Effect controls — a View option on Roto brush: draw the cut-out picture."
+    "description": "Effect controls — a View option on Roto brush: draw the cut-out picture. Also a row on Stabilise: whether the shot keeps its own movement or holds still."
   },
   "fxRevealOriginal": "Reveal original",
   "@fxRevealOriginal": {
@@ -2937,7 +3037,7 @@
   },
   "fxAnalyse": "Analyse",
   "@fxAnalyse": {
-    "description": "Effect controls — the button that starts the camera solve on Camera track."
+    "description": "Effect controls — the button that starts the camera solve on Camera track. Also on Stabilise, where it starts the analysis of the shot."
   },
   "fxAnamorphicSqueeze": "Anamorphic squeeze",
   "@fxAnamorphicSqueeze": {
@@ -3377,7 +3477,7 @@
   },
   "fxPointSize": "Point size",
   "@fxPointSize": {
-    "description": "Effect controls — a Size option on Clone to points: each stamp is a square the size of its point, with the whole layer squeezed into it."
+    "description": "Effect controls — a Size option on Clone to points: each stamp is a square the size of its point, with the whole layer squeezed into it. Also a row on Stabilise: how big its followed points are drawn in the Viewer."
   },
   "fxLayerSize": "Layer size",
   "@fxLayerSize": {
@@ -3665,7 +3765,7 @@
   },
   "fxOff": "Off",
   "@fxOff": {
-    "description": "Effect controls — a dropdown option on Clone to points: no time offset, or no render per clone."
+    "description": "Effect controls — a dropdown option on Clone to points: no time offset, or no render per clone. Also an option of Stabilise's Rolling shutter row: the skew is left alone."
   },
   "fxAuto": "Auto",
   "@fxAuto": {
@@ -4241,7 +4341,7 @@
   },
   "fxEdges": "Edges",
   "@fxEdges": {
-    "description": "Effect controls — a control on Radial blur."
+    "description": "Effect controls — a control on Radial blur. Also a row on Stabilise: what is done with the empty edges steadying drags into view."
   },
   "fxEllipse": "Ellipse",
   "@fxEllipse": {
@@ -4561,7 +4661,7 @@
   },
   "fxFeatureDensity": "Feature density",
   "@fxFeatureDensity": {
-    "description": "Effect controls — a control on Camera track."
+    "description": "Effect controls — a control on Camera track. Also on Stabilise."
   },
   "fxFeather": "Feather",
   "@fxFeather": {
@@ -4577,7 +4677,7 @@
   },
   "fxFill": "Fill",
   "@fxFill": {
-    "description": "Effect controls — the name of an effect."
+    "description": "Effect controls — the name of an effect. Also an option of Stabilise's Edges row: the empty edges are filled from nearby frames."
   },
   "fxFinalResult": "Final result",
   "@fxFinalResult": {
@@ -4885,7 +4985,7 @@
   },
   "fxCrop": "Crop",
   "@fxCrop": {
-    "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
+    "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop. Also an option of Stabilise's Edges row: the moving edges are cut away."
   },
   "fxLumaFade": "Luma fade",
   "@fxLumaFade": {
@@ -5025,7 +5125,7 @@
   },
   "fxMode": "Mode",
   "@fxMode": {
-    "description": "Effect controls — a control on Flash. Also whether Chorus flanges, and whether Wah follows the playing."
+    "description": "Effect controls — a control on Flash. Also whether Chorus flanges, and whether Wah follows the playing. Also a row on Stabilise: take the shake out, or put another layer's shake back."
   },
   "fxModel": "Model",
   "@fxModel": {
@@ -5033,7 +5133,7 @@
   },
   "fxFrames": "Frames",
   "@fxFrames": {
-    "description": "Effect controls - a control on Depth, Remove background and Roto brush: which frames of the footage Analyse or Propagate reads."
+    "description": "Effect controls - a control on Depth, Remove background and Roto brush: which frames of the footage Analyse or Propagate reads. Also on Stabilise."
   },
   "fxAllFrames": "All frames",
   "@fxAllFrames": {
@@ -5257,7 +5357,7 @@
   },
   "fxReverse": "Reverse",
   "@fxReverse": {
-    "description": "Effect controls — a control on Lens distort."
+    "description": "Effect controls — a control on Lens distort. Also the second option of Stabilise's Mode row: another layer's shake is put back."
   },
   "fxRgbSplit": "RGB split",
   "@fxRgbSplit": {
@@ -5693,7 +5793,7 @@
   },
   "fxShowPoints": "Show points",
   "@fxShowPoints": {
-    "description": "Effect controls — a control on Camera track."
+    "description": "Effect controls — a control on Camera track. Also on Stabilise: its followed points are drawn in the Viewer."
   },
   "fxShutter": "Shutter",
   "@fxShutter": {
@@ -6333,7 +6433,7 @@
   },
   "fxUseMasks": "Use masks",
   "@fxUseMasks": {
-    "description": "Effect controls — a control on Camera track."
+    "description": "Effect controls — a control on Camera track. Also on Stabilise."
   },
   "fxUseSourceColour": "Use source colour",
   "@fxUseSourceColour": {
@@ -8836,6 +8936,10 @@
   "menuTrackCamera": "Track camera",
   "@menuTrackCamera": {
     "description": "Menu item."
+  },
+  "menuStabilise": "Stabilise",
+  "@menuStabilise": {
+    "description": "Animation menu item: adds the Stabilise effect to each selected footage or Precomp layer."
   },
   "menuTrackMatte": "Matte",
   "@menuTrackMatte": {
@@ -15052,11 +15156,11 @@
   },
   "trackNotAnalysed": "Not analysed yet",
   "@trackNotAnalysed": {
-    "description": "Camera track status line in Effect controls, before Analyse has ever been pressed."
+    "description": "Camera track status line in Effect controls, before Analyse has ever been pressed. Also the Stabilise status line."
   },
   "trackWaiting": "Waiting to start",
   "@trackWaiting": {
-    "description": "Camera track status line: the analysis has been accepted but has not begun."
+    "description": "Camera track status line: the analysis has been accepted but has not begun. Also the Stabilise status line, and the word beside the Viewer's progress bar while Stabilise analyses wait to start."
   },
   "trackFollowing": "Following frame {done} of {total}",
   "@trackFollowing": {
@@ -15076,7 +15180,7 @@
   },
   "trackStopped": "Analysis stopped",
   "@trackStopped": {
-    "description": "Camera track status line after Cancel was pressed. Nothing was written."
+    "description": "Camera track status line after Cancel was pressed. Nothing was written. Also the Stabilise status line."
   },
   "trackSolvedSummary": "{points} points, {error} px average error",
   "@trackSolvedSummary": {
@@ -15097,19 +15201,19 @@
   },
   "trackFailedUnreadable": "The media could not be read",
   "@trackFailedUnreadable": {
-    "description": "Camera track status line when the analysis was refused: the file would not open, or carries no video."
+    "description": "Camera track status line when the analysis was refused: the file would not open, or carries no video. Also the Stabilise status line."
   },
   "trackFailedNoFrames": "There are no frames to analyse",
   "@trackFailedNoFrames": {
-    "description": "Camera track status line when the analysis was refused: the media opened but has no pictures in it."
+    "description": "Camera track status line when the analysis was refused: the media opened but has no pictures in it. Also the Stabilise status line."
   },
   "trackFailedFollowing": "The frames could not be followed",
   "@trackFailedFollowing": {
-    "description": "Camera track status line when the analysis was refused: the pictures changed size part-way through."
+    "description": "Camera track status line when the analysis was refused: the pictures changed size part-way through. Also the Stabilise status line."
   },
   "trackFailedNoFeatures": "Too little in the shot stayed still enough to follow",
   "@trackFailedNoFeatures": {
-    "description": "Camera track status line when the analysis was refused: not enough fixed detail in the picture."
+    "description": "Camera track status line when the analysis was refused: not enough fixed detail in the picture. Also the Stabilise status line."
   },
   "trackFailedRotationOnly": "The camera only turned, so there is no depth to recover",
   "@trackFailedRotationOnly": {
@@ -15150,13 +15254,110 @@
   "@tipTrackCreateCamera": {
     "description": "Tooltip on the Create camera button in the Camera track's status row."
   },
+  "stabiliseAnalysing": "Analysing {done} of {total}",
+  "@stabiliseAnalysing": {
+    "description": "Stabilise status line while the shot is being analysed. Both numbers are frame counts.",
+    "placeholders": { "done": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "stabiliseSolving": "Stabilising",
+  "@stabiliseSolving": {
+    "description": "Stabilise status line, and the word beside the Viewer's progress bar, while the steady path is being worked out from the analysis."
+  },
+  "stabiliseDone": "Stabilised",
+  "@stabiliseDone": {
+    "description": "Stabilise status line when the analysis is done and the picture is steady."
+  },
+  "stabiliseScaled": "Stabilised at {percent}%",
+  "@stabiliseScaled": {
+    "description": "Stabilise status line when the analysis is done and the picture is scaled up to hide its edges. {percent} is a number such as 109.3.",
+    "placeholders": { "percent": { "type": "String" } }
+  },
+  "stabiliseShort": "Needs {percent}%, over the maximum",
+  "@stabiliseShort": {
+    "description": "Stabilise status line, in a warning colour, when hiding the edges needs more scale than the Maximum scale row allows. {percent} is a number such as 162.",
+    "placeholders": { "percent": { "type": "String" } }
+  },
+  "stabilisePartial": "Stabilised {frames} of {total} frames",
+  "@stabilisePartial": {
+    "description": "Stabilise status line when the analysis stopped part-way: only the first {frames} frames are steady. Both numbers are frame counts.",
+    "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "stabiliseFollows": "Follows {layer}",
+  "@stabiliseFollows": {
+    "description": "Stabilise status line in Reverse mode: this layer moves with the shake of the named layer. {layer} is a layer name.",
+    "placeholders": { "layer": { "type": "String" } }
+  },
+  "stabiliseWaitingFor": "Waiting for {layer}",
+  "@stabiliseWaitingFor": {
+    "description": "Stabilise status line in Reverse mode while the named layer's analysis is not in yet. {layer} is a layer name.",
+    "placeholders": { "layer": { "type": "String" } }
+  },
+  "stabiliseFollowedFailed": "{layer}: {reason}",
+  "@stabiliseFollowedFailed": {
+    "description": "Stabilise status line in Reverse mode when the stabilised layer it follows has no analysis and will not get one by itself. {layer} is that layer's name. {reason} is a whole sentence of its own, already translated, saying why: not analysed yet, analysis stopped, or why the analysis failed. Order and punctuate the two as reads naturally.",
+    "placeholders": { "layer": { "type": "String" }, "reason": { "type": "String" } }
+  },
+  "stabiliseNothingToFollow": "Nothing stabilised to follow",
+  "@stabiliseNothingToFollow": {
+    "description": "Stabilise status line in Reverse mode when the Stabilised layer row names no stabilised layer."
+  },
+  "stabiliseStale": "Analysis out of date",
+  "@stabiliseStale": {
+    "description": "Stabilise status line when a row that changes what is analysed has moved and the new analysis was stopped or failed. The picture is still drawn from the previous analysis; Analyse makes a new one."
+  },
+  "stabiliseNeedsFootage": "Needs footage or a precomp",
+  "@stabiliseNeedsFootage": {
+    "description": "Stabilise status line on a layer that cannot be analysed, such as a solid or a text layer."
+  },
+  "stabiliseMakePrecomp": "Make stabilised precomp",
+  "@stabiliseMakePrecomp": {
+    "description": "Button beside the Stabilise status line: puts the steady shot in a precomp to work on, which moves with the shot outside it."
+  },
+  "tipStabiliseMakePrecomp": "Stabilised precomp",
+  "@tipStabiliseMakePrecomp": {
+    "description": "Tooltip on the Make stabilised precomp button beside the Stabilise status line."
+  },
+  "stabiliseConvertToKeyframes": "Convert to keyframes",
+  "@stabiliseConvertToKeyframes": {
+    "description": "Button beside the Stabilise status line: writes the stabilisation onto the layer's Anchor point, Scale and Rotation as one keyframe a frame, and switches the effect off."
+  },
+  "stabilisePrecompName": "{layer} stabilised",
+  "@stabilisePrecompName": {
+    "description": "Name given to the composition Make stabilised precomp creates. {layer} is the stabilised layer's name.",
+    "placeholders": { "layer": { "type": "String" } }
+  },
+  "stabiliseDropped": "{count} dropped",
+  "@stabiliseDropped": {
+    "description": "Beside the Stabilise status line: how many followed points were dropped from the analysis.",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "stabiliseRestorePoints": "Restore points",
+  "@stabiliseRestorePoints": {
+    "description": "Button beside the Stabilise status line: brings every dropped point back."
+  },
+  "tipStabiliseRestorePoints": "Restore points",
+  "@tipStabiliseRestorePoints": {
+    "description": "Tooltip on the Restore points button beside the Stabilise status line."
+  },
+  "stabiliseDropPoints": "Drop points",
+  "@stabiliseDropPoints": {
+    "description": "Row in the Viewer's menu over Stabilise's points: leaves the picked points, and those moving with them, out of the stabilisation."
+  },
+  "stabiliseProgressAnalysing": "Analysing",
+  "@stabiliseProgressAnalysing": {
+    "description": "The word beside the Viewer's progress bar while a Stabilise effect is analysing its shot."
+  },
+  "stabiliseProgressWaiting": "Waiting",
+  "@stabiliseProgressWaiting": {
+    "description": "The word beside the Viewer's progress bar while every Stabilise analysis is queued and none has started. Kept short: the slot is narrow."
+  },
   "trackConvertToKeyframes": "Convert to keyframes",
   "@trackConvertToKeyframes": {
     "description": "Button in the Transform heading of a solve-linked Camera layer: bakes the derived motion into one keyframe per frame and ends the link."
   },
   "tipTrackConvert": "Bake motion",
   "@tipTrackConvert": {
-    "description": "Tooltip on the Convert to keyframes button in a linked Camera layer's Transform heading."
+    "description": "Tooltip on the Convert to keyframes button in a linked Camera layer's Transform heading. Also on the Convert to keyframes button beside the Stabilise status line."
   },
   "trackLinkFollowing": "Following the solve",
   "@trackLinkFollowing": {
@@ -22257,6 +22458,10 @@
   "@keyAddAnExpression": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyStabiliseTheSelectedLayers": "Stabilise the selected layers",
+  "@keyStabiliseTheSelectedLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyTrimTheCompositionToTheWorkArea": "Trim the composition to the work area",
   "@keyTrimTheCompositionToTheWorkArea": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -26009,7 +26214,7 @@
   },
   "fxMethod": "Method",
   "@fxMethod": {
-    "description": "Effect controls — a control on Depth of field pro: how the blur is worked out, either from the lens's traced blur shapes or by tracing rays through the lens."
+    "description": "Effect controls — a control on Depth of field pro: how the blur is worked out, either from the lens's traced blur shapes or by tracing rays through the lens. Also a row on Stabilise: how each frame's motion is fitted."
   },
   "fxLensShapes": "Lens shapes",
   "@fxLensShapes": {
@@ -27908,7 +28113,7 @@
   },
   "bakeTooBig": "Not enough video memory",
   "@bakeTooBig": {
-    "description": "Bake status line on Smoke and fire when the grid at this Resolution does not fit on the graphics card, so no smoke is drawn."
+    "description": "Bake status line on Smoke and fire when the grid at this Resolution does not fit on the graphics card, so no smoke is drawn. Also the Stabilise status line, when its analysis does not fit on the graphics card."
   },
   "foldMaterials": "Materials",
   "@foldMaterials": {

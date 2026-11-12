@@ -650,6 +650,7 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE Wave Warp", "wave_warp"),
         ("ADBE BEZMESH", "bezier_warp"),
         ("ADBE WRPMESH", "warp"),
+        ("ADBE SubspaceStabilizer", "stabilise"),
         ("ADBE Drop Shadow", "drop_shadow"),
         ("ADBE Roughen Edges", "roughen_edges"),
         ("ADBE Median", "median"),

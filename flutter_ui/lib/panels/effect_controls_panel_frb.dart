@@ -75,6 +75,7 @@ import 'denoise_display_frb.dart';
 import 'repair_display_frb.dart';
 import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
+import 'stabilise_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'flare_window.dart';
@@ -689,12 +690,22 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// port's type, which is what the parameter is now following.
   void _readDriven() {
     if (!mounted) return;
-    final layer = _boundUi?.selectedLayer.value ?? _lastLayer;
+    final picked = _boundUi?.selectedLayer.value;
+    final layer = picked ?? _lastLayer;
     BridgeLayerGraph? graph;
     try {
       graph = layer?.getGraph();
     } catch (_) {
-      // The layer has gone, so the rows draw their own controls again.
+      // The layer has gone, so the rows draw their own controls again. One
+      // held from another comp has gone with its comp, which an undo can
+      // take away, so it is let go rather than drawn from its last read.
+      if (picked == null && layer != null) {
+        setState(() {
+          _lastLayer = null;
+          _heldEntry = null;
+          _heldComp = null;
+        });
+      }
     }
     // The Timeline's fold-out takes the same reading from the same helper, so
     // a row cannot say *driven* in one panel and offer a spinner in the other.
@@ -3946,6 +3957,8 @@ bool _simulating(Map<String, BridgeEffectValue> values) {
   final on = values['simulate'];
   return on is BridgeEffectValue_Bool && on.field0;
 }
+bool _choiceIs(BridgeEffectValue? value, int option) =>
+    value is BridgeEffectValue_Choice && value.field0 == option;
 bool _namesALayer(BridgeEffectValue? value) =>
     value is BridgeEffectValue_Layer && value.field0 != null;
 
@@ -3999,6 +4012,16 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
           corrected: trackCorrected,
+        ),
+      // Stabilise's is the Camera track's kind of line, filed under this
+      // instance as the Planar track's is, and worded by its Mode.
+      'stabilise' => StabiliseDisplayFrb(
+          key: ValueKey<String>('fx-stabilise-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          reverse: _choiceIs(values['mode'], 1),
+          onChanged: onChanged,
+          pressed: pressed,
         ),
       // Planar track's display is the same kind of thing and not the same
       // thing: a status, but about a *surface* rather than a camera,

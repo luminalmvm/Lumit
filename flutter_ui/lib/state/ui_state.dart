@@ -108,6 +108,7 @@ import 'package:lumit_flutter/state/relay_door.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
 import 'package:lumit_flutter/state/reviews.dart';
 import 'package:lumit_flutter/state/settings.dart';
+import 'package:lumit_flutter/state/stabilise_progress.dart';
 import 'package:lumit_flutter/state/template_controls.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/updates.dart';
@@ -1036,6 +1037,12 @@ class LumitUiState extends ChangeNotifier {
   /// drawing (docs/07 §2.5). Fed from the worker stream below; the Viewer's
   /// progress bar listens to it and nothing else does.
   final PreviewProgressTracker previewProgress = PreviewProgressTracker();
+
+  /// How far the Stabilise analyses in the comp on screen have got, for the
+  /// same slot on the Viewer's transport. Made when the Viewer first asks.
+  StabiliseProgress get stabiliseProgress =>
+      _stabiliseProgress ??= StabiliseProgress(this);
+  StabiliseProgress? _stabiliseProgress;
 
   /// The last measured frame's per-layer and per-effect render times
   /// (docs/13 §7.1). Empty — and the engine not measuring — until a column or
@@ -3654,6 +3661,7 @@ class LumitUiState extends ChangeNotifier {
     // the frb tests it is a failure, and one that lands on whichever test
     // happens to be running when it fires rather than the one that caused it.
     previewProgress.dispose();
+    _stabiliseProgress?.dispose();
     model.dispose();
     cacheChanged.dispose();
     solveLanded.dispose();

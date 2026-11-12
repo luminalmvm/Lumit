@@ -825,6 +825,18 @@ fn feed_effect_stack(
         {
             h.update(b"tracked/");
         }
+        // Stabilise draws from an analysis kept outside the document and the
+        // points dropped from it, neither of which is a row, and from the warp
+        // resolved from them, which reads its rows at other moments and, for
+        // Reverse, another layer's rows and where both layers sit.
+        if e.effect.match_name == lumit_core::fx::effects::stabilise::MATCH_NAME {
+            let stamp = marker_layer
+                .and_then(|l| lumit_core::fx::effects::stabilise::stamp(doc, comp, l, e, lt));
+            if let Some(stamp) = stamp {
+                h.update(b"stabilised/");
+                h.update(&stamp);
+            }
+        }
         // Bake points draws from a bake kept outside the document, and one
         // landing changes no row. Which bake a frame reads, and which frame
         // of it, joins the key, so a frame drawn before it is not served.
@@ -1738,6 +1750,7 @@ fn feed_layer(
                 &layer.effects,
                 layer.switches.fx,
                 lt / comp_dt,
+                1.0 / comp_dt,
             )
             .into_iter()
             .filter(|&o| o != 0)
@@ -1766,6 +1779,7 @@ fn feed_layer(
                 &layer.effects,
                 layer.switches.fx,
                 lt / comp_dt,
+                1.0 / comp_dt,
             )
             .into_iter()
             .filter(|&o| o != 0)
