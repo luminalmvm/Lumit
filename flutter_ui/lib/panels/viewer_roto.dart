@@ -278,12 +278,16 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     UuidValue? effect,
     int view,
     bool armed,
+    UuidValue? layer,
   })? _asked;
 
   VoidCallback? _escapeRelease;
 
   /// The poll waiting for a release-time solve to land, or null.
   Timer? _solveTimer;
+
+  /// A stroke released while that solve ran, asked for again once it lands.
+  ({_Surface on, UuidValue effect, int frame})? _solveAgain;
 
   @override
   void initState() {
@@ -386,6 +390,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       // A node graph's brush is found by the read itself, so arming the tool
       // is a reason to read there. A layer's arrives from the Viewer.
       armed: graph != null && widget.active,
+      // The layer in hand, so arming the brush or picking another layer reads
+      // that layer's frame. Without it the first stroke was refused.
+      layer: box?.layer.internallayerId,
     );
     if (_asked == next) return;
     _asked = next;
@@ -787,7 +794,11 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     } catch (_) {
       return;
     }
-    if (started) _watchSolve(on, effect);
+    if (started) {
+      _watchSolve(on, effect);
+    } else if (_solveTimer?.isActive ?? false) {
+      _solveAgain = (on: on, effect: effect, frame: frame);
+    }
   }
 
   /// Wait for the release-time solve to land, then tell the Viewer.
@@ -806,6 +817,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       } catch (_) {
         // The layer or the effect went away under the poll.
         timer.cancel();
+        _solveAgain = null;
         return;
       }
       final moving = s.stage == BridgeRotoStage.queued ||
@@ -816,6 +828,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       widget.uiState.solveLanded.value++;
       widget.uiState.requestFrame();
       widget.onChanged();
+      final again = _solveAgain;
+      _solveAgain = null;
+      if (again != null) _solveNow(again.on, again.effect, again.frame);
     });
   }
 }

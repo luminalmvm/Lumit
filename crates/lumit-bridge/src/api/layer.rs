@@ -5333,8 +5333,6 @@ impl LayerReference {
     #[frb(sync)]
     pub fn convert_to_sequenced(&self) -> Result<(), BridgeError> {
         use lumit_core::model::LayerKind;
-        use lumit_core::sequence::{Clip, ClipSource};
-        use lumit_core::time::Rational;
 
         let layer = self.item()?;
         let LayerKind::Footage { item } = &layer.kind else {
@@ -5349,63 +5347,7 @@ impl LayerReference {
             .iter()
             .position(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
-
-        // The layer's own span length is the fallback when the media has not
-        // probed; a quarter-second floor keeps a clip from being unclickable.
-        let span = (layer.out_point.0.to_f64() - layer.in_point.0.to_f64()).max(0.04);
-        let duration =
-            Rational::from_f64_on_grid(span, Rational::FLICK_DEN).unwrap_or(layer.out_point.0);
-
-        // Where the layer starts showing, on its own clock. A footage layer
-        // shows the source moment that far past its zero, so the clip is
-        // placed there and trimmed there and the two read the same source at
-        // the same moment. Never negative: a clip's place cannot be.
-        let local = layer
-            .in_point
-            .0
-            .checked_sub(layer.start_offset.0)
-            .unwrap_or(Rational::ZERO);
-        let local = if local.is_negative() {
-            Rational::ZERO
-        } else {
-            local
-        };
-        let source_out = local.checked_add(duration).unwrap_or(duration);
-
-        let mut converted = layer.clone();
-        // The choice of audio streams moves onto the clip, which is where a
-        // Sequence layer keeps one.
-        converted.audio_streams = Default::default();
-        converted.kind = LayerKind::Sequence {
-            clips: vec![Clip {
-                id: Uuid::now_v7(),
-                source: ClipSource::Footage(*item),
-                source_in: local,
-                source_out,
-                place_start: local,
-                place_duration: duration,
-                // None by construction: a retimed layer is refused above, and
-                // `convert_from_sequenced` still brings a clip's own map back
-                // the other way.
-                retime: None,
-                interpolation: layer.interpolation.clone(),
-                fade_in: Default::default(),
-                fade_out: Default::default(),
-                effects: Vec::new(),
-                fx: true,
-                gain_db: 0.0,
-                link: None,
-                audio_streams: layer.audio_streams.clone(),
-                audible: true,
-                blend: None,
-                label: None,
-                group: None,
-                opacity: 1.0,
-                takes: Vec::new(),
-                transition: None,
-                extra: serde_json::Map::new(),
-            }],
-        };
+        let converted = crate::api::cut::razor::sequenced(&layer, *item);
 
         self.commit(lumit_core::ops::Op::Batch {
             ops: vec![

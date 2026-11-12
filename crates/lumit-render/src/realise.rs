@@ -727,7 +727,7 @@ impl Realiser<'_> {
                     let roto: Vec<Option<wgpu::Texture>> = d
                         .roto_mattes
                         .iter()
-                        .map(|slot| slot.as_ref().map(|m| upload_roto_matte(&self.ctx, m)))
+                        .map(|s| s.as_ref().map(|m| self.roto_texture(m, lw, lh)))
                         .collect();
                     let planes: Vec<Option<wgpu::Texture>> = d
                         .planes
@@ -1982,7 +1982,7 @@ impl Realiser<'_> {
             let roto: Vec<Option<wgpu::Texture>> = m
                 .roto_mattes
                 .iter()
-                .map(|slot| slot.as_ref().map(|r| upload_roto_matte(&self.ctx, r)))
+                .map(|s| s.as_ref().map(|r| self.roto_texture(r, m.tex_w, m.tex_h)))
                 .collect();
             let planes: Vec<Option<wgpu::Texture>> = m
                 .planes

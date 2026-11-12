@@ -41,7 +41,9 @@ Once the brush has strokes, the effect's card reads **Base frame** and its numbe
 **Set to current frame** moves it to the frame at the playhead. A move sets the propagated
 matte aside, and Propagate starts again from the new frame.
 
-With no background stroke on the base frame, the frame's border counts as background.
+With no background stroke on the base frame, the frame's border counts as background. The
+first background stroke replaces the border, and background no stroke reaches can stay in
+the matte.
 
 ## Propagate
 
@@ -83,9 +85,11 @@ stroke, and strokes overrule the model.
 A click on any other frame is a stroke of one point. Moving the base frame drops the taps
 on the old one.
 
+With no tap on the base frame, the model is not asked and the matte is cut from the strokes.
+
 The model is a **Segmentation** model pack, which needs the model runtime. Both are
-[addons](/use/addons/), installed from **Settings ▸ Addons**. Without them Propagate is
-refused, and the card offers **Open addons**.
+[addons](/use/addons/), installed from **Settings ▸ Addons**. Without them a Propagate with
+taps is refused, and the card offers **Open addons**.
 
 ## In a node graph
 
