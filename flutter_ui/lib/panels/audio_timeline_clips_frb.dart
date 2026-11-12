@@ -164,13 +164,16 @@ bool audioBelowTracks(List<AudioTrackRow> tracks, double y) =>
 String clipGainWords(double gainDb) =>
     '${gainDb > 0 ? '+' : ''}${gainDb.toStringAsFixed(1)} ${l10n.unitSymbolDb}';
 
-/// Where a clip's gain line lies, in the strip's own pixels: 0 dB at the top of
-/// the box, silence at its foot, on the Volume band's own floor and its linear
+/// The loudest a clip's own gain goes, in dB.
+const double clipGainTopDb = 24;
+
+/// Where a clip's gain line lies, in the strip's own pixels: [clipGainTopDb] at
+/// the top of the box, silence at its foot, on the Volume band's own floor and its linear
 /// shape (docs/impl/audio-timeline.md §5). A box is inset two pixels top and
 /// bottom, which is the four this takes off [stripHeight] and the two it puts
 /// back.
 double audioClipGainY(double gainDb, double stripHeight) =>
-    volumeBandY(gainDb, math.max(3.0, stripHeight - 4), topDb: 0) + 2;
+    volumeBandY(gainDb, math.max(3.0, stripHeight - 4), topDb: clipGainTopDb) + 2;
 
 /// How tall the line's hit band is, and how thick the line drawn down the
 /// middle of it. A few pixels either side is enough to take hold of, and every
@@ -590,15 +593,16 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     _escape.begin(() => setState(() => _gain = null));
   }
 
-  /// The band's own arithmetic read from 0 dB down: the dB the drag took hold
-  /// of, less its travel over the height of the box.
+  /// The band's own arithmetic read from [clipGainTopDb] down: the dB the drag
+  /// took hold of, less its travel over the height of the box.
   void _gainMove(double dy) {
     final held = _gain;
     if (held == null || !_escape.running) return;
     final travelled = held.travelled + dy;
     final height = math.max(3.0, widget.height - 4);
-    final db = (held.grabbedAt - travelled / (height - 2) * -volumeBandFloorDb)
-        .clamp(volumeBandFloorDb, 0.0);
+    final db = (held.grabbedAt -
+            travelled / (height - 2) * (clipGainTopDb - volumeBandFloorDb))
+        .clamp(volumeBandFloorDb, clipGainTopDb);
     setState(() => _gain = (
           clip: held.clip,
           db: db,

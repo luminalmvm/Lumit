@@ -18888,6 +18888,34 @@
   "@captionsNothingToJoin": {
     "description": "Status line, when Join is asked of captions that cannot be one, such as captions from two different files."
   },
+  "histEditGain": "Edit gain",
+  "@histEditGain": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetAutomationMode": "Set automation mode",
+  "@histSetAutomationMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSoloSafeSwitch": "Solo safe switch",
+  "@histSoloSafeSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditLowerBehind": "Edit lower behind",
+  "@histEditLowerBehind": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditMasterAutomation": "Edit master automation",
+  "@histEditMasterAutomation": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetMasterAutomationMode": "Set master automation mode",
+  "@histSetMasterAutomationMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetLoudnessTarget": "Set loudness target",
+  "@histSetLoudnessTarget": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
   "captionsCannotAddHere": "No caption can go at the playhead.",
   "@captionsCannotAddHere": {
     "description": "Status line, when a caption is added where there is no room or no speech from the layer the captions follow."

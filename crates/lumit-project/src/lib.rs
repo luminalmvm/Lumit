@@ -2871,6 +2871,9 @@ mod tests {
         let mut comp = lumit_core::model::Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -2911,6 +2914,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2938,6 +2944,16 @@ mod tests {
             !json.contains("\"graph\""),
             "an untouched project must carry no graph key"
         );
+        for key in [
+            "audio_gain_db",
+            "automation",
+            "duck",
+            "solo_safe",
+            "master_keys",
+            "loudness_target",
+        ] {
+            assert!(!json.contains(key), "an unmixed project writes no {key}");
+        }
 
         // 2. Open and re-save: the same bytes, so nothing was invented on load.
         let (reopened, _) = open(&a).unwrap();
@@ -3024,6 +3040,42 @@ mod tests {
             entry_bytes(&c, "project.json"),
             entry_bytes(&d, "project.json")
         );
+
+        // The mixer's settings on a layer and a comp come back whole.
+        let mut mixed = back.clone();
+        for item in &mut mixed.items {
+            if let lumit_core::model::ProjectItem::Composition(c) = item {
+                c.master_keys = Some(lumit_core::anim::Animation::Static(-3.0));
+                c.master_automation = lumit_core::mixer::AutomationMode::Touch;
+                c.loudness_target = Some(lumit_core::mixer::LoudnessTarget {
+                    lufs: -16.0,
+                    true_peak_db: -1.0,
+                });
+                for l in &mut c.layers {
+                    l.audio_gain_db = 4.5;
+                    l.automation = lumit_core::mixer::AutomationMode::Trim;
+                    l.switches.solo_safe = true;
+                    l.duck = Some(lumit_core::mixer::Duck::behind(Uuid::now_v7()));
+                }
+            }
+        }
+        let e = dir.path().join("e.lum");
+        save(&mixed, &e).unwrap();
+        let (again, _) = open(&e).unwrap();
+        let comps = |d: &lumit_core::model::Document| {
+            d.items
+                .iter()
+                .filter_map(|i| match i {
+                    lumit_core::model::ProjectItem::Composition(c) => Some(c.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            comps(&again),
+            comps(&mixed),
+            "the mixer's settings survive the file"
+        );
     }
 
     /// **A project written before node graphs existed is untouched by them**
@@ -3046,6 +3098,9 @@ mod tests {
         let plate = doc.items[0].id();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -3416,6 +3471,9 @@ mod tests {
         let mut comp = lumit_core::model::Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -3462,6 +3520,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -3620,6 +3681,9 @@ mod tests {
             lumit_core::model::Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                master_keys: None,
+                master_automation: Default::default(),
+                loudness_target: None,
                 lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),

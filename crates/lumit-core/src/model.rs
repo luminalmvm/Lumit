@@ -502,6 +502,17 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// The master fader's keys, in comp time. When there are some they decide
+    /// the master, and [`Self::master_volume_db`] stays the level an older
+    /// Lumit reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master_keys: Option<crate::anim::Animation>,
+    /// How a move of the master fader writes [`Self::master_keys`].
+    #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
+    pub master_automation: crate::mixer::AutomationMode,
+    /// The loudness the comp's mix is made for. `None` is no target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness_target: Option<crate::mixer::LoudnessTarget>,
     /// How the comp's lights fall on its layers. Lumit's own adds the light to
     /// the picture; After Effects' lights a layer from black.
     #[serde(default, skip_serializing_if = "CompLighting::is_default")]
@@ -2078,6 +2089,9 @@ pub struct Switches {
     /// montage work pays nothing for the default.
     #[serde(default = "default_true")]
     pub accepts_lights: bool,
+    /// Solo safe: the layer keeps sounding while another layer is soloed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub solo_safe: bool,
 }
 
 impl Layer {
@@ -2253,6 +2267,7 @@ impl Default for Switches {
             shy: false,
             guide: false,
             accepts_lights: true,
+            solo_safe: false,
         }
     }
 }
@@ -3232,6 +3247,17 @@ pub struct Layer {
     /// Where the layer's sound goes: a bus instead of the master, and its sends.
     #[serde(default, skip_serializing_if = "crate::routes::AudioRoutes::is_master")]
     pub audio_routes: crate::routes::AudioRoutes,
+    /// The layer's own sound in dB before its rack and Volume: its **Gain**,
+    /// set by hand or by Normalise. Volume is the fader.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub audio_gain_db: f64,
+    /// How a fader move writes the Volume, Pan and send keys while the comp
+    /// plays.
+    #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
+    pub automation: crate::mixer::AutomationMode,
+    /// **Lower behind**: the layer drops while another layer or a bus sounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duck: Option<crate::mixer::Duck>,
     /// Retime: layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -3975,6 +4001,9 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
     }
 }
 
+// A comp is the large one, and boxing it would touch every place an item is
+// built or matched for a few bytes per item.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ProjectItem {
     Footage(FootageItem),
@@ -4928,6 +4957,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
@@ -5265,6 +5297,9 @@ mod tests {
         let mut comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -5310,6 +5345,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5589,6 +5627,9 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -5630,6 +5671,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

@@ -10,6 +10,7 @@ import 'package:lumit_flutter/panels/timeline_snap.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart';
 import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
@@ -30,6 +31,9 @@ void main() {
         info: BridgeLayerInfo(
           pitchFollowsSpeed: false,
           sends: const [],
+          audioGainDb: 0,
+          automationMode: BridgeAutomationMode.read,
+          soloSafe: false,
           collapseForced: false,
           volumeDb: const BridgeScalar.static_(0),
           pan: const BridgeScalar.static_(0),

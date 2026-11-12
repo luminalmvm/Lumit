@@ -47,7 +47,12 @@ composites over it.
 | **Adjustment layer** | Applies its effects to everything below. Also a switch any drawing layer can carry |
 | **Layer group** | A header row folding layers together in the Timeline. Organisation only, the render never reads it |
 | **Audio layer** | An audio item, or footage's audio |
-| **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
+| **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume. A bus can feed another bus, and passes sound for the whole composition |
+| **Gain** | A layer's or clip's level before its effects and Volume, set by hand or by Normalise. Volume is the fader |
+| **Lower behind** | A layer's level drops while another layer or a bus is sounding |
+| **Solo safe** | A layer that keeps sounding while another is soloed |
+| **Automation mode** | How a fader writes its keys while the comp plays: Read, Touch, Latch, Write or Trim |
+| **Loudness target** | The loudness and true peak a comp's mix is made for |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 | **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100%. Its **Materials** rows change the file's materials on the layer |
 | **Take** | One embedded animation in a 3D model's file. A Model layer's **Take** row picks it by name |
@@ -121,6 +126,7 @@ Not interchangeable.
 | **Render** | The engine making pixels, for anything |
 | **Preview** | Playback inside Lumit. Never writes user files |
 | **Export** | Writing a media file. May **bake**, which never changes the project |
+| **Stem** | One bus exported as a file of its own |
 | **Evaluation graph** | What the layer stack compiles into. Users never see the term |
 | **Cache** | Frames stored in VRAM, RAM and disk tiers, keyed by content hash |
 | **Proxy** | A smaller copy of a footage file, kept beside the original and read in its place while working |

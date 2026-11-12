@@ -15,6 +15,7 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'graph_looks.dart';
+import 'mixer.dart';
 import 'model.dart';
 import 'model_rows.dart';
 import 'multicam.dart';
@@ -912,6 +913,16 @@ class BridgeLayerInfo {
   final UuidValue? output;
   final List<BridgeSend> sends;
 
+  /// The layer's own level before its rack and Volume, in dB.
+  final double audioGainDb;
+  final BridgeAutomationMode automationMode;
+
+  /// Keeps sounding while another layer is soloed.
+  final bool soloSafe;
+
+  /// What this layer lowers behind, if anything.
+  final BridgeDuck? duck;
+
   /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
   /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -1050,6 +1061,10 @@ class BridgeLayerInfo {
     required this.pitchFollowsSpeed,
     this.output,
     required this.sends,
+    required this.audioGainDb,
+    required this.automationMode,
+    required this.soloSafe,
+    this.duck,
     required this.masks,
     required this.paint,
     this.puppet,
@@ -1099,6 +1114,10 @@ class BridgeLayerInfo {
       pitchFollowsSpeed.hashCode ^
       output.hashCode ^
       sends.hashCode ^
+      audioGainDb.hashCode ^
+      automationMode.hashCode ^
+      soloSafe.hashCode ^
+      duck.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
       puppet.hashCode ^
@@ -1150,6 +1169,10 @@ class BridgeLayerInfo {
           pitchFollowsSpeed == other.pitchFollowsSpeed &&
           output == other.output &&
           sends == other.sends &&
+          audioGainDb == other.audioGainDb &&
+          automationMode == other.automationMode &&
+          soloSafe == other.soloSafe &&
+          duck == other.duck &&
           masks == other.masks &&
           paint == other.paint &&
           puppet == other.puppet &&
@@ -4573,6 +4596,10 @@ class LayerReference {
   void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
 
+  /// Set the layer's own level before its rack and Volume, in dB.
+  void setAudioGainDb({required double db}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAudioGainDb(that: this, db: db);
+
   /// Route this layer's sound to `output` (a Bus layer, or `None` for the
   /// master) and set its sends, as one undoable step.
   void setAudioRoutes({UuidValue? output, required List<BridgeSend> sends}) =>
@@ -4587,6 +4614,10 @@ class LayerReference {
   /// file of its own.
   void setAudioStreams({required List<int> streams}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAudioStreams(that: this, streams: streams);
+
+  void setAutomationMode({required BridgeAutomationMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSetAutomationMode(that: this, mode: mode);
 
   /// Set how one two-axis property is shown and edited: combined on
   /// one row, linked (Scale), or separated onto a row per axis.
@@ -4772,6 +4803,12 @@ class LayerReference {
   void setCueText({required int cue, required String text}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetCueText(that: this, cue: cue, text: text);
+
+  /// Lower this layer behind another layer or a bus, or stop, as one
+  /// undoable step. Refused, with nothing changed, when the sound would go
+  /// round in a circle.
+  void setDuck({BridgeDuck? duck}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetDuck(that: this, duck: duck);
 
   /// Enable or bypass `effect` — **or a style**, whichever list holds it
   /// ([`Self::is_style`]), which is what makes a style row's own on/off tick
@@ -5070,6 +5107,10 @@ class LayerReference {
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
           that: this, id: id, keys: keys);
+
+  /// A solo safe layer keeps sounding while another layer is soloed.
+  void setSoloSafe({required bool enabled}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetSoloSafe(that: this, enabled: enabled);
 
   /// Point this layer at `item`, keeping its transform, keys, masks, effects
   /// and markers. An anchor keeps its place on the picture as the size

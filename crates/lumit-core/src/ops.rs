@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod guards;
+mod mixer;
 mod reshape;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -57,6 +58,10 @@ pub enum OpError {
     /// (docs/impl/camera.md §1).
     #[error("the property is not on this layer")]
     PropNotOnLayer,
+    /// [`Op::SetLayerRoutes`] or [`Op::SetLayerDuck`] would send sound
+    /// somewhere it cannot go ([`crate::routes::check_routes`]).
+    #[error("{0}")]
+    InvalidRoute(#[from] crate::routes::RouteError),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -687,6 +692,31 @@ pub enum Op {
         layer: Uuid,
         streams: crate::model::AudioStreams,
     },
+    /// Set a layer's **Gain**, its own sound in dB before its rack and Volume.
+    SetLayerAudioGain {
+        comp: Uuid,
+        layer: Uuid,
+        db: f64,
+    },
+    /// Choose how a layer's faders write their keys while the comp plays.
+    SetLayerAutomation {
+        comp: Uuid,
+        layer: Uuid,
+        mode: crate::mixer::AutomationMode,
+    },
+    /// Toggle a layer's solo safe switch.
+    SetLayerSoloSafe {
+        comp: Uuid,
+        layer: Uuid,
+        solo_safe: bool,
+    },
+    /// Set or clear what a layer lowers behind. Refused, changing nothing,
+    /// where it would make a circle ([`crate::routes::check_routes`]).
+    SetLayerDuck {
+        comp: Uuid,
+        layer: Uuid,
+        duck: Option<crate::mixer::Duck>,
+    },
     /// Move a composition's **master fader** — one gain stage on the summed
     /// mix, ahead of the safety limiter (docs/09 §3.1). dB; 0 is
     /// unity, −100 and below is exact silence.
@@ -696,6 +726,21 @@ pub enum Op {
     SetMasterVolume {
         comp: Uuid,
         db: f64,
+    },
+    /// Set or clear the master fader's keys, in comp time.
+    SetMasterAutomation {
+        comp: Uuid,
+        keys: Option<Animation>,
+    },
+    /// Choose how the master fader writes its keys.
+    SetMasterAutomationMode {
+        comp: Uuid,
+        mode: crate::mixer::AutomationMode,
+    },
+    /// Set or clear the loudness a comp's mix is made for.
+    SetLoudnessTarget {
+        comp: Uuid,
+        target: Option<crate::mixer::LoudnessTarget>,
     },
     /// Set or clear a composition's **mix mark**
     /// (docs/impl/audio-timeline.md §2): the Audio timeline sets it the first
@@ -1030,6 +1075,13 @@ impl Op {
             Op::SetLayerRoutes { .. } => "Edit routing",
             Op::SetLayerAudioStreams { .. } => "Set audio streams",
             Op::SetMasterVolume { .. } => "Move master fader",
+            Op::SetLayerAudioGain { .. } => "Edit gain",
+            Op::SetLayerAutomation { .. } => "Set automation mode",
+            Op::SetLayerSoloSafe { .. } => "Solo safe switch",
+            Op::SetLayerDuck { .. } => "Edit lower behind",
+            Op::SetMasterAutomation { .. } => "Edit master automation",
+            Op::SetMasterAutomationMode { .. } => "Set master automation mode",
+            Op::SetLoudnessTarget { .. } => "Set loudness target",
             Op::SetSoundMix { .. } => "Sound mix",
             Op::SetBeatGrid { .. } => "Set beat grid",
             Op::SetRetimeProperty { .. } => "Edit Retime",
@@ -1135,6 +1187,10 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerPan { comp, layer, .. }
         | Op::SetLayerRoutes { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
+        | Op::SetLayerAudioGain { comp, layer, .. }
+        | Op::SetLayerAutomation { comp, layer, .. }
+        | Op::SetLayerSoloSafe { comp, layer, .. }
+        | Op::SetLayerDuck { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
 
@@ -2456,6 +2512,13 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             routes,
         } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let duck = c
+                .layers
+                .iter()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?
+                .duck;
+            crate::routes::check_routes(c, *layer, routes, duck.as_ref())?;
             let l = c
                 .layers
                 .iter_mut()
@@ -2502,6 +2565,13 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 on: previous,
             })
         }
+        Op::SetLayerAudioGain { .. }
+        | Op::SetLayerAutomation { .. }
+        | Op::SetLayerSoloSafe { .. }
+        | Op::SetLayerDuck { .. }
+        | Op::SetMasterAutomation { .. }
+        | Op::SetMasterAutomationMode { .. }
+        | Op::SetLoudnessTarget { .. } => mixer::apply(doc, op),
         Op::SetBeatGrid { comp, grid } => {
             // A grid with no tempo in it is no grid: refused rather than
             // stored, so every held grid can be divided by.

@@ -735,8 +735,8 @@ class CutTrackPainter extends CustomPainter {
           ..color = colours.rising);
   }
 
-  /// A sound clip's level, as a line across it: at the top for 0 dB, lower
-  /// as it is turned down, the Audio timeline's own line.
+  /// A sound clip's level, as a line across it: at the top for its loudest,
+  /// lower as it is turned down, the Audio timeline's own line.
   void _gainLine(Canvas canvas, BridgeClip clip, Rect box) {
     final live = gain.value;
     final db = live != null && live.clip == clip.id.toString()

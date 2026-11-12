@@ -1427,6 +1427,9 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -1467,6 +1470,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -1896,6 +1902,9 @@ mod tests {
                     adjustment: false,
                     pitch_follows_speed: false,
                     audio_routes: Default::default(),
+                    audio_gain_db: 0.0,
+                    automation: Default::default(),
+                    duck: None,
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -2038,6 +2047,9 @@ mod tests {
                     adjustment: false,
                     pitch_follows_speed: false,
                     audio_routes: Default::default(),
+                    audio_gain_db: 0.0,
+                    automation: Default::default(),
+                    duck: None,
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -2315,8 +2327,20 @@ mod tests {
                 .audio_routes
                 .clone()
         };
+        // To a Bus layer of the comp: a route to anything else is refused.
+        let mut bus = test_layer(Uuid::now_v7());
+        bus.kind = LayerKind::Null;
+        bus.audio_only = true;
+        let bus_id = bus.id;
+        store
+            .commit(Op::AddLayer {
+                comp: comp_id,
+                index: 0,
+                layer: Box::new(bus),
+            })
+            .unwrap();
         let routed = crate::routes::AudioRoutes {
-            output: Some(Uuid::now_v7()),
+            output: Some(bus_id),
             sends: Vec::new(),
         };
         store
@@ -2329,6 +2353,68 @@ mod tests {
         assert_eq!(routes(&store), routed);
         store.undo().unwrap();
         assert!(routes(&store).is_master());
+        assert!(
+            store
+                .commit(Op::SetLayerRoutes {
+                    comp: comp_id,
+                    layer: layer_id,
+                    routes: crate::routes::AudioRoutes {
+                        output: Some(Uuid::now_v7()),
+                        sends: Vec::new(),
+                    },
+                })
+                .is_err(),
+            "a route to something that is not a bus is refused"
+        );
+
+        // The mixer's own settings each round-trip as one op and one undo.
+        let layer_of = |s: &DocumentStore| {
+            s.snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .clone()
+        };
+        let before = layer_of(&store);
+        let duck = crate::mixer::Duck::behind(bus_id);
+        for op in [
+            Op::SetLayerAudioGain {
+                comp: comp_id,
+                layer: layer_id,
+                db: -3.0,
+            },
+            Op::SetLayerAutomation {
+                comp: comp_id,
+                layer: layer_id,
+                mode: crate::mixer::AutomationMode::Trim,
+            },
+            Op::SetLayerSoloSafe {
+                comp: comp_id,
+                layer: layer_id,
+                solo_safe: true,
+            },
+            Op::SetLayerDuck {
+                comp: comp_id,
+                layer: layer_id,
+                duck: Some(duck),
+            },
+        ] {
+            store.commit(op).unwrap();
+        }
+        let set = layer_of(&store);
+        assert_eq!(set.audio_gain_db, -3.0);
+        assert_eq!(set.automation, crate::mixer::AutomationMode::Trim);
+        assert!(set.switches.solo_safe);
+        assert_eq!(set.duck, Some(duck));
+        for _ in 0..4 {
+            store.undo().unwrap();
+        }
+        assert_eq!(layer_of(&store), before);
+        // And the bus goes again, so the undos below reach the edits above.
+        store.undo().unwrap();
 
         // The master fader (docs/09 §3.1) is comp state and round-trips
         // the same way — one op, one undo step, back to unity.
@@ -2343,6 +2429,42 @@ mod tests {
         assert_eq!(master(&store), -4.5);
         store.undo().unwrap();
         assert_eq!(master(&store), 0.0);
+        let comp_of = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().clone();
+        let before = comp_of(&store);
+        let keys = Animation::Keyframed(vec![crate::anim::Keyframe {
+            time: crate::time::Rational::ZERO,
+            value: -6.0,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        }]);
+        let target = crate::mixer::LoudnessTarget {
+            lufs: -14.0,
+            true_peak_db: -1.0,
+        };
+        for op in [
+            Op::SetMasterAutomation {
+                comp: comp_id,
+                keys: Some(keys.clone()),
+            },
+            Op::SetMasterAutomationMode {
+                comp: comp_id,
+                mode: crate::mixer::AutomationMode::Latch,
+            },
+            Op::SetLoudnessTarget {
+                comp: comp_id,
+                target: Some(target),
+            },
+        ] {
+            store.commit(op).unwrap();
+        }
+        let set = comp_of(&store);
+        assert_eq!(set.master_keys, Some(keys));
+        assert_eq!(set.master_automation, crate::mixer::AutomationMode::Latch);
+        assert_eq!(set.loudness_target, Some(target));
+        for _ in 0..3 {
+            store.undo().unwrap();
+        }
+        assert_eq!(comp_of(&store), before);
 
         // The confirmed beat grid (docs/09 §5) is comp state on the
         // same pattern: set, read back exactly, undone to nothing — and a

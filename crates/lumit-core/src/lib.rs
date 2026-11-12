@@ -34,6 +34,7 @@ pub mod lut;
 pub mod markers;
 pub mod mask;
 pub mod mesh_shape;
+pub mod mixer;
 pub mod model;
 pub mod model_layer;
 pub mod model_material;

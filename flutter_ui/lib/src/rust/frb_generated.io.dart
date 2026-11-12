@@ -35,6 +35,7 @@ import 'api/interpret.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/lens.dart';
+import 'api/mixer.dart';
 import 'api/model.dart';
 import 'api/model_rows.dart';
 import 'api/multicam.dart';
@@ -305,6 +306,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeDrmNode dco_decode_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
+  BridgeDuck dco_decode_box_autoadd_bridge_duck(dynamic raw);
+
+  @protected
   BridgeEffectInstanceInfo dco_decode_box_autoadd_bridge_effect_instance_info(
       dynamic raw);
 
@@ -364,6 +368,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLightSettings dco_decode_box_autoadd_bridge_light_settings(dynamic raw);
+
+  @protected
+  BridgeLoudnessTarget dco_decode_box_autoadd_bridge_loudness_target(
+      dynamic raw);
 
   @protected
   BridgeMask dco_decode_box_autoadd_bridge_mask(dynamic raw);
@@ -695,6 +703,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAutoSide dco_decode_bridge_auto_side(dynamic raw);
 
   @protected
+  BridgeAutomationMode dco_decode_bridge_automation_mode(dynamic raw);
+
+  @protected
   BridgeAutosave dco_decode_bridge_autosave(dynamic raw);
 
   @protected
@@ -912,6 +923,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeDrmNode dco_decode_bridge_drm_node(dynamic raw);
+
+  @protected
+  BridgeDuck dco_decode_bridge_duck(dynamic raw);
 
   @protected
   BridgeEffectInfo dco_decode_bridge_effect_info(dynamic raw);
@@ -1227,6 +1241,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLottieImport dco_decode_bridge_lottie_import(dynamic raw);
+
+  @protected
+  BridgeLoudnessTarget dco_decode_bridge_loudness_target(dynamic raw);
 
   @protected
   BridgeMarker dco_decode_bridge_marker(dynamic raw);
@@ -2539,6 +2556,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeDrmNode? dco_decode_opt_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
+  BridgeDuck? dco_decode_opt_box_autoadd_bridge_duck(dynamic raw);
+
+  @protected
   BridgeEffectInstanceInfo?
       dco_decode_opt_box_autoadd_bridge_effect_instance_info(dynamic raw);
 
@@ -2568,6 +2588,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLightSettings? dco_decode_opt_box_autoadd_bridge_light_settings(
+      dynamic raw);
+
+  @protected
+  BridgeLoudnessTarget? dco_decode_opt_box_autoadd_bridge_loudness_target(
       dynamic raw);
 
   @protected
@@ -3046,6 +3070,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeDuck sse_decode_box_autoadd_bridge_duck(SseDeserializer deserializer);
+
+  @protected
   BridgeEffectInstanceInfo sse_decode_box_autoadd_bridge_effect_instance_info(
       SseDeserializer deserializer);
 
@@ -3118,6 +3145,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLightSettings sse_decode_box_autoadd_bridge_light_settings(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLoudnessTarget sse_decode_box_autoadd_bridge_loudness_target(
       SseDeserializer deserializer);
 
   @protected
@@ -3518,6 +3549,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAutoSide sse_decode_bridge_auto_side(SseDeserializer deserializer);
 
   @protected
+  BridgeAutomationMode sse_decode_bridge_automation_mode(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeAutosave sse_decode_bridge_autosave(SseDeserializer deserializer);
 
   @protected
@@ -3763,6 +3798,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeDrmNode sse_decode_bridge_drm_node(SseDeserializer deserializer);
+
+  @protected
+  BridgeDuck sse_decode_bridge_duck(SseDeserializer deserializer);
 
   @protected
   BridgeEffectInfo sse_decode_bridge_effect_info(SseDeserializer deserializer);
@@ -4133,6 +4171,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLottieImport sse_decode_bridge_lottie_import(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLoudnessTarget sse_decode_bridge_loudness_target(
       SseDeserializer deserializer);
 
   @protected
@@ -5694,6 +5736,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeDuck? sse_decode_opt_box_autoadd_bridge_duck(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeEffectInstanceInfo?
       sse_decode_opt_box_autoadd_bridge_effect_instance_info(
           SseDeserializer deserializer);
@@ -5728,6 +5774,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLightSettings? sse_decode_opt_box_autoadd_bridge_light_settings(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLoudnessTarget? sse_decode_opt_box_autoadd_bridge_loudness_target(
       SseDeserializer deserializer);
 
   @protected
@@ -6237,6 +6287,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeDrmNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_duck(
+      BridgeDuck self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_effect_instance_info(
       BridgeEffectInstanceInfo self, SseSerializer serializer);
 
@@ -6311,6 +6365,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_light_settings(
       BridgeLightSettings self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_loudness_target(
+      BridgeLoudnessTarget self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_mask(
@@ -6723,6 +6781,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAutoSide self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_automation_mode(
+      BridgeAutomationMode self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_autosave(
       BridgeAutosave self, SseSerializer serializer);
 
@@ -7000,6 +7062,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_drm_node(BridgeDrmNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_duck(BridgeDuck self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_effect_info(
@@ -7412,6 +7477,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_lottie_import(
       BridgeLottieImport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_loudness_target(
+      BridgeLoudnessTarget self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_marker(BridgeMarker self, SseSerializer serializer);
@@ -9073,6 +9142,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeDrmNode? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_bridge_duck(
+      BridgeDuck? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_box_autoadd_bridge_effect_instance_info(
       BridgeEffectInstanceInfo? self, SseSerializer serializer);
 
@@ -9107,6 +9180,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_light_settings(
       BridgeLightSettings? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_loudness_target(
+      BridgeLoudnessTarget? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_match_frame(

@@ -82,7 +82,7 @@ import 'audio_routes_frb.dart'
         soundClipRows,
         soundHeadRows;
 import 'audio_streams_menu_frb.dart';
-import 'audio_timeline_clips_frb.dart' show audioClipGainY;
+import 'audio_timeline_clips_frb.dart' show audioClipGainY, clipGainTopDb;
 import 'clip_fade_popover.dart' show clipFadeShapeName;
 import 'clip_fades.dart';
 import 'cut_timeline_lane.dart';
@@ -2127,8 +2127,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final tall = max(3.0, held.height - 4);
     final heard = _heard(held.track, held.clip);
     final value = heard
-        ? (held.clip.gainDb - travelled / (tall - 2) * -volumeBandFloorDb)
-            .clamp(volumeBandFloorDb, 0.0)
+        ? (held.clip.gainDb -
+                travelled / (tall - 2) * (clipGainTopDb - volumeBandFloorDb))
+            .clamp(volumeBandFloorDb, clipGainTopDb)
         : (held.clip.opacity - travelled / (tall - 2)).clamp(0.0, 1.0);
     _gainHeld = (
       track: held.track,

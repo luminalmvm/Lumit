@@ -1826,6 +1826,13 @@ pub struct BridgeLayerInfo {
     /// The Bus layer this layer's sound goes to, or `None` for the master.
     pub output: Option<Uuid>,
     pub sends: Vec<crate::api::routes::BridgeSend>,
+    /// The layer's own level before its rack and Volume, in dB.
+    pub audio_gain_db: f64,
+    pub automation_mode: crate::api::mixer::BridgeAutomationMode,
+    /// Keeps sounding while another layer is soloed.
+    pub solo_safe: bool,
+    /// What this layer lowers behind, if anything.
+    pub duck: Option<crate::api::mixer::BridgeDuck>,
     /// The layer's masks, bottom of the stack first. Carried in the
     /// read model for the same reason the effects are: the Timeline's
     /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -2113,6 +2120,10 @@ pub(crate) fn read_layer_info(
         pitch_follows_speed: layer.pitch_follows_speed,
         output: layer.audio_routes.output,
         sends: crate::api::routes::bridge_sends(layer),
+        audio_gain_db: layer.audio_gain_db,
+        automation_mode: crate::api::mixer::BridgeAutomationMode::of(layer.automation),
+        solo_safe: layer.switches.solo_safe,
+        duck: layer.duck.as_ref().map(crate::api::mixer::BridgeDuck::of),
         masks: layer
             .masks
             .iter()

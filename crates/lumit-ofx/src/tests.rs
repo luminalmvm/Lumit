@@ -2096,6 +2096,9 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),

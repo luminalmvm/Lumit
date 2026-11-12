@@ -2405,6 +2405,13 @@ Map<String, String> get _built => {
       "Edit routing": l10n.histEditRouting,
       "Set audio streams": l10n.histSetAudioStreams,
       "Move master fader": l10n.histMoveMasterFader,
+      "Edit gain": l10n.histEditGain,
+      "Set automation mode": l10n.histSetAutomationMode,
+      "Solo safe switch": l10n.histSoloSafeSwitch,
+      "Edit lower behind": l10n.histEditLowerBehind,
+      "Edit master automation": l10n.histEditMasterAutomation,
+      "Set master automation mode": l10n.histSetMasterAutomationMode,
+      "Set loudness target": l10n.histSetLoudnessTarget,
       // The mark the Audio timeline writes, which reads in the history under
       // the same words the row carries.
       "Sound mix": l10n.timelineSoundMix,
