@@ -129,6 +129,11 @@ A selected keyframe shows its handles, and so do the sides of its neighbours tha
 - With several keyframes selected, dragging a handle on one moves the same handle on each
   by the same amount.
 
+A handle can reach past the neighbouring keyframe, up to 1000% influence, or 100% in the
+acceleration graph. Time never runs backwards along a curve: where a span's two handles
+together reach too far, the curve uses both scaled down in proportion, and the handles stay
+where they were dragged.
+
 **Edit ▸ Settings ▸ Shortcuts ▸ Dragging** changes `Alt` to `Ctrl`.
 
 In the speed graph each keyframe is two points, one for the speed coming in and one for
