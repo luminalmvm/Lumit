@@ -2808,8 +2808,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           continue;
         }
         // The rows first, while the indices still name their animators.
-        for (final (index, value)
-            in rows[id] ?? const <(int, TextAnimatorValue)>[]) {
+        // Axes from the last slot down, so each still names its axis.
+        final picked = (rows[id] ?? <(int, TextAnimatorValue)>[])
+          ..sort((a, b) => b.$2.index - a.$2.index);
+        for (final (index, value) in picked) {
           if (whole[id]?.contains(index) ?? false) continue;
           deleted |= removeTextAnimatorValue(entry.layer, index, value);
         }
