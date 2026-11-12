@@ -2190,40 +2190,49 @@ fn comp_walk(
                         .sqrt()
                         .max(1.0)
                 };
-                let (r, natural) = match &spine {
-                    Some(path) => {
-                        let (w, h) = lumit_text::path_box(path, size);
-                        let zoom = f64::from(shown).clamp(1.0, room(w, h)) as f32;
-                        let r = lumit_text::rasterise_along_at(
-                            &block,
-                            path,
-                            document.path_offset.value_at(lt) as f32,
-                            w,
-                            h,
-                            &xforms,
-                            zoom,
-                        );
-                        (r, (w.max(1), h.max(1)))
+                // Drawn once for the same words, style, letter moves, path and
+                // size, so moving the layer does not draw them again.
+                let offset = document.path_offset.value_at(lt);
+                let memo_key =
+                    raster_memo::key("text", &[document, &line, &xforms, &spine, &offset, &shown]);
+                let drawn = raster_memo::drawn(memo_key, || {
+                    let (r, natural) = match &spine {
+                        Some(path) => {
+                            let (w, h) = lumit_text::path_box(path, size);
+                            let zoom = f64::from(shown).clamp(1.0, room(w, h)) as f32;
+                            let r = lumit_text::rasterise_along_at(
+                                &block,
+                                path,
+                                offset as f32,
+                                w,
+                                h,
+                                &xforms,
+                                zoom,
+                            );
+                            (r, (w.max(1), h.max(1)))
+                        }
+                        // Shown at its own size or smaller, the layer is drawn as
+                        // it always was, without laying it out twice.
+                        None if shown <= 1.0 => {
+                            let r = lumit_text::rasterise(&block, &xforms);
+                            let size = (r.width, r.height);
+                            (r, size)
+                        }
+                        None => {
+                            let own = lumit_text::layout(&block, !xforms.is_empty());
+                            let zoom =
+                                f64::from(shown).clamp(1.0, room(own.width, own.height)) as f32;
+                            lumit_text::rasterise_at(&block, &xforms, zoom)
+                        }
+                    };
+                    raster_memo::Drawn {
+                        rgba: Arc::new(r.rgba),
+                        width: r.width,
+                        height: r.height,
+                        natural: (natural.0 as f32, natural.1 as f32),
                     }
-                    // Shown at its own size or smaller, the layer is drawn as it
-                    // always was, without laying it out twice.
-                    None if shown <= 1.0 => {
-                        let r = lumit_text::rasterise(&block, &xforms);
-                        let size = (r.width, r.height);
-                        (r, size)
-                    }
-                    None => {
-                        let own = lumit_text::layout(&block, !xforms.is_empty());
-                        let zoom = f64::from(shown).clamp(1.0, room(own.width, own.height)) as f32;
-                        lumit_text::rasterise_at(&block, &xforms, zoom)
-                    }
-                };
-                (
-                    Arc::new(r.rgba),
-                    r.width,
-                    r.height,
-                    (natural.0 as f32, natural.1 as f32),
-                )
+                });
+                (drawn.rgba, drawn.width, drawn.height, drawn.natural)
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
             // into its own bounding box, which is also the layer's natural
@@ -2252,14 +2261,19 @@ fn comp_walk(
                     let k = f64::from(shown).clamp(1.0, most);
                     let w = (natural_w * k).round().max(1.0) as u32;
                     let h = (natural_h * k).round().max(1.0) as u32;
-                    Some((
-                        Arc::new(lumit_core::shape::rasterise_contents(
+                    // Drawn once for the same art at the same size, so moving
+                    // the layer does not fill the outlines again.
+                    let memo_key =
+                        raster_memo::key("shape", &[&contents, &(w, h), &(x0, y0, x1, y1), &lt]);
+                    let drawn = raster_memo::drawn(memo_key, || raster_memo::Drawn {
+                        rgba: Arc::new(lumit_core::shape::rasterise_contents(
                             &contents, w, h, x0, y0, x1, y1, lt,
                         )),
-                        w,
-                        h,
-                        (natural_w as f32, natural_h as f32),
-                    ))
+                        width: w,
+                        height: h,
+                        natural: (natural_w as f32, natural_h as f32),
+                    });
+                    Some((drawn.rgba, drawn.width, drawn.height, drawn.natural))
                 }),
             LayerKind::Precomp { .. } => None, // handled as Nested below
             LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
@@ -7352,6 +7366,7 @@ mod energy_line_path;
 pub(crate) mod follow;
 mod moments;
 pub(crate) mod motion_blur;
+mod raster_memo;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -9928,7 +9943,10 @@ mod render_below_at_tests {
         let step = -0.0333 * 10.0;
         for (k, offset) in offsets.iter().rev().enumerate() {
             let want = step * (k + 1) as f64;
-            assert!((offset - want).abs() < 1e-4, "echo {k} at {offset}, not {want}");
+            assert!(
+                (offset - want).abs() < 1e-4,
+                "echo {k} at {offset}, not {want}"
+            );
         }
     }
 
@@ -9961,3 +9979,4 @@ mod render_below_at_tests {
         );
     }
 }
+
