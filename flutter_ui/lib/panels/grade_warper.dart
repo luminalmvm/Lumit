@@ -362,7 +362,7 @@ class _MeshPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 4
             ..color =
-                enabled ? hsvToRgb(hue, 0.95, 0.95) : hsvToRgb(hue, 0, 0.42));
+                enabled ? hsvToRgb(hue, 0.6, 0.92) : hsvToRgb(hue, 0, 0.42));
     }
 
     // The picture's colours, as alpha in a theme ink, so the plot reads
