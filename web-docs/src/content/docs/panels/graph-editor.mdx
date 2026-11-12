@@ -38,7 +38,7 @@ Under the graph:
 | **Zoom** | Zooms time, as in Layers mode. |
 | **Magnet** | Turns snapping on and off. |
 | **Scope** | Steps through **Selected curves**, **Layer curves** and **Composition curves**. Curves shown but not selected are dashed; a click selects one, and `Shift`-click or `Ctrl`-click adds it. |
-| **Auto fit** | Automatically adjusts the vertical zoom to fit the curve on screen. Zooming the values with the wheel turns it off. |
+| **Auto fit** | Automatically adjusts the vertical zoom to fit the curve on screen. Zooming the values with the wheel, or moving them with a middle-button drag, turns it off. |
 | **Fit selection** | Zooms time and value to the selected keyframes, or to every curve with none selected. `F` does the same, and `Shift+F` frames every curve. |
 
 | Right-click on | Holds |
@@ -50,7 +50,7 @@ Under the graph:
 
 With more than one curve on the graph, a list in its corner names them. A click on a row hides
 or shows the curve, `Alt`-click solos it, and a right-click adds **Rename layer** to the curve's
-menu.
+menu. The arrow at the top of the list folds it down to a stroke of each curve's colour.
 
 With **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ Retime opens to Speed** on, a Retime curve
 opens on the speed graph. See [Retiming and speed](/use/retime/).
@@ -103,8 +103,8 @@ handle sent to Auto or Clamp and back to Free returns to the shape it had.
 `Alt`+click does not remove a curve's last keyframe. Deleting it with `Delete` leaves the
 property at the value that keyframe held.
 
-With the **Pen** tool armed, a click on the curve adds a keyframe and a click on a keyframe
-removes it.
+With the **Pen** tool armed, a click on the curve adds a keyframe. A click on a keyframe
+selects it, as with any tool.
 
 One selected keyframe carries a readout of its frame, its value, and its in and out
 influence. Click the readout to type its speed and influence on each side. The foot of the
@@ -156,11 +156,15 @@ bottom and top.
 - **Alt+wheel** zooms the values about the pointer.
 - With **Auto fit** off, **the wheel** scrolls the values.
 - A drag with the **Hand** tool pans the curves.
+- **A middle-button drag** pans time and values. With `Ctrl` held as it begins it zooms about
+  where the drag began: right and left zoom time in and out, up and down the values.
 
 **Edit ▸ Settings ▸ Shortcuts ▸ Scroll wheel** changes which key does which.
 
 ## What else is drawn
 
+- A grid rules the plot by value and by frame, with fainter lines between them where there
+  is room. The values are numbered down the right edge.
 - A mask's **Path** row has no value to plot. It draws its rate of change in the value
   graph too.
 - An [expression](/use/expressions/) draws as a curve with no keyframes.

@@ -22,6 +22,10 @@ Custom shader it draws the [shader graph](/use/shaders/#the-shader-graph).
 
 Every graph starts with **Source**, one box per effect in order, and **Layer out**.
 
+A text layer's **Source** box stands open, with a number socket for each of its
+[animators'](/use/text/#animators) numbers. Picked, it shows the layer's **Animators** in
+the Node panel.
+
 | Gesture | What it does |
 | --- | --- |
 | Drop a node onto a wire | Inserts it at that point in the stack. |
@@ -76,7 +80,8 @@ toolbar lists the three switches, **Frame selected** and **Frame all**.
 
 Each box carries two small badges. The checkbox enables or disables the box, and disabled
 the picture passes through untouched. The twirl opens the box, displaying a socket and a
-control for every parameter.
+control for every parameter. A group of rows the effect folds shut shows its first row, and
+the whole group once that row is wired or off its default.
 
 A box that reads points with nothing wired into its Points socket is marked **No
 stream**. In a shared project, a box someone else has picked wears a ring in their colour.
