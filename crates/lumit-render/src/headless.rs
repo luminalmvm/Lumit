@@ -2162,31 +2162,30 @@ impl HeadlessRenderer {
         self.render_preview(doc, comp_id, frame, Quality::default(), scale)
     }
 
-    /// Compute a v1 scope trace (waveform/vectorscope/histogram) from an
-    /// already-rendered comp frame's display bytes, returning the `GRID × GRID`
-    /// RGBA8 trace. `rgba` is the exact frame the Viewer shows (served from the
-    /// bridge's rendered-frame cache, so the scope traces the same frame at no
-    /// re-render cost); the binning runs on the GPU and only the tiny trace is
-    /// read back.
+    /// Compute scope traces from the display bytes of the frame the Viewer
+    /// shows, one `GRID × GRID` RGBA8 trace per kind, in the order asked.
     ///
-    /// `kind` is `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram
-    /// / `4` parade / `5` luma histogram (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
+    /// `kinds` are the codes `ScopeKind::from_code` reads (0 luma, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram, 6 CIE
+    /// xy, 7 vectorscope at 2x); `colours` carries the frontend's fixed
     /// `ScopeColours` as `[bg, trace, red, green, blue]` RGB byte triples, so no
     /// colour literal lives in the engine (docs/15-DESIGN.md) and the bridge need
-    /// not name `lumit-gpu`. `Err` on an unknown kind or if the tiny readback
-    /// fails.
+    /// not name `lumit-gpu`. `Err` on an unknown kind or if the readback fails.
     pub fn render_scope(
         &self,
         rgba: &[u8],
         width: u32,
         height: u32,
-        kind: u32,
+        kinds: &[u32],
         colours: [[u8; 3]; 5],
-    ) -> Result<Vec<u8>, String> {
-        let kind = lumit_gpu::scope::ScopeKind::from_code(kind)
-            .ok_or_else(|| format!("headless scope: unknown kind {kind}"))?;
+    ) -> Result<Vec<Vec<u8>>, String> {
+        let kinds = kinds
+            .iter()
+            .map(|&k| lumit_gpu::scope::ScopeKind::from_code(k).ok_or(k))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|k| format!("headless scope: unknown kind {k}"))?;
         self.scope
-            .trace_rgba8(&self.gpu, kind, colours.into(), rgba, width, height)
+            .trace_rgba8(&self.gpu, &kinds, colours.into(), rgba, width, height)
             .map_err(|e| e.to_string())
     }
 

@@ -19,7 +19,8 @@
 const GRID: u32 = 256u;
 
 struct Params {
-    kind: u32,       // 0 luma, 1 rgb, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram
+    kind: u32,       // 0 luma, 1 rgb, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram,
+                     // 6 CIE xy, 7 vectorscope at 2x
     grid: u32,       // always GRID; carried so the shader reads no literal size
     n_cols: u32,     // sampled columns = ceil(width / sx)
     n_rows: u32,     // sampled rows    = ceil(height / sy)
@@ -70,6 +71,32 @@ fn value_row(v: f32) -> u32 {
     return min(row, GRID - 1u);
 }
 
+// The CIE plot's window on the xy plane: a square from XY_MIN, XY_SPAN wide,
+// which holds the whole spectral locus with a little room round it. The
+// Scopes panel draws its locus and triangles through the same two numbers.
+const XY_MIN: f32 = -0.03;
+const XY_SPAN: f32 = 0.9;
+// Below this luminance a pixel's chromaticity is 8-bit noise, and black has
+// none at all, so the plot leaves them out.
+const XY_DARK: f32 = 0.001;
+
+// A pixel's CIE 1931 x and y, and its luminance Y in z. The bytes are read as
+// the Viewer shows them, sRGB-encoded Rec.709, so they are decoded to linear
+// and taken to XYZ by the Rec.709 primaries with the D65 white.
+fn chromaticity(rgb: vec3<u32>) -> vec3<f32> {
+    let v = vec3<f32>(rgb) / 255.0;
+    let lin = select(
+        pow((v + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4)),
+        v / 12.92,
+        v <= vec3<f32>(0.04045),
+    );
+    let x = 0.4124564 * lin.r + 0.3575761 * lin.g + 0.1804375 * lin.b;
+    let y = 0.2126729 * lin.r + 0.7151522 * lin.g + 0.0721750 * lin.b;
+    let z = 0.0193339 * lin.r + 0.1191920 * lin.g + 0.9503041 * lin.b;
+    let s = max(x + y + z, 1e-6);
+    return vec3<f32>(x / s, y / s, y);
+}
+
 // The binning pass: one invocation per SAMPLED pixel (the strided grid the CPU
 // walks), each incrementing its bin. `gid.xy` indexes the sampled grid, so the
 // real pixel is (col*sx, row*sy) — the exact positions `while x < width` visits.
@@ -97,22 +124,33 @@ fn bin(@builtin(global_invocation_id) gid: vec3<u32>) {
                 atomicAdd(&counts[c * GRID * GRID + by * GRID + bx], 1u);
             }
         }
-        case 2u: { // vectorscope (Rec.709 Cb/Cr)
+        case 2u, 7u: { // vectorscope (Rec.709 Cb/Cr), 7 at twice the size
             let rf = f32(rgb.x) / 255.0;
             let gf = f32(rgb.y) / 255.0;
             let bf = f32(rgb.z) / 255.0;
-            // Rec.709, as the waveform's luma is.
+            // Rec.709, as the waveform's luma is, so the targets the panel
+            // draws for 75% bars are where 75% bars land.
             let y = 0.2126 * rf + 0.7152 * gf + 0.0722 * bf;
             let cb = (bf - y) / 1.8556;
             let cr = (rf - y) / 1.5748;
             // The plot's middle is the grid's middle edge, not a cell's centre,
             // so a cell is drawn round the value it holds.
             let half = f32(GRID) * 0.5;
-            let scale = f32(GRID) * 0.9;
+            let scale = f32(GRID) * 0.9 * select(1.0, 2.0, p.kind == 7u);
             let px = half + cb * scale;
             let py = half - cr * scale; // screen y down; Cr up
             if (px >= 0.0 && px < f32(GRID) && py >= 0.0 && py < f32(GRID)) {
                 atomicAdd(&counts[u32(py) * GRID + u32(px)], 1u);
+            }
+        }
+        case 6u: { // CIE 1931 xy
+            let c = chromaticity(rgb);
+            if (c.z >= XY_DARK) {
+                let fx = (c.x - XY_MIN) / XY_SPAN * f32(GRID);
+                let fy = (1.0 - (c.y - XY_MIN) / XY_SPAN) * f32(GRID);
+                if (fx >= 0.0 && fx < f32(GRID) && fy >= 0.0 && fy < f32(GRID)) {
+                    atomicAdd(&counts[u32(fy) * GRID + u32(fx)], 1u);
+                }
             }
         }
         case 4u: { // parade: each channel's waveform in its own third
@@ -202,7 +240,7 @@ fn colourise(@builtin(global_invocation_id) gid: vec3<u32>) {
                 if (f > 0.0) { add_trace(&px, cols[c], f); }
             }
         }
-        case 2u: { // vectorscope
+        case 2u, 6u, 7u: { // vectorscope and CIE xy: one point per cell
             let f = intensity(counts_ro[cell], peak_v);
             if (f > 0.0) { add_trace(&px, cp.trace, f); }
         }

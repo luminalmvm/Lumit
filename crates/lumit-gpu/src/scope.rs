@@ -73,11 +73,16 @@ pub enum ScopeKind {
     Parade,
     /// Pixel counts by brightness, one trace.
     HistogramLuma,
+    /// CIE 1931 xy chromaticity, the bytes read as sRGB-encoded Rec.709.
+    Chromaticity,
+    /// The vectorscope at twice the size, for pictures with little colour.
+    VectorscopeZoom,
 }
 
 impl ScopeKind {
     /// The kind a bridge code names: 0 waveform, 1 RGB waveform, 2
-    /// vectorscope, 3 histogram, 4 parade, 5 luma histogram.
+    /// vectorscope, 3 histogram, 4 parade, 5 luma histogram, 6 CIE xy, 7
+    /// vectorscope at 2x.
     #[must_use]
     pub fn from_code(code: u32) -> Option<Self> {
         match code {
@@ -87,6 +92,8 @@ impl ScopeKind {
             3 => Some(ScopeKind::Histogram),
             4 => Some(ScopeKind::Parade),
             5 => Some(ScopeKind::HistogramLuma),
+            6 => Some(ScopeKind::Chromaticity),
+            7 => Some(ScopeKind::VectorscopeZoom),
             _ => None,
         }
     }
@@ -99,6 +106,8 @@ impl ScopeKind {
             ScopeKind::Histogram => 3,
             ScopeKind::Parade => 4,
             ScopeKind::HistogramLuma => 5,
+            ScopeKind::Chromaticity => 6,
+            ScopeKind::VectorscopeZoom => 7,
         }
     }
 
@@ -106,7 +115,11 @@ impl ScopeKind {
     /// peak reduction scans and the colourise pass reads.
     fn count_len(self) -> u32 {
         match self {
-            ScopeKind::WaveformLuma | ScopeKind::Vectorscope | ScopeKind::Parade => GRID * GRID,
+            ScopeKind::WaveformLuma
+            | ScopeKind::Vectorscope
+            | ScopeKind::Parade
+            | ScopeKind::Chromaticity
+            | ScopeKind::VectorscopeZoom => GRID * GRID,
             ScopeKind::WaveformRgb => 3 * GRID * GRID,
             ScopeKind::Histogram => 3 * GRID,
             ScopeKind::HistogramLuma => GRID,
@@ -351,23 +364,23 @@ impl ScopeEngine {
         tex
     }
 
-    /// Compute the `GRID × GRID` RGBA8 trace for `kind` from a comp frame's
-    /// display bytes, in the given `colours`. The returned buffer is the tightly
-    /// packed trace (`GRID * GRID * 4` bytes), byte-for-byte the same the CPU
-    /// path builds (within the ±1 rounding the fp maths allows across adapters).
-    /// The heavy work — binning every sampled pixel — runs on the GPU; only the
-    /// tiny trace is read back.
+    /// Compute one `GRID × GRID` RGBA8 trace per entry of `kinds` from a comp
+    /// frame's display bytes, in the given `colours`, in the order asked. Each
+    /// buffer is a tightly packed trace (`GRID * GRID * 4` bytes), byte-for-byte
+    /// the same the CPU path builds (within the ±1 rounding the fp maths allows
+    /// across adapters). The frame goes up once and the traces come back in one
+    /// read, however many there are, so a four-up Scopes panel costs one trip.
     pub fn trace_rgba8(
         &self,
         ctx: &GpuContext,
-        kind: ScopeKind,
+        kinds: &[ScopeKind],
         colours: ScopeColours,
         rgba: &[u8],
         w: u32,
         h: u32,
-    ) -> Result<Vec<u8>, GpuError> {
+    ) -> Result<Vec<Vec<u8>>, GpuError> {
         let src = self.upload_frame(ctx, rgba, w, h);
-        self.trace(ctx, kind, colours, &src, w, h)
+        self.trace(ctx, kinds, colours, &src, w, h)
     }
 
     /// As [`Self::trace_rgba8`], from an already-uploaded `Rgba8Unorm` frame
@@ -376,14 +389,19 @@ impl ScopeEngine {
     pub fn trace(
         &self,
         ctx: &GpuContext,
-        kind: ScopeKind,
+        kinds: &[ScopeKind],
         colours: ScopeColours,
         src: &wgpu::Texture,
         w: u32,
         h: u32,
-    ) -> Result<Vec<u8>, GpuError> {
-        let dst = self.run(ctx, kind, colours, src, w, h);
-        readback_trace(ctx, &dst)
+    ) -> Result<Vec<Vec<u8>>, GpuError> {
+        // The kinds share one counts buffer, which is safe because the queue
+        // runs each one's clear, bin and paint in the order they were sent.
+        let traces: Vec<wgpu::Texture> = kinds
+            .iter()
+            .map(|&kind| self.run(ctx, kind, colours, src, w, h))
+            .collect();
+        readback_traces(ctx, &traces)
     }
 
     /// Run the three passes into a fresh trace texture, returning it (the shared
@@ -563,36 +581,43 @@ fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-/// Read the `GRID × GRID` trace texture back as tight RGBA8. The row is exactly
+/// Read the `GRID × GRID` trace textures back as tight RGBA8, one after
+/// another in a single buffer and a single map. The row is exactly
 /// `GRID * 4 = 1024` bytes, already a multiple of `COPY_BYTES_PER_ROW_ALIGNMENT`
 /// (256), so no per-row padding is needed.
-fn readback_trace(ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u8>, GpuError> {
+fn readback_traces(ctx: &GpuContext, texs: &[wgpu::Texture]) -> Result<Vec<Vec<u8>>, GpuError> {
+    if texs.is_empty() {
+        return Ok(Vec::new());
+    }
     crate::device::wait_here()?;
     let row = GRID * 4;
     debug_assert_eq!(row % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
+    let one = u64::from(row) * u64::from(GRID);
     let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("scope-readback"),
-        size: u64::from(row) * u64::from(GRID),
+        size: one * texs.len() as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
     let mut encoder = ctx.device.create_command_encoder(&Default::default());
-    encoder.copy_texture_to_buffer(
-        tex.as_image_copy(),
-        wgpu::TexelCopyBufferInfo {
-            buffer: &buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(row),
-                rows_per_image: Some(GRID),
+    for (i, tex) in texs.iter().enumerate() {
+        encoder.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: one * i as u64,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(GRID),
+                },
             },
-        },
-        wgpu::Extent3d {
-            width: GRID,
-            height: GRID,
-            depth_or_array_layers: 1,
-        },
-    );
+            wgpu::Extent3d {
+                width: GRID,
+                height: GRID,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
     ctx.submit([encoder.finish()]);
 
     let slice = buffer.slice(..);
@@ -605,7 +630,10 @@ fn readback_trace(ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u8>, GpuE
         .map_err(|e| GpuError::Readback(e.to_string()))?
         .map_err(|e| GpuError::Readback(e.to_string()))?;
     let data = slice.get_mapped_range();
-    let out = data.to_vec();
+    let out = data
+        .chunks_exact(one as usize)
+        .map(<[u8]>::to_vec)
+        .collect();
     drop(data);
     buffer.unmap();
     Ok(out)
@@ -740,8 +768,9 @@ mod tests {
         // grey's row is then fully lit (peak == the per-column count).
         let frame = solid(256, 64, 128, 128, 128);
         let trace = engine
-            .trace_rgba8(&ctx, ScopeKind::WaveformLuma, STANDARD, &frame, 256, 64)
-            .expect("trace");
+            .trace_rgba8(&ctx, &[ScopeKind::WaveformLuma], STANDARD, &frame, 256, 64)
+            .expect("trace")
+            .remove(0);
         assert_eq!(trace.len(), g() * g() * 4);
         let row = value_row(luma8(128, 128, 128));
         // Software rasterisers land a bit off hardware on the fp maths.
@@ -827,12 +856,112 @@ mod tests {
             return;
         };
         let engine = ctx.scope();
-        let trace = engine
-            .trace_rgba8(&ctx, ScopeKind::WaveformRgb, STANDARD, &[1, 2, 3], 8, 8)
+        // Two kinds in the one request: both come back, in the order asked.
+        let traces = engine
+            .trace_rgba8(
+                &ctx,
+                &[ScopeKind::WaveformRgb, ScopeKind::Chromaticity],
+                STANDARD,
+                &[1, 2, 3],
+                8,
+                8,
+            )
             .expect("trace");
-        assert_eq!(trace.len(), g() * g() * 4, "a full-size trace is produced");
-        for px in trace.chunks_exact(4) {
-            assert_eq!(px[3], 0xff, "the trace is opaque");
+        assert_eq!(traces.len(), 2, "one trace per kind asked for");
+        for trace in traces {
+            assert_eq!(trace.len(), g() * g() * 4, "a full-size trace is produced");
+            for px in trace.chunks_exact(4) {
+                assert_eq!(px[3], 0xff, "the trace is opaque");
+            }
+        }
+    }
+
+    /// Where one colour lands on the CIE xy plot, the shader's maths on the
+    /// CPU: sRGB decode, Rec.709 to XYZ, then x and y onto the grid.
+    fn chromaticity_cell(r: u8, g_: u8, b: u8) -> ((f32, f32), usize) {
+        let lin = |v: u8| {
+            let f = f32::from(v) / 255.0;
+            if f <= 0.04045 {
+                f / 12.92
+            } else {
+                ((f + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let (r, g_, b) = (lin(r), lin(g_), lin(b));
+        let x = 0.412_456_4 * r + 0.357_576_1 * g_ + 0.180_437_5 * b;
+        let y = 0.212_672_9 * r + 0.715_152_2 * g_ + 0.072_175 * b;
+        let z = 0.019_333_9 * r + 0.119_192 * g_ + 0.950_304_1 * b;
+        let (cx, cy) = (x / (x + y + z), y / (x + y + z));
+        let col = ((cx + 0.03) / 0.9 * GRID as f32) as usize;
+        let row = ((1.0 - (cy + 0.03) / 0.9) * GRID as f32) as usize;
+        ((cx, cy), row * g() + col)
+    }
+
+    /// The cell a colour's Rec.709 Cb/Cr lands in on the vectorscope, or
+    /// `None` off the edge.
+    fn vectorscope_cell(r: u8, g_: u8, b: u8, zoom: f32) -> Option<usize> {
+        let (r, g_, b) = (
+            f32::from(r) / 255.0,
+            f32::from(g_) / 255.0,
+            f32::from(b) / 255.0,
+        );
+        let y = 0.2126 * r + 0.7152 * g_ + 0.0722 * b;
+        let (cb, cr) = ((b - y) / 1.8556, (r - y) / 1.5748);
+        let scale = GRID as f32 * 0.9 * zoom;
+        let half = GRID as f32 * 0.5;
+        let (px, py) = (half + cb * scale, half - cr * scale);
+        let inside = |v: f32| (0.0..GRID as f32).contains(&v);
+        (inside(px) && inside(py)).then(|| py as usize * g() + px as usize)
+    }
+
+    /// The two plots the graticule draws targets on put each colour where the
+    /// Scopes panel's targets say it goes: the sRGB primaries and white on
+    /// their Rec.709 and D65 points, and the 75% bars on the vectorscope at
+    /// both sizes. A drift here is the trace leaving its boxes.
+    #[test]
+    fn chromaticity_and_vectorscope_land_where_the_graticule_reads() {
+        let Some(ctx) = ctx() else {
+            crate::no_adapter();
+            return;
+        };
+        let engine = ctx.scope();
+        let n = 16 * 16;
+        for (rgb, want) in [
+            ([255, 0, 0], (0.64, 0.33)),
+            ([0, 255, 0], (0.30, 0.60)),
+            ([0, 0, 255], (0.15, 0.06)),
+            ([255, 255, 255], (0.3127, 0.3290)),
+        ] {
+            let ((x, y), cell) = chromaticity_cell(rgb[0], rgb[1], rgb[2]);
+            assert!((x - want.0).abs() < 2e-3 && (y - want.1).abs() < 2e-3);
+            let frame = solid(16, 16, rgb[0], rgb[1], rgb[2]);
+            let counts = gpu_counts(engine, &ctx, ScopeKind::Chromaticity, &frame, 16, 16);
+            assert_eq!(counts[cell], n, "{rgb:?} lands on its own xy");
+        }
+        // Black has no chromaticity, so it is left off the plot.
+        let black = solid(16, 16, 0, 0, 0);
+        let counts = gpu_counts(engine, &ctx, ScopeKind::Chromaticity, &black, 16, 16);
+        assert_eq!(counts.iter().sum::<u32>(), 0);
+
+        // The bars, and a skin tone that stays on the plot at 2x.
+        for rgb in [
+            [191, 0, 0],
+            [0, 191, 0],
+            [0, 0, 191],
+            [191, 191, 0],
+            [190, 150, 125],
+        ] {
+            let frame = solid(16, 16, rgb[0], rgb[1], rgb[2]);
+            for (kind, zoom) in [
+                (ScopeKind::Vectorscope, 1.0),
+                (ScopeKind::VectorscopeZoom, 2.0),
+            ] {
+                let counts = gpu_counts(engine, &ctx, kind, &frame, 16, 16);
+                match vectorscope_cell(rgb[0], rgb[1], rgb[2], zoom) {
+                    Some(cell) => assert_eq!(counts[cell], n, "{rgb:?} at {zoom}x"),
+                    None => assert_eq!(counts.iter().sum::<u32>(), 0, "{rgb:?} off the edge"),
+                }
+            }
         }
     }
 }
