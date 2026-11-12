@@ -1,15 +1,17 @@
 // Profiles put one person's settings away and take another's out. A mistake
 // there loses somebody's shortcuts or theme without a word, so this checks
-// the round trip: a profile comes back as it was left, the machine's own
-// settings never move, and two machines' edits merge without one eating the
-// other.
+// the round trip: a profile comes back as it was left, its library stays its
+// own, the machine's own settings never move, and two machines' edits merge
+// without one eating the other.
 
+import 'dart:convert';
 import 'dart:io' hide Platform;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/profiles.dart';
 import 'package:lumit_flutter/state/workspace.dart';
+import 'package:lumit_flutter/theme/custom_theme.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
@@ -21,7 +23,10 @@ Workspace _workspace(String name) {
   if (dir.existsSync()) dir.deleteSync(recursive: true);
   Workspace.storeOverride =
       '${dir.path}${Platform.pathSeparator}workspace.json';
-  addTearDown(() => Workspace.storeOverride = null);
+  addTearDown(() {
+    Workspace.storeOverride = null;
+    Workspace.libraryHome = null;
+  });
   return Workspace();
 }
 
@@ -64,6 +69,67 @@ void main() {
     expect(next.workspace.colorScheme, LumitColorScheme.light);
   });
 
+  test('each profile keeps its own library, and an older one keeps its presets',
+      () async {
+    final w = _workspace('profiles-library');
+    final sep = Platform.pathSeparator;
+    final settings = File(Workspace.storeOverride!).parent.path;
+    void write(String path, Object json) => File('$settings$sep$path')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync(jsonEncode(json));
+    // Two profiles from before each had a library of its own. The second
+    // kept its top-level presets and its themes in its settings.
+    write('profiles.json', {
+      'current': 'a',
+      'profiles': [
+        {'id': 'a', 'name': 'Mack'},
+        {'id': 'b', 'name': 'Client'},
+      ],
+    });
+    write('profiles${sep}b.settings.json', {
+      'presets': {
+        'files': {'Glow.lumfx': 'glow'},
+      },
+      'appearance': {
+        'custom_themes': [
+          CustomTheme.from('Dusk', LumitTheme.light()).toJson(),
+        ],
+        'custom_theme': 'Dusk',
+      },
+    });
+    final profiles = ProfilesState(w, AccountState(), afterApply: () {});
+    final mine = profiles.current;
+    final older = profiles.all.last;
+    expect(profiles.homeOf(mine), isNull,
+        reason: 'the profile in use keeps the folders it has');
+    w.saveCustomTheme(CustomTheme.from('Night', LumitTheme.dark()));
+    List<String> themes() => [for (final t in w.customThemes) t.name];
+
+    await profiles.switchTo(older);
+    expect(
+        File('${profiles.homeOf(older)}${sep}presets${sep}Glow.lumfx')
+            .readAsStringSync(),
+        'glow');
+    expect(themes(), ['Dusk']);
+    expect(w.customThemeName, 'Dusk');
+
+    // A new profile starts with the library in use, then goes its own way.
+    final added = profiles.add('Desk');
+    await profiles.switchTo(added);
+    expect(themes(), ['Dusk']);
+    w.saveCustomTheme(CustomTheme.from('Noon', LumitTheme.light()));
+    expect(themes(), ['Dusk', 'Noon']);
+
+    await profiles.switchTo(older);
+    expect(themes(), ['Dusk']);
+    await profiles.switchTo(mine);
+    expect(themes(), ['Night']);
+
+    final home = profiles.homeOf(added)!;
+    await profiles.remove(added);
+    expect(Directory(home).existsSync(), isFalse);
+  });
+
   test('edits on two machines merge setting by setting', () {
     const base = {
       'theme': 'dark',
@@ -88,5 +154,20 @@ void main() {
       // Added there, and removed there.
       'new': 2,
     });
+
+    // Saved easings travel as the text of their file. One added on each
+    // machine, one changed here and removed there: all three stand.
+    String easings(List<Object> list) =>
+        const JsonEncoder.withIndent('  ').convert(list);
+    final merged = mergeSettings(
+      {'easings': easings([{'name': 'Snap', 'v': 1}])},
+      {'easings': easings([{'name': 'Snap', 'v': 2}, {'name': 'Mine'}])},
+      {'easings': easings([{'name': 'Theirs'}])},
+    ) as Map<String, dynamic>;
+    expect(jsonDecode(merged['easings'] as String), [
+      {'name': 'Snap', 'v': 2},
+      {'name': 'Mine'},
+      {'name': 'Theirs'},
+    ]);
   });
 }

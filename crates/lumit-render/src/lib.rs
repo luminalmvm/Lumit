@@ -80,6 +80,7 @@ pub mod grade_lut;
 mod grid_lines;
 mod haze;
 pub mod headless;
+mod library_luts;
 pub mod media_index;
 pub mod mix;
 pub mod model;

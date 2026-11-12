@@ -228,7 +228,12 @@ class PhoneLine extends ChangeNotifier {
       notifyListeners();
     }
     if (j is Map && j['type'] == 'command') _command(j);
+    if (j is Map && j['type'] == 'library') onLibrary?.call();
   }
+
+  /// Another of the account's computers changed the library. Set by the
+  /// wiring to a library pass.
+  VoidCallback? onLibrary;
 
   /// Do what a phone asked, and always answer it: ok, or why not. Said on the
   /// status line like anything else done here, and nothing opens.

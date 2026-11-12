@@ -2396,6 +2396,7 @@ Map<String, String> get _built => {
       "Trim the composition to the work area":
           l10n.keyTrimTheCompositionToTheWorkArea,
       "Open the export queue": l10n.keyOpenTheExportQueue,
+      "Open the library": l10n.keyOpenTheLibrary,
       "Open Lumit help": l10n.keyOpenLumitHelp,
       "Layer settings": l10n.keyLayerSettings,
       "Next blend mode": l10n.keyNextBlendMode,

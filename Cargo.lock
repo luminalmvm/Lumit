@@ -2696,6 +2696,7 @@ dependencies = [
 name = "lumit-text"
 version = "0.11.1"
 dependencies = [
+ "blake3",
  "fontdue",
  "fontique",
  "harfrust",

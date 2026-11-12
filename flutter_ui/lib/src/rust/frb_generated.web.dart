@@ -49,6 +49,7 @@ import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/layer/clip_peaks.dart';
 import 'api/lens.dart';
+import 'api/library.dart';
 import 'api/mixer.dart';
 import 'api/model.dart';
 import 'api/model_rows.dart';
@@ -390,6 +391,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRays dco_decode_box_autoadd_bridge_lens_rays(dynamic raw);
+
+  @protected
+  BridgeLibraryFont dco_decode_box_autoadd_bridge_library_font(dynamic raw);
 
   @protected
   BridgeLightChannels dco_decode_box_autoadd_bridge_light_channels(dynamic raw);
@@ -1288,6 +1292,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRow dco_decode_bridge_lens_row(dynamic raw);
+
+  @protected
+  BridgeLibraryFolders dco_decode_bridge_library_folders(dynamic raw);
+
+  @protected
+  BridgeLibraryFont dco_decode_bridge_library_font(dynamic raw);
+
+  @protected
+  BridgeLibraryPackItem dco_decode_bridge_library_pack_item(dynamic raw);
 
   @protected
   BridgeLibraryTemplate dco_decode_bridge_library_template(dynamic raw);
@@ -2340,6 +2353,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeLensRow> dco_decode_list_bridge_lens_row(dynamic raw);
 
   @protected
+  List<BridgeLibraryPackItem> dco_decode_list_bridge_library_pack_item(
+      dynamic raw);
+
+  @protected
   List<BridgeLibraryTemplate> dco_decode_list_bridge_library_template(
       dynamic raw);
 
@@ -2792,6 +2809,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRays? dco_decode_opt_box_autoadd_bridge_lens_rays(dynamic raw);
+
+  @protected
+  BridgeLibraryFont? dco_decode_opt_box_autoadd_bridge_library_font(
+      dynamic raw);
 
   @protected
   BridgeLightChannels? dco_decode_opt_box_autoadd_bridge_light_channels(
@@ -3366,6 +3387,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRays sse_decode_box_autoadd_bridge_lens_rays(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLibraryFont sse_decode_box_autoadd_bridge_library_font(
       SseDeserializer deserializer);
 
   @protected
@@ -4424,6 +4449,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRow sse_decode_bridge_lens_row(SseDeserializer deserializer);
+
+  @protected
+  BridgeLibraryFolders sse_decode_bridge_library_folders(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLibraryFont sse_decode_bridge_library_font(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLibraryPackItem sse_decode_bridge_library_pack_item(
+      SseDeserializer deserializer);
 
   @protected
   BridgeLibraryTemplate sse_decode_bridge_library_template(
@@ -5662,6 +5699,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeLibraryPackItem> sse_decode_list_bridge_library_pack_item(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeLibraryTemplate> sse_decode_list_bridge_library_template(
       SseDeserializer deserializer);
 
@@ -6214,6 +6255,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRays? sse_decode_opt_box_autoadd_bridge_lens_rays(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLibraryFont? sse_decode_opt_box_autoadd_bridge_library_font(
       SseDeserializer deserializer);
 
   @protected
@@ -6821,6 +6866,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_lens_rays(
       BridgeLensRays self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_library_font(
+      BridgeLibraryFont self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_light_channels(
@@ -7965,6 +8014,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_lens_row(BridgeLensRow self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_library_folders(
+      BridgeLibraryFolders self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_library_font(
+      BridgeLibraryFont self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_library_pack_item(
+      BridgeLibraryPackItem self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_library_template(
@@ -9309,6 +9370,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeLensRow> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_library_pack_item(
+      List<BridgeLibraryPackItem> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_library_template(
       List<BridgeLibraryTemplate> self, SseSerializer serializer);
 
@@ -9869,6 +9934,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_lens_rays(
       BridgeLensRays? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_library_font(
+      BridgeLibraryFont? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_light_channels(

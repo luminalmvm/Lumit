@@ -34,6 +34,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/library_window.dart' show showLibrary;
 import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
 import 'package:lumit_flutter/panels/template_place.dart'
     show installTemplateFiles;
@@ -1523,6 +1524,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'export.queue.open':
         showExportQueueFrb(context: context);
+      case 'library.open':
+        showLibrary(context);
       case 'help.open':
         openLumitHelp(state);
       // The View menu's two switches that had no key.
@@ -1601,6 +1604,7 @@ bool _pressedOnce(String action) =>
       'marker.add.region',
       'export.queue.add',
       'export.queue.open',
+      'library.open',
       'help.open',
       'viewer.controls.toggle',
       'viewer.snap.grid.toggle',

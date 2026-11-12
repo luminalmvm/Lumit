@@ -36,6 +36,7 @@ mod blend_tag;
 mod edge_key;
 pub mod epoch;
 pub mod exec;
+mod file_stamp;
 pub mod graph;
 mod lights;
 mod material;
@@ -185,6 +186,18 @@ pub trait SourceStamper {
     ///
     /// The default answers `None`, for a host with no such tier at all.
     fn roto_identity(&self, _instance: Uuid, _frame: i64, _segments: bool) -> Option<[u8; 32]> {
+        None
+    }
+
+    /// What a library font family is drawn from, so a Text layer drawn before
+    /// the font arrived is never served after it. `None` folds nothing.
+    fn font_identity(&self, _family: &str) -> Option<[u8; 32]> {
+        None
+    }
+
+    /// Where a file a row names is read from when it isn't at the path the
+    /// document holds, such as a LUT in the user's library.
+    fn file_on_this_machine(&self, _path: &str) -> Option<String> {
         None
     }
 }
@@ -1198,7 +1211,7 @@ fn feed_effect_stack(
                             h.update(&[1]);
                             h.update(&(p.len() as u64).to_le_bytes());
                             h.update(p.as_bytes());
-                            feed_file_stamp(h, p);
+                            file_stamp::feed_row_file(h, stamper, p);
                         }
                         None => {
                             h.update(&[0]);
@@ -2223,6 +2236,12 @@ fn feed_source(
             let (line, spoken, [x, y]) = lumit_core::captions::show::spoken(document, context);
             h.update(line.as_bytes());
             h.update(&[0]); // length delimiter: text then size never collide
+
+            // A font from the library names the files it was drawn from.
+            if let Some(font) = stamper.font_identity(&document.style.family) {
+                h.update(b"libfont/");
+                h.update(&font);
+            }
             feed_f64(h, document.size);
             for c in document.fill.0 {
                 h.update(&c.to_le_bytes());
@@ -2847,35 +2866,6 @@ fn feed_f64(h: &mut blake3::Hasher, v: f64) {
     // Canonicalise the one f64 equality wrinkle: 0.0 and -0.0 render alike.
     let v = if v == 0.0 { 0.0 } else { v };
     h.update(&v.to_bits().to_le_bytes());
-}
-
-/// A file's size and last-modified time, folded into a key so that editing
-/// the file on disk renames the frames that read it.
-///
-/// A path a frame key mentions is a path some loader is about to read, so the
-/// stat is warm and costs microseconds. A file the engine cannot stat — gone,
-/// on a disconnected share, permission-denied — feeds a distinct marker and
-/// nothing else: the loader will fail the same way, and a name that says
-/// "this file was unreadable" is as true as any other.
-fn feed_file_stamp(h: &mut blake3::Hasher, path: &str) {
-    let stamp = std::fs::metadata(path).ok().map(|m| {
-        let modified = m
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0, |d| d.as_nanos());
-        (m.len(), modified)
-    });
-    match stamp {
-        Some((len, modified)) => {
-            h.update(&[1]);
-            h.update(&len.to_le_bytes());
-            h.update(&modified.to_le_bytes());
-        }
-        None => {
-            h.update(&[0]);
-        }
-    }
 }
 
 #[cfg(test)]

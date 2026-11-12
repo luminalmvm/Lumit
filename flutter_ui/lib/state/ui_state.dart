@@ -97,6 +97,7 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/keymap.dart';
+import 'package:lumit_flutter/state/library.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/motion_paths.dart';
 import 'package:lumit_flutter/state/view_projection.dart';
@@ -192,7 +193,19 @@ class LumitUiState extends ChangeNotifier {
   /// The profiles on this machine and the one in use: its settings, and
   /// keeping them in step with the server when the account has Pro.
   late final ProfilesState profiles =
-      ProfilesState(workspace, account, afterApply: _afterProfile);
+      ProfilesState(workspace, account, afterApply: _afterProfile)
+        ..beforeSwitch = (() => library.pause())
+        ..afterSwitch = (() => library.resume());
+
+  /// The library: presets, styles, themes, fonts and the rest, and with Pro
+  /// the same library on every computer of the account.
+  late final LibraryState library = LibraryState(
+    account: account,
+    profiles: profiles,
+    workspace: workspace,
+    keymap: () => keymap,
+    presetsChanged: presetsChanged,
+  );
 
   /// The way to Lumit's own relay, for a shared project.
   late final RelayDoor relayDoor = RelayDoor(account);
@@ -478,7 +491,8 @@ class LumitUiState extends ChangeNotifier {
   /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
   /// The line to the account's phones, and what pairs one.
-  late final PhoneLine phones = PhoneLine(account, _app, workspace, reviews);
+  late final PhoneLine phones = PhoneLine(account, _app, workspace, reviews)
+    ..onLibrary = (() => unawaited(library.syncNow()));
 
   /// Invites to multi-edit that friends sent this computer, and sending them.
   late final FriendInvites friendInvites = FriendInvites(account);
@@ -3652,6 +3666,7 @@ class LumitUiState extends ChangeNotifier {
     reviews.dispose();
     phones.dispose();
     backup.dispose();
+    library.dispose();
     profiles.dispose();
     _app.share.roster.removeListener(_mindDoors);
     valuesInHand.removeListener(_look);

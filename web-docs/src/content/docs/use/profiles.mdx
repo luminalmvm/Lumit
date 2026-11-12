@@ -8,7 +8,8 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 A **profile** is one person's settings: appearance, shortcuts, panel layout, preferences,
-and saved easings, expressions and effect presets. A machine can hold several.
+saved easings and expressions, and its own [library](/use/library/). A machine can hold
+several.
 
 <Shot file="profile-card.png" caption="The profile card, opened from the left of the bottom strip." eager/>
 
@@ -57,7 +58,7 @@ window. Friends are free.
 Lumit Pro is a subscription on a Lumit account. It adds:
 
 - Shared projects through Lumit's relay. See [Relays](/use/projects/#relays).
-- [Sync](#sync).
+- [Sync](#sync), with the [library](/use/library/#on-every-computer).
 - [Projects kept online](/use/projects/#keeping-a-shared-project-online).
 - [Previews](/use/review-links/).
 - [Backup and history](/use/backup/).
@@ -109,20 +110,20 @@ is a switch for each kind of setting.
 
 | Kind | What it holds |
 | --- | --- |
-| **Appearance and themes** | Theme, accent, shape, and custom themes. |
+| **Appearance and themes** | Theme, accent, shape, and the theme and style in use. |
 | **Shortcuts** | The whole keymap. |
 | **Panel layout and workspaces** | The arrangement in force and saved workspaces. |
 | **Preferences** | The options on the other Settings pages, apart from those below. |
 | **Easings, expressions and favourites** | Saved easings and expressions, favourite effects, and recent colours. |
-| **Effect presets** | The files in the presets folder. |
 
 :::note[Not synced]
 Interface scale, cache budgets and location, the audio device, **Audio offset**, recent
 projects, **Nightly builds**, **Nightly icon**, **Discord status**, the **New project
 template**, the shared projects **Upload limit**, **Download limit**, **Stand-in size** and
 **Stand-in frames**, **Phones can start exports**, and **Keyframes in Effect controls**.
-Effect presets are left out while they come to more than 900 KB together.
 :::
+
+The library syncs by itself. See [Library](/use/library/#on-every-computer).
 
 ## Related
 

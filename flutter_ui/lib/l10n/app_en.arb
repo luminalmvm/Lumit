@@ -7897,16 +7897,24 @@
   },
   "keymapPresetLoaded": "{name} loaded.",
   "@keymapPresetLoaded": {
-    "description": "Settings window, Shortcuts: shown beside the Preset buttons after one is pressed. {name} is the button's own label, such as Lumit default, After Effects or Vegas.",
+    "description": "Settings window, Shortcuts: shown beside the Preset list after a choice in it. {name} is the choice's own label, such as Lumit default, After Effects, Vegas or the name of a saved set.",
     "placeholders": {
       "name": {
         "type": "String"
       }
     }
   },
+  "keymapSaveSet": "Save as set…",
+  "@keymapSaveSet": {
+    "description": "Settings window, Shortcuts: the last choice in the Preset list. It keeps the shortcuts in force under a name, listed with the presets from then on."
+  },
+  "keymapSaveSetTitle": "Save shortcut set",
+  "@keymapSaveSetTitle": {
+    "description": "Title of the small window that asks what to call a saved set of shortcuts."
+  },
   "keymapLumitDefault": "Lumit default",
   "@keymapLumitDefault": {
-    "description": "Button that loads Lumit's own set of keyboard shortcuts."
+    "description": "Settings window, Shortcuts: the name of Lumit's own set of keyboard shortcuts, in the Preset list and the drag choices."
   },
   "keymapNoMatches": "No shortcut matches that.",
   "@keymapNoMatches": {
@@ -15653,7 +15661,7 @@
   },
   "settingsPreset": "Preset",
   "@settingsPreset": {
-    "description": "Settings window, Shortcuts: the name of the row whose buttons load a whole set of shortcuts at once."
+    "description": "Settings window, Shortcuts: the name of the row whose list puts a whole set of shortcuts in force at once."
   },
   "settingsResetPage": "Reset page",
   "@settingsResetPage": {
@@ -16426,6 +16434,10 @@
   "menuExportQueue": "Export queue…",
   "@menuExportQueue": {
     "description": "Window menu: opens the export queue window."
+  },
+  "menuLibrary": "Library…",
+  "@menuLibrary": {
+    "description": "Window menu: opens the Library window, which lists presets, fonts, themes and the rest of what a person keeps to use again."
   },
   "compGroupFrame": "Frame",
   "@compGroupFrame": {
@@ -22440,6 +22452,10 @@
   "@keyOpenTheExportQueue": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyOpenTheLibrary": "Open the library",
+  "@keyOpenTheLibrary": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyOpenLumitHelp": "Open Lumit help",
   "@keyOpenLumitHelp": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -23433,6 +23449,439 @@
   "@syncStatusOff": {
     "description": "Line in the profile card for a Pro account whose profile has sync switched off."
   },
+  "libraryTitle": "Library",
+  "@libraryTitle": {
+    "description": "Title strip of the Library window."
+  },
+  "librarySearch": "Search library",
+  "@librarySearch": {
+    "description": "Placeholder in the Library window's search field."
+  },
+  "libraryAll": "All",
+  "@libraryAll": {
+    "description": "First row of the Library window's sidebar: every kind of item together."
+  },
+  "libraryKindPresets": "Presets",
+  "@libraryKindPresets": {
+    "description": "A kind of library item: effect, animation, material and node-group presets."
+  },
+  "libraryKindStyles": "Styles",
+  "@libraryKindStyles": {
+    "description": "A kind of library item: interface styles."
+  },
+  "libraryKindThemes": "Themes",
+  "@libraryKindThemes": {
+    "description": "A kind of library item: colour themes."
+  },
+  "libraryKindFonts": "Fonts",
+  "@libraryKindFonts": {
+    "description": "A kind of library item: font files."
+  },
+  "libraryKindShortcuts": "Shortcut sets",
+  "@libraryKindShortcuts": {
+    "description": "A kind of library item: saved keyboard shortcut sets."
+  },
+  "libraryKindLenses": "Lenses",
+  "@libraryKindLenses": {
+    "description": "A kind of library item: lens profiles."
+  },
+  "libraryKindFlares": "Flares",
+  "@libraryKindFlares": {
+    "description": "A kind of library item: lens flare designs."
+  },
+  "libraryKindExports": "Export presets",
+  "@libraryKindExports": {
+    "description": "A kind of library item: saved export settings."
+  },
+  "libraryKindLuts": "LUTs",
+  "@libraryKindLuts": {
+    "description": "A kind of library item: colour look-up tables."
+  },
+  "libraryKindTemplates": "Templates",
+  "@libraryKindTemplates": {
+    "description": "A kind of library item: project templates. Listed only when there are some."
+  },
+  "libraryBindings": "{n, plural, =1{1 binding} other{{n} bindings}}",
+  "@libraryBindings": {
+    "description": "The detail line of a shortcut set in the Library window: how many keys it binds.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryElements": "{n, plural, =1{1 element} other{{n} elements}}",
+  "@libraryElements": {
+    "description": "The detail line of a flare in the Library window: how many elements it is made of.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryEntries": "{n, plural, =1{1 entry} other{{n} entries}}",
+  "@libraryEntries": {
+    "description": "The detail line of the export presets in the Library window: how many presets the file holds.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryUndoAction": "{action, select, delete{Undo delete} rename{Undo rename} restore{Undo restore} keepOnlyHere{Undo keep only here} removeHere{Undo remove from this computer} get{Undo get} resolve{Undo the choice} other{Undo}}",
+  "@libraryUndoAction": {
+    "description": "Menu row in the Library window that takes the last action back, named after the action. The item's name follows it.",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRedoAction": "{action, select, delete{Redo delete} rename{Redo rename} restore{Redo restore} keepOnlyHere{Redo keep only here} removeHere{Redo remove from this computer} get{Redo get} resolve{Redo the choice} other{Redo}}",
+  "@libraryRedoAction": {
+    "description": "Menu row in the Library window that does the undone action again, named after the action. The item's name follows it.",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryNeedsYou": "Needs you",
+  "@libraryNeedsYou": {
+    "description": "Sidebar row and item mark in the Library window: items changed on two computers that wait for the person to pick a version."
+  },
+  "libraryRecentlyDeleted": "Recently deleted",
+  "@libraryRecentlyDeleted": {
+    "description": "Sidebar row in the Library window: items deleted in the last 30 days, which can still be restored."
+  },
+  "libraryComputers": "Computers",
+  "@libraryComputers": {
+    "description": "Heading in the Library window's sidebar over the account's computers."
+  },
+  "libraryThisComputer": "This computer",
+  "@libraryThisComputer": {
+    "description": "The computer Lumit is running on, in the Library window's computer list and conflict cards."
+  },
+  "librarySeenNow": "now",
+  "@librarySeenNow": {
+    "description": "Beside a computer in the Library window that is signed in right now."
+  },
+  "libraryAgoMinutes": "{n} min",
+  "@libraryAgoMinutes": {
+    "description": "How long ago a computer was last seen, in minutes. Beside its name in the Library window.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryAgoHours": "{n} h",
+  "@libraryAgoHours": {
+    "description": "How long ago a computer was last seen, in hours.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryAgoDays": "{n} d",
+  "@libraryAgoDays": {
+    "description": "How long ago a computer was last seen, in days.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryStatusInSync": "In sync",
+  "@libraryStatusInSync": {
+    "description": "Status in the Library window's title strip when every computer has the same library."
+  },
+  "libraryStatusOffline": "Offline",
+  "@libraryStatusOffline": {
+    "description": "Status in the Library window's title strip when the server cannot be reached and nothing waits to go up."
+  },
+  "libraryStatusOfflineWaiting": "Offline · {n} waiting",
+  "@libraryStatusOfflineWaiting": {
+    "description": "Status in the Library window's title strip when the server cannot be reached: how many changes wait to go up.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryStatusNeedsYou": "Needs you · {n}",
+  "@libraryStatusNeedsYou": {
+    "description": "Status in the Library window's title strip: how many items wait for the person to pick a version.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryStatusFailed": "Couldn't sync",
+  "@libraryStatusFailed": {
+    "description": "Status in the Library window's title strip when the last pass failed."
+  },
+  "libraryStatusLocal": "On this computer",
+  "@libraryStatusLocal": {
+    "description": "Status in the Library window's title strip without Lumit Pro or signed out: the library is kept on this computer only."
+  },
+  "libraryOnThisComputer": "On this computer",
+  "@libraryOnThisComputer": {
+    "description": "Switch over a kind's list in the Library window: whether that kind is kept on this computer."
+  },
+  "libraryEmpty": "Nothing here yet",
+  "@libraryEmpty": {
+    "description": "Line in the middle of the Library window when the chosen kind has no items."
+  },
+  "libraryGet": "Get",
+  "@libraryGet": {
+    "description": "Button on a Library item kept in the account but not on this computer. Fetches it and keeps it here from then on."
+  },
+  "libraryRemoveHere": "Remove from this computer",
+  "@libraryRemoveHere": {
+    "description": "Action on a Library item: stop keeping it on this computer. The account keeps it."
+  },
+  "libraryKeepOnlyHere": "Keep only on this computer",
+  "@libraryKeepOnlyHere": {
+    "description": "Action on a Library item: never send it to the account."
+  },
+  "libraryKeepOnlyHereAsk": "Remove {name} from the account?",
+  "@libraryKeepOnlyHereAsk": {
+    "description": "Question before Keep only on this computer on an item the account already holds. The copy on this computer stays.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryKeepOnlyHereYes": "Keep only here",
+  "@libraryKeepOnlyHereYes": {
+    "description": "The yes button of that question."
+  },
+  "libraryShareAgain": "Sync it again",
+  "@libraryShareAgain": {
+    "description": "Action on a Library item kept only on this computer: send it to the account again."
+  },
+  "libraryDeleteForever": "Delete forever",
+  "@libraryDeleteForever": {
+    "description": "Action on a recently deleted Library item: remove it from the account for good."
+  },
+  "libraryDeleteForeverAsk": "Delete {name} forever?",
+  "@libraryDeleteForeverAsk": {
+    "description": "Question before an item is removed from Recently deleted for good.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRestore": "Restore",
+  "@libraryRestore": {
+    "description": "Button on a version in a Library item's history, and on a recently deleted item."
+  },
+  "librarySaveCopy": "Save as a copy",
+  "@librarySaveCopy": {
+    "description": "Menu row on a version in a Library item's history: keep that version as a new item beside the current one."
+  },
+  "libraryCurrent": "Current",
+  "@libraryCurrent": {
+    "description": "Beside the newest version in a Library item's history."
+  },
+  "libraryWhere": "Where",
+  "@libraryWhere": {
+    "description": "Heading in the Library window's detail pane over each computer and whether it has the item."
+  },
+  "libraryHistory": "History",
+  "@libraryHistory": {
+    "description": "Heading in the Library window's detail pane over the item's versions."
+  },
+  "libraryWhereUpToDate": "Up to date",
+  "@libraryWhereUpToDate": {
+    "description": "A computer holds the newest version of a Library item."
+  },
+  "libraryWhereOlder": "Older version",
+  "@libraryWhereOlder": {
+    "description": "A computer holds an older version of a Library item."
+  },
+  "libraryWhereNotKept": "Not kept",
+  "@libraryWhereNotKept": {
+    "description": "A computer does not keep a Library item or its kind."
+  },
+  "libraryStateWaiting": "Waiting to go up",
+  "@libraryStateWaiting": {
+    "description": "A Library item changed here that has not reached the account yet."
+  },
+  "libraryStateComing": "Coming down",
+  "@libraryStateComing": {
+    "description": "A Library item on its way from the account to this computer."
+  },
+  "libraryStateNotHere": "Not on this computer",
+  "@libraryStateNotHere": {
+    "description": "A Library item the account holds that is not kept on this computer."
+  },
+  "libraryStateOnlyHere": "Only on this computer",
+  "@libraryStateOnlyHere": {
+    "description": "A Library item kept on this computer and never sent to the account."
+  },
+  "libraryStateTooBig": "Too big to sync",
+  "@libraryStateTooBig": {
+    "description": "A Library item larger than the server takes."
+  },
+  "libraryCannotWrite": "Its name can't be kept on this computer",
+  "@libraryCannotWrite": {
+    "description": "Why a Library item the account holds is not on this computer: the item's name, or a name inside it, is one this system cannot write."
+  },
+  "libraryStateNoRoom": "No room in the account",
+  "@libraryStateNoRoom": {
+    "description": "A Library item that cannot go up because the account's storage is full."
+  },
+  "libraryKeepThisOne": "Keep this one",
+  "@libraryKeepThisOne": {
+    "description": "Button on a Library conflict: keep this computer's version."
+  },
+  "libraryKeepTheOther": "Keep the other",
+  "@libraryKeepTheOther": {
+    "description": "Button on a Library conflict: take the other computer's version."
+  },
+  "libraryKeepBoth": "Keep both",
+  "@libraryKeepBoth": {
+    "description": "Button on a Library conflict: keep both versions, this computer's renamed after it."
+  },
+  "libraryChosen": "{n} chosen",
+  "@libraryChosen": {
+    "description": "Detail pane of the Library window when several items are selected.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryDeleted": "Deleted {name}",
+  "@libraryDeleted": {
+    "description": "Notice after a Library item is deleted, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryDeletedMany": "Deleted {n} items",
+  "@libraryDeletedMany": {
+    "description": "Notice after several Library items are deleted, with Undo beside it.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryRenamed": "Renamed to {name}",
+  "@libraryRenamed": {
+    "description": "Notice after a Library item is renamed, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRestored": "Restored {name}",
+  "@libraryRestored": {
+    "description": "Notice after a version of a Library item is restored, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryRemovedHere": "Removed {name} from this computer",
+  "@libraryRemovedHere": {
+    "description": "Notice after a Library item stops being kept on this computer, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryKeptOnlyHere": "{name} stays on this computer",
+  "@libraryKeptOnlyHere": {
+    "description": "Notice after Keep only on this computer, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryResolved": "Kept {name}",
+  "@libraryResolved": {
+    "description": "Notice after a Library conflict is settled, with Undo beside it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryAdded": "Added {n}",
+  "@libraryAdded": {
+    "description": "Notice after files are added to the library: how many.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryExported": "Exported {n}",
+  "@libraryExported": {
+    "description": "Notice after Library items are written to a .lumlibrary file: how many.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryImport": "Import…",
+  "@libraryImport": {
+    "description": "Footer button of the Library window: take a .lumlibrary file in."
+  },
+  "libraryExport": "Export…",
+  "@libraryExport": {
+    "description": "Footer button of the Library window: write the chosen items, or all of them, to a .lumlibrary file."
+  },
+  "libraryAdd": "Add…",
+  "@libraryAdd": {
+    "description": "Footer button of the Library window: pick files to add to the library."
+  },
+  "libraryFileType": "Lumit library",
+  "@libraryFileType": {
+    "description": "File type name in the open and save dialogues for .lumlibrary files."
+  },
+  "libraryStorageLine": "Library {library} · {used} of {limit} used",
+  "@libraryStorageLine": {
+    "description": "Footer line of the Library window: the library's share of the account's storage, and the account's use of its allowance.",
+    "placeholders": {
+      "library": {
+        "type": "String"
+      },
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "librarySyncWithPro": "Sync it with",
+  "@librarySyncWithPro": {
+    "description": "Footer of the Library window without Lumit Pro, followed by the Pro badge. Pressing it opens the Lumit Pro window."
+  },
+  "libraryUndo": "Undo",
+  "@libraryUndo": {
+    "description": "Button beside a Library notice that takes the last action back."
+  },
+  "libraryFontSample": "The quick brown fox jumps over the lazy dog",
+  "@libraryFontSample": {
+    "description": "The sample line drawn in a font's own face in the Library window. A sentence that uses every letter of the language."
+  },
   "signInTitle": "Sign in",
   "@signInTitle": {
     "description": "Title strip of the sign-in window."
@@ -23652,11 +24101,11 @@
   "@proFeatureRelayBody": {
     "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
   },
-  "proFeatureSyncTitle": "Settings on every device",
+  "proFeatureSyncTitle": "Settings and library on every device",
   "@proFeatureSyncTitle": {
     "description": "Second feature in the Lumit Pro window."
   },
-  "proFeatureSyncBody": "Shortcuts, themes, workspaces, and presets follow you.",
+  "proFeatureSyncBody": "Shortcuts and workspaces follow you. So do presets, fonts and themes.",
   "@proFeatureSyncBody": {
     "description": "What the second Lumit Pro feature does."
   },
@@ -24567,6 +25016,14 @@
   "@settingsSyncNow": {
     "description": "Button in the Sync group of Settings."
   },
+  "settingsLibrary": "Library",
+  "@settingsLibrary": {
+    "description": "Row in the Sync group of Settings ▸ Account: the library's sync status, with a button that opens the Library window."
+  },
+  "settingsOpenLibrary": "Open library",
+  "@settingsOpenLibrary": {
+    "description": "Button on the Library row of Settings ▸ Account ▸ Sync. Opens the Library window."
+  },
   "syncGroupAppearance": "Appearance and themes",
   "@syncGroupAppearance": {
     "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
@@ -24585,10 +25042,6 @@
   },
   "syncGroupLibrary": "Easings, expressions and favourites",
   "@syncGroupLibrary": {
-    "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
-  },
-  "syncGroupPresets": "Effect presets",
-  "@syncGroupPresets": {
     "description": "One of the kinds of setting that can be synced, ticked on or off in Settings."
   },
   "shareCloud": "Lumit relay",

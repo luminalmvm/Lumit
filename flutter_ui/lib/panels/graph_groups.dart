@@ -116,6 +116,10 @@ const double graphNoteWidth = 180;
 /// The chip of the label palette a new note wears: the amber.
 const int _noteColour = 2;
 
+/// Bumped when saved groups arrive or leave from outside a canvas, as a
+/// library sync does, so every open shelf reads them again.
+final ValueNotifier<int> savedGroupsChanged = ValueNotifier(0);
+
 /// The group half of a graph canvas.
 mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// The canvas's groups as the document has them.
@@ -220,6 +224,13 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   void initState() {
     super.initState();
     refreshShelf();
+    savedGroupsChanged.addListener(refreshShelf);
+  }
+
+  @override
+  void dispose() {
+    savedGroupsChanged.removeListener(refreshShelf);
+    super.dispose();
   }
 
   /// A bar's press, on its way to the canvas's own pointer handler.
