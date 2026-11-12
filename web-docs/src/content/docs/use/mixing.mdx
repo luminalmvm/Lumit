@@ -28,26 +28,29 @@ Each layer that makes a sound, and each bus, has one **output** and any number o
 **sends**.
 
 - **Output** is the master or one bus. The sound goes there after Volume and Pan.
-- A **send** takes a copy of the sound to another bus at a level of its own. **Post-fader**
-  takes it after Volume and Pan, **Pre-fader** before them. A new send is post-fader at
-  0 dB. Its level can be keyed.
-- **Mute send** silences a send and keeps it. It is on a send's menu in the Mixer, on its row
-  in the Timeline's **Sends** fold and on its lane in the Audio timeline. **Mute send ▸** in a
-  sound menu lists the layer's sends. A muted send is dimmed, and a solo does not bring it
-  back.
+- A **send** takes a copy of the sound to another bus at a level of its own, which can be
+  keyed. **Post-fader** takes it after Volume and Pan, **Pre-fader** before them. A new send
+  is post-fader at 0 dB.
+- **Mute send** silences a send and keeps it. A muted send is dimmed, and a solo does not
+  bring it back.
 
-**Output ▸** and **Send to ▸** are in the sound menus of the Mixer, the Audio timeline and
-the Cut timeline. A bus can feed another bus. A bus that would bring the sound back round to
-where it started is greyed in the lists, and such a route is **refused**: the status line
-says *That route would send the sound round in a circle.*
+**Output ▸**, **Send to ▸** and **Mute send ▸** are on the right-click menu of a Mixer strip,
+an Audio timeline track head and a Cut timeline sound track's head. **Mute send** is also on a
+send's menu in the Mixer, on its row in the Timeline's **Sends** fold and on its lane in the
+Audio timeline.
+
+A bus can feed another bus. A bus that would bring the sound back round to where it started
+is greyed in the lists, and such a route is **refused**: the status line says *That route
+would send the sound round in a circle.*
 
 ## Solo and mute
 
-- **Mute** silences a layer or a bus, and whatever reaches the master through it.
-- **Solo**: with anything soloed, only what is soloed is heard, along with the buses it
-  feeds and its sends. A soloed bus brings in what feeds it.
-- **Solo safe** keeps a layer or bus heard whatever is soloed. `Ctrl`-click **S** in the
-  Mixer, or choose **Solo safe** in a sound menu. A solo safe **S** wears a ring.
+- **Mute** silences a layer, or a bus and the sound passing through it.
+- **Solo**: with anything soloed, only what is soloed is heard, through the buses it feeds
+  and its sends. A soloed bus brings in what feeds it.
+- **Solo safe** keeps a layer heard whatever is soloed. `Ctrl`-click **S** in the Mixer, or
+  choose **Solo safe** on the strip's menu. A solo safe **S** wears a ring. A solo safe bus
+  does not bring in what feeds it.
 - `Alt`-click **S**, or `Alt`+`S` in the Mixer, solos that strip and clears every other
   solo, as one undo step.
 
@@ -56,14 +59,13 @@ The Mixer dims the strips a solo silences.
 ## Gain and Volume
 
 **Gain** is a layer's level before its audio effects and Volume, from −60 to +24 dB. It is one
-value, never keyed. The Gain pot and the Gain row set it from −24 to +24 dB. A clip's
-**gain** is the same for one clip, from −60 to +24 dB.
-**Volume** is the fader, after the effects, and can be keyed. A Bus layer has no Gain.
+value, never keyed. A clip's **gain** is the same for one clip. **Volume** is the fader, after
+the effects, and can be keyed. A Bus layer has no Gain.
 
 | Where | What it sets |
 | --- | --- |
-| The **Gain** pot on a Mixer strip | Gain |
-| The **Gain** row in the Timeline's **Audio** group | Gain |
+| The **Gain** pot on a Mixer strip | Gain, from −24 to +24 dB |
+| The **Gain** row in the Timeline's **Audio** group | Gain, from −24 to +24 dB |
 | The line across a sound clip | The clip's gain. See [Cutting](/use/cutting/#gain). |
 
 - **Normalise** sets the Gain of a layer that is one file, and the gain of each clip of a
@@ -72,9 +74,9 @@ value, never keyed. The Gain pot and the Gain row set it from −24 to +24 dB. A
 - **Normalise loudness ▸** sets each clip's gain so its measured loudness lands at −14, −16
   or −23 LUFS. A layer's menu has it when the layer has clips.
 - **Normalise together** and **Normalise loudness together ▸**, with several layers or clips
-  selected, move them all by one change, so the loudest lands on the target and the rest keep
+  selected, move them all by one change. The loudest lands on the target and the rest keep
   their balance. **Normalise loudness together ▸** needs every selected layer to have clips.
-- **Reset gain** in a sound menu puts Gain back at 0 dB, and on a clip's menu the clip's gain.
+- **Reset gain** puts a layer's Gain back at 0 dB, and on a clip's menu the clip's gain.
 
 Waveforms are drawn after the clip's gain and the layer's Gain.
 
@@ -92,10 +94,10 @@ while the composition plays. How is set by each strip's **automation mode**.
 | **Trim** | A move shifts the keys already there by the change, then glides back. |
 
 The mode is set from the chip on a Mixer strip, the Master strip and an Audio timeline track
-head, from **Automation ▸** in a sound menu, and with `A` in the Mixer. **Automation ▸** on
-the Mixer's ground menu sets every strip. **Write** is drawn in
-the error colour, **Touch**, **Latch** and **Trim** in the warning colour, and **Read** quiet
-unless the strip has keys.
+head, from **Automation ▸** on a strip's or track head's menu, and with `A` in the Mixer.
+**Automation ▸** on the Mixer's ground menu sets every strip. **Write** is drawn in the error
+colour, **Touch**, **Latch** and **Trim** in the warning colour, and **Read** in the accent
+colour while the strip has keys.
 
 Recording comes from the Mixer's faders, Pan pots and send bars, and in the Audio timeline
 from a lane's line and value field and from the Volume and Pan lines over clips. A move is
@@ -112,17 +114,17 @@ heard at once.
 - **Touch return** is in [Settings ▸ Audio](/use/settings/#audio).
 
 :::note[Not built yet]
-Recording a Volume or Pan driven by an expression.
+Recording a Volume, Pan or send level driven by an expression.
 :::
 
 ## Lower behind
 
 **Lower behind** brings a layer's or bus's level down while another layer or bus is heard,
-and back up when it stops. It follows the other's level after its fader. It multiplies with
-Volume's keys rather than replacing them.
+and back up when it stops. It follows the other's level after its fader, and works on top of
+Volume and its keys.
 
-- **Lower behind ▸** in a sound menu lists the composition's other layers that make a sound,
-  and its buses. A pick lowers the selected layers behind it by 12 dB.
+- **Lower behind ▸** on a strip's or track head's menu lists the composition's other layers
+  that make a sound, and its buses. A pick lowers the selected layers behind it by 12 dB.
 - The Audio panel's **Lower behind…** opens a popover with the same list and, once one is
   picked, its settings.
 
@@ -134,8 +136,8 @@ Volume's keys rather than replacing them.
 | **Release** | How quickly it comes back, from 10 to 5000 ms. 600 ms to begin with. |
 | **Remove** | Takes Lower behind off. |
 
-A source that would bring the sound back round to the layer is **refused**. The Mixer's
-meters show how far the level is held down.
+A source that would bring the sound back round to the layer is **refused**. A thin bar beside
+a strip's meters in the Mixer shows how far the level is held down.
 
 ## Loudness
 
@@ -150,17 +152,16 @@ track and **Composition ▸ Audio**.
 
 The Master strip shows the target as a mark across its short-term loudness bar, and beside
 its integrated loudness. Both are coloured against it: within 1 LU in the success colour,
-louder in the warning colour, quieter muted. The Audio panel draws it as a line across its
-loudness history. The master's limiter holds the mix under the target's true peak, or under
-−0.3 dB with no target.
-An [export](/use/export/#loudness-and-stems) of the composition starts on the target.
+louder in the warning colour. The Audio panel draws it as a line across its loudness history.
+The master's limiter holds the mix under the target's true peak, or under −0.3 dB with no
+target. An [export](/use/export/#loudness-and-stems) of the composition starts on the target.
 
 **Normalise mix…**, beside it in the same three menus, measures the whole mix through the
 limiter and moves the master fader, or every master key by the same amount, so the mix meets
 the target. It measures again, and moves once more where the limiter kept it over half a unit
 off. With no target it asks for one. The measure can be cancelled. The status line gives the
-loudness measured after, or says the mix is silent and nothing was changed. It is one undo step,
-**Normalise mix**.
+loudness measured after, or says the mix is silent and nothing was changed. It is one undo
+step, **Normalise mix**.
 
 ## Related
 

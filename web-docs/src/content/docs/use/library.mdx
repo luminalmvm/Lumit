@@ -1,26 +1,30 @@
 ---
 title: Library
-description: Presets, styles, themes, fonts, LUTs, shortcut sets and templates in one place, and on every computer with Lumit Pro.
+description: Presets, styles, themes, fonts, LUTs, shortcut sets and graphics templates in one window, and on every computer with Lumit Pro.
 sidebar:
   order: 19.75
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-The **library** is what you keep in Lumit to use in any project. With Lumit Pro it is the same on
-every computer signed in to your account.
+The **library** is what a profile keeps in Lumit to use in any project. With Lumit Pro it is
+the same on every computer signed in to the account.
 
 <Shot file="library.png" caption="The Library window." eager/>
 
 ## The Library window
 
-**Window ▸ Library** opens it, as do the sync line in the profile card and **Open library** in
+**Window ▸ Library…** opens it, as do the sync line in the profile card and **Open library** in
 **Settings ▸ Account**. It works without an account.
 
-- On the left, each kind with its count, then **Needs you** and **Recently deleted**, then the
-  computers signed in to the account.
-- In the middle, the items of the chosen kind, by folder.
-- On the right, the chosen item: where it is, its history and what can be done to it.
+- At the top, the sync status and a search. The search finds items by name, folder, kind and
+  the line under the name.
+- On the left, **All** and each kind with its count, then **Needs you** while an item waits
+  for a choice, and **Recently deleted**. With sync on, the account's computers are under
+  them, each with when it was last seen.
+- In the middle, the items: under their kinds in **All**, under their folders in a kind.
+- On the right, the chosen item: a preview, where it is, its history and what can be done to
+  it.
 - At the bottom, how much of the account's storage the library takes.
 
 | Kind | What it holds |
@@ -39,11 +43,12 @@ every computer signed in to your account.
 
 ## Adding to the library
 
-- **Add…** takes files of any kind the library holds and puts each in its kind.
+- **Add…** takes files of any kind the library holds and puts each in its kind. A file of no
+  kind is left out.
 - Files dropped on the window are added the same way.
-- Saving a preset, a group, a theme, a style, a template, a lens or a flare adds it.
+- Saving a preset, a group, a theme, a style, a graphics template, a lens or a flare adds it.
 - **Settings ▸ Shortcuts ▸ Preset ▸ Save as set…** saves the keymap in force as a shortcut set.
-  Importing a keymap file saves it as a set too.
+  Importing a keymap file saves it as a set too. Saved sets are in the **Preset** list.
 
 A font in the library is listed in the Text panel with the installed fonts, and text layers draw
 with it without it being installed. A library font of the same name as an installed one is used
@@ -54,15 +59,20 @@ library's LUTs.
 
 | Key | Does |
 | --- | --- |
-| Arrows, Page Up, Page Down, Home, End | Move through the list. Left and Right move between the kinds and the list |
-| Enter | Shows the item in its folder, gets it, or opens its conflict |
-| F2 | Renames it |
-| Delete | Deletes the chosen items |
-| Ctrl+A | Chooses every item listed |
-| Ctrl+F | Search |
-| Ctrl+I | Add… |
-| Ctrl+Z, Ctrl+Shift+Z | Undo and redo the last library action |
-| Esc | Clears the search, then closes the window |
+| Arrows, `Page Up`, `Page Down`, `Home`, `End` | Move through the list. `Left` and `Right` move between the kinds and the list |
+| `Shift` with those, `Shift`-click | Chooses from the last item chosen to this one |
+| `Ctrl`-click | Adds an item to those chosen, or takes it out |
+| `Ctrl`+`A` | Chooses every item listed |
+| `Enter`, double-click | Shows the item in its folder, gets one that is not on this computer, or opens its conflict. In **Recently deleted**, restores it |
+| `F2` | Renames it |
+| `Delete` | Deletes the chosen items |
+| `Ctrl`+`F` | Search |
+| `Ctrl`+`I` | **Add…** |
+| `Ctrl`+`Z`, `Ctrl`+`Shift`+`Z` | Undo and redo the last library action |
+| `Esc` | Clears the search, then closes the window |
+
+Right-click an item for **Show in folder**, **Rename**, **Delete** and the
+[sync actions](#on-every-computer). With several chosen, there are **Export…** and **Delete**.
 
 Delete, rename, restore, get, remove from this computer, keep only on this computer and a
 conflict's choice can be undone. **Open the library** has no key until one is set in
@@ -76,7 +86,8 @@ online, and when they next start otherwise. **Sync now** in **Settings ▸ Accou
 library with the settings.
 
 Each kind has an **On this computer** switch. Off, nothing of that kind comes to the computer or
-leaves it, and the account's items are listed as **Not on this computer**.
+leaves it. The account's items are listed as **Not on this computer**, and the computer's own as
+**Only on this computer**.
 
 | Action | What it does |
 | --- | --- |
@@ -86,27 +97,29 @@ leaves it, and the account's items are listed as **Not on this computer**.
 | **Sync it again** | Sends an item kept only on this computer to the account |
 | **Delete** | Deletes it on every computer. It goes to **Recently deleted** |
 
-Fonts, LUTs and the fonts packed in templates go only to computers signed in to the same
-account. They are never part of a shared project, a review link or a preview.
+Fonts, LUTs and the fonts packed in graphics templates go only to computers signed in to the
+same account. They are never part of a shared project or a shared preview.
 
 Without a connection, changes wait and go when it returns. The window's status says
-**Offline** with the number waiting, or **No room in the account** while something does not fit.
-A press on the status syncs at once.
+**Offline** with the number waiting, **Needs you** with the number of items, or **No room in
+the account** or **Too big to sync** while something cannot go up. A press on it opens **Needs
+you** when it says so, and otherwise syncs at once.
+
+An item wears a mark when it is not in sync.
 
 | State | Meaning |
 | --- | --- |
-| None | Up to date |
 | **Waiting to go up** | Changed here, not yet in the account |
 | **Coming down** | In the account, on its way here |
 | **Not on this computer** | In the account, not kept here |
-| **Only on this computer** | Never sent to the account |
+| **Only on this computer** | Not sent to the account |
 | **Too big to sync** | A file over 95 MB |
 | **No room in the account** | The account's storage is full |
 | **Its name can't be kept on this computer** | A name this system can't hold |
 
-Each row has a disc for each computer, showing whether it has the newest version, an older one,
-or does not keep the item. Settings that belong to one machine, such as the cache, the audio
-device, recent projects and the interface scale, never sync.
+Each item has a disc for each computer: filled where it has the newest version, a ring where
+it has an older one, dashed where it does not keep the item. **Where** on the right says the
+same in words.
 
 ## When two computers change the same thing
 
@@ -125,26 +138,27 @@ Two computers that add different files at the same name keep both, the same way.
 
 ## History
 
-Every version of an item is kept, with the computer it came from.
+With sync on, each change to an item is kept as a version, with the computer it came from.
+Older versions are thinned as [backups](/use/backup/#which-versions-are-kept) are.
 
 - **Restore** makes an earlier version the newest. The one it replaces stays in the history.
-- **Save as a copy** brings an earlier version back beside the current one.
+- **Save as a copy**, on a version's right-click menu, brings it back beside the current one.
 
 A deleted item stays in **Recently deleted** for 30 days. **Restore** brings it back, and
-**Delete forever** removes it and its history at once. A file a sync replaces or deletes on a
-computer is kept beside the profile for 30 days.
+**Delete forever** removes it and its history at once, after a question.
 
-Older versions are thinned as [backups](/use/backup/) are.
+A file that a delete or a sync takes off a computer is kept there for 30 days, in the `profiles`
+folder beside the settings.
 
 ## Storage
 
-The library counts against the account's storage, with backups, review links and projects kept
+The library counts against the account's storage, with backups, previews and projects kept
 online. A file counts once, however many versions hold it.
 
 ## Export and import
 
 **Export…** saves the chosen items, or the whole library, as one `.lumlibrary` file. **Import…**
-adds the items in one. Neither needs an account.
+adds the items in one, as does **Add…**. Neither needs an account.
 
 ## Profiles
 

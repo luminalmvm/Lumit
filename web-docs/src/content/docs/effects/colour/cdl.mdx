@@ -16,7 +16,7 @@ CDL is a [Colour](/effects/#colour) effect.
 An ASC Color Decision List. Each channel is multiplied by **Slope**, has **Offset** added,
 is held to 0 to 1 and raised to **Power**. **Saturation** then scales colour about Rec. 709
 luma, and the result is held to 0 to 1 again. It is worked in its **Space**. A CDL with
-every row at rest passes the picture on untouched, unclamped.
+every row at rest passes the picture on untouched, with nothing held to 0 to 1.
 
 **Import CDL…** makes a CDL node from a `.cdl`, `.cc` or `.ccc` file; see
 [CDL](/use/grading/#cdl).
@@ -51,7 +51,7 @@ In the Effect Controls panel:
 - **Slope** multiplies each channel.
 - **Offset** adds to each channel, after Slope.
 - **Power**: the exponent each channel is raised to, last.
-- **Saturation**: colourfulness about Rec. 709 luma. At 1 it changes nothing.
+- **Saturation**: colourfulness about Rec. 709 luma.
 - **Mix**: how much of the result replaces the picture.
 - **Matte** and **Invert** drive the strength of the effect from another layer's
   brightness; see [Effects](/use/effects/).

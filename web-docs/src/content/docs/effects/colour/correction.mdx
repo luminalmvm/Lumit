@@ -14,10 +14,10 @@ Correction is a [Colour](/effects/#colour) effect.
 ## What it does
 
 One node of a grade: wheels, log wheels, adjustments, an RGB mixer, curves and hue curves,
-keyed by a qualifier, four windows and the Matte. The grade is worked in its **Space**, and
-the key says where it lands: white grades, black leaves the picture as it came. A fresh
-Correction passes the picture on untouched. The [Grade panel](/panels/grade/) edits it
-page by page; see [Grading](/use/grading/).
+keyed by a qualifier, four windows and the Matte. The grade is worked in its **Space** and
+lands where the key is white. A Correction with every row at rest passes the picture on
+untouched. The [Grade panel](/panels/grade/) edits it page by page; see
+[Grading](/use/grading/).
 
 Exposure, Temperature and Tint act on the linear picture, then the HDR zones, before it is
 put into the Space. The rest runs in this order: Offset, Lift, Gamma, Gain, the log wheels,
@@ -236,20 +236,20 @@ In the Effect Controls panel:
   made. **Parallel** grades the same picture as the node above and adds its change to theirs.
   **Layer** grades the same picture and lays its result over theirs through its **Blend**, by
   its key and Mix. A Correction with nothing above it, or under another effect, is Serial.
-- **Lift** raises the shadows towards a colour and leaves white where it is.
+- **Lift** raises or lowers the blacks and leaves white where it is.
 - **Gamma** bends the mid-tones.
-- **Gain** multiplies, scaling the picture from black.
+- **Gain** multiplies every level.
 - **Offset** adds the same amount at every level, before the other three wheels.
-- **Shadow**, **Midtone** and **Highlight** add colour to the dark, middle and bright parts
-  of the picture.
-- **Low range** is the luma where shadows give way to mid-tones, and **High range** where
-  mid-tones give way to highlights.
+- **Shadow**, **Midtone** and **Highlight** add colour below **Low range**, between the two
+  ranges and above **High range**.
+- **Low range** and **High range**: the luma, in the grading space, where shadows end and
+  where highlights start.
 - **Exposure**: stops of light, on the linear picture.
 - **Temperature** and **Tint**: blue to orange and green to magenta, the
   [Temperature](/effects/colour/temperature/) effect's maths.
 - **Contrast** spreads the levels away from the **Pivot**, or draws them in below 100.
 - **Pivot**: the level contrast turns about, in the grading space.
-- **Saturation** scales colour against luma.
+- **Saturation** scales colour about luma.
 - **Hue** turns every colour round the colour wheel. Luma stays.
 - **Lum mix** at 100 lets the wheels change brightness. At 0 they change colour only.
 - **Colour boost** raises or lowers saturation, the weak colours more than the strong ones.
@@ -270,15 +270,15 @@ In the Effect Controls panel:
 - **Keep luma** puts back the luma the mixer moved.
 - **Luma**, **Red**, **Green** and **Blue**: tone curves. Each colour curve acts on its own
   channel, then Luma on all three.
-- **High soft clip** bends the brightest levels so they ease towards white. **Low soft clip**
-  eases the darkest towards black.
+- **High soft clip** eases the brightest levels towards white, and **Low soft clip** the
+  darkest towards black.
 - **Hue v hue** turns one hue towards another.
 - **Hue v sat** saturates or desaturates by hue.
 - **Hue v lum** brightens or darkens by hue.
 - **Lum v sat** saturates or desaturates by brightness.
 - **Sat v sat** saturates or desaturates by saturation.
 - **Sat v lum** brightens or darkens by saturation.
-- **Qualifier**: what the key is picked on: **HSL**, **RGB**, **Luma** or **3D**. **Off**
+- **Qualifier**: what the node is keyed on, **HSL**, **RGB**, **Luma** or **3D**. **Off**
   keys everything.
 - **Use hue**, **Use saturation** and **Use luma** leave that range out of an HSL key while
   off.
@@ -296,7 +296,8 @@ In the Effect Controls panel:
 - **Size**: how far round each sample a 3D key reaches. **Softness**, under **3D**, is how
   far past Size it fades.
 - **Denoise** softens the picture the key is judged on.
-- **Clean black** and **Clean white** push a weak key's grey towards black and towards white.
+- **Clean black** pushes the key's weakest greys to black, and **Clean white** its strongest
+  to white.
 - **Black clip** and **White clip**: the least and the most the key can be.
 - **Blur radius** blurs the key.
 - **Grow** widens the key, or narrows it below 0.

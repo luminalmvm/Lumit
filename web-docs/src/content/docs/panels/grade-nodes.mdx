@@ -15,7 +15,8 @@ to what the shot shows. It is another view of the stack
 
 ## The canvas
 
-- Each node is a tile, numbered in stack order and named by its own name or its effect's.
+- Each picture effect in the stack is a tile, named by its own name or its effect's. Colour
+  effects and shared nodes are numbered, in stack order.
 - A Correction's tile marks what it uses: curves, a qualifier, windows. A LUT node is marked
   too.
 - A [shared node](/use/grading/#shared-nodes) shows a link mark and the shared node's name.
@@ -23,10 +24,11 @@ to what the shot shows. It is another view of the stack
 - A Parallel or Layer run is drawn as tiles stacked between a split and a mixer: a plus for
   Parallel, two bars for Layer.
 - A key wire is a dashed line from one tile to the effect whose Matte it feeds.
-- Every Correction has a key out dot, and every node with a Matte a matte in dot. On a clip
-  they are dimmed.
+- Every Correction has a key out dot on its lower edge, and every node with a Matte a matte
+  in dot. On a clip they are dimmed, and a group's grade has none.
 
-With no nodes, the canvas shows the source and the end with a plus between them.
+With no nodes, the canvas shows the source and the end with a plus between them, which adds
+a serial node.
 
 ## Working on it
 
@@ -44,26 +46,31 @@ With no nodes, the canvas shows the source and the end with a plus between them.
 | --- | --- |
 | `Delete`, `Backspace` | Deletes the current node. |
 | `Enter`, `F2` | Renames the current node. |
-| `←`, `→` | The node before or after. |
+| `←`, `→` | The node before or after, round from either end. |
 
 Right-click a tile:
 
 | Row | Does |
 | --- | --- |
-| **Add serial node**, **Add parallel node**, **Add layer node**, **Add outside node** | A new node after it. |
+| **Add serial node**, **Add parallel node**, **Add layer node**, **Add outside node** | A new node after it. A group's grade offers the serial node only. |
 | **Add colour warper node** | A [Colour warper](/effects/colour/colour-warper/) after it. |
-| **Add shared node ▸** | The shared nodes by name, one the shot already uses greyed out. With any shared nodes. |
-| **Bypass node**, **Reset node**, **Rename…**, **Delete node** | **Reset node** puts every row back to its default and drops its keys, leaving **Space** and **Combine** as they are. |
-| **Share with picked shots** | Makes the node a shared node, used by the other picked shots too. |
+| **Add shared node ▸** | The shared nodes by name, one the shot already uses greyed out. With any shared nodes, and not in a group's grade. |
+| **Bypass node** | Switches the node off, or on again. |
+| **Reset node** | Puts every row back to its default and drops its keys, leaving **Space** and **Combine** as they are. |
+| **Rename…** | Names the node. |
+| **Delete node** | Takes the node out of the stack. |
+| **Share with picked shots** | Makes the node a shared node, used by the other picked shots too. On a Colour effect in the shot's own grade. |
 | **Unshare** | On a shared node. Every shot using it gets its own copy. |
 | **Import CDL…**, **Export CDL…** | See [CDL](/use/grading/#cdl). Import is not offered in a group's grade, and Export only on a Correction or CDL node. |
-| **Copy node**, **Paste node**, **Save look…**, **Reveal in Effect controls** | Not in a group's grade. |
+| **Copy node**, **Paste node** | **Paste node** puts the clipboard's effects after it. Not in a group's grade. |
+| **Save look…** | Saves the shot's whole grade as a look. Not in a group's grade. |
+| **Reveal in Effect controls** | Not in a group's grade. |
 
 On a shared node, **Rename…** and **Reset node** act on the shared node in every shot, and
 **Bypass node** and **Delete node** on this shot's use of it.
 
-Right-click the ground for the add rows, **Paste node** at the end, **Reset grade** or
-**Bypass grade**.
+Right-click the ground for the add rows, **Paste node** at the end, **Reset grade** and
+**Bypass grade**. **Reset grade** drops the grade's keys.
 
 ## The header
 
