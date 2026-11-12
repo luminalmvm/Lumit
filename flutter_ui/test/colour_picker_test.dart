@@ -58,6 +58,7 @@ Future<_Applied> _openPicker(
   double min = 0,
   double max = 1,
   SwatchShelf? shelf,
+  bool linear = false,
 }) async {
   final applied = _Applied();
   await tester.pumpWidget(_harness((context) => showColourPicker(
@@ -68,6 +69,7 @@ Future<_Applied> _openPicker(
         min: min,
         max: max,
         shelf: shelf,
+        linear: linear,
         onPreview: applied.previews.add,
         onCommit: applied.commits.add,
       )));
@@ -146,6 +148,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(applied.commits.length, duringDrag + 1,
           reason: 'one settled edit for the whole drag');
+    });
+
+    /// With the eyedropper armed, a click is the pipette's: it reads the
+    /// window, and nothing under it (the square here) takes the click. The
+    /// picker stays open. A test has no window picture, so nothing is read.
+    testWidgets('the eyedropper takes the next click', (tester) async {
+      final applied = await _openPicker(tester);
+      await tester.tap(find.byKey(const Key('colour-picker-dropper')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('colour-picker-square')),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(applied.commits, isEmpty, reason: 'the square never saw it');
+      expect(find.byKey(const Key('colour-picker-square')), findsOneWidget,
+          reason: 'the picker is still open');
+      // Put away, the next click is the square's again.
+      await tester.tap(find.byKey(const Key('colour-picker-square')));
+      await tester.pumpAndSettle();
+      expect(applied.commits, isNotEmpty);
+    });
+
+    testWidgets('a linear colour reads as the screen shows it',
+        (tester) async {
+      // Linear light whose screen colour is #FF8F00.
+      final initial = PickedColour(1, linearOf(0x8f / 255), 0);
+      final applied = await _openPicker(tester, initial: initial, linear: true);
+      expect(find.text('FF8F00'), findsOneWidget,
+          reason: 'the hex is what the screen shows');
+      // A hex typed is the colour seen, handed back as linear light.
+      await tester.enterText(find.byType(EditableText).last, '808080');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(applied.commits.last.r, closeTo(linearOf(0x80 / 255), 1e-4));
+      expect(applied.commits.last.r, closeTo(0.2158, 1e-3));
+    });
+
+    test('screenOf and linearOf undo each other, past white too', () {
+      for (final v in [-0.5, 0.0, 0.002, 0.2, 0.5, 1.0, 2.5]) {
+        expect(linearOf(screenOf(v)), closeTo(v, 1e-9));
+      }
     });
 
     testWidgets('Cancel puts back the colour it opened with', (tester) async {

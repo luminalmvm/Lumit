@@ -423,10 +423,11 @@ const _placement = {
 
 /// What a transform property reads on a fresh layer
 /// (`lumit_core::model::TransformGroup::default`): nothing anywhere, except
-/// the two that mean "unchanged" at a hundred.
+/// the ones that mean "unchanged" at a hundred.
 double _transformDefault(BridgeTransformProp prop) => switch (prop) {
       BridgeTransformProp.scaleX ||
       BridgeTransformProp.scaleY ||
+      BridgeTransformProp.scaleZ ||
       BridgeTransformProp.opacity =>
         100,
       _ => 0,

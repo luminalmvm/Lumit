@@ -20,13 +20,24 @@ dragging a marker on top of another does the same.
 | Action | How |
 | --- | --- |
 | Add at the playhead | **Composition ▸ Add marker at playhead**, or `*`, `Shift+NUMBER`, or `Shift+M` |
-| Add anywhere | Double-click empty ruler. *Edit marker…* opens on the new marker. |
+| Add under the pointer | Double-click empty ruler, or right-click it: **Add marker here**. *Edit marker…* opens on the new marker. |
 | Go to the one before or after | **Composition ▸ Previous marker** or **Next marker**, or `Ctrl+Alt+Left` and `Ctrl+Alt+Right` |
+| Go to one | Right-click the flag: **Go to marker** |
 | Move | Drag the marker along the ruler |
 | Edit | Double-click the flag, or right-click it: *Edit marker…* |
 | Delete | Right-click the flag: *Delete marker* |
 
-Pressing or dragging a marker does not move the playhead.
+Pressing or dragging a marker does not move the playhead. `Esc` while a marker is being
+dragged puts it back.
+
+**Edit marker…** opens a dialogue with what the marker says, its **Duration** in frames
+and its **Colour**. Cancelling the dialogue of a marker made by a double-click leaves the
+marker, with nothing written on it.
+
+**Markers…**, on the Timeline's **More commands** menu and on a right-click of empty lane
+ground, lists every marker of the composition by frame, an unlabelled one as **(no
+label)**. Type a label and press **Add at playhead** to add one, and press the button on a
+marker's line to remove it.
 
 Footage carries markers of its own, set in the
 [source view](/use/multicam/#markers-on-footage).
@@ -40,6 +51,18 @@ off.
 
 Right-click a flag and pick a chip to set the marker's colour. The first chip is the plain
 grey. **Edit marker…** carries the same chips. Layer markers take a colour the same way.
+A beat marker takes none.
+
+## Layer markers
+
+**Layer ▸ Markers ▸ Add at playhead** puts a marker on every selected layer, at the
+playhead, in place of one already on that frame. A layer marker cannot be dragged along
+its bar.
+
+Right-click a layer marker for **Edit marker…**, its colour, **Delete marker** and **Delete
+all markers**. **Add at playhead** and **Delete all markers** are also under **Markers** on
+the Layer menu and on the right-click menu of a layer's row. A click on a layer marker
+selects its layer.
 
 ## Regions
 
@@ -50,6 +73,7 @@ editor in the marker's colour.
 | Action | How |
 | --- | --- |
 | Make a region | Right-click the flag: **Make region**. It starts one second long. |
+| Make one over the work area | `R` in the [Cut timeline](/use/cutting/) |
 | Resize | Drag the handle at the region's end, or set **Duration** in *Edit marker…* |
 | Move | Drag the flag |
 | Remove | Right-click the flag: **Remove region**, or set **Duration** to 0 |
@@ -70,7 +94,7 @@ macOS) [sounds the mix](/use/audio/#scrubbing) as the playhead moves.
 ## Numbered markers
 
 1. Press `Shift+0`–`Shift+9` to set that numbered marker at the playhead. Pressing the
-   shortcut again moves it to the current playhead.
+   shortcut again moves it to the current playhead. The marker's label is its number.
 2. Press the bare digit `0`–`9` to jump to that marker. Nothing happens until it has
    been set; if you edit the marker's contents this will stop working for that marker.
 
@@ -81,12 +105,14 @@ macOS) [sounds the mix](/use/audio/#scrubbing) as the playhead moves.
 - **Composition ▸ Detect beats** analyses the comp's audio and writes beat markers.
 - **Composition ▸ Clear beat markers** removes only the generated ones.
 
-Detection runs in the background. Where a comp carries no audio, nothing happens.
+Detection runs in the background. Where nothing in the composition is sounding, the status
+line says so.
 
 A beat marker stays a beat marker once you drag it or rename it.
 
-The [Audio panel](/panels/audio/)'s **Beats** section generates beat markers with a
-chosen source, sensitivity, range and tempo.
+The [Audio panel](/panels/audio/#beats)'s **Beats** section generates beat markers with a
+chosen source, sensitivity, range and tempo. Once a run has a tempo, the ruler numbers the
+bars.
 
 :::note[Not built yet]
 Placing markers by tapping during playback.

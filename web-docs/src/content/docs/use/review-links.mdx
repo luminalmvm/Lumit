@@ -12,32 +12,44 @@ comment on a frame, and the comments come back to Lumit. It is part of
 ## Send a composition
 
 1. Front the composition, or select it in the Project panel.
-2. Choose **Composition ▸ Send as a preview…**.
+2. Choose **Composition ▸ Send as a preview…**. The **Share a preview** window opens.
 3. Set the fields and press **Create link**.
 
 | Field | What it sets |
 | --- | --- |
-| **Title** | What the link is called. |
-| **Size** | **1080p** or **720p**. |
-| **Span** | The whole composition, or the work area. |
+| **Title** | What the link is called, up to 120 characters. Left empty, it is the composition's name. |
+| **Size** | **1080p** or **720p**. The composition is fitted inside it and is never made larger. The size in pixels is read beside it. |
+| **Span** | The whole composition, or the work area where one is set. |
 | **Reviewers** | **Can comment** lets reviewers leave comments. |
+
+The footer reads how long the preview runs.
+
+While it is sent, the window reads *Exporting* with the frames done, then *Uploading* with
+the size sent. **Cancel** stops it. A send carries on with the window closed.
 
 When the upload finishes, the link is on the clipboard and the heading reads **Link
 copied**. A click on the address copies it again and shows **Copied to clipboard** in its
-place.
+place. **Open** opens the link in the browser.
 
+- A preview is an H.264 file with the composition's sound.
+- One preview is sent at a time. It waits for an export that is already writing, and the
+  window reads *Waiting for another export*.
 - Missing footage shows as colour bars.
 - A file can be up to 2 GB.
 - An account holds up to 1,000 links.
+- Previews use the account's storage, and the foot of the Previews window says how much is
+  used. With the storage full, nothing is sent until a link or a version is deleted.
 
 ## Versions
 
 Sending a composition again shows a **Send as** row. **New version of**, with the link's
-title, adds a version to it. **Separate link** makes a new link instead. A link holds up to
-50 versions, and a comment stays with the version it was made on.
+title, adds a version to it, and the button reads **Add version**. **Separate link** makes
+a new link instead. A link holds up to 50 versions, and a comment stays with the version
+it was made on.
 
-**What changed** is a short note shown beside the version. Lumit fills it in, and it can be
-typed over.
+**What changed** is a short note shown beside the version, up to 200 characters. Lumit
+fills it in from the layers and effects changed, added and removed, and it can be typed
+over.
 
 A link is marked **Changed** when its composition has been edited since it was sent.
 **Send a new version** sends one.
@@ -46,6 +58,15 @@ A link is marked **Changed** when its composition has been edited since it was s
 
 **File ▸ Previews…** opens the Previews window, which lists the links, newest
 activity first. A dot marks a link with comments or approvals that have not been seen.
+Under a link's title are its newest version, how many comments are open, **Approved** and
+**Changed**.
+
+A mark on the bottom strip shows while a preview is being sent, and while comments or
+approvals have not been seen, with their count. Press it to open the Previews window on
+the newest of them.
+
+After Lumit Pro ends, the links stay in the window and can be read and deleted. Sending
+needs Lumit Pro, and **Send as a preview…** opens the Lumit Pro window without it.
 
 | Action | How |
 | --- | --- |
@@ -53,8 +74,8 @@ activity first. A dot marks a link with comments or approvals that have not been
 | Open the link in the browser | **Open** |
 | Choose a version | The list beside the title |
 | Send the fronted composition | **Send as a preview…** |
-| Send the link to a [friend](/use/profiles/#friends) | **Send to a friend** |
-| Copy, open, send a new version or delete | Right-click the link in the list |
+| Send the link to a [friend](/use/profiles/#friends) | **Send to a friend**, then the friend |
+| Copy, open, send to a friend, send a new version or delete | Right-click the link in the list |
 
 | Key | What it does |
 | --- | --- |
@@ -70,15 +91,16 @@ activity first. A dot marks a link with comments or approvals that have not been
 | Control | What it does |
 | --- | --- |
 | **Can comment** | Reviewers can leave comments. |
-| **Can attach pictures** | Reviewers can attach a picture to a comment. |
+| **Can attach pictures** | Reviewers can attach a picture to a comment. It is off while **Can comment** is off. |
 | **Can download** | Reviewers can download the file. |
-| **Email me** | Emails you about comments, replies and approvals. **Settings ▸ Account ▸ Email me about new comments** turns the emails off for every link. |
-| **Video only** | A second link that shows only the video, on one version. **Move to v…** points it at the newest. |
-| **Password** | Reviewers type it before watching. |
+| **Email me** | Emails you about comments, replies and approvals. **Settings ▸ Account ▸ Email me about new comments** turns the emails off for every link, and the row then reads *Off in Settings*. |
+| **Video only** | A second link that shows only the video, on one version. **Copy link** makes it and copies it, **Move to v…** points it at the newest, and **Remove** stops it working. |
+| **Password** | Reviewers type it before watching. It is up to 100 letters, numbers and symbols. **Set** sets it, and **Clear** takes it off. |
 | **Expires** | Never, or in a day, 7 days or 30 days. An expired link is deleted. |
-| **Seen by** | Who has opened the link, and when. |
+| **Seen by** | Who has opened the link, the version they were on, and when. Someone who gave no name reads *Someone*. |
+| **Versions** | Each version, newest first, with its size in pixels, how long it runs, the size of its file, what changed and when it was sent. One a reviewer approved reads **Approved**. |
 | **Compare** | Opens that version beside the one before it. |
-| **Delete…** | Deletes that version and its comments. |
+| **Delete…** | Deletes that version and its comments. A link's only version is not deleted. |
 | **Delete link…** | Deletes the link, its versions and its comments. |
 
 ## Comments
@@ -87,11 +109,14 @@ The **Comments** page lists the comments on the chosen version. **Open** shows t
 that are not resolved, and **All** shows every one.
 
 A comment can carry a pin, an arrow or a box, a drawing, a picture, or a range of frames.
-One that points at a layer names it.
+One that points at a layer names it. Likes on the same second show as one line naming who
+liked it. A mention, an `@` and a name, is drawn in the accent colour.
+
+A right-click on a comment opens the same actions as a menu, with **Copy text**.
 
 | Action | How |
 | --- | --- |
-| Go to a comment's frame | Press its timecode |
+| Go to a comment's frame | Press its timecode. A comment that points at a layer selects it. |
 | Show or hide a drawing | Press the pencil |
 | Show a picture whole | Press the picture |
 | Resolve or reopen | Point at the comment: **Resolve** or **Reopen** |

@@ -1,6 +1,7 @@
 //! The selectors that follow speech: a letter's weight from the words' times.
 
-use super::{RangeSelector, SelectorBasis, SelectorMode, SelectorShape, SpokenWord};
+use super::selector::{RangeSelector, SelectorBasis, SelectorMode, SelectorShape};
+use super::SpokenWord;
 
 /// How far a change has got at `t`, 0 to 1 through it, in this shape.
 pub(super) fn curve(shape: SelectorShape, t: f64) -> f64 {

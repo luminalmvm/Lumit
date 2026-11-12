@@ -12,11 +12,31 @@ and on the right either the **lanes** or the **graph**.
 
 <Shot file="timeline.png" caption="The Timeline: outline on the left, lanes on the right." eager/>
 
+## The header
+
+The top line carries one tab per open composition and **Export**, which opens the export
+dialogue for the composition in front.
+
+- Click a tab to bring its composition to the front.
+- Drag a tab along the line to reorder the tabs.
+- A tab's close button shuts it. The tab to its left comes to the front, or the next one
+  when the first tab shuts.
+
+Under the tabs, above the outline:
+
+| Item | What it is |
+| --- | --- |
+| **Playhead time** | The playhead as a timecode, counted from the composition's start timecode. Click it and type a time to move the playhead. A time with fewer than four fields reads as seconds, minutes and seconds, or hours, minutes and seconds. |
+| **Frame number** | The same moment as a frame count from 0, with the composition's length in frames after it. Click it and type a frame. |
+| **Search layers** | Lists only the layers whose name contains what is typed. `Ctrl+F` does not reach it. |
+| **Layers** and **Graph** | The two modes. `Shift+F3` switches between them. The Lantern shape draws the pair on the top line. |
+
+A typed time or frame outside the composition lands on its nearest end.
+
 ## Layers and Graph
 
-Two mode tabs sit at the far right of the panel's header, with the playhead's time and frame
-number at its far left. The outline is **the same in both modes**; switching mode changes
-what is drawn against time, and nothing else.
+The outline is **the same in both modes**; switching mode changes what is drawn against
+time, and nothing else.
 
 <Shot file="layers-shut.png" caption="Layers mode with everything shut: a summary diamond on the bar for each keyframe." />
 
@@ -28,15 +48,52 @@ Shut, a layer's keys are summarised as diamonds within its own bar.
 <Shot file="graph-mode.png" caption="Graph mode: the curve of the selected property." />
 
 **Graph** draws the curves. A property's curves are on the pane while its row is
-**selected** in the outline. The curves share one value scale.
+**selected** in the outline. The curves share one value scale. See
+[the graph editor](/panels/graph-editor/).
 
 ## The Animated filter
 
-**U**, the shortcut, lists only properties that have keyframes, across every
+**Animated**, on the bottom bar, lists only the rows that have keyframes, across every
 layer.
 
 Beside it, the **shy filter** hides every layer with its shy switch on, and a master
 **motion blur** toggles motion blur for all layers in the composition with the switch on.
+
+## Reveal keys
+
+A reveal key opens the selected layers showing only the rows it names. Pressing it again
+shuts them.
+
+| Key | Shows |
+| --- | --- |
+| `P`, `S`, `R`, `T`, `A` | Position, Scale, Rotation, Opacity, Anchor point. On a 3D layer `R` shows all three rotation rows. |
+| `E` | Effects. |
+| `M` | Masks. |
+| `L` | The Audio group. Twice adds its Waveform lane, and three times shuts the layers. See [Audio](/use/audio/). |
+| `U` | The rows that have keyframes. |
+| `U` twice | Transform, each effect, each text animator and Audio, where one holds something a new layer would not have. Each opens whole. |
+| `U` three times | Shuts the layers. |
+| `Shift+U` | The rows changed from what a new layer has, and nothing else. |
+
+`U` and `L` count presses made within half a second of each other. With no layer selected,
+`U` and `Shift+U` act on every layer in the composition.
+
+**Layer ▸ Reveal** carries the single reveals as commands. The **Animation** menu carries
+these, on the selected layers or on every layer when none is selected:
+
+| Command | Shows |
+| --- | --- |
+| **Reveal properties with keyframes** | The rows that have keyframes. |
+| **Reveal properties with animation** | Those, and the rows driven by an expression or by a wire from the node graph. |
+| **Reveal all modified properties** | Those, and everything a new layer would not have: a typed value, an effect, a mask. |
+| **Reveal selected properties** | The selected property rows, on their layers, with the rest folded. |
+
+**Expand all** and **Collapse all**, on the lane area's menu, the column headings' menu and
+under **Layer ▸ Reveal**, open or shut the selected layers, or every layer with none
+selected. `Ctrl+Alt+Shift+`` ` and `Ctrl+Alt+`` ` are the shortcuts. Expand all opens each
+layer's Transform, Effects and Masks headings and leaves each effect shut.
+
+A twirl pressed on a selected layer twirls every selected layer with it.
 
 ## The ruler
 
@@ -47,6 +104,17 @@ Beside it, the **shy filter** hides every layer with its shy switch on, and a ma
 | **Layer markers** | Markers sitting on a layer. |
 | **Beat markers** | Markers placed by **Composition ▸ Detect beats**. |
 | **Cache bar** | Which frames are cached, coloured by which tier they are in. |
+
+- Click or drag on the ruler to move the playhead. Dragging it past either end of the lanes
+  scrolls them.
+- Hold `Ctrl` while dragging and each frame the playhead lands on is sounded.
+- Hold `Shift` while dragging and the playhead lands on the nearest marker, layer end, edit
+  point, keyframe or work-area edge.
+- Double-click the work area's band, in the lower half of the ruler, to give the work area
+  back the whole composition.
+- Double-click anywhere else on the ruler to make a [marker](/use/markers/) there.
+- `B` and `N` set the work area's start and end to the playhead.
+- `Esc` while a work-area edge or a marker is being dragged puts it back.
 
 ## The outline columns
 
@@ -64,8 +132,8 @@ times.
 | **Parent** | The parent picker. |
 
 Drag a column heading to reorder the groups, and drag a seam to resize one. Toggles on the
-bottom bar show and hide **Modes**, **Matte and blend**, **Parent** and the render times, as does a right-click on the headings or that bar. You can also manually adjust
-the column widths for several of these to hide items if they aren't needed.
+bottom bar show and hide **Modes**, **Matte and blend**, **Parent** and the render times,
+as does a right-click on the headings or that bar.
 
 **Switches** opens on visibility, mute, solo and lock, and **Modes** on disable effects, 3D
 and motion blur. Drag the seam wider to show the rest. The order, the widths and the hidden
@@ -81,6 +149,28 @@ A matte or parent picker shows the number and name of the layer it points at, an
 numbers every layer the same way. A layer's number is its place in the composition, and it
 keeps that number while a search or the shy filter hides other layers.
 
+## The outline rows
+
+- Click a layer's row to select it. `Ctrl`+click adds or drops one, and `Shift`+click
+  selects the run between.
+- Double-click a layer's name to open a Precomp layer's composition or a Sequence layer's
+  clips. On any other layer it renames the layer, as `Enter` does.
+- Click the label colour to pick one of nine colours for every selected layer.
+- Drag a layer by its name to move it up or down the stack.
+- Footage, a composition or a solid dragged from the Project panel lands in the stack where
+  it is dropped. Several files lie end to end, and with `Shift` held they all start
+  together. With `Alt` held, the layer under the pointer takes the item as its source.
+- Click a property's name to select the row. Its keyframes are selected with it, and its
+  curve is drawn in Graph mode. `Ctrl`+click and `Shift`+click add rows the same way they
+  add layers.
+- `X` turns the visibility of every selected layer on or off.
+- Click empty ground in either half to select nothing.
+
+A property row carries a stopwatch, a previous-keyframe and a next-keyframe arrow, a
+keyframe button, and its value. See [Keyframes](/use/keyframes/).
+
+[Layer groups](/use/layer-groups/) draw as a header row over the layers they hold.
+
 ## The lanes
 
 <Shot file="timeline-lanes.png" caption="A layer twirled open, showing its properties and keyframes." />
@@ -91,21 +181,55 @@ moved or trimmed, a readout beside the pointer gives its in frame, its out frame
 length. A still placed in a composition lasts the whole composition, and both ends of its bar
 drag freely.
 
+- Dragging a selected bar moves every selected layer with it. A locked layer stays where it
+  is.
+- `Ctrl+Alt` held as the drag begins [staggers](/use/layers/#stagger) the selected layers
+  instead.
+- `Shift` held while dragging an end [stretches](/use/retime/#stretch) the layer.
+- A Footage, Precomp or Audio layer's end stops where its source runs out, and a small
+  triangle marks that corner of the bar. A still image, and a layer with
+  [Retime](/use/retime/) on, have no such stop.
+- `[` and `]` move the selected layers so their in point or out point lands on the
+  playhead. `Alt+[` and `Alt+]` trim that end to the playhead instead.
+- Double-click a Precomp layer's bar to open its composition, and a Sequence layer's bar to
+  open its clips.
+- `Esc` while a bar is being dragged puts it back.
+
 Twirl a layer open and its transform, masks, effects, flow options, paint strokes and shape
 contents appear beneath it, each on a lane of its own. An effect's parameter rows show the
 value box without its slider. A click on an effect's name selects the effect, and the arrow
 beside it twirls it open.
 
+A text layer with [animators](/use/text/#animators) has an **Animators** heading, and a
+layer with [Puppet](/use/puppet/#pins-in-the-timeline) pins a **Puppet** heading.
+
 A layer that makes a sound has an **Audio** group: **Volume**, **Pan**, **Gain** from −24 to
 +24 dB, a **Sends** fold with a keyable row and a **Pre** or **Post** switch for each send, and
 the **Waveform**. A send's row has **Mute send** on its right-click, and is dimmed while the
-send is muted. A bus has no Gain and no Waveform. See [Mixing](/use/mixing/).
+send is muted. A bus has no Gain and no Waveform. See [Mixing](/use/mixing/) and
+[Audio](/use/audio/#waveforms).
 
 A [Sequence layer](/use/sequence-layers/) draws its clips on one row. A
 [caption layer](/use/captions/#edit-captions) twirls open to its captions as blocks.
 
-On a [node graph composition](/use/node-graphs/) the Timeline draws one row per box, with a
-lane per parameter once the box is twirled open. A box has no span, so there is no bar.
+On a [node graph composition](/use/node-graphs/) the Timeline draws the ruler and, under
+it, a lane for each keyed parameter of the box selected on the canvas, or of every box with
+none selected. With no Node graph panel open, the canvas is drawn below them.
+
+### Keyframes on a lane
+
+A keyframe's mark is drawn in two halves, one for each side's interpolation: a diamond half
+for linear, an hourglass half for bezier or automatic, a square half for hold.
+
+| Action | How |
+| --- | --- |
+| Select a keyframe | Click it. `Shift`+click or `Ctrl`+click adds it to the selection, or drops it. |
+| Select several | Drag a box over empty lane ground. `Shift` or `Ctrl` held as the drag begins adds to the selection. |
+| Move | Drag a selected keyframe. Every selected keyframe moves with it, and a readout gives the frame and value. |
+| Stagger | Hold `Ctrl+Alt` as the drag begins. See [Keyframes](/use/keyframes/#move-and-delete). |
+| Add a keyframe | `Ctrl`+click a lane that already has keyframes. The new one holds the value the property reads there. |
+| Delete | `Delete` or `Backspace`, or right-click a keyframe: **Delete keyframe**. |
+| Abandon a drag | `Esc` while the button is down. |
 
 ### Sound mix
 
@@ -116,23 +240,20 @@ fold. A double-click opens the **Audio** workspace, and the right-click menu off
 Audio workspace** and **Convert to precomp**, which moves the Audio layers into a nested
 composition and takes the row away.
 
-**Expand all** and **Collapse all**, on the lane area's menu, the column headings' menu and
-under **Layer ▸ Reveal**, open or shut the selected layers, or every layer with none selected. `Ctrl+Alt+Shift+`` ` and
-`Ctrl+Alt+`` ` are the shortcuts. Beside them, **Reveal properties with keyframes** (`U`) and
-**Reveal all modified properties** (`Shift+U`) open only the rows that are keyed or changed.
-**Reveal selected properties** keeps the selected property rows open on their layers and
-folds the rest.
-
 ### Right-click menus
 
 | Right-click | Offers |
 | --- | --- |
-| **A layer's bar** | The same menu as the layer's row in the outline. See [The row menu](/use/layers/#the-row-menu). |
-| **Empty lane ground** | **New layer ▸**, **Paste**, **Select all**, **Deselect all**, **Expand all**, **Collapse all**, both reveals, **Work area starts here**, **Work area ends here**, **Clear work area**, **Markers…** and **Detect beats**. The three dots on the bottom bar open the same menu with **Arm razor** added. |
-| **Empty ground under the outline's rows**, **The row above the column headings** | The same menu as empty lane ground. |
+| **A layer's row or bar** | [The row menu](/use/layers/#the-row-menu). |
+| **A keyframe** | **Linear**, **Easy ease**, **Easy ease in**, **Easy ease out**, **Hold**, **Tangents ▸**, **Ease…**, **Keyframe speed…**, **Join handles**, **Reverse**, **Copy**, **Paste**, **Copy ease**, **Paste ease** and **Delete keyframe**, on every selected keyframe. A keyframe outside the selection is selected first. |
+| **Empty lane ground** | **New layer ▸**, **Paste**, **Select all**, **Deselect all**, **Expand all**, **Collapse all**, **Reveal properties with keyframes**, **Reveal all modified properties**, **Reveal selected properties**, **Work area starts here**, **Work area ends here**, **Clear work area**, **Markers…** and **Detect beats**. |
+| **Empty ground under the outline's rows**, **the row above the column headings** | The same menu as empty lane ground. |
+| **The three dots on the bottom bar** | **New layer ▸**, **Paste**, **Select all**, **Deselect all**, the work area, **Markers…**, **Detect beats** and **Arm razor**, which reads **Disarm razor** while the razor is armed. |
+| **The column headings**, **the bar under the outline** | **Expand all**, **Collapse all**, the three reveals, and a tick each for **Modes**, **Matte and blend**, **Parent** and **Time**. |
 | **The bar under the lanes** | **Zoom to fit**, **Zoom in**, **Zoom out** and **Snap**. |
-| **The ruler** | **Add marker here**, **Previous marker**, **Next marker**, **Work area starts here**, **Work area ends here** and **Clear work area**. |
+| **The ruler** | **Add marker here**, **Previous marker**, **Next marker**, **Work area starts here**, **Work area ends here**, **Clear work area** and **Trim comp to work area**. |
 | **A composition marker** | **Go to marker**, **Previous marker**, **Next marker**, **Edit marker…**, **Make region**, its colour and **Delete marker**. |
+| **A layer marker** | **Edit marker…**, its colour, **Delete marker** and **Delete all markers**. |
 | **The navigator** | **Zoom to fit**, **Zoom in** and **Zoom out**. |
 | **A composition tab** | **Composition settings…**, **Trim comp to work area**, **Flowchart**, **Close** and **Close other tabs**. |
 | **A group's header or bar** | **Rename group**, **Select all**, **Ungroup**, **Precompose group** and **Label colour…**. |
@@ -142,9 +263,24 @@ folds the rest.
 | **Masks** | **Add mask**, a rectangle the size of the composition, **Paste** and **Delete all masks**. |
 | **A mask's row** | **Rename**, the Layer menu's Mask rows with **Mode ▸**, **Feather per point**, **Cut**, **Copy**, **Paste**, **Duplicate** and **Delete mask**, on every picked mask. |
 | **A mask's Path** | **Copy path**, **Paste path**, **Add keyframe** or **Remove keyframe** and **Reveal in graph**. **Paste path** writes every picked mask, and a pasted path on a keyed shape is a key at the playhead. |
-| **A property's name, stopwatch or value** | **Reset**, **Copy value**, **Paste value**, **Copy link**, **Paste link**, **Add keyframe** or **Remove keyframe**, **Stop animating**, **Set expression**, **Edit expression**, **Convert to keyframes** or **Remove expression** and **Reveal in graph**. |
+| **A property's name, stopwatch or value** | **Reset**, **Copy value**, **Paste value**, **Copy link**, **Paste link**, **Add keyframe** or **Remove keyframe**, **Stop animating**, **Add expression**, **Drive with ▸**, **Edit expression**, **Convert to keyframes** or **Remove expression** and **Reveal in graph**. On a row with several axes, **Add expression ▸** names the axis. |
+| **The Retime row's name** | **Stretch…**, **Freeze frame**, **Ramp…**, **Reverse**, **Reset speed**, **In-between frames ▸** on a Footage layer, and **Disable Retime**. See [Retiming and speed](/use/retime/). |
+| **The Sound mix row** | **Open Audio workspace** and **Convert to precomp**. |
 
 *Here* is the frame under the pointer. Under the outline's rows it is the playhead.
+
+## Snapping
+
+The **magnet** on the bar under the lanes turns snapping on and off.
+
+With it on, a dragged bar, keyframe, work-area edge or marker lands on the nearest of these
+within twelve pixels on screen: an edit point, a layer's in or out point, a keyframe, a
+marker, the playhead, or a work-area edge. With none near, it lands on a whole frame. The
+thing it has landed on is marked with a line while it holds the drag.
+
+With it off, nothing snaps and a keyframe can sit between frames.
+
+`Ctrl` held during a drag suspends snapping.
 
 ## Moving about
 
@@ -152,18 +288,48 @@ folds the rest.
 - **Shift+wheel** scrolls sideways.
 - **Ctrl+wheel** zooms time, anchored on the pointer. The After Effects shortcuts use
   **Alt+wheel**.
-- **A middle-button drag** pans both ways at once. The outline moves with the lanes.
+- **A middle-button drag** pans both ways at once, and so does a drag with the **Hand**
+  tool. The outline moves with the lanes.
+- `=` and `-` zoom time in and out about the playhead. `\` shows the whole composition, and
+  pressed again goes back to the zoom before.
 - **`F`** in Layers mode zooms time to the keyframes of the selected layers, or of every
   layer with none selected.
-- **Shift** while dragging the playhead on the ruler lands it on the nearest marker, layer
-  end, edit point, keyframe or work-area edge.
 - **Dragging a key** near either end of the lanes scrolls them.
+- **The navigator** is the strip above the ruler. It stands for the whole composition, with
+  the part in view drawn as a window and the playhead as a line. Drag the window to pan,
+  drag either end of it to zoom, and press outside it to bring the window there.
 - **Minimap under the lanes**, in **Settings ▸ Appearance ▸ Panels**, draws every layer's
   bar as a thin line in a strip under the lanes. The part in view is a window on it, and
   dragging the window scrolls. It is on by default in the Lantern shape.
 
+During playback the lanes jump on a page when the playhead leaves the view.
+
 Each composition keeps its own playhead, zoom and scroll, across and down, between launches
 too.
+
+## The bottom bar
+
+Under the outline, left to right:
+
+| Item | Does |
+| --- | --- |
+| **Linear**, **Easy ease**, **Hold**, **Ease** | In Layers mode. Sets the interpolation of every selected keyframe. **Ease** opens the Ease popover. See [Keyframes](/use/keyframes/#interpolation). |
+| **Linear**, **Easy ease**, **Hold**, **Easing…**, **Auto**, **Clamp**, **Free**, **Break handles** | In Graph mode. See [the graph editor](/panels/graph-editor/#controls). |
+| **Modes**, **Matte and blend**, **Parent**, **Time** | Shows and hides that [column](#the-outline-columns). |
+| **Animated**, **Hide shy**, **Motion blur** | See [The Animated filter](#the-animated-filter). |
+| **More commands** | The three dots. See [Right-click menus](#right-click-menus). |
+
+Under the lanes:
+
+| Item | Does |
+| --- | --- |
+| **Zoom** | A slider from the whole composition at the left to twenty frames across the lanes at the right. The mark at each end steps the zoom, and pointing at the slider gives the zoom in per cent. The Desk shape draws a dial in its place, with the number of frames one ruler tick spans beside it. |
+| **Magnet** | Turns [snapping](#snapping) on and off. |
+| **Scope**, **Auto fit**, **Fit selection** | In Graph mode. See [the graph editor](/panels/graph-editor/#controls). |
+| **Scrollbar** | Scrolls the lanes sideways. |
+
+On a narrow panel the strip's buttons, the magnet and the graph's framing buttons that do
+not fit go into **⋯** at the end of their bar.
 
 ## Editing keyframes in bulk
 
@@ -177,23 +343,23 @@ badge reading how many keys it holds and how many frames it spans.
 - Drag an **end handle** to stretch the whole block — the keys inside keep their
   proportions.
 - The **magnet** on the bottom bar decides whether a dragged key snaps to whole frames.
+- Click the **badge** to open the Ease popover on the block.
 - A block whose keys all sit on one frame has no end handles. Drag its keys to move them.
 
-The strip along the bottom bar acts on whatever keys are selected: **Interpolation** —
-Linear, Easy ease, Hold, Ease.
-
-On a narrow panel the strip's buttons, the magnet and the graph's framing buttons that do
-not fit go into **⋯** at the end of their bar.
+See [Editing many keyframes at once](/tutorials/many-keyframes/).
 
 ## Render times
 
-The hourglass on the bottom strip turns on render-time measuring. Each layer's row shows how
-long that layer took on the last measured frame in milliseconds, each effect's heading shows
-its own, and the column heading carries the whole frame's. A Precomp layer's number includes
-everything inside it.
+The hourglass on the bottom strip turns render-time measuring on and off. It starts on.
+Each layer's row shows how long that layer took on the last measured frame in
+milliseconds, each effect's heading shows its own, and the column heading carries the whole
+frame's. A Precomp layer's number includes everything inside it.
 
 ## Related
 
 - [Layers](/use/layers/)
+- [Layer groups](/use/layer-groups/)
 - [Keyframes](/use/keyframes/)
+- [Markers](/use/markers/)
 - [The graph editor](/panels/graph-editor/)
+- [Keyboard shortcuts](/reference/shortcuts/)

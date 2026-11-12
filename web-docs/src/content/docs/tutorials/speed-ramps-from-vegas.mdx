@@ -20,9 +20,9 @@ is in [Retiming and speed](/use/retime/).
 | Fade types on an envelope segment | **Linear**, **Fast**, **Slow**, **Smooth**, **Sharp** and **Hold** on the line's right-click menu |
 | Paste event attributes | **Speed ▸ Copy speed** and **Paste speed** on a clip's right-click menu |
 | Playback rate, in Event properties | **Speed ▸ Speed…** on the clip's right-click menu |
-| `Ctrl`+drag an event's edge | The same in Cut with the Vegas preset, or **Stretch…** on a layer's right-click menu |
+| `Ctrl`+drag an event's edge | The same in Cut with the Vegas preset, or **Retime ▸ Stretch…** on a layer's right-click menu |
 | Reverse | A speed below 0% |
-| Insert freeze frame at cursor | A point at 0%, or **Freeze frame at playhead** on a layer |
+| Insert freeze frame at cursor | A point at 0%, or **Freeze frame** (`Ctrl`+`Shift`+`R`) |
 | Resample mode: Disable resample | **In-between frames ▸ Nearest** |
 | Resample mode: Force resample | **In-between frames ▸ Blend** |
 | Optical flow | **Flow** |
@@ -95,8 +95,9 @@ Drag a point below 0%, or give it a negative speed with **Set speed…**.
 Right-click the clip and choose **Speed ▸ Speed…**. **Speed ▸ Reset speed** puts it back to
 100%.
 
-For a layer, right-click its row and choose **Stretch…**. It sets a speed and gives the layer
-the length that goes with it. Holding `Shift` while you drag either end of the layer does the same.
+For a layer, right-click its row and choose **Retime ▸ Stretch…**. It sets a speed and
+gives the layer the length that goes with it. Holding `Shift` while you drag either end of
+the layer does the same.
 
 ## Smoother slow motion
 
@@ -111,10 +112,9 @@ had. See [Frames in between](/use/retime/#frames-in-between).
 
 ## Sound
 
-In the Cut timeline a picture clip's sound is a clip of its own, and plays at normal speed
-whatever the picture's speed. In the Timeline a retimed clip is silent. **Detach audio** on
-the layer's right-click menu, before retiming, moves the sound to an Audio layer of its own at
-normal speed.
+In the Cut timeline a picture clip's sound is a linked clip of its own, and plays at normal
+speed whatever the picture's speed. A layer or clip that carries its own sound plays it at
+its speed. See [Sound](/use/retime/#sound).
 
 ## Related
 

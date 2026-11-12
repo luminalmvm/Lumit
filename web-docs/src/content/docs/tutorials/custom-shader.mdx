@@ -1,0 +1,75 @@
+---
+title: Writing a custom shader
+description: Type a small WGSL effect with a slider of its own, then build one from boxes.
+sidebar:
+  order: 5
+---
+
+A [Custom shader](/use/shaders/) is an effect whose program you write. This types one
+that fades a layer to grey, then builds a cross-fade from boxes.
+
+## Type a shader
+
+**1. Add the effect.** Select a layer and choose **Effect ▸ Utility ▸ Custom shader**.
+
+**2. Open the editor.** In [Effect controls](/panels/effect-controls/), press **Edit
+shader…**.
+
+**3. Replace the text.** Select everything in the editor and type:
+
+```wgsl
+struct Params {
+    /// @slider(0, 1) @default(1) Amount
+    amount: f32,
+}
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    let c = lumit_sample(uv);
+    let grey = vec3<f32>(dot(c.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    return vec4<f32>(mix(c.rgb, grey, p.amount), c.a);
+}
+```
+
+**4. Read the line under the text.** It reads **The shader compiles**, and the Viewer
+draws the layer in grey. If it gives an error, the line number counts from the first line
+you typed.
+
+**5. Apply it.** Press **Apply**, or `Ctrl+Enter`.
+
+**6. Set the row.** The effect now has an **Amount** row. Drag it towards 0 and the colour
+comes back.
+
+**7. Keyframe it.** Turn on Amount's stopwatch, move the playhead and change the value.
+
+## Build one from boxes
+
+The composition needs a second layer to fade to.
+
+**1. Add another Custom shader** to the first layer.
+
+**2. Open its graph.** Press **Open graph** on the effect. The Node graph panel shows one
+box, **Result**.
+
+**3. Add the boxes.** Press `Ctrl+Space` over the canvas and pick **Picture**. Do the same
+for **Second picture**, **Mix** and **Parameter**.
+
+**4. Wire the two pictures in.** Drag from Picture's **colour** socket to Mix's **a**, and
+from Second picture's **colour** to Mix's **b**.
+
+**5. Wire the amount.** Drag from Parameter's **value** to Mix's **t**.
+
+**6. Wire the result.** Drag from Mix's **value** to Result's **colour**.
+
+**7. Leave the graph.** Press `Escape`.
+
+**8. Choose the second layer.** In Effect controls, set the shader's **Second input** to
+the other layer.
+
+**9. Fade.** Drag the row the Parameter box added from 0 to 1. The first layer gives way
+to the second.
+
+## Related
+
+- [Custom shaders](/use/shaders/)
+- [Custom shader](/effects/utility/custom-shader/)
+- [The node graph](/use/nodes/)

@@ -46,15 +46,43 @@ runtime is in.
 **4. Install the packs you want.** Each download is checked against its published hash
 before Lumit uses it.
 
+One addon installs at a time. A download shows a bar and **Cancel**. A pack already
+installed at another version reads **Update**.
+
 The runtime loads the first time an effect asks for it. The line under its row then names
-the graphics provider it is running on.
+the graphics provider it is running on and its version, or reads **Installed. Would not
+load.** with the reason.
+
+An installed pack's row gives its licence, its size and its job: **Depth**, **Matte**,
+**Segmentation** or **Frame synthesis**.
 
 **Install from file** installs a pack from an `addon.json` with its files beside it, for a
 machine with no network. **Where they are kept ▸ Show** opens the folder. **Remove** on a
 row deletes that addon. **Licence** opens its licence in the browser.
 
-Without the pack it needs, an effect wears a badge naming the pack and leaves the picture,
-or the sound, alone. An install or a removal takes effect at once.
+An install or a removal takes effect at once. An install that fails says why under the
+**Catalogue** row:
+
+| Line | Means |
+| --- | --- |
+| **Lumit could not reach the download.** | The catalogue or a file could not be fetched. |
+| **The list of addons could not be read.** | The catalogue is not one this version reads. |
+| **That addon description could not be read.** | The `addon.json` is unreadable, or its files are not beside it. |
+| **This addon has nothing for this machine.** | It is published for other platforms only. |
+| **The download did not arrive whole.** | A file is not the published length. Nothing is installed. |
+| **The download is not the file that was published.** | A file does not match its published hash. Nothing is installed. |
+| **Another addon is installing.** | A second install was asked for. |
+| **That addon could not be installed.** | The install was turned down, or there is nowhere to keep it. |
+| **That addon could not be removed.** | A runtime that has loaded stays in use until Lumit is restarted. |
+
+## Without a pack
+
+- An effect that needs a pack wears **This effect needs an addon that is not installed**,
+  names the pack beneath, and passes its picture, or its sound, through unchanged.
+- The Flow group, the Roto brush and the export dialogue show **Open addons**, which opens
+  the Addons page.
+- An installed addon whose files are gone or the wrong size reads **Files are missing** and
+  does not run.
 
 ## Where they are used
 
@@ -127,5 +155,6 @@ DIS5K, whose terms are non-commercial.
 ## Related
 
 - [Settings](/use/settings/#addons)
+- [Extensions](/use/extensions/)
 - [Retime](/use/retime/)
 - [Cutting out a subject with the Roto brush](/tutorials/roto-brush/)

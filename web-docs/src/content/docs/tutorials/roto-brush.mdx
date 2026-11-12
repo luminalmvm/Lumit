@@ -2,53 +2,67 @@
 title: Cutting out a subject with the Roto brush
 description: Scribble on one frame, propagate through the shot, correct where it drifts.
 sidebar:
-  order: 3
+  order: 6
 ---
 
-The [Roto brush](/effects/utility/roto-brush/) cuts a moving subject out of a shot from a few scribbles.
+The [Roto brush](/use/roto-brush/) cuts a moving subject out of a shot from a few scribbles.
 
-## 1. Stroke the base frame
+**1. Select the footage layer.** Click it in the Timeline.
 
-1. Add a **Roto brush** effect to the footage layer.
-2. Pick the **Roto brush** tool (`Alt+W`). **Size** on the options bar sets the scribble's width.
-3. Scrub to a frame where the subject separates well. It does not have to be the first
-   frame.
-4. Drag through the subject. The stroke draws green, and the matte appears when you
-   release.
-5. Where the matte grabs too much, hold `Alt` and drag through the background — a red
-   stroke.
+**2. Pick the Roto brush tool.** Press `Alt+W`. **Size** on the toolbar sets the scribble's
+width.
 
-The frame you stroked first becomes the **base frame**; the effect's card shows it,
-and **Set to current frame** moves it. If you draw no background stroke, the frame's
-border counts as the background.
+**3. Go to a frame where the subject separates well.** It does not have to be the first
+frame.
 
-Set **View** on the card to **Boundary** to see the edge drawn over the picture, or
-**Matte** to see the matte itself.
+**4. Drag through the subject.** The layer gains a
+[Roto brush](/effects/utility/roto-brush/) effect, and the matte appears when you release.
+This frame is the **base frame**.
 
-## 2. Propagate
+**5. Mark the background.** Where the matte takes in too much, hold `Alt` and drag through
+the background. With no background stroke, the frame's border counts as the background.
 
-Press **Propagate** on the effect's card. The matte is carried outward from the base
-frame in both directions as a background job, and you can keep working while it runs.
-The card shows how far the span reaches; **Cancel** keeps the frames already solved.
+**6. Look at the edge.** In [Effect controls](/panels/effect-controls/), set the effect's
+**View** to **Boundary** to see the edge drawn over the picture, or to **Matte** to see the
+matte itself.
 
-## 3. Correct a frame
+**7. Propagate.** Press **Propagate** on the effect's card. The matte is carried outward
+from the base frame in both directions, in the background. The line under the buttons counts
+the frames, then says how far the matte reaches. **Cancel** keeps the frames already solved.
 
-Scrub the result. Where the matte leaks incorrectly rotoscopes:
+**8. Correct a frame.** Move the playhead to a frame where the matte is wrong. Drag through
+what it lost, and `Alt`-drag through background it took in.
 
-1. Scribble **across** the region where it lost the subject, `Alt`
-   where it added in the background.
-2. Propagate again. Only the frames from the correction outward are re-solved.
+**9. Propagate again.** Only the frames from the correction outward are solved again.
 
-Corrections carry forward, away from the base frame.
+**10. Soften the edge.** Raise **Refine radius** on the card to widen the soft band round
+the edge. Where one spot needs more, press `Alt+W` again for the **Refine edge** tool and
+drag over it.
 
-## 4. Refine the edge
+## Start from a tap instead
 
-**Refine radius** on the card sets how wide the softened band round the edge is. Where
-one spot needs more, pick the **Refine edge** tool (with the Roto brush on the strip) and
-paint over it; the band widens where you painted.
+A segmentation model can make the base frame's matte from a click. It is an
+[addon](/use/addons/).
+
+**1. Install the model.** In **Settings ▸ Addons**, install the model runtime and a
+**Segmentation** model pack.
+
+**2. Add the effect.** Select the footage layer and choose **Effect ▸ Utility ▸ Roto
+brush**.
+
+**3. Ask for the model.** Set **Seed from** to **Segment**.
+
+**4. Click the subject.** Use the Roto brush tool, on the frame to start from.
+
+**5. Take out what it got wrong.** `Alt`-click anything the matte took in by mistake.
+
+**6. Finish with strokes.** Drag strokes where the taps are not enough, then press
+**Propagate**.
 
 ## Related
 
-- [Roto brush](/effects/utility/roto-brush/)
+- [Roto brush](/use/roto-brush/)
+- [Roto brush effect](/effects/utility/roto-brush/)
+- [Addons and model packs](/use/addons/)
 - [Masks](/use/masks/)
 - [Mattes](/use/mattes/)

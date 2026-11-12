@@ -715,6 +715,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAnimatedMaskPath dco_decode_bridge_animated_mask_path(dynamic raw);
 
   @protected
+  BridgeAnimatorAxis dco_decode_bridge_animator_axis(dynamic raw);
+
+  @protected
   BridgeAssembled dco_decode_bridge_assembled(dynamic raw);
 
   @protected
@@ -768,6 +771,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAxisModes dco_decode_bridge_axis_modes(dynamic raw);
+
+  @protected
+  BridgeAxisSpacing dco_decode_bridge_axis_spacing(dynamic raw);
 
   @protected
   BridgeBeatGrid dco_decode_bridge_beat_grid(dynamic raw);
@@ -1101,6 +1107,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFlowParams dco_decode_bridge_flow_params(dynamic raw);
+
+  @protected
+  BridgeFontAxis dco_decode_bridge_font_axis(dynamic raw);
+
+  @protected
+  BridgeFontAxisValue dco_decode_bridge_font_axis_value(dynamic raw);
 
   @protected
   BridgeFontUse dco_decode_bridge_font_use(dynamic raw);
@@ -1686,6 +1698,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSelectorBasis dco_decode_bridge_selector_basis(dynamic raw);
 
   @protected
+  BridgeSelectorKind dco_decode_bridge_selector_kind(dynamic raw);
+
+  @protected
   BridgeSelectorMode dco_decode_bridge_selector_mode(dynamic raw);
 
   @protected
@@ -2134,6 +2149,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  List<BridgeAnimatorAxis> dco_decode_list_bridge_animator_axis(dynamic raw);
+
+  @protected
   List<BridgeAudioDevice> dco_decode_list_bridge_audio_device(dynamic raw);
 
   @protected
@@ -2262,6 +2280,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFlarePreset> dco_decode_list_bridge_flare_preset(dynamic raw);
+
+  @protected
+  List<BridgeFontAxis> dco_decode_list_bridge_font_axis(dynamic raw);
+
+  @protected
+  List<BridgeFontAxisValue> dco_decode_list_bridge_font_axis_value(dynamic raw);
 
   @protected
   List<BridgeFontUse> dco_decode_list_bridge_font_use(dynamic raw);
@@ -3782,6 +3806,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeAnimatorAxis sse_decode_bridge_animator_axis(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeAssembled sse_decode_bridge_assembled(SseDeserializer deserializer);
 
   @protected
@@ -3844,6 +3872,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAxisModes sse_decode_bridge_axis_modes(SseDeserializer deserializer);
+
+  @protected
+  BridgeAxisSpacing sse_decode_bridge_axis_spacing(
+      SseDeserializer deserializer);
 
   @protected
   BridgeBeatGrid sse_decode_bridge_beat_grid(SseDeserializer deserializer);
@@ -4230,6 +4262,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFlowParams sse_decode_bridge_flow_params(SseDeserializer deserializer);
+
+  @protected
+  BridgeFontAxis sse_decode_bridge_font_axis(SseDeserializer deserializer);
+
+  @protected
+  BridgeFontAxisValue sse_decode_bridge_font_axis_value(
+      SseDeserializer deserializer);
 
   @protected
   BridgeFontUse sse_decode_bridge_font_use(SseDeserializer deserializer);
@@ -4899,6 +4938,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeSelectorKind sse_decode_bridge_selector_kind(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeSelectorMode sse_decode_bridge_selector_mode(
       SseDeserializer deserializer);
 
@@ -5423,6 +5466,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeAnimatorAxis> sse_decode_list_bridge_animator_axis(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeAudioDevice> sse_decode_list_bridge_audio_device(
       SseDeserializer deserializer);
 
@@ -5578,6 +5625,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFlarePreset> sse_decode_list_bridge_flare_preset(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFontAxis> sse_decode_list_bridge_font_axis(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeFontAxisValue> sse_decode_list_bridge_font_axis_value(
       SseDeserializer deserializer);
 
   @protected
@@ -7268,6 +7323,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAnimatedMaskPath self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_animator_axis(
+      BridgeAnimatorAxis self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_assembled(
       BridgeAssembled self, SseSerializer serializer);
 
@@ -7338,6 +7397,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_axis_modes(
       BridgeAxisModes self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_axis_spacing(
+      BridgeAxisSpacing self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_beat_grid(
@@ -7766,6 +7829,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_flow_params(
       BridgeFlowParams self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_font_axis(
+      BridgeFontAxis self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_font_axis_value(
+      BridgeFontAxisValue self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_font_use(BridgeFontUse self, SseSerializer serializer);
@@ -8524,6 +8595,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSelectorBasis self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_selector_kind(
+      BridgeSelectorKind self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_selector_mode(
       BridgeSelectorMode self, SseSerializer serializer);
 
@@ -9092,6 +9167,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeAnimatedMaskPath> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_animator_axis(
+      List<BridgeAnimatorAxis> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_audio_device(
       List<BridgeAudioDevice> self, SseSerializer serializer);
 
@@ -9250,6 +9329,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_flare_preset(
       List<BridgeFlarePreset> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_font_axis(
+      List<BridgeFontAxis> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_font_axis_value(
+      List<BridgeFontAxisValue> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_font_use(

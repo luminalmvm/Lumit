@@ -21,6 +21,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
+import 'package:lumit_flutter/panels/text_animator_rows_frb.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -114,6 +117,34 @@ void main() {
     /// The effect box's key, for a layer whose only effect is the blur.
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
+
+    /// A Text layer's Source box stands open with a socket for each of its
+    /// animators' numbers, for a driver to be wired into.
+    testWidgets('a text layer\'s Source box shows its animators\' sockets',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      p.uiState.setSelectedComp(comp);
+      final text = comp.addTextLayer();
+      final document = text.getText()!;
+      text.setText(
+        document: document.copyWith(animators: [
+          animatorWith(
+            animatorWithSelectorKind(freshTextAnimator('Animator 1'),
+                BridgeSelectorKind.proximity),
+            axes: const [
+              BridgeAnimatorAxis(tag: 'wght', value: BridgeScalar.static_(700)),
+            ],
+          ),
+        ]),
+      );
+      p.uiState.selectedLayer.value = text;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      const source = 'source';
+      expect(socket(source, 'text.0.radius'), findsOneWidget);
+      expect(socket(source, 'text.0.axis.wght'), findsOneWidget);
+    });
 
     /// A new effect's box starts shut: a number socket nobody has wired is
     /// not drawn at all. The header twirl opens it, showing every parameter

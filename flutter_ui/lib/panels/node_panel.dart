@@ -83,6 +83,7 @@ import 'shader_graph.dart' show ShaderGraphThumb;
 import 'shader_node_view.dart';
 import 'timeline_extras_frb.dart' show showCompTabMenuFrb, showMenuAt;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
+import 'text_animator_rows_frb.dart' show TextAnimatorRowsFrb;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -120,6 +121,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// this panel redraws on every playhead frame, and a read in that path is
   /// the traffic `bridge_call_budget_test` guards against.
   _Picked? _picked;
+
+  /// Whether the picked box is a Text layer's Source, which lists the layer's
+  /// animators: the moved letters are what that box makes.
+  bool _textSource = false;
+  bool _animatorsOpen = true;
 
   /// The box picked last, kept up when the pick is cleared, as the last
   /// stack stays up in Effect controls. A new layer starts afresh.
@@ -292,7 +298,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         // honest answer until the selection catches up.
       }
     }
-    _lastNode = picked == null ? null : node;
+    var textSource = false;
+    if (node is BridgeNodeRef_Source && layer != null) {
+      try {
+        textSource = layer.getText() != null;
+      } catch (_) {
+        // The layer has gone since the pick was made.
+      }
+    }
+    _lastNode = picked == null ? (textSource ? node : null) : node;
     var index = const <BridgeGraphNode>[];
     var name = '';
     var colours = const <String, int>{};
@@ -315,6 +329,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     setState(() {
       _layer = layer;
       _picked = picked;
+      _textSource = textSource;
       _box = null;
       _input = null;
       _index = index;
@@ -922,6 +937,40 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             viewHere: ui.viewerGraphPoint != null,
           ),
           Expanded(child: _boxFace(ui, comp, box)),
+        ],
+      );
+    }
+    if (_textSource && !_holdIndex && layer != null && comp != null) {
+      // A Text layer's Source: the words and the animators that move them,
+      // the same section the Effect controls panel draws.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, engineLabel('Source'),
+              crumb: _layerName,
+              onCrumb: _toIndex,
+              onMenu: (at) =>
+                  showLayerRowMenu(context, layer.internallayerId, at)),
+          Expanded(
+            child: ValueListenableBuilder<int>(
+              valueListenable: ui.playheadFrame,
+              builder: (context, frame, _) => ListView(
+                children: [
+                  TextAnimatorRowsFrb(
+                    key: ValueKey<String>('node-anim-${layer.internallayerId}'),
+                    layer: layer,
+                    onChanged: ui.model.refresh,
+                    comp: comp,
+                    playheadFrame: frame,
+                    onSeek: (f) => ui.playheadFrame.value = f,
+                    open: _animatorsOpen,
+                    onToggle: () =>
+                        setState(() => _animatorsOpen = !_animatorsOpen),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       );
     }

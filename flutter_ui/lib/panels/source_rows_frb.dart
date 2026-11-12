@@ -384,9 +384,9 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
     required BridgeColourRgba colour,
     required ValueChanged<BridgeColourRgba> onPicked,
   }) {
-    int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
-    final shown =
-        documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255);
+    // Kept in linear light, drawn as the Viewer shows it.
+    final exact = PickedColour(colour.r, colour.g, colour.b);
+    final shown = exact.onScreen.clipped;
     void pick(PickedColour picked) => onPicked(
         BridgeColourRgba(r: picked.r, g: picked.g, b: picked.b, a: colour.a));
 
@@ -403,10 +403,11 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
             await showColourPicker(
               context: context,
               position: box.localToGlobal(Offset(0, box.size.height + 4)),
-              initial: PickedColour.of(shown),
+              initial: exact,
               // A solid's colour is chosen as a display colour, so its
-              // channels read 0–255.
+              // channels read 0–255: the colour as the Viewer shows it.
               scale: ColourScale.bytes,
+              linear: true,
               // It applies as it is chosen — there is no cheaper preview of a
               // solid than the solid itself.
               onCommit: pick,
@@ -417,6 +418,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
             details.globalPosition,
             current: PickedColour(colour.r, colour.g, colour.b),
             onPicked: pick,
+            linear: true,
           ),
           child: HoverMark(
             swells: true,

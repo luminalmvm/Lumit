@@ -14,11 +14,11 @@ A **script** is a JavaScript file that edits the open project. After Effects scr
 1. Choose **File ▸ Scripts ▸ Run script…**.
 2. Pick the `.js` or `.jsx` file.
 
-A script dropped on the window runs after one question.
+A script dropped on the window runs after one question, **Run** or **Cancel**.
 
 While it runs, a card covers the window with the script's name and **Stop**. A file the
 script asks for opens the system file dialogue, and a message it shows appears in the
-status line.
+status line. One script runs at a time. A script file is at most 16 MB.
 
 The whole run is one undo step, named after the first name the script gives
 `app.beginUndoGroup()`, or after the file. A script that fails or is stopped leaves the
@@ -26,13 +26,17 @@ project as it was.
 
 When a script fails, the status line gives the reason and the line it failed on.
 
-When a script prints with `$.writeln()` or shows an `alert()`, **Show log** on the status
-line lists the lines, with **Copy**. Alerts come after the printed lines.
+When a script prints with `print()`, `console.log()` or `$.writeln()`, or shows an
+`alert()`, **Show log** on the status line lists the lines, with **Copy**. Alerts come after
+the printed lines. A right-click on a line has **Copy line**. The log keeps 10,000 lines and
+1 MB, and a line is cut at 4 KB.
 
 ## The Scripts folder
 
 **File ▸ Scripts** lists the `.js` and `.jsx` files in the Scripts folder, with a submenu
-for each folder inside it. **Open scripts folder** shows it in the file manager.
+for each folder inside it, four folders deep and 500 scripts at most. A file or folder whose
+name starts with a dot is left out. **Open scripts folder** shows the folder in the file
+manager.
 
 | | |
 |---|---|
@@ -40,7 +44,8 @@ for each folder inside it. **Open scripts folder** shows it in the file manager.
 | macOS | `~/Library/Application Support/dev.Lumit.Lumit/scripts/` |
 | Linux | `~/.local/share/lumit/scripts/` |
 
-**Settings ▸ General ▸ Scripts folder** lists another folder instead. **Clear** goes back.
+**Settings ▸ General ▸ Scripts folder** lists another folder instead, picked with
+**Choose…**. **Clear** goes back.
 
 ## Event scripts
 
@@ -60,8 +65,28 @@ It runs as from the menu, and the status line names it after.
 | `lumit.args.event` | `"export"`, `"open"` or `"save"` |
 | `lumit.args.file` | the exported file's or the project's file name, without its folder |
 
-An event script is skipped while another script runs. A script's own saves and exports, and
-the save made before a project closes, run none.
+An event script is skipped while another script runs or a card covers the window, and the
+status line says so. A script's own saves and exports, an export made for a shared preview,
+and the save made before a project closes, run none.
+
+## What a script may reach
+
+- A script reads and lists files in its own folder and the folders inside it, and files you
+  chose or passed to it. A script at the top of a drive or in the home folder itself has no
+  folder of its own. Anywhere else `exists` is false.
+- A script reads at most 64 MB from one file, and is told of at most 100,000 entries in one
+  folder.
+- A script writes text files, as UTF-8, only in its own folder and the folders inside it, and
+  never over the project. A run writes at most 64 MB. A script with no folder of its own, as
+  over MCP, writes nothing.
+- A script imports footage only from the files it can read. It saves the project over its own
+  file or as a new `.lum` file, and exports and saves frames, only into the project's folder
+  or its own, never over a file.
+- A network path or a device is refused.
+- A script's values take at most 1 GB of memory.
+
+On the [command line](/use/command-line/#run-a-script), a script's saves, footage and
+exports go where it says.
 
 ## After Effects scripts
 
@@ -70,61 +95,70 @@ the save made before a project closes, run none.
 | `app` | `project`, `newProject()`, `beginUndoGroup()`, `endUndoGroup()` |
 | `app.project` | `items`, `numItems`, `item()`, `rootFolder`, `activeItem`, `file`, `importFile()`, `save()` |
 | `items` | `addFolder()`, `addComp()`, `length`, `[n]` |
-| Any item | `name`, `parentFolder`, `comment` |
+| Any item | `id`, `name`, `typeName`, `parentFolder`, `comment` |
+| `FolderItem` | `items`, `numItems`, `item()` |
 | `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `markerProperty`, `openInViewer()`, `saveFrameToPng()` |
 | `layers` | `addCamera()`, `addNull()`, `addSolid()`, `add()` of footage or a comp, `precompose()`, `byName()`, `length`, `[n]` |
-| Any layer | `name`, `index`, `enabled`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform`, `Effects`, `marker` |
-| Properties | Anchor Point, Position, Scale, Orientation, X, Y and Z Rotation, Opacity, and a camera's Point of Interest, Zoom, Focus Distance and Aperture, by match name or by name |
-| Keys | `value`, `valueAtTime()`, `setValue()`, `setValueAtTime()`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `numKeys`, `keyTime()`, `keyValue()`, `setInterpolationTypeAtKey()`, `setTemporalEaseAtKey()`, `keyInTemporalEase()`, `keyOutTemporalEase()`, `setTemporalAutoBezierAtKey()`, `setTemporalContinuousAtKey()`, `setSpatialTangentsAtKey()` |
-| Expressions | `expression`, `expressionEnabled` |
-| Effects | `addProperty()` by match name or name, `property()` by number, match name or Lumit's name, `numProperties`, `name`, `enabled` |
-| Markers | `setValueAtTime()` with a `MarkerValue`, `setValuesAtTimes()`, `numKeys`, `keyTime()`, `keyValue()`, `removeKey()` |
-| `FootageItem` | `mainSource.conformFrameRate`, `file`, `duration`, `width`, `height`, `frameRate`, `frameDuration` |
-| `ImportOptions` | `file`, `sequence`, footage as `importAs` |
-| `File`, `Folder` | `$.fileName`, `name`, `fsName`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `write()`, `writeln()`, `close()`, `encoding`, `lineFeed`, `remove()`, `Folder.create()`, `File.openDialog()` |
-| `Window` | `"dialog"` and `"palette"`, `add()` of `group`, `panel`, `statictext`, `edittext`, `checkbox`, `radiobutton`, `dropdownlist`, `slider` and `button`, `text`, `value`, `selection`, `items`, `enabled`, `onClick`, `onChange`, `orientation`, `alignChildren`, `alignment`, `margins`, `spacing`, `show()`, `close()` |
-| Globals | `alert()`, `$.writeln()`, `writeLn()`, `AutoOrientType`, `KeyframeInterpolationType`, `KeyframeEase`, `MarkerValue`, `ImportAsType` |
+| Any layer | `id`, `name`, `index`, `containingComp`, `enabled`, `audioEnabled`, `effectsActive`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform`, `cameraOption`, `Effects`, `effect()`, `marker` |
+| Properties | Anchor Point, Position, Scale, Orientation, X, Y and Z Rotation, Opacity, and a camera's Point of Interest, Zoom, Focus Distance and Aperture, by match name, by name, or as `transform.position`, `transform.xRotation`, `cameraOption.zoom` and the like. `property()` also takes Transform, Camera Options, Effects and Marker |
+| Any property | `name`, `value`, `valueAtTime()`, `setValue()`, `numKeys`, `isTimeVarying`, `canVaryOverTime`, `isSpatial` |
+| Keys | `setValueAtTime()`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `keyTime()`, `keyValue()`, `nearestKeyIndex()`, `setInterpolationTypeAtKey()`, `keyInInterpolationType()`, `keyOutInterpolationType()`, `isInterpolationTypeValid()`, `setTemporalEaseAtKey()`, `keyInTemporalEase()`, `keyOutTemporalEase()`, `setTemporalAutoBezierAtKey()`, `keyTemporalAutoBezier()`, `setTemporalContinuousAtKey()`, `keyTemporalContinuous()`, `setRovingAtKey()`, `keyRoving()`, `setSpatialTangentsAtKey()`, `keyInSpatialTangent()`, `keyOutSpatialTangent()`, `setSpatialAutoBezierAtKey()`, `keySpatialAutoBezier()`, `setSpatialContinuousAtKey()`, `keySpatialContinuous()` |
+| Expressions | `expression`, `expressionEnabled`, `canSetExpression`, `expressionError` |
+| Effects | `addProperty()` by match name or name, `property()` by number, match name or Lumit's name, `numProperties`, `name`, `matchName` |
+| An effect | `name`, `matchName`, `enabled`, `active`, `numProperties`, `propertyIndex`, `property()` of a control by number, match name or name. A control is a property, with `matchName` |
+| Markers | `setValueAtTime()` with a `MarkerValue`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `numKeys`, `keyTime()`, `keyValue()`, `nearestKeyIndex()` |
+| `MarkerValue` | `comment`, `chapter`, `url`, `frameTarget`, `cuePointName`, `eventCuePoint`, `duration`, `label`, `protectedRegion`, `getParameters()`, `setParameters()` |
+| `FootageItem` | `mainSource.conformFrameRate`, `mainSource.frameRate`, `mainSource.file`, `mainSource.isStill`, `file`, `duration`, `width`, `height`, `frameRate`, `frameDuration` |
+| `ImportOptions` | `file`, `sequence`, `forceAlphabetical`, footage as `importAs`, `canImportAs()` |
+| `File`, `Folder` | `$.fileName`, `name`, `displayName`, `fsName`, `fullName`, `absoluteURI`, `path`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `eof`, `write()`, `writeln()`, `close()`, `encoding`, `lineFeed`, `remove()`, `Folder.create()`, `File.openDialog()` |
+| `Window` | `"dialog"`, `"palette"` and `"window"`, `add()` of `group`, `panel`, `statictext`, `edittext`, `checkbox`, `radiobutton`, `dropdownlist`, `slider` and `button`, `text`, `value`, `minvalue`, `maxvalue`, `selection`, `items`, `enabled`, `visible`, `helpTip`, `preferredSize`, `size`, `characters`, `onClick`, `onChange`, `onChanging`, `onShow`, `onClose`, `defaultElement`, `cancelElement`, `orientation`, `alignChildren`, `alignment`, `margins`, `spacing`, `remove()`, `removeAll()`, `find()`, `show()`, `hide()`, `close()`, and the creation properties `name`, `multiline` and `readonly` |
+| Globals | `alert()`, `$.writeln()`, `$.write()`, `$.global`, `writeLn()`, `clearOutput()`, `AutoOrientType`, `KeyframeInterpolationType`, `KeyframeEase`, `MarkerValue`, `ImportAsType`, `CompItem`, `FootageItem`, `FolderItem`, `ScriptUI` |
 
 Anything else stops the script with a message naming it.
 
 ### Where Lumit differs
 
 - A Bezier key with no ease of its own is automatic. Spatial tangents are not carried, so
-  a point moves between keys in a straight line.
+  a point moves between keys in a straight line. The spatial tangent calls answer zeros.
 - `valueAtTime()` reads between eased keys in a straight line.
-- Roving keys stay at their times.
-- Key times land on the nearest frame of the comp.
+- Roving keys stay at their times. A key's continuous setting is kept only to be read back.
+- Key times land on the nearest frame of the comp. Of two keys set on one frame, the later
+  is kept.
+- `setValue()` on a property that has keys stops the script.
+- Anchor Point's third value has to be 0 and Scale's 100. Orientation other than 0 on a 2D
+  layer stops the script.
 - A camera a script adds, and a layer it makes 3D, turn in After Effects' rotation order and
   keep their X, Y and Z Rotation as they are. On a 3D layer in Lumit's order they are turned
   into that order, which matches After Effects on every key.
+- `autoOrient` is `CAMERA_OR_POINT_OF_INTEREST` or `NO_AUTO_ORIENT` on a camera, and
+  `NO_AUTO_ORIENT` on any other layer.
 - A layer given a `parent` stays where it is at the comp's start.
 - `app.newProject()` answers the open project.
 - `activeItem` is the comp open in the Viewer. On the command line it is the project's only
   comp, or null when there are more.
+- `addComp()` files the comp where it is asked for, not in the Compositions folder.
+- An item's `id` and a layer's `id` are Lumit's own, as text. An item's `remove()` is not
+  supported.
 - An expression is JavaScript. While it is on, the keys under it are not kept.
 - An effect Lumit does not have stops the script. Controls named by number or match name take
-  After Effects' values and convert them as importing does. By name, they take Lumit's own.
+  After Effects' values and convert them as importing does, and read as empty until the
+  script sets them. By name, they take Lumit's own.
 - A marker keeps its comment, duration, label colour and whether it is a chapter. Chapter
-  text, URLs and cue points are not kept.
-- A numbered still always imports as the whole sequence.
+  text, URLs and cue points are not kept. A marker set on a frame that has one replaces it.
+- `importFile()` imports as footage only. A file Lumit cannot read stops the script.
+- A numbered still always imports as the whole sequence. `mainSource.isStill` is always false.
 - A comp's or solid's pixel aspect is not kept.
 - `#target` lines are skipped. `#include`, `//@include` and `#includepath` read in files from
-  the script's own folder and the folders inside it, each once.
+  the script's own folder and the folders inside it, each once, 16 deep and 16 MB at most.
+- A file opens to read, write or append. What is written reaches the disk when the file is
+  closed or the script ends. On Windows a path written `/c/folder` is read as `C:\folder`.
 - A script's window is drawn with Lumit's own controls. Fonts, colours and places are not
   kept, and sizes, `margins` and `spacing` are taken roughly. A palette waits as a dialog
-  does.
-- Escape or the close mark presses a window's Cancel button, or makes `show()` answer 2.
+  does. A script is never handed a dockable `Panel`.
+- Enter presses a window's `defaultElement`, or its button named or labelled OK. Escape, a
+  click beside the window or the close mark presses its `cancelElement` or its button named
+  or labelled Cancel, or makes `show()` answer 2.
 - On the command line and over MCP, `show()` answers 2 at once.
-- A script reads and lists files in its own folder and the folders inside it, and files you
-  chose or passed to it. A script at the top of a drive or in the home folder itself has no
-  folder of its own. Anywhere else `exists` is false.
-- A script writes text files, as UTF-8, only in its own folder and the folders inside it, and
-  never over the project. A run writes at most 64 MB. A script with no folder of its own, as
-  over MCP, writes nothing.
-- A script imports footage only from the files it can read. It saves the project over its own
-  file or as a new `.lum` file, and exports and saves frames, only into the project's folder
-  or its own, never over a file.
-- A network path or a device is refused.
 
 ## Related
 

@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../state/font_axes.dart';
 import '../state/library.dart' show LibraryState;
 import '../state/template_controls.dart' show ControlRow;
 import '../state/text_documents.dart';
@@ -40,6 +41,11 @@ class _TextPanelFrbState extends State<TextPanelFrb>
 
   /// Whether the less used controls are showing.
   bool _more = false;
+
+  /// Whether the font list shows the variable fonts alone, and those
+  /// families once the engine has listed them.
+  bool _variableOnly = false;
+  List<String>? _variableFamilies;
 
   @override
   void initState() {
@@ -82,7 +88,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     return ListenableBuilder(
-      listenable: Listenable.merge([ui.model, ui.selectedLayers, ui.tools]),
+      listenable: Listenable.merge(
+          [ui.model, ui.selectedLayers, ui.tools, fontAxesArrived]),
       builder: (context, _) {
         final t = ThemeScope.of(context).theme;
         final target = targetOf(ui);
@@ -347,6 +354,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                   ),
                 ],
               ]),
+              _variableOnlyRow(t),
+              ..._axisRows(t, ui, target),
               _moreTwirl(t),
               if (_more) ..._moreRows(t, ui, target),
             ],
@@ -354,6 +363,121 @@ class _TextPanelFrbState extends State<TextPanelFrb>
         ));
       },
     );
+  }
+
+  /// The filter that keeps the font list to the families with axes.
+  Widget _variableOnlyRow(LumitTheme t) => SizedBox(
+        height: t.density.propertyRow,
+        child: Row(
+          children: [
+            const SizedBox(width: 10),
+            HouseCheckbox(
+              key: const ValueKey('text-variable-only'),
+              value: _variableOnly,
+              onChanged: (on) {
+                setState(() => _variableOnly = on);
+                if (on && _variableFamilies == null) {
+                  textVariableFontFamilies().then((families) {
+                    if (mounted) setState(() => _variableFamilies = families);
+                  }).catchError((Object _) {
+                    if (mounted) setState(() => _variableFamilies = const []);
+                  });
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(l10n.textVariableOnly,
+                  style: t.body.copyWith(color: t.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      );
+
+  /// **A variable font's axes** for the whole layer, one number each, starting
+  /// where the face sets them, and the Variable font spacing the animators'
+  /// axes lay the letters out by. Nothing for a font that doesn't vary.
+  List<Widget> _axisRows(LumitTheme t, LumitUiState ui, TextTarget target) {
+    final style = target.document.style;
+    final axes = shownFontAxes(style.family, style.face);
+    if (axes.isEmpty) return const [];
+    double valueOf(BridgeFontAxis axis) {
+      for (final a in style.axes) {
+        if (a.tag == axis.tag) return a.value;
+      }
+      return axis.face;
+    }
+
+    // An axis put back where the face sets it is left out of the file.
+    TextChange set(BridgeFontAxis axis, double v) => restyle((s) => s.copyWith(
+          axes: [
+            for (final a in s.axes)
+              if (a.tag != axis.tag) a,
+            if ((v - axis.face).abs() > 1e-6)
+              BridgeFontAxisValue(tag: axis.tag, value: v),
+          ],
+        ));
+    return [
+      SizedBox(
+        height: t.density.propertyRow,
+        child: Row(
+          children: [
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(l10n.textFontAxes,
+                  style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (style.axes.isNotEmpty)
+              HouseButton(
+                key: const ValueKey('text-axes-reset'),
+                small: true,
+                frameless: true,
+                onPressed: () => commitText(
+                    ui, target, restyle((s) => s.copyWith(axes: const []))),
+                child: Text(l10n.textFontAxesReset),
+              ),
+            const SizedBox(width: 10),
+          ],
+        ),
+      ),
+      textGrid([
+        for (final axis in axes)
+          textCell(
+            t,
+            axis.name,
+            _number(
+              ui,
+              target,
+              keyName: 'text-axis-${axis.tag}',
+              value: valueOf(axis),
+              min: axis.min,
+              max: axis.max,
+              decimals: axis.max - axis.min <= 10 ? 2 : 0,
+              resetTo: axis.face,
+              change: (v) => set(axis, v),
+            ),
+          ),
+        textCell(
+          t,
+          l10n.textAxisSpacing,
+          BareDropdown<BridgeAxisSpacing>(
+            key: const ValueKey('text-axis-spacing'),
+            value: style.axisSpacing,
+            options: BridgeAxisSpacing.values,
+            label: (s) => switch (s) {
+              BridgeAxisSpacing.adaptive => l10n.textAxisSpacingAdaptive,
+              BridgeAxisSpacing.perCharacter =>
+                l10n.textAxisSpacingPerCharacter,
+              BridgeAxisSpacing.default_ => l10n.textAxisSpacingDefault,
+            },
+            onChanged: (s) => commitText(
+                ui, target, restyle((st) => st.copyWith(axisSpacing: s))),
+          ),
+        ),
+      ]),
+    ];
   }
 
   /// The way to the less used controls, the same twirl every fold in the app
@@ -697,6 +821,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
         resetTo: resetTo,
         // Named, the row's menu holds the chip's rows and Add to controls.
         rowMenu: named != null,
+        linear: true,
         colour: shown,
         onPicked: pick,
       ),
@@ -717,7 +842,16 @@ class _TextPanelFrbState extends State<TextPanelFrb>
   /// picker says what the layer is asking for.
   Widget _familyPicker(LumitUiState ui, TextTarget target) {
     final family = target.document.style.family;
-    final installed = _families ?? const <String>[];
+    final all = _families ?? const <String>[];
+    final variable = _variableFamilies;
+    // The layer's own family stays listed under the filter, so the picker
+    // still says what the layer is set in.
+    final installed = _variableOnly && variable != null
+        ? [
+            for (final f in all)
+              if (variable.contains(f) || f == family) f
+          ]
+        : all;
     final missing = family.isNotEmpty && !installed.contains(family);
     final names = ['', ...installed, if (missing) family];
     final labels = [

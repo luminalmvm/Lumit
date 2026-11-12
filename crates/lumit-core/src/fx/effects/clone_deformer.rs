@@ -37,7 +37,9 @@ use lumit_fx_macros::Effect;
 
 use super::clone_to_points::CloneToPoints;
 
+pub mod fillet;
 pub mod round;
+use fillet::filleted;
 use round::rounded;
 
 /// The effect's match name.
@@ -178,8 +180,9 @@ pub struct CloneDeformer {
     )]
     pub operation: u32,
 
-    /// How round Round corners makes each outward corner, px@comp: the
-    /// radius of the circle that fits in it.
+    /// How round Round corners makes each corner, px@comp: how far along each
+    /// side the rounding starts, as Cavalry's Bevel (at a right angle, the
+    /// radius of the circle that fits in it).
     #[slider(label = "Radius", min = 0.0, max = 200.0, default = 20.0, hard_min = 0.0, unit = Px)]
     pub radius: f32,
 
@@ -846,67 +849,6 @@ pub fn overlay(a: &Outline, b: &Outline, operation: u32) -> Outline {
         .flatten()
         .map(|c| c.into_iter().map(|p| [p[0] as f32, p[1] as f32]).collect())
         .collect()
-}
-
-/// A closed contour with every corner rounded to `radius`, as a fillet:
-/// the arc meets both sides, and stops half way along the shorter one, so a
-/// thin piece is rounded by what it has room for and no piece goes.
-#[must_use]
-pub fn filleted(contour: &[[f32; 2]], radius: f32) -> Vec<[f32; 2]> {
-    let n = contour.len();
-    if n < 3 || radius <= 0.0 {
-        return contour.to_vec();
-    }
-    let mut out = Vec::with_capacity(n * 4);
-    for i in 0..n {
-        let p = contour[i];
-        let (a, b) = (contour[(i + n - 1) % n], contour[(i + 1) % n]);
-        let (la, lb) = (
-            (a[0] - p[0]).hypot(a[1] - p[1]),
-            (b[0] - p[0]).hypot(b[1] - p[1]),
-        );
-        if la < 1e-6 || lb < 1e-6 {
-            continue;
-        }
-        let (ua, ub) = (
-            [(a[0] - p[0]) / la, (a[1] - p[1]) / la],
-            [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb],
-        );
-        // Half the angle between the two sides.
-        let half = (ua[0] * ub[0] + ua[1] * ub[1]).clamp(-1.0, 1.0).acos() * 0.5;
-        if !(1e-4..=std::f32::consts::FRAC_PI_2 - 1e-3).contains(&half) {
-            out.push(p);
-            continue;
-        }
-        let reach = (radius / half.tan()).min(la.min(lb) * 0.5);
-        let r = reach * half.tan();
-        let bis = [ua[0] + ub[0], ua[1] + ub[1]];
-        let bl = bis[0].hypot(bis[1]);
-        let c = [
-            p[0] + bis[0] / bl * r / half.sin(),
-            p[1] + bis[1] / bl * r / half.sin(),
-        ];
-        let (s, e) = (
-            [p[0] + ua[0] * reach, p[1] + ua[1] * reach],
-            [p[0] + ub[0] * reach, p[1] + ub[1] * reach],
-        );
-        let a0 = (s[1] - c[1]).atan2(s[0] - c[0]);
-        let mut sweep = (e[1] - c[1]).atan2(e[0] - c[0]) - a0;
-        if sweep > std::f32::consts::PI {
-            sweep -= std::f32::consts::TAU;
-        } else if sweep < -std::f32::consts::PI {
-            sweep += std::f32::consts::TAU;
-        }
-        // About a segment every 3 px of arc, at least one a 12th of a turn.
-        let steps = ((sweep.abs() * r / 3.0).ceil() as usize)
-            .max((sweep.abs() / 0.52).ceil() as usize)
-            .clamp(1, 64);
-        for k in 0..=steps {
-            let t = a0 + sweep * k as f32 / steps as f32;
-            out.push([c[0] + r * t.cos(), c[1] + r * t.sin()]);
-        }
-    }
-    out
 }
 
 /// The picture's colour with Vector's edge as its alpha, then the Mix.

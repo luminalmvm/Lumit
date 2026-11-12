@@ -1,0 +1,63 @@
+---
+title: Making a speed ramp
+description: Give a layer a Retime, add points to its speed envelope, and slow the stretch between them.
+sidebar:
+  order: 2
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A speed ramp slows a stretch of footage and brings it back to normal speed. On a layer it
+is made on the layer's [Retime](/use/retime/), in the graph editor. For clips in the Cut
+timeline, see [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/).
+
+<Shot file="speed-ramp.png" caption="A speed ramp in the graph editor, seen through the Speed lens." eager/>
+
+**1. Select the layer.** Click the Footage layer's row in the Timeline.
+
+**2. Choose the Retiming workspace.** Choose **Window ▸ Workspace ▸ Retiming**. The
+Timeline switches to the graph editor on the speed graph.
+
+**3. Give the layer a Retime.** Press **Enable Retime** on the empty graph, or
+`Ctrl+Alt+T`. The graph draws a flat line at 100%.
+
+**4. Add four points.** Double-click the line at the frame where the slow-down begins, at
+the frame where the slow stretch begins, at the frame where it ends, and at the frame where
+normal speed is back.
+
+**5. Set the slow speed.** Right-click the second point, choose **Set speed…** and type
+`25` in **Speed**. Do the same on the third. The line now falls to 25%, runs level, and
+climbs back to 100%.
+
+**6. Shape the two slopes.** Right-click the line between the first and second points and
+choose **Smooth**. Do the same between the third and fourth.
+
+**7. Land on every frame.** With footage shot at a higher frame rate than the composition,
+drag a point towards the dashed **Every frame** line. The point snaps to it, at the speed
+where each source frame shows once.
+
+**8. Fill the frames in between.** Below that speed source frames repeat. Choose
+**Layer ▸ Flow** to have the frames in between made instead.
+
+**9. Play it.** Press `Space`.
+
+## One slope in one command
+
+**1. Put the playhead where the change of speed starts.**
+
+**2. Press `Ctrl+Alt+R`.** The **Ramp…** box opens.
+
+**3. Type the speed to reach in To.**
+
+**4. Type how long the change takes in Over.** The unit beside it switches between frames
+and seconds.
+
+**5. Pick the curve in Ease.**
+
+**6. Press Ramp.** With no point after it, the speed stays there.
+
+## Related
+
+- [Retiming and speed](/use/retime/)
+- [Graph editor](/panels/graph-editor/)
+- [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/)

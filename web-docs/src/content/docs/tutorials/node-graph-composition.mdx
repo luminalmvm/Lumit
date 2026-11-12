@@ -1,0 +1,67 @@
+---
+title: Building a node graph composition
+description: Fork footage through a glow, merge it back, then turn the graph into an effect with a row of its own.
+sidebar:
+  order: 4
+---
+
+A [node graph composition](/use/node-graphs/) makes its picture from boxes and wires. This
+builds a glow laid back over its footage, then applies the same graph to a layer in
+another composition.
+
+## Build the graph
+
+**1. Make the graph.** Choose **Composition ▸ New node graph…** and confirm the settings.
+The Node graph panel shows one box, **Output**.
+
+**2. Bring footage in.** Drag a footage item from the Project panel onto the canvas. It
+lands as a **Read** box.
+
+**3. Add a glow on a wire.** Drag from the Read's output socket and let go over empty
+canvas. The console opens. Type `glow` and pick **[Glow](/effects/stylise/glow/)**. It
+arrives wired to the Read.
+
+**4. Add a Merge.** Press `Ctrl+Space` over the canvas and pick
+**[Merge](/effects/compositing/merge/)**.
+
+**5. Wire the glow over the footage.** Drag from Glow's **Output** to Merge's **A**, and
+from the Read's output to Merge's **B**.
+
+**6. Wire the Output.** Drag from Merge's **Output** to the Output box. The Viewer shows
+the result.
+
+**7. Set the blend.** On the Merge box, set **Mode** to **Screen**.
+
+## Give it a row
+
+**1. Add an Input.** Press `Ctrl+Space` and pick **Number** under **Input**.
+
+**2. Name it.** With the Input picked, set **Label** in the Node panel to `Strength`.
+
+**3. Wire it.** Drag from the Input's socket to Glow's **Intensity** socket.
+
+## Apply it to a layer
+
+A Read always shows its own footage. To work on whichever layer the graph is applied to,
+the picture has to come from an Input.
+
+**1. Add a picture Input.** Press `Ctrl+Space` and pick **Picture** under **Input**.
+
+**2. Put it in the Read's place.** Drag from the Input's socket to Glow's **Input**, and
+again to Merge's **B**. Each wire replaces the one from the Read.
+
+**3. Remove the Read.** Pick it and press `Delete`. The Viewer goes transparent: a picture
+Input reads nothing while the graph is viewed on its own.
+
+**4. Open another composition** and select a layer in it.
+
+**5. Apply the graph.** Press `Ctrl+Space` and pick the graph under **Node graphs**.
+
+The layer's effect is headed by the graph's name and carries the **Strength** row, **Mix**
+and **Matte**. **Open graph** on it goes back to the graph.
+
+## Related
+
+- [Node graph compositions](/use/node-graphs/)
+- [The node graph](/use/nodes/)
+- [Node graph](/effects/utility/node-graph/)

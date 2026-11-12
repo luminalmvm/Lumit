@@ -124,7 +124,18 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
             let offset = document.path_offset.value_at(lt) as f32;
             let block = lumit_text::TextBlock::of(document, &line);
             let entries = lumit_text::shape_items(&block, spine.as_ref(), offset);
-            let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken);
+            let xforms = match context.comp.and_then(|c| context.document.comp(c)) {
+                Some(comp) => lumit_core::text::ports::layer_glyph_xforms(
+                    &context.document,
+                    comp,
+                    layer,
+                    document,
+                    &line,
+                    context.comp_time,
+                    &spoken,
+                ),
+                None => lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken),
+            };
             // A straight line with animators is drawn flat with room round it,
             // which moves its letters in, so it keeps its place here too.
             let roomy =

@@ -16,7 +16,8 @@ The original is never replaced. The proxy sits beside it as a second reference.
 
 ## Make one
 
-Right-click a footage row in the [Project panel](/panels/project/) and choose **Make proxy**.
+Right-click a footage row in the [Project panel](/panels/project/) and choose **Proxy ▸
+Make proxy**.
 
 Lumit reads every frame of the source and writes it out at half width, as a `.mov` named
 after the original with `_proxy` on the end, **beside the original file**.
@@ -28,17 +29,20 @@ With several footage rows selected, **Make proxy** queues one for each. **Make p
 a folder's menu queues every footage item in the folder. One runs at a time, and **Cancel**
 stops it and empties the queue.
 
-**Set proxy…** on the same menu attaches a file you already have.
+**Set proxy…** on the same menu attaches a file you already have, to one row at a time.
 
 ## Switch between them
 
 | Where | What it does |
 | --- | --- |
-| **Use proxy**, on the footage row's menu | Whether *this* item reads from its proxy. Ticked. |
-| **Proxies**, on the Project panel's bottom bar | Whether the project reads proxies at all. On by default. |
-| **Clear proxy**, on the row's menu | Forgets the proxy. The file on disk is left alone. |
+| **Proxy ▸ Use proxy**, on the footage row's menu | Whether *this* item reads from its proxy. Ticked. |
+| The proxies mark on the Project panel's bottom bar, or **Use proxies** on the panel's right-click menu | Whether the project reads proxies at all. On by default. The mark's tooltip reads *Using proxies* or *Using originals*. |
+| **Proxy ▸ Clear proxy**, on the row's menu | Forgets the proxy. The file on disk is left alone. |
 
 A row wears a **proxy** badge while its own tick is on.
+
+**Use proxy** and **Clear proxy** are on the menu only for an item that has a proxy. With
+several footage rows selected, each acts on every selected item that has one.
 
 ## What does not change
 

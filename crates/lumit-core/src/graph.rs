@@ -782,6 +782,14 @@ impl LayerGraph {
                 if matches!(node, NodeRef::Out) && port == OUT_VOLUME_PORT.id {
                     return Ok(PortType::Number);
                 }
+                // A Text layer's animator numbers, on its Source box. Which
+                // ones the layer has is the document's to say; a port that
+                // names none is ignored when the letters are worked out.
+                if matches!(node, NodeRef::Source)
+                    && port.starts_with(crate::text::ports::TEXT_PORT_PREFIX)
+                {
+                    return Ok(PortType::Number);
+                }
                 // Source and Out otherwise draw ports but hold no parameters,
                 // so naming one of them as a parameter destination names
                 // nothing.

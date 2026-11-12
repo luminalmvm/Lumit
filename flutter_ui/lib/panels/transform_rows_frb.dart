@@ -1163,6 +1163,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         // The exact numbers, so an over-white light or an imported value is
         // not rounded to what a screen shows.
         initial: exact,
+        linear: true,
         scale: ColourScale.unit,
         max: 64,
         onPreview: (p) {
@@ -1604,6 +1605,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   double? _defaultOf(BridgeTransformProp prop) => switch (prop) {
         BridgeTransformProp.scaleX ||
         BridgeTransformProp.scaleY ||
+        BridgeTransformProp.scaleZ ||
         BridgeTransformProp.opacity =>
           100,
         BridgeTransformProp.rotation ||

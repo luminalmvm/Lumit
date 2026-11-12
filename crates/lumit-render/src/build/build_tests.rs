@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 mod float_plate;
+mod proximity;
 
 // Regression: under auto res a footage layer decodes at a reduced size that
 // changes with viewport zoom. Its comp-space geometry must use the *native*

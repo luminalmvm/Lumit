@@ -1,0 +1,43 @@
+---
+title: Moving a camera through layers
+description: Space layers in depth, add a camera, keyframe a move past them, and focus on one.
+sidebar:
+  order: 9
+---
+
+A [camera](/use/camera/) sees the layers that have the 3D switch on. This walk-through
+spaces a few layers in depth, moves a camera past them, and blurs the ones out of focus.
+
+**1. Turn on 3D.** Select the layers and choose **Layer ▸ 3D layer**.
+
+**2. Space the layers.** Select one layer, press `P` in the Timeline, and set the third
+box on **Position**. A larger z is further from the camera. Do the same for each layer.
+
+**3. Add the camera.** Choose **Layer ▸ New ▸ Camera**.
+
+**4. Look at the layers from outside.** On the Viewer's bottom bar, open **3D view** and
+choose **Custom view 1**. Pick **Orbit camera** from the Camera tools on the toolbar and
+drag on the picture. The layers and the camera are drawn as outlines.
+
+**5. Go back to the camera.** Open **3D view** and choose **Active camera**.
+
+**6. Key the start.** Move the playhead to where the move starts. Twirl the camera open in
+the Timeline and turn on the stopwatch on **Position**.
+
+**7. Key the end.** Move the playhead to where the move ends and change the camera's
+**Position**. Its z moves it towards the layers, and its x and y move it across them.
+
+**8. Turn on depth of field.** Select the camera, choose **Layer ▸ 3D ▸ Camera settings**,
+tick **Depth of field** and press **Apply**.
+
+**9. Focus.** Under **Camera options** on the camera, set **Focus distance** to the
+distance from the camera to the layer to keep sharp: that layer's z less the camera's z.
+
+**10. Set the blur.** Raise **Aperture** on the camera until the other layers are soft
+enough.
+
+## Related
+
+- [Cameras and 3D](/use/camera/)
+- [Keyframes](/use/keyframes/)
+- [Transforming layers](/use/transform/)

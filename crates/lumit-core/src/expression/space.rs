@@ -237,6 +237,36 @@ impl Space {
     }
 }
 
+/// Where `from`'s anchor is in `into`'s own pixels at comp time `t`: what a
+/// text animator's Proximity selector measures its letters from. `None` when
+/// `into` is scaled to nothing.
+pub(crate) fn anchor_in(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    from: &Layer,
+    into: &Layer,
+    t: f64,
+) -> Option<(f64, f64)> {
+    let context = ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: Some(into.id),
+        comp_time: t,
+        current_depth: 0,
+        inputs: None,
+    };
+    let read = reader(&context, comp.id, t);
+    let tr = &from.transform;
+    let anchor = (
+        read(from, &tr.anchor_x),
+        read(from, &tr.anchor_y),
+        read(from, &tr.anchor_z),
+    );
+    let world = space(doc, comp, from, t, &read).to_world(anchor);
+    let p = space(doc, comp, into, t, &read).world_to_layer(world)?;
+    (p.0.is_finite() && p.1.is_finite()).then_some((p.0, p.1))
+}
+
 /// Which way a point is carried, and so how many numbers come back.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Way {

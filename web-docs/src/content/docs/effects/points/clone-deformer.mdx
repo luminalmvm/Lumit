@@ -1,0 +1,91 @@
+---
+title: Clone deformer
+description: "Aligns, cuts or rounds the copies a Clone to points above it drew, as one group."
+---
+
+Clone deformer is a **Points** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Changes the copies the [Clone to points](/effects/points/clone-to-points/) above it drew,
+as one group. **Align** moves the group so its bounds line up on a point. **Boolean** cuts
+the group with another layer. **Round corners** rounds its corners. Several Clone
+deformers in a row each work on what the one above left.
+
+**Mode** sets what the group is read as. **Raster** reads the picture, so it works on any
+layer and after any effect. **Vector** reads the outlines of Shape layers, and the colours
+still come from the picture. It needs a Clone to points of Shape layers directly above it,
+with only Clone deformers between. Anywhere else Vector reads the picture, as Raster does.
+
+In Vector, the Boolean layer is read by its outline when it is a Shape layer or has a
+mask, and by its picture otherwise. A stroke's width is not part of an outline, so a Shape
+layer of strokes alone is filled.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Dropdown | Raster · Vector | Raster | - |
+| **Deformer** | Dropdown | Align · Boolean · Round corners | Align | - |
+| **Horizontal** | Dropdown | None · Left · Centre · Right | Centre | - |
+| **Vertical** | Dropdown | None · Top · Centre · Bottom | Centre | - |
+| **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Position y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Boolean layer** | Layer | Any layer in the composition | None | - |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Operation** | Dropdown | Union · Subtract · Intersect · Difference · Subtract from layer | Subtract | - |
+| **Radius** | Slider | 0 to 200; higher | 20 | Pixels at composition size |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Align** groups **Horizontal**, **Vertical**, **Position x**, **Position y**, and appears while **Deformer** is Align.
+- **Boolean** groups **Boolean layer**, **Map placement**, **Operation**, and appears while **Deformer** is Boolean.
+- **Round corners** groups **Radius**, and appears while **Deformer** is Round corners.
+- **Position x** is editable while **Horizontal** is anything but None.
+- **Position y** is editable while **Vertical** is anything but None.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode**: what the group is read as, its picture or its Shape layers' outlines.
+- **Deformer**: what is done to the group.
+- **Horizontal**: which side of the group's bounds goes on **Position x**. **None** leaves
+  the group where it is across.
+- **Vertical**: which side of the group's bounds goes on **Position y**. **None** leaves the
+  group where it is down.
+- **Position x** and **Position y**: where the group is lined up.
+- **Boolean layer**: the layer the group is cut with. With none, nothing is cut.
+- **Map placement**: where the Boolean layer sits on this one: as it sits in the
+  composition, stretched over the frame, or centred at its own size.
+- **Operation**: how the layer cuts the group. **Union** adds the layer. **Subtract** cuts
+  it away. **Intersect** keeps only where both are. **Difference** keeps where one is and
+  not both. **Subtract from layer** cuts the copies out of the layer, in the layer's
+  colours.
+- **Radius**: the radius of the circle that fits in each rounded corner.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Clone to points](/effects/points/clone-to-points/)
+- [Shapes](/use/shapes/)
+- [Points](/effects/#points)
+- [Effects](/use/effects/)

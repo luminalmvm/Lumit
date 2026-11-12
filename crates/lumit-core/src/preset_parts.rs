@@ -66,7 +66,7 @@ pub fn keyed_rows(group: &TransformGroup) -> Vec<KeyedRow> {
 
 /// Every animatable number on an animator, so a new row can't be missed by the
 /// one thing that moves them.
-fn animator_rows(animator: &mut TextAnimator) -> [&mut Property; 19] {
+fn animator_rows(animator: &mut TextAnimator) -> Vec<&mut Property> {
     let TextAnimator {
         selector,
         position_x,
@@ -85,12 +85,18 @@ fn animator_rows(animator: &mut TextAnimator) -> [&mut Property; 19] {
         box_r,
         box_g,
         box_b,
+        axes,
         ..
     } = animator;
-    [
+    let mut rows = vec![
         &mut selector.start,
         &mut selector.end,
         &mut selector.offset,
+        &mut selector.radius,
+        &mut selector.min_amount,
+        &mut selector.max_amount,
+        &mut selector.wiggles,
+        &mut selector.correlation,
         position_x,
         position_y,
         rotation,
@@ -107,16 +113,23 @@ fn animator_rows(animator: &mut TextAnimator) -> [&mut Property; 19] {
         box_r,
         box_g,
         box_b,
-    ]
+    ];
+    rows.extend(axes.iter_mut().map(|a| &mut a.value));
+    rows
 }
 
 /// The same numbers, to read.
 #[must_use]
-pub fn animator_values(a: &TextAnimator) -> [&Property; 19] {
-    [
+pub fn animator_values(a: &TextAnimator) -> Vec<&Property> {
+    let mut rows = vec![
         &a.selector.start,
         &a.selector.end,
         &a.selector.offset,
+        &a.selector.radius,
+        &a.selector.min_amount,
+        &a.selector.max_amount,
+        &a.selector.wiggles,
+        &a.selector.correlation,
         &a.position_x,
         &a.position_y,
         &a.rotation,
@@ -133,7 +146,9 @@ pub fn animator_values(a: &TextAnimator) -> [&Property; 19] {
         &a.box_r,
         &a.box_g,
         &a.box_b,
-    ]
+    ];
+    rows.extend(a.axes.iter().map(|a| &a.value));
+    rows
 }
 
 impl PresetParts {

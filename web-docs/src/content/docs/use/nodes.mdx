@@ -14,7 +14,9 @@ with the ability to wire a **driver** into parameters.
 <Shot file="graph-panel.png" caption="The Node graph: a layer's image chain wired left to right, with a driver feeding one of its parameters." eager/>
 
 Open it from **Window ▸ Panels ▸ Node graph**, or switch to the **Nodes** workspace. The panel
-follows the layer selected in the Timeline.
+follows the layer selected in the Timeline. With a
+[node graph composition](/use/node-graphs/) open it draws that instead, and inside a
+Custom shader it draws the [shader graph](/use/shaders/#the-shader-graph).
 
 ## The image chain
 
@@ -24,48 +26,88 @@ Every graph starts with **Source**, one box per effect in order, and **Layer out
 | --- | --- |
 | Drop a node onto a wire | Inserts it at that point in the stack. |
 | Drag a box's body | Moves it. A drag that starts inside the selection moves the whole selection. |
+| Drag a box's left or right edge | Sets its width. |
 | Drag from a socket | Pulls out a wire. Drop it on a socket that takes the same kind of value. |
 | Drag a wire off an effect's input | Bypasses that effect. The picture goes past it and it keeps its place in the stack. |
 | Drop a wire back on it | Switches it back on, and moves it to where the wire says. |
+| Drag from an effect's picture output to another effect's picture input | Moves the first effect to sit immediately before the second. |
 | Drag the wire off **Layer out** | The layer draws nothing until something is plugged back in. |
-| `Delete` | Removes the picked boxes. |
+| Press a wired parameter socket | Picks the wire up by its far end. Drop it on another socket to move it, or anywhere else to remove it. |
+| Double-click a box's name, or `Enter` with one box picked | Renames the effect or driver. `Enter` or a click away keeps the name, `Escape` does not. |
+| Double-click a box | A [Custom shader](/use/shaders/) opens its shader graph. A [Node graph](/effects/utility/node-graph/) box opens the composition it applies. |
+| `M` | Bypasses the picked boxes, or brings them back. |
+| `Ctrl+D` | Duplicates the picked effects. |
+| `Delete` or `Backspace` | Removes the picked boxes. **Source** and **Layer out** are never removed. |
 
-Two switches sit in the panel's toolbar. **Auto-wire** joins a dropped node to the wire in
-hand as it lands. **Heal** reconnects the neighbours of a deleted box.
+The panel's toolbar carries the layer's name and:
+
+- **Group**, **Add note**, **Save group…** and **Saved groups**. See [Groups](#groups) and
+  [Notes](#notes).
+- **Auto-wire** joins a box added from the console to the wire in hand as it lands.
+- **Heal**: on, a deleted box takes its wires with it. Off, a box that still carries a
+  wire is not deleted.
+- **The magnet** lands a dragged box or note on the dot grid.
+- **Frame all** and the zoom, as a percentage.
+
+Auto-wire, Heal and the magnet start on. None of the three is saved. A right-click on the
+toolbar lists the three switches, **Frame selected** and **Frame all**.
 
 ## Getting about the canvas
 
-- **Middle-drag** pans. The wheel zooms about the pointer.
-- **Frame selected** (`F`) fits the picked boxes on screen, and **Frame all** (`Shift+F`)
-  every box. `Ctrl+D` duplicates the picked boxes.
-- A **primary drag on empty canvas** sweeps a selection box. Click replaces the selection,
-  `Ctrl`-click toggles one, `Shift`-click adds, and `Ctrl+A` selects everything.
+- **Middle-drag** pans, and so does a drag with the Hand tool. The wheel zooms about the
+  pointer, from 20% to 200%.
+- **Frame selected** (`F`) fits the picked boxes on screen, or every box with none picked,
+  and **Frame all** (`Shift+F`) every box.
+- A **primary drag on empty canvas** sweeps a selection box, which picks the boxes wholly
+  inside it. With `Shift` or `Ctrl` held it adds to the selection. Click replaces the
+  selection, `Ctrl`-click toggles one, `Shift`-click adds, and `Ctrl+A` selects everything.
 - **Dragging an effect** from [Effects & presets](/panels/effects-presets/) onto the canvas
   adds it: an effect joins the stack, a driver lands where it is let go.
-- A **right-click on empty canvas** opens the canvas menu: Add node, Paste, Select all, Frame
-  selected, Frame all, Add note and Group. A right-click on the toolbar lists its switches and
-  the framing. **`Tab`** or **`Shift+A`** with the canvas focused opens the node
-  search at the pointer, as `ctrl+space` does. [Settings ▸ Timeline](/use/settings/#timeline)
-  can turn either key off, and can make the right-click open the search instead of the menu.
+- A **right-click on empty canvas** opens the canvas menu: **Add node…**, **Paste**,
+  **Select all**, **Frame selected**, **Frame all**, **Add note**, **Group**,
+  **Collapse all** and **Expand all**.
+- **`Tab`** or **`Shift+A`** with the canvas focused opens the node search at the pointer,
+  as `ctrl+space` does. [Settings ▸ Timeline](/use/settings/#timeline) can turn either key
+  off, and can make the right-click open the search instead of the menu.
 - **`ctrl+space`** opens the node search. With a wire in hand the results are filtered to the
-  kinds that wire can join, and picking one connects it.
+  kinds that wire can join, and picking one connects it while Auto-wire is on.
 
-Each box carries two small badges. The checkbox enables or disables a specific node and the 
-picture passes through untouched. The twirl opens the node, displaying a socket for every 
-parameter. In a [node graph](/use/node-graphs/) an open node also carries the parameters' 
-controls.
+## Boxes
+
+Each box carries two small badges. The checkbox enables or disables the box, and disabled
+the picture passes through untouched. The twirl opens the box, displaying a socket and a
+control for every parameter.
+
+A box that reads points with nothing wired into its Points socket is marked **No
+stream**. In a shared project, a box someone else has picked wears a ring in their colour.
 
 The checkbox and the wires say the same thing. A bypassed effect is drawn unwired, with
 hollow sockets and the chain running from the box before it to the box after. Switching one
 off in [Effect controls](/panels/effect-controls/) unplugs it here, and unplugging it here
 switches it off there.
 
-An effect's box has the menu its heading has in [Effect controls](/panels/effect-controls/),
-with the box's own rows added.
+An effect's box has the menu its heading has in
+[Effect controls](/panels/effect-controls/#an-effects-heading), with **Reveal in Effect
+controls** in place of **Reveal in node graph**, and the box's own rows added:
 
-On a box's right-click menu, **Collapse** folds it down to its header, its wires meeting at
-either end, and **Colour** tints the header with one of the Timeline's label colours. Both
-act on every picked box and are saved with the project.
+| Item | What it does |
+| --- | --- |
+| **Show all sockets**, **Hide unused sockets** | The twirl. |
+| **Edit shader**, **Open graph** | What a double-click opens, on a Custom shader and a Node graph box. |
+| **Add node…** | Opens the node search. |
+| **Disconnect all** | Takes every wire off the box. |
+| **Group**, **Save group…**, **Ungroup** | See [Groups](#groups). |
+| **View here** | See [Seeing the picture at a box](#seeing-the-picture-at-a-box). |
+| **Collapse**, **Expand** | Folds the box down to its header, its wires meeting at either end. |
+| **Colour** | Tints the header with one of the Timeline's label colours. |
+
+A driver's box has **Bypass**, **Rename**, **Copy**, **Paste**, **Duplicate**,
+**Manual page** and **Delete** beside those. **Collapse** and **Colour** act on every
+picked box and are saved with the project.
+
+Right-click a socket for **Disconnect** and the twirl's two names. Right-click a wire for
+**Insert node…**, which opens the node search and puts the chosen box on that wire,
+**Add reroute** and **Delete**.
 
 ## Groups
 
@@ -114,10 +156,10 @@ A **note** is a few words left on the canvas. It is not a box and is wired to no
 
 - **Add note** in the toolbar starts one in the middle of the canvas. Clicking away keeps
   it, and one left empty is not kept.
-- **Drag** a note to move it.
+- **Drag** a note to move it. It lands on the dot grid while the magnet is on.
 - **Double-click** it to change its words.
 - **The twirl** folds it down to its first line.
-- **Right-click** it for **Edit**, **Collapse**, **Colour** and **Delete**.
+- **Right-click** it for **Edit**, **Collapse**, **Colour…** and **Delete**.
 
 ## Ties and reroute points
 
@@ -126,11 +168,12 @@ point** takes wires through a single spot, and wires from one socket fan out aft
 
 - **Drag with the right button** across wires to tie them.
 - `Shift` and a **drag with the right button** puts a reroute point on each wire it crosses,
-  one point for the wires from each socket.
+  one point for the wires from each socket. **Add reroute** on a wire's right-click menu
+  puts one point on that wire.
 - **Drag** a tie or a point to move it. Several can sit along one wire.
 - `Ctrl` and a **drag** out of a point draws a new wire from its socket, through the point.
-- **Right-click** a tie or a point, drag across it with the right button, or click it and
-  press `Delete`, to let its wires go.
+- **Right-click** a tie or a point and choose **Delete**, drag across it with the right
+  button, or click it and press `Delete`, to let its wires go.
 
 Ties and points work on the layer graph, the node graph and a Custom shader's graph. They
 come with boxes that are copied, pasted or saved as a group.
@@ -144,29 +187,37 @@ parameter's socket makes that parameter follow the value.
 | --- | --- |
 | [**Wiggle**](/effects/drivers/wiggle/) | A random continuous number changing by an Amount at a Frequency. |
 | [**Audio level**](/effects/drivers/audio-level/) | The loudness of the composition, a layer or a clip at this moment. |
+| [**Beat trigger**](/effects/drivers/beat-trigger/) | Events from beats and loud moments. |
 | [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate. |
 | [**Math**](/effects/drivers/math/) | Two numbers and an operation. |
 | [**Remap**](/effects/drivers/remap/) | Maps a number from one range onto another, with a clamp. |
 | [**Smooth**](/effects/drivers/smooth/) | Its input, softened over Time. |
 | [**Split**](/effects/drivers/split/) | A colour taken apart into its four numbers. |
 | [**Combine**](/effects/drivers/combine/) | Four numbers put together as a colour. |
+| [**Measure**](/effects/drivers/measure/) | The size and edges of a layer's content. |
 | [**Points sample**](/effects/drivers/points-sample/) | Reads a points stream: how many points are alive, and how far the nearest one is from a position. |
 | [**Layer points**](/effects/drivers/layer-points/) | Another layer's points, brought into this graph. |
 | [**Expression**](/effects/drivers/expression/) | Whatever an expression returns: a number, a point or a colour. |
 | [**Clone index**](/effects/drivers/clone-index/) | Which copy Clone to points is stamping a layer as. |
-| [**Measure**](/effects/drivers/measure/) | The size and edges of a layer's content. |
-| [**Beat trigger**](/effects/drivers/beat-trigger/) | Events from beats and loud moments. |
 
-Add one from the effect console, `ctrl+space`, where they are grouped under **Controls**,
-and wire its output to a parameter's socket.
+The [Siceliot](/effects/#siceliot) drivers give each copy
+[Clone to points](/effects/points/clone-to-points/) stamps its own value.
+
+Add one from the effect console, `ctrl+space`, where they are grouped under **Controls**
+and **Siceliot**, and wire its output to a parameter's socket. A driver chosen from the
+**Drivers** menu, the **Effect** menu or [Effects & presets](/panels/effects-presets/)
+lands on the graph too, unwired. With a wire in hand the console lists only the drivers
+that wire can join.
+
+A driver's own rows are set on its open box and in the [Node panel](#the-node-panel).
 
 Wires don't cross between layers. The drivers that read another layer name it instead, with
 an ordinary layer picker: Audio level's and Beat trigger's **Audio** row, Layer points'
 **Points layer** row and Measure's **Layer** row.
 
-A driven parameter's row in Effect Controls names the driver in place of a value. Its
-keyframes are overridden while the wire is there, and come back when it is pulled.
-**Drive with** on a parameter's right-click menu wires one from the row, see
+A driven parameter's row in Effect Controls reads **driven** and shows the value the wire
+carries. Its keyframes are overridden while the wire is there, and come back when it is
+pulled. **Drive with** on a parameter's right-click menu wires one from the row, see
 [Effects](/use/effects/#edit-the-parameters).
 
 ## Wires and their colours
@@ -179,7 +230,10 @@ A wire's colour is the type of value it carries:
 - **shape · points**
 - **audio**
 
-A wire dropped on a socket of another kind is refused.
+A wire dropped on a socket of another kind is refused. A socket's tooltip names its kind.
+
+**Wires** in [Settings ▸ Appearance](/use/settings/#appearance) sets how each wire runs
+between its two sockets: **Curved**, **Angled** or **Hanging**.
 
 ## Mattes and points
 
@@ -202,10 +256,15 @@ A points effect added below a producer is wired to the nearest one above it. The
 row at the top of its card in [Effect controls](/panels/effect-controls/) shows the same
 wire and changes it.
 
-Some points effects, such as [Vary points](/effects/generate/vary-points/) and
-[Pick points](/effects/generate/pick-points/), take a stream and hand a changed one on.
-[Merge points](/effects/generate/merge-points/) has four Points sockets, and takes a
+Some points effects, such as [Vary points](/effects/points/vary-points/) and
+[Pick points](/effects/points/pick-points/), take a stream and hand a changed one on.
+[Merge points](/effects/points/merge-points/) has four Points sockets, and takes a
 different producer above it on each.
+
+## Layer out
+
+**Layer out** has a **Volume** socket. A number wired into it drives the layer's Volume in
+place of its keyframes. Its **Audio** socket takes no wire.
 
 ## Seeing the picture at a box
 
@@ -214,32 +273,46 @@ Selecting exactly one effect, a box here or a heading in Effect Controls, puts a
 composition with that layer's stack stopping there. **View here** on a box's right-click
 menu and the eye at the right of the Node panel's header do the same.
 
+## The Node panel
+
+The **Node panel**, **Window ▸ Panels ▸ Node**, lists the rows of the one box picked on
+the canvas, drivers included. The rows are the ones
+[Effect controls](/panels/effect-controls/#parameter-rows) draws.
+
+With no box picked it lists the layer's boxes. A click on one picks it on the canvas, and
+a double-click on an effect opens it in Effect Controls. A right-click on a row opens the
+box's menu.
+
+With a box picked, the header carries:
+
+- **The tick**, which bypasses the box.
+- **The layer's name**, which goes back to the list of boxes.
+- **The box's name**.
+- **The search mark**. It, or `Ctrl+F`, opens a filter that keeps the rows whose names
+  match.
+- How many of its rows wires drive: **2 driven**.
+- **The eye**, **Picture here**, on a box that makes a picture.
+
+A Custom shader's panel also carries a small picture of its
+[shader graph](/use/shaders/#the-shader-graph), which a click opens.
+
 ## The Nodes workspace
 
 <Shot file="nodes-workspace.png" caption="The Nodes workspace: the graph across most of the window, a small Viewer and the Node panel down the right." />
 
-The **Nodes** workspace puts the node graph in the centre of your view, to allow for work
-dedicated to nodes. It also keeps the timeline visible to change the selected layer or the 
-current frame. As well as the viewer to the right and the **Node panel**, which lists the 
-picked box's parameter rows.
-
-The Node panel's header shows the picked box's name and, when wires drive any of its rows,
-how many: **2 driven**. With no box picked it reads **Pick a node on the graph.**, and on a
-box with no rows **This box has nothing to set.** A double-click on a row of its index
-opens the effect in Effect Controls. **Ctrl+F**, or the search mark in the header, opens a
-filter that keeps the rows whose names match.
+The **Nodes** workspace puts the node graph in the centre of the window, with the Timeline
+beneath it, and a Viewer and the **Node panel** at the right.
 
 :::note[What the graph does not draw]
 A layer's graph draws no branch and no merge: it is the layer's effect stack, seen as boxes.
 Branching and merging live in a
-[**node graph composition**](/use/node-graphs/), made with **New node graph**. The Layer
-out box draws an **Audio**
-input that currently takes no input, this is planned to be changed.
+[**node graph composition**](/use/node-graphs/), made with **New node graph…**.
 :::
 
 ## Related
 
 - [Node graph compositions](/use/node-graphs/)
+- [Custom shaders](/use/shaders/)
 - [Working with the node graph](/tutorials/node-graph/)
 - [Effects](/use/effects/)
 - [Expressions](/use/expressions/)

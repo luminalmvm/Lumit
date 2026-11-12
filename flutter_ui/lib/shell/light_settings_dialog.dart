@@ -510,6 +510,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         colour: exact.clipped,
         // The exact numbers, scene-linear as the light's row is.
         initial: exact,
+        linear: true,
         scale: ColourScale.unit,
         max: 64,
         onPicked: (p) => setState(() => _v.colour = [p.r, p.g, p.b]),

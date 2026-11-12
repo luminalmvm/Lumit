@@ -18,7 +18,7 @@ On its first run Lumit asks for a workspace and a set of shortcuts. See
 | --- | --- |
 | Time remapping | **Retime**, edited in the value graph of the [graph editor](/use/graph-editor/) |
 | Track matte | [**Matte**](/use/mattes/), chosen from a dropdown on the layer |
-| Pre-compose | **Precompose**; the result is a comp layer |
+| Pre-compose | **Layer ▸ Precompose…**; the result is a Precomp layer |
 | CTI (current time indicator) | **Playhead** |
 | Time stretch | **Stretch** |
 | Null object | **Null layer** |
@@ -48,7 +48,7 @@ imported from **Settings ▸ General ▸ After Effects presets**. See
 | Velocity envelope | The **speed line** across a clip. See [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/) |
 | Playback rate | **Speed ▸ Speed…** on a clip's right-click menu |
 | Cursor | **Playhead** |
-| Split | `S` with the Vegas shortcuts, or the **razor** tool |
+| Split | `S` with the Vegas shortcuts, **Edit ▸ Split layer**, or the **razor** tool |
 | Event FX | A clip's **fx** button and its own [effects](/use/cutting/#effects-and-blend-mode-on-a-clip) |
 | Pan/Crop | A clip's **Pan/Crop** button: a [Crop](/effects/utility/crop/) and a Transform on the clip |
 | Group, Ungroup | **Group** and **Ungroup**, `G` and `U` with the Vegas shortcuts |
@@ -85,3 +85,4 @@ The next step is your [first composition](/start/first-composition/).
 - [Sequence layers](/use/sequence-layers/)
 - [Retiming and speed](/use/retime/)
 - [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/)
+- [Keyboard shortcuts](/reference/shortcuts/#the-vegas-preset)

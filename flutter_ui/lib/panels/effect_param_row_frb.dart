@@ -1992,9 +1992,10 @@ class EffectParamRowFrb extends StatelessWidget {
     double chan(BridgeScalar s) => sampledScalar(s, timeOfFrame(comp, frame));
     final t = ThemeScope.of(context).theme;
 
-    int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
-    final shown = documentColour(
-        byte(chan(colour.r)), byte(chan(colour.g)), byte(chan(colour.b)), 255);
+    // Drawn as the Viewer shows the linear light it holds.
+    final shown = PickedColour(chan(colour.r), chan(colour.g), chan(colour.b))
+        .onScreen
+        .clipped;
 
     // The value written for a picked colour: the three channels clamped to the
     // parameter's declared range, with alpha left alone.
@@ -2041,6 +2042,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 scale: ColourScale.unit,
                 min: min,
                 max: max,
+                linear: true,
                 // Live all the way through: a drag inside the picker previews
                 // on the picture, and each settled change is one undoable edit
                 // — the same shape as dragging the number beside it.

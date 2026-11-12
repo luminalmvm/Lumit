@@ -13,14 +13,20 @@ as well as how to interpret what it finds there.
 
 ## Import files
 
-1. Choose **File ▸ Import footage…**.
+1. Choose **File ▸ Import footage…**, `Ctrl+I` by default.
 2. Select one or more files.
 
-Dragging files from your file manager onto the Lumit window works as well. An empty editor
-offers **Import footage** beside **Open**.
+Dragging files from your file manager onto the Lumit window works as well, and so do
+**Import footage** on the [Project panel](/panels/project/#bringing-things-in)'s bottom
+bar and a double-click on the panel's empty space. An empty editor offers **Import
+footage** beside **Open**.
 
 **File ▸ Import folder…** imports the footage in a folder and every folder inside it. Each
-folder becomes a project folder of the same name.
+folder becomes a project folder of the same name. Hidden files and folders are left out.
+
+Everything picked at once is one undo step. While the files are read, a card shows how far
+the import has got, with **Cancel import**, which leaves the project as it was. One import
+runs at a time.
 
 ## What Lumit opens
 
@@ -33,7 +39,7 @@ Collada files.
 The filter is a convenience, not a limit. Switch it to **All files** and pick anything -
 Lumit reads the file rather than its extension, so a container or codec the list does not
 name opens if the build can decode it. A file the build cannot decode still imports as an
-item; it never gets a picture on its row.
+item; it never gets a picture on its row, and the row wears an `unreadable` badge.
 
 ## Organise the panel
 
@@ -55,6 +61,9 @@ named after the file.
 - A top-level group becomes a layer group. A group inside a group, or one with its own
   opacity or blend mode, becomes a composition of its own and a Precomp layer.
 - A layer mask and a clipping mask are applied to the layer's picture.
+- A vector mask becomes masks on the layer, unless Photoshop has already drawn it into the
+  layer's picture.
+- A layer with no picture is left out, and the bottom strip says how many were.
 - A solid colour fill layer becomes a Solid layer.
 - Drop shadow, inner shadow, outer glow, inner glow, colour overlay and stroke become
   layer styles.
@@ -115,7 +124,8 @@ A Model layer is drawn through the comp's camera with the file's own materials, 
 comp's lights, and passes through other 3D layers by depth. Its effects run on its
 picture, which keeps its depth. Motion blur smears it along its own movement. In the
 Viewer it is outlined by its box and picked where the model itself is. A model with
-pictures missing wears **Missing** in the Project panel, with their names on it.
+pictures missing wears a `missing` badge in the Project panel, with their names on its
+tooltip.
 
 Under **Materials** a Model layer has a group of rows for each material in its file, named
 as the file names it, in the Timeline and in **Effect controls**: **Base colour**,
@@ -148,11 +158,12 @@ the file's values back. A preset starts from the file's values and turns Texture
 
 A `.blend`, USD (`.usd`, `.usdz`, `.usdc`, `.usda`), Alembic (`.abc`), PLY, STL or Collada
 (`.dae`) file opens through your own Blender, which turns it into a glTF in the cache. Its row
-reads **Converting** until then; click it to stop Blender, and click **Stopped** to start again.
+wears a `converting` badge until then; click it to stop Blender, and click `stopped` to
+start again.
 An FBX Lumit can't read goes the same way. Saving the file again converts it again, and the
 layer keeps the old model until the new one is ready, or if it won't convert. Objects hidden in
-Blender are left out. With no Blender found the row reads **No 3D app**; click it to choose one
-in [Settings](/use/settings/#general). Blender 5 and later have no Collada importer. Two Blenders
+Blender are left out. With no Blender found the row wears `no 3D app`; click it to choose
+one in [Settings](/use/settings/#general). Blender 5 and later have no Collada importer. Two Blenders
 run at once, and the rest wait.
 **Edit in 3D app**, under **Layer ▸ 3D** and on the item's right-click menu, opens a `.blend` in
 Blender.
@@ -227,21 +238,29 @@ every selected footage item at once.
 | **Render pass** | Which pass of a multi-pass EXR is shown. **Auto** picks the beauty pass. Cryptomatte passes are not listed. |
 | **Alpha** | Straight, premultiplied against a matte colour, or ignored. **Guess** reads it from the file's frames. |
 | **Invert alpha** | Swaps opaque and clear. |
-| **Frame rate** | Plays the file's frames at another rate. The picture gets longer or shorter and its sound does not. |
+| **Frame rate** | Plays the file's frames at another rate. The picture gets longer or shorter and its sound does not. *From file* in the list goes back to the file's own rate. |
 | **Start timecode** | The timecode of the first frame, which the source view counts from. |
-| **Separate fields** | Splits each interlaced frame into its two fields, at twice the rate. |
+| **Separate fields** | Splits each interlaced frame into its two fields, at twice the rate. *Off*, *Upper field first* or *Lower field first*. The order the file declares is shown beside it as *From file*. |
 | **Preserve edges** | Fills a field's missing rows along the edges in the picture. |
-| **Remove pulldown** | Takes a 3:2 or 24Pa cadence out of interlaced video. **Guess** finds the cadence. |
-| **Pixel aspect ratio** | Widens or narrows the picture until its pixels are square. |
-| **Loop** | Plays the picture through more than once. |
+| **Remove pulldown** | Takes a 3:2 or 24Pa cadence out of interlaced video, at one of five phases each. **Guess** finds the cadence. Disabled while fields are not separated. |
+| **Pixel aspect ratio** | Widens or narrows the picture until its pixels are square. The list holds *Square pixels*, the D1/DV, HDV, DVCPRO HD and anamorphic 2:1 shapes, and the file's own as *From file*. |
+| **Loop** | Plays the picture through more than once, up to 9999 times. |
 | **Colour space** | What the file arrived in, see [Colour management](/use/colour-management/). |
-| **Linear light** | Whether the file's numbers are already linear. Read only with no colour space chosen. |
+| **Linear light** | Whether the file's numbers are already linear: *On*, *Off*, or *Automatic*, which is on for a floating-point file and off for any other. Read only with no colour space chosen. |
 | **Preserve RGB** | Takes the file's numbers as they are, with no colour conversion. |
+
+The dialogue has two tabs. **Main** holds the render pass and the groups **Alpha**,
+**Time**, **Fields and pulldown** and **Other**, and **Colour** holds the last three rows
+of the table. A **Guess** that finds nothing reads *Nothing to go on*.
 
 An EXR pass of one channel, such as depth, shows in grey at the values the file holds.
 
 **Remember interpretation** on the same menu keeps one item's settings, and **Apply
-interpretation** gives them to every selected item.
+interpretation** gives them to every selected item. What is remembered lasts
+until Lumit closes.
+
+While the Project panel is the active panel, `Ctrl+Alt+G` opens **Interpret footage…** on
+the selected footage, `Ctrl+Alt+C` remembers and `Ctrl+Alt+V` applies.
 
 Footage from an After Effects project keeps the interpretation it had there, opened
 directly or through a Lumit Bridge bundle. Its OCIO colour space comes across from an
@@ -256,8 +275,17 @@ fields and pixel aspect ratio a file declares are shown and not applied until ch
 
 ## Missing files
 
+The project file keeps each footage path relative to itself. Footage on another drive keeps
+its full path. When the project opens, each file is looked for at its relative path, then
+at the full path it last had, then by its content under the project's folder.
+
 If a file moves, the asset reports that it is missing. Relink it to the new path and
-every layer using it recovers.
+every layer using it recovers. Other missing items whose files moved the same way are
+relinked with it.
+
+Until then the item's layers draw colour bars, its row in the
+[Project panel](/panels/project/#missing-files) wears a `missing` badge, and the
+[Viewer](/panels/viewer/) counts the missing files.
 
 ## Proxies
 
@@ -267,8 +295,15 @@ not to. See [Proxies](/use/proxies/).
 
 ## Lumit projects
 
-Picking a `.lum` in the import dialogue lists its compositions. The one chosen is added to
-the project, with everything it uses. A `.lum` dragged onto the window is not imported.
+Picking a `.lum` in the import dialogue opens **Import a composition**, which lists its
+compositions. The one chosen is added to the project, with everything it uses. A `.lum`
+dragged onto the window is not imported.
+
+- The compositions nested in it, its solids and its footage come with it. Footage the open
+  project already has is used again.
+- Where the open project already has a composition of the same name, the new one has the
+  other project's name after it in brackets.
+- The whole import is one undo step.
 
 ## Lottie files
 
@@ -282,7 +317,8 @@ the file, and its pictures are written beside the file in a folder named after i
 
 A whole After Effects project can be imported via **File ▸ Import .aep
 project…**, with support for compositions, markers, layers, keyframes, and built-in
-effects. A text layer keeps its font, spacing, outline, alignment, and box width. A
+effects. It takes an `.aep`, or a zipped [Lumit Bridge](#lumit-bridge) bundle. A text layer
+keeps its font, spacing, outline, alignment, and box width. A
 light keeps its type, its aim and its light options, and a 3D layer its Orientation,
 Anchor Z, Scale Z and material options, keyframes included. A 3D layer, camera or light
 turns its X, Y and Z Rotation in After Effects' order.
@@ -290,6 +326,9 @@ turns its X, Y and Z Rotation in After Effects' order.
 A common third-party effect becomes the maker's own OFX plugin where one is installed, with
 its controls carried across by name. Any other third-party effect arrives as a placeholder
 that keeps its values and draws nothing. Neither stops the rest of the project importing.
+
+The import makes a new project in place of the open one. For a step-by-step guide, see
+[Bringing in an After Effects project](/tutorials/after-effects-import/).
 
 **Remove Grain** arrives as [Denoise](/effects/blur-sharpen/denoise/). Temporal filtering
 sets **Frames** to 2, or to 0 when it is off. Its amount becomes **Temporal strength**, and
@@ -310,7 +349,72 @@ copy's values. A Dropdown Menu Control arrives as a Custom controls menu.
 Animation presets (`.ffx`) are imported from **Settings ▸ General ▸ After Effects
 presets**. See [Effects & presets](/panels/effects-presets/#after-effects-presets).
 
+### The import report
+
+**Import report** opens when the import ends. It lists what did not come across whole,
+under a heading for each outcome with its count: **Skipped** first, then **Placeholder**,
+then **Adjusted**. Its foot counts the items imported. With nothing to list it reads
+*Everything imported*. The report is shown once, and the new project has no file until it
+is saved.
+
+| Outcome | Meaning |
+| --- | --- |
+| **Skipped** | Could not be brought across. |
+| **Placeholder** | Kept in its place with all its values, and changes nothing in the picture. |
+| **Adjusted** | Came across with a difference, which the line states. |
+
+Lines that say the same thing are one line with a count. A click on it lists where it
+applies: the composition, layer or effect. A right-click on a line has **Show where**,
+**Show where for all**, **Copy line**, **Copy where** and **Copy report**. **Copy report**
+at the foot copies the whole report as text.
+
+### What comes across differently
+
+| In After Effects | In Lumit |
+| --- | --- |
+| A shape operator Lumit has not got, such as Merge Paths or Zig Zag | Left out. The shape draws without it. |
+| Wiggle Paths, Offset Paths | The nearest Lumit modifier. |
+| A keyed fill or stroke colour, opacity or width, or a keyed group opacity | Kept as it starts. |
+| A gradient's colours | White to black. |
+| A Text or Shape layer's extrusion depth and bevel | Geometry options. |
+| Text animators, text on a path, tsume, a justified last line, source text that changes | Not imported. The text is. |
+| Audio layer | A Footage layer carrying its sound. Separate left and right levels become the left one. |
+| A layer kind Lumit has not got, or a layer whose source is gone | A Null layer, in the same place. |
+| Time stretch | The equivalent [Retime](/use/retime/). |
+| Pixel Motion frame blending | Flow frame interpolation. The in-between frames differ. |
+| Classic blend modes | Their modern counterparts. A blend mode Lumit has not got becomes Normal. |
+| Preserve underlying transparency, draft layer quality | Not applied. |
+| Keyed Casts Shadows or Accepts Shadows | The first key's setting. |
+| A light kind Lumit has not got | The nearest kind. |
+| A motion path's spatial tangents | Not carried. Each axis animates on its own. |
+| Mask feather that differs in x and y | One feather, their average. |
+| RotoBezier mask | The polygon through its points. |
+| Pixel aspect ratio other than square | Square pixels. |
+| A composition's start timecode | The composition starts at zero. |
+| Preserve frame rate, or resolution, when nested | Nested compositions follow the one they are in. |
+| An expression Lumit cannot run | Switched off, with its text kept. The keyframes under it drive the property. |
+| A built-in effect Lumit has no match for | A placeholder that keeps every parameter. |
+| A third-party effect | The same effect, when it is installed as an [OFX plugin](/use/plugins/). Otherwise the closest Lumit effect at its defaults, or a placeholder. |
+| Footage that is not on this computer | A missing item with its interpretation kept. |
+| A project at 8 bits a channel without linear blending | Blended in scene-linear light. Blends can shift. |
+
+### Lumit Bridge
+
+An `.aep` that Lumit cannot read is not imported, and the open project stays. Where only
+its structure cannot be read, its footage comes in alone, with no compositions or layers.
+
+Lumit Bridge reads such a project from inside After Effects. It is `lumit-bridge.jsx`, in
+`tools/ae-bridge` of Lumit's source, and runs in After Effects 2024 or later. It writes the
+open project out as a folder ending `.lum-bundle`, and Lumit imports a zip of that folder.
+
+- The bundle records where the footage is and does not hold the files.
+- Values that After Effects scripts cannot read, such as the points of a Curves effect, are
+  not in a bundle. The import report lists them.
+- A bundle written by a newer Lumit Bridge than Lumit knows is refused.
+
 ## Related
 
 - [Compositions](/use/compositions/)
 - [Layers](/use/layers/)
+- [The Project panel](/panels/project/)
+- [Bringing in an After Effects project](/tutorials/after-effects-import/)

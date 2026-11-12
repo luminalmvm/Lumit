@@ -975,7 +975,8 @@ class _Swatch extends StatelessWidget {
           height: 20,
           decoration: BoxDecoration(
             color: on
-                ? PickedColour(colour.r, colour.g, colour.b).clipped
+                // Shown as the Viewer shows it: the colour is linear light.
+                ? PickedColour(colour.r, colour.g, colour.b).onScreen.clipped
                 : t.surface1,
             border: Border.all(
                 color:
@@ -1004,6 +1005,7 @@ class _Swatch extends StatelessWidget {
             details.globalPosition,
             current: PickedColour(colour.r, colour.g, colour.b),
             resetTo: PickedColour(resetTo.r, resetTo.g, resetTo.b),
+            linear: true,
             onPicked: (picked) =>
                 onPicked!(ToolColour(picked.r, picked.g, picked.b)),
           ),
@@ -1012,6 +1014,7 @@ class _Swatch extends StatelessWidget {
             position: details.globalPosition,
             initial: PickedColour(colour.r, colour.g, colour.b),
             scale: ColourScale.bytes,
+            linear: true,
             onCommit: (picked) {
               onPicked!(ToolColour(picked.r, picked.g, picked.b));
               // Picking a colour is asking for one.
