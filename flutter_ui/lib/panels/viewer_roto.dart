@@ -286,6 +286,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// The poll waiting for a release-time solve to land, or null.
   Timer? _solveTimer;
 
+  /// A stroke released while that solve ran, asked for again once it lands.
+  ({_Surface on, UuidValue effect, int frame})? _solveAgain;
+
   @override
   void initState() {
     super.initState();
@@ -791,7 +794,11 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     } catch (_) {
       return;
     }
-    if (started) _watchSolve(on, effect);
+    if (started) {
+      _watchSolve(on, effect);
+    } else if (_solveTimer?.isActive ?? false) {
+      _solveAgain = (on: on, effect: effect, frame: frame);
+    }
   }
 
   /// Wait for the release-time solve to land, then tell the Viewer.
@@ -810,6 +817,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       } catch (_) {
         // The layer or the effect went away under the poll.
         timer.cancel();
+        _solveAgain = null;
         return;
       }
       final moving = s.stage == BridgeRotoStage.queued ||
@@ -820,6 +828,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       widget.uiState.solveLanded.value++;
       widget.uiState.requestFrame();
       widget.onChanged();
+      final again = _solveAgain;
+      _solveAgain = null;
+      if (again != null) _solveNow(again.on, again.effect, again.frame);
     });
   }
 }
