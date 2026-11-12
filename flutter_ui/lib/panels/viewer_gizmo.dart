@@ -65,7 +65,7 @@ import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
 import 'viewer_snap.dart' show snapViewerDrag, viewerSnapTargets;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
 import 'viewer_type.dart' show viewerTypeEditRequest;
-import 'graph_maths.dart' show rationalSeconds;
+import 'graph_maths.dart' show maxInfluence, minTangentReach, rationalSeconds;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart';
 import 'shape_entries.dart';
@@ -1189,8 +1189,10 @@ BridgeSideInterp _sideReaching(List<BridgeKeyframe> keys, int i, double reach,
       (rationalSeconds(keys[j].time) - rationalSeconds(keys[i].time)).abs();
   if (dt <= 0) return side;
   final influence = switch (side) {
-    BridgeSideInterp_Bezier(:final field0) => field0.influence.clamp(1e-3, 1.0),
-    BridgeSideInterp_Auto(:final field0) => field0.influence.clamp(1e-3, 1.0),
+    BridgeSideInterp_Bezier(:final field0) =>
+      field0.influence.clamp(minTangentReach, maxInfluence),
+    BridgeSideInterp_Auto(:final field0) =>
+      field0.influence.clamp(minTangentReach, maxInfluence),
     _ => 1 / 3,
   };
   return BridgeSideInterp.bezier(BridgeBezierSide(
