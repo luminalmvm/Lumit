@@ -457,13 +457,14 @@ pub fn default_keymap() -> Keymap {
         row(Transcript, "Mod+Shift+F", "transcript.fillers"),
         row(Transcript, "Mod+Alt+P", "transcript.pauses"),
         // --- Colour workspace ---
-        // Adding a node and the matte view work from the Viewer too, so they
-        // are app-wide. The rest belong to the grading panels: there the
-        // arrows and Home and End walk the shots, not the playhead.
-        row(Global, "Alt+S", "grade.node.serial"),
-        row(Global, "Alt+P", "grade.node.parallel"),
-        row(Global, "Alt+L", "grade.node.layer"),
-        row(Global, "Alt+O", "grade.node.outside"),
+        // The matte view works from the Viewer too, so it is app-wide. The
+        // rest belong to the grading panels: there Alt+L adds a layer node
+        // rather than learning noise, and the arrows and Home and End walk
+        // the shots, not the playhead.
+        row(Colour, "Alt+S", "grade.node.serial"),
+        row(Colour, "Alt+P", "grade.node.parallel"),
+        row(Colour, "Alt+L", "grade.node.layer"),
+        row(Colour, "Alt+O", "grade.node.outside"),
         row(Global, "Shift+H", "grade.matte"),
         row(Colour, "Mod+Alt+G", "grade.still.grab"),
         row(Colour, "ArrowUp", "grade.shot.prev"),
