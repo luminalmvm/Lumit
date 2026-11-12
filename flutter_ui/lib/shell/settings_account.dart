@@ -84,7 +84,7 @@ class AccountSettings extends StatelessWidget {
         // Free for everyone, so above everything Pro holds.
         if (ui.account.signedIn && matches(l10n.settingsFriends)) {
           sections.add(_Friends(
-              key: ValueKey(ui.account.account?.id),
+              key: ValueKey(('friends', ui.account.account?.id)),
               ui: ui,
               first: sections.isEmpty));
         }
@@ -92,7 +92,7 @@ class AccountSettings extends StatelessWidget {
         if (ui.account.pro &&
             (matches(l10n.settingsPhones) || matches(l10n.phonesExport))) {
           sections.add(_Phones(
-              key: ValueKey(ui.account.account?.id),
+              key: ValueKey(('phones', ui.account.account?.id)),
               ui: ui,
               first: sections.isEmpty));
         }
