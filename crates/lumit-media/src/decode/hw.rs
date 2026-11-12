@@ -3,12 +3,12 @@
 //! software when either goes wrong. Runs on the decode thread that owns the
 //! decoder.
 
+use super::scaler::Scalers;
 use super::{open_codec_ctx, VideoDecoder};
 use crate::MediaError;
 use rsmpeg::avcodec::{AVCodec, AVCodecContext, AVCodecParameters};
 use rsmpeg::avutil::{AVFrame, AVHWDeviceContext};
 use rsmpeg::ffi;
-use rsmpeg::swscale::SwsContext;
 use std::sync::{Mutex, PoisonError};
 
 /// Which device a decoder asks for.
@@ -300,7 +300,7 @@ impl VideoDecoder {
             ffi::av_dict_free(&mut (*to).metadata);
             ffi::av_frame_copy_props(to, frame.as_ptr());
         }
-        let frame = to_software_layout(&sw, self.decoder.sw_pix_fmt)?;
+        let frame = to_software_layout(&sw, self.decoder.sw_pix_fmt, &mut self.scalers)?;
         // Two kept: the last frame handed out is still held by `last`.
         self.spare.push(sw);
         if self.spare.len() > 2 {
@@ -345,7 +345,7 @@ impl VideoDecoder {
         };
         // A ten-bit frame kept semi-planar is compared in software's layout.
         let planar = (frame.format != theirs.format)
-            .then(|| repack(frame, theirs.format).ok())
+            .then(|| Scalers::default().repack(frame, theirs.format).ok())
             .flatten();
         let agrees = same_samples(planar.as_ref().unwrap_or(frame), &theirs);
         judge(kind, agrees);
@@ -424,6 +424,7 @@ impl VideoDecoder {
 pub(super) fn to_software_layout(
     sw: &AVFrame,
     sw_pix_fmt: ffi::AVPixelFormat,
+    scalers: &mut Scalers,
 ) -> Result<AVFrame, MediaError> {
     // The J layouts are the same samples, labelled full range.
     let plain = match sw_pix_fmt {
@@ -449,41 +450,9 @@ pub(super) fn to_software_layout(
     let mut out = match sw.format {
         ffi::AV_PIX_FMT_P010LE | ffi::AV_PIX_FMT_P210LE => return Ok(sw.clone()),
         f if f == plain => sw.clone(),
-        _ => repack(sw, plain)?,
+        _ => scalers.repack(sw, plain)?,
     };
     out.set_format(sw_pix_fmt);
-    Ok(out)
-}
-
-/// `src` in the planar `format`, by a same-size point "scale": a plane copy
-/// plus the chroma deinterleave, with no value changed.
-fn repack(src: &AVFrame, format: ffi::AVPixelFormat) -> Result<AVFrame, MediaError> {
-    let mut sws = SwsContext::get_context(
-        src.width,
-        src.height,
-        src.format,
-        src.width,
-        src.height,
-        format,
-        ffi::SWS_POINT,
-        None,
-        None,
-        None,
-    )
-    .ok_or_else(|| MediaError::Ffmpeg("hardware frame repack context creation failed".into()))?;
-    let mut out = AVFrame::new();
-    out.set_width(src.width);
-    out.set_height(src.height);
-    out.set_format(format);
-    out.alloc_buffer()
-        .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-    sws.scale_frame(src, 0, src.height, &mut out)?;
-    // SAFETY: both frames are valid and ours; this copies plain fields and
-    // side data, never the planes.
-    #[allow(unsafe_code)]
-    unsafe {
-        ffi::av_frame_copy_props(out.as_mut_ptr(), src.as_ptr());
-    }
     Ok(out)
 }
 

@@ -324,11 +324,9 @@ impl lumit_cache::ByteSized for CachedFrame {
 /// so a step back across the cut costs nothing: nine. Twelve leaves room for a
 /// fourth row or a nested comp before anything is closed and opened again.
 ///
-/// ponytail: a count, the same for every file. A hardware decoder holds a
-/// device and surfaces on the card and a software one holds frames in memory,
-/// and neither is weighed. The upgrade is to charge each decoder to the
-/// governor and close by its pressure, if a project of very large files ever
-/// shows twelve to be too many.
+/// ponytail: a count, the same for every file, and what a decoder holds is not
+/// weighed. The upgrade is to charge each to the governor and close by its
+/// pressure, if a project of very large files ever shows twelve to be too many.
 pub const MAX_OPEN_DECODERS: usize = 12;
 
 /// The open decoders one decoding thread keeps, one per footage item.
@@ -372,10 +370,12 @@ impl OpenDecoders {
         self.open.remove(&item);
     }
 
-    /// The decodes that follow are for another frame of the comp. What "used
-    /// lately" means is counted in these.
+    /// The decodes that follow are for another frame, the unit "used lately"
+    /// counts in. A decoder the last frame did not use lets go of its RGBA frame.
     pub fn next_frame(&mut self) {
         self.frame += 1;
+        let idle = self.open.values_mut().filter(|o| o.0 + 1 < self.frame);
+        idle.for_each(|(_, dec)| dec.let_go_of_rgba());
     }
 
     /// The decoder for `item`, opened from `source` if it is not open already.

@@ -39,6 +39,8 @@ mod fields;
 mod hw;
 #[cfg(not(target_arch = "wasm32"))]
 use fields::{field_planes, weave_planes};
+#[cfg(not(target_arch = "wasm32"))]
+mod scaler;
 
 /// How wide a decoded frame's samples are, and what they already mean.
 ///
@@ -144,6 +146,7 @@ pub struct VideoDecoder {
     /// The numbered run this reads, with the source's own path its unreadable
     /// files are noted under. `None` for a plain file.
     run: Option<(crate::sequence::Run, std::path::PathBuf)>,
+    scalers: scaler::Scalers,
 }
 
 /// How far either way a file of a run that won't read looks for one that does.
@@ -287,6 +290,7 @@ impl VideoDecoder {
             run,
             src,
             spare: Vec::new(),
+            scalers: Default::default(),
         })
     }
 
@@ -297,6 +301,12 @@ impl VideoDecoder {
     /// How many seeks this decoder has performed since it was opened.
     pub fn seeks(&self) -> usize {
         self.seeks
+    }
+
+    /// Let go of the RGBA frame kept only to make the next frame sooner, for
+    /// a decoder that sits idle. Nothing it hands back changes.
+    pub fn let_go_of_rgba(&mut self) {
+        self.scalers.let_go_of_rgba();
     }
 
     /// Whether the last frame this decoder handed out came from the graphics
@@ -426,19 +436,20 @@ impl VideoDecoder {
         Ok(luma_of(&frame))
     }
 
-    /// [`convert_rgba`], at the original's size for a smaller stand-in.
+    /// [`convert_rgba`] on the kept scaler, at the original's size for a
+    /// smaller stand-in.
     fn convert(
-        &self,
+        &mut self,
         frame: &AVFrame,
         target_width: Option<u32>,
         pixel_aspect: Option<(u32, u32)>,
     ) -> Result<DecodedFrame, MediaError> {
-        let Some((w, h)) = self.own else {
-            return convert_rgba(frame, target_width, pixel_aspect);
-        };
         let size = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
-        let (dst_w, dst_h) = scaled_size(size(w), size(h), target_width, pixel_aspect);
-        convert_sized(frame, dst_w, dst_h)
+        let (src_w, src_h) = self
+            .own
+            .map_or((frame.width, frame.height), |(w, h)| (size(w), size(h)));
+        let (dst_w, dst_h) = scaled_size(src_w, src_h, target_width, pixel_aspect);
+        self.scalers.rgba(frame, dst_w, dst_h)
     }
 
     /// [`Self::decode_exact`], except that a file of a numbered run that won't
@@ -842,55 +853,7 @@ fn convert_rgba(
 /// A frame as RGBA at exactly this size, eight-bit or float as it arrived.
 #[cfg(not(target_arch = "wasm32"))]
 fn convert_sized(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame, MediaError> {
-    if is_float(frame.format) {
-        return convert_linear_f32(frame, dst_w, dst_h);
-    }
-    let src_w = frame.width;
-    let src_h = frame.height;
-
-    let mut sws = SwsContext::get_context(
-        src_w,
-        src_h,
-        frame.format,
-        dst_w,
-        dst_h,
-        ffi::AV_PIX_FMT_RGBA,
-        ffi::SWS_BILINEAR,
-        None,
-        None,
-        None,
-    )
-    .ok_or_else(|| MediaError::Ffmpeg("swscale context creation failed".into()))?;
-    crate::probe::use_yuv_matrix(&mut sws, frame.colorspace, src_h, true);
-
-    let mut out = AVFrame::new();
-    out.set_width(dst_w);
-    out.set_height(dst_h);
-    out.set_format(ffi::AV_PIX_FMT_RGBA);
-    out.alloc_buffer()
-        .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-    sws.scale_frame(frame, 0, src_h, &mut out)?;
-
-    // Copy out of the AVFrame's padded rows into a tight RGBA buffer.
-    let stride = usize::try_from(out.linesize[0]).unwrap_or(0);
-    let width = u32::try_from(dst_w).unwrap_or(0);
-    let height = u32::try_from(dst_h).unwrap_or(0);
-    let row_bytes = (width as usize).saturating_mul(4);
-    let height_usize = height as usize;
-    // Checked (not saturating): if this would overflow, the buffer cannot
-    // possibly be that large, so treat it as an error rather than reading
-    // out of bounds with a silently-truncated length.
-    let buf_len = stride
-        .checked_mul(height_usize)
-        .ok_or_else(|| MediaError::Ffmpeg("scaled frame buffer size overflow".into()))?;
-    let data = unsafe_data_slice(&out, buf_len)?;
-    let rgba = copy_tight_rows(data, stride, row_bytes, height_usize)?;
-    Ok(DecodedFrame {
-        width,
-        height,
-        rgba,
-        format: PixelFormat::Srgb8,
-    })
+    scaler::Scalers::default().rgba(frame, dst_w, dst_h)
 }
 
 /// Read the frame's first data plane as a byte slice. Kept in one place so

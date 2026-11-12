@@ -249,6 +249,9 @@ pub fn ahead(src: &MediaSource, n: usize, target_width: Option<u32>) -> bool {
 }
 
 impl VideoDecoder {
+    /// Nothing is kept between frames here, so there is nothing to let go of.
+    pub fn let_go_of_rgba(&mut self) {}
+
     pub fn open(src: impl Into<MediaSource>, index: FrameIndex) -> Result<Self, MediaError> {
         Ok(Self(Video::open(src.into(), index)?))
     }
