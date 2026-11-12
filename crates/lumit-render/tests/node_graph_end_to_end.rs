@@ -34,7 +34,10 @@
 // no-panic rule of docs/14 is about the engine's own paths.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphInput, GraphNode, InputKind};
+mod graph_nodes;
+
+use graph_nodes::{number_input, output, picture_input, read, wire};
+use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
 use lumit_core::model::{
     BlendMode, Composition, Document, EffectInstance, EffectParam, EffectValue, Layer, LayerKind,
     LinearColour, MatteChannel, MatteRef, ProjectItem, SolidDef, Switches, TransformGroup,
@@ -131,59 +134,6 @@ fn graph_comp(name: &str, nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Compo
         groups: Vec::new(),
     });
     c
-}
-
-fn wire(from: Uuid, from_port: &str, to: Uuid, to_port: &str) -> GraphEdge {
-    GraphEdge {
-        from,
-        from_port: from_port.to_owned(),
-        to,
-        to_port: to_port.to_owned(),
-    }
-}
-
-fn read(item: Uuid) -> GraphNode {
-    GraphNode::Read {
-        id: Uuid::now_v7(),
-        item,
-        custom_name: None,
-    }
-}
-
-fn picture_input(id: &str) -> GraphNode {
-    GraphNode::Input {
-        id: Uuid::now_v7(),
-        input: GraphInput {
-            id: id.into(),
-            label: id.into(),
-            kind: InputKind::Picture,
-            default: [0.0; 4],
-            min: 0.0,
-            max: 1.0,
-            unit: lumit_core::fx::params::Unit::Raw,
-            preview: None,
-        },
-    }
-}
-
-fn number_input(id: &str, default: f64) -> GraphNode {
-    GraphNode::Input {
-        id: Uuid::now_v7(),
-        input: GraphInput {
-            id: id.into(),
-            label: id.into(),
-            kind: InputKind::Number,
-            default: [default, 0.0, 0.0, 0.0],
-            min: -8.0,
-            max: 8.0,
-            unit: lumit_core::fx::params::Unit::Raw,
-            preview: None,
-        },
-    }
-}
-
-fn output() -> GraphNode {
-    GraphNode::Output { id: Uuid::now_v7() }
 }
 
 /// A fresh builtin instance with `edits` applied to its float rows.

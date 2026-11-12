@@ -17,8 +17,10 @@ use crate::api::{
     state::{LumitBridgeState, PROJECTS},
     BridgeError,
 };
+use map_ends::{map_end_value, map_start_value};
 
 mod clip_peaks;
+mod map_ends;
 
 /// The layer-styles seam's own tests. Its own file beside the module
 /// rather than a corner of `api/tests.rs`, because what it exercises is one
@@ -8395,31 +8397,6 @@ pub(crate) fn trimmed(
         next = next.extend_start(start)?;
     }
     Some(next)
-}
-
-/// The last source position a map reaches — what the clip asks of its source.
-#[frb(ignore)]
-fn map_start_value(
-    map: &lumit_core::anim::Property,
-    now: lumit_core::time::Rational,
-) -> Option<lumit_core::time::Rational> {
-    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
-        return None;
-    };
-    let first = keys.first()?.value;
-    if (first - now.to_f64()).abs() < 1e-9 {
-        return None;
-    }
-    lumit_core::time::Rational::from_f64_on_grid(first, lumit_core::time::Rational::FLICK_DEN).ok()
-}
-
-fn map_end_value(map: &lumit_core::anim::Property) -> Option<lumit_core::time::Rational> {
-    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
-        return None;
-    };
-    let last = keys.last()?;
-    lumit_core::time::Rational::from_f64_on_grid(last.value, lumit_core::time::Rational::FLICK_DEN)
-        .ok()
 }
 
 /// Stand the puppet mesh preview down (see
