@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart';
 import 'package:lumit_flutter/src/rust/api/routes.dart';
 import 'package:uuid/uuid.dart';
 
@@ -20,6 +21,7 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'lower_behind.dart';
 import 'normalise_commands.dart';
 import 'timeline_extras_frb.dart' show labelChips;
 import 'volume_band_frb.dart' show BandKind;
@@ -27,18 +29,40 @@ import 'volume_band_frb.dart' show BandKind;
 /// Change one of [layer]'s sends, keeping the rest of its routing. Read at
 /// the moment of the write, from a gesture, never from a build.
 void writeSend(LayerReference layer, UuidValue bus,
-    {BridgeScalar? level, bool? pre}) {
+    {BridgeScalar? level, bool? pre, bool? muted}) {
   final info = layer.getInfo();
   layer.setAudioRoutes(
     output: info.output,
     sends: [
       for (final s in info.sends)
         s.bus == bus
-            ? BridgeSend(bus: bus, level: level ?? s.level, pre: pre ?? s.pre)
+            ? BridgeSend(
+                bus: bus,
+                level: level ?? s.level,
+                pre: pre ?? s.pre,
+                muted: muted ?? s.muted)
             : s,
     ],
   );
 }
+
+/// **Mute send**, the tick row a send's menu wears: the send silenced or heard
+/// again, one undo step.
+Widget muteSendRow(LayerReference layer, BridgeSend send,
+        {required VoidCallback close, required VoidCallback onChanged}) =>
+    MenuRow(
+      key: ValueKey<String>('send-mute-${send.bus}'),
+      onPressed: () {
+        close();
+        try {
+          writeSend(layer, send.bus, muted: !send.muted);
+        } catch (_) {
+          // A locked layer refuses quietly.
+        }
+        onChanged();
+      },
+      child: MenuLabel(l10n.audioSendMute, ticked: send.muted),
+    );
 
 /// A picture layer's sound moved on to an Audio layer of its own, and the
 /// picture layer muted. A layer with no sound to move says so in the status line.
@@ -130,6 +154,10 @@ List<Widget> audioLayerRows({
   final ids = [for (final t in targets) t.layer.internallayerId];
   final locked = targets.every((t) => t.info.switches.locked);
   final canRename = !switches.locked && targets.length == 1;
+  final sounding = [
+    for (final t in targets)
+      if (t.info.kind != BridgeLayerKind.bus) t,
+  ];
   void flip(BridgeLayerSwitch which, bool on) {
     closeParent();
     try {
@@ -169,7 +197,6 @@ List<Widget> audioLayerRows({
         child: MenuLabel(label, ticked: ticked, action: action),
       );
 
-  // A bus goes to the master and has nothing to choose.
   final isBus = info.kind == BridgeLayerKind.bus;
   // Asked as the menu opens, which is a gesture. Sound with a picture is what
   // can stand on a layer of its own.
@@ -218,6 +245,10 @@ List<Widget> audioLayerRows({
         () => flip(BridgeLayerSwitch.audible, !switches.audible)),
     switchRow('solo', l10n.switchSolo, switches.solo,
         () => flip(BridgeLayerSwitch.solo, !switches.solo)),
+    switchRow('solo-safe', l10n.audioSoloSafe, info.soloSafe, () {
+      closeParent();
+      each((t) => t.layer.setSoloSafe(enabled: !info.soloSafe));
+    }),
     switchRow('bypass', l10n.cutBypassEffects, !switches.fx,
         () => flip(BridgeLayerSwitch.fx, !switches.fx)),
     lock,
@@ -242,17 +273,37 @@ List<Widget> audioLayerRows({
       },
       child: MenuLabel(l10n.audioResetPan, ticked: false, enabled: panOff),
     ),
+    if (targets.any((t) => t.info.audioGainDb != 0))
+      MenuRow(
+        key: const ValueKey<String>('audio-menu-reset-gain'),
+        onPressed: () {
+          closeParent();
+          each((t) {
+            if (t.info.audioGainDb != 0) t.layer.setAudioGainDb(db: 0);
+          });
+        },
+        child: MenuLabel(l10n.clipResetGain, ticked: false),
+      ),
     if (!isBus)
       MenuRow(
         key: const ValueKey<String>('audio-menu-normalise'),
         onPressed: () async {
           closeParent();
-          await normaliseLayers(app, comp, frame, normaliseTargetDb, [
-            for (final t in targets)
-              if (t.info.kind != BridgeLayerKind.bus) t,
-          ], then: onChanged);
+          await normaliseLayers(app, comp, frame, normaliseTargetDb, sounding,
+              then: onChanged);
         },
         child: MenuLabel(l10n.audioNormalise, ticked: false),
+      ),
+    // Several at once, moved by one change so their balance holds.
+    if (!isBus && sounding.length > 1)
+      MenuRow(
+        key: const ValueKey<String>('audio-menu-normalise-together'),
+        onPressed: () {
+          closeParent();
+          normaliseTogether(app, normaliseTargetDb,
+              layers: sounding, then: onChanged);
+        },
+        child: MenuLabel(l10n.audioNormaliseTogether, ticked: false),
       ),
     // The clip menu's loudness list, over every clip of the picked layers. A
     // layer that is one file has no loudness call yet, so it needs clips.
@@ -262,10 +313,20 @@ List<Widget> audioLayerRows({
         close: closeParent,
         tickColumn: true,
         onLoudness: (lufs) => normaliseClips(app, lufs, [
-          for (final t in targets)
-            if (t.info.kind != BridgeLayerKind.bus)
-              for (final c in t.info.clips) (t.layer, c.id),
+          for (final t in sounding)
+            for (final c in t.info.clips) (t.layer, c.id),
         ], then: onChanged, loudness: true),
+      ),
+    if (!isBus &&
+        sounding.length > 1 &&
+        sounding.every((t) => t.info.clips.isNotEmpty))
+      loudnessRow(
+        key: 'audio-menu-loudness-together',
+        close: closeParent,
+        tickColumn: true,
+        label: l10n.audioNormaliseLoudnessTogether,
+        onLoudness: (lufs) => normaliseTogether(app, lufs,
+            layers: sounding, then: onChanged, loudness: true),
       ),
     // Composition ▸ Detect beats, from the music where a cutter looks for it.
     if (!isBus)
@@ -279,15 +340,49 @@ List<Widget> audioLayerRows({
       ),
     ...extra,
     const MenuDivider(),
-    if (!isBus)
-      ...audioRouteRows(
-        entry: entry,
-        targets: targets,
-        app: app,
-        buses: buses,
-        closeParent: closeParent,
-        onChanged: onChanged,
+    ...audioRouteRows(
+      comp: comp,
+      entry: entry,
+      targets: targets,
+      app: app,
+      buses: buses,
+      closeParent: closeParent,
+      onChanged: onChanged,
+    ),
+    SubmenuRow(
+      key: const ValueKey<String>('audio-menu-automation'),
+      closeParent: closeParent,
+      submenu: (dismiss) => FloatSurface(
+        width: 130,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final mode in BridgeAutomationMode.values)
+              MenuRow(
+                key: ValueKey<String>('audio-menu-automation-${mode.name}'),
+                onPressed: () {
+                  dismiss();
+                  each((t) => t.layer.setAutomationMode(mode: mode));
+                },
+                child: MenuLabel(automationModeLabel(mode),
+                    ticked: info.automationMode == mode),
+              ),
+          ],
+        ),
       ),
+      child: MenuLabel(l10n.audioAutomation, ticked: false),
+    ),
+    SubmenuRow(
+      key: const ValueKey<String>('audio-menu-duck'),
+      closeParent: closeParent,
+      submenu: (dismiss) => LowerBehindFlyout(
+          entry: entry,
+          targets: targets,
+          dismiss: dismiss,
+          onChanged: onChanged),
+      child: MenuLabel(l10n.audioLowerBehind, ticked: false),
+    ),
     if (canDetach) detach,
     SubmenuRow(
       key: const ValueKey<String>('audio-menu-add-effect'),
@@ -331,12 +426,15 @@ List<Widget> audioLayerRows({
 /// where [resetGainShown], which greys while no picked clip is off 0 dB.
 /// [tickColumn] leaves room for a tick on every row, for a menu whose rows all
 /// keep one. [onLoudness] normalises to a loudness, in LUFS, picked from a list.
+/// [onTogether], for a pick of several, moves them all by one change: null for
+/// the Normalise target, or a loudness in LUFS.
 List<Widget> soundClipRows({
   required VoidCallback close,
   bool keepPitch = false,
   VoidCallback? onKeepPitch,
   VoidCallback? onNormalise,
   ValueChanged<double>? onLoudness,
+  ValueChanged<double?>? onTogether,
   bool resetGainShown = false,
   VoidCallback? onResetGain,
   bool tickColumn = false,
@@ -357,12 +455,22 @@ List<Widget> soundClipRows({
     if (onKeepPitch != null)
       row('keep-pitch', l10n.menuKeepPitch, onKeepPitch, ticked: keepPitch),
     if (onNormalise != null) row('normalise', l10n.audioNormalise, onNormalise),
+    if (onTogether != null)
+      row('normalise-together', l10n.audioNormaliseTogether,
+          () => onTogether(null)),
     if (onLoudness != null)
       loudnessRow(
           key: 'sound-clip-loudness',
           close: close,
           tickColumn: tickColumn,
           onLoudness: onLoudness),
+    if (onTogether != null && onLoudness != null)
+      loudnessRow(
+          key: 'sound-clip-loudness-together',
+          close: close,
+          tickColumn: tickColumn,
+          label: l10n.audioNormaliseLoudnessTogether,
+          onLoudness: onTogether),
     if (resetGainShown) row('reset-gain', l10n.clipResetGain, onResetGain),
   ];
 }
@@ -373,6 +481,7 @@ Widget loudnessRow({
   required VoidCallback close,
   required ValueChanged<double> onLoudness,
   bool tickColumn = false,
+  String? label,
 }) =>
     SubmenuRow(
       key: ValueKey<String>(key),
@@ -396,7 +505,7 @@ Widget loudnessRow({
           ],
         ),
       ),
-      child: MenuLabel(l10n.audioNormaliseLoudness,
+      child: MenuLabel(label ?? l10n.audioNormaliseLoudness,
           ticked: tickColumn ? false : null),
     );
 
@@ -445,10 +554,22 @@ List<Widget> soundHeadRows({
   ];
 }
 
+/// What an automation mode is called.
+String automationModeLabel(BridgeAutomationMode mode) => switch (mode) {
+      BridgeAutomationMode.read => l10n.automationRead,
+      BridgeAutomationMode.touch => l10n.automationTouch,
+      BridgeAutomationMode.latch => l10n.automationLatch,
+      BridgeAutomationMode.write => l10n.automationWrite,
+      BridgeAutomationMode.trim => l10n.automationTrim,
+    };
+
 /// The two routing rows: **Output**, the master or one bus, and **Send to**, a
 /// tick per bus that adds or takes away a send to it. On several layers the
-/// ticks read the one clicked, and a pick is written on all of them.
+/// ticks read the one clicked, and a pick is written on all of them. A bus
+/// feeds another bus too, and one that would bring the sound back round to
+/// where it started is greyed.
 List<Widget> audioRouteRows({
+  required CompositionReference comp,
   required BridgeLayerEntry entry,
   required List<BridgeLayerEntry> targets,
   required LumitState app,
@@ -457,28 +578,41 @@ List<Widget> audioRouteRows({
   required VoidCallback onChanged,
 }) {
   final info = entry.info;
+  final self = entry.layer.internallayerId;
+  // Asked as the menu opens, which is a gesture.
+  final reachable = [
+    for (final bus in buses)
+      if (bus.layer.internallayerId != self) bus,
+  ];
+  bool allowed(BridgeLayerEntry bus) => targets.every((t) => comp.routeAllowed(
+      layer: t.layer.internallayerId, bus: bus.layer.internallayerId));
   Widget tickRow(String key, bool on, String label, VoidCallback act,
-          VoidCallback dismiss) =>
+          VoidCallback dismiss, {bool enabled = true}) =>
       MenuRow(
         key: ValueKey<String>(key),
+        enabled: enabled,
         onPressed: () {
           dismiss();
           act();
           onChanged();
         },
-        child: Row(children: [menuTick(on), Expanded(child: Text(label))]),
+        child: MenuLabel(label, ticked: on, enabled: enabled),
       );
-  void each(void Function(BridgeLayerEntry target) write) =>
-      asOneUndoStep(app.project, () {
-        for (final t in targets) {
-          if (t.info.kind == BridgeLayerKind.bus) continue;
-          try {
-            write(t);
-          } catch (_) {
-            // A locked layer refuses, and the rest still take it.
-          }
+  void each(void Function(BridgeLayerEntry target) write) {
+    var refused = false;
+    asOneUndoStep(app.project, () {
+      for (final t in targets) {
+        try {
+          write(t);
+        } catch (_) {
+          // A locked layer refuses quietly, and the rest still take it.
+          if (!t.info.switches.locked) refused = true;
         }
-      });
+      }
+    });
+    if (refused) app.postNotice(l10n.audioRouteRefused);
+  }
+
   return [
     SubmenuRow(
       key: const ValueKey<String>('atl-route-output'),
@@ -496,20 +630,25 @@ List<Widget> audioRouteRows({
                 () => each((t) => t.layer
                     .setAudioRoutes(output: null, sends: t.info.sends)),
                 dismiss),
-            for (final bus in buses)
-              tickRow(
-                  'atl-route-output-${bus.layer.internallayerId}',
-                  info.output == bus.layer.internallayerId,
-                  bus.info.name,
-                  () => each((t) => t.layer.setAudioRoutes(
-                      output: bus.layer.internallayerId, sends: t.info.sends)),
-                  dismiss),
+            for (final bus in reachable)
+              () {
+                final on = info.output == bus.layer.internallayerId;
+                return tickRow(
+                    'atl-route-output-${bus.layer.internallayerId}',
+                    on,
+                    bus.info.name,
+                    () => each((t) => t.layer.setAudioRoutes(
+                        output: bus.layer.internallayerId,
+                        sends: t.info.sends)),
+                    dismiss,
+                    enabled: on || allowed(bus));
+              }(),
           ],
         ),
       ),
       child: MenuLabel(l10n.audioRouteOutput, ticked: false),
     ),
-    if (buses.isNotEmpty)
+    if (reachable.isNotEmpty)
       SubmenuRow(
         key: const ValueKey<String>('atl-route-send'),
         closeParent: closeParent,
@@ -519,7 +658,7 @@ List<Widget> audioRouteRows({
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final bus in buses)
+              for (final bus in reachable)
                 () {
                   final id = bus.layer.internallayerId;
                   final on = info.sends.any((s) => s.bus == id);
@@ -539,12 +678,45 @@ List<Widget> audioRouteRows({
                                     pre: false),
                             ],
                           )),
-                      dismiss);
+                      dismiss,
+                      enabled: on || allowed(bus));
                 }(),
             ],
           ),
         ),
         child: MenuLabel(l10n.audioRouteSendTo, ticked: false),
+      ),
+    // Each of the clicked layer's sends, ticked while it is silenced.
+    if (info.sends.isNotEmpty)
+      SubmenuRow(
+        key: const ValueKey<String>('atl-route-mute'),
+        closeParent: closeParent,
+        submenu: (dismiss) => FloatSurface(
+          width: 180,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final send in info.sends)
+                tickRow(
+                    'atl-route-mute-${send.bus}',
+                    send.muted,
+                    buses
+                            .where((b) => b.layer.internallayerId == send.bus)
+                            .firstOrNull
+                            ?.info
+                            .name ??
+                        '',
+                    () => each((t) {
+                          if (t.info.sends.any((s) => s.bus == send.bus)) {
+                            writeSend(t.layer, send.bus, muted: !send.muted);
+                          }
+                        }),
+                    dismiss),
+            ],
+          ),
+        ),
+        child: MenuLabel(l10n.audioSendMute, ticked: false),
       ),
   ];
 }

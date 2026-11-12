@@ -529,6 +529,7 @@ List<LayerRow> layerRows({
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
   Map<String, Map<String, DrivenParam>> driven = const {},
+  Map<String, String> busNames = const {},
   Map<String, RevealFilter> reveal = const {},
   Set<String> revealShut = const {},
   Set<String> revealPicked = const {},
@@ -546,7 +547,8 @@ List<LayerRow> layerRows({
         hasAudio: hasAudio[id] ?? false,
         flowParams: flowParams[id],
         volumeDb: volumeDb[id],
-        driven: driven[id] ?? const {});
+        driven: driven[id] ?? const {},
+        busNames: busNames);
     final fold = filter == null
         ? built
         : withHeadingsShut(

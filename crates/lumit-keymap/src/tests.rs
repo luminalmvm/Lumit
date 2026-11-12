@@ -106,9 +106,9 @@ fn conflicts_flag_same_context_and_global_overlap_but_not_disjoint_contexts() {
 
 /// `L` reveals a layer's Audio in the Timeline and shuttles forward
 /// everywhere else. That, the Cut timeline's editing keys, the Transcript
-/// panel's, a camera tool's Look at and the digits that cut to a multicam
-/// clip's angles in Cut and the Viewer are all the shadows the default ships
-/// with, and they are deliberate.
+/// panel's, a camera tool's Look at, the Mixer's Home and the digits that cut
+/// to a multicam clip's angles in Cut and the Viewer are all the shadows the
+/// default ships with, and they are deliberate.
 #[test]
 fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
     let km = default_keymap();
@@ -143,6 +143,7 @@ fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         ".",
         "Shift+F3",
         "Mod+Shift+F",
+        "Home",
     ]
     .map(String::from)
     .to_vec();

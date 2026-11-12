@@ -1,3 +1,5 @@
+#[cfg(feature = "media")]
+use super::caps::format_caps;
 use super::*;
 
 /// The colour-blind form of [`super::spec_check`], for the rows that have

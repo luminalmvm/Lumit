@@ -126,7 +126,7 @@ pub(crate) fn ahead_of(
     if ahead.is_empty() {
         return stereo.to_vec();
     }
-    let chain = lumit_render::export::AudioChain {
+    let chain = lumit_render::mix::jobs::AudioChain {
         doc: Arc::clone(doc),
         comp: comp.id,
         layer: layer.id,
@@ -136,7 +136,7 @@ pub(crate) fn ahead_of(
         base_s: 0.0,
     };
     let start = (at * f64::from(rate)).round() as i64;
-    match lumit_render::export::chain_bake(&chain, stereo, start, rate, true) {
+    match lumit_render::mix::bake::chain_bake(&chain, stereo, start, rate, true) {
         Some((wet, latency)) => {
             let skip = (latency as usize * 2).min(wet.len());
             let mut out = wet[skip..].to_vec();

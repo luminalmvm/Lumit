@@ -1364,7 +1364,10 @@ class LayerArea extends StatelessWidget {
                   style: WaveformStyle(
                     multiwave: mode == LaneMode.stack,
                     fromBottom: waveformStyle.fromBottom,
+                    scale: waveformStyle.scale,
                   ),
+                  gainDb: entry.info.audioGainDb,
+                  full: t.error,
                   // Both rows: the lane's own, and the empty one
                   // belonging to the **Waveform** twirl directly above it. A
                   // centred wave then sits on the divider between the two

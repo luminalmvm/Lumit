@@ -15,6 +15,8 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'graph_looks.dart';
+import 'layer/clip_peaks.dart';
+import 'mixer.dart';
 import 'model.dart';
 import 'model_rows.dart';
 import 'multicam.dart';
@@ -36,7 +38,7 @@ import 'transcript.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `map_start_value`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `sequenced`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `map_start_value`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `sequenced`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -912,6 +914,16 @@ class BridgeLayerInfo {
   final UuidValue? output;
   final List<BridgeSend> sends;
 
+  /// The layer's own level before its rack and Volume, in dB.
+  final double audioGainDb;
+  final BridgeAutomationMode automationMode;
+
+  /// Keeps sounding while another layer is soloed.
+  final bool soloSafe;
+
+  /// What this layer lowers behind, if anything.
+  final BridgeDuck? duck;
+
   /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
   /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -1050,6 +1062,10 @@ class BridgeLayerInfo {
     required this.pitchFollowsSpeed,
     this.output,
     required this.sends,
+    required this.audioGainDb,
+    required this.automationMode,
+    required this.soloSafe,
+    this.duck,
     required this.masks,
     required this.paint,
     this.puppet,
@@ -1099,6 +1115,10 @@ class BridgeLayerInfo {
       pitchFollowsSpeed.hashCode ^
       output.hashCode ^
       sends.hashCode ^
+      audioGainDb.hashCode ^
+      automationMode.hashCode ^
+      soloSafe.hashCode ^
+      duck.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
       puppet.hashCode ^
@@ -1150,6 +1170,10 @@ class BridgeLayerInfo {
           pitchFollowsSpeed == other.pitchFollowsSpeed &&
           output == other.output &&
           sends == other.sends &&
+          audioGainDb == other.audioGainDb &&
+          automationMode == other.automationMode &&
+          soloSafe == other.soloSafe &&
+          duck == other.duck &&
           masks == other.masks &&
           paint == other.paint &&
           puppet == other.puppet &&
@@ -3099,6 +3123,15 @@ class LayerReference {
           buckets: buckets,
           multiwave: multiwave);
 
+  /// This layer's samples over `[start_seconds, end_seconds)` of the clock
+  /// [`Self::audio_peaks`] takes, mixed to one channel as its wave is.
+  /// Empty for a layer with no sound of its own, or a window holding more
+  /// than 16,384 frames. Not sync: it decodes the window.
+  Future<BridgeAudioSamples> audioSamples(
+          {required double startSeconds, required double endSeconds}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAudioSamples(
+          that: this, startSeconds: startSeconds, endSeconds: endSeconds);
+
   /// One window of this layer's audio as a **spectrogram**: what the
   /// spectral lane mode draws, in the same window-fetch shape the peaks take —
   /// the visible stretch of the source, one column per pixel, so the drawn
@@ -3244,6 +3277,24 @@ class LayerReference {
           endSeconds: endSeconds,
           buckets: buckets,
           multiwave: multiwave,
+          stereo: stereo);
+
+  /// One Sequence clip's samples over `[start_seconds, end_seconds)` of its
+  /// own placed clock, clamped to the clip, as [`Self::clip_audio_peaks`]
+  /// takes it. With `stereo`, left and right apart where the sound has
+  /// two. Empty for a clip with no sound of its own (a multicam clip
+  /// included), or a window holding more than 16,384 frames. Not sync: it
+  /// decodes the window.
+  Future<BridgeAudioSamples> clipAudioSamples(
+          {required UuidValue clip,
+          required double startSeconds,
+          required double endSeconds,
+          required bool stereo}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClipAudioSamples(
+          that: this,
+          clip: clip,
+          startSeconds: startSeconds,
+          endSeconds: endSeconds,
           stereo: stereo);
 
   /// One Sequence clip's audio as a **spectrogram** - the twin of
@@ -4260,7 +4311,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceNormaliseClips(
           that: this, clips: clips, targetDb: targetDb);
 
-  /// The Volume this layer needs for its loudest sample, over the stretch of
+  /// The Gain this layer needs for its loudest sample, over the stretch of
   /// the file it plays, to land at `target_db`. None for a layer with no file
   /// of its own to read, or one with nothing but silence on it.
   ///
@@ -4573,6 +4624,11 @@ class LayerReference {
   void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
 
+  /// Set the layer's own level before its rack and Volume, in dB, held to
+  /// -60 to +24 as a clip's gain line is.
+  void setAudioGainDb({required double db}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAudioGainDb(that: this, db: db);
+
   /// Route this layer's sound to `output` (a Bus layer, or `None` for the
   /// master) and set its sends, as one undoable step.
   void setAudioRoutes({UuidValue? output, required List<BridgeSend> sends}) =>
@@ -4587,6 +4643,10 @@ class LayerReference {
   /// file of its own.
   void setAudioStreams({required List<int> streams}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAudioStreams(that: this, streams: streams);
+
+  void setAutomationMode({required BridgeAutomationMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSetAutomationMode(that: this, mode: mode);
 
   /// Set how one two-axis property is shown and edited: combined on
   /// one row, linked (Scale), or separated onto a row per axis.
@@ -4772,6 +4832,12 @@ class LayerReference {
   void setCueText({required int cue, required String text}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetCueText(that: this, cue: cue, text: text);
+
+  /// Lower this layer behind another layer or a bus, or stop, as one
+  /// undoable step. Refused, with nothing changed, when the sound would go
+  /// round in a circle.
+  void setDuck({BridgeDuck? duck}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetDuck(that: this, duck: duck);
 
   /// Enable or bypass `effect` — **or a style**, whichever list holds it
   /// ([`Self::is_style`]), which is what makes a style row's own on/off tick
@@ -5070,6 +5136,10 @@ class LayerReference {
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
           that: this, id: id, keys: keys);
+
+  /// A solo safe layer keeps sounding while another layer is soloed.
+  void setSoloSafe({required bool enabled}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetSoloSafe(that: this, enabled: enabled);
 
   /// Point this layer at `item`, keeping its transform, keys, masks, effects
   /// and markers. An anchor keeps its place on the picture as the size

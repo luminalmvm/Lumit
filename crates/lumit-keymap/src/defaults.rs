@@ -24,8 +24,8 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 #[must_use]
 pub fn default_keymap() -> Keymap {
     use KeyContext::{
-        Captions, Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Transcript,
-        Viewer,
+        Captions, Cut, Effects, Global, Graph, Mixer, Nodes, Panels, Project, Timeline, Tools,
+        Transcript, Viewer,
     };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
@@ -161,6 +161,7 @@ pub fn default_keymap() -> Keymap {
         // so they take the family's chord with their own initial.
         row(Global, "Mod+Alt+Shift+S", "layer.new.sequence"),
         row(Global, "Mod+Alt+Shift+A", "layer.new.audio"),
+        row(Global, "Mod+Alt+Shift+B", "layer.new.bus"),
         // What else After Effects does to the selected layers from the
         // keyboard, on its own chords. App-wide like the ones above, since a
         // layer picked in the Viewer is as selected as one picked in the
@@ -455,6 +456,20 @@ pub fn default_keymap() -> Keymap {
         row(Transcript, "X", "transcript.mark"),
         row(Transcript, "Mod+Shift+F", "transcript.fillers"),
         row(Transcript, "Mod+Alt+P", "transcript.pauses"),
+        // --- Mixer ---
+        // The arrows walk the strips and ride the picked faders. Home takes
+        // a fader back to 0 dB rather than the playhead to the start.
+        row(Mixer, "ArrowLeft", "mixer.strip.prev"),
+        row(Mixer, "ArrowRight", "mixer.strip.next"),
+        row(Mixer, "ArrowUp", "mixer.fader.up"),
+        row(Mixer, "ArrowDown", "mixer.fader.down"),
+        row(Mixer, "Shift+ArrowUp", "mixer.fader.up.fine"),
+        row(Mixer, "Shift+ArrowDown", "mixer.fader.down.fine"),
+        row(Mixer, "Home", "mixer.fader.reset"),
+        row(Mixer, "M", "mixer.mute"),
+        row(Mixer, "S", "mixer.solo"),
+        row(Mixer, "Alt+S", "mixer.solo.alone"),
+        row(Mixer, "A", "mixer.automation.next"),
         // A multicam clip's angles. The digits cut, with Alt they switch.
         row(Cut, "Mod+Shift+ArrowRight", "multicam.angle.next"),
         row(Cut, "Mod+Shift+ArrowLeft", "multicam.angle.prev"),

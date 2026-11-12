@@ -700,7 +700,7 @@ impl FootageReference {
         // The lock goes before the decode does: `preview` spawns and returns,
         // so nothing slow happens under the project guard (docs/14 §1).
         drop(proj);
-        crate::audio::preview(self.id, sound, start_seconds);
+        crate::audio::preview::preview(self.id, sound, start_seconds);
         Ok(true)
     }
 

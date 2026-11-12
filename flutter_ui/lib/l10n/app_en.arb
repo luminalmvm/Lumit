@@ -7063,6 +7063,54 @@
   "@keyNewAudioLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewBus": "New bus",
+  "@keyNewBus": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Adds a bus, a layer that mixes the sound routed to it."
+  },
+  "keyPreviousStrip": "Previous strip",
+  "@keyPreviousStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyNextStrip": "Next strip",
+  "@keyNextStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyRaiseTheFaderBy05Db": "Raise the fader by 0.5 dB",
+  "@keyRaiseTheFaderBy05Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyLowerTheFaderBy05Db": "Lower the fader by 0.5 dB",
+  "@keyLowerTheFaderBy05Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyRaiseTheFaderBy01Db": "Raise the fader by 0.1 dB",
+  "@keyRaiseTheFaderBy01Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyLowerTheFaderBy01Db": "Lower the fader by 0.1 dB",
+  "@keyLowerTheFaderBy01Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyReturnTheFaderTo0Db": "Return the fader to 0 dB",
+  "@keyReturnTheFaderTo0Db": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyMuteOrUnmuteTheStrip": "Mute or unmute the strip",
+  "@keyMuteOrUnmuteTheStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keySoloOrUnsoloTheStrip": "Solo or unsolo the strip",
+  "@keySoloOrUnsoloTheStrip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keySoloTheStripAlone": "Solo the strip alone",
+  "@keySoloTheStripAlone": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
+  "keyNextAutomationMode": "Next automation mode",
+  "@keyNextAutomationMode": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Acts on the strips picked in the Mixer."
+  },
   "keyNewProject": "New project",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -9562,6 +9610,10 @@
   "cutRefusedWrongLayer": "Picture goes on picture tracks, sound on sound tracks.",
   "@cutRefusedWrongLayer": {
     "description": "Status-line notice when a clip in the Cut timeline is refused because it was put on the wrong kind of track."
+  },
+  "cutRefusedBusTrack": "Clips don't go on a bus track.",
+  "@cutRefusedBusTrack": {
+    "description": "Status-line notice when a clip dropped or pasted on a bus track in the Cut timeline or the Audio timeline is refused. A bus track carries other tracks' sound and holds no clips of its own."
   },
   "pasteSequenceShape": "Paste sequence shape",
   "@pasteSequenceShape": {
@@ -13243,6 +13295,82 @@
   "@insertBus": {
     "description": "Audio timeline, right-click on the empty ground below the rows: adds a bus, a track whose effects and volume work on the sound routed to it."
   },
+  "menuBus": "Bus",
+  "@menuBus": {
+    "description": "Layer menu, New submenu, and the Timeline's new-layer button: adds a bus, a layer that mixes the sound routed to it. The picked layers that make a sound go to the new bus."
+  },
+  "audioSoloSafe": "Solo safe",
+  "@audioSoloSafe": {
+    "description": "Right-click menu on a sound layer (Mixer strip, Audio and Cut timeline track heads, Audio panel): a ticked row. A solo safe layer keeps sounding while another layer is soloed."
+  },
+  "audioAutomation": "Automation",
+  "@audioAutomation": {
+    "description": "Right-click menu on a sound layer: opens the list of ways its volume and pan controls write keys while the composition plays."
+  },
+  "automationRead": "Read",
+  "@automationRead": {
+    "description": "Automation submenu: the controls follow the keys already there and write nothing."
+  },
+  "automationTouch": "Touch",
+  "@automationTouch": {
+    "description": "Automation submenu: a control writes keys only while it is held, then returns to the keys already there."
+  },
+  "automationLatch": "Latch",
+  "@automationLatch": {
+    "description": "Automation submenu: a control writes keys from the moment it is touched until playback stops, holding its last value."
+  },
+  "automationWrite": "Write",
+  "@automationWrite": {
+    "description": "Automation submenu: the controls write keys all the time the composition plays, replacing what was there."
+  },
+  "automationTrim": "Trim",
+  "@automationTrim": {
+    "description": "Automation submenu: moving a control raises or lowers the keys already there by the same amount, rather than replacing them."
+  },
+  "audioRouteRefused": "That route would send the sound round in a circle.",
+  "@audioRouteRefused": {
+    "description": "Status line, after picking a bus in a sound layer's Output or Send to menu: the bus already feeds this layer, so the route was not made."
+  },
+  "audioGain": "Gain",
+  "@audioGain": {
+    "description": "Timeline, a sound layer's Audio group: the row holding the layer's own level in dB, before its effects and its volume. Normalise sets it."
+  },
+  "audioLowerBehind": "Lower behind",
+  "@audioLowerBehind": {
+    "description": "Right-click menu on a sound layer: opens a list of the composition's other sounding layers and its buses. Picking one makes this layer's sound go down while that one is heard."
+  },
+  "audioDuckLine": "{name}, {db} dB",
+  "@audioDuckLine": {
+    "description": "Audio panel, under the Lower behind button: what the picked layer is lowered behind and by how much, for example \"Dialogue, -12 dB\". Click to change it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "db": {
+        "type": "String"
+      }
+    }
+  },
+  "duckAmount": "Amount",
+  "@duckAmount": {
+    "description": "Lower behind popover in the Audio panel: how far the layer's sound goes down while the other one is heard, in dB."
+  },
+  "duckThreshold": "Threshold",
+  "@duckThreshold": {
+    "description": "Lower behind popover: how loud the other sound has to be before this layer goes down, in dB."
+  },
+  "duckAttack": "Attack",
+  "@duckAttack": {
+    "description": "Lower behind popover: how quickly the layer goes down once the other sound starts, in milliseconds."
+  },
+  "duckRelease": "Release",
+  "@duckRelease": {
+    "description": "Lower behind popover: how quickly the layer comes back up once the other sound stops, in milliseconds."
+  },
+  "duckRemove": "Remove",
+  "@duckRemove": {
+    "description": "Lower behind popover: a button that stops the layer being lowered behind anything."
+  },
   "audioRouteOutput": "Output",
   "@audioRouteOutput": {
     "description": "Audio timeline, right-click on a track's name: opens the list of where the track's sound goes, the master or a bus."
@@ -13266,6 +13394,15 @@
   "audioSendPost": "Post",
   "@audioSendPost": {
     "description": "Audio timeline, a send row: short for post-fader. The send is taken after the track's volume and pan. Click to switch to Pre. Keep it very short."
+  },
+  "audioSendTo": "Send to {bus}",
+  "@audioSendTo": {
+    "description": "Audio timeline, the name of a send's automation lane under a track: the level sent to the named bus. {bus} is the bus's name.",
+    "placeholders": {
+      "bus": {
+        "type": "String"
+      }
+    }
   },
   "insertAudioLayer": "Insert audio layer",
   "@insertAudioLayer": {
@@ -15422,6 +15559,64 @@
   "@settingsNormaliseTo": {
     "description": "Settings window, Audio: the level, in dB, that Normalise puts a sound's loudest sample at."
   },
+  "audioOutputMoved": "Sound moved to another output",
+  "@audioOutputMoved": {
+    "description": "Status line, when the sound output in use went away and the sound was moved to another output, usually the system default."
+  },
+  "audioFellBehind": "Sound could not keep up",
+  "@audioFellBehind": {
+    "description": "Status line, said at most once a playback, when some sound was played as silence because it was not ready in time."
+  },
+  "settingsTouchReturn": "Touch return",
+  "@settingsTouchReturn": {
+    "description": "Settings window, Audio: how long, in milliseconds, a control let go while recording in the Touch automation mode takes to glide back to its keys."
+  },
+  "settingsScrubOnDrag": "Scrub when dragging the playhead",
+  "@settingsScrubOnDrag": {
+    "description": "Settings window, Audio: a switch. On, dragging the playhead along a timeline ruler plays the sound under it, as dragging with Ctrl held always does."
+  },
+  "settingsWaveformScale": "Scale",
+  "@settingsWaveformScale": {
+    "description": "Settings window, Appearance, Waveforms: the name of the row choosing how a waveform's height follows the level of the sound."
+  },
+  "waveformLinear": "Linear",
+  "@waveformLinear": {
+    "description": "One choice for a waveform's scale: the height is the level itself."
+  },
+  "waveformSquareRoot": "Square root",
+  "@waveformSquareRoot": {
+    "description": "One choice for a waveform's scale: the height is the square root of the level, which makes quiet sound easier to see."
+  },
+  "waveformLogarithmic": "Logarithmic",
+  "@waveformLogarithmic": {
+    "description": "One choice for a waveform's scale: the height follows the level in decibels, from -60 dB at the centre to 0 dB at the edge."
+  },
+  "exportLoudness": "Loudness",
+  "@exportLoudness": {
+    "description": "Export dialog, Audio section: the name of the row choosing the loudness, in LUFS, the exported mix is brought to."
+  },
+  "exportLoudnessTarget": "Target, {target}",
+  "@exportLoudnessTarget": {
+    "description": "Export dialog, Loudness list: the composition's own loudness target, for example \"Target, −14 LUFS\".",
+    "placeholders": {
+      "target": {
+        "type": "String",
+        "example": "−14 LUFS"
+      }
+    }
+  },
+  "exportTruePeak": "True peak",
+  "@exportTruePeak": {
+    "description": "Export dialog, Audio section: the name of the row holding the highest true peak, in dBTP, the exported mix may reach."
+  },
+  "exportStems": "Stems",
+  "@exportStems": {
+    "description": "Export dialog, Audio section: the name of the row that also writes each bus's sound to a file of its own."
+  },
+  "exportStemsEach": "A file for each bus",
+  "@exportStemsEach": {
+    "description": "Export dialog, Stems row: the tick that writes, beside the main file, one sound file for each bus in the composition."
+  },
   "settingsAudioOffset": "Audio offset",
   "@settingsAudioOffset": {
     "description": "Settings window, Audio: the name of the row that sets how many milliseconds late the sound is heard on this setup, so playback can line the picture up with it. Above zero holds the picture back for late sound, such as through Bluetooth headphones; below zero holds the sound back."
@@ -16915,6 +17110,18 @@
   "@audioNormaliseLoudness": {
     "description": "Menu row on a sound clip, opening a list of loudness targets: sets each picked clip's level so its measured loudness lands on the target picked."
   },
+  "audioNormaliseTogether": "Normalise together",
+  "@audioNormaliseTogether": {
+    "description": "Menu row with several sound clips or layers picked: moves all their levels by one amount, so the loudest sample of them all lands at the level in Settings and the others keep their balance with it."
+  },
+  "audioNormaliseLoudnessTogether": "Normalise loudness together",
+  "@audioNormaliseLoudnessTogether": {
+    "description": "Menu row with several sound clips or layers picked, opening a list of loudness targets: moves all their levels by one amount, so the loudest measured of them lands on the target picked and the others keep their balance with it."
+  },
+  "audioSendMute": "Mute send",
+  "@audioSendMute": {
+    "description": "A ticked menu row on a send: in a sound layer's menu (opening the list of its sends), and on a send's row or automation lane in the Audio timeline and the Timeline. While ticked the send stays in place but carries no sound to its bus."
+  },
   "audioLoudnessTarget": "{value} LUFS",
   "@audioLoudnessTarget": {
     "description": "One target in the Normalise loudness list: a loudness in LUFS, the unit loudness is measured in.",
@@ -17046,6 +17253,126 @@
         "type": "int"
       }
     }
+  },
+  "mixerGainTip": "Gain {value} dB",
+  "@mixerGainTip": {
+    "description": "Tooltip on a Mixer strip's Gain pot: the layer's own level before its effects and its volume, for example \"Gain +3.0 dB\".",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "mixerInsertsCount": "{count} fx",
+  "@mixerInsertsCount": {
+    "description": "Mixer strip on a short panel: one row standing for the strip's audio effects, for example \"3 fx\". Click to list them. Keep it very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mixerSendsCount": "{count, plural, =1{1 send} other{{count} sends}}",
+  "@mixerSendsCount": {
+    "description": "Mixer strip on a short panel: one row standing for the strip's sends to buses, for example \"2 sends\". Click to list them. Keep it very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mixerInsertOn": "On",
+  "@mixerInsertOn": {
+    "description": "Right-click on an audio effect row in a Mixer strip: a ticked row. Unticked, the effect is off and the sound passes it unchanged."
+  },
+  "mixerInsertRemove": "Remove",
+  "@mixerInsertRemove": {
+    "description": "Right-click on an audio effect row in a Mixer strip: takes the effect off the layer."
+  },
+  "mixerSendPreFader": "Pre-fader",
+  "@mixerSendPreFader": {
+    "description": "Right-click on a send row in a Mixer strip: a ticked row. The send is taken before the strip's fader and pan."
+  },
+  "mixerSendPostFader": "Post-fader",
+  "@mixerSendPostFader": {
+    "description": "Right-click on a send row in a Mixer strip: a ticked row. The send is taken after the strip's fader and pan."
+  },
+  "mixerSendRemove": "Remove send",
+  "@mixerSendRemove": {
+    "description": "Right-click on a send row in a Mixer strip: stops sending this strip's sound to that bus."
+  },
+  "mixerShowBus": "Show bus",
+  "@mixerShowBus": {
+    "description": "Right-click on a send row in a Mixer strip: picks the bus the send goes to and scrolls the Mixer to its strip."
+  },
+  "mixerNewBus": "New bus",
+  "@mixerNewBus": {
+    "description": "Mixer, the Output list at the foot of a strip: adds a bus and sends this strip's sound to it."
+  },
+  "mixerClipped": "Clipped",
+  "@mixerClipped": {
+    "description": "Tooltip on a Mixer strip's clip light while it is lit: the strip's sound reached full scale. Click to put the light out."
+  },
+  "mixerLoudnessTarget": "Loudness target",
+  "@mixerLoudnessTarget": {
+    "description": "Right-click on the Mixer's Master strip, and Composition menu, Audio submenu: the loudness the composition's mix is made for. Also the title of the dialogue that asks for one."
+  },
+  "mixerLoudnessTargetOff": "Off",
+  "@mixerLoudnessTargetOff": {
+    "description": "Loudness target submenu: the composition has no loudness target."
+  },
+  "mixerLoudnessTargetCustom": "Custom…",
+  "@mixerLoudnessTargetCustom": {
+    "description": "Loudness target submenu: asks for a loudness and a true peak of your own."
+  },
+  "mixerNormaliseMix": "Normalise mix…",
+  "@mixerNormaliseMix": {
+    "description": "Right-click on the Mixer's Master strip, and Composition menu, Audio submenu: measures the whole mix and sets the master volume so it meets the loudness target."
+  },
+  "mixerNormalisingMix": "Normalising the mix",
+  "@mixerNormalisingMix": {
+    "description": "The card shown over the window while Normalise mix measures the composition's whole mix."
+  },
+  "mixerNormalisedMix": "The mix is now {lufs} LUFS",
+  "@mixerNormalisedMix": {
+    "description": "Status line after Normalise mix: the composition's integrated loudness once the master volume was set, for example \"The mix is now -14.0 LUFS\".",
+    "placeholders": {
+      "lufs": {
+        "type": "String"
+      }
+    }
+  },
+  "mixerNormaliseSilent": "The mix is silent, so nothing was changed",
+  "@mixerNormaliseSilent": {
+    "description": "Status line after Normalise mix when nothing in the composition makes a sound, so there was no loudness to measure and the master was left as it is."
+  },
+  "mixerNormaliseBusy": "The mix is already being measured",
+  "@mixerNormaliseBusy": {
+    "description": "Status line when Normalise mix is chosen while an earlier Normalise mix is still measuring, so the second one did not start."
+  },
+  "loudnessMomentaryMark": "M",
+  "@loudnessMomentaryMark": {
+    "description": "Mixer, Master strip: the short mark over the momentary loudness reading. Keep it one or two letters."
+  },
+  "loudnessMomentary": "Momentary loudness",
+  "@loudnessMomentary": {
+    "description": "Tooltip on the Master strip's M reading: the loudness of the last 400 milliseconds, in LUFS."
+  },
+  "loudnessRangeMark": "LRA",
+  "@loudnessRangeMark": {
+    "description": "Mixer, Master strip: the short mark over the loudness range reading. Keep it very short."
+  },
+  "loudnessRange": "Loudness range",
+  "@loudnessRange": {
+    "description": "Tooltip on the Master strip's LRA reading: how much the loudness varies over the mix, in LU."
+  },
+  "unitSymbolLufs": "LUFS",
+  "@unitSymbolLufs": {
+    "description": "Unit after a loudness value, loudness units relative to full scale. Usually left as it is."
+  },
+  "unitSymbolDbtp": "dBTP",
+  "@unitSymbolDbtp": {
+    "description": "Unit after a true peak value, decibels true peak. Usually left as it is."
   },
   "audioSectionBeats": "Beats",
   "@audioSectionBeats": {
@@ -19088,6 +19415,42 @@
   "captionsNothingToJoin": "Those captions cannot be joined.",
   "@captionsNothingToJoin": {
     "description": "Status line, when Join is asked of captions that cannot be one, such as captions from two different files."
+  },
+  "histEditGain": "Edit gain",
+  "@histEditGain": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetAutomationMode": "Set automation mode",
+  "@histSetAutomationMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSoloSafeSwitch": "Solo safe switch",
+  "@histSoloSafeSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditLowerBehind": "Edit lower behind",
+  "@histEditLowerBehind": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditMasterAutomation": "Edit master automation",
+  "@histEditMasterAutomation": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetMasterAutomationMode": "Set master automation mode",
+  "@histSetMasterAutomationMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetLoudnessTarget": "Set loudness target",
+  "@histSetLoudnessTarget": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histRecordAutomation": "Record automation",
+  "@histRecordAutomation": {
+    "description": "A row of the Edit > History window: the keys one automation pass wrote while the composition played. Sent by the engine as English and looked up here."
+  },
+  "histNormaliseMix": "Normalise mix",
+  "@histNormaliseMix": {
+    "description": "A row of the Edit > History window: the master fader moved so the whole mix meets a loudness. Sent by the engine as English and looked up here."
   },
   "captionsCannotAddHere": "No caption can go at the playhead.",
   "@captionsCannotAddHere": {

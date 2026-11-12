@@ -14,6 +14,10 @@
 //! there. Where the callback gets to a block first it plays silence, counts
 //! the frames ([`ClockHandle::starved_frames`]) and carries on: the clock
 //! never waits for a decode.
+//!
+//! The mix itself is a graph of nodes ([`plan`], [`block`]): the callback
+//! walks it once a buffer with its own [`block::MixWork`], made when the
+//! stream opens.
 
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::Device;
@@ -23,10 +27,18 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::Arc;
 
 pub mod beat;
+pub mod block;
+pub mod duck;
+mod jog;
+pub mod limiter;
+pub mod live;
 pub mod loudness;
 pub mod meter;
 pub mod mix;
 pub mod peaks;
+pub mod plan;
+pub mod rack;
+mod rack_thread;
 mod slow;
 pub mod spectra;
 pub mod speed;
@@ -49,7 +61,7 @@ struct Shared {
     /// load and on audio edits; the callback try-reads and plays silence on a
     /// miss. Swapping the plan — not re-baking a buffer — is what makes
     /// solo/mute/move audible on the next callback (docs/09 §6).
-    plan: RwLock<Option<Arc<mix::MixPlan>>>,
+    plan: RwLock<Option<Arc<plan::MixPlan>>>,
     /// Frames consumed since load/seek — the clock.
     playhead: AtomicUsize,
     /// How many frames the last callback moved the playhead by, and when it
@@ -77,6 +89,10 @@ struct Shared {
     /// will sound and then hands it to `scrub`, so a burst is heard whole
     /// and a moment late, and not at once with its first blocks missing.
     scrub_wanted: AtomicU64,
+    /// Where the jog is asked to go, as the bits of a frame count (f64), or
+    /// [`jog::NO_JOG`]. Written by [`AudioEngine::jog`] and read by the
+    /// callback and the filling thread.
+    jog: AtomicU64,
     /// How many frames of some clip were due and not in memory, and were
     /// played as silence. Only ever grows.
     starved: AtomicU64,
@@ -84,10 +100,16 @@ struct Shared {
     closed: AtomicBool,
     /// How many times slower than the mix the sound plays ([`slow`]).
     slow: AtomicU32,
+    /// How late what the callback mixes is heard, in frames: the device's
+    /// own delay as it reports it, smoothed, and the limiter's look ahead.
+    device_latency: AtomicU32,
+    lookahead: AtomicU32,
+    /// The stream has stopped for good: the device went away.
+    device_lost: AtomicBool,
 }
 
 impl Shared {
-    fn new(plan: Option<Arc<mix::MixPlan>>) -> Self {
+    fn new(plan: Option<Arc<plan::MixPlan>>) -> Self {
         Self {
             plan: RwLock::new(plan),
             playhead: AtomicUsize::new(0),
@@ -98,10 +120,21 @@ impl Shared {
             scrub: AtomicU64::new(0),
             meters: Arc::new(meter::Meters::default()),
             scrub_wanted: AtomicU64::new(0),
+            jog: AtomicU64::new(jog::NO_JOG),
             starved: AtomicU64::new(0),
             closed: AtomicBool::new(false),
             slow: AtomicU32::new(1),
+            device_latency: AtomicU32::new(0),
+            lookahead: AtomicU32::new(0),
+            device_lost: AtomicBool::new(false),
         }
+    }
+
+    /// How late the sound is heard after it is mixed, in frames.
+    fn latency_frames(&self) -> u32 {
+        self.device_latency
+            .load(Ordering::Relaxed)
+            .saturating_add(self.lookahead.load(Ordering::Relaxed))
     }
 
     /// Where the clock stands, in frames.
@@ -109,9 +142,11 @@ impl Shared {
     /// The callback hands the card a buffer and counts all of it at once.
     /// While playing, that buffer is counted in here as time passes, so the
     /// clock runs smoothly from the start of the buffer to its end, and
-    /// waits there if the next callback is late. Stopped, it is the playhead.
-    // The three reads are not one read. One that lands across a callback is
-    // out by a buffer at most, for that one reading.
+    /// waits there if the next callback is late. Playing, it is also held
+    /// back by how late the sound is heard, so it reads what is heard now.
+    /// Stopped, it is the playhead.
+    // The reads are not one read. One that lands across a callback is out by
+    // a buffer at most, for that one reading.
     fn clock_frames(&self, rate: u32) -> f64 {
         let playhead = self.playhead.load(Ordering::Relaxed) as f64;
         if !self.playing.load(Ordering::Relaxed) {
@@ -121,19 +156,29 @@ impl Shared {
         let since = nanos().saturating_sub(self.stepped_at.load(Ordering::Relaxed));
         let slow = f64::from(self.slow.load(Ordering::Relaxed).max(1));
         let passed = since as f64 * f64::from(rate) / 1e9 / slow;
-        (playhead - step + passed.min(step)).max(0.0)
+        let late = f64::from(self.latency_frames()) / slow;
+        (playhead - step + passed.min(step) - late).max(0.0)
     }
 }
 
-/// How many frames the callback mixes at a time, on its own stack: more than
-/// a sound card asks for in one go, so a callback is one walk of the plan.
-const SCRATCH_FRAMES: usize = 1024;
+/// How many frames the callback mixes at a time: more than a sound card asks
+/// for in one go, so a callback is one walk of the plan.
+const SCRATCH_FRAMES: usize = block::SCRATCH_FRAMES;
+
+/// How much of each new reading of the device's delay the smoothed figure
+/// takes. The reading wobbles from buffer to buffer; the clock must not.
+#[cfg(not(target_arch = "wasm32"))]
+const LATENCY_SMOOTHING: f64 = 0.05;
 
 /// How far ahead of the playhead the filling thread keeps the sound decoded,
 /// in seconds: while playing, and while stopped (when what matters is that
 /// the next press of play starts with sound).
 pub const PLAY_AHEAD_SECONDS: usize = 8;
 pub const STOPPED_AHEAD_SECONDS: usize = 4;
+
+/// The longest a start waits for its sound to be ready
+/// ([`AudioEngine::start_at`]).
+pub const START_WAIT: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// How long the filling thread rests when there is nothing to decode. A seek,
 /// a new plan or a scrub wakes it at once.
@@ -199,24 +244,44 @@ impl Burst {
 struct Scrub {
     now: Burst,
     was: Burst,
+    /// The varispeed scrub ([`jog`]).
+    jog: jog::Jog,
 }
 
-/// A whole buffer as a trivial plan: one clip covering the strip 1:1.
-fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<mix::MixPlan> {
+/// A whole buffer as a trivial plan: one clip covering the strip 1:1, into
+/// one node.
+fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<plan::MixPlan> {
     let frames = buffer.frames();
-    Arc::new(mix::MixPlan {
-        clips: vec![mix::PlacedClip {
+    Arc::new(plan::MixPlan::single(
+        vec![plan::PlacedClip {
             source: stream::Source::whole(buffer),
             start_frame: 0,
             src_start: 0,
             len: frames,
             gain: [1.0, 1.0],
             envelope: None,
-            meter: 0,
+            node: 0,
+            silent: false,
         }],
-        total_frames: frames,
-        master_gain: 1.0,
-    })
+        frames,
+    ))
+}
+
+/// Hand one mixed stereo frame to a device frame: both sides to a stereo
+/// device, `(L + R) / 2` to a mono one, silence on any channel past two.
+/// With `gain`, added rather than written.
+#[inline]
+fn put(frame: &mut [f32], l: f32, r: f32, gain: Option<f32>) {
+    let (l, r) = match frame.len() {
+        1 => ((l + r) * 0.5, 0.0),
+        _ => (l, r),
+    };
+    for (d, s) in frame.iter_mut().zip([l, r]) {
+        match gain {
+            Some(g) => *d += s * g,
+            None => *d = s,
+        }
+    }
 }
 
 /// One output the machine offers (docs/09 §3.1).
@@ -306,15 +371,16 @@ pub struct AudioEngine {
     shared: Arc<Shared>,
     device_rate: u32,
     channels: usize,
-    /// The thread that fills ahead, to wake it when where it should be
-    /// filling has changed.
+    /// The thread that fills ahead and the rack thread, to wake them when
+    /// where they should be filling has changed.
     filler: std::thread::Thread,
+    racks: std::thread::Thread,
 }
 
 impl Drop for AudioEngine {
     fn drop(&mut self) {
         self.shared.closed.store(true, Ordering::Relaxed);
-        self.filler.unpark();
+        self.wake();
     }
 }
 
@@ -355,23 +421,41 @@ impl AudioEngine {
         let mut edge = Edge::default();
         let mut stretch = slow::Stretch::new(device_rate);
         let mut loudness = loudness::Loudness::new(device_rate);
+        let mut work = block::MixWork::new(device_rate).owning_live();
+        let mut late = 0.0f64;
+        let lost = shared.clone();
 
         let stream = device
             .build_output_stream(
                 &config.config(),
-                move |out: &mut [f32], _| {
+                move |out: &mut [f32], info: &cpal::OutputCallbackInfo| {
+                    let stamp = info.timestamp();
+                    if let Some(gap) = stamp.playback.duration_since(&stamp.callback) {
+                        let frames = gap.as_secs_f64() * f64::from(device_rate);
+                        late += (frames - late) * LATENCY_SMOOTHING;
+                        cb.device_latency
+                            .store(late.round() as u32, Ordering::Relaxed);
+                    }
                     let meter = &mut loudness;
                     fill_smooth(
                         &cb,
                         &mut scrub,
                         &mut edge,
                         &mut stretch,
+                        &mut work,
                         meter,
                         out,
                         channels,
                     )
                 },
-                |_err| { /* device hiccup: next callback continues; never panic */ },
+                move |err| {
+                    // A hiccup carries on with the next callback. A device
+                    // that has gone ends the stream, and whoever owns the
+                    // engine opens another.
+                    if matches!(err, cpal::StreamError::DeviceNotAvailable) {
+                        lost.device_lost.store(true, Ordering::Relaxed);
+                    }
+                },
                 None,
             )
             .map_err(|e| AudioError::Device(e.to_string()))?;
@@ -392,6 +476,8 @@ impl AudioEngine {
             .map_err(|e| AudioError::Device(e.to_string()))?
             .thread()
             .clone();
+        let racks = rack_thread::spawn(Arc::clone(&shared), device_rate)
+            .map_err(|e| AudioError::Device(e.to_string()))?;
 
         Ok(Self {
             _stream: stream,
@@ -399,7 +485,15 @@ impl AudioEngine {
             device_rate,
             channels,
             filler,
+            racks,
         })
+    }
+
+    /// Wake the filling thread and the rack thread: what they should be
+    /// filling has changed.
+    fn wake(&self) {
+        self.filler.unpark();
+        self.racks.unpark();
     }
 
     /// The rate media should be decoded at so no runtime resampling happens.
@@ -417,21 +511,21 @@ impl AudioEngine {
     }
 
     /// Install a live mix plan (clips decoded at `device_rate`) and rewind.
-    pub fn load_plan(&self, plan: Arc<mix::MixPlan>) {
+    pub fn load_plan(&self, plan: Arc<plan::MixPlan>) {
         self.shared.playing.store(false, Ordering::Relaxed);
         *self.shared.plan.write() = Some(plan);
         self.shared.playhead.store(0, Ordering::Relaxed);
         // Another composition: its loudness is measured from the start.
         self.shared.meters.reset_loudness();
-        self.filler.unpark();
+        self.wake();
     }
 
     /// Replace the plan **without touching the clock or play state** — the
     /// instant-edit path: solo, mute, move and trim swap the plan mid-playback
     /// and are heard on the next callback (~10 ms), no re-bake, no seek.
-    pub fn swap_plan(&self, plan: Arc<mix::MixPlan>) {
+    pub fn swap_plan(&self, plan: Arc<plan::MixPlan>) {
         *self.shared.plan.write() = Some(plan);
-        self.filler.unpark();
+        self.wake();
     }
 
     pub fn unload(&self) {
@@ -442,7 +536,7 @@ impl AudioEngine {
 
     pub fn play(&self) {
         self.shared.playing.store(true, Ordering::Relaxed);
-        self.filler.unpark();
+        self.wake();
     }
 
     pub fn pause(&self) {
@@ -467,7 +561,33 @@ impl AudioEngine {
         // No buffer has been counted from here yet.
         self.shared.step.store(0, Ordering::Relaxed);
         self.shared.playhead.store(frame, Ordering::Relaxed);
-        self.filler.unpark();
+        self.wake();
+    }
+
+    /// Play from `t` seconds, heard from its first frame: where the sound
+    /// there is not decoded yet, or a rack has not run in, the transport
+    /// stands stopped at `t` until it is, for up to [`START_WAIT`]. Waits on
+    /// the caller's thread, never the callback's; the page cannot wait, so
+    /// there it starts at once.
+    pub fn start_at(&self, t: f64) {
+        let frame = (t.max(0.0) * f64::from(self.device_rate)) as usize;
+        let want = self.device_rate as usize / 20;
+        let ready = || {
+            let plan = self.shared.plan.read();
+            plan.as_ref()
+                .is_none_or(|p| p.ready(frame, want.min(p.total_frames.saturating_sub(frame))))
+        };
+        if cfg!(not(target_arch = "wasm32")) && !ready() {
+            self.pause();
+            self.seek_seconds(t);
+            let began = web_time::Instant::now();
+            while !ready() && began.elapsed() < START_WAIT {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        } else {
+            self.seek_seconds(t);
+        }
+        self.play();
     }
 
     /// Sound `len` seconds of the mix from `t`, once, while the transport is
@@ -487,12 +607,11 @@ impl AudioEngine {
         self.shared
             .scrub_wanted
             .store(pack_scrub(at, len), Ordering::Relaxed);
-        self.filler.unpark();
+        self.wake();
     }
 
     /// The playback clock (docs/06-RENDER-PIPELINE.md §A/V sync: audio is
-    /// master). Output latency compensation arrives with the ring buffer
-    /// work; at ±half a frame tolerance it is acceptable to omit for Gate 0.
+    /// master), less how late the sound is heard while playing.
     pub fn clock_seconds(&self) -> f64 {
         self.shared.clock_frames(self.device_rate) / f64::from(self.device_rate)
     }
@@ -551,6 +670,33 @@ impl ClockHandle {
     pub fn starved_frames(&self) -> u64 {
         self.shared.starved.load(Ordering::Relaxed)
     }
+
+    /// The frame the mix has got to, with no allowance for how late it is
+    /// heard: where a rack thread fills its rings from.
+    #[must_use]
+    pub fn playhead_frames(&self) -> usize {
+        self.shared.playhead.load(Ordering::Relaxed)
+    }
+
+    /// The rate the engine mixes at.
+    #[must_use]
+    pub fn device_rate(&self) -> u32 {
+        self.device_rate
+    }
+
+    /// How late what is mixed is heard, in seconds: the device's own delay
+    /// and the master limiter's look ahead. The clock already takes it off.
+    #[must_use]
+    pub fn output_latency_seconds(&self) -> f64 {
+        f64::from(self.shared.latency_frames()) / f64::from(self.device_rate.max(1))
+    }
+
+    /// The device has gone and the stream with it. Nothing more will be heard
+    /// until an engine is opened again.
+    #[must_use]
+    pub fn device_lost(&self) -> bool {
+        self.shared.device_lost.load(Ordering::Relaxed)
+    }
 }
 
 /// **One step of the filling thread**: make a waiting scrub ready, then decode
@@ -574,6 +720,11 @@ fn fill_ahead(shared: &Shared, rate: u32) -> bool {
         let len = (asked & ((1 << SCRUB_LEN_BITS) - 1)) as usize;
         plan.warm(at, at.saturating_add(len));
         shared.scrub.store(asked, Ordering::Relaxed);
+    }
+    // And the stretch around where the jog is heading.
+    if let Some(target) = shared.jog_target() {
+        let (at, half) = (target as usize, rate as usize / 2);
+        plan.warm(at.saturating_sub(half), at.saturating_add(half));
     }
     let playhead = shared.playhead.load(Ordering::Relaxed);
     let ahead = if shared.playing.load(Ordering::Relaxed) {
@@ -615,11 +766,13 @@ struct Edge {
 /// first [`SCRUB_FADE_FRAMES`] of such a buffer are blended up from the last
 /// frame of the one before, so the wave arrives where it is going and does
 /// not jump there.
+#[allow(clippy::too_many_arguments)]
 fn fill_smooth(
     shared: &Shared,
     scrub: &mut Scrub,
     edge: &mut Edge,
     stretch: &mut slow::Stretch,
+    work: &mut block::MixWork,
     loudness: &mut loudness::Loudness,
     out: &mut [f32],
     channels: usize,
@@ -629,12 +782,15 @@ fn fill_smooth(
     }
     let playing = shared.playing.load(Ordering::Relaxed);
     let began = shared.playhead.load(Ordering::Relaxed);
-    if stretch.fill(shared, scrub, out, channels) {
+    let lookahead = if stretch.fill(shared, scrub, work, out, channels) {
         // Slowed down is not the mix as it will be heard, so it is not measured.
         loudness.pause();
+        0
     } else {
-        fill(shared, scrub, Some(&mut *loudness), out, channels);
-    }
+        fill(shared, scrub, work, Some(&mut *loudness), out, channels);
+        work.latency()
+    };
+    shared.lookahead.store(lookahead, Ordering::Relaxed);
     shared.meters.publish_loudness(loudness.reading());
     if channels == 0 {
         return;
@@ -656,14 +812,15 @@ fn fill_smooth(
 }
 
 /// The realtime callback: lock-free reads, no allocation, silence on any miss.
-/// Each buffer is summed live from the plan's clips sounding in it
-/// ([`mix::MixPlan::mix_into`]), which is what lets an edit swap the plan and
-/// be heard immediately. A clip whose block is not in memory yet is silence
-/// for those frames, and they are counted. The master's loudness is measured
-/// into `loudness` when one is given.
+/// Each buffer is mixed live from the plan ([`plan::MixPlan::mix_block`]),
+/// which is what lets an edit swap the plan and be heard immediately. A clip
+/// whose block is not in memory yet is silence for those frames, and so is a
+/// rack's output not yet in its ring; both are counted. The master's loudness
+/// is measured into `loudness` when one is given.
 fn fill(
     shared: &Shared,
     scrub: &mut Scrub,
+    work: &mut block::MixWork,
     mut loudness: Option<&mut loudness::Loudness>,
     out: &mut [f32],
     channels: usize,
@@ -677,12 +834,15 @@ fn fill(
         if let Some(loudness) = loudness {
             loudness.pause();
         }
-        fill_scrub(shared, scrub, out, channels);
+        work.set_limiter(false);
+        fill_scrub(shared, scrub, work, out, channels);
         return;
     }
+    work.set_limiter(true);
     // Playing: a burst cut off by the play button is not picked up again when
     // playback stops, and one asked for meanwhile is not kept for then.
     shared.scrub.store(0, Ordering::Relaxed);
+    shared.jog.store(jog::NO_JOG, Ordering::Relaxed);
     *scrub = Scrub::default();
     let Some(guard) = shared.plan.try_read() else {
         return; // plan being swapped: one quiet buffer beats a glitch
@@ -701,20 +861,18 @@ fn fill(
     // atomics and no allocation; published once, below.
     let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
     let mut scratch = [0.0f32; SCRATCH_FRAMES * 2];
+    let mut rings = block::RingSource::default();
     let mut missed = 0usize;
     for chunk in out.chunks_mut(SCRATCH_FRAMES * channels) {
         let wanted = chunk.len() / channels;
         let frames = wanted.min(total.saturating_sub(playhead));
         let mixed = &mut scratch[..frames * 2];
-        missed += plan.mix_into(playhead, mixed, Some(&mut acc));
+        missed += plan.mix_block(playhead, mixed, work, &mut rings, Some(&mut acc), None);
         if let Some(loudness) = loudness.as_deref_mut() {
             loudness.add(mixed);
         }
         for (frame, s) in chunk.chunks_exact_mut(channels).zip(mixed.chunks_exact(2)) {
-            frame[0] = s[0];
-            if channels > 1 {
-                frame[1] = s[1];
-            }
+            put(frame, s[0], s[1], None);
         }
         playhead += frames;
         if frames < wanted {
@@ -733,7 +891,8 @@ fn fill(
         shared.step.store(playhead - began, Ordering::Relaxed);
         shared.stepped_at.store(nanos(), Ordering::Relaxed);
     }
-    shared.meters.publish(&acc);
+    shared.meters.publish(&acc, plan.nodes.len());
+    missed += rings.missed;
     if missed > 0 {
         shared.starved.fetch_add(missed as u64, Ordering::Relaxed);
     }
@@ -747,8 +906,15 @@ fn fill(
 
 /// The stopped transport's half of the callback: sound whatever scrub burst
 /// is in flight, and nothing otherwise. Under the same rules as [`fill`], and
-/// the clock is left where it is.
-fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
+/// the clock is left where it is. Racks are heard dry: their streams run
+/// ahead of the playhead, not of a scrub.
+fn fill_scrub(
+    shared: &Shared,
+    scrub: &mut Scrub,
+    work: &mut block::MixWork,
+    out: &mut [f32],
+    channels: usize,
+) {
     let asked = shared.scrub.swap(0, Ordering::Relaxed);
     if asked != 0 {
         scrub.was = scrub.now;
@@ -759,7 +925,8 @@ fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usi
             left: (asked & ((1 << SCRUB_LEN_BITS) - 1)) as usize,
         };
     }
-    if scrub.now.left == 0 && scrub.was.left == 0 {
+    let target = shared.jog_target();
+    if scrub.now.left == 0 && scrub.was.left == 0 && !scrub.jog.wanted(target) {
         return;
     }
     let Some(guard) = shared.plan.try_read() else {
@@ -782,13 +949,9 @@ fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usi
                 .min(burst.left)
                 .min(plan.total_frames.saturating_sub(burst.at));
             let mixed = &mut scratch[..frames * 2];
-            missed += plan.mix_into(burst.at, mixed, None);
+            missed += plan.mix_block(burst.at, mixed, work, &mut block::DrySource, None, None);
             for (frame, s) in chunk.chunks_exact_mut(channels).zip(mixed.chunks_exact(2)) {
-                let gain = burst.gain();
-                frame[0] += s[0] * gain;
-                if channels > 1 {
-                    frame[1] += s[1] * gain;
-                }
+                put(frame, s[0], s[1], Some(burst.gain()));
                 burst.at += 1;
                 burst.played += 1;
                 burst.left -= 1;
@@ -798,6 +961,7 @@ fn fill_scrub(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usi
             }
         }
     }
+    missed += scrub.jog.fill(plan, target, work, out, channels);
     if missed > 0 {
         shared.starved.fetch_add(missed as u64, Ordering::Relaxed);
     }

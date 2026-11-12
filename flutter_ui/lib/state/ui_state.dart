@@ -38,7 +38,7 @@ import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
-    show audioSetMuted, audioSetOffsetMs, setAudioDevice;
+    show audioClock, audioSetMuted, audioSetOffsetMs, setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
@@ -52,6 +52,7 @@ import 'package:lumit_flutter/src/rust/api/multicam.dart'
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show setTouchReturnMs;
 import 'package:lumit_flutter/src/rust/api/model.dart'
     show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -76,6 +77,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeSharePerson;
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/app_icon.dart';
+import 'package:lumit_flutter/state/audio_notices.dart';
 import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/background.dart';
 import 'package:lumit_flutter/state/caption_selection.dart';
@@ -1135,6 +1137,7 @@ class LumitUiState extends ChangeNotifier {
     // left standing from the frame that started the run would be the only bar
     // that ever appeared during playback.
     previewProgress.stop();
+    audioNotices.restart();
     _playFrom(comp, playheadFrame.value);
     playing.value = true;
   }
@@ -1792,6 +1795,7 @@ class LumitUiState extends ChangeNotifier {
   void _arrived(int frame) {
     frameArrived.value++;
     if (!playing.value) return;
+    audioNotices.read(audioClock(), _app);
     // After a turn, a frame outside the work area is the old leg running on,
     // and the first frame inside it is the new leg arriving.
     final loop = _loop;
@@ -3261,6 +3265,7 @@ class LumitUiState extends ChangeNotifier {
     final device = this.workspace.audioDevice;
     if (device != null) setAudioDevice(id: device);
     audioSetOffsetMs(ms: this.workspace.audioOffsetMs);
+    setTouchReturnMs(ms: this.workspace.touchReturnMs);
     // How often a spare copy of the work is written, and how many are kept.
     // Always handed over rather than skipped when it matches the default: this
     // is what starts the engine's timer, so a fresh install with no settings

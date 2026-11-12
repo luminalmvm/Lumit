@@ -63,6 +63,10 @@ pub(super) fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetLayerPan { comp, .. }
         | Op::SetLayerRoutes { comp, .. }
         | Op::SetLayerAudioStreams { comp, .. }
+        | Op::SetLayerAudioGain { comp, .. }
+        | Op::SetLayerAutomation { comp, .. }
+        | Op::SetLayerSoloSafe { comp, .. }
+        | Op::SetLayerDuck { comp, .. }
         | Op::SetRetimeProperty { comp, .. }
         | Op::SetLayerInterpolation { comp, .. }
         | Op::GroupLayers { comp, .. }

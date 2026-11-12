@@ -198,6 +198,9 @@ fn a_prefix_point_at_a_box_rewires_the_output() {
                 item: Box::new(ProjectItem::Composition(Composition {
                     graph: Some(graph),
                     master_volume_db: 0.0,
+                    master_keys: None,
+                    master_automation: Default::default(),
+                    loudness_target: None,
                     lighting: Default::default(),
                     sound_mix: false,
                     groups: Vec::new(),

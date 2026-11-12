@@ -244,6 +244,18 @@ enum StreamsArrival {
   split,
 }
 
+/// How a waveform's height follows its level.
+enum WaveformScale {
+  /// The level straight through.
+  linear,
+
+  /// The square root of the level, which lifts the quiet end.
+  squareRoot,
+
+  /// The level in decibels, from -60 dB at silence to 0 dB at the edge.
+  logarithmic,
+}
+
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
   /// The style's own room, which is the night room for every scheme. A dark
@@ -475,6 +487,9 @@ class InterfaceSettings {
   /// the single wave and the stack alike.
   bool waveformsFromBottom;
 
+  /// How a waveform's height follows its level. Square root by default.
+  WaveformScale waveformScale;
+
   /// Whether the Viewer bar carries its tone map button.
   ///
   /// Off by default: tone mapping is a preview-only way of reading a picture
@@ -681,6 +696,7 @@ class InterfaceSettings {
     this.multiwaveWaveforms = true,
     this.reduceTransparency = false,
     this.waveformsFromBottom = false,
+    this.waveformScale = WaveformScale.squareRoot,
     this.showToneMap = false,
     this.viewerGuidesLocked = false,
     this.alignToFirstPicked = false,
@@ -754,6 +770,7 @@ class InterfaceSettings {
         'multiwave_waveforms': multiwaveWaveforms,
         'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
+        'waveform_scale': waveformScale.name,
         'show_tone_map': showToneMap,
         'viewer_guides_locked': viewerGuidesLocked,
         'align_to_first_picked': alignToFirstPicked,
@@ -871,6 +888,9 @@ class InterfaceSettings {
         // Absent means off: centred is what a settings file written before
         // this field existed was already drawing.
         waveformsFromBottom: j['waveforms_from_bottom'] as bool? ?? false,
+        waveformScale: WaveformScale.values.firstWhere(
+            (s) => s.name == j['waveform_scale'],
+            orElse: () => WaveformScale.squareRoot),
         // Absent means off: hidden is the new default, and a settings file
         // written before this field existed adopts it — a comp that stored an
         // engaged tone map is disengaged with it rather than left stranded.

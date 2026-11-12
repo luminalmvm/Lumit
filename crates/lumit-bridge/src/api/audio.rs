@@ -36,6 +36,12 @@ pub struct BridgeAudioClock {
     /// prepare still running. The caller should drive the picture from its own
     /// clock until this turns true, and follow `seconds` after that.
     pub loaded: bool,
+    /// How many times the output had to be opened again because the one in
+    /// use went away. Only grows.
+    pub device_changes: u32,
+    /// How much sound, in milliseconds, has been played as silence because
+    /// it was not ready in time. Only grows.
+    pub starved_ms: u32,
 }
 
 impl CompositionReference {
@@ -79,10 +85,31 @@ impl CompositionReference {
     pub fn audio_scrub(&self, frame: u64) -> Result<(), BridgeError> {
         let document = self.document_snapshot()?;
         #[cfg(feature = "media")]
-        crate::audio::scrub(self.id, frame, document);
+        crate::audio::scrub::scrub(self.id, frame, document);
         #[cfg(not(feature = "media"))]
         let _ = (frame, document);
         Ok(())
+    }
+
+    /// Hear the mix toward `frame` (fractional) at the speed of the drag,
+    /// the pitch following: call it on every move of a dragged playhead. The
+    /// transport stays stopped and the clock does not move. Before the mix
+    /// is loaded it asks for it and is silent until it lands.
+    #[frb(sync)]
+    pub fn audio_jog(&self, frame: f64) -> Result<(), BridgeError> {
+        let document = self.document_snapshot()?;
+        #[cfg(feature = "media")]
+        crate::audio::scrub::jog(self.id, frame, document);
+        #[cfg(not(feature = "media"))]
+        let _ = (frame, document);
+        Ok(())
+    }
+
+    /// The drag is over: the jog fades out.
+    #[frb(sync)]
+    pub fn audio_jog_end(&self) {
+        #[cfg(feature = "media")]
+        crate::audio::scrub::jog_end();
     }
 
     /// This comp's **mix** summarised over `[start_seconds, end_seconds)` of
@@ -101,12 +128,17 @@ impl CompositionReference {
     /// shortly. One band, like a plain wave: the stack's filters want the
     /// samples, and a mix keeps none.
     ///
+    /// With `bus`, a Bus layer's lane instead: what is routed to it through
+    /// each source's fader and send level, before its own rack and fader.
+    /// Empty when that bus is not in the mix.
+    ///
     /// Not `#[frb(sync)]`: a wide window walks a fair stretch of the plan.
     pub fn audio_mix_peaks(
         &self,
         start_seconds: f64,
         end_seconds: f64,
         buckets: u32,
+        bus: Option<uuid::Uuid>,
     ) -> Result<BridgeAudioPeaks, BridgeError> {
         let document = self.document_snapshot()?;
         #[cfg(feature = "media")]
@@ -114,6 +146,7 @@ impl CompositionReference {
             let buckets = buckets.min(crate::api::layer::MAX_PEAK_BUCKETS);
             let peaks = crate::audio::mix_peaks::mix_peaks(
                 self.id,
+                bus,
                 start_seconds,
                 end_seconds,
                 buckets as usize,
@@ -132,7 +165,7 @@ impl CompositionReference {
             }
         }
         #[cfg(not(feature = "media"))]
-        let _ = (document, start_seconds, end_seconds, buckets);
+        let _ = (document, start_seconds, end_seconds, buckets, bus);
         Ok(BridgeAudioPeaks::empty())
     }
 
@@ -257,14 +290,14 @@ impl LayerReference {
             if let Some(lufs) = lufs {
                 levels.push(BridgeClipLevel {
                     clip: clip.id,
-                    db: target_lufs - lufs,
+                    db: crate::api::mixer::gain_in_range(target_lufs - lufs),
                 });
             }
         }
         Ok(levels)
     }
 
-    /// The Volume this layer needs for its loudest sample, over the stretch of
+    /// The Gain this layer needs for its loudest sample, over the stretch of
     /// the file it plays, to land at `target_db`. None for a layer with no file
     /// of its own to read, or one with nothing but silence on it.
     ///
@@ -402,9 +435,11 @@ impl LayerReference {
 /// the file rather than guessed from its two ends.
 const PEAK_STEPS: usize = 256;
 
-/// The level that takes `peak` to `target_db`. Silence has no such level.
+/// The level that takes `peak` to `target_db`, held to the range a Gain is
+/// set in. Silence has no such level.
 fn level_for(peak: f32, target_db: f64) -> Option<f64> {
-    (peak > 1e-6).then(|| target_db - 20.0 * f64::from(peak).log10())
+    (peak > 1e-6)
+        .then(|| crate::api::mixer::gain_in_range(target_db - 20.0 * f64::from(peak).log10()))
 }
 
 /// Pause. The clock holds its position, so play resumes from here.
@@ -447,6 +482,22 @@ pub fn audio_set_offset_ms(ms: i32) {
     let _ = ms;
 }
 
+/// Stop the sound while the picture catches up, leaving the automation pass
+/// being written alone.
+pub(crate) fn audio_hold_for_picture() {
+    #[cfg(feature = "media")]
+    crate::audio::hold_for_picture();
+}
+
+/// Put the sound at `secs` under the picture, leaving the automation pass
+/// being written alone.
+pub(crate) fn audio_resync(secs: f64) {
+    #[cfg(feature = "media")]
+    crate::audio::seek_for_picture(secs);
+    #[cfg(not(feature = "media"))]
+    let _ = secs;
+}
+
 /// Move the clock to `secs` — a scrub. The play state is untouched, so
 /// scrubbing while playing keeps playing.
 #[frb(sync)]
@@ -471,10 +522,13 @@ pub fn audio_clock() -> BridgeAudioClock {
     #[cfg(feature = "media")]
     {
         let (seconds, playing, loaded) = crate::audio::clock();
+        let (device_changes, starved_ms) = crate::audio::health();
         BridgeAudioClock {
             seconds,
             playing,
             loaded,
+            device_changes,
+            starved_ms,
         }
     }
     // No decoder, so no mix and no device: the caller keeps its own clock,
@@ -484,10 +538,21 @@ pub fn audio_clock() -> BridgeAudioClock {
         seconds: 0.0,
         playing: false,
         loaded: false,
+        device_changes: 0,
+        starved_ms: 0,
     }
 }
 
-/// One mixer strip's bars, or the master's (docs/09 §3.1).
+/// Which row of the desk a meter is.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeMeterKind {
+    Strip,
+    Bus,
+    Master,
+}
+
+/// One mixer strip's bars, a bus's, or the master's (docs/09 §3.1).
 ///
 /// **Linear sample amplitudes, not decibels.** The mix works in amplitudes;
 /// a bar that wants dB converts where it is drawn, once, rather than the
@@ -499,6 +564,7 @@ pub struct BridgeAudioMeter {
     /// Precomp layer's row covers everything inside it — the mixer draws the
     /// rows of the comp in front of you.
     pub layer: String,
+    pub kind: BridgeMeterKind,
     /// Loudest sample of the last buffer (about ten milliseconds), left then
     /// right. The little line that rests above the bar for a few seconds is
     /// the panel's own hold, not this.
@@ -507,15 +573,18 @@ pub struct BridgeAudioMeter {
     /// Root-mean-square of the same buffer — the body of the bar.
     pub rms_left: f64,
     pub rms_right: f64,
-    /// Something has reached the master ceiling since the clip lights were
-    /// last put out, so the limiter is holding sound back. Sticky until
-    /// [`reset_audio_clip`], because a light that cleared itself would only
-    /// report an overload to somebody who happened to be looking.
+    /// Something has reached full scale since the clip lights were last put
+    /// out. Sticky until [`reset_audio_clip`], because a light that cleared
+    /// itself would only report an overload to somebody who happened to be
+    /// looking.
     pub clipped: bool,
+    /// The most the last buffer was pulled down, in dB (positive): a
+    /// strip's lower behind, the master's limiter.
+    pub gain_reduction_db: f64,
 }
 
-/// What the mix is doing: one entry per sounding strip in the order the mixer
-/// draws them, then the master last.
+/// What the mix is doing: one entry per strip and bus in the mix's order,
+/// then the master last.
 ///
 /// Meant to be polled while the mixer is on screen — it takes one short lock
 /// and reads lock-free atomics the audio callback publishes once per buffer.
@@ -530,11 +599,17 @@ pub fn audio_meters() -> Vec<BridgeAudioMeter> {
             .into_iter()
             .map(|s| BridgeAudioMeter {
                 layer: s.layer.map(|id| id.to_string()).unwrap_or_default(),
+                kind: match (s.layer, s.bus) {
+                    (None, _) => BridgeMeterKind::Master,
+                    (Some(_), true) => BridgeMeterKind::Bus,
+                    (Some(_), false) => BridgeMeterKind::Strip,
+                },
                 peak_left: f64::from(s.reading.peak[0]),
                 peak_right: f64::from(s.reading.peak[1]),
                 rms_left: f64::from(s.reading.rms[0]),
                 rms_right: f64::from(s.reading.rms[1]),
                 clipped: s.reading.clipped,
+                gain_reduction_db: f64::from(s.reading.gr),
             })
             .collect()
     }
@@ -555,6 +630,9 @@ pub fn reset_audio_clip() {
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeAudioLoudness {
+    /// The last 400 milliseconds, in LUFS. Minus infinity while stopped or
+    /// silent.
+    pub momentary: f64,
     /// The last three seconds, in LUFS. Minus infinity while stopped or silent.
     pub short_term: f64,
     /// Everything played since the measure began, gated, in LUFS. Minus
@@ -563,6 +641,8 @@ pub struct BridgeAudioLoudness {
     /// The loudest true peak since the measure began, as an amplitude, 1.0
     /// being full scale.
     pub true_peak: f64,
+    /// How far the loudness ranges since the measure began, in LU.
+    pub range: f64,
 }
 
 /// The master's loudness, polled with [`audio_meters`]. The measure begins
@@ -574,17 +654,56 @@ pub fn audio_loudness() -> BridgeAudioLoudness {
     {
         let r = crate::audio::loudness::loudness();
         BridgeAudioLoudness {
+            momentary: f64::from(r.momentary),
             short_term: f64::from(r.short_term),
             integrated: f64::from(r.integrated),
             true_peak: f64::from(r.true_peak),
+            range: f64::from(r.range),
         }
     }
     #[cfg(not(feature = "media"))]
     BridgeAudioLoudness {
+        momentary: f64::NEG_INFINITY,
         short_term: f64::NEG_INFINITY,
         integrated: f64::NEG_INFINITY,
         true_peak: 0.0,
+        range: 0.0,
     }
+}
+
+/// Where one strip's controls are now, or the master's.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeStripPosition {
+    /// The layer, or an empty string for the master.
+    pub layer: String,
+    pub volume_db: f64,
+    /// -100 full left to 100 full right. Nought for the master.
+    pub pan: f64,
+    /// Each send's level in dB, in the layer's send order.
+    pub sends: Vec<f64>,
+}
+
+/// Where each fader of the mix playing is now: every strip and bus in the
+/// mix's order, then the master. Read from the keys at the clock, or the
+/// value heard while a control is held, so faders move with the automation.
+/// Polled with [`audio_meters`]; empty when nothing is loaded.
+#[frb(sync)]
+pub fn audio_positions() -> Vec<BridgeStripPosition> {
+    #[cfg(feature = "media")]
+    {
+        crate::audio::positions::positions()
+            .into_iter()
+            .map(|p| BridgeStripPosition {
+                layer: p.layer.map(|id| id.to_string()).unwrap_or_default(),
+                volume_db: p.volume_db,
+                pan: p.pan,
+                sends: p.sends,
+            })
+            .collect()
+    }
+    #[cfg(not(feature = "media"))]
+    Vec::new()
 }
 
 /// Start the integrated loudness and the true peak afresh.

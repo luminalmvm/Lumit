@@ -394,6 +394,10 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   /// their end, ready for the next.
   bool _pasteAt(LumitUiState ui, CompositionReference comp, int frame,
       {LayerReference? onto}) {
+    if (onto != null && cutIsBusLayer(cutTracks, onto)) {
+      cutRefuseOnBus(Provider.of<LumitState>(context, listen: false));
+      return true;
+    }
     final BridgeCutPaste paste;
     try {
       paste = comp.cutPaste(atFrame: frame, target: onto);
@@ -660,6 +664,14 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                     [for (final (layer, c) in heardPicks) (layer, c.id)],
                     then: afterLevel,
                     loudness: true)
+                : null,
+            onTogether: heard && clip.audible && heardPicks.length > 1
+                ? (lufs) => normaliseTogether(
+                    Provider.of<LumitState>(context, listen: false),
+                    lufs ?? ui.workspace.normaliseTargetDb,
+                    clips: heardPicks,
+                    then: afterLevel,
+                    loudness: lufs != null)
                 : null,
             resetGainShown: heard && clip.audible,
             onResetGain: heardPicks.any((p) => p.$2.gainDb != 0)

@@ -72,6 +72,7 @@ const _bannedWordIsAnotherSense = {
   'keyMinimiseEveryTrackOrRestoreThem',
   'cutRefusedLocked',
   'cutSoundOnItsOwnTrack',
+  'cutRefusedBusTrack',
   // The Cut and Audio timelines' clip menu, handing a clip back its row's.
   'clipColourFromTrack',
   // The Cut timeline's menus, picking every clip on the row.

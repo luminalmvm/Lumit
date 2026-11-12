@@ -225,6 +225,9 @@ pub(crate) fn map_layer(
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime,
         interpolation,
         parked_flow: None,
@@ -706,6 +709,7 @@ fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Propert
                 0,
             )
             .is_none_or(|v| v != 0.0),
+        solo_safe: false,
     }
 }
 
