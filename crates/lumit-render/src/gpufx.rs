@@ -3797,7 +3797,7 @@ impl GpuEffect for Echo {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let (weights, mode, mix) = effects::echo::Echo::read(p).packed();
+        let (weights, start, mode, mix) = effects::echo::Echo::read(p).packed_with_start();
         // The kernel is called whether or not any neighbour arrived, exactly as
         // the old arm called it: an offset with no frame simply contributes
         // nothing, so a layer at its first frame trails off rather than
@@ -3810,7 +3810,12 @@ impl GpuEffect for Echo {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::temporal::EchoOp { weights, mode, mix },
+            &lumit_gpu::fx::temporal::EchoOp {
+                weights,
+                mode,
+                mix,
+                start,
+            },
         )
     }
 }

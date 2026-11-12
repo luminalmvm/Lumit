@@ -404,13 +404,13 @@ class ViewerStage extends StatelessWidget {
                     : null) ??
                 uiState.layerBounds.boundsOf(entry,
                     compSize: compSize, revision: revision, t: playheadSeconds),
-        // A keyed position has no one value for a body drag to add to; its
-        // keys are dragged on the motion path instead. Keyed scale or
-        // rotation likewise grows no handles. A 3D layer keys at the playhead
-        // instead, as its 3D handles do, unless an expression drives it.
+        // A keyed position is dragged by its body from wherever it is
+        // grabbed, as in After Effects, and takes a key at the playhead; its
+        // keys can still be dragged on the motion path. Only an expression
+        // leaves it no value for a drag to set. Keyed scale or rotation
+        // grows no handles.
         draggable: positionStill ||
-            (map.projected &&
-                tf.positionX is! BridgeScalar_Expression &&
+            (tf.positionX is! BridgeScalar_Expression &&
                 tf.positionY is! BridgeScalar_Expression),
         // A light is a place, with nothing to scale or turn on the picture,
         // and a model's box has no flat side for the handles.

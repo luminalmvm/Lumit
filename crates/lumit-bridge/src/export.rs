@@ -260,6 +260,10 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
         "h264" => ExportFormat::Video(VideoCodec::H264),
         #[cfg(target_arch = "wasm32")]
         "vp9" | "av1" => ExportFormat::Video(VideoCodec::H264),
+        #[cfg(not(target_arch = "wasm32"))]
+        "vp9" => ExportFormat::Video(VideoCodec::Vp9),
+        #[cfg(not(target_arch = "wasm32"))]
+        "qtrle" => ExportFormat::Video(VideoCodec::QtAnimation),
         "hevc" => ExportFormat::Video(VideoCodec::Hevc),
         "prores_proxy" => ExportFormat::Video(VideoCodec::ProRes422Proxy),
         "prores_lt" => ExportFormat::Video(VideoCodec::ProRes422Lt),
@@ -318,6 +322,8 @@ fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
         ExportFormat::Video(VideoCodec::ProRes422Hq) => "prores_hq",
         ExportFormat::Video(VideoCodec::ProRes4444) => "prores_4444",
         ExportFormat::Video(VideoCodec::ProRes4444Xq) => "prores_4444xq",
+        ExportFormat::Video(VideoCodec::Vp9) => "vp9",
+        ExportFormat::Video(VideoCodec::QtAnimation) => "qtrle",
         ExportFormat::Images(ImageFormat::Png) => "png",
         ExportFormat::Images(ImageFormat::Tiff) => "tiff",
         ExportFormat::Images(ImageFormat::Exr) => "exr",
@@ -440,6 +446,11 @@ pub(crate) fn to_export_spec(
                 target_bps: bps(mbps),
                 peak_bps: (spec.peak_mbps > 0).then(|| bps(spec.peak_mbps)),
             },
+        },
+        rate_control: if spec.constant_bitrate {
+            lumit_render::export::RateControl::Cbr
+        } else {
+            lumit_render::export::RateControl::Vbr
         },
         fps: (spec.fps > 0.0).then_some(spec.fps),
         range: (spec.range_start_frame >= 0 && spec.range_end_frame > spec.range_start_frame)
@@ -591,6 +602,7 @@ pub(crate) fn from_export_spec(
         bitrate_mbps,
         peak_mbps,
         bitrate_auto,
+        constant_bitrate: spec.rate_control == lumit_render::export::RateControl::Cbr,
         fps: spec.fps.unwrap_or(0.0),
         range_start_frame,
         range_end_frame,

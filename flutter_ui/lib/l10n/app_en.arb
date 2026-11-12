@@ -2777,7 +2777,7 @@
   },
   "formatVp9": "VP9 video (.webm)",
   "@formatVp9": {
-    "description": "Export format, offered in the browser version only. VP9 and .webm are technical names and stay as they are."
+    "description": "Export format, with transparency. VP9 and .webm are technical names and stay as they are."
   },
   "formatAv1": "AV1 video (.webm)",
   "@formatAv1": {
@@ -2810,6 +2810,14 @@
   "formatProRes4444Xq": "ProRes 4444 XQ (.mov)",
   "@formatProRes4444Xq": {
     "description": "Export format that can carry transparency, at a higher data rate than ProRes 4444. ProRes 4444 XQ and .mov are technical names and stay as they are."
+  },
+  "formatQtAnimation": "QuickTime Animation (.mov)",
+  "@formatQtAnimation": {
+    "description": "Export format: lossless QuickTime with transparency. QuickTime, Animation and .mov are technical names and stay as they are."
+  },
+  "formatWebmPicker": "WebM video",
+  "@formatWebmPicker": {
+    "description": "The file type shown in the system Save dialogue for a .webm file. WebM stays as it is."
   },
   "formatGif": "GIF (.gif)",
   "@formatGif": {
@@ -4214,6 +4222,30 @@
   "fxEchoes": "Echoes",
   "@fxEchoes": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxEchoOperator": "Echo operator",
+  "@fxEchoOperator": {
+    "description": "Effect controls — a control on Echo: how its echoes combine, as After Effects' Echo Operator."
+  },
+  "fxEchoTimeSeconds": "Echo time (seconds)",
+  "@fxEchoTimeSeconds": {
+    "description": "Effect controls — a control on Echo: how far apart its echoes are, in seconds."
+  },
+  "fxCompositeInBack": "Composite in back",
+  "@fxCompositeInBack": {
+    "description": "Effect controls — an Echo operator: each echo drawn behind the ones before."
+  },
+  "fxCompositeInFront": "Composite in front",
+  "@fxCompositeInFront": {
+    "description": "Effect controls — an Echo operator: each echo drawn in front of the ones before."
+  },
+  "fxNumberOfEchoes": "Number of echoes",
+  "@fxNumberOfEchoes": {
+    "description": "Effect controls — a control on Echo: how many echoes it draws."
+  },
+  "fxStartingIntensity": "Starting intensity",
+  "@fxStartingIntensity": {
+    "description": "Effect controls — a control on Echo: how strong the layer itself is."
   },
   "fxEdges": "Edges",
   "@fxEdges": {
@@ -16232,6 +16264,26 @@
   "exportBitRateAuto": "Auto",
   "@exportBitRateAuto": {
     "description": "Export dialog, Bit rate row: a tick that works a delivery-quality rate out from the frame and the rate. Unticked, the number beside it is used."
+  },
+  "exportBitRateEncoding": "Bitrate encoding",
+  "@exportBitRateEncoding": {
+    "description": "Export dialog, a row label: how the video bitrate is spent, varying (VBR) or constant (CBR)."
+  },
+  "exportBitRateVbr": "VBR",
+  "@exportBitRateVbr": {
+    "description": "Export dialog, Bitrate encoding: variable bitrate, more where the picture is busy up to a maximum. VBR is a technical name and stays as it is."
+  },
+  "exportBitRateCbr": "CBR",
+  "@exportBitRateCbr": {
+    "description": "Export dialog, Bitrate encoding: constant bitrate throughout. CBR is a technical name and stays as it is."
+  },
+  "exportBitRateMaximum": "Maximum",
+  "@exportBitRateMaximum": {
+    "description": "Export dialog, a row label: the highest a variable bitrate may go, in megabits a second."
+  },
+  "exportBitRateMaximumAuto": "1.5 × bitrate",
+  "@exportBitRateMaximumAuto": {
+    "description": "Export dialog, Maximum row while it is worked out: half as much again as the bitrate."
   },
   "exportResampleHigh": "High",
   "@exportResampleHigh": {

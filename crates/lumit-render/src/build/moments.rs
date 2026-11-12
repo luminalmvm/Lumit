@@ -40,7 +40,7 @@ pub(super) fn below_picture(
 }
 
 /// `draws` as a comp-sized picture.
-fn picture_of(
+pub(super) fn picture_of(
     comp: &Composition,
     draws: Vec<crate::draw::CompLayerDraw>,
     camera: Option<lumit_core::model::CameraPose>,

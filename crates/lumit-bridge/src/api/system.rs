@@ -17,7 +17,7 @@
 //! 15.5 GB on a 16 GB host). That errs low, which is the safe direction for a
 //! budget ceiling — the same choice `video_memory_bytes` makes below.
 //!
-//! Video memory is answered on all three too: the first DXGI adapter's
+//! Video memory is answered on all three too: the renderer's DXGI adapter's
 //! dedicated video memory on Windows, and on the other two through the graphics
 //! API the engine already links — see [`video_memory_bytes`].
 
@@ -232,12 +232,42 @@ pub fn system_memory_bytes() -> u64 {
     }
 }
 
+/// The memory free on the machine right now, in bytes, or 0 where it cannot be
+/// asked. Read once as the session opens, to keep the memory cache inside what
+/// is actually free (see `framecache::size_to_machine`).
+pub(crate) fn free_memory_bytes() -> u64 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+        let mut status = MEMORYSTATUSEX {
+            dwLength: u32::try_from(std::mem::size_of::<MEMORYSTATUSEX>()).unwrap_or(0),
+            ..Default::default()
+        };
+        // SAFETY: as in `system_memory_bytes`.
+        if unsafe { GlobalMemoryStatusEx(&mut status) }.is_ok() {
+            return status.ullAvailPhys;
+        }
+        0
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
+}
+
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
-/// On Windows, the *first* adapter DXGI enumerates, which is the one the
-/// renderer takes too. A machine with a discrete card behind an integrated one
-/// would report the integrated adapter's memory; that is a smaller ceiling than
-/// the truth, which errs the safe way for a budget.
+/// On Windows, the dedicated memory of the adapter the renderer opened, matched
+/// by its PCI ids ([`lumit_gpu::adapter_ids`]); before the renderer has opened
+/// one, the hardware adapter with the most, which is the one it asks for.
+///
+/// It used to be the *first* adapter DXGI enumerates. On a laptop with an
+/// integrated card and a discrete one (an Intel UHD and an Nvidia MX, say) the
+/// first is the integrated card, whose dedicated memory is a token 128 MB,
+/// while the renderer draws on the discrete one. The governor then held a 2 GB
+/// card to about 90 MB, and every frame ran the degradation ladder: work
+/// refused, frames tiled, kernels sent to the processor. That is not "errs the
+/// safe way", it is a machine made many times slower than it is.
 ///
 /// macOS and Linux answer through the graphics API the engine already links —
 /// Metal's recommended working-set size, or the largest device-local Vulkan
@@ -250,26 +280,106 @@ pub fn system_memory_bytes() -> u64 {
 pub fn video_memory_bytes() -> u64 {
     #[cfg(windows)]
     {
-        use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter, IDXGIFactory1};
-        // SAFETY: both calls are plain COM creation/enumeration, and every
-        // result is checked before it is read.
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
+        };
+        let mut cards = Vec::new();
+        // SAFETY: plain COM creation and enumeration; every result is checked
+        // before it is read, and enumeration stops at the first index DXGI
+        // refuses (DXGI_ERROR_NOT_FOUND past the last adapter).
         unsafe {
             let Ok(factory) = CreateDXGIFactory1::<IDXGIFactory1>() else {
                 return 0;
             };
-            let Ok(adapter) = factory.EnumAdapters(0) else {
-                return 0;
-            };
-            let adapter: IDXGIAdapter = adapter;
-            let Ok(desc) = adapter.GetDesc() else {
-                return 0;
-            };
-            u64::try_from(desc.DedicatedVideoMemory).unwrap_or(0)
+            let mut index = 0;
+            while let Ok(adapter) = factory.EnumAdapters1(index) {
+                index += 1;
+                let Ok(desc) = adapter.GetDesc1() else {
+                    continue;
+                };
+                cards.push(Card {
+                    vendor: desc.VendorId,
+                    device: desc.DeviceId,
+                    dedicated: u64::try_from(desc.DedicatedVideoMemory).unwrap_or(0),
+                    software: desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0,
+                });
+            }
         }
+        card_memory(&cards, lumit_gpu::adapter_ids())
     }
     #[cfg(not(windows))]
     {
         lumit_gpu::video_memory_bytes()
+    }
+}
+
+/// One graphics adapter as DXGI lists it, for [`card_memory`].
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Debug, Clone, Copy)]
+struct Card {
+    vendor: u32,
+    device: u32,
+    dedicated: u64,
+    software: bool,
+}
+
+/// The dedicated memory of the card the renderer is on: the one whose ids are
+/// `renderer`'s, or, where those are not known yet or match nothing, the
+/// hardware card with the most (the one a high-performance request takes).
+/// 0 when there is no hardware card at all, which the budget reads as "not
+/// known here".
+#[cfg_attr(not(windows), allow(dead_code))]
+fn card_memory(cards: &[Card], renderer: Option<(u32, u32)>) -> u64 {
+    let hardware = || cards.iter().filter(|c| !c.software);
+    renderer
+        .and_then(|(vendor, device)| hardware().find(|c| c.vendor == vendor && c.device == device))
+        .map(|c| c.dedicated)
+        .or_else(|| hardware().map(|c| c.dedicated).max())
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod card_tests {
+    use super::{card_memory, Card};
+
+    const MB: u64 = 1 << 20;
+    const INTEL: Card = Card {
+        vendor: 0x8086,
+        device: 0x9b41,
+        dedicated: 128 * MB,
+        software: false,
+    };
+    const MX230: Card = Card {
+        vendor: 0x10de,
+        device: 0x1d11,
+        dedicated: 2048 * MB,
+        software: false,
+    };
+    const WARP: Card = Card {
+        vendor: 0x1414,
+        device: 0x8c,
+        dedicated: 0,
+        software: true,
+    };
+
+    /// A laptop lists its integrated card first; the renderer is on the
+    /// discrete one, and that is the card measured.
+    #[test]
+    fn the_renderers_card_is_measured_not_the_first() {
+        let cards = [INTEL, MX230, WARP];
+        assert_eq!(card_memory(&cards, Some((0x10de, 0x1d11))), 2048 * MB);
+        // Pinned to the integrated card (WGPU_POWER_PREF=low), it is that one.
+        assert_eq!(card_memory(&cards, Some((0x8086, 0x9b41))), 128 * MB);
+    }
+
+    /// Before the renderer opens, or for ids DXGI does not list, the hardware
+    /// card with the most; the software rasteriser never counts.
+    #[test]
+    fn unknown_ids_take_the_largest_hardware_card() {
+        assert_eq!(card_memory(&[INTEL, MX230, WARP], None), 2048 * MB);
+        assert_eq!(card_memory(&[INTEL, MX230], Some((1, 2))), 2048 * MB);
+        assert_eq!(card_memory(&[WARP], None), 0);
+        assert_eq!(card_memory(&[], None), 0);
     }
 }
 

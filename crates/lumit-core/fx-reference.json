@@ -22254,8 +22254,19 @@
       "category_slug": "temporal",
       "params": [
         {
+          "id": "echo_time",
+          "label": "Echo time (seconds)",
+          "kind": "float",
+          "unit": "seconds",
+          "default": -0.0333,
+          "slider_min": -2.0,
+          "slider_max": 2.0,
+          "hard_min": -60.0,
+          "hard_max": 60.0
+        },
+        {
           "id": "echoes",
-          "label": "Echoes",
+          "label": "Number of echoes",
           "kind": "float",
           "unit": "raw",
           "default": 4.0,
@@ -22263,6 +22274,17 @@
           "slider_max": 16.0,
           "hard_min": 1.0,
           "hard_max": 16.0
+        },
+        {
+          "id": "starting_intensity",
+          "label": "Starting intensity",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
         },
         {
           "id": "decay",
@@ -22277,25 +22299,26 @@
         },
         {
           "id": "mode",
-          "label": "Mode",
+          "label": "Echo operator",
           "kind": "choice",
           "unit": "raw",
           "default": 3,
           "options": [
-            "Behind",
-            "In front",
+            "Composite in back",
+            "Composite in front",
             "Add",
             "Screen",
             "Multiply",
             "Overlay",
             "Soft light",
             "Hard light",
-            "Lighten",
-            "Darken",
+            "Maximum",
+            "Minimum",
             "Difference",
             "Exclusion",
             "Subtract",
-            "Divide"
+            "Divide",
+            "Blend"
           ],
           "dividers_after": [
             1

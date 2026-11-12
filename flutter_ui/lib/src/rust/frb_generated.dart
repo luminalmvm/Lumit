@@ -28022,8 +28022,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeExportSpec dco_decode_bridge_export_spec(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 40)
-      throw Exception('unexpected arr length: expect 40 but see ${arr.length}');
+    if (arr.length != 41)
+      throw Exception('unexpected arr length: expect 41 but see ${arr.length}');
     return BridgeExportSpec(
       preset: dco_decode_String(arr[0]),
       codec: dco_decode_String(arr[1]),
@@ -28032,39 +28032,40 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       bitrateMbps: dco_decode_u_32(arr[4]),
       peakMbps: dco_decode_u_32(arr[5]),
       bitrateAuto: dco_decode_bool(arr[6]),
-      fps: dco_decode_f_64(arr[7]),
-      rangeStartFrame: dco_decode_CastedPrimitive_i_64(arr[8]),
-      rangeEndFrame: dco_decode_CastedPrimitive_i_64(arr[9]),
-      includeAudio: dco_decode_bool(arr[10]),
-      audioBitRate: dco_decode_CastedPrimitive_i_64(arr[11]),
-      audioRate: dco_decode_u_32(arr[12]),
-      audioDepth: dco_decode_u_32(arr[13]),
-      audioChannels: dco_decode_u_32(arr[14]),
-      depth: dco_decode_u_32(arr[15]),
-      alphaChannel: dco_decode_bool(arr[16]),
-      straightAlpha: dco_decode_bool(arr[17]),
-      colourSpace: dco_decode_String(arr[18]),
-      resample: dco_decode_String(arr[19]),
-      cropTop: dco_decode_u_32(arr[20]),
-      cropLeft: dco_decode_u_32(arr[21]),
-      cropBottom: dco_decode_u_32(arr[22]),
-      cropRight: dco_decode_u_32(arr[23]),
-      useRegionOfInterest: dco_decode_bool(arr[24]),
-      region: dco_decode_list_prim_f_64_strict(arr[25]),
-      metadata: dco_decode_list_bridge_metadata_field(arr[26]),
-      qualityDivisor: dco_decode_u_32(arr[27]),
-      diskCacheReadOnly: dco_decode_bool(arr[28]),
-      effects: dco_decode_bool(arr[29]),
-      honourSolo: dco_decode_bool(arr[30]),
-      renderGuides: dco_decode_bool(arr[31]),
-      motionBlur: dco_decode_u_32(arr[32]),
-      retimeBlend: dco_decode_u_32(arr[33]),
-      useProxies: dco_decode_bool(arr[34]),
-      makeANoise: dco_decode_bool(arr[35]),
-      openFolder: dco_decode_bool(arr[36]),
-      gifDither: dco_decode_u_32(arr[37]),
-      gifPalettePerFrame: dco_decode_bool(arr[38]),
-      gifPlays: dco_decode_u_32(arr[39]),
+      constantBitrate: dco_decode_bool(arr[7]),
+      fps: dco_decode_f_64(arr[8]),
+      rangeStartFrame: dco_decode_CastedPrimitive_i_64(arr[9]),
+      rangeEndFrame: dco_decode_CastedPrimitive_i_64(arr[10]),
+      includeAudio: dco_decode_bool(arr[11]),
+      audioBitRate: dco_decode_CastedPrimitive_i_64(arr[12]),
+      audioRate: dco_decode_u_32(arr[13]),
+      audioDepth: dco_decode_u_32(arr[14]),
+      audioChannels: dco_decode_u_32(arr[15]),
+      depth: dco_decode_u_32(arr[16]),
+      alphaChannel: dco_decode_bool(arr[17]),
+      straightAlpha: dco_decode_bool(arr[18]),
+      colourSpace: dco_decode_String(arr[19]),
+      resample: dco_decode_String(arr[20]),
+      cropTop: dco_decode_u_32(arr[21]),
+      cropLeft: dco_decode_u_32(arr[22]),
+      cropBottom: dco_decode_u_32(arr[23]),
+      cropRight: dco_decode_u_32(arr[24]),
+      useRegionOfInterest: dco_decode_bool(arr[25]),
+      region: dco_decode_list_prim_f_64_strict(arr[26]),
+      metadata: dco_decode_list_bridge_metadata_field(arr[27]),
+      qualityDivisor: dco_decode_u_32(arr[28]),
+      diskCacheReadOnly: dco_decode_bool(arr[29]),
+      effects: dco_decode_bool(arr[30]),
+      honourSolo: dco_decode_bool(arr[31]),
+      renderGuides: dco_decode_bool(arr[32]),
+      motionBlur: dco_decode_u_32(arr[33]),
+      retimeBlend: dco_decode_u_32(arr[34]),
+      useProxies: dco_decode_bool(arr[35]),
+      makeANoise: dco_decode_bool(arr[36]),
+      openFolder: dco_decode_bool(arr[37]),
+      gifDither: dco_decode_u_32(arr[38]),
+      gifPalettePerFrame: dco_decode_bool(arr[39]),
+      gifPlays: dco_decode_u_32(arr[40]),
     );
   }
 
@@ -36010,6 +36011,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_bitrateMbps = sse_decode_u_32(deserializer);
     var var_peakMbps = sse_decode_u_32(deserializer);
     var var_bitrateAuto = sse_decode_bool(deserializer);
+    var var_constantBitrate = sse_decode_bool(deserializer);
     var var_fps = sse_decode_f_64(deserializer);
     var var_rangeStartFrame = sse_decode_CastedPrimitive_i_64(deserializer);
     var var_rangeEndFrame = sse_decode_CastedPrimitive_i_64(deserializer);
@@ -36051,6 +36053,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         bitrateMbps: var_bitrateMbps,
         peakMbps: var_peakMbps,
         bitrateAuto: var_bitrateAuto,
+        constantBitrate: var_constantBitrate,
         fps: var_fps,
         rangeStartFrame: var_rangeStartFrame,
         rangeEndFrame: var_rangeEndFrame,
@@ -45283,6 +45286,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.bitrateMbps, serializer);
     sse_encode_u_32(self.peakMbps, serializer);
     sse_encode_bool(self.bitrateAuto, serializer);
+    sse_encode_bool(self.constantBitrate, serializer);
     sse_encode_f_64(self.fps, serializer);
     sse_encode_CastedPrimitive_i_64(self.rangeStartFrame, serializer);
     sse_encode_CastedPrimitive_i_64(self.rangeEndFrame, serializer);

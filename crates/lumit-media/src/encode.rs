@@ -51,6 +51,11 @@ pub enum VideoCodec {
     ProRes4444,
     /// 4444 at a higher data rate.
     ProRes4444Xq,
+    /// VP9 in a `.webm`, with an alpha channel, as a browser plays it.
+    Vp9,
+    /// QuickTime Animation in a `.mov`: lossless eight-bit RGB with an alpha
+    /// channel, the classic QuickTime file with transparency.
+    QtAnimation,
 }
 
 impl VideoCodec {
@@ -65,13 +70,15 @@ impl VideoCodec {
             VideoCodec::ProRes422Hq => "ProRes 422 HQ",
             VideoCodec::ProRes4444 => "ProRes 4444",
             VideoCodec::ProRes4444Xq => "ProRes 4444 XQ",
+            VideoCodec::Vp9 => "VP9",
+            VideoCodec::QtAnimation => "Animation",
         }
     }
 
     /// `prores_ks`'s own number for the profile, None for the other codecs.
     fn prores_profile(self) -> Option<i64> {
         match self {
-            VideoCodec::H264 | VideoCodec::Hevc => None,
+            VideoCodec::H264 | VideoCodec::Hevc | VideoCodec::Vp9 | VideoCodec::QtAnimation => None,
             VideoCodec::ProRes422Proxy => Some(0),
             VideoCodec::ProRes422Lt => Some(1),
             VideoCodec::ProRes422 => Some(2),
@@ -85,18 +92,30 @@ impl VideoCodec {
         self.prores_profile().is_some()
     }
 
-    /// The 4444 kinds, which carry alpha.
+    /// The kinds that carry alpha: ProRes 4444, VP9 and Animation.
     pub fn has_alpha(self) -> bool {
-        matches!(self, VideoCodec::ProRes4444 | VideoCodec::ProRes4444Xq)
+        matches!(
+            self,
+            VideoCodec::ProRes4444
+                | VideoCodec::ProRes4444Xq
+                | VideoCodec::Vp9
+                | VideoCodec::QtAnimation
+        )
+    }
+
+    /// The kinds written lossless or near it, with no bitrate to choose:
+    /// ProRes and Animation.
+    pub fn intra(self) -> bool {
+        self.is_prores() || self == VideoCodec::QtAnimation
     }
 
     /// The container's extension. ProRes lives in a `.mov`; the mp4 muxer
     /// refuses it.
     pub fn extension(self) -> &'static str {
-        if self.is_prores() {
-            "mov"
-        } else {
-            "mp4"
+        match self {
+            VideoCodec::Vp9 => "webm",
+            c if c.intra() => "mov",
+            _ => "mp4",
         }
     }
 }
@@ -230,6 +249,9 @@ pub struct VideoSettings {
     pub bit_rate: Option<i64>,
     /// VBR peak in bits/second (docs/06 §7.5 preset table's "peak").
     pub max_rate: Option<i64>,
+    /// Constant bitrate: the stream holds `bit_rate` throughout, rather than
+    /// spending more where the picture is busy up to `max_rate`.
+    pub cbr: bool,
     /// What the container states this stream's colour to be.
     pub colour: ColourTags,
     /// How wide each channel of the frames [`Encoder::write_rgba`] is handed:
@@ -301,6 +323,8 @@ pub enum AudioCodec {
     /// 32-bit samples: `pcm_s24le` is the one FFmpeg encoder that takes
     /// `AV_SAMPLE_FMT_S32` and writes the top three bytes of each.
     PcmS24,
+    /// Opus, the sound a `.webm` carries, at 48 kHz.
+    Opus,
 }
 
 impl AudioCodec {
@@ -310,6 +334,7 @@ impl AudioCodec {
             AudioCodec::Aac => ffi::AV_CODEC_ID_AAC,
             AudioCodec::PcmS16 => ffi::AV_CODEC_ID_PCM_S16LE,
             AudioCodec::PcmS24 => ffi::AV_CODEC_ID_PCM_S24LE,
+            AudioCodec::Opus => ffi::AV_CODEC_ID_OPUS,
         }
     }
 
@@ -322,6 +347,7 @@ impl AudioCodec {
             AudioCodec::Aac => ffi::AV_SAMPLE_FMT_FLTP,
             AudioCodec::PcmS16 => ffi::AV_SAMPLE_FMT_S16,
             AudioCodec::PcmS24 => ffi::AV_SAMPLE_FMT_S32,
+            AudioCodec::Opus => ffi::AV_SAMPLE_FMT_FLT,
         }
     }
 
@@ -331,6 +357,7 @@ impl AudioCodec {
             AudioCodec::Aac => "AAC",
             AudioCodec::PcmS16 => "PCM 16-bit",
             AudioCodec::PcmS24 => "PCM 24-bit",
+            AudioCodec::Opus => "Opus",
         }
     }
 }
@@ -444,6 +471,8 @@ pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
             "hevc_vaapi",
             "libx265",
         ],
+        VideoCodec::Vp9 => &["libvpx-vp9"],
+        VideoCodec::QtAnimation => &["qtrle"],
         _ => &["prores_ks"],
     }
 }
@@ -464,6 +493,8 @@ pub fn pick_first_working<'a>(
 #[cfg(not(target_arch = "wasm32"))]
 pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
     match codec {
+        VideoCodec::Vp9 => ffi::AV_PIX_FMT_YUVA420P,
+        VideoCodec::QtAnimation => ffi::AV_PIX_FMT_ARGB,
         c if c.has_alpha() => ffi::AV_PIX_FMT_YUVA444P10LE,
         c if c.is_prores() => ffi::AV_PIX_FMT_YUV422P10LE,
         _ if encoder.ends_with("_qsv") || encoder.ends_with("_vaapi") => ffi::AV_PIX_FMT_NV12,
@@ -481,6 +512,8 @@ pub fn encoder_label(encoder: &str) -> &'static str {
         "libx264" => "software x264",
         "libx265" => "software x265",
         "prores_ks" => "software ProRes",
+        "libvpx-vp9" => "software VP9",
+        "qtrle" => "software Animation",
         _ => "software",
     }
 }
@@ -1345,6 +1378,7 @@ impl Encoder {
                 AudioCodec::Aac => "aac",
                 AudioCodec::PcmS16 => "pcm_s16le",
                 AudioCodec::PcmS24 => "pcm_s24le",
+                AudioCodec::Opus => "libopus",
             },
             (None, None) => "",
         }
@@ -1693,7 +1727,38 @@ fn build_video_ctx(
     // hardware encoder refuses to open — exactly the case the ladder must
     // survive.
     let profile = (v.codec == VideoCodec::H264).then_some(ffi::AV_PROFILE_H264_HIGH as i32);
-    set_rate_and_profile(&mut ctx, profile, v.max_rate);
+    // Constant bitrate: the floor and the ceiling are the target itself.
+    let cbr = v.bit_rate.filter(|_| v.cbr);
+    set_rate_and_profile(&mut ctx, profile, cbr.or(v.max_rate));
+    if let Some(rate) = cbr {
+        // SAFETY: as in `set_rate_and_profile`: the context is ours and not
+        // yet open, and `rc_min_rate` is a plain field `avcodec_open2` reads.
+        #[allow(unsafe_code)]
+        unsafe {
+            (*ctx.as_mut_ptr()).rc_min_rate = rate;
+        }
+        // Each encoder's own word for it. libvpx and Quick Sync read a floor
+        // equal to the ceiling as CBR already, and x265 holds to its buffer.
+        match name {
+            "libx264" => set_private_option(&mut ctx, c"nal-hrd", c"cbr"),
+            n if n.ends_with("_nvenc") || n.ends_with("_amf") => {
+                set_private_option(&mut ctx, c"rc", c"cbr");
+            }
+            _ => {}
+        }
+    }
+    if v.codec == VideoCodec::Vp9 {
+        // A sensible speed for a delivery file, every core in use, and with
+        // no bitrate asked for, constant quality rather than libvpx's own
+        // starved default.
+        set_private_option(&mut ctx, c"deadline", c"good");
+        set_private_option(&mut ctx, c"cpu-used", c"4");
+        set_private_option(&mut ctx, c"row-mt", c"1");
+        if v.bit_rate.is_none() {
+            set_private_option(&mut ctx, c"crf", c"31");
+            ctx.set_bit_rate(0);
+        }
+    }
     set_colour_tags(&mut ctx, v.colour);
     if let Some(p) = v.codec.prores_profile() {
         // SAFETY: the context is ours and not yet open, `priv_data` is the
@@ -1758,8 +1823,13 @@ fn open_audio(
     a: &AudioSettings,
     global_header: bool,
 ) -> Result<AudioTrack, MediaError> {
-    let codec = AVCodec::find_encoder(a.codec.codec_id())
-        .ok_or_else(|| MediaError::Ffmpeg(format!("no {} encoder linked", a.codec.label())))?;
+    // Opus by libopus: FFmpeg's own Opus encoder is still experimental.
+    let codec = if a.codec == AudioCodec::Opus {
+        AVCodec::find_encoder_by_name(c"libopus")
+    } else {
+        AVCodec::find_encoder(a.codec.codec_id())
+    }
+    .ok_or_else(|| MediaError::Ffmpeg(format!("no {} encoder linked", a.codec.label())))?;
     let mut ctx = AVCodecContext::new(&codec);
     let rate =
         i32::try_from(a.rate).map_err(|_| MediaError::Ffmpeg("audio rate overflows".into()))?;
@@ -1769,7 +1839,7 @@ fn open_audio(
     ctx.set_sample_fmt(a.codec.sample_fmt());
     // PCM has no bitrate to choose — it is exactly rate × channels × depth —
     // and asking for one confuses the encoder rather than obeying.
-    if a.codec == AudioCodec::Aac {
+    if matches!(a.codec, AudioCodec::Aac | AudioCodec::Opus) {
         ctx.set_bit_rate(a.bit_rate);
     }
     ctx.set_time_base(AVRational { num: 1, den: rate });
@@ -1885,6 +1955,11 @@ fn encode_audio_frame(
                 *dst = f32_to_i32(*src);
             }
         }
+        AudioCodec::Opus => {
+            // Packed float: one plane, L R L R …, as it comes.
+            let out = plane_f32_mut(frame.data[0], n * chans)?;
+            out.copy_from_slice(&interleaved[..n * chans]);
+        }
     }
     frame.set_pts(track.next_pts);
     track.next_pts += i64::try_from(n).unwrap_or(0);
@@ -1957,6 +2032,23 @@ fn dict_set(dict: Option<AVDictionary>, key: &str, value: &str) -> Option<AVDict
     })
 }
 
+/// One of the encoder's own options, by name, before it opens. An encoder
+/// without it leaves it unread, which is the answer wanted: the option is
+/// a refinement, never what makes the file.
+#[cfg(not(target_arch = "wasm32"))]
+fn set_private_option(ctx: &mut AVCodecContext, key: &std::ffi::CStr, value: &std::ffi::CStr) {
+    // SAFETY: the context is ours and not yet open, `priv_data` is the
+    // options block `AVCodecContext::new` allocated for this encoder, and both
+    // strings are NUL-terminated and alive for the call, which copies them.
+    #[allow(unsafe_code)]
+    unsafe {
+        let raw = ctx.as_mut_ptr();
+        if !(*raw).priv_data.is_null() {
+            ffi::av_opt_set((*raw).priv_data, key.as_ptr(), value.as_ptr(), 0);
+        }
+    }
+}
+
 /// Write the profile and VBR-peak fields rsmpeg's safe setters do not cover:
 /// one audited raw-struct touch, before `open`, on a context we exclusively
 /// own — the same discipline as the plane helpers below.
@@ -1996,6 +2088,7 @@ mod tests {
             fps_den: 1,
             bit_rate: None,
             max_rate: None,
+            cbr: false,
             colour: ColourTags::Srgb,
             depth: BitDepth::Eight,
         }
@@ -2184,6 +2277,75 @@ mod tests {
         let mut dec = crate::decode::VideoDecoder::open(&path, index).unwrap();
         let red = dec.frame_rgba(0, None).unwrap().rgba[0];
         assert!(red.abs_diff(0x60) <= 2, "read back {red}");
+    }
+
+    /// **A WebM and a QuickTime Animation keep their alpha.** VP9 in a .webm
+    /// with Opus sound, and Animation in a .mov with PCM: each opens, writes,
+    /// and reads back as the codec it claims, with a transparent pixel still
+    /// transparent.
+    #[test]
+    fn webm_and_animation_keep_their_alpha() {
+        let dir = tempfile::tempdir().unwrap();
+        for (codec, name, audio) in [
+            (VideoCodec::Vp9, "vp9", AudioCodec::Opus),
+            (VideoCodec::QtAnimation, "qtrle", AudioCodec::PcmS16),
+        ] {
+            let path = dir.path().join(format!("clip.{}", codec.extension()));
+            let mut enc = Encoder::open(
+                &path,
+                Some(&video_settings(codec, 320, 240)),
+                Some(&AudioSettings {
+                    rate: 48_000,
+                    bit_rate: 128_000,
+                    codec: audio,
+                    channels: 2,
+                }),
+                &Metadata::new(),
+            )
+            .unwrap();
+            // The left half opaque grey, the right half clear.
+            let mut rgba = Vec::with_capacity(320 * 240 * 4);
+            for _ in 0..240 {
+                for x in 0..320 {
+                    rgba.extend_from_slice(if x < 160 {
+                        &[120, 120, 120, 255]
+                    } else {
+                        &[0, 0, 0, 0]
+                    });
+                }
+            }
+            for _ in 0..20 {
+                enc.write_rgba(&rgba).unwrap();
+                enc.write_audio(&[0.0; 1600 * 2]).unwrap();
+            }
+            enc.finish().unwrap();
+            let probe = crate::probe::probe(&path).unwrap();
+            let video = probe.video.unwrap();
+            assert_eq!(video.codec, name);
+            assert_eq!((video.width, video.height), (320, 240));
+            assert!(probe.audio.is_some(), "{name} carries its sound");
+        }
+    }
+
+    /// **Constant bitrate opens on the software ladder.** x264 with its floor
+    /// and ceiling at the target writes a playable file.
+    #[test]
+    fn a_constant_bitrate_h264_opens_and_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cbr.mp4");
+        let mut v = video_settings(VideoCodec::H264, 320, 240);
+        v.bit_rate = Some(2_000_000);
+        v.cbr = true;
+        let mut enc = Encoder::open(&path, Some(&v), None, &Metadata::new()).unwrap();
+        let rgba = vec![90u8; 320 * 240 * 4];
+        for _ in 0..30 {
+            enc.write_rgba(&rgba).unwrap();
+        }
+        enc.finish().unwrap();
+        assert_eq!(
+            crate::probe::probe(&path).unwrap().video.unwrap().codec,
+            "h264"
+        );
     }
 
     /// Every sample rate, sample width and channel layout the export dialog

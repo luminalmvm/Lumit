@@ -28,6 +28,7 @@ fn a_clip_missing_here_is_read_from_what_another_person_sends() {
         fps_den: 1,
         bit_rate: None,
         max_rate: None,
+        cbr: false,
         colour: ColourTags::default(),
         depth: lumit_media::encode::BitDepth::Eight,
     };
@@ -171,6 +172,7 @@ fn rig() -> Rig {
         fps_den: 1,
         bit_rate: None,
         max_rate: None,
+        cbr: false,
         colour: ColourTags::default(),
         depth: lumit_media::encode::BitDepth::Eight,
     };

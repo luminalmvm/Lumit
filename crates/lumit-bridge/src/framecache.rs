@@ -498,10 +498,22 @@ static CHOSEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::ne
 /// The built-in figure holds about two seconds of 1080p at 60 fps across both
 /// tiers. A loop longer than that came off disk every time round, on a
 /// machine with tens of gigabytes standing idle.
-pub(crate) fn size_to_machine(vram: u64, ram: u64) {
+///
+/// `free` is the memory the machine had free as the session opened (0 where
+/// that cannot be asked). The memory cache takes no more than half of it: an
+/// 8 GB laptop already running a browser has perhaps 3 GB free, and a cache
+/// sized to 30% of the 8 filled into the page file, which on a hard disk
+/// stops the whole machine. The card's cache is a quarter of the card with
+/// no floor on a small card: 512 MiB was over a third of what a 2 GB card's
+/// budget allows, taken from the frames being drawn.
+pub(crate) fn size_to_machine(vram: u64, ram: u64, free: u64) {
     let share = |bytes: u64, part: u64| usize::try_from(bytes / part).unwrap_or(usize::MAX);
     if !CHOSEN.load(std::sync::atomic::Ordering::Relaxed) {
-        with_cache(|c| c.set_budget(share(ram, 2).max(DEFAULT_BUDGET_BYTES)));
+        let mut budget = share(ram, 2);
+        if free > 0 {
+            budget = budget.min(share(free, 2));
+        }
+        with_cache(|c| c.set_budget(budget.max(DEFAULT_BUDGET_BYTES)));
     }
     vram::size_to_machine(share(vram, 4));
 }
@@ -579,10 +591,14 @@ pub(crate) mod vram {
     /// See [`super::size_to_machine`].
     pub(super) fn size_to_machine(bytes: usize) {
         if !CHOSEN.load(Ordering::Relaxed) {
-            BUDGET.store(
-                bytes.max(lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES),
-                Ordering::Relaxed,
-            );
+            // A quarter of the card, whatever its size; the built-in figure
+            // only where the card's size is not known.
+            let budget = if bytes == 0 {
+                lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES
+            } else {
+                bytes
+            };
+            BUDGET.store(budget, Ordering::Relaxed);
         }
     }
 

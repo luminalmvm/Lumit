@@ -156,6 +156,7 @@ pub fn transcode(
         // and a number here would be a guess applied to every clip alike.
         bit_rate: None,
         max_rate: None,
+        cbr: false,
         colour: ColourTags::default(),
         depth: lumit_media::encode::BitDepth::Eight,
     };
@@ -211,6 +212,7 @@ mod tests {
             fps_den: 1,
             bit_rate: None,
             max_rate: None,
+            cbr: false,
             colour: ColourTags::default(),
             depth: lumit_media::encode::BitDepth::Eight,
         };
@@ -300,6 +302,7 @@ mod tests {
             fps_den: 1,
             bit_rate: None,
             max_rate: None,
+            cbr: false,
             colour: ColourTags::default(),
             depth: lumit_media::encode::BitDepth::Eight,
         };

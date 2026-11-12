@@ -3292,7 +3292,12 @@ fn wgsl_echo_matches_the_cpu_oracle() {
         (one_tap(0.5), 12, 1.0, 8),
     ] {
         let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, weights, mode, mix);
-        let op = EchoOp { weights, mode, mix };
+        let op = EchoOp {
+            weights,
+            mode,
+            mix,
+            start: 1.0,
+        };
         let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -3329,6 +3334,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
             weights: one_tap(0.9),
             mode: 13,
             mix: 1.0,
+            start: 1.0,
         };
         let cpu = lumit_core::fx::cpu::echo(&current, &cpu_neighbours, op.weights, op.mode, op.mix);
         let out = fx.echo(&ctx, &cur_t, &gpu_neighbours, w, h, None, &op);
@@ -3350,6 +3356,7 @@ fn wgsl_echo_matches_the_cpu_oracle() {
             weights: [0.0; 16],
             mode: 0,
             mix: 1.0,
+            start: 1.0,
         },
     );
     assert_eq!(
@@ -15804,7 +15811,12 @@ fn the_matte_scales_the_echo_decay() {
     // Screen, the schema's default combine, at full Mix.
     let (mode, mix) = (3u32, 1.0f32);
     let weights = weights_for(0.6);
-    let op = EchoOp { weights, mode, mix };
+    let op = EchoOp {
+        weights,
+        mode,
+        mix,
+        start: 1.0,
+    };
     check_matte_claim(
         &ctx,
         &MatteClaim {

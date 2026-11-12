@@ -132,7 +132,6 @@ Beat markers
 Beat pulse
 Beat trigger
 Beats
-Behind
 Bend
 Between
 Bevel
@@ -296,6 +295,8 @@ Comp
 Completion
 Complexity
 Composite
+Composite in back
+Composite in front
 Composite on original
 Compositing
 Compressor
@@ -431,7 +432,8 @@ Each point
 Ease in
 Ease out
 Echo
-Echoes
+Echo operator
+Echo time (seconds)
 Edge
 Edge colour
 Edge fade
@@ -711,7 +713,6 @@ IOR
 Ice
 Image
 Image layer
-In front
 In high
 In low
 In order
@@ -950,6 +951,7 @@ Nothing
 Number
 Number by input
 Number from
+Number of echoes
 Number range
 Number to
 OCIO colour space transform
@@ -1394,6 +1396,7 @@ Start size
 Start thickness
 Start x
 Start y
+Starting intensity
 Static
 Status
 Steps per second

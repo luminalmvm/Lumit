@@ -41,6 +41,7 @@ const BUILTIN: &[(&str, &[(&str, &str)])] = &[
             shader!("siceliot", "bilateral-blur"),
             shader!("siceliot", "bend"),
             shader!("siceliot", "four-point-warp"),
+            shader!("siceliot", "displacex"),
         ],
     ),
     (
@@ -80,7 +81,7 @@ mod tests {
     #[test]
     fn every_built_in_effect_loads_and_compiles() {
         let effects = super::effects();
-        assert_eq!(effects.len(), 19);
+        assert_eq!(effects.len(), 20);
         for effect in effects {
             lumit_core::fx::lfx::check(&effect)
                 .unwrap_or_else(|why| panic!("{}: {why}", effect.id));

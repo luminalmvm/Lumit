@@ -175,6 +175,7 @@ pub fn transcode(
         fps_den,
         bit_rate: Some(rate),
         max_rate: Some(rate.saturating_mul(2)),
+        cbr: false,
         colour: ColourTags::default(),
         depth: lumit_media::encode::BitDepth::Eight,
     };
@@ -344,6 +345,7 @@ mod tests {
             fps_den: 1,
             bit_rate: None,
             max_rate: None,
+            cbr: false,
             colour: ColourTags::default(),
             depth: lumit_media::encode::BitDepth::Eight,
         };

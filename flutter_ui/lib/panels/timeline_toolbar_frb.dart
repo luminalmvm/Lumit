@@ -107,7 +107,9 @@ class Toolbar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final (fpsNum, fpsDen) = model.fpsExact;
     final lastFrame = model.durationFrames - 1;
-    // The clock reads from the comp's Start timecode; the frame count does not.
+    // The clock and the frame count both read from the comp's Start
+    // timecode, as in After Effects: a comp trimmed to start at 3 seconds
+    // reads 00:00:03:00 and the frame there, on its first frame.
     final start = model.startFrame;
     return Container(
       key: const ValueKey('tl-toolbar'),
@@ -168,13 +170,17 @@ class Toolbar extends StatelessWidget {
                     TimeReadout(
                       key: const ValueKey('tl-frame'),
                       frame: frame,
-                      format: (f) => 'F$f',
+                      format: (f) => 'F${f + start}',
                       // The `f`, the digits of the last frame, and one spare so a
                       // comp that grows past a power of ten does not start to
                       // twitch before the next rebuild.
-                      widthChars: 2 + '${lastFrame < 0 ? 0 : lastFrame}'.length,
+                      widthChars: 2 +
+                          '${lastFrame < 0 ? start : lastFrame + start}'.length,
                       style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
-                      parse: _frameOfTyped,
+                      parse: (text) => switch (_frameOfTyped(text)) {
+                        final f? => f - start,
+                        null => null,
+                      },
                       onCommit: onSeek,
                       minFrame: 0,
                       maxFrame: lastFrame,
@@ -184,7 +190,7 @@ class Toolbar extends StatelessWidget {
                       // clock rather than counting in it, so the field holds the
                       // bare number and wears the letter again on commit — an
                       // edit that began by stepping over a letter began wrong.
-                      editFormat: (f) => '$f',
+                      editFormat: (f) => '${f + start}',
                     )),
               ],
             ),

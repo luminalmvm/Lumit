@@ -455,6 +455,13 @@ pub fn collect_comp_jobs(
                 .copied()
                 .chain(cloned.map(|(_, tau)| *tau))
                 .chain(own.iter().copied().filter(|_| !l.is_adjustment()))
+                // And the earlier frames an Echo that follows this layer's
+                // motion builds it again at.
+                .chain(if l.switches.visible && !l.audio_only {
+                    crate::build::follow::moments(comp, l, t)
+                } else {
+                    Vec::new()
+                })
                 .collect::<Vec<f64>>(),
         );
         if l.is_adjustment() {

@@ -1215,6 +1215,8 @@ const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
 const EXR_DEPTHS: &[BitDepth] = &[BitDepth::Half, BitDepth::Float];
 /// AAC has no sample width of its own; only the delivery default stands.
 const AAC_DEPTH: &[AudioDepth] = &[AudioDepth::Sixteen];
+/// Opus runs at 48 kHz, the one rate the export offers it.
+const OPUS_RATES: &[u32] = &[48_000];
 /// Uncompressed PCM in a `.wav` carries either width.
 const PCM_DEPTHS: &[AudioDepth] = &[AudioDepth::Sixteen, AudioDepth::TwentyFour];
 /// What a still sequence can state. PNG carries cICP and TIFF carries nothing,
@@ -1227,6 +1229,36 @@ impl ExportFormat {
     /// This format's capability row.
     pub fn caps(self) -> FormatCaps {
         match self {
+            // QuickTime Animation in mov: lossless eight-bit RGB with alpha, PCM
+            // sound, no bitrate to choose.
+            ExportFormat::Video(lumit_media::encode::VideoCodec::QtAnimation) => FormatCaps {
+                video: true,
+                audio: true,
+                alpha: true,
+                alpha_mode: true,
+                gif: false,
+                depths: EIGHT_ONLY,
+                audio_rates: EXPORT_AUDIO_RATES,
+                audio_depths: PCM_DEPTHS,
+                bit_rate: false,
+                metadata: true,
+                colour_spaces: BUILT_IN_COLOUR_SPACES,
+            },
+            // VP9 in webm: eight bits, alpha, Opus sound at 48 kHz, and a bitrate
+            // to choose.
+            ExportFormat::Video(lumit_media::encode::VideoCodec::Vp9) => FormatCaps {
+                video: true,
+                audio: true,
+                alpha: true,
+                alpha_mode: true,
+                gif: false,
+                depths: EIGHT_ONLY,
+                audio_rates: OPUS_RATES,
+                audio_depths: AAC_DEPTH,
+                bit_rate: true,
+                metadata: true,
+                colour_spaces: BUILT_IN_COLOUR_SPACES,
+            },
             // ProRes in mov: no bitrate to choose, PCM sound, and the 4444 kinds
             // hold alpha.
             ExportFormat::Video(c) if c.is_prores() => FormatCaps {
@@ -1326,7 +1358,10 @@ impl ExportFormat {
     /// an editor expects of a master, and AAC beside H.264 and HEVC.
     pub fn audio_codec(self, depth: AudioDepth) -> lumit_media::encode::AudioCodec {
         match self {
-            ExportFormat::Video(c) if c.is_prores() => AudioFormat::Wav.codec(depth),
+            ExportFormat::Video(lumit_media::encode::VideoCodec::Vp9) => {
+                lumit_media::encode::AudioCodec::Opus
+            }
+            ExportFormat::Video(c) if c.intra() => AudioFormat::Wav.codec(depth),
             ExportFormat::Audio(f) => f.codec(depth),
             _ => lumit_media::encode::AudioCodec::Aac,
         }
@@ -1859,6 +1894,19 @@ pub enum Bitrate {
     },
 }
 
+/// How the video bitrate is spent (docs/06 §7.5): varying with the picture
+/// up to a peak, or held constant throughout, as a stream or a broadcast
+/// wants.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum RateControl {
+    /// Variable: the target on average, more where the picture is busy, up to
+    /// the peak.
+    #[default]
+    Vbr,
+    /// Constant: the target throughout.
+    Cbr,
+}
+
 /// Bits per pixel per second a codec needs for a delivery-quality picture —
 /// the constants behind [`Bitrate::Auto`]. Taken from the preset table
 /// (docs/06 §7.5): 1920×1080 at 60 wants 16 Mbps of H.264, which is 0.13 bits
@@ -1887,6 +1935,7 @@ pub fn auto_bitrate(
     let bits_per_px = match codec {
         lumit_media::encode::VideoCodec::H264 => H264_BITS_PER_PIXEL,
         lumit_media::encode::VideoCodec::Hevc => HEVC_BITS_PER_PIXEL,
+        lumit_media::encode::VideoCodec::Vp9 => HEVC_BITS_PER_PIXEL,
         // ProRes has no bitrate to choose, so this is never asked.
         _ => H264_BITS_PER_PIXEL,
     };
@@ -2413,6 +2462,9 @@ pub struct ExportSpec {
     /// The video bitrate: worked out from the size and rate, or the number
     /// that was typed. Meaningless — and unread — for the lossless formats.
     pub bitrate: Bitrate,
+    /// Whether that bitrate is held constant or allowed to vary up to its
+    /// peak.
+    pub rate_control: RateControl,
     /// Output frame rate; None = the composition's own. A different
     /// rate resamples by nearest comp frame — the honest thing without optical
     /// flow in the export path — and the file is stamped with the chosen rate.
@@ -2461,6 +2513,7 @@ impl Default for ExportSpec {
             format: ExportFormat::Video(lumit_media::encode::VideoCodec::H264),
             target: None,
             bitrate: Bitrate::default(),
+            rate_control: RateControl::default(),
             fps: None,
             range: None,
             include_audio: true,
@@ -3290,6 +3343,7 @@ fn run(
                     fps_den: out_den,
                     bit_rate,
                     max_rate,
+                    cbr: spec.rate_control == RateControl::Cbr,
                     colour: spec.colour_space.tags(),
                     depth: spec.depth,
                 }),

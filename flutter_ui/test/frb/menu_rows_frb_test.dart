@@ -179,7 +179,7 @@ void main() {
       expect(matte.inverted, isTrue);
 
       await settle(tester, p);
-      await choose(tester, 'Layer', 'No matte', under: 'Matte');
+      await choose(tester, 'Layer', 'None', under: 'Matte');
       expect(under.getMatte(), isNull);
     });
 

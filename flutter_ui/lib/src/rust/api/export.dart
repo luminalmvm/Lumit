@@ -470,6 +470,10 @@ class BridgeExportSpec {
   /// chooses its own quality, which is what blank has always meant.
   final bool bitrateAuto;
 
+  /// Hold the bitrate constant (CBR) rather than letting it vary up to
+  /// `peak_mbps` (VBR).
+  final bool constantBitrate;
+
   /// Output frame rate; zero means the composition's own. A different rate
   /// resamples by nearest comp frame over the same wall-clock span.
   final double fps;
@@ -605,6 +609,7 @@ class BridgeExportSpec {
     required this.bitrateMbps,
     required this.peakMbps,
     required this.bitrateAuto,
+    required this.constantBitrate,
     required this.fps,
     required this.rangeStartFrame,
     required this.rangeEndFrame,
@@ -654,6 +659,7 @@ class BridgeExportSpec {
       bitrateMbps.hashCode ^
       peakMbps.hashCode ^
       bitrateAuto.hashCode ^
+      constantBitrate.hashCode ^
       fps.hashCode ^
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
@@ -700,6 +706,7 @@ class BridgeExportSpec {
           bitrateMbps == other.bitrateMbps &&
           peakMbps == other.peakMbps &&
           bitrateAuto == other.bitrateAuto &&
+          constantBitrate == other.constantBitrate &&
           fps == other.fps &&
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&

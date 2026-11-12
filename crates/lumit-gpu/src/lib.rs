@@ -383,6 +383,22 @@ pub fn adapter_summary() -> Option<&'static str> {
     ADAPTER_SUMMARY.get().map(String::as_str)
 }
 
+/// The PCI vendor and device ids of the adapter the first context opened,
+/// published beside [`ADAPTER_SUMMARY`].
+///
+/// A laptop with an integrated card and a discrete one lists the integrated
+/// card first, and the renderer asks for the discrete one. Whoever measures
+/// the card's memory from outside (DXGI, on Windows) needs to know which of
+/// the two the renderer is on, or it measures the wrong one.
+static ADAPTER_IDS: std::sync::OnceLock<(u32, u32)> = std::sync::OnceLock::new();
+
+/// The `(vendor, device)` ids of the adapter the first context opened, or
+/// `None` before any context exists.
+#[must_use]
+pub fn adapter_ids() -> Option<(u32, u32)> {
+    ADAPTER_IDS.get().copied()
+}
+
 /// Which card the first context opened, as the kernel names it (see [`drm`]).
 /// Published once beside [`ADAPTER_SUMMARY`] and for the same reason: the
 /// adapter is only in hand inside [`GpuContext::headless`], and the Linux
@@ -1267,6 +1283,7 @@ impl GpuContext {
             // Kept for the bridge, which writes it to the diagnostics file once
             // a session (see [`adapter_summary`]).
             let _ = ADAPTER_SUMMARY.set(summary);
+            let _ = ADAPTER_IDS.set((info.vendor, info.device));
         }
         // wgpu's defaults for both of these panic. An engine crate may not panic
         // (docs/14-ENGINEERING-RULES.md), and neither condition is recoverable

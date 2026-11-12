@@ -1791,6 +1791,23 @@ fn feed_layer(
     // neighbour frames, exactly the ones the render decodes (same window, same
     // retime mapping, same comp frame step). Footage layers only, as the render
     // decodes; a plain layer's key is untouched.
+    // **A time effect that follows the layer's motion** (Echo, Motion blur,
+    // Timewarp, Posterize time) reads the layer as the effects above it leave
+    // it, where it was at each moment it reads, so that layer at each of
+    // those moments is part of this frame's name: a key moved a frame back
+    // changes the trail.
+    if let Some((at, how)) = lumit_core::fx::follow::split(layer) {
+        let above = lumit_core::fx::follow::inner(layer, at, how);
+        h.update(b"follow/");
+        for (i, tau) in lumit_core::fx::follow::times(comp, layer, t)
+            .into_iter()
+            .enumerate()
+        {
+            let llt = lumit_core::time::layer_time(tau, layer.start_offset.0);
+            h.update(&(i as u32).to_le_bytes());
+            feed_layer(h, doc, comp, &above, tau, llt, quality, stamper, visited)?;
+        }
+    }
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);

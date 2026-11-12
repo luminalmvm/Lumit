@@ -29952,6 +29952,7 @@ impl SseDecode for crate::api::export::BridgeExportSpec {
         let mut var_bitrateMbps = <u32>::sse_decode(deserializer);
         let mut var_peakMbps = <u32>::sse_decode(deserializer);
         let mut var_bitrateAuto = <bool>::sse_decode(deserializer);
+        let mut var_constantBitrate = <bool>::sse_decode(deserializer);
         let mut var_fps = <f64>::sse_decode(deserializer);
         let mut var_rangeStartFrame = <i64>::sse_decode(deserializer);
         let mut var_rangeEndFrame = <i64>::sse_decode(deserializer);
@@ -29994,6 +29995,7 @@ impl SseDecode for crate::api::export::BridgeExportSpec {
             bitrate_mbps: var_bitrateMbps,
             peak_mbps: var_peakMbps,
             bitrate_auto: var_bitrateAuto,
+            constant_bitrate: var_constantBitrate,
             fps: var_fps,
             range_start_frame: var_rangeStartFrame,
             range_end_frame: var_rangeEndFrame,
@@ -41991,6 +41993,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeExportSpec {
             self.bitrate_mbps.into_into_dart().into_dart(),
             self.peak_mbps.into_into_dart().into_dart(),
             self.bitrate_auto.into_into_dart().into_dart(),
+            self.constant_bitrate.into_into_dart().into_dart(),
             self.fps.into_into_dart().into_dart(),
             self.range_start_frame.into_into_dart().into_dart(),
             self.range_end_frame.into_into_dart().into_dart(),
@@ -50551,6 +50554,7 @@ impl SseEncode for crate::api::export::BridgeExportSpec {
         <u32>::sse_encode(self.bitrate_mbps, serializer);
         <u32>::sse_encode(self.peak_mbps, serializer);
         <bool>::sse_encode(self.bitrate_auto, serializer);
+        <bool>::sse_encode(self.constant_bitrate, serializer);
         <f64>::sse_encode(self.fps, serializer);
         <i64>::sse_encode(self.range_start_frame, serializer);
         <i64>::sse_encode(self.range_end_frame, serializer);

@@ -354,6 +354,9 @@ class _ExportDialogState extends State<_ExportDialog> {
   int _bitrate = 0;
   int _peak = 0;
   bool _autoBitrate = true;
+
+  /// Constant bitrate (CBR) rather than variable (VBR) up to [_peak].
+  bool _constantBitrate = false;
   double _fps = 60;
   bool _ownRate = false;
   _Span _span = _Span.workArea;
@@ -721,6 +724,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       bitrateMbps: _bitrate,
       peakMbps: _peak,
       bitrateAuto: _autoBitrate,
+      constantBitrate: _constantBitrate,
       fps: _fps,
       rangeStartFrame: start,
       rangeEndFrame: end,
@@ -1648,6 +1652,61 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ),
               ),
             ]),
+            labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
+          ),
+        ),
+        // How the bitrate is spent: varying with the picture up to a
+        // maximum (VBR), or held at the bitrate throughout (CBR).
+        _columns(
+          _row(
+            t,
+            l10n.exportBitRateEncoding,
+            SizedBox(
+              height: dialogControlHeight,
+              child: _why(
+                _caps.bitRate ? null : l10n.tipExportFormatLimit,
+                BareDropdown<bool>(
+                  key: const ValueKey('export-bitrate-encoding'),
+                  value: _constantBitrate,
+                  options: const [false, true],
+                  label: (cbr) =>
+                      cbr ? l10n.exportBitRateCbr : l10n.exportBitRateVbr,
+                  onChanged: _caps.bitRate
+                      ? (cbr) => _edit(() => _constantBitrate = cbr)
+                      : null,
+                ),
+              ),
+            ),
+            dimmed: dim,
+          ),
+          _row(
+            t,
+            l10n.exportBitRateMaximum,
+            SizedBox(
+              height: dialogControlHeight,
+              child: _caps.bitRate && !_autoBitrate && !_constantBitrate
+                  ? DragValueField(
+                      key: const ValueKey('export-bitrate-peak'),
+                      // Blank takes half as much again as the bitrate.
+                      value: _peak,
+                      min: 0,
+                      max: 800,
+                      suffix: _peak == 0
+                          ? null
+                          : l10n.exportReadingVideoRate(''),
+                      fill: t.surface0,
+                      onChanged: (v) => _edit(() => _peak = v.toInt()),
+                    )
+                  : _well(
+                      t,
+                      _constantBitrate || !_caps.bitRate
+                          ? '—'
+                          : l10n.exportBitRateMaximumAuto,
+                      key: const ValueKey('export-bitrate-peak'),
+                      tone: t.textDisabled,
+                    ),
+            ),
             labelColumn: exportLabelColumnPaired,
             dimmed: dim,
           ),
@@ -2585,6 +2644,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       _bitrate = stored.bitrateMbps;
       _peak = stored.peakMbps;
       _autoBitrate = stored.bitrateAuto;
+      _constantBitrate = stored.constantBitrate;
       if (stored.fps > 0) {
         _ownRate = true;
         _fps = stored.fps;

@@ -1886,10 +1886,8 @@ fn stroke(
 // Temporal
 // ---------------------------------------------------------------------------
 
-/// "Echo" → **Echo** (docs/08 §3.25). The count, the decay and the operator
-/// carry; Lumit's echoes are one frame apart by declaration (its temporal
-/// window is the previous sixteen frames), so AE's Echo Time is reported
-/// unless it already names a single frame back.
+/// "Echo" → **Echo** (docs/08 §3.25). Every row carries: Echo Time, the count,
+/// Starting Intensity, the decay and the operator, Blend included.
 fn echo(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -1897,7 +1895,9 @@ fn echo(
     row: &'static Row,
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
+    fx.float(conv, "ADBE Echo-0001", "echo_time", 1.0, 0.0);
     fx.float(conv, "ADBE Echo-0002", "echoes", 1.0, 0.0);
+    fx.float(conv, "ADBE Echo-0003", "starting_intensity", 1.0, 0.0);
     fx.float(conv, "ADBE Echo-0004", "decay", 1.0, 0.0);
     // 1 Add, 2 Maximum, 3 Minimum, 4 Screen, 5 Composite in Back,
     // 6 Composite in Front, 7 Blend. AE's default of 1 is Add.
@@ -1908,21 +1908,9 @@ fn echo(
         4 => (3, None),
         5 => (0, None),
         6 => (1, None),
-        _ => (2, Some("Add, Lumit's list having no averaging entry")),
+        7 => (14, None),
+        _ => (2, Some("Add, an operator Lumit has not got")),
     });
-    // AE's Echo Time is seconds a frame back; Lumit's samples are whole frames.
-    let step = -1.0 / conv.tb.rate().fps();
-    if fx
-        .still(conv, "ADBE Echo-0001")
-        .is_some_and(|t| (t - step).abs() > 1e-4)
-    {
-        fx.approx_named(
-            conv,
-            "Echo Time (seconds)",
-            "one frame a step, Lumit's echoes being declared on whole frames",
-        );
-    }
-    fx.drop_param(conv, "Starting Intensity");
     fx.done()
 }
 

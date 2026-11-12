@@ -4207,6 +4207,67 @@ fn comp_walk(
         // A layer with a backdrop effect is drawn as an adjustment is: over
         // the composite below, its own picture handed to that effect instead.
         let adjusts = layer.is_adjustment() || backdrop_fx(layer);
+        // **Time effects follow the layer's motion.** Echo's ghosts, Motion
+        // blur's streak, Timewarp's moments and Posterize time's held frames
+        // are the layer as it was then: placed where it was, with the effects
+        // above as they were. So the layer is drawn as those effects leave it
+        // into a comp-sized picture, the way a group header wraps its
+        // members, and that picture is built again at each moment the effect
+        // reads; the effect and every effect after it run on it, in comp
+        // space (`follow`).
+        if !adjusts && !with.rebuild && !spliced && comp.graph.is_none() {
+            if let Some(split) = follow::split(layer) {
+                if let Some(d) = follow::wrap(
+                    follow::Frame {
+                        doc,
+                        comp,
+                        layer,
+                        split,
+                        t: (t_comp, frame_t),
+                        lt: (lt, effect_lt, frame_lt),
+                    },
+                    pixels_by_layer,
+                    visited,
+                    &with,
+                    |tail, at| {
+                        let comp_diag =
+                            ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                        let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, tail);
+                        resolve_layer_fx(
+                            tail,
+                            &drivers_for(tail, at, context.clone()),
+                            at,
+                            frame_lt,
+                            comp_diag,
+                            1.0,
+                            &markers,
+                            context.clone(),
+                        )
+                    },
+                    |tail, at| follow::Extras {
+                        colour_tables: colour_tables(&tail.effects, at),
+                        dof_inputs: dof_inputs_for(tail.id, &tail.effects, None),
+                        mattes: mattes_for(tail.id, &tail.effects, &tail.graph),
+                        mask_paths: mask_paths_for(&tail.effects, None, at),
+                        roto_mattes: roto_mattes_for(&tail.effects, 0),
+                        planes: planes_for(&tail.effects, 0),
+                        points_schedules: points_schedules_for(
+                            None,
+                            &tail.effects,
+                            at,
+                            frame_lt,
+                            None,
+                        ),
+                        flare_lens_files: flare_lens_files(&tail.effects, at),
+                        graph_fx: graph_fx_for(Some(tail), &tail.effects, at, frame_lt),
+                    },
+                ) {
+                    // The layer's own Matte gates the whole trail.
+                    draws.push(CompLayerDraw { matte, ..d });
+                    continue;
+                }
+            }
+        }
         let comp_clips = match &layer.kind {
             LayerKind::Sequence { clips } if !adjusts => {
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
@@ -7288,6 +7349,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
 
 mod audio_spectrum_levels;
 mod energy_line_path;
+pub(crate) mod follow;
 mod moments;
 pub(crate) mod motion_blur;
 
@@ -9772,6 +9834,7 @@ mod render_below_at_tests {
         let mut doc = Document::new();
         let (footage, probes) = clip(&mut doc);
         let footage_id = footage.id;
+        let mut clip_layer = footage.clone();
         let nested = comp_with(10, vec![footage]);
         let nested_id = nested.id;
         doc.items.push(ProjectItem::Composition(nested));
@@ -9834,7 +9897,7 @@ mod render_below_at_tests {
         // Echo reads back through its window and measures nothing.
         let echoed = precomp(&["echo"]);
         let trail = rebuilds(&echoed);
-        assert_eq!(trail.len(), 16, "one rebuild per frame of the window");
+        assert_eq!(trail.len(), 4, "one rebuild per echo it shows");
         assert!(trail.iter().all(|(o, measure)| *o < 0 && measure.is_none()));
         // A rebuild is made from pixels, so its footage is decoded even
         // where the frame itself is held.
@@ -9847,6 +9910,19 @@ mod render_below_at_tests {
 
         // Motion blur still gets its measurement.
         assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, Some(1))]);
+
+        // A footage layer's Echo builds the layer again at each frame it
+        // shows, so the clip is decoded at each of them.
+        clip_layer.effects = vec![lumit_core::fx::builtins::instantiate("echo").unwrap()];
+        let footage_comp = comp_with(10, vec![clip_layer]);
+        let jobs = plan(&footage_comp, false);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        let mut offsets: Vec<f64> = job.shutter.iter().map(|s| s.offset.round()).collect();
+        offsets.sort_by(f64::total_cmp);
+        assert_eq!(offsets, vec![-4.0, -3.0, -2.0, -1.0], "one decode per echo");
     }
 
     // Echo on a Precomp layer had the same fault as the plugin: every tap

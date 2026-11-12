@@ -17,6 +17,9 @@ pub struct EchoOp {
     pub mode: u32,
     /// 0..1, blended against the leading (current) frame.
     pub mix: f32,
+    /// The frame itself's intensity, After Effects' Starting Intensity: 1
+    /// leaves it as it is.
+    pub start: f32,
 }
 
 #[repr(C)]
@@ -149,18 +152,33 @@ impl FxEngine {
             matte_on: f32::from(matted),
             tap,
         };
-        // acc := current (weight 0 add = a + n*0 = a).
+        // acc := current (weight 0 add = a + n*0 = a), or current scaled by
+        // the starting intensity, added onto a clear picture.
         let mut acc = work_texture(ctx, w, h, "fx-echo-acc");
-        self.dispatch(
-            ctx,
-            &self.echo_accumulate,
-            current,
-            current,
-            &acc,
-            w,
-            h,
-            bytemuck::bytes_of(&params(0.0, 0, 0, false)),
-        );
+        if (op.start - 1.0).abs() < 1e-6 {
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                current,
+                current,
+                &acc,
+                w,
+                h,
+                bytemuck::bytes_of(&params(0.0, 0, 0, false)),
+            );
+        } else {
+            let clear = work_texture(ctx, w, h, "fx-echo-clear");
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                &clear,
+                current,
+                &acc,
+                w,
+                h,
+                bytemuck::bytes_of(&params(op.start.max(0.0), 2, 0, false)),
+            );
+        }
         for (i, &weight) in op.weights.iter().enumerate() {
             if weight <= 0.0 {
                 continue;

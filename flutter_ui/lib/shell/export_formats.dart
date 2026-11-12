@@ -32,11 +32,9 @@ final Set<String> _offered = {
     if (exportFormatCaps(codec: f.key).video) f.key,
 };
 
-/// Only the browser build writes WebM. It has no Save dialogue of its own to
-/// name the type in, so the label stands in.
+/// The browser build writes AV1 as well as VP9. It has no Save dialogue of
+/// its own to name the type in, so the label stands in.
 List<_Format> get _webFormats => [
-      _Format('vp9', l10n.formatVp9, 'webm', l10n.formatVp9,
-          ExportOutputType.video),
       _Format('av1', l10n.formatAv1, 'webm', l10n.formatAv1,
           ExportOutputType.video),
     ];
@@ -60,6 +58,10 @@ List<_Format> get _desktopFormats => [
           l10n.formatMovPicker, ExportOutputType.video),
       _Format('prores_4444xq', l10n.formatProRes4444Xq, 'mov',
           l10n.formatMovPicker, ExportOutputType.video),
+      _Format('qtrle', l10n.formatQtAnimation, 'mov', l10n.formatMovPicker,
+          ExportOutputType.video),
+      _Format('vp9', l10n.formatVp9, 'webm', l10n.formatWebmPicker,
+          ExportOutputType.video),
       _Format('gif', l10n.formatGif, 'gif', l10n.formatGifPicker,
           ExportOutputType.video),
       _Format('png', l10n.formatPngSequence, 'png', l10n.formatPngPicker,
