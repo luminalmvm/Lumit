@@ -91,6 +91,48 @@ pub(crate) fn raise_timer_resolution() {
 #[cfg(not(windows))]
 pub(crate) fn raise_timer_resolution() {}
 
+/// Keep Windows from throttling this process to save power (Windows; a no-op
+/// elsewhere).
+///
+/// On a laptop, and more so on battery, Windows may run a process it judges
+/// to be background work at low clocks ("efficiency mode") and may ignore its
+/// timer resolution request, so a 1 ms sleep lasts a whole 15.6 ms tick. Both
+/// land on a frame: the worker waits for the graphics card several times a
+/// frame (the present, the D3D11 hop, a read-back), and each wait that sleeps
+/// then sleeps a tick. Lumit is an editor somebody is looking at, so it asks
+/// for neither, as a video player does. A refusal is harmless: things stay as
+/// they were.
+#[cfg(windows)]
+pub(crate) fn opt_out_of_power_throttling() {
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
+        PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, PROCESS_POWER_THROTTLING_STATE,
+    };
+    // The mask names what this process decides; a state of 0 for each says
+    // "not throttled".
+    let state = PROCESS_POWER_THROTTLING_STATE {
+        Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        ControlMask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+            | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+        StateMask: 0,
+    };
+    // SAFETY: the pseudo-handle of this process and a correctly sized,
+    // initialised PROCESS_POWER_THROTTLING_STATE that outlives the call; the
+    // result is ignored because a refusal leaves nothing to do.
+    unsafe {
+        let _ = SetProcessInformation(
+            GetCurrentProcess(),
+            ProcessPowerThrottling,
+            std::ptr::from_ref(&state).cast(),
+            u32::try_from(std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>()).unwrap_or(0),
+        );
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn opt_out_of_power_throttling() {}
+
 /// Run this thread a step above the rest of the machine while it plays, and
 /// back at the ordinary priority when it stops (Windows).
 ///

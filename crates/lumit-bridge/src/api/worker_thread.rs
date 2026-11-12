@@ -3202,6 +3202,7 @@ fn worker_loop(
     );
     let mut stream = stream;
     crate::turns::raise_timer_resolution();
+    crate::turns::opt_out_of_power_throttling();
 
     // Made before the renderer, because the two profiler sinks it installs
     // read it from inside a render.
