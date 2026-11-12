@@ -29775,6 +29775,10 @@
   "@gradeCompare": {
     "description": "Grade panel, Match page: compare the Viewer's picture against the shot or still picked in Match to."
   },
+  "panelGradeNodes": "Grade nodes",
+  "@panelGradeNodes": {
+    "description": "Name of the panel that draws the current shot's grade as numbered nodes joined left to right. A tab title and a Window > Panels row."
+  },
   "gradeStillsAlbum": "Stills",
   "@gradeStillsAlbum": {
     "description": "The name given to the first album of stills, made when Grab still is used before any album exists."
@@ -29786,6 +29790,18 @@
   "gradeStillFailed": "The still could not be grabbed",
   "@gradeStillFailed": {
     "description": "Notice when Grab still could not write the still to the library."
+  },
+  "gradeCopyNode": "Copy node",
+  "@gradeCopyNode": {
+    "description": "Grade nodes panel menu: put this node on the effect clipboard."
+  },
+  "gradePasteNode": "Paste node",
+  "@gradePasteNode": {
+    "description": "Grade nodes panel menu: put the effects on the clipboard into the grade as nodes, after this one."
+  },
+  "gradeScopeShot": "Shot",
+  "@gradeScopeShot": {
+    "description": "Grade nodes panel header, first of the choices of whose nodes are shown: the shot's own grade."
   },
   "gradeScopeGroupPre": "Group pre",
   "@gradeScopeGroupPre": {
@@ -29995,6 +30011,14 @@
   "@gradeGridVersions": {
     "description": "Grade panel versions menu, and the Viewer's grid chip: the Viewer shows every grade version of the current shot side by side in a grid."
   },
+  "gradeKeyInvert": "Invert key",
+  "@gradeKeyInvert": {
+    "description": "Grade nodes panel, right-click on a key wire: the node takes the opposite of the key it is fed, so it grades what the other node leaves alone."
+  },
+  "gradeKeyRemove": "Remove key wire",
+  "@gradeKeyRemove": {
+    "description": "Grade nodes panel, right-click on a key wire: the wire from one node's key to another node goes."
+  },
   "histApplyMemory": "Apply memory",
   "@histApplyMemory": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a kept grade memory put on shots in place of their grade."
@@ -30083,6 +30107,30 @@
   "@gradeCdlFitted": {
     "description": "Notice after Export CDL wrote a node that needs more than slope, offset, power and saturation: the nearest CDL was fitted to it, so it is close rather than exact."
   },
+  "gradeImportCdl": "Import CDL…",
+  "@gradeImportCdl": {
+    "description": "Menu row in Layer > Grade and on a grade node's right-click: read a colour decision file and add it as a CDL node after the current node."
+  },
+  "gradeExportCdl": "Export CDL…",
+  "@gradeExportCdl": {
+    "description": "Menu row in Layer > Grade and on a grade node's right-click: write the node as a colour decision file. Offered on a Correction or a CDL node."
+  },
+  "gradeAddWarper": "Add colour warper node",
+  "@gradeAddWarper": {
+    "description": "Menu row in Layer > Grade and in the Grade nodes panel's add menu: add a Colour warper node, a mesh over the colour wheel whose points are dragged to move colours."
+  },
+  "gradeAddShared": "Add shared node",
+  "@gradeAddShared": {
+    "description": "Submenu in the Grade nodes panel's add menu: every shared node by its name, to use in this shot too. Edits to a shared node show in every shot that uses it."
+  },
+  "gradeShareNode": "Share with picked shots",
+  "@gradeShareNode": {
+    "description": "Row on a grade node's right-click in the Grade nodes panel: the node becomes a shared node, used by this shot and every other picked shot; editing it anywhere edits it everywhere."
+  },
+  "gradeUnshareNode": "Unshare",
+  "@gradeUnshareNode": {
+    "description": "Row on a shared node's right-click in the Grade nodes panel: every shot that used it gets its own copy, and the node is no longer shared."
+  },
   "gradeQualKeep": "Keep",
   "@gradeQualKeep": {
     "description": "Row name on the Grade panel's Qualifier page in 3D mode: the colours the 3D key keeps, picked by drawing on the Viewer, with their count and swatches."
@@ -30094,5 +30142,9 @@
   "gradeQualClear": "Clear",
   "@gradeQualClear": {
     "description": "Button at the end of the Keep or Drop row on the Grade panel's Qualifier page in 3D mode: forget those samples."
+  },
+  "gradeNodeThumbnails": "Node thumbnails",
+  "@gradeNodeThumbnails": {
+    "description": "Grade nodes panel header button tooltip: each node shows a small picture of what it puts out."
   }
 }

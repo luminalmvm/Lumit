@@ -24,6 +24,9 @@ enum Panel {
   /// The selected layer's grade as wheels, primaries, curves and a look,
   /// over the Colour effects that do the work. The Colour workspace's own.
   grade,
+
+  /// The current shot's grade as nodes, from its picture to what it shows.
+  gradeNodes,
   debug,
   hierarchy,
   easing,
@@ -114,6 +117,7 @@ enum Panel {
         Panel.effectsAndPresets => l10n.panelEffectsAndPresets,
         Panel.scopes => l10n.panelScopes,
         Panel.grade => l10n.panelGrade,
+        Panel.gradeNodes => l10n.panelGradeNodes,
         Panel.hierarchy => l10n.panelHierarchy,
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,

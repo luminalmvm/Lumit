@@ -2806,14 +2806,16 @@ class LumitUiState extends ChangeNotifier {
     // (item 6.35).
     // Except over the Mixer: picking a track there is mixing, and taking the
     // faders away for its effects is the one thing nobody asked for. The
-    // Grade panel is the same: it is the layer's controls in the Colour
-    // workspace, and Effect controls sit one tab behind it on purpose. So is
+    // Grade panel and the Grade nodes panel are the same: they are the
+    // layer's controls in the Colour workspace, and Effect controls sit one
+    // tab behind them on purpose. So is
     // the Transcript panel: picking words picks their clips, and the words
     // have to stay in sight.
     if (primary != null &&
         !_restoring &&
         !frontedOver(split, Panel.mixer, Panel.effectControls) &&
         !frontedOver(split, Panel.grade, Panel.effectControls) &&
+        !frontedOver(split, Panel.gradeNodes, Panel.effectControls) &&
         !frontedOver(split, Panel.captions, Panel.effectControls) &&
         !frontedOver(split, Panel.transcript, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
