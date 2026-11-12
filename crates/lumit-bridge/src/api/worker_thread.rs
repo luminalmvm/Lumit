@@ -4994,6 +4994,10 @@ fn publish_preview(
     asked: f32,
     mut document: lumit_core::model::Document,
 ) -> Result<(), BridgeError> {
+    let wireframe = crate::realtime::wireframe_drags();
+    if wireframe {
+        crate::realtime::wireframe_document(&mut document);
+    }
     crate::realtime::draft_flares(&mut document);
     let (comp_width, comp_height) = document
         .comp(comp.id)
@@ -5006,6 +5010,8 @@ fn publish_preview(
         std::sync::Arc::new(document),
     );
     let scale = crate::realtime::drag_scale(comp_width, comp_height, asked);
+    let started = web_time::Instant::now();
+    lumit_render::build::set_outlines_only(wireframe);
     watched(state, stream, frame, false, |state, stream| {
         publish_frame(
             state,
@@ -5018,6 +5024,13 @@ fn publish_preview(
             false,
         );
     });
+    lumit_render::build::set_outlines_only(false);
+    // What the drag frame cost, so the next is drawn coarser while drags are
+    // slow (the adaptive resolution limit). A wireframe frame is not a
+    // measure of the picture, so it teaches nothing.
+    if !wireframe {
+        crate::realtime::observe_drag(started.elapsed().as_secs_f64());
+    }
     Ok(())
 }
 

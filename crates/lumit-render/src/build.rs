@@ -301,6 +301,47 @@ fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
 // if a scaled-up shape is still too slow.
 const SHAPE_RASTER_PIXELS: f64 = 4096.0 * 4096.0;
 
+/// Whether the frames being built draw each layer as the outline of its own
+/// rectangle (a wireframe drag, After Effects CS6's Wireframe fast preview).
+/// Set by the one thread that renders, around a drag frame only, and back off
+/// before anything else is drawn; such a frame is never cached.
+static OUTLINES_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn outline drawing on or off for the frames built from here on. See
+/// [`OUTLINES_ONLY`].
+pub fn set_outlines_only(on: bool) {
+    OUTLINES_ONLY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn outlines_only() -> bool {
+    OUTLINES_ONLY.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// A picture the size and kind of `rgba` (`w` × `h`, eight-bit or float
+/// RGBA) that is clear inside and white along its edge, two pixels wide.
+/// `None` for a picture of a size it cannot read, which then stays as it is.
+fn outline_like(rgba: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
+    let (w, h) = (w as usize, h as usize);
+    let pixels = w.checked_mul(h).filter(|&n| n > 0)?;
+    let bpp = rgba.len() / pixels;
+    let white: Vec<u8> = match bpp {
+        4 => vec![255; 4],
+        16 => [1.0_f32; 4].iter().flat_map(|v| v.to_ne_bytes()).collect(),
+        _ => return None,
+    };
+    let edge = 2.min(w).min(h);
+    let mut out = vec![0u8; pixels * bpp];
+    for y in 0..h {
+        for x in 0..w {
+            if x < edge || y < edge || x >= w - edge || y >= h - edge {
+                let at = (y * w + x) * bpp;
+                out[at..at + bpp].copy_from_slice(&white);
+            }
+        }
+    }
+    Some(out)
+}
+
 /// How many comp pixels one of the layer's own pixels covers at most, read
 /// off its world placement: the longest of the two axes' lengths, whichever
 /// way round the matrix is laid out, so a turned or skewed layer is never
@@ -2292,6 +2333,13 @@ fn comp_walk(
             _ => lumit_media::decode::PixelFormat::Srgb8,
         };
         raw.map(|(mut rgba, w, h, natural)| {
+            // A wireframe drag frame: the layer's own rectangle, outlined, in
+            // place of its picture (see [`set_outlines_only`]).
+            if outlines_only() {
+                if let Some(outline) = outline_like(&rgba, w, h) {
+                    rgba = Arc::new(outline);
+                }
+            }
             // Nothing to stamp in is the ordinary layer, and it keeps the
             // bytes it arrived with: both stages return on an empty list
             // anyway, and asking for them by name is what lets a decoded frame
@@ -9980,3 +10028,25 @@ mod render_below_at_tests {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod outline_tests {
+    use super::outline_like;
+
+    /// The outline keeps the picture's size and kind: white on the edge,
+    /// clear inside.
+    #[test]
+    fn an_outline_is_white_on_the_edge_and_clear_inside() {
+        let eight = outline_like(&[9u8; 6 * 5 * 4], 6, 5).expect("eight-bit");
+        assert_eq!(eight.len(), 6 * 5 * 4);
+        assert_eq!(&eight[0..4], &[255; 4], "corner");
+        let inside = (2 * 6 + 2) * 4;
+        assert_eq!(&eight[inside..inside + 4], &[0; 4], "inside");
+        let float = outline_like(&[0u8; 6 * 5 * 16], 6, 5).expect("float");
+        assert_eq!(&float[0..4], &1.0_f32.to_ne_bytes());
+        assert!(
+            outline_like(&[0u8; 7], 6, 5).is_none(),
+            "an unreadable size stays"
+        );
+    }
+}

@@ -9940,6 +9940,14 @@
   "@settingsFullResolutionWhileDragging": {
     "description": "Settings window: the name of the setting that renders a value drag at the Viewer's own resolution instead of the reduced one, so previews stay sharp and get slower."
   },
+  "settingsAdaptiveResolutionLimit": "Adaptive resolution limit",
+  "@settingsAdaptiveResolutionLimit": {
+    "description": "Settings window: how coarse a drag preview may go when its frames come slowly. Auto, or 1/2 to 1/16."
+  },
+  "settingsWireframeWhileDragging": "Wireframe while dragging",
+  "@settingsWireframeWhileDragging": {
+    "description": "Settings window: a drag shows each layer as the outline of its rectangle, and the release shows the frame."
+  },
   "settingsFramesWaitingToBeWritten": "Frames waiting to be written",
   "@settingsFramesWaitingToBeWritten": {
     "description": "Settings window: the name of one setting."

@@ -56,9 +56,11 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
     show
         setAutosave,
         setDiscordStatus,
+        setDragResolutionLimit,
         setFullResDragPreviews,
         setHardwareDecode,
-        setLargestPicture;
+        setLargestPicture,
+        setWireframeDrags;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
@@ -3013,6 +3015,8 @@ class LumitUiState extends ChangeNotifier {
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
+    setDragResolutionLimit(divisor: perf.dragResolutionLimit);
+    setWireframeDrags(on_: perf.wireframeDrags);
     setHardwareDecode(on_: perf.hardwareDecode);
     final largest = perf.largestPicture;
     if (largest != null) setLargestPicture(side: largest);

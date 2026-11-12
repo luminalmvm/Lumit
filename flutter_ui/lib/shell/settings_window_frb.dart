@@ -3793,6 +3793,32 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             setFullResDragPreviews(fullRes: on);
             ui.workspace.settingsChanged();
           }),
+          // How far a slow drag may give up resolution, and the outline-only
+          // drag: After Effects CS6's Fast Previews, for a machine that cannot
+          // keep up even at the drag budget.
+          _row(
+            t,
+            l10n.settingsAdaptiveResolutionLimit,
+            _dropdown<int>(
+              key: 'settings-drag-limit',
+              value: ui.workspace.performance.dragResolutionLimit,
+              options: const [0, 2, 4, 8, 16],
+              width: _ddWide,
+              label: (d) => d == 0 ? l10n.menuAuto : '1/$d',
+              onChanged: (d) => setState(() {
+                ui.workspace.performance.dragResolutionLimit = d;
+                setDragResolutionLimit(divisor: d);
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
+          _flag(t, 'settings-wireframe-drags',
+              l10n.settingsWireframeWhileDragging,
+              value: ui.workspace.performance.wireframeDrags, set: (on) {
+            ui.workspace.performance.wireframeDrags = on;
+            setWireframeDrags(on_: on);
+            ui.workspace.settingsChanged();
+          }),
           _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
               value: ui.workspace.performance.hardwareDecode, set: (on) {
             ui.workspace.performance.hardwareDecode = on;
