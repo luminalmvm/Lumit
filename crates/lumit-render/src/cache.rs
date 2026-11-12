@@ -199,6 +199,35 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
     }
 
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
+        self.stamp_with(item, lt, native, None)
+    }
+
+    /// The footage layer's own stamp, which knows the layer and so whether it
+    /// decodes at shown size, as the plan's footage job asks.
+    fn stamp_layer(
+        &self,
+        item: Uuid,
+        lt: f64,
+        native: bool,
+        layer: &lumit_core::model::Layer,
+    ) -> Option<(String, u64)> {
+        let shown = (!native && self.quality.shown_size)
+            .then(|| lumit_core::shown_size::largest_scale(self.doc, layer))
+            .flatten();
+        self.stamp_with(item, lt, native, shown)
+    }
+}
+
+impl Stamper<'_> {
+    /// [`lumit_eval::SourceStamper::stamp`], for a layer shown no larger than
+    /// `shown` of its own size.
+    fn stamp_with(
+        &self,
+        item: Uuid,
+        lt: f64,
+        native: bool,
+        shown: Option<f32>,
+    ) -> Option<(String, u64)> {
         // A 3D model is never probed, so it is named by its file as it is on
         // disk now, or a model saved over would keep its old frames.
         if let Some(lumit_core::model::ProjectItem::Footage(f)) = self.doc.item(item) {
@@ -275,7 +304,7 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         let target = if native {
             None
         } else {
-            settled.target_width(width)
+            settled.target_width_shown(width, shown)
         };
         let on_disk = self.saved_over(item, media, source_frame);
         Some((

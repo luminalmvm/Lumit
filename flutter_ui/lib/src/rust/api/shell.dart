@@ -59,6 +59,12 @@ void setWireframeDrags({required bool on_}) =>
 void setLiveUpdate({required bool on_}) =>
     BridgeLib.instance.api.crateApiShellSetLiveUpdate(on_: on_);
 
+/// **Decode footage at shown size** (Settings → Performance and the Viewer's
+/// bar): a footage layer shown smaller than its own size is decoded no larger
+/// for the preview. Export always decodes at full size.
+void setDecodeAtShownSize({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetDecodeAtShownSize(on_: on_);
+
 /// Let footage be decoded by the graphics card's video unit, or keep it on the
 /// processor.
 ///

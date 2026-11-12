@@ -125,6 +125,14 @@ pub fn set_live_update(on: bool) {
     crate::realtime::set_live_update(on);
 }
 
+/// **Decode footage at shown size** (Settings → Performance and the Viewer's
+/// bar): a footage layer shown smaller than its own size is decoded no larger
+/// for the preview. Export always decodes at full size.
+#[frb(sync)]
+pub fn set_decode_at_shown_size(on: bool) {
+    crate::realtime::set_decode_at_shown_size(on);
+}
+
 /// Let footage be decoded by the graphics card's video unit, or keep it on the
 /// processor.
 ///

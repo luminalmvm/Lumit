@@ -74,6 +74,10 @@ pub struct Quality {
     /// Manual preview-resolution divisor: 1 = Full, 2 = Half, 3 = Third,
     /// 4 = Quarter (docs/01-GLOSSARY.md §5).
     pub divisor: u32,
+    /// Decode footage at shown size (Settings → Performance): a plain 2D
+    /// footage layer decodes no larger than the largest scale it is shown at
+    /// ([`lumit_core::shown_size`]). Preview only; export never sets it.
+    pub shown_size: bool,
 }
 
 impl Default for Quality {
@@ -84,6 +88,7 @@ impl Default for Quality {
             auto_res: false,
             display_scale: 1.0,
             divisor: 1,
+            shown_size: false,
         }
     }
 }
@@ -142,6 +147,24 @@ impl Quality {
             return (w < natural_w).then_some(w.max(16));
         }
         specified
+    }
+
+    /// [`Self::target_width`] for a layer shown no larger than `shown` of its
+    /// own size ([`lumit_core::shown_size::largest_scale`]), when
+    /// [`Self::shown_size`] is on. The plan and the frame's name both come
+    /// here, so the width in the name is the width decoded.
+    #[must_use]
+    pub fn target_width_shown(self, natural_w: u32, shown: Option<f32>) -> Option<u32> {
+        let base = self.target_width(natural_w);
+        let Some(shown) = shown.filter(|_| self.shown_size) else {
+            return base;
+        };
+        let from = base.unwrap_or(natural_w);
+        let w = ((from as f32 * shown).ceil() as u32).max(16);
+        if w >= natural_w {
+            return base;
+        }
+        Some(w.min(from))
     }
 
     /// The number the frame-cache key folds in, so each resolution tier keys
@@ -678,7 +701,13 @@ pub fn collect_comp_jobs(
                     let target_width = if flow.is_some() || !flow_neighbours.is_empty() {
                         None
                     } else {
-                        quality.target_width(nat_w)
+                        // Decode footage at shown size: the cache key asks the same in
+                        // `Stamper::stamp_layer`.
+                        let shown = quality
+                            .shown_size
+                            .then(|| lumit_core::shown_size::largest_scale(doc, layer))
+                            .flatten();
+                        quality.target_width_shown(nat_w, shown)
                     };
                     let target_width = fit_texture(target_width, nat_w, nat_h);
                     let (source_frame, blend) =
@@ -1009,7 +1038,13 @@ pub fn collect_comp_jobs(
                 let target_width = if native {
                     None
                 } else {
-                    quality.target_width(nat_w)
+                    // Decode footage at shown size; the frame's name asks the
+                    // same in `Stamper::stamp_layer`.
+                    let shown = quality
+                        .shown_size
+                        .then(|| lumit_core::shown_size::largest_scale(doc, layer))
+                        .flatten();
+                    quality.target_width_shown(nat_w, shown)
                 };
                 let target_width = fit_texture(target_width, nat_w, nat_h);
                 let (source_frame, blend) = lumit_core::pixels::frame_pick(
@@ -1575,6 +1610,28 @@ mod tests {
     /// and draft caps on top without ever raising the specified width. This is
     /// the policy both the decode request and the cache key read, so a bug here
     /// would file a frame under the wrong resolution.
+    #[test]
+    fn a_layer_shown_smaller_decodes_no_larger_than_it_is_shown() {
+        let on = Quality {
+            shown_size: true,
+            ..Quality::default()
+        };
+        assert_eq!(on.target_width_shown(3840, Some(0.5)), Some(1920));
+        assert_eq!(on.target_width_shown(3840, None), None, "not a candidate");
+        let half = Quality { divisor: 2, ..on };
+        assert_eq!(
+            half.target_width_shown(3840, Some(0.5)),
+            Some(960),
+            "Half of the shown size"
+        );
+        let off = Quality::default();
+        assert_eq!(
+            off.target_width_shown(3840, Some(0.5)),
+            None,
+            "the setting off, or export, decodes as before"
+        );
+    }
+
     #[test]
     fn target_width_follows_the_quality_policy() {
         let full = Quality::default();

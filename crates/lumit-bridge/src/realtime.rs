@@ -230,6 +230,20 @@ pub(crate) fn live_update() -> bool {
     LIVE_UPDATE.load(Ordering::Relaxed)
 }
 
+/// **Decode footage at shown size** (Settings → Performance), on by default: a
+/// plain 2D footage layer shown smaller than its own size is decoded for the
+/// preview no larger than it is shown (`lumit_core::shown_size`). Export
+/// never reads this.
+static SHOWN_SIZE: AtomicBool = AtomicBool::new(true);
+
+pub(crate) fn set_decode_at_shown_size(on: bool) {
+    SHOWN_SIZE.store(on, Ordering::Relaxed);
+}
+
+pub(crate) fn decode_at_shown_size() -> bool {
+    SHOWN_SIZE.load(Ordering::Relaxed)
+}
+
 /// Strip a drag frame's document down to what a wireframe shows: no effect,
 /// style, matte or motion blur on any layer, every layer blended Normal, so
 /// each one's outline is drawn where it sits and nothing hides or gates it.

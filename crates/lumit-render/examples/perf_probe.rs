@@ -96,6 +96,7 @@ fn quality(scale: f32) -> Quality {
         auto_res: scale < 1.0,
         display_scale: scale,
         divisor: 1,
+        shown_size: false,
     }
 }
 
