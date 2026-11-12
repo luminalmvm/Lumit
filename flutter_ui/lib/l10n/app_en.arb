@@ -10549,6 +10549,26 @@
       }
     }
   },
+  "textAxisWeight": "Weight",
+  "@textAxisWeight": {
+    "description": "The standard name of a variable font's weight (wght) axis, shown when the font does not name it."
+  },
+  "textAxisWidth": "Width",
+  "@textAxisWidth": {
+    "description": "The standard name of a variable font's width (wdth) axis, shown when the font does not name it."
+  },
+  "textAxisSlant": "Slant",
+  "@textAxisSlant": {
+    "description": "The standard name of a variable font's slant (slnt) axis, shown when the font does not name it."
+  },
+  "textAxisItalic": "Italic",
+  "@textAxisItalic": {
+    "description": "The standard name of a variable font's italic (ital) axis, shown when the font does not name it."
+  },
+  "textAxisOpticalSize": "Optical size",
+  "@textAxisOpticalSize": {
+    "description": "The standard name of a variable font's optical size (opsz) axis, shown when the font does not name it."
+  },
   "textAnimatorAxesFull": "A layer moves at most 8 font axes",
   "@textAnimatorAxesFull": {
     "description": "Shown in place of the Add font axis menu once a text layer's animators move eight axes, the most it can."
