@@ -1,0 +1,83 @@
+---
+title: Stabilise
+description: "Takes the shake out of a shot, or puts it back on another layer."
+---
+
+Stabilise is a **Distortion** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Analyses how the picture moves through a shot, then moves each frame to steady it. In
+**Reverse** it moves a layer with the shake of a stabilised one.
+
+It works on footage layers and Precomp layers. See [Stabilising](/use/stabilising/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Analyse**: analyse the shot again. A new Stabilise analyses by itself.
+- **Cancel**: stop an analysis that is running.
+- **Mode**: *Stabilise* takes the shake out of this layer. *Reverse* puts another layer's
+  shake onto this one.
+- **Stabilised layer**: the layer whose shake **Reverse** puts back. A Precomp layer means
+  the stabilised layer inside it.
+- **Result**: *Smooth motion* keeps the camera's own movement and takes out the shake. *No
+  motion* holds the shot still.
+- **Smoothness**: how much of the camera's movement is smoothed away. At 0 the shot is
+  unchanged. Read for *Smooth motion*.
+- **Reference**: the moment of the layer every frame is held to. Read for *No motion*.
+- **Use this frame**: sets **Reference** to the frame under the playhead.
+- **Method**: what each frame's movement is measured as. *Position* is a slide. *Scale and
+  rotation* adds a turn and a change of size. *Perspective* adds the lean of a tilted
+  camera.
+- **Keep scale**: leaves the picture's change of size alone.
+- **Rolling shutter**: *Reduce* takes out the skew of a sensor read row by row, where the
+  analysis measured one.
+- **Edges**: what the empty edges of a moved frame become. *Show* leaves them empty, *Crop*
+  cuts the picture to the part that is always covered, *Crop and scale* scales the picture
+  up until they are out of frame, and *Fill* fills them from the frames before and after.
+- **Maximum scale**: the most *Crop and scale* scales the picture up.
+- **Safe margin**: a share of the frame on each side that *Crop and scale* may leave empty.
+- **Steady crop**: how still the crop holds. At 100 one crop serves the whole shot. Lower
+  lets it ease with the shot and crop less.
+- **Extra scale**: scale added on top.
+- **Fill from**: how far before and after a frame *Fill* reaches.
+- **Fill feather**: how far in from its edge each frame fades into the fill.
+- **Trim left**, **Trim top**, **Trim right** and **Trim bottom**: pixels of each frame's own
+  edge that *Fill* never uses.
+- **Feature density**: how many points the analysis follows. More is slower but copes
+  better with hard footage.
+- **Use masks**: masks on the layer are left out of the analysis.
+- **Frames**: which frames Analyse reads. **All frames** is the whole footage however the
+  layer is trimmed, **Layer in to out** is the frames between the layer's in and out
+  points, and **Work area** is the frames inside the composition's work area.
+- **Show points**: draws the followed points over the picture.
+- **Point size**: how big the points are drawn.
+- **Amount**: how much of the correction is used. Keyed to 0 on a frame, it leaves that
+  frame where it was shot.
+
+:::note[Limitations]
+There is no mesh warp method, and camera gyro data is not read.
+:::
+
+## Related
+
+- [Stabilising](/use/stabilising/)
+- [Steadying a handheld shot](/tutorials/stabilise-a-shot/)
+- [Tracking](/use/tracking/)
+- [Masks](/use/masks/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

@@ -6765,6 +6765,12 @@ fn every_parameter_declares_a_unit() {
             ("bezier_warp", "left_top_tangent_y"),
             ("bezier_warp", "left_bottom_tangent_x"),
             ("bezier_warp", "left_bottom_tangent_y"),
+            // Stabilise's Fill feather and trims, pixels of the frame.
+            ("stabilise", "fill_feather"),
+            ("stabilise", "trim_left"),
+            ("stabilise", "trim_top"),
+            ("stabilise", "trim_right"),
+            ("stabilise", "trim_bottom"),
             ("gradient", "start_x"),
             ("gradient", "start_y"),
             ("gradient", "end_x"),
@@ -7598,6 +7604,11 @@ fn every_effect_carries_a_matte_row() {
         //
         // **Scene pass** is a reading, as Depth is, and **Part matte** a coverage.
         //
+        // **Stabilise** moves the whole frame by the shot's measured motion. A
+        // strength per pixel would tear the picture between where it was and
+        // where it is moved to; how much of the correction is used is its
+        // Amount row, for the whole frame.
+        //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
         if matches!(
@@ -7610,6 +7621,7 @@ fn every_effect_carries_a_matte_row() {
                 | "depth_points"
                 | "scene_pass"
                 | "part_matte"
+                | "stabilise"
         ) {
             assert_eq!(
                 s.matte,
@@ -7623,10 +7635,14 @@ fn every_effect_carries_a_matte_row() {
                 s.match_name
             );
             // The Matte key carries no such row at all; Set matte's is its own,
-            // and is the auxiliary layer the render threads to it.
+            // and is the auxiliary layer the render threads to it. Stabilise's
+            // is the layer a Reverse puts the shake of back.
             assert_eq!(
                 s.layer_input().is_some(),
-                matches!(s.match_name, "set_matte" | "depth_points" | "scene_pass" | "part_matte"),
+                matches!(
+                    s.match_name,
+                    "set_matte" | "depth_points" | "scene_pass" | "part_matte" | "stabilise"
+                ),
                 "{}: Set matte keeps its source on the layer-input carriage, as Depth points does its depth",
                 s.match_name
             );
@@ -10756,7 +10772,7 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
     let inst = a_plugin_instance("ofx:test.core.retimer");
     let one = std::slice::from_ref(&inst);
     assert_eq!(
-        stack_temporal_window(one, true, 0.0),
+        stack_temporal_window(one, true, 0.0, 30.0),
         vec![-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5],
         "the plugin's own frames are what the layer decodes"
     );
@@ -10765,11 +10781,11 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
     assert!(stack_is_temporal(one, true));
 
     // Bypassed, disabled, and a plain built-in stack are all untouched.
-    assert_eq!(stack_temporal_window(one, false, 0.0), vec![0]);
+    assert_eq!(stack_temporal_window(one, false, 0.0, 30.0), vec![0]);
     let mut off = inst.clone();
     off.enabled = false;
     assert_eq!(
-        stack_temporal_window(std::slice::from_ref(&off), true, 0.0),
+        stack_temporal_window(std::slice::from_ref(&off), true, 0.0, 30.0),
         vec![0]
     );
 
@@ -10783,7 +10799,7 @@ fn a_retimers_declared_frames_land_in_the_temporal_window() {
     assert!(BUILTIN_DEFS.register(plain));
     let plain_inst = a_plugin_instance("ofx:test.core.plain");
     assert_eq!(
-        stack_temporal_window(std::slice::from_ref(&plain_inst), true, 0.0),
+        stack_temporal_window(std::slice::from_ref(&plain_inst), true, 0.0, 30.0),
         vec![-1, 0, 1]
     );
 }

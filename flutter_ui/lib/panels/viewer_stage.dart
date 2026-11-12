@@ -78,6 +78,7 @@ import 'viewer_shape3d.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
+import 'viewer_stabilise.dart';
 import 'viewer_track.dart';
 import 'viewer_type.dart';
 import 'viewer_zoom.dart';
@@ -207,6 +208,49 @@ class ViewerStage extends StatelessWidget {
       }
     }
     return null;
+  }
+
+  /// The Stabilise whose points are drawn, and whether its layer is the one
+  /// taking clicks: of the enabled ones taking the shake out with Show points
+  /// on, the first on a selected layer, else the first. From the read model,
+  /// as the cloud's layer is.
+  ({LayerReference layer, UuidValue effect, double size, bool selecting})?
+      _stabilised() {
+    final picked = uiState.selectedLayerIds;
+    ({LayerReference layer, UuidValue effect, double size, bool selecting})?
+        first;
+    for (final entry in uiState.model.heldLayers) {
+      for (final fx in entry.info.effects) {
+        if (fx.name != 'stabilise' || !fx.enabled) continue;
+        var show = false;
+        var reverse = false;
+        var size = 100.0;
+        for (final v in fx.values) {
+          switch (v.value) {
+            case BridgeEffectValue_Bool(:final field0)
+                when v.id == 'show_points':
+              show = field0;
+            case BridgeEffectValue_Choice(:final field0) when v.id == 'mode':
+              reverse = field0 == 1;
+            case BridgeEffectValue_Float(
+                  field0: BridgeScalar_Static(:final field0)
+                ) when v.id == 'point_size':
+              size = field0;
+            default:
+          }
+        }
+        if (!show || reverse) continue;
+        final found = (
+          layer: entry.layer,
+          effect: fx.id,
+          size: size,
+          selecting: picked.contains(entry.layer.internallayerId),
+        );
+        if (found.selecting) return found;
+        first ??= found;
+      }
+    }
+    return first;
   }
 
   /// The Roto brush on the **selected** layer, which picture it is drawing, and
@@ -1162,6 +1206,47 @@ class ViewerStage extends StatelessWidget {
                       generation: uiState.solveLanded.value,
                       accent: t.accent,
                       mark: t.textPrimary,
+                      onChanged: onChanged,
+                      onPictureMenu: (d) => menus.openPicture?.call(d),
+                    ),
+                  );
+                },
+              ),
+            ),
+            // Stabilise's followed points, under the same kind of listener as
+            // the cloud and for the same reasons.
+            Positioned.fill(
+              child: ListenableBuilder(
+                listenable: Listenable.merge(
+                  [uiState.model, uiState.solveLanded],
+                ),
+                builder: (context, _) {
+                  // Points are composition pixels on the comp's own picture:
+                  // none in a pane looking through another camera, or one
+                  // drawn as lines only.
+                  final points = showPicture && _viewPose() == null
+                      ? _stabilised()
+                      : null;
+                  if (points == null) return const SizedBox.shrink();
+                  return ValueListenableBuilder<int>(
+                    valueListenable: uiState.playheadFrame,
+                    builder: (context, frame, _) => ViewerStabiliseLayer(
+                      key: ValueKey<String>(
+                          'viewer-stabilise-${points.effect}'),
+                      layer: points.layer,
+                      effect: points.effect,
+                      pointSize: points.size,
+                      selecting: points.selecting,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      playheadFrame: frame,
+                      revision: uiState.model.heldRevision,
+                      landed: uiState.solveLanded.value,
+                      accent: t.accent,
+                      muted: t.textMuted,
                       onChanged: onChanged,
                       onPictureMenu: (d) => menus.openPicture?.call(d),
                     ),

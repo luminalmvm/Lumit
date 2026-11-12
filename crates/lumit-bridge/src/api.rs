@@ -62,6 +62,7 @@ pub mod shape;
 pub mod share;
 pub mod shell;
 pub mod solid;
+pub mod stabilise;
 pub mod state;
 pub mod streams;
 pub mod styles;

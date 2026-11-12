@@ -54,6 +54,7 @@ Amplitude
 Amplitude x
 Amplitude y
 Analyse
+Analysis
 Anamorphic squeeze
 Anchor
 Anchor in
@@ -351,6 +352,7 @@ Crackle
 Create corner pin
 Create transform keys
 Crop
+Crop and scale
 Crop bottom
 Crop left
 Crop right
@@ -522,6 +524,7 @@ Expansion
 Explosion
 Exposure
 Expression
+Extra scale
 Extract channels
 Extrusion depth
 F-stop
@@ -549,6 +552,8 @@ Fields
 File
 Fill
 Fill cell
+Fill feather
+Fill from
 Film
 Film colour
 Filter
@@ -787,6 +792,7 @@ Jolts only
 Jumpy
 Keep in picked
 Keep inside
+Keep scale
 Key out safe
 Key out unsafe
 Kill
@@ -921,6 +927,7 @@ Max renders
 Max trails
 Maximum
 Maximum length
+Maximum scale
 Maximum signal
 Maximum span length
 Measure
@@ -967,6 +974,7 @@ Nearest (m)
 Nearest distance
 Negative
 Neon
+No motion
 Node graph
 Noise
 Noise by size
@@ -1071,6 +1079,7 @@ Per clone
 Per-axis wobble
 Perlin
 Persistence
+Perspective
 Petals
 Phase
 Phase from
@@ -1188,9 +1197,11 @@ Red blur
 Red from
 Red phase
 Reds
+Reduce
 Reduce brightness
 Reduce saturation
 Reduction
+Reference
 Refine radius
 Refraction
 Region from
@@ -1245,6 +1256,7 @@ Rise
 Robust Video Matting
 Roll
 Roll speed
+Rolling shutter
 Rolloff
 Room size
 Rose
@@ -1271,6 +1283,7 @@ Row stagger
 Rows
 Rows/columns jitter
 Rubber
+Safe margin
 Same
 Same as Per
 Sample size
@@ -1283,6 +1296,7 @@ Saturation
 Save to folder
 Sawtooth
 Scale
+Scale and rotation
 Scale height
 Scale sizes
 Scale width
@@ -1339,6 +1353,7 @@ Sharpen
 Shift per row
 Shift x
 Shift y
+Show
 Show points
 Shuffle
 Shutter
@@ -1376,6 +1391,7 @@ Smoke
 Smoke and fire
 Smoke colour
 Smooth
+Smooth motion
 Smooth noise
 Smoothing
 Smoothness
@@ -1431,6 +1447,8 @@ Sprite flare
 Sprite layer
 Square
 Squeeze
+Stabilise
+Stabilised layer
 Stages
 Stagger
 Standard
@@ -1447,6 +1465,7 @@ Start x
 Start y
 Static
 Status
+Steady crop
 Steps per second
 Stereo phase
 Stereo width
@@ -1562,6 +1581,11 @@ Tremolo
 Triangle
 Triangles
 Trigger
+Trim
+Trim bottom
+Trim left
+Trim right
+Trim top
 Tritone
 True peak
 Turbulence
@@ -1609,6 +1633,7 @@ Use middle colour
 Use point colour
 Use point size
 Use source colour
+Use this frame
 Utility
 V line rel width
 Value

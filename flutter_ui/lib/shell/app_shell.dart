@@ -1456,6 +1456,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       // The selected rows, as the Composition menu's own row adds them.
       case 'template.controls.add':
         handled = addToControlsRow(ui).press();
+      case 'layer.stabilise':
+        handled = stabiliseRow(state, ui).press();
       // The Layer menu's rows the same way. Stepping the blend mode repeats
       // while the key is held, and stops at either end of the list.
       case 'layer.blend.next':
@@ -1576,6 +1578,7 @@ bool _pressedOnce(String action) =>
       'effect.learn',
       'effect.listen',
       'template.controls.add',
+      'layer.stabilise',
       'layer.lock.toggle',
       'layer.unlock.all',
       'layer.centre',

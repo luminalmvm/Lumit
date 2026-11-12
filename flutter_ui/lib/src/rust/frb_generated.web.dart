@@ -58,6 +58,7 @@ import 'api/shape.dart';
 import 'api/share.dart';
 import 'api/shell.dart';
 import 'api/solid.dart';
+import 'api/stabilise.dart';
 import 'api/state.dart';
 import 'api/state/prefix.dart';
 import 'api/streams.dart';
@@ -1725,6 +1726,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSpokenSpeaker dco_decode_bridge_spoken_speaker(dynamic raw);
 
   @protected
+  BridgeStabilisePoint dco_decode_bridge_stabilise_point(dynamic raw);
+
+  @protected
+  BridgeStabilisePoints dco_decode_bridge_stabilise_points(dynamic raw);
+
+  @protected
+  BridgeStabiliseStatus dco_decode_bridge_stabilise_status(dynamic raw);
+
+  @protected
   BridgeStillsProgress dco_decode_bridge_stills_progress(dynamic raw);
 
   @protected
@@ -2299,6 +2309,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeSpokenSpeaker> dco_decode_list_bridge_spoken_speaker(dynamic raw);
+
+  @protected
+  List<BridgeStabilisePoint> dco_decode_list_bridge_stabilise_point(
+      dynamic raw);
 
   @protected
   List<BridgeStroke> dco_decode_list_bridge_stroke(dynamic raw);
@@ -4706,6 +4720,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeStabilisePoint sse_decode_bridge_stabilise_point(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeStabilisePoints sse_decode_bridge_stabilise_points(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeStabiliseStatus sse_decode_bridge_stabilise_status(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeStillsProgress sse_decode_bridge_stills_progress(
       SseDeserializer deserializer);
 
@@ -5407,6 +5433,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeSpokenSpeaker> sse_decode_list_bridge_spoken_speaker(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeStabilisePoint> sse_decode_list_bridge_stabilise_point(
       SseDeserializer deserializer);
 
   @protected
@@ -8054,6 +8084,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSpokenSpeaker self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_stabilise_point(
+      BridgeStabilisePoint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_stabilise_points(
+      BridgeStabilisePoints self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_stabilise_status(
+      BridgeStabiliseStatus self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_stills_progress(
       BridgeStillsProgress self, SseSerializer serializer);
 
@@ -8783,6 +8825,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_spoken_speaker(
       List<BridgeSpokenSpeaker> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_stabilise_point(
+      List<BridgeStabilisePoint> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_stroke(

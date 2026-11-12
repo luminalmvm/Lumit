@@ -391,6 +391,7 @@ impl FxEngine {
         let mirror_mod = module(include_str!("../fx_mirror.wgsl"), "fx-mirror");
         let lens_distort_mod = module(include_str!("../fx_lensdistort.wgsl"), "fx-lens-distort");
         let corner_pin_mod = module(include_str!("../fx_cornerpin.wgsl"), "fx-corner-pin");
+        let stabilise_mod = module(include_str!("../fx_stabilise.wgsl"), "fx-stabilise");
         let dispmap_mod = module(include_str!("../fx_dispmap.wgsl"), "fx-displacement-map");
         let polar_mod = module(include_str!("../fx_polar.wgsl"), "fx-polar-coordinates");
         let twirl_mod = module(include_str!("../fx_twirl.wgsl"), "fx-twirl");
@@ -549,6 +550,8 @@ impl FxEngine {
         let mirror = pipeline(&mirror_mod, "fx-mirror", "mirror");
         let lens_distort = pipeline(&lens_distort_mod, "fx-lens-distort", "lens_distort");
         let corner_pin = pipeline(&corner_pin_mod, "fx-corner-pin", "corner_pin");
+        let stabilise = pipeline(&stabilise_mod, "fx-stabilise", "stabilise");
+        let stabilise_fill = pipeline(&stabilise_mod, "fx-stabilise-fill", "stabilise_fill");
         let displacement_map = pipeline(&dispmap_mod, "fx-displacement-map", "displacement_map");
         let polar_coordinates = pipeline(&polar_mod, "fx-polar-coordinates", "polar_coordinates");
         let twirl = pipeline(&twirl_mod, "fx-twirl", "twirl");
@@ -711,6 +714,8 @@ impl FxEngine {
             mirror: mirror.wait(),
             lens_distort: lens_distort.wait(),
             corner_pin: corner_pin.wait(),
+            stabilise: stabilise.wait(),
+            stabilise_fill: stabilise_fill.wait(),
             displacement_map: displacement_map.wait(),
             polar_coordinates: polar_coordinates.wait(),
             twirl: twirl.wait(),

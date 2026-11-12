@@ -46,8 +46,9 @@ fn point_bakes_at(project: &LumitBridgeState) {
     lumit_render::sim::bake::set_root(root(project, &location));
 }
 
-/// The last project's solves and simulations go, this one's solves are read
-/// back, in that order, and bakes go to this project's folder from now on.
+/// The last project's solves, simulations and stabilisations go, this one's
+/// are read back, in that order, and bakes go to this project's folder from
+/// now on.
 pub(crate) fn project_changed(id: Uuid, solves: Vec<lumit_render::track::Job>) {
     lumit_render::sim::let_go();
     let project = crate::api::state::PROJECTS
@@ -57,6 +58,7 @@ pub(crate) fn project_changed(id: Uuid, solves: Vec<lumit_render::track::Job>) {
     if let Some(project) = project {
         if let Ok(project) = project.read() {
             point_bakes_at(&project);
+            lumit_render::stabilise::opened(&project.store.snapshot());
         }
     }
     lumit_render::track::clear();

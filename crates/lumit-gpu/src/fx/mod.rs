@@ -44,6 +44,8 @@ pub mod points_field;
 pub mod smoke;
 pub mod split;
 pub mod sprite_flare;
+/// Stabilise's warp: the frame drawn through the map its analysis made.
+pub mod stabilise;
 pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
@@ -215,6 +217,11 @@ pub struct FxEngine {
     /// Corner pin (docs/08 §3.48): the picture pulled onto four points, through
     /// the inverse of the homography they define.
     corner_pin: wgpu::ComputePipeline,
+    /// Stabilise: each frame drawn through the map its analysis made, with
+    /// a bicubic tap.
+    stabilise: wgpu::ComputePipeline,
+    /// Stabilise's Fill: one frame of the fill laid over what is under it.
+    stabilise_fill: wgpu::ComputePipeline,
     /// Displacement map (docs/08 §3.49): another layer's channels push this one.
     /// The seventh kernel to claim the matte inside its own maths, and the
     /// second (after Set matte) for which the matte is the effect's subject.

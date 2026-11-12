@@ -237,6 +237,7 @@ impl ProjectReference {
             lumit_render::planes::forget(&lumit_render::planes::owned_ids(&doc));
             // A transcription of the project going stops, and its watchers go.
             crate::speech::forget(self.id);
+            lumit_render::stabilise::forget_document(&doc);
             // And so do the puppet wireframes the render left for the overlay,
             // by layer for the same reason: another project's are still on
             // screen.

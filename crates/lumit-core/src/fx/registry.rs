@@ -688,6 +688,13 @@ pub trait EffectDef: Sync + Send + 'static {
         None
     }
 
+    /// [`frames_needed`](EffectDef::frames_needed), told the comp's rate too,
+    /// for a built-in whose window is set in seconds. The window is still in
+    /// comp frames.
+    fn frames_needed_at(&self, inst: &EffectInstance, frame: f64, _fps: f64) -> Option<Vec<i32>> {
+        self.frames_needed(inst, frame)
+    }
+
     /// Why the last frame this definition rendered was a placeholder rather
     /// than the effect's own work, if it was (docs/12 §2.3).
     ///

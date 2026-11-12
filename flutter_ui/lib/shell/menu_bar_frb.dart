@@ -886,6 +886,7 @@ class LumitMenuBarFrb extends StatelessWidget {
         category: l10n.menuEffect,
         icon: mark(LumitIcon.fx),
         disabled: layers.isEmpty ? l10n.paletteNeedsLayer : null,
+        otherNames: effect.otherNames,
         run: () => addEffectToLayers(app, ui, layers, effect.name),
       ));
     }
@@ -1859,6 +1860,7 @@ List<MenuSection> lumitMenus(
             MenuEntry.submenu(
                 l10n.menuSeparateDimensions, axisModeRows(app, ui)),
             trackCameraRow(app, ui),
+            stabiliseRow(app, ui),
             MenuEntry.todo(l10n.menuTrackMotion),
             MenuEntry.divider(),
             // The Reveal family: `U`'s own machinery under the menu's words, each

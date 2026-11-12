@@ -37,7 +37,7 @@ import 'layer_fold_frb.dart' show animatorsPath;
 const double _cellWidth = 78;
 
 /// The Animators section for [layer], or nothing when it is not a Text layer.
-class TextAnimatorRowsFrb extends StatelessWidget {
+class TextAnimatorRowsFrb extends StatefulWidget {
   final LayerReference layer;
   final VoidCallback onChanged;
 
@@ -68,15 +68,58 @@ class TextAnimatorRowsFrb extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final document = layer.getText();
-    if (document == null) return const SizedBox.shrink();
+  State<TextAnimatorRowsFrb> createState() => _TextAnimatorRowsFrbState();
+}
 
+class _TextAnimatorRowsFrbState extends State<TextAnimatorRowsFrb> {
+  /// The animators from the last read model that held the layer, null when it
+  /// is not a Text layer. A layer of a comp no longer in front is not in the
+  /// model, and keeps what was last read, as the panel's other sections do.
+  List<BridgeTextAnimator>? _held;
+
+  @override
+  Widget build(BuildContext context) {
+    // Drawn from the read model, with no call to the engine.
+    final entry = Provider.of<LumitUiState>(context, listen: false)
+        .model
+        .byId(widget.layer.internallayerId);
+    if (entry != null) {
+      _held = entry.info.kind == BridgeLayerKind.text
+          ? entry.info.textAnimators
+          : null;
+    }
+    final animators = _held;
+    if (animators == null) return const SizedBox.shrink();
+    return _AnimatorSection(of: widget, animators: animators);
+  }
+}
+
+/// The section itself, for the animators [TextAnimatorRowsFrb] holds.
+class _AnimatorSection extends StatelessWidget {
+  final TextAnimatorRowsFrb of;
+  final List<BridgeTextAnimator> animators;
+
+  const _AnimatorSection({required this.of, required this.animators});
+
+  LayerReference get layer => of.layer;
+  VoidCallback get onChanged => of.onChanged;
+  CompositionReference get comp => of.comp;
+  int get playheadFrame => of.playheadFrame;
+  ValueChanged<int> get onSeek => of.onSeek;
+  bool get open => of.open;
+  VoidCallback get onToggle => of.onToggle;
+  bool get solid => of.solid;
+
+  @override
+  Widget build(BuildContext context) {
     // One write path: read the document, change the animator list, write it
     // whole. The engine takes the whole document as one op — and when the list
     // crosses empty ↔ not-empty it moves the layer's anchor by the margin the
-    // animated raster adds, in the same op, so the words do not jump.
+    // animated raster adds, in the same op, so the words do not jump. Read
+    // when the edit is made, never while drawing.
     void write(List<BridgeTextAnimator> animators) {
+      final document = layer.getText();
+      if (document == null) return;
       layer.setText(
         document: BridgeTextDocument(
           text: document.text,
@@ -94,10 +137,10 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     }
 
     final rows = <Widget>[];
-    for (var i = 0; i < document.animators.length; i++) {
+    for (var i = 0; i < animators.length; i++) {
       rows.addAll(_animatorRows(
         context,
-        document.animators,
+        animators,
         i,
         write,
       ));

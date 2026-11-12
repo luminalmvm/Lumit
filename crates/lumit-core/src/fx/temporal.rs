@@ -356,7 +356,8 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// datamosh) can read its neighbours.
 ///
 /// `frame` is the layer's local time in **frames of the comp**, the unit a
-/// plugin is asked in and one a built-in never reads.
+/// plugin is asked in, and `fps` the comp's rate, which a window set in
+/// seconds reads.
 ///
 /// **Per instance, not only per effect**. A built-in's window is a fact
 /// about the effect and comes off its declaration, exactly as it always did. A
@@ -366,7 +367,12 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// answers for itself, falling back to the declaration when it has nothing more
 /// specific to say. The frames it names are then in the frame key and in the
 /// prefetch, which is what keeps a cached frame from outliving what it sampled.
-pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64) -> Vec<i32> {
+pub fn stack_temporal_window(
+    effects: &[EffectInstance],
+    fx_on: bool,
+    frame: f64,
+    fps: f64,
+) -> Vec<i32> {
     let mut offsets = vec![0i32];
     if fx_on {
         let live = effects
@@ -377,7 +383,7 @@ pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64
             let Some(def) = super::catalogue::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
             };
-            match def.frames_needed(e, frame) {
+            match def.frames_needed_at(e, frame, fps) {
                 Some(own) => offsets.extend_from_slice(&own),
                 None => offsets.extend_from_slice(def.schema().traits.temporal),
             }
@@ -423,7 +429,7 @@ pub fn input_times(inst: &EffectInstance, t: f64, dt: f64) -> Vec<f64> {
     if inst.effect.match_name == TIME_OFFSET {
         return vec![t + inst.float_at("offset", t).unwrap_or(0.0)];
     }
-    let window = match def.frames_needed(inst, t) {
+    let window = match def.frames_needed_at(inst, t, 1.0 / dt) {
         Some(own) => own,
         None => def.schema().traits.temporal.to_vec(),
     };
@@ -459,7 +465,7 @@ pub fn layer_temporal_window(
     lt: f64,
     dt: f64,
 ) -> Vec<i32> {
-    let mut offsets = stack_temporal_window(&layer.effects, layer.switches.fx, lt);
+    let mut offsets = stack_temporal_window(&layer.effects, layer.switches.fx, lt, 1.0 / dt);
     if layer.switches.fx && dt > 0.0 {
         for inst in layer
             .effects

@@ -1,0 +1,49 @@
+---
+title: Steadying a handheld shot
+description: Stabilise a shot, fix a wrong lock, then add something that moves with it.
+sidebar:
+  order: 9
+---
+
+[Stabilise](/effects/distortion/stabilise/) takes the shake out of a handheld shot. This
+steadies one, fixes it where it follows the wrong thing, and adds a title that sits in the
+shot.
+
+## 1. Stabilise
+
+1. Select the footage layer and choose **Animation ▸ Stabilise**.
+2. Wait for the status line to read *Stabilised*. The Viewer's transport shows the progress.
+3. Play the shot.
+
+## 2. Set how steady
+
+1. Drag **Smoothness** up for a steadier shot and down for one closer to how it was filmed.
+   The picture updates as you drag.
+2. For a shot that should not move at all, set **Result** to *No motion*, put the playhead
+   on the frame to hold, and press **Use this frame**.
+3. If the status line reads *Needs … over the maximum*, lower **Smoothness**, raise
+   **Maximum scale**, or set **Edges** to *Fill*.
+
+## 3. Fix a wrong lock
+
+Where something large moves through the frame, the analysis can follow it in place of the
+background.
+
+1. Open the **Analysis** group and turn on **Show points**.
+2. Scrub to a frame where points sit on the thing that moves.
+3. Drag a box round those points and press `Delete`. The points moving with them through
+   the rest of the shot go too.
+4. Play the shot again. **Restore points** beside the status line undoes every drop.
+
+## 4. Add something that moves with the shot
+
+1. Press **Make stabilised precomp** beside the status line.
+2. Double-click the new Precomp layer to open it. The shot inside is steady.
+3. Add a text layer and place it against something in the picture.
+4. Go back to the outer composition and play it. The text moves with the shot.
+
+## Related
+
+- [Stabilising](/use/stabilising/)
+- [Stabilise](/effects/distortion/stabilise/)
+- [Text](/use/text/)
