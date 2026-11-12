@@ -687,12 +687,22 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// port's type, which is what the parameter is now following.
   void _readDriven() {
     if (!mounted) return;
-    final layer = _boundUi?.selectedLayer.value ?? _lastLayer;
+    final picked = _boundUi?.selectedLayer.value;
+    final layer = picked ?? _lastLayer;
     BridgeLayerGraph? graph;
     try {
       graph = layer?.getGraph();
     } catch (_) {
-      // The layer has gone, so the rows draw their own controls again.
+      // The layer has gone, so the rows draw their own controls again. One
+      // held from another comp has gone with its comp, which an undo can
+      // take away, so it is let go rather than drawn from its last read.
+      if (picked == null && layer != null) {
+        setState(() {
+          _lastLayer = null;
+          _heldEntry = null;
+          _heldComp = null;
+        });
+      }
     }
     // The Timeline's fold-out takes the same reading from the same helper, so
     // a row cannot say *driven* in one panel and offer a spinner in the other.
