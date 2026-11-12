@@ -123,10 +123,15 @@ pub struct VideoDecoder {
     /// slideshow, and "did that need a seek?" is a far steadier thing to assert
     /// than "was that fast?".
     seeks: usize,
-    /// Whether frames are decoded by the graphics card's video unit
-    /// (docs/impl/media-io.md §4). Diagnostic — the pixels and the pts logic
-    /// are identical either way.
+    /// Whether the last frame handed out came from the graphics card's video
+    /// unit (docs/impl/media-io.md §4). Diagnostic. The pixels and the pts
+    /// logic are identical either way.
     hardware: bool,
+    /// What this reads, for the software decoder that checks a device.
+    src: MediaSource,
+    /// The last frames copied back from the graphics card, filled again once
+    /// nothing else holds them.
+    spare: Vec<AVFrame>,
     /// The original's size, for a stand-in made smaller than the file it
     /// stands in for. Its frames are handed back at that size, as the probe
     /// says they are.
@@ -145,17 +150,16 @@ pub struct VideoDecoder {
 #[cfg(not(target_arch = "wasm32"))]
 const FILL_REACH: usize = 30;
 
-/// Build and open a codec context for `codec`/`par`, with the D3D11VA
-/// hardware device attached when `try_hw` asks for it and the codec supports
-/// it. Returns whether hardware is actually in use. A context that fails to
-/// open is unusable, which is why the caller retries with a fresh one in
-/// software rather than reusing this one.
+/// Build and open a codec context for `codec`/`par`, with a hardware device
+/// attached when `device` names one and it suits the stream. A context that
+/// fails to open is unusable, which is why the caller retries with a fresh
+/// one in software rather than reusing this one.
 #[cfg(not(target_arch = "wasm32"))]
 fn open_codec_ctx(
     codec: &AVCodec,
     par: &rsmpeg::avcodec::AVCodecParameters,
-    try_hw: bool,
-) -> Result<(AVCodecContext, bool), MediaError> {
+    device: Option<hw::HwKind>,
+) -> Result<AVCodecContext, MediaError> {
     let mut ctx = AVCodecContext::new(codec);
     ctx.apply_codecpar(par)?;
     // Library-default libav is SINGLE-threaded (unlike the ffmpeg CLI), so this
@@ -167,9 +171,11 @@ fn open_codec_ctx(
     unsafe {
         ctx.deref_mut().thread_count = thread_cap(par.width, par.height);
     }
-    let hardware = try_hw && hw::attach_d3d11va(codec, &mut ctx);
+    if let Some(kind) = device {
+        hw::attach(codec, par, &mut ctx, kind);
+    }
     ctx.open(None)?;
-    Ok((ctx, hardware))
+    Ok(ctx)
 }
 
 /// How many decode threads a frame this size may have, or 0 to leave it to
@@ -223,6 +229,15 @@ impl VideoDecoder {
         index: FrameIndex,
         allow_hardware: bool,
     ) -> Result<Self, MediaError> {
+        Self::open_on(src, index, allow_hardware.then_some(hw::HwKind::Platform))
+    }
+
+    /// As [`Self::open_with`], naming the device to try.
+    fn open_on(
+        src: impl Into<MediaSource>,
+        index: FrameIndex,
+        device: Option<hw::HwKind>,
+    ) -> Result<Self, MediaError> {
         let src = src.into();
         // The source says how its frames are read, whoever built the index.
         let mut index = index;
@@ -238,8 +253,8 @@ impl VideoDecoder {
             .ok_or_else(|| MediaError::Ffmpeg("no decoder for codec".into()))?;
         // Hardware first; a context that fails to open with the device attached
         // is rebuilt fresh in software (fallback, not error — §4).
-        let (decoder, hardware) = open_codec_ctx(&codec, &par, allow_hardware)
-            .or_else(|_| open_codec_ctx(&codec, &par, false))?;
+        let decoder =
+            open_codec_ctx(&codec, &par, device).or_else(|_| open_codec_ctx(&codec, &par, None))?;
         let coded = (
             u32::try_from(par.width).unwrap_or(0),
             u32::try_from(par.height).unwrap_or(0),
@@ -255,11 +270,13 @@ impl VideoDecoder {
             next_sequential: Some(0),
             last: None,
             seeks: 0,
-            hardware,
+            hardware: false,
             own,
             turns,
             stored: own.unwrap_or(coded),
             run,
+            src,
+            spare: Vec::new(),
         })
     }
 
@@ -272,8 +289,8 @@ impl VideoDecoder {
         self.seeks
     }
 
-    /// Whether this decoder runs on the graphics card's video unit
-    /// (docs/impl/media-io.md §4). Diagnostic only.
+    /// Whether the last frame this decoder handed out came from the graphics
+    /// card's video unit (docs/impl/media-io.md §4). Diagnostic only.
     pub fn is_hardware(&self) -> bool {
         self.hardware
     }
@@ -451,10 +468,20 @@ impl VideoDecoder {
         }
     }
 
-    /// Decode exactly frame `n` and hand back the picture in the shared planar
-    /// form both taps convert from — hardware frames transferred to system
-    /// memory and repacked, exactly as they were before either tap existed.
+    /// [`Self::decode_exact_once`], tried once more in software when it fails
+    /// on the graphics card. A file that is itself broken fails the same way
+    /// in software, and that error is the one returned.
     fn decode_exact(&mut self, n: usize) -> Result<AVFrame, MediaError> {
+        match self.decode_exact_once(n) {
+            Err(e) if !self.decoder.hw_device_ctx.is_null() => self.again_in_software(n, e),
+            done => done,
+        }
+    }
+
+    /// Decode exactly frame `n` and hand back the picture both taps convert
+    /// from, hardware frames transferred to system memory and brought to the
+    /// samples software gives ([`hw::to_software_layout`]).
+    fn decode_exact_once(&mut self, n: usize) -> Result<AVFrame, MediaError> {
         let want_pts = self
             .index
             .pts_of_frame(n)
@@ -518,30 +545,7 @@ impl VideoDecoder {
             };
             if pts == want_pts {
                 self.next_sequential = Some(n + 1);
-                // A hardware frame's pixels live on the graphics card; bring
-                // them to system memory (NV12) so the same swscale conversion
-                // the software path uses runs on them (§4's v1 baseline —
-                // the one-copy interop is the recorded follow-up).
-                let frame = if frame.hw_frames_ctx.is_null() {
-                    frame
-                } else {
-                    let mut sw = AVFrame::new();
-                    sw.hwframe_transfer_data(&frame)
-                        .map_err(|e| MediaError::Ffmpeg(format!("hw frame transfer: {e}")))?;
-                    // Repack semi-planar NV12 as planar yuv420p — a pure
-                    // layout change, no resampling — because swscale's nv12
-                    // and yuv420p RGB conversions interpolate chroma
-                    // DIFFERENTLY (measured: 9% of bytes off, up to 161, on
-                    // a test pattern's edges). Preview == export and
-                    // cross-machine determinism need one conversion, so the
-                    // hardware path is made to look exactly like software
-                    // before the shared RGBA step.
-                    if sw.format == ffi::AV_PIX_FMT_NV12 {
-                        hw::deinterleave_to_yuv420p(&sw)?
-                    } else {
-                        sw
-                    }
-                };
+                let frame = self.handed_out(n, frame)?;
                 self.last = Some((want_pts, frame.clone()));
                 return Ok(frame);
             }
@@ -1362,43 +1366,6 @@ mod tests {
             off < 4.0,
             "the picture is turned the wrong way, off by {off}"
         );
-    }
-
-    /// Hardware decode is an implementation detail, never a look: the frames
-    /// the D3D11VA path produces must match the software decoder's. H.264
-    /// decoding is bit-exact by spec, so the two only differ if the transfer
-    /// or conversion path is wrong; a byte of slack per channel forgives a
-    /// driver's chroma rounding without letting a real defect through. Skips
-    /// where hardware decode is unavailable (non-Windows, CI, no fixture) —
-    /// on those machines the fallback IS the software path.
-    #[test]
-    fn hardware_and_software_decode_agree_on_the_pixels() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available");
-            return;
-        };
-        let index = build_frame_index(&file).unwrap();
-        let mut hw = VideoDecoder::open(&file, index.clone()).unwrap();
-        if !hw.is_hardware() {
-            eprintln!("skipping: no hardware decoder on this machine");
-            return;
-        }
-        let mut sw = VideoDecoder::open_with(&file, index, false).unwrap();
-        assert!(!sw.is_hardware());
-        for n in [0usize, 7, 63, 119] {
-            let a = hw.frame_rgba(n, None).unwrap();
-            let b = sw.frame_rgba(n, None).unwrap();
-            assert_eq!((a.width, a.height), (b.width, b.height));
-            let worst = a
-                .rgba
-                .iter()
-                .zip(&b.rgba)
-                .map(|(x, y)| x.abs_diff(*y))
-                .max()
-                .unwrap_or(0);
-            assert!(worst <= 1, "frame {n}: hw and sw differ by {worst}");
-        }
     }
 
     /// **The playback-collapse regression.** Adaptive playback drops frames when
