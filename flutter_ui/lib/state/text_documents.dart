@@ -17,6 +17,8 @@ const double plainTextSize = 72;
 const BridgeTextStyle plainTextStyle = BridgeTextStyle(
   family: '',
   face: '',
+  axes: [],
+  axisSpacing: BridgeAxisSpacing.adaptive,
   kerning: BridgeKerning.off,
   tracking: 0,
   scaleX: 100,
@@ -88,6 +90,8 @@ extension TextStyleCopy on BridgeTextStyle {
   BridgeTextStyle copyWith({
     String? family,
     String? face,
+    List<BridgeFontAxisValue>? axes,
+    BridgeAxisSpacing? axisSpacing,
     double? leading,
     bool autoLeading = false,
     BridgeKerning? kerning,
@@ -115,6 +119,8 @@ extension TextStyleCopy on BridgeTextStyle {
       BridgeTextStyle(
         family: family ?? this.family,
         face: face ?? this.face,
+        axes: axes ?? this.axes,
+        axisSpacing: axisSpacing ?? this.axisSpacing,
         leading: autoLeading ? null : (leading ?? this.leading),
         kerning: kerning ?? this.kerning,
         tracking: tracking ?? this.tracking,

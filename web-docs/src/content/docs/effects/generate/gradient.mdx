@@ -1,6 +1,6 @@
 ---
 title: Gradient
-description: "A two-colour ramp across the frame."
+description: "A ramp of two to five colours across the frame."
 ---
 
 import Compare from "../../../../components/Compare.astro";
@@ -15,7 +15,7 @@ Gradient is a **Generate** effect.
 
 ## What it does
 
-Paints a smooth run from one colour to another over the whole frame between two points.
+Paints a smooth run of two to five colours over the whole frame between two points.
 
 ## Parameters
 
@@ -30,6 +30,13 @@ Paints a smooth run from one colour to another over the whole frame between two 
 | **End x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **End y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
 | **End colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
+| **Colours** | Dropdown | Two · Three · Four · Five | Two | - |
+| **Colour 2** | Colour | Each channel 0 to 4, scene-linear | 1, 0.5, 0, 1 | - |
+| **Colour 2 position** | Slider | 0 to 100 | 50 | Per cent |
+| **Colour 3** | Colour | Each channel 0 to 4, scene-linear | 0, 0.5, 1, 1 | - |
+| **Colour 3 position** | Slider | 0 to 100 | 75 | Per cent |
+| **Colour 4** | Colour | Each channel 0 to 4, scene-linear | 0, 1, 1, 1 | - |
+| **Colour 4 position** | Slider | 0 to 100 | 90 | Per cent |
 | **Scatter** | Slider | 0 to 100 | 0 | Per cent |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -52,10 +59,19 @@ In the Effect Controls panel:
 - **Start colour**: the colour at the start point.
 - **End x** and **End y**: the end point.
 - **End colour**: the colour at the end point.
+- **Colours**: how many colours the ramp runs through, from two to five: Start colour, the
+  colours in between, End colour.
+- **Colour 2**, **Colour 3** and **Colour 4**: the colours in between, in order from the
+  start.
+- **Colour 2 position**, **Colour 3 position** and **Colour 4 position**: where each sits
+  along the ramp, in per cent. A colour placed before the one ahead of it sits where that
+  one does.
 - **Scatter**: displaces a pixel's position to add texture to the ramp.
 - **Seed**: which random pattern the scatter follows.
 - **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 

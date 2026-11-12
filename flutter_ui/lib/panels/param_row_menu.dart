@@ -613,16 +613,17 @@ List<Widget> _rows(
       if (menu.colour case final colour?) ...[
         _row('param-menu-copy-colour', l10n.swatchCopyColour, () {
           done();
-          ColourClipboard.copy(colour());
+          ColourClipboard.copy(colour(), linear: true);
         }),
         if (menu.pasteColour case final paste?)
           _row('param-menu-paste-colour', l10n.swatchPasteColour, () {
             done();
-            if (ColourClipboard.from(clip) case final got?) paste(got);
-          }, enabled: ColourClipboard.from(clip) != null),
+            final got = ColourClipboard.from(clip, linear: true);
+            if (got != null) paste(got);
+          }, enabled: ColourClipboard.from(clip, linear: true) != null),
         _row('param-menu-copy-hex', l10n.swatchCopyHex, () {
           done();
-          ColourClipboard.copyHex(colour());
+          ColourClipboard.copyHex(colour(), linear: true);
         }),
       ],
       if (menu.linkTo case final to?)

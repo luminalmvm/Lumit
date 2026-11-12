@@ -14,34 +14,46 @@ are seven shipped ones plus however many you save.
 
 ## The panels
 
-Every panel is in the **Window** menu, with a tick showing whether it is in the
+Every panel is under **Window ▸ Panels**, with a tick showing whether it is in the
 arrangement. Toggling one adds or drops it.
 
 | Panel | What it is for |
 | --- | --- |
-| **Viewer** | The picture, and the tools that work on it. |
-| **Project** | Assets and folders. |
-| **Timeline** | Time, layers, keyframes, and the graph editor. |
+| [**Viewer**](/panels/viewer/) | The picture, and the tools that work on it. |
+| [**Project**](/panels/project/) | Assets and folders. |
+| [**Timeline**](/panels/timeline/) | Time, layers, keyframes, and the graph editor. |
 | **Cut timeline** | The composition's layers as tracks of clips. See [Cutting](/use/cutting/). |
 | **Transcript** | What the Cut timeline's composition says, as text that cuts it. See [Editing by transcript](/use/editing-by-transcript/). |
-| **Effect controls** | The selected layer's whole effect stack, parameter by parameter. |
-| **Effects & presets** | Every effect, preset and installed [plugin](/use/plugins/). |
+| [**Effect controls**](/panels/effect-controls/) | The selected layer's whole effect stack, parameter by parameter. |
+| [**Effects & presets**](/panels/effects-presets/) | Every effect, preset and installed [plugin](/use/plugins/). |
 | **Node graph** | Boxes and wires: the selected layer's stack, a Custom shader's inner graph, or a [node graph composition](/use/node-graphs/). See [The node graph](/use/nodes/). |
 | **Node** | The parameter rows of whichever box the Node graph has picked, and the form of a Read or Input box. |
-| **Easing** | Shape a curve and apply it to the selected keyframes. |
+| [**Easing**](/panels/easing/) | Shape a curve and apply it to the selected keyframes. |
 | **Retime** | Set a layer's speed, stretch, freeze or reverse it, and choose its in-between frames. |
-| **Scopes** | Waveform and vectorscope. |
+| [**Scopes**](/panels/scopes/) | Waveform, RGB parade, vectorscope and histogram. |
+| **Grade** | The selected layer's grade as wheels, primaries, curves and a look. See [Grade a layer](/use/colour-management/#grade-a-layer). |
 | **Text** | The font, size, spacing and outline of a [text layer](/use/text/). |
 | **Paragraph** | How a text layer's lines are aligned, indented and spaced. |
 | **Expressions** | Saved [expressions](/use/expressions/), and an editor that applies one. |
 | **Stagger** | Starts the selected layers a set number of frames apart. See [Stagger](/use/layers/#stagger). |
-| **Notes** | One page of text kept in the project file. |
+| [**Notes**](/panels/notes/) | One page of text kept in the project file. |
 | **Align** | Moves the selected layers' anchor points, or lines the layers up with the composition. See [Align](/panels/align/). |
-| **Hierarchy** | The open composition's layers as a tree, precomps expandable. |
-| **Debug** | Engine readouts. Off, and out of the Panels list, until you turn it on from the Help menu. |
+| [**Hierarchy**](/panels/hierarchy/) | The open composition's layers as a tree, precomps expandable. |
+| [**Debug**](/panels/debug-view/) | Engine readouts. Off, and out of the Panels list, until you turn it on from the Help menu. |
 | **Mixer** | A strip per layer that makes a sound, then the buses and the Master strip. See [Mixer](/panels/audio/#mixer). |
 | **Audio** | Output levels, beats, and the selected layer's sound. See [Audio panel](/panels/audio/#audio-panel). |
 | **Audio timeline** | A row per layer that makes a sound, with its wave on the lane. See [Audio timeline](/panels/audio/#audio-timeline). |
+
+**Window ▸ New Viewer** adds another Viewer panel, and **Window ▸ New 3D viewport** a
+[3D viewport](/use/camera/#3d-viewport). The Viewer is the one panel that can be in the
+arrangement more than once.
+
+**Window ▸ Extensions** lists the panels of installed [extensions](/use/extensions/), and
+**Manage extensions…** opens **Settings ▸ Addons**.
+
+`Ctrl+F6` and `Ctrl+Shift+F6` move the keyboard to the next and the previous panel, and
+`Ctrl+F` to the active panel's search box. Six panels have a key that shows or hides them.
+See [Keyboard shortcuts](/reference/shortcuts/#panels).
 
 ## Rearrange
 
@@ -51,10 +63,25 @@ Drag a panel's tab. The frame you drag it over shows where it would land:
 - **Near an edge** splits the frame and puts the panel on that side. The panels either side
   resize proportionally.
 
-Drag a seam between two panels to change their share. Press `` ` `` (backtick) with the
-pointer over a panel to maximise it to the whole window, and again to put it back.
+Drag a seam between two panels to change their share. A double-click on a seam, or **Reset
+split** on its right-click, gives the two sides the same room. Press `` ` `` (backtick) with
+the pointer over a panel to maximise it to the whole window, and again to put it back. A
+double-click on a tab does the same, and `Esc` puts a maximised panel back.
 
-Right-clicking a panel's tab offers **Close panel**.
+A right-click on a panel's tab, on its header in a stack, or on the empty end of its tab
+strip offers:
+
+| Row | Does |
+| --- | --- |
+| **Close panel** | Takes the panel out of the arrangement. |
+| **Close other panels** | Closes the rest of its group. |
+| **Move to new window**, **Move group to new window** | Moves the panel, or its whole group, into a [window of its own](#floating-windows). |
+| **Maximise panel** | Fills the window with the panel, or puts it back. |
+| **Add panel** | Lists the panels not in the arrangement, and adds the one picked to this group. |
+| **Stacked group**, **One open at a time** | See [Stack a group](#stack-a-group). |
+| **Reset workspace** | Puts the Edit arrangement back. |
+
+A tab strip too narrow for its tabs lists them at the top of this menu.
 
 ## Stack a group
 
@@ -67,7 +94,7 @@ another, each under a header with its name.
   open panel joins the stack below it.
 - **One open at a time**, in a header's right-click menu, shuts the others when one opens.
 
-A panel ticked in the **Window** menu joins a stack when the arrangement has one. Unticking
+A panel ticked in **Window ▸ Panels** joins a stack when the arrangement has one. Unticking
 **Stacked group** turns the stack back into tabs.
 
 ## Floating windows
@@ -122,7 +149,8 @@ connected.
 ## The shipped workspaces
 
 The strip at the right-hand end of the toolbar switches between them, and so does **Window ▸
-Workspace**. `Alt+Shift+1` to `Alt+Shift+9` reach them by position, counting the presets
+Workspace**. With the toolbar on the left, the strip is on the menu bar's line.
+`Alt+Shift+1` to `Alt+Shift+9` reach them by position, counting the presets
 first and then your own. Each button's tooltip gives its name and its shortcut.
 
 | Workspace | Arranged for |
@@ -130,13 +158,22 @@ first and then your own. Each button's tooltip gives its name and its shortcut.
 | **Edit** | The default. Project, Effect controls and Notes tabbed on the left, Viewer centre, Timeline across the bottom, and a stack on the right: Effects & presets open, with Text, Paragraph, Align and Stagger shut below it. |
 | **Effects** | Project and Effect controls tabbed on the left, Viewer centre, the Easing panel beside it, and a stack at the right-hand edge with Effects & presets open and Expressions and Scopes shut. |
 | **Nodes** | The [Node graph](/use/nodes/) across most of the window, a short Timeline under it, a small Viewer down the right, and the Node panel open under it with Effects & presets and Expressions shut. |
-| **Colour** | Project and Effect controls tabbed on the left, Viewer dominant, and a wide right-hand column with Scopes open and Effects & presets shut below it. |
+| **Colour** | Project and Effects & presets tabbed on the left, Viewer centre with Scopes under it, and the Grade panel on the right with Effect controls tabbed behind it. |
 | **Audio** | Mixer in front of Project and Effect controls on the left, Viewer centre, the Audio panel open on the right with Effects & presets shut below it, and the Audio timeline across the bottom. |
-| **Retiming** | The Retime panel open on the right, with Easing, Stagger and Expressions shut below it, and the Timeline on the speed graph. |
+| **Retiming** | Project, Effect controls and Effects & presets tabbed on the left, the Retime panel open on the right, with Easing, Stagger and Expressions shut below it, and the Timeline on the speed graph. |
 | **Cut** | Project, Transcript, Effect controls, Effects & presets and Notes tabbed on the left, a Viewer showing a source view beside the composition, and the [Cut timeline](/use/cutting/) across the bottom with the Mixer at its right. |
 
-Rearranging under a preset moves the panels and leaves the preset alone. **Window ▸
-Workspace ▸ Reset workspace** puts the preset you are on back to how it shipped.
+Rearranging under a preset moves the panels and leaves the preset alone. A preset moved
+from how it shipped carries a dot on the strip.
+
+A right-click on a name on the strip has the rows of **Window ▸ Workspace** for that
+workspace. On a preset, **Reset workspace** there puts that preset back to how it shipped.
+**Window ▸ Workspace ▸ Reset workspace** puts the Edit arrangement back.
+
+**Change shortcut…**, in either menu, takes the next keys pressed, and **Apply** makes them
+switch to that workspace. The shortcut belongs to the workspace's place
+on the strip, so renaming a workspace of your own can move it to another. The row is
+disabled past the ninth place.
 
 ## Save your own
 
@@ -144,8 +181,9 @@ Workspace ▸ Reset workspace** puts the preset you are on back to how it shippe
 out. It joins the strip beside the presets.
 
 The same menu carries **Rename workspace…**, **Delete workspace** and **Export workspace…**,
-each live only on one of your own, **Import workspace…**, and **Change shortcut…**. Export
-writes a `.lumworkspace` file; Import reads one.
+each live only on one of your own, and **Import workspace…**. Export
+writes a `.lumworkspace` file; Import reads one and adds it to the strip. A file that is
+not a workspace is refused.
 
 Your workspaces are listed alphabetically. A name is taken only once: saving a second
 *Grading* gives you *Grading 2*.
@@ -170,7 +208,7 @@ Switching workspace never closes, reloads or re-renders anything. It only moves 
 ## How large everything draws
 
 **Settings ▸ Appearance ▸ Interface ▸ Scale** runs from 75 % to 200 % in steps of 5, with a
-field beside the slider for typing value.
+field beside the slider for typing a value. A drag on the slider applies on release.
 
 Three more settings sit under it: **Tooltips**, on or off; **Motion**, how much controls
 animate as they change; and **Compact**, which tightens row spacing throughout.
@@ -179,34 +217,74 @@ A tooltip gives the control's name and its shortcut, as the keymap has it now.
 
 ## The command palette
 
-`Ctrl+Shift+P` opens the command palette, and so does the box at the right-hand end of the
-menu bar. It finds every menu command, composition, layer, effect, panel and setting by
-name, and **Enter** runs or opens the one highlighted.
+`Ctrl+Shift+P` opens the command palette, and so do **Window ▸ Command palette…** and the
+box at the right-hand end of the menu bar. It finds every menu command, composition, layer,
+effect, panel and setting by name, and **Enter** runs or opens the one highlighted.
 
 <Shot file="command-palette.png" caption="The command palette, with a heading over each kind of row." />
 
-A layer row selects that layer in the open composition, and a setting row opens Settings on
-that setting. An effect row reads *Select a layer first* while no layer is selected. Before
-anything is typed, the palette leads with the last eight commands run, from it or from the
-menus.
+Typing narrows the list. One or two letters need only appear in order, so `nc` finds *New
+composition*. Three or more have to start a word. `↑` and `↓` move the highlight and `Esc`
+closes the palette. Before anything is typed, the palette leads with the last eight commands
+run, from it or from the menus.
+
+| Heading | Enter |
+| --- | --- |
+| **Command** | Runs the menu command. The row carries its menu path, its shortcut, and a tick when it is a switch that is on. |
+| **Comp** | Opens the composition in the Viewer and Timeline. |
+| **Layer** | Selects that layer in the open composition. |
+| **Effect** | Adds the effect to the selected layers. The row reads *Select a layer first* while no layer is selected. |
+| **Panel** | Shows the panel, brings it to the front and gives it the keyboard. |
+| **Setting** | Opens Settings on that page, at that setting. |
+
+A command its menu shows disabled is listed greyed, after the rest.
+
+The box in the menu bar is hidden in a window under 1,000 pixels wide, and
+**Settings ▸ Appearance ▸ Command box in the top line** turns it off.
 
 ## The menu bar
 
 Nine menus: **File, Edit, Composition, Layer, Effect, Animation, View, Window, Help**. A
 menu item that needs something you have not selected appears disabled. A command that is
-not built yet is left off its menu.
+not built yet is left off its menu. A row shows the shortcut the keymap has for it now. The
+headings scroll sideways in a window too narrow for all nine.
 
 On Windows the menu bar is the window's top line, with **Minimise**, **Maximise** (or
 **Restore**) and **Close** at its right. Dragging the empty part of the line moves the
-window, and a double-click maximises it or puts it back. On Linux the same line replaces
+window, and a double-click maximises it or puts it back. A right-click there has the same
+three commands. Windows 11 opens its snap layouts over **Maximise**. On Linux the same line
+replaces
 the system's title bar when **Settings ▸ Appearance ▸ Lumit's own title bar** is on, from
-the next start. macOS keeps its own title bar.
+the next start. macOS keeps its own title bar, and has the menus in the system's menu bar,
+with **Settings…** and **About Lumit** in the **Lumit** menu.
 
 The window is at least 840 × 560.
 
-**Edit ▸ Undo** and **Redo** name the step they would take, as **Edit ▸ History** lists it.
-Right-click that list for **Clear history…**, which drops every undo and redo step and leaves
-the project as it is.
+Settings, History and the other windows inside Lumit move when dragged by any part no
+control takes. A right-click on a window's title strip has **Reset place**, or **Reset size
+and place** on one that resizes, and **Close**.
+
+### The Help menu
+
+| Row | Does |
+| --- | --- |
+| **About Lumit** | Shows the version, the licence, and what the engine reported as it started. **Copy** copies that report. |
+| **Lumit Pro…** | Opens the Lumit Pro window. See [Profiles and accounts](/use/profiles/#lumit-pro). |
+| **Check for updates** | Checks, and then reads as the next step of the update. See [Updating](/start/install/#updating). |
+| **Lumit help** | Opens this manual in the browser. `F1`. |
+| **Lumit online guides** | Opens [Your first composition](/start/first-composition/) in the browser. |
+| **Lumit tour** | Runs [the tour](/start/install/#the-tour). |
+| **Keyboard shortcuts…** | Opens **Settings ▸ Shortcuts**. |
+| **Enable debug panel** | Shows or hides the Debug panel. |
+
+## Undo and history
+
+**Edit ▸ Undo** and **Redo** name the step they would take. `Ctrl+Z` undoes and
+`Ctrl+Shift+Z` redoes. **Edit ▸ History…** lists every step: see
+[History](/use/projects/#history).
+
+**Edit ▸ Clear** empties the stores of rendered frames with **Memory cache**, **Disk
+cache…** and **All caches…**, and has **Undo history…**. The disk cache asks first.
 
 ## The status line
 
@@ -215,20 +293,23 @@ The strip along the bottom of the window. Left to right:
 | Part | Shows |
 | --- | --- |
 | **Profile** | The profile button. See [Profiles](/use/profiles/). |
-| **Update** | Where the updater has got to. A press checks, downloads or restarts. See [Updating](/start/install/#updating). |
+| **Update** | Where the updater has got to. A press checks, downloads or restarts, and the tooltip lists what the waiting releases change. See [Updating](/start/install/#updating). |
 | **Nightly** | A pill, on a nightly build only. |
-| **Previews** | Comments nobody has looked at, or a ring while a composition uploads. It opens the Previews window. See [Review links](/use/review-links/). |
-| **Saved state** | **No project**, **Not saved yet**, **Saved** or **Unsaved changes**. |
+| **Previews** | Comments nobody has looked at, or a ring while a composition uploads. It opens the Previews window. See [Previews](/use/review-links/). |
+| **Project** | The project's name, or **Untitled** before it has a file, with a dot before it while it has unsaved changes. The tooltip reads **Saved**, **Unsaved changes** or **Not saved yet**, and a click saves. A right-click has **Save**, **Save as…**, **Revert to saved…** and **Show in folder**. With no project it reads **No project**. |
 | **Backup** | The open project's backup, with Pro. See [Backup](/use/backup/#the-mark-on-the-bottom-strip). |
-| **Cache** | How full the RAM, VRAM and disk tiers are. Click it to clear them. |
+| **Cache** | How full the RAM, VRAM and disk tiers are. A click opens the three with a **Clear** each, and the disk tier asks first. A right-click has **Clear all caches…** and **Preview and cache settings…**. |
 | **Hourglass** | Turns render-time measuring on and off. See [the Timeline](/panels/timeline/#render-times). |
+| **Driving** | While another program is connected and can [edit the open project](/use/command-line/#let-another-program-edit-the-project-open-in-lumit), its name, with **Disconnect**. |
 | **Shared** | While a project is shared, who is in it. It opens the **Multi-edit** window. See [Shared projects](/use/projects/#shared-projects). |
-| **Notice** | The latest message. Click it to list the last twenty. |
-| **Jobs** | A running export or proxy, with its progress and a **Cancel**. |
+| **Notice** | The latest message, with **×** to dismiss it. Click it to list the last twenty. |
+| **Jobs** | A running export or proxy, with its frame count, a bar and a **Cancel**. An export adds the time left once it has run for five seconds. A finished job reads where the file went, that it was cancelled, or why it failed. A click on a finished export opens its folder. |
 | **Output peak** | While playing, what the sound output peaked at, in dB. |
-| **Hint** | What the armed tool's modifier keys do, at the right-hand end. |
+| **Hint** | While `Shift`, `Alt` or `Ctrl` is held, what it does to the armed tool, at the right-hand end. |
 
 ## Related
 
 - [Settings](/use/settings/)
+- [Keyboard shortcuts](/reference/shortcuts/)
+- [Make Lumit yours](/tutorials/customise/)
 - [The node graph](/use/nodes/)

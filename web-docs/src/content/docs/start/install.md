@@ -26,6 +26,8 @@ Lumit is not signed on Windows. SmartScreen therefore shows a blue "Windows prot
 your PC" panel the first time you run it, and you should choose **More info → Run
 anyway**.
 
+**Uninstall Lumit** is in the Start menu's **Lumit** folder.
+
 ## Linux
 
 Lumit for Linux is an x86-64 Flatpak. Download the `.flatpak` and install it:
@@ -38,9 +40,18 @@ Any Linux distribution with Flatpak works. If Flatpak is not set up on your
 distribution, [flathub.org/setup](https://flathub.org/setup) covers it in a couple of
 commands.
 
+The Flatpak reads and writes your home folder and anything mounted under `/media`,
+`/run/media` and `/mnt`. Footage kept anywhere else is granted once, by its path:
+
+```bash
+flatpak override --user --filesystem=/data io.github.luminalmvm.Lumit
+```
+
 File associations for `.lum` and `.lumfx` are not created after installing the flatpak.
 If you would like to be able to click on project files to open them directly, then clone
-the repository from GitHub, and run `packaging/linux/install.sh`.
+the repository from GitHub, build it, and run `packaging/linux/install.sh`.
+
+`flatpak uninstall io.github.luminalmvm.Lumit` removes the Flatpak.
 
 The `.AppImage` runs without installing. It needs glibc 2.35 or newer, and uses the
 system's own GTK and WebKitGTK:
@@ -52,8 +63,24 @@ chmod +x lumit-*.AppImage
 
 ## macOS
 
-Lumit runs on Macs with Apple silicon and macOS 12 or newer. Download the `.dmg` installer
-and run it.
+Lumit runs on macOS 12 or newer. There is a `.dmg` for Macs with Apple silicon and one for
+Intel Macs. Download the one for your Mac, open it, and drag Lumit onto **Applications**.
+
+## In the browser
+
+Lumit also runs in a browser, at [web.lumitlab.com](https://web.lumitlab.com), with nothing
+to install. The browser needs WebGPU. The browser build has no profiles or account, no
+addons or extensions, and no updates. It also leaves out:
+
+- **File ▸ Scripts**, **Multi-edit** and the previews, with **Send as a preview…**.
+- **Open from backup…**, **Save a version…** and **Project history…**.
+- **Help ▸ Lumit Pro…** and **Window ▸ Extensions**.
+- **Show in folder** and **Reload footage**, and a second window for a popped-out panel.
+- `.hdr` pictures on import.
+
+An export has no **Browse…**: the browser asks where to save as the export starts. See
+[Exporting](/use/export/#in-the-browser). **Settings** has no Account or Addons page, and
+has a **Kept in this browser** row.
 
 ## Building from source
 
@@ -63,6 +90,24 @@ interface in Flutter.
 ```bash
 git clone https://github.com/luminalmvm/Lumit.git
 ```
+
+## Files and links
+
+Lumit opens these when one is double-clicked or, for a link, clicked in a browser.
+
+| Opened | Lumit |
+| --- | --- |
+| A `.lum` project | Opens it, past the welcome screen. |
+| An invite link, which begins `lumit:` | Opens the **Multi-edit** window on the invite. See [Shared projects](/use/projects/#shared-projects). |
+| A `.lfx` extension package | Opens its install window. See [Extensions](/use/extensions/#installing-one). |
+| A `.lumstyle` style | Takes the style in and uses it. |
+| A `.lumfx` preset | Puts it on the selected layer. With none selected, a notice asks for one. |
+| A `.lumtheme` theme | Takes the theme in and switches to it. |
+
+On macOS, whatever is opened while Lumit is running goes to the Lumit that is open. On
+Windows and Linux an extension package, a style, a preset and a theme do too. A project or
+an invite link starts another Lumit, unless **Settings ▸ General ▸ Keep running in the
+background** is on.
 
 ## First start
 
@@ -102,6 +147,28 @@ presets, Effect controls, the effect menus, the workspaces and the node graph.
   it when it ends. It brings forward the panels it needs and puts the window back as it
   was.
 
+## The welcome screen
+
+Lumit opens on the welcome screen.
+
+- **New project** starts an empty project, or a copy of the
+  [template](/use/settings/#general) when one is set.
+- **Open** opens a `.lum` file.
+- **Recent** lists the ten projects opened most recently, each with a picture from its last
+  save. A click opens one, **×** takes one off the list, and **Clear** empties it. A
+  right-click on one has **Open**, **Show in folder**, **Copy path** and **Forget project**.
+- With Lumit Pro, **Backed up** lists the newest five
+  [backed-up projects](/use/backup/#open-from-backup) that are not among the recent ones.
+- **Manual** opens this manual and **What's new** opens the release notes, both in the
+  browser. The installed version is beside them, with the update button while an update is
+  waiting.
+
+`Esc` closes the screen with nothing opened. The Viewer then offers **Import footage** and
+**Open** until a composition is showing.
+
+The screen is not shown when Lumit was started by a project, an invite link, an extension
+package or a style, or with **Settings ▸ General ▸ Welcome screen on launch** off.
+
 ## Updating
 
 With **Edit ▸ Settings ▸ General ▸ Updates ▸ Automatic updates** on, Lumit checks for a
@@ -121,7 +188,7 @@ which version is installed and what the last check found.
 
 An update goes through these windows in turn:
 
-1. **Update to Lumit {version}?**, with the file's name and size. **Not now** or
+1. **Update to Lumit {version}?**, with the size of the download. **Not now** or
    **Download**.
 2. The download's progress, with **Cancel**.
 3. **Before you update to Lumit {version}**, only for a release whose notes have something
@@ -131,7 +198,14 @@ An update goes through these windows in turn:
    **Later**, **Restart without saving** and **Save and restart**. **Later** keeps the
    download, and the next press comes straight back here.
 
-On Windows the installer runs silently and Lumit comes back by itself. An AppImage
+The update button at the left of the status line reads the same, and so does the one on
+the welcome screen while an update is waiting. Its tooltip lists what the waiting releases
+change. A press on it downloads without the first two windows, and the next press asks
+about the restart.
+
+On Windows the installer runs silently and Lumit comes back by itself. On macOS a copy of
+Lumit that can be replaced is swapped for the new one and reopened, and otherwise the disk
+image opens. An AppImage
 replaces its own file and comes back by itself. A Flatpak is
 updated by Flatpak: the last window offers **Show the file**, and gives the
 `flatpak install --user` command for the downloaded bundle.
@@ -144,13 +218,14 @@ from before 0.8.0 is offered the `.dmg`.
 
 ### Nightly builds
 
+A nightly is built each night that something has changed.
 **Settings ▸ General ▸ Updates ▸ Nightly builds** follows nightly builds instead of
 releases. Turning it on asks first:
 
-> **Use nightly builds?** New features first, less tested. Projects saved in a nightly
-> may not open in the stable version. Keep a copy.
+> **Use nightly builds?** Projects saved in a nightly may not open in the stable version.
 
 - A nightly is only ever offered nightlies.
+- A nightly installed by hand follows the nightlies until the row is turned off.
 - Turning the row off offers the latest stable release, even when it is older than the
   nightly installed.
 - **Nightly icon**, on a nightly build on Windows and macOS, switches between the

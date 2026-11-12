@@ -105,6 +105,7 @@ void main() {
       layer.setTransform(
           prop: BridgeTransformProp.scaleX,
           value: const BridgeScalar.static_(37));
+      layer.setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
       p.uiState.setSelection([layer]);
       p.uiState.model.refresh();
       await mount(tester, p);
@@ -118,6 +119,8 @@ void main() {
           reason: 'pivoting about its own middle, as a new layer does');
       expect(staticOf(after.scaleX), 100,
           reason: 'a fresh layer is at full size, not at nothing');
+      expect(staticOf(after.depth!.scaleZ), 100,
+          reason: 'full depth too, not flattened');
       expect(staticOf(after.opacity), 100);
     });
 

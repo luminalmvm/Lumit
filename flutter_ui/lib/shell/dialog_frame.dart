@@ -88,7 +88,13 @@ class DialogFrame extends StatelessWidget {
   final double? width;
   final List<Widget> children;
 
-  const DialogFrame({super.key, this.width, required this.children});
+  /// Whether the frame casts its drop shadow. Off for a window whose colour
+  /// is picked off the screen beside it (New Solid), so the shadow does not
+  /// darken what the eyedropper reads.
+  final bool shadow;
+
+  const DialogFrame(
+      {super.key, this.width, required this.children, this.shadow = true});
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +105,7 @@ class DialogFrame extends StatelessWidget {
       child: dialogSurface(
         context,
         t,
+        shadow: shadow,
         Entrance.content(
           spec: scope.motion.content,
           rise: scope.motion.contentRise,
@@ -117,7 +124,8 @@ class DialogFrame extends StatelessWidget {
 /// A dialogue's box: `surface1` out to a hairline edge drawn over its outer
 /// pixel, the float corner and shadow, with a style's `dialog` rules over it.
 /// Shared by every dialogue and the Settings window.
-Widget dialogSurface(BuildContext context, LumitTheme t, Widget child) {
+Widget dialogSurface(BuildContext context, LumitTheme t, Widget child,
+    {bool shadow = true}) {
   final style = partStyle(context, t, 'dialog');
   final radius = BorderRadius.circular(style.radius ?? t.tokens.floatRadius);
   return frosted(
@@ -128,12 +136,12 @@ Widget dialogSurface(BuildContext context, LumitTheme t, Widget child) {
         BoxDecoration(
           color: t.surface1,
           borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          boxShadow: t.floatShadow,
+          boxShadow: shadow ? t.floatShadow : null,
         ),
         PartStyle(
             background: style.background,
             radius: style.radius,
-            shadows: style.shadows,
+            shadows: shadow ? style.shadows : null,
             blur: style.blur),
       ),
       foregroundDecoration: dress(

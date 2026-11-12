@@ -14,18 +14,37 @@ it or keyframes on another layer's transform.
 Both are effects, applied to the layer holding the shot, and both keep working while you
 carry on editing.
 
+One analysis runs at a time. **Analyse** pressed while another is running is refused.
+
+[Track points](/effects/points/track-points/) follows features or blobs in the same way
+and hands them out as points.
+
+[Bake points](/effects/points/bake-points/) writes a points stream to disk for every
+frame of its layer, and counts as the one analysis running. Its status reads *Not baked
+yet*, *Baking frame 12 of 300*, *Bake stopped*, *The bake could not be made*, *Not enough
+video memory* or *Baked 300 frames*.
+
 ## Camera track
 
 1. Select the footage layer and apply **Effect ▸ Utility ▸ Camera track**.
 2. Press **Analyse**. The status row counts the frames as they go, and **Cancel** stops it.
 
-The analysis is of the **whole source footage**, not of the layer, and every layer using
-that footage shares the solve. Re-analyse after changing a setting.
+With **Frames** on **All frames** the analysis is of the **whole source footage**, not of
+the layer, and every layer using that footage shares the solve. Re-analyse after changing
+a setting.
+
+The solve is kept in the cache folder and not in the project. The same file analysed
+with the same settings is read back, in any project. On a Precomp layer the nested
+composition is analysed, and its solve lasts while the project is open. In a
+[shared project](/use/projects/#shared-projects) a finished analysis is sent to the people
+who have not got it.
 
 | Control | What it does |
 | --- | --- |
 | **Feature density** | How many points are followed. More is slower but copes better with hard footage. |
+| **Focal length** | The lens in millimetres on 35 mm film. At 0 the track works it out. |
 | **Use masks** | Leaves the layer's masks out of the track. |
+| **Frames** | Which frames are analysed: **All frames**, **Layer in to out**, or **Work area**. |
 | **Show points** | Draws the solved points over the picture. |
 
 ### A track that stops part-way
@@ -37,6 +56,27 @@ footage, and the line says how far it got.
 
 A camera following a partial track moves inside the span and holds its last position past
 the end.
+
+### What the status says
+
+| Line | Means |
+| --- | --- |
+| *Not analysed yet* | Nothing has been analysed with these settings. |
+| *Waiting to start* | The analysis is queued. |
+| *Following frame 120 of 400* | The frames are being followed. |
+| *Solving the camera* | The frames are followed and the camera is being worked out. |
+| *Analysis stopped* | **Cancel** was pressed. |
+| *412 points, 0.38 px average error* | A whole solve: how many points it rests on, and how closely they agree. |
+| *Analysed 180 of 400 frames* | A partial solve. |
+
+An analysis that cannot be done is **refused**, with one of these lines:
+
+- The media could not be read.
+- There are no frames to analyse.
+- The frames could not be followed.
+- Too little in the shot stayed still enough to follow.
+- The camera only turned, so there is no depth to recover.
+- The shot does not carry a camera move that could be solved.
 
 ### The camera
 
@@ -51,7 +91,10 @@ and the camera holds where it was.
 ### Nudging it
 
 A linked camera's own transform and zoom rows still take edits, and what you type there is
-a **offset**.
+an **offset**.
+
+A camera that has been nudged wears a dot beside its badge, and so does the Camera track's
+status. **Clear corrections** beside the badge takes the nudges back and keeps the link.
 
 **Convert to keyframes** bakes solve and correction together into one key per frame and 
 ends the link.
@@ -59,15 +102,25 @@ ends the link.
 ### The point cloud
 
 With **Show points** on, the solved points draw over the picture on the tracked layer.
+Nearer points are drawn larger and brighter.
 Select some and three buttons appear over the picture: **Create null**, **Create solid** and
 **Create card**, each placed at the average position of what you picked and facing the camera.
 A card fills the solved camera's frame there and has the shot projected on it from that camera,
 making the camera if the comp has none. See [3D models](/use/importing/#3d-models).
 
+The points take clicks while the tracked layer is selected.
+
+- **Click** a point to select it.
+- **Shift-click** adds a point.
+- **Drag a box** round several.
+- **Right-click** a point for the three buttons' rows, **Select all** and **Clear
+  selection**.
+- `Esc` clears the selection.
+
 ## Planar track
 
 1. Select the footage layer and apply **Effect ▸ Utility ▸ Planar track**.
-2. Set **Follow**, and place its geometry on the source's **first frame**. That frame is
+2. Set **Follow**, and place its geometry on the first frame to be tracked. That frame is
    the reference, and every later frame is measured against it.
 3. Mask out anything that crosses what is being followed. The layer's own masks still
    apply inside it.
@@ -75,7 +128,7 @@ making the camera if the comp has none. See [3D models](/use/importing/#3d-model
 5. Set **Pin layer** to the layer you want moved, and press **Create corner pin** or
    **Create transform keys**.
 
-**Feature density** and **Use masks** work as they do on the Camera track.
+**Feature density**, **Use masks** and **Frames** work as they do on the Camera track.
 
 ### What Follow means
 
@@ -101,21 +154,32 @@ two points write all three.
 
 ### Reading the status
 
+The status counts the frames as the Camera track's does, then reads *Working out the
+movement*.
+
 *Tracked over 400 frames* is a whole track. *Tracked 180 of 400 frames* means what was
 being followed stopped being followable, and the span bar shows how far it reached.
 
-A second line may read *Re-anchored twice, so the far end may drift a little*. When too
-few of the reference frame's features survive, the measurement adopts a recent frame
-instead and carries a little error forward.
+A second line may read *Re-anchored 2 times*. When too few of the reference frame's
+features survive, the measurement adopts a recent frame instead and carries a little error
+forward.
 
 *What is inside the shape is not one flat surface* means the four points enclose something
 that is not flat, or whose parts move against each other. Following points instead does not
 ask that question.
 
+The Planar track analyses a Footage layer or a Precomp layer. A Precomp layer's track
+lasts while the project is open.
+
+### Placing the corners and points
+
+With the effect selected, the Viewer marks where each corner and point is. Drag a mark
+with the Selection tool, or set a point's row by picking a place on the picture with the
+[dropper](/panels/viewer/#the-dropper). See [effect points](/panels/viewer/#effect-points).
+
 :::note[Limitations]
-The quad and the points are rows in the panel; dragging them on the picture is not built,
-and neither can be keyframed. The Planar track analyses a footage layer only, where the
-Camera track will also analyse a Precomp layer.
+The corners and the points are read as they stand at the start of the layer. Keyframes on
+them are not followed.
 :::
 
 ## Related
@@ -124,4 +188,5 @@ Camera track will also analyse a Precomp layer.
 - [Camera track](/effects/utility/camera-track/) and [Planar
   track](/effects/utility/planar-track/)
 - [Stabilising](/use/stabilising/)
+- [Putting a picture on a tracked surface](/tutorials/planar-track/)
 - [Masks](/use/masks/)

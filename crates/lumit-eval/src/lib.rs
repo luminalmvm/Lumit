@@ -2270,11 +2270,22 @@ fn feed_source(
                 feed_f64(h, x);
                 feed_f64(h, y);
             }
-            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken) {
+            // A Proximity selector's letters are weighed against where its
+            // target is now, so a target dragged across the words keys each
+            // frame apart.
+            for x in lumit_core::text::ports::layer_glyph_xforms(
+                doc, owner, layer, document, &line, comp_time, &spoken,
+            ) {
                 let lone = [x.rotation, x.opacity, x.depth];
                 let pairs = x.position.into_iter().chain(x.scale).chain(x.turn);
                 for v in pairs.chain(lone).chain(x.fill).chain(x.plate) {
                     h.update(&v.to_le_bytes());
+                }
+                // Where the letter is set on its font's axes.
+                for i in 0..usize::from(x.axes.len) {
+                    h.update(&x.axes.tags[i]);
+                    h.update(&x.axes.keep[i].to_le_bytes());
+                    h.update(&x.axes.add[i].to_le_bytes());
                 }
             }
         }

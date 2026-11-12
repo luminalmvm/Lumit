@@ -1,0 +1,111 @@
+---
+title: Easing
+description: Draw one curve shape and apply it to every selected span of keyframes.
+sidebar:
+  order: 5.5
+---
+
+The Easing panel holds one curve shape and applies it to the selected keyframes.
+**Window ▸ Panels ▸ Easing** opens it, as does **Easing…** on the bottom bar of the
+Timeline's [Graph mode](/panels/graph-editor/).
+
+## The box
+
+The box draws the travel between two keyframes, from the first at the bottom left to the
+second at the top right. The diagonal is a straight move.
+
+- Drag either handle to bend the curve. `Shift` snaps the handle to twentieths of the box,
+  and `Alt` mirrors the other handle round the middle.
+- A handle stays inside the box sideways. It can go half a box above the top or below the
+  bottom, which makes the move overshoot.
+
+The strip under the box plays the shape. Pointing at it plays it again.
+
+The four numbers under it are the two handles' places in the box, to type or drag: how far
+across and how far up for the handle leaving the first keyframe, then the same for the
+handle arriving at the second.
+
+Under the numbers:
+
+| Button | Does |
+| --- | --- |
+| **Read from keyframes** | Loads the shape of the first selected span into the box. |
+| **Reverse** | Plays the shape backwards: a slow start becomes a slow finish. |
+| **Apply as you shape** | While on, letting go of a handle, typing a number or pressing Reverse applies the shape at once. |
+| **Save…** | Keeps the shape in the box under a name. |
+| **More** | **Import easings…** and **Export easings…**. |
+| **Apply** | Puts the shape on the selection. |
+
+Right-click the box for **Apply**, **Apply in only**, **Apply out only**, **Copy as
+cubic-bezier**, **Paste**, **Reverse**, **Save…** and **Reset**. **Paste** takes any four
+numbers on the clipboard, written as `cubic-bezier()` or bare. **Reset** puts the box back
+to Easy ease.
+
+## The shapes
+
+Each tile draws its curve, and its name shows beside **Apply** while the pointer is over
+it. Click a tile to load its shape into the box and apply it to the selection.
+`Shift`+click eases only the side coming in to each span's second keyframe, and
+`Ctrl`+click only the side going out of its first. The other side keeps what it had.
+
+| Shapes | |
+| --- | --- |
+| **Easy ease** | Slow at both ends. The shape `F9` gives. |
+| **Slow start**, **Slow finish** | Slow at one end and straight at the other. |
+| **Heavy ease** | Slow at both ends, more strongly. |
+| **Snap** | Away fast, then a long glide in. |
+| **Sine**, **Quad**, **Cubic**, **Quart**, **Expo** | Each as **in**, **out** and **in out**. In is a slow start, out a slow finish. |
+| **Back in**, **Back out**, **Back in out** | Pulls back before it sets off, overshoots its end, or both. |
+
+Right-click a tile for **Apply**, **Apply in only**, **Apply out only**, **Copy as
+cubic-bezier** and **Save…**.
+
+## Apply
+
+**Apply** puts the shape in the box on the selection. A span between two keyframes takes
+the shape when both of its ends are selected, so a run of selected keyframes is eased from
+end to end, and one selected keyframe on its own takes nothing. One press is one undo
+step, however many layers the selection crosses.
+
+The selection is the Timeline's, in Layers mode or Graph mode. The panel keeps its shape
+while the selection changes.
+
+Apply is greyed while the graph editor shows the **Speed** or the **Acceleration** graph,
+and with no Timeline in the arrangement. A click on a tile then only loads its shape.
+
+## Save a shape
+
+**Save…** asks for a name and keeps the shape in the box. A name already taken gets a
+number after it. Once a shape is saved, the shapes sit in two tabs, **Built in** and
+**Yours**.
+
+The menu of one of your own tiles has **Rename** and **Delete** in place of **Save…**.
+
+Saved shapes are kept with your settings, not in the project. **Export easings…** writes
+them to a `.json` file, and **Import easings…** adds a file's shapes after yours, numbering
+a name already taken.
+
+## One keyframe's numbers
+
+While exactly one keyframe is selected, the panel shows the frame it sits on and its
+eases, to type or drag:
+
+- **Speed in** and **Speed out**: how fast the value is changing as it arrives and as it
+  leaves, in the property's units per second.
+- **Influence in** and **Influence out**: how far each handle reaches towards the
+  neighbouring keyframe, from 0.1% to 100%.
+- **Continuous** keeps the speed out equal to the speed in. Typing either speed sets both.
+
+The first or last keyframe of a curve shows only the side it has.
+
+## As a popup
+
+With **Shape eases in a popup** on in **Settings ▸ Timeline ▸ Panels**, **Easing…** opens
+the same editor as a popup over the bottom bar. It stays open across **Apply**, and closes
+on **Close** or a click outside it.
+
+## Related
+
+- [Keyframes](/use/keyframes/)
+- [The graph editor](/panels/graph-editor/)
+- [Editing many keyframes at once](/tutorials/many-keyframes/)

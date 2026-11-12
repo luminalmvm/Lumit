@@ -35,7 +35,6 @@ import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../state/comp_time.dart' show sampledScalar;
 import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
 import 'timeline_extras_frb.dart' show addMarkerFrb, showRulerMenu;
@@ -50,7 +49,7 @@ import 'graph_maths.dart'
         easyEase,
         keyEaseOf,
         keyWithEase,
-        keyframeAmong,
+        keysWithKeyOnCurve,
         rowKeysOf,
         withTangentMode;
 import 'key_block.dart';
@@ -498,9 +497,8 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
       }
       final keys = scalar.field0;
       if (keys.any((k) => laneKeyFrame(k, scope.fps).round() == frame)) return;
-      final added = [...keys, keyframeAmong(keys, time, sampledScalar(scalar, time))]
-        ..sort((a, b) => laneKeyFrame(a, scope.fps)
-            .compareTo(laneKeyFrame(b, scope.fps)));
+      // Cut into the curve, so it keeps its course through the new key.
+      final added = keysWithKeyOnCurve(keys, time);
       next.add(BridgeScalar.keyframed(added));
     }
     lane.onWrite(next);

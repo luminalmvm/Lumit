@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/timeline_extras_frb.dart' show TimelineRuler;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 
 import 'frb_test_support.dart';
@@ -117,6 +118,62 @@ void main() {
       await tester.pump();
     }
 
+
+    /// A scrub taken past the lanes' right end scrolls them, and the playhead
+    /// stays under the pointer once it moves again. The drag's own local
+    /// position is measured through the press's transform, so it used to put
+    /// the playhead back by however far the lanes had scrolled.
+    testWidgets('a scrub past the edge keeps the playhead under the pointer',
+        (tester) async {
+      final p = withManyLayers();
+      await mount(tester, p);
+      final lanes = tester.getCenter(find.byType(LayerArea));
+      await zoomIn(tester, lanes);
+      await tester.sendEventToBinding(
+          TestPointer(1, PointerDeviceKind.mouse).hover(lanes));
+      final position = horizontalPosition(tester);
+      // Back to the start, so there is room to scroll towards the end.
+      position.jumpTo(0);
+      await tester.pump();
+
+      final ruler = find.byKey(const ValueKey('tl-ruler'));
+      // The ruler is as wide as the comp: its visible part is the viewport's.
+      final view = tester
+          .stateList<ScrollableState>(find.byType(Scrollable))
+          .firstWhere((s) => s.position == position)
+          .context
+          .findRenderObject()! as RenderBox;
+      final seen = view.localToGlobal(Offset.zero) & view.size;
+      final rulerRect = tester.getRect(ruler);
+      final rect = Rect.fromLTRB(
+          seen.left, rulerRect.top, seen.right, rulerRect.bottom);
+      final pointer = TestPointer(3, PointerDeviceKind.mouse, null, kPrimaryButton);
+      final from = Offset(rect.left + rect.width * 0.5, rect.center.dy);
+      await tester.sendEventToBinding(pointer.down(from));
+      await tester.pump();
+      final edge = Offset(rect.right - 4, rect.center.dy);
+      for (var i = 1; i <= 6; i++) {
+        await tester.sendEventToBinding(pointer.move(Offset.lerp(from, edge, i / 6)!));
+        await tester.pump();
+      }
+      // Let the edge scroll run.
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(position.pixels, greaterThan(0), reason: 'the lanes scrolled');
+      // A step back from the edge, which stops the scroll.
+      final back = Offset(rect.right - 200, rect.center.dy);
+      await tester.sendEventToBinding(pointer.move(back));
+      await tester.pump();
+
+      final box = tester.renderObject<RenderBox>(ruler);
+      final axis = tester.widget<TimelineRuler>(find.byType(TimelineRuler)).axis;
+      final under = axis.frameAt(box.globalToLocal(back).dx);
+      expect(p.uiState.playheadFrame.value, closeTo(under, 1),
+          reason: 'the playhead is the frame under the pointer');
+      await tester.sendEventToBinding(pointer.up());
+      await tester.pumpAndSettle();
+    });
     /// **The middle button drags the view about** (docs/07 §4.6), the way it
     /// does in After Effects, Blender and Resolve. Both ways at once, and the
     /// view moves against the drag so the lanes follow the pointer.

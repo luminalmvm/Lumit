@@ -10,6 +10,15 @@ sidebar:
 Lumit requires a GPU for rendering. You need a GPU that supports D3D12, Vulkan, or
 Metal.
 
+When Lumit cannot finish starting, it opens a window headed **Lumit could not start**. The
+window gives the reason and the path of `lumit-diagnostics.log`, the file the same line
+was written to. Both can be selected and copied.
+
+## A panel reads "This panel could not be drawn"
+
+A panel that fails to draw is replaced by a box with that heading, the first line of the
+fault, and the file it was recorded in. The other panels carry on.
+
 ## Windows shows "Windows protected your PC"
 
 The build is not code-signed on Windows, so SmartScreen warns on first run. Choose
@@ -22,6 +31,32 @@ Lumit will be unable to find it and the asset reports it as missing.
 
 To fix this, click the Relink button, and this allows you to locate the file to 
 recover it. See [Importing media](/use/importing/).
+
+## The Viewer says the preview cannot be shown
+
+On a Linux laptop with two graphics cards, the Viewer shows a message in place of the
+picture when Lumit is rendering on the NVIDIA card and its window is drawn by the other
+one.
+
+- Switch the machine to NVIDIA Performance mode.
+- Start Lumit with PRIME render offload.
+
+## The Flatpak cannot open footage on a drive
+
+The Flatpak reads the home folder and anything mounted under `/media`, `/run/media` and
+`/mnt`. A folder anywhere else has to be granted. See
+[Installation](/start/install/#linux).
+
+## Importing video freezes the computer
+
+Turn off **Settings ▸ Preview and cache ▸ Hardware video decoding** and open the project
+again.
+
+## There is no sound
+
+**Settings ▸ Audio** names the output device. While a device chosen there is not
+connected, Lumit plays through the system default and says so under the row. On a machine
+with nothing to play through, the row reads **This machine has no audio output.**
 
 ## Playback is slow, or quality drops while working
 
@@ -82,6 +117,7 @@ project already loaded stays.
 ## Related
 
 - [Installation](/start/install/)
+- [Settings](/use/settings/)
 - [Preview and playback](/use/preview/)
 - [Exporting](/use/export/)
 - [Plugins](/use/plugins/)

@@ -822,6 +822,34 @@ final class FoldAnimatorValueRow extends LayerFoldRow {
       : super(depth);
 }
 
+/// A text animator's selector choices, which have no curve: what picks the
+/// letters, the target a Proximity selector measures from, what it counts,
+/// the shape of its edge, whether it is turned over, and a Wiggly's seed.
+enum AnimatorSetting { selector, target, basis, shape, invert, seed }
+
+/// One of [AnimatorSetting] on animator [index], as the Effect controls panel
+/// shows it, so the Timeline has the whole selector too.
+final class FoldAnimatorSettingRow extends LayerFoldRow {
+  final int index;
+  final BridgeTextAnimator animator;
+  final AnimatorSetting setting;
+  const FoldAnimatorSettingRow(this.index, this.animator, this.setting,
+      {required int depth})
+      : super(depth);
+}
+
+/// The selector choices [a] has rows for.
+List<AnimatorSetting> animatorSettingsOf(BridgeTextAnimator a) => [
+      AnimatorSetting.selector,
+      if (a.selector.kind == BridgeSelectorKind.proximity) ...[
+        AnimatorSetting.target,
+        AnimatorSetting.invert,
+      ],
+      if (a.selector.kind == BridgeSelectorKind.wiggly) AnimatorSetting.seed,
+      AnimatorSetting.basis,
+      if (a.selector.kind != BridgeSelectorKind.wiggly) AnimatorSetting.shape,
+    ];
+
 /// One control of a footage layer's Flow group. Which control
 /// is the [kind]; all of them read and write the whole group in one op, so a
 /// row needs nothing but its own identity.
@@ -1226,6 +1254,19 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
             PuppetValue.scale => 100,
             _ => null,
           }),
+      // A selector's choice is a change when it is not the fresh one.
+      FoldAnimatorSettingRow(:final animator, :final setting) => switch (
+            setting) {
+          AnimatorSetting.selector =>
+            animator.selector.kind != BridgeSelectorKind.range,
+          AnimatorSetting.target => animator.selector.target != null,
+          AnimatorSetting.invert => animator.selector.invert,
+          AnimatorSetting.seed => animator.selector.seed != 0,
+          AnimatorSetting.basis =>
+            animator.selector.basis != BridgeSelectorBasis.characters,
+          AnimatorSetting.shape =>
+            animator.selector.shape != BridgeSelectorShape.square,
+        },
       FoldAnimatorValueRow(:final animator, :final value) => _differs(
           textAnimatorScalarOf(animator, value), textAnimatorDefault(value)),
       FoldShapeValueRow(:final value) => value == ShapeValue.path ||
@@ -1399,7 +1440,7 @@ double? transformDefault(BridgeTransformProp prop, double w, double h) =>
         ),
       FoldAnimatorValueRow(:final animator, :final value) => (
           group: animator.name,
-          label: textAnimatorValueLabel(value)
+          label: textAnimatorValueLabel(value, animator)
         ),
       _ => null,
     };
@@ -2429,6 +2470,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldWaveformRow() => waveformPath(layerId),
       FoldSettingRow(:final setting) =>
         '${transformPath(layerId)}/${setting.name}',
+      FoldAnimatorSettingRow(:final index, :final setting) =>
+        '${animatorPath(layerId, index)}/${setting.name}',
       FoldAnimatorValueRow(:final index, :final value) =>
         '${animatorPath(layerId, index)}/${value.name}',
       FoldMaskRow(:final mask) => '${masksPath(layerId)}/${mask.id}',
@@ -3048,7 +3091,9 @@ List<LayerFoldRow> layerFoldRows({
   // the letters are moved as the words are drawn, and the masks then gate what
   // was drawn (docs/06 render order). Like every other group here the
   // heading appears only once there is something under it.
-  if (info.textAnimators.isNotEmpty) {
+  // A Text layer always has the heading, since its Add animator is how the
+  // first animator is made.
+  if (info.kind == BridgeLayerKind.text || info.textAnimators.isNotEmpty) {
     final animatorsOpen = open.contains(animatorsPath(id));
     rows.add(FoldGroupRow(
       path: animatorsPath(id),
@@ -3073,8 +3118,10 @@ List<LayerFoldRow> layerFoldRows({
         ));
         if (!animatorOpen) continue;
         final solid = meshKindOf(info) == BridgeLayerKind.model;
-        for (final value in TextAnimatorValue.values) {
-          if (!solid && solidAnimatorValues.contains(value)) continue;
+        for (final setting in animatorSettingsOf(animator)) {
+          rows.add(FoldAnimatorSettingRow(i, animator, setting, depth: 3));
+        }
+        for (final value in textAnimatorValuesOf(animator, solid: solid)) {
           rows.add(FoldAnimatorValueRow(i, animator, value, depth: 3));
         }
       }

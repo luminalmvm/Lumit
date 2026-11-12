@@ -1,0 +1,216 @@
+---
+title: Custom shaders
+description: Write an effect of your own, as WGSL text or as a graph of boxes, inside a Custom shader.
+sidebar:
+  order: 9.65
+---
+
+A **Custom shader** is an effect whose program you write. The program is WGSL text typed
+into the shader editor or loaded from a file, or a **shader graph** of boxes that Lumit
+turns into that text.
+
+Add one with **Effect ▸ Utility ▸
+[Custom shader](/effects/utility/custom-shader/)**. A new one holds a starter program with
+two rows, **Gain** and **Tint**, that passes the picture through unchanged.
+
+## The shader editor
+
+**Edit shader…** on the effect opens the editor: the program with numbered lines, and a
+line under it reading **The shader compiles** or the compiler's own message. Line numbers
+in a message count from the first line of your text.
+
+- A pause in the typing checks the text. Text that compiles is drawn in the Viewer at
+  once, without being applied. Text that does not compile leaves the last picture up.
+- **Apply**, or `Ctrl+Enter`, puts the text on the effect as one undo step.
+- **Cancel** leaves the effect as it was.
+- `Tab` indents.
+- The window is resized by its grip and opens at the size it was left.
+
+**Load from file…** reads a `.wgsl` file. Its text is copied into the project, and the
+file is not read again.
+
+A shader that will not compile draws its input unchanged, and its card in
+[Effect controls](/panels/effect-controls/#badges) wears **This shader did not compile**
+with the compiler's message beneath.
+
+## The program
+
+The program is one function. It is given a place in the frame and returns the colour
+there.
+
+```wgsl
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv);
+}
+```
+
+`uv` runs from 0 to 1 across the frame. Pictures arrive premultiplied and scene-linear,
+and the function returns the same.
+
+| Name | Gives |
+| --- | --- |
+| `lumit_sample(uv)` | The picture arriving at the effect, at a place. |
+| `lumit_load(xy)` | One pixel of it, by whole pixel coordinates. |
+| `lumit_sample2(uv)` | The **Second input** layer. |
+| `lumit_matte(uv)` | The **Matte** layer's strength there, from 0 to 1. |
+| `lumit_size()` | The picture's size in pixels, at the resolution being drawn. |
+| `lumit_px(uv)` | The place in composition pixels, the same at every preview resolution. |
+| `lumit_premult(c)`, `lumit_unpremult(c)` | A colour multiplied by its alpha, or divided by it. |
+| `lumit.time` | The layer's time in seconds. |
+| `lumit.seed` | A whole number fixed for this effect. It does not change from frame to frame. |
+| `lumit.comp_scale` | Drawn pixels per composition pixel: 1 at Full, 0.5 at Half. |
+| `lumit.matte_on`, `lumit.input2_on` | 1 when a Matte or a Second input is set, otherwise 0. |
+| `p` | The shader's own parameters. |
+
+A value that is not a number comes out as transparent black. **Mix** and **Blend** are
+applied after the function returns.
+
+## Parameters
+
+A struct called `Params` declares the shader's rows in Effect controls, in the order they
+are written. Each field is read as `p.name`. The comment above a field starting `///`
+carries its annotations and its label.
+
+```wgsl
+struct Params {
+    /// @slider(0, 2) @default(1) Gain
+    gain: f32,
+    /// @default(1, 1, 1, 1) Tint
+    tint: vec4<f32>,
+}
+```
+
+| Field type | Row | Annotations |
+| --- | --- | --- |
+| `f32` | A number. | `@slider(low, high)` sets the range it drags over, 0 to 1 without it. `@bounded(low, high)` makes a slider that cannot leave its range. `@dial` makes an angle in degrees. `@default(n)`. `@unit(px)`, `@unit(deg)` or `@unit(s)`. |
+| `i32` | A whole number. | `@counter(low, high)` sets the range, 0 to 100 without it. `@default(n)`. |
+| `u32` | A whole number from 0. | `@toggle` makes a checkbox, with `@default(true)`. `@choice("One", "Two")` makes a dropdown, with `@default("Two")` or an index. `@seed` makes a seed. |
+| `vec2<f32>` | A point, as X and Y in pixels. | `@default(x, y)`. `@unit`. |
+| `vec4<f32>` | A colour. White without a default. | `@default(r, g, b, a)`. |
+
+The words left on the comment are the row's label. With none, the label is the field's
+name with its underscores as spaces.
+
+The rows keyframe, take expressions and take wires as any effect's do.
+
+An annotation that cannot be read loses that row alone, and the field reads its default.
+
+## What is refused
+
+- A program with no `fn shade(uv: vec2<f32>) -> vec4<f32>`.
+- `@group` or `@binding` anywhere in the text.
+- Declaring `src`, `orig`, `dst`, `matte`, `input2`, `lumit`, `p`, or any name starting
+  `lumit_`.
+- A `vec3<f32>` parameter, or one of any type not in the table.
+- Two parameters with the same name, or one named `input2`, `edit`, `load_from_file`,
+  `mix`, `blend`, `matte`, `matte_invert` or `matte_channel`.
+- More than 4,096 different programs in one run of Lumit. Every text the editor checks
+  counts as one.
+
+## The shader graph
+
+The shader graph builds the program from boxes. It opens in the
+[Node graph](/use/nodes/) panel:
+
+- **Open graph** on the effect in Effect controls.
+- A double-click on the effect's heading, or on its box in the Node graph.
+- A click on the small picture of the graph on the box, or in the Node panel. It reads
+  **Click to open** while the shader has no graph.
+
+The strip along the top names the composition, the layer and the shader. Click the
+composition or the layer, or press `Escape`, to leave. At its right are the magnet, which
+lands a dragged box on the dot grid, **Frame all** and the zoom.
+
+| Gesture | What it does |
+| --- | --- |
+| `Ctrl+Space` | Opens the console listing the boxes. The chosen box lands at the pointer. |
+| Drag from a socket | Pulls out a wire. Dropped on empty canvas it opens the console. |
+| Press a wired input | Picks the wire up by its far end. Drop it on another input to move it, or elsewhere to remove it. |
+| Drag a box | Moves it, with the rest of the selection. |
+| Drag empty canvas | Pans. The wheel zooms about the pointer, from 20% to 200%. |
+| `F`, `Shift+F` | Fits the picked boxes, or every box, on screen. |
+| `Enter` | Renames the one picked box. |
+| `Ctrl+D` | Duplicates the picked boxes. |
+| `Delete` or `Backspace` | Removes the picked boxes and their wires. |
+
+A box's right-click menu holds **Rename**, **Add node…**, **Disconnect all**, **Copy**,
+**Paste**, **Duplicate**, **View here** and **Delete**. A socket's holds **Disconnect**,
+a wire's **Insert node…**, **Add reroute** and **Delete**, and the canvas's **Add node…**,
+**Paste**, **Select all**, **Frame selected** and **Frame all**.
+[Ties and reroute points](/use/nodes/#ties-and-reroute-points) work as they do on a
+layer's graph.
+
+A graph starts with one **Result** box and holds exactly one. Each input takes one wire,
+and a new wire replaces the one there. A wire that would stop a working graph compiling is
+refused, a loop among them. A graph that does not compile can still be edited, and says
+why at the foot of the canvas:
+
+- **The wire into** a box's socket **doesn't fit**
+- **There's no Result box**
+- **There's more than one Result box**
+- **Two wires go into one socket**
+- **The wires make a loop**
+- **A Parameter box has a setting it can't use**
+- **This graph can't be read**
+
+A number wired into a wider input is used for every part of it. A picture wire joins only
+a **Sample** box's picture input.
+
+Picking a box puts its **at** chip over the Viewer's picture. Turned on, or with
+**View here** ticked on the box's menu, the Viewer shows the shader's output with that box
+in place of its Result.
+
+### The Node panel
+
+Inside a shader graph the [Node panel](/use/nodes/#the-node-panel) lists the shader's
+boxes, and a click on one picks it on the canvas. A picked box lists its sockets, each
+with the box at the other end of its wire. A click on that name picks that box.
+
+A **Parameter** box adds a row to the effect. Its name is the box's own, from **Rename**,
+and the panel sets the rest:
+
+| Row | What it sets |
+| --- | --- |
+| **Kind** | **Slider**, **Clamped slider**, **Angle**, **Colour** or **Point**. |
+| **Default** | The value the row starts at. A Colour has four numbers and a Point two. |
+| **Minimum**, **Maximum** | A slider's range. |
+| **Unit** | A slider's unit: raw, pixels, degrees or seconds. |
+
+### The boxes
+
+| Family | Boxes |
+| --- | --- |
+| Input | **Picture** and **Second picture**, each with a colour and a picture output. **Matte**, its strength. **UV**, the place being drawn. **Time**, in seconds. **Seed**. **Parameter**, which adds a row to the effect. |
+| Maths | **Add**, **Subtract**, **Multiply**, **Divide**, **Modulo**, **Mix**, **Clamp**, **Saturate**, **Power**, **Square root**, **Absolute**, **Sign**, **Minimum**, **Maximum**, **Floor**, **Ceiling**, **Fraction**, **Step**, **Smooth step**, **Sine**, **Cosine**, **Arctangent**, **Length**, **Distance**, **Dot product**, **Normalise**. |
+| Vector | **Split**, a value taken apart into its numbers. **Combine 2**, **Combine 3** and **Combine 4**, numbers put together. **Swizzle**, a value's parts reordered. |
+| Texture | **Sample**, which reads a picture at a place. |
+| Colour | **Luminance**, **Premultiply**, **Unpremultiply**, **Tint**, **Blend**. |
+| Output | **Result**, the picture going out. |
+
+An unwired input reads 0, except:
+
+- **Sample** reads the effect's own picture, at the place being drawn.
+- **Clamp**'s **high**, **Smooth step**'s **high**, **Power**'s **y**, **Blend**'s
+  **amount** and **Combine 4**'s **w** read 1.
+- **Tint**'s **tint** reads white.
+
+### The graph and the text
+
+A shader with no graph opens on a lone Result box, and the first edit there makes the
+graph the program in place of the typed text.
+
+Once a shader has a graph, the graph is the program. **Edit shader…** then offers
+**Detach graph**: **Detach** keeps the text the graph made and removes the graph. The
+boxes cannot be rebuilt from the text.
+
+:::note[Not built yet]
+Controls on a **Swizzle** or a **Blend** box. Swizzle always takes the first part, and
+Blend always blends as Normal.
+:::
+
+## Related
+
+- [Custom shader](/effects/utility/custom-shader/)
+- [Writing a custom shader](/tutorials/custom-shader/)
+- [The node graph](/use/nodes/)
+- [Effects](/use/effects/)

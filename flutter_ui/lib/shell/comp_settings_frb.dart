@@ -214,9 +214,11 @@ Future<CompositionReference?> showNewCompositionFrb({
   // container with FFmpeg, and a dialog that popped up and then rearranged itself
   // is worse than one that appears already right.
   var initial = BridgeCompSettings.defaults();
+  var timed = false;
   for (final item in footage) {
     final info = await item.mediaInfo();
     if (info == null) continue;
+    final lasts = _lasts(info);
     initial = BridgeCompSettings(
       name: initial.name,
       // Audio-only media has no picture to size a comp by, so it keeps whatever
@@ -226,13 +228,19 @@ Future<CompositionReference?> showNewCompositionFrb({
       fpsNum: info.fpsNum > 0 ? info.fpsNum : initial.fpsNum,
       fpsDen: info.fpsNum > 0 ? info.fpsDen : initial.fpsDen,
       // The longest item wins: a comp shorter than something dropped into it
-      // would clip the very thing that was asked for.
-      duration: _longer(initial.duration, info.duration),
+      // would clip the very thing that was asked for. The default only stands
+      // when no item has a length of its own.
+      duration: !lasts
+          ? initial.duration
+          : timed
+              ? _longer(initial.duration, info.duration)
+              : info.duration,
       background: initial.background,
       shutterAngle: initial.shutterAngle,
       motionBlurSamples: initial.motionBlurSamples,
       motionBlurLimit: initial.motionBlurLimit,
     );
+    timed = timed || lasts;
   }
   if (!context.mounted) return null;
 
@@ -297,6 +305,14 @@ Future<CompositionReference?> showNewCompositionFrb({
 /// float ever decides which of two lengths is bigger.
 BridgeRational _longer(BridgeRational a, BridgeRational b) =>
     a.num.toInt() * b.den.toInt() >= b.num.toInt() * a.den.toInt() ? a : b;
+
+/// Whether the media lasts longer than a still, by the engine's own test: more
+/// than a frame and a half, or more than nothing when it has no rate.
+bool _lasts(BridgeMediaInfo info) {
+  final d = info.duration;
+  if (info.fpsNum == 0) return d.num.toInt() > 0;
+  return 2 * d.num.toInt() * info.fpsNum > 3 * d.den.toInt() * info.fpsDen;
+}
 
 class _CompSettingsBody extends StatefulWidget {
   final String title;
@@ -850,6 +866,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       position: position,
       initial: PickedColour.of(_backgroundColour),
       presets: t.backgroundPresets,
+      linear: true,
       onCommit: (picked) => setState(() {
         _background = [
           picked.r.toDouble(),

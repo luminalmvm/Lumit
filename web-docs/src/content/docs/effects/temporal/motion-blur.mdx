@@ -48,12 +48,18 @@ In the Effect Controls panel:
 - **Shutter angle** sets how long the imaginary shutter is open.
 - **Samples** is a *maximum* on the number of samples the blur combines.
 - **Quality**: increasing gives higher quality blur, for increased render time.
+- **Motion vectors**: a layer whose red and green channels carry each pixel's movement,
+  used in place of the measured movement. Red is horizontal, green is vertical, and 0.5 is
+  no movement.
+- **Vector scale**: how many pixels of movement a full channel of that layer stands for.
 - **View** is a diagnostic display. Motion vectors show measured movement
   as colour. Confidence shows where the measurement is likely correct in white, and
   Dominant motion shows the neighbourhood motion an uncertain pixel borrows. In a
   [node graph](/use/node-graphs/) each view is also an output socket on the box.
 - **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 

@@ -18,19 +18,90 @@ part of a layer and hide the rest.
 2. Pick a shape tool or the pen tool.
 3. Draw in the Viewer.
 
-With no layer selected, the same tools make a [shape layer](/use/shapes/).
+With no layer selected, the same tools make a [shape layer](/use/shapes/). With a shape
+layer selected they add a shape to it, and `Alt` draws a mask on it instead.
+
+`Shift` keeps a shape tool's width and height equal. A mask drawn with a shape tool is
+named after the shape, and one drawn with the Pen is named **Mask 1**, **Mask 2** and so
+on.
+
+A mask is drawn in the layer's own coordinates and moves, scales and rotates with the
+layer.
 
 A mask left open by the Pen cuts nothing. See [open paths](/use/shapes/#open-paths).
+
+**Add mask**, on the right-click menu of a layer's **Masks** heading in the Timeline, adds
+a rectangle the size of the composition. The same menu has **Paste** and **Delete all
+masks**.
+
+## Edit the path
+
+With the Selection tool, a selected layer shows its masks' points in the Viewer. Selecting
+a mask's **Path** row in the Timeline shows that mask's points alone, whether or not its
+layer is selected.
+
+- **Click** a point to select it. `Shift`-click adds it to the selection or takes it out.
+- **Drag** from empty picture across points to select them.
+- **Drag** a selected point to move every selected point.
+- **Drag** a handle of a selected point to bend the path. A smooth point's other handle
+  turns with it.
+- `Ctrl+Alt`-click a point to switch it between corner and smooth, and `Ctrl+Alt`-drag one
+  to pull out a pair of handles.
+- `Delete` removes the selected points.
+- `Ctrl+Shift+T` puts a box round the selected points. A drag in it turns them about its
+  middle, in steps of 15° with `Shift`. `Enter`, `Esc` or a click takes the box down.
+
+On a path that is keyframed, an edit sets a keyframe at the playhead.
+
+The Pen's other tools on the [toolbar](/panels/toolbar/) work on a finished path:
+
+| Tool | Does |
+| --- | --- |
+| **Add vertex** | A click on the path's line adds a point there. |
+| **Delete vertex** | A click on a point removes it. |
+| **Convert vertex** | A click on a point switches it between corner and smooth. A drag on a point pulls out a pair of handles, and a drag on a handle moves that handle alone. |
+| **Mask feather** | A drag on a mask's point, or on the edge of the soft band round it, sets that point's feather width. |
+
+With a mask's Path row selected, the **Pen** adds a point where the path's line is
+clicked, and `Alt` converts a point.
+
+Right-click a point or the path's line in the Viewer:
+
+| Item | Does |
+| --- | --- |
+| **Delete point** | Removes the selected points. |
+| **Corner point**, **Smooth point** | Converts the selected points. The kind in force is ticked. |
+| **Set as first point** | Starts a closed path from this point. Greyed on an open path and on a keyframed one. |
+| **Add point here** | On the line: adds a point there. |
+| **Select all points** | Selects every point of the path. |
+| **Close path** | Closes the path, or opens it. Ticked while it is closed. |
+| **Reverse path** | Runs the path the other way. Greyed on a keyframed path. |
+| **Rename…** | Renames the mask. |
+| **Delete mask** | Deletes the mask. |
+
+## The mask's rows
+
+A masked layer has a **Masks** heading in the Timeline, with a row for each mask and its
+properties under it. With the Timeline active, `M` shows the masks of the selected layers
+alone.
+
+On the mask's own row, the **Invert** mark inverts the mask and the dropdown sets its mode.
+Double-click the name to rename it. Right-click the row for **Rename**, the
+[Layer ▸ Mask](#the-layer-menu) rows, **Feather per point**, **Cut**, **Copy**, **Paste**,
+**Duplicate** and **Delete mask**. `Delete` removes a mask whose row is selected.
+
+Right-click a **Path** row for **Copy path** and **Paste path**, which carry the shape
+alone from one mask to another.
 
 ## Mask properties
 
 | Property | What it does |
 | --- | --- |
 | **Path** | The bezier path. Drag its points in the Viewer, and keyframe it to animate the shape. |
-| **Feather** | Softens the edge, half the width either side of the path. |
-| **Point _n_ feather** | That point's own soft-edge width, once the mask has been given a feather per point. |
-| **Expansion** | Grows or shrinks the mask from its path. |
 | **Opacity** | Adjusts similar to a layer's opacity property. |
+| **Feather** | Softens the edge, half the width either side of the path. In layer pixels. |
+| **Point _n_ feather** | That point's own soft-edge width, once the mask has been given a feather per point. |
+| **Expansion** | Grows or shrinks the mask from its path. In layer pixels, negative to shrink. |
 | **Mode** | How this mask interacts with the layer and other masks. |
 | **Inverted** | Swaps inside for outside. |
 
@@ -41,6 +112,38 @@ is the default. **Subtract** cuts this shape out of what the masks above it buil
 **Darken** the lesser. Setting a mask to **None** leaves the path drawn and editable while
 affecting nothing.
 
+A mask at **None**, or at an opacity of 0, is off. A layer whose masks are all off is shown
+whole.
+
+## Animate the path
+
+The stopwatch on the **Path** row keyframes the whole shape. A new keyframe holds the shape
+the mask already shows. Move the playhead, drag a point, and the mask changes shape between
+the two keyframes.
+
+Points are paired by order. Where one keyframe's path has fewer points, it is subdivided
+to match the other first, without changing its shape.
+
+**Layer ▸ Mask and shape path ▸ Add or remove keyframe at playhead** does the same for the
+masks whose rows are selected. **Closed** on the same submenu closes the path, or opens it.
+
+A path's keyframes are diamonds on its lane and have no curve in the
+[graph editor](/panels/graph-editor/).
+
+## The Layer menu
+
+**Layer ▸ Mask** acts on every mask whose row is selected in the Timeline, as one undo
+step, and is greyed with none selected.
+
+| Row | Does |
+| --- | --- |
+| **Mode ▸** | **None** to **Difference**. The mode in force is ticked. |
+| **Inverted** | `Ctrl+Shift+I`. Inverts the mask. |
+| **Feather…** | `Ctrl+Shift+F`. Asks for the feather as a number, from 0 to 10000. |
+| **Opacity…** | Asks for the opacity as a number. |
+
+On a keyframed feather or opacity, the number goes into the keyframe at the playhead.
+
 ## A feather per point
 
 One edge of a mask can be sharp and another soft. Right-click the mask's row in the
@@ -49,9 +152,12 @@ feather** row of its own, starting at the width the mask already had. The width 
 smoothly from one point to the next. **One feather width** on the same menu drops the rows
 and goes back to a single width.
 
+The **Mask feather** tool sets a point's width in the Viewer, and gives the mask a feather
+per point if it had one width.
+
 :::note[Not built yet]
-The widths are edited on their Timeline rows, not in the Viewer. Variable feather in an
-imported After Effects project is not carried across — the mask arrives at one width.
+Variable feather in an imported After Effects project is not carried across — the mask
+arrives at one width.
 :::
 
 ## Related

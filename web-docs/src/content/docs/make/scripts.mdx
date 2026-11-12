@@ -77,16 +77,100 @@ object.
 | Name | What it is |
 | --- | --- |
 | `lumit.command(name, args)` | Runs a command by its name, as `lumit.command("layer.add", { ... })`. |
-| `lumit.args` | The `--arg` values from the command line, and an event script's `event` and `file`. |
-| `lumit.chooseFile(title, extensions)` | Opens the system file dialogue and answers the path, or `null`. On the command line, `null`. |
-| `lumit.readText(path)`, `lumit.readJson(path)` | Reads a file the script may read. |
+| `lumit.args` | The `--arg` values from the command line, and an event script's `event` and `file`, each as text. |
+| `lumit.chooseFile(title, extensions)` | Opens the system file dialogue and answers the path, or `null`. `extensions` is a list without dots, such as `["json"]`. The script may read the file chosen. On the command line and over MCP, `null`. |
+| `lumit.readText(path)` | A file's text, from a file the script [may read](/use/scripts/#what-a-script-may-reach). |
+| `lumit.readJson(path)` | The same file, read as JSON. |
 | `lumit.frameAt(seconds, comp)` | The frame of a comp nearest a time in seconds. |
-| `print(...)`, `console.log(...)` | Writes a line to the log, or to standard error on the command line. |
+| `print(...)`, `console.log(...)`, `console.info(...)`, `console.warn(...)`, `console.error(...)` | Writes a line to the log, or to standard error on the command line. |
 
-A command that fails throws an `Error` with the reason. A script that does not catch it stops,
-and the project is left as it was. Undo and redo are not methods: a run is one step.
+A command that fails throws an `Error` with the reason as its `message` and a `code`:
+`unknown-command`, `bad-args`, `not-found`, `failed` or `stopped`. A script that does not
+catch it stops, and the project is left as it was. Undo and redo are not methods: a run is
+one step.
 
 The value of the script's last line is its answer. The command line prints it as JSON.
+
+The engine is QuickJS, with none of its file, network or process modules. Every script has
+the [After Effects objects](/use/scripts/#after-effects-scripts) as well as `lumit`, and
+the two can be mixed.
+
+## Naming things
+
+`comp`, `item`, `layer` and `effect` take an id or a name. An id is the `id` in an answer.
+Of two things with one name, the first is found: the first in the Project panel, or the
+topmost in the stack. `effect` also takes its place in the stack, 0 at the top.
+
+A time is a frame on the comp's rate, or exact seconds as `{ num, den }`. Times in an answer
+are exact seconds, on the comp's clock.
+
+## What commands answer
+
+| Command | Answers |
+| --- | --- |
+| `project.info` | `{path, items, comps, can_undo, can_redo}`. `path` is `null` before the first save, and `items` and `comps` are counts. |
+| `project.save` | `{path}`, where it was saved. |
+| `comp.list` | `{comps}`, a list of comps. |
+| `comp.get` | The comp, with `layers` as a list of layers, `markers` and `comment`. |
+| `comp.new`, `comp.set` | The comp. |
+| `comp.precompose` | `{comp, layer}`: the new comp, and the layer that places it. |
+| `comp.open`, `export.cancel` | `{}`. |
+| `comp.active` | `{comp}`, `null` when none is open. |
+| `comp.frame` | `{path, width, height}`. |
+| `comp.write` | `{motion_blur, lighting, graph}` as they now are. |
+| `item.list` | `{items}`, a list of items. |
+| `item.set`, `folder.new` | The item. |
+| `layer.add`, `shape.add`, `layer.set`, `layer.composite`, `layer.keys`, `layer.write` | The layer. |
+| `layer.get` | The layer, with `properties` and `markers`. |
+| `layer.read` | The whole layer as a `.lum` file keeps it. |
+| `layer.delete` | `{deleted}`, the layer's id. |
+| `markers.set` | `{markers}`, how many were set. |
+| `effect.list` | `{effects}`, a list of effects, top first. |
+| `effect.get`, `effect.add`, `effect.set` | The effect. |
+| `footage.import` | `{items}`, each `{id, name}`. |
+| `export.start` | `{job}`, a number for `export.status` and `export.cancel`. |
+| `export.status` | `{state, done, total, path, message}`. `state` is `running`, `done`, `failed` or `cancelled`, `done` and `total` count frames, and `message` says why it failed. |
+
+Over MCP, `undo` and `redo` answer `{done}`, false when there was nothing to undo or redo.
+
+| Answer | Fields |
+| --- | --- |
+| A comp | `id`, `name`, `width`, `height`, `frame_rate` as `{num, den}`, `duration`, `frames`, `background`, `node_graph`, and `layers`, a count. |
+| A layer | `id`, `name`, `kind`, `index`, `parent`, `in`, `out`, `start_offset`, `three_d`, `after_effects_order`, `two_node` and `switches`. `kind` is `footage`, `solid`, `precomp`, `text`, `camera`, `sequence`, `adjustment`, `null`, `shape`, `light`, `model` or `mesh`. `two_node` is `null` unless the layer is a camera. |
+| An item | `id`, `name`, `kind`, `folder` and `comment`. `kind` is `footage`, `folder`, `comp` or `solid`. Footage adds `sequence`, `frame_rate`, `path` and `media`, and a solid adds `media`: `{width, height, frame_rate, duration}`, or `null` for footage that cannot be read. |
+| An effect | `id`, `index`, `effect`, `name`, `enabled`, `after_effects` and `params`, a list of `{id, label, kind, value}`. `kind` is `float`, `point`, `colour`, `bool`, `choice`, `seed` or `other`. |
+| A marker | `id`, `time`, `label`, `colour`, `duration` in frames, and `chapter`. |
+
+In `layer.get`, `properties` holds `anchor`, `position`, `scale`, `rotation`, `rotation_x`,
+`rotation_y`, `orientation`, `opacity`, `point_of_interest`, `zoom`, `focus_distance` and
+`aperture`, each only where the layer has it. A property, and a number, point or colour
+row's `value`, is a number, a list of keys as `{time, value, hold, in, out}`, or
+`{expression}`. One with several values is a list with one of these for each.
+
+## What commands refuse
+
+- `comp.frame`: a time past the comp's last frame and, in Lumit and over MCP, a file that
+  is not `.png`. Without `out`, the file is the comp's name and the frame number, beside
+  the project, or in the script's folder when the project has no file.
+- `layer.add`: a colour or a size on anything but a solid, and a comp placed inside itself.
+  The layer goes to the top of the stack unless `index` says otherwise.
+- `shape.add`: an item with fewer than two vertices.
+- `layer.add` and `layer.write`: an `id` among `fields`.
+- `layer.set`: `jump` without `parent`, `two_node` on anything but a camera, and
+  `after_effects_order` while an expression drives a rotation.
+- `layer.keys`: a property the layer does not have, the wrong number of values, and keys out
+  of time order.
+- `layer.composite`: a layer as its own matte.
+- `item.set`: `frame_rate` on anything but footage, and `null` for an image sequence. A
+  folder cannot go inside itself.
+- `effect.add`: an effect that goes in a node graph and not on a layer.
+- `effect.set`: more than one of `value`, `keys` and `expression`, or one without `param`.
+  Layer, file and text rows cannot be set.
+- `footage.import`: a file that is missing or cannot be read. Nothing is imported then.
+- `export.start`: a second export while one runs. Without `out`, the file is an H.264 mp4
+  named after the comp, beside the project, numbered when that file is there.
+- `markers.set` replaces every marker. One given the `id` of a marker already there keeps
+  what a script cannot set.
 
 ## Effects
 
@@ -94,7 +178,9 @@ The value of the script's last line is its answer. The command line prints it as
 takes the effects an extension carries, by name.
 
 `effect.get` answers one effect with every row it has, including the rows an LFX effect's or
-a Custom shader's `Params` declare. `effect.set` sets a row by its id or its label:
+a Custom shader's `Params` declare. `effect.set` sets a row by its id or its label. A number
+row takes a number, a point two, a colour three or four, a checkbox `true` or `false`, and a
+menu or a seed a whole number:
 
 ```js
 const at = { comp: "Stripes", layer: "Stripe 1" };

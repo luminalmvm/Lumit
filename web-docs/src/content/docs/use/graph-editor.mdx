@@ -11,6 +11,13 @@ The graph editor draws a property as a line of value, or rate of change, against
 
 <Shot file="graph-editor.png" caption="The graph editor, showing the value graph." eager/>
 
+## Open a curve
+
+1. Press **Graph** in the Timeline, or `Shift+F3`.
+2. Click a property's name in the outline. `Ctrl`+click or `Shift`+click adds more.
+
+**Reveal in graph**, on a property row's right-click menu, does both.
+
 ## The three views
 
 | View | Shows |
@@ -38,18 +45,12 @@ one to select it, or `Shift`-click or `Ctrl`-click to add it.
   with no key held. It is off each time Lumit starts.
 - Select several keyframes to move them together. Dragging a handle on one moves the same
   handle on each by the same amount.
+- Double-click the curve to add a keyframe, and `Alt`+click a keyframe to remove it.
+- Double-click a keyframe to type its frame, value and influence.
 
 To change a keyframe to linear, easy ease, or hold, press **Linear**, **Easy ease** or
 **Hold** at the bottom of the graph editor. The default shortcut for easy ease is `F9`.
-**Easing…**, on the value graph only, opens the easing editor. **Auto**, **Clamp** and
-**Free** set the selected keyframes' tangents.
-
-In the easing editor, a click on a shape applies it. Once a shape is saved, the shapes sit
-in two tabs, **Built in** and **Yours**. Drag the two handles and press **Apply** for a
-shape of your own: `Shift` snaps a handle, `Alt` mirrors the other one. The buttons under
-the curve are **Read from keyframes**, which takes the shape of two selected keyframes,
-**Reverse**, **Apply as you shape**, **Save…**, and **More** for **Import easings…** and
-**Export easings…**. Right-click the curve to copy it as `cubic-bezier()` or paste one.
+**Auto**, **Clamp** and **Free** set the selected keyframes' tangents.
 
 Right-click a keyframe for its interpolation, **Tangents**, **Ease…**, **Keyframe speed…**,
 **Join handles**, **Copy**, **Paste**, **Copy ease**, **Paste ease** and **Delete keyframe**. The
@@ -64,6 +65,16 @@ With more than one curve on the graph, a list in its corner names them. Click a 
 show its curve. `Alt`-click to solo it.
 
 **Edit ▸ Settings ▸ Shortcuts ▸ Dragging** changes `Alt` to `Ctrl`.
+
+Every control and gesture is listed under [Graph editor](/panels/graph-editor/).
+
+## Apply one shape to many keyframes
+
+1. Select the keyframes.
+2. Press **Easing…** at the bottom of the graph editor, on the value graph.
+3. Click a shape in the [Easing panel](/panels/easing/), or draw one and press **Apply**.
+
+## The acceleration graph
 
 In the acceleration graph each keyframe has an in dot and an out dot. Dragging a dot up or
 down changes that side's influence and keeps its speed, as far as the influence can reach.
@@ -92,9 +103,11 @@ keyframe after the next, or the property's range, and the box says so.
 
 A Retime curve opens on the value graph. With **Edit ▸ Settings ▸ Timeline ▸ Editing ▸
 Retime opens to Speed** on, and in the **Retiming** workspace, it opens on the speed graph. See
-[Retiming and speed](/use/retime/).
+[Retiming and speed](/use/retime/#the-graph-editor).
 
 ## Related
 
+- [Graph editor](/panels/graph-editor/)
+- [The Easing panel](/panels/easing/)
 - [Keyframes](/use/keyframes/)
 - [Retiming and speed](/use/retime/)

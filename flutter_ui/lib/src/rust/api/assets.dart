@@ -8,8 +8,8 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `reference_point`, `restyle_shift`, `shift_property`, `text_document_of`, `with_camera_at`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `shift_property`, `text_document_of`, `with_camera_at`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The style a text layer has before anything is styled.
 BridgeTextStyle defaultTextStyle() =>
@@ -29,6 +29,18 @@ Future<List<String>> textFontFamilies() =>
 Future<List<String>> textFontFaces({required String family}) =>
     BridgeLib.instance.api.crateApiAssetsTextFontFaces(family: family);
 
+/// The axes of a family's face: empty for a font that doesn't vary, or one
+/// not installed here. Not sync, since it may read the font's file.
+Future<List<BridgeFontAxis>> textFontAxes(
+        {required String family, required String face}) =>
+    BridgeLib.instance.api
+        .crateApiAssetsTextFontAxes(family: family, face: face);
+
+/// The installed families with axes of their own, for the Text panel's
+/// Variable fonts only filter.
+Future<List<String>> textVariableFontFamilies() =>
+    BridgeLib.instance.api.crateApiAssetsTextVariableFontFamilies();
+
 /// Lay out `text` the way the engine draws it in this style, with or without
 /// the room animators get round it, and `boxed` when an animator draws boxes.
 /// The first call with a font loads it.
@@ -46,6 +58,38 @@ BridgeTextBlock measureText(
         paragraph: paragraph,
         animated: animated,
         boxed: boxed);
+
+/// One font axis an animator moves its letters along: a tag such as `wght`
+/// and the place on it, in the font's own numbers.
+class BridgeAnimatorAxis {
+  final String tag;
+  final BridgeScalar value;
+
+  const BridgeAnimatorAxis({
+    required this.tag,
+    required this.value,
+  });
+
+  @override
+  int get hashCode => tag.hashCode ^ value.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAnimatorAxis &&
+          runtimeType == other.runtimeType &&
+          tag == other.tag &&
+          value == other.value;
+}
+
+/// How letters make room for each other while animators move them on the
+/// font's axes: Variable font spacing.
+enum BridgeAxisSpacing {
+  adaptive,
+  perCharacter,
+  default_,
+  ;
+}
 
 /// Capitals: as typed, all capitals, or small capitals for the lower case.
 enum BridgeCaps {
@@ -82,6 +126,81 @@ class BridgeColourRgba {
           g == other.g &&
           b == other.b &&
           a == other.a;
+}
+
+/// One axis of a variable font, as the Text panel shows it.
+class BridgeFontAxis {
+  /// The four-letter tag, such as `wght`.
+  final String tag;
+
+  /// What the font calls it, such as "Weight".
+  final String name;
+  final double min;
+  final double max;
+
+  /// The font's own default place on it.
+  final double defaultValue;
+
+  /// Where the chosen face sits on it, which an unset axis reads as.
+  final double face;
+
+  /// An axis the font asks not to be shown.
+  final bool hidden;
+
+  const BridgeFontAxis({
+    required this.tag,
+    required this.name,
+    required this.min,
+    required this.max,
+    required this.defaultValue,
+    required this.face,
+    required this.hidden,
+  });
+
+  @override
+  int get hashCode =>
+      tag.hashCode ^
+      name.hashCode ^
+      min.hashCode ^
+      max.hashCode ^
+      defaultValue.hashCode ^
+      face.hashCode ^
+      hidden.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFontAxis &&
+          runtimeType == other.runtimeType &&
+          tag == other.tag &&
+          name == other.name &&
+          min == other.min &&
+          max == other.max &&
+          defaultValue == other.defaultValue &&
+          face == other.face &&
+          hidden == other.hidden;
+}
+
+/// A place the whole layer is set at on one of its font's axes.
+class BridgeFontAxisValue {
+  final String tag;
+  final double value;
+
+  const BridgeFontAxisValue({
+    required this.tag,
+    required this.value,
+  });
+
+  @override
+  int get hashCode => tag.hashCode ^ value.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFontAxisValue &&
+          runtimeType == other.runtimeType &&
+          tag == other.tag &&
+          value == other.value;
 }
 
 /// Whether pairs of letters are pulled together by the font's own kerning.
@@ -160,7 +279,8 @@ class BridgeParagraphStyle {
           vertical == other.vertical;
 }
 
-/// Which stretch of the words an animator reaches, in per cent of the run.
+/// Which stretch of the words an animator reaches, in per cent of the run, or
+/// for a Proximity selector which letters are near its target.
 class BridgeRangeSelector {
   final BridgeScalar start;
   final BridgeScalar end;
@@ -171,6 +291,23 @@ class BridgeRangeSelector {
 
   /// Seconds a spoken word takes to change.
   final double ease;
+  final BridgeSelectorKind kind;
+
+  /// The layer a Proximity selector measures from, in the same comp.
+  final UuidValue? target;
+
+  /// Px in the text layer's own pixels.
+  final BridgeScalar radius;
+  final bool invert;
+
+  /// A Wiggly selector: the range of weights, per cent, how often they
+  /// change course a second, how much the letters wander together, per
+  /// cent, and which wander.
+  final BridgeScalar minAmount;
+  final BridgeScalar maxAmount;
+  final BridgeScalar wiggles;
+  final BridgeScalar correlation;
+  final int seed;
 
   const BridgeRangeSelector({
     required this.start,
@@ -180,6 +317,15 @@ class BridgeRangeSelector {
     required this.shape,
     required this.mode,
     required this.ease,
+    required this.kind,
+    this.target,
+    required this.radius,
+    required this.invert,
+    required this.minAmount,
+    required this.maxAmount,
+    required this.wiggles,
+    required this.correlation,
+    required this.seed,
   });
 
   @override
@@ -190,7 +336,16 @@ class BridgeRangeSelector {
       basis.hashCode ^
       shape.hashCode ^
       mode.hashCode ^
-      ease.hashCode;
+      ease.hashCode ^
+      kind.hashCode ^
+      target.hashCode ^
+      radius.hashCode ^
+      invert.hashCode ^
+      minAmount.hashCode ^
+      maxAmount.hashCode ^
+      wiggles.hashCode ^
+      correlation.hashCode ^
+      seed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -203,7 +358,16 @@ class BridgeRangeSelector {
           basis == other.basis &&
           shape == other.shape &&
           mode == other.mode &&
-          ease == other.ease;
+          ease == other.ease &&
+          kind == other.kind &&
+          target == other.target &&
+          radius == other.radius &&
+          invert == other.invert &&
+          minAmount == other.minAmount &&
+          maxAmount == other.maxAmount &&
+          wiggles == other.wiggles &&
+          correlation == other.correlation &&
+          seed == other.seed;
 }
 
 /// Where the letters sit against the baseline.
@@ -218,6 +382,15 @@ enum BridgeScript {
 enum BridgeSelectorBasis {
   characters,
   words,
+  ;
+}
+
+/// How a selector picks its letters: by place in the words, or by how near
+/// they are to a target layer.
+enum BridgeSelectorKind {
+  range,
+  proximity,
+  wiggly,
   ;
 }
 
@@ -305,6 +478,14 @@ class BridgeTextAnimator {
   final BridgeScalar boxG;
   final BridgeScalar boxB;
 
+  /// The font axes the reached letters are set along, at most eight on a
+  /// layer.
+  final List<BridgeAnimatorAxis> axes;
+
+  /// The property groups the animator lists, in the order added; `None`
+  /// lists them all.
+  final List<String>? properties;
+
   const BridgeTextAnimator({
     required this.name,
     required this.selector,
@@ -324,6 +505,8 @@ class BridgeTextAnimator {
     required this.boxR,
     required this.boxG,
     required this.boxB,
+    required this.axes,
+    this.properties,
   });
 
   @override
@@ -345,7 +528,9 @@ class BridgeTextAnimator {
       boxOpacity.hashCode ^
       boxR.hashCode ^
       boxG.hashCode ^
-      boxB.hashCode;
+      boxB.hashCode ^
+      axes.hashCode ^
+      properties.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -369,7 +554,9 @@ class BridgeTextAnimator {
           boxOpacity == other.boxOpacity &&
           boxR == other.boxR &&
           boxG == other.boxG &&
-          boxB == other.boxB;
+          boxB == other.boxB &&
+          axes == other.axes &&
+          properties == other.properties;
 }
 
 /// Where a block of text sits inside its layer, in layer pixels. Styled or
@@ -536,6 +723,10 @@ class BridgeTextStyle {
   /// family's regular face.
   final String face;
 
+  /// A variable font's axes, set for the whole layer on top of the face.
+  final List<BridgeFontAxisValue> axes;
+  final BridgeAxisSpacing axisSpacing;
+
   /// Baseline to baseline in px. Unset is auto, 120 % of the size.
   final double? leading;
   final BridgeKerning kerning;
@@ -587,6 +778,8 @@ class BridgeTextStyle {
   const BridgeTextStyle({
     required this.family,
     required this.face,
+    required this.axes,
+    required this.axisSpacing,
     this.leading,
     required this.kerning,
     required this.tracking,
@@ -615,6 +808,8 @@ class BridgeTextStyle {
   int get hashCode =>
       family.hashCode ^
       face.hashCode ^
+      axes.hashCode ^
+      axisSpacing.hashCode ^
       leading.hashCode ^
       kerning.hashCode ^
       tracking.hashCode ^
@@ -645,6 +840,8 @@ class BridgeTextStyle {
           runtimeType == other.runtimeType &&
           family == other.family &&
           face == other.face &&
+          axes == other.axes &&
+          axisSpacing == other.axisSpacing &&
           leading == other.leading &&
           kerning == other.kerning &&
           tracking == other.tracking &&

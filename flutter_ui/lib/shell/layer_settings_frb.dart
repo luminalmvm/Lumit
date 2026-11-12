@@ -53,6 +53,9 @@ Future<bool> showLayerSettingsFrb({
   final applied = await showLumitModal<bool>(
     context: context,
     id: 'layer-settings',
+    // Undimmed, so the Viewer behind stays true to pick a colour from with
+    // the colour picker's eyedropper.
+    dimBackground: solid == null,
     builder: (close) => _LayerSettingsBody(
       name: name,
       definition: definition,
@@ -95,6 +98,9 @@ Future<LayerReference?> newSolidFrb({
   final picked = await showLumitModal<(String, BridgeSolidDef?)>(
     context: context,
     id: 'layer-settings',
+    // Undimmed, so the Viewer behind stays true to pick the solid's colour
+    // from with the colour picker's eyedropper.
+    dimBackground: false,
     builder: (close) => _LayerSettingsBody(
       name: _solidName(next, _lastColour),
       suggest: (colour) => _solidName(next, colour),
@@ -203,6 +209,9 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
       onEnter: _confirm,
       child: DialogFrame(
         width: 400,
+        // No shadow round a solid's window, so it does not darken the
+        // Viewer the eyedropper picks its colour from.
+        shadow: !solid,
         children: [
           dialogTitleBar(t,
               title: widget.fresh ? l10n.newSolidTitle : l10n.layerSettingsTitle,
@@ -271,9 +280,11 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
                       alignment: AlignmentDirectional.centerStart,
                       // A solid's colour is chosen as a **display** colour, so
                       // the picker's channels read 0-255, the same reading the
-                      // source card's own swatch opens with.
+                      // source card's own swatch opens with: the colour as the
+                      // Viewer shows the linear light it is kept in.
                       child: ColourSwatchButton(
                         key: const ValueKey('layer-settings-colour'),
+                        linear: true,
                         colour: PickedColour(_colour?.r ?? 0, _colour?.g ?? 0,
                                 _colour?.b ?? 0)
                             .clipped,

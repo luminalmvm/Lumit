@@ -23,16 +23,21 @@ A few conventions run through the whole catalogue:
   the effect was applied. A **Blend** dropdown sits beside it with the layer blend
   modes. On Normal nothing changes; on any other mode the effect runs at full
   strength, is blended over the picture in that mode, then Mix is applied once.
-- **Matte** and **Invert** appear on every effect too. A matte is an input to an effect. 
+- **Matte** and **Invert** appear on almost every effect too. A matte is an input to an effect. 
   For example a blur driven by a matte blurs less where the matte is dark. It is not
   simply the same as if you could change the opacity of an effect. Some effects use the 
   matte to drive more than just strength, in these cases the effect page explains its use.
+  **Channel** beside them picks what is read from the matte layer: its luminance, its alpha,
+  or its red, green or blue.
 - **Distances** are counted in pixels. They adapt to resizes, including exporting at a
   different resolution.
 - **Every parameter animates.** Turn on its stopwatch. See [Keyframes](/use/keyframes/).
 - Effects that require a **file or another layer** as input do nothing until you supply one.
 
 ## Effect categories
+
+Two extensions come with Lumit, Siceliot and Reaizzi Glass. Their effects sit under the same
+headings as Lumit's own, and each category lists them in a second table.
 
 ### Blur & sharpen
 
@@ -54,6 +59,10 @@ Soften, focus, and detail lift.
 | [Vector blur](/effects/blur-sharpen/vector-blur/) | Streaks each pixel along directions read from a map. |
 
 {/* END GENERATED */}
+
+| Effect | What it does |
+| --- | --- |
+| [Bilateral blur](/effects/blur-sharpen/bilateral-blur/) | Smooths areas of similar colour and keeps the edges between them sharp. |
 
 ### Colour
 
@@ -93,6 +102,10 @@ Colour grading and correction.
 
 {/* END GENERATED */}
 
+| Effect | What it does |
+| --- | --- |
+| [Gradient map](/effects/colour/gradient-map/) | Repaints each pixel from a ramp of up to five colours, by how bright it is. |
+
 ### Distortion
 
 Warps, reshapes, twists, and glitches.
@@ -110,7 +123,7 @@ Warps, reshapes, twists, and glitches.
 | [Datamosh](/effects/distortion/datamosh/) | Melt frames together. |
 | [Turbulent displace](/effects/distortion/turbulent-displace/) | Fractal warping. |
 | [Tile](/effects/distortion/tile/) | Cuts a rectangle and stamps it across the frame. |
-| [Offset](/effects/distortion/offset/) | Slides and wrap the picture. |
+| [Offset](/effects/distortion/offset/) | Slides and wraps the picture. |
 | [Mirror](/effects/distortion/mirror/) | Reflects one half of the frame. |
 | [Lens distort](/effects/distortion/lens-distort/) | Bends the edges of a layer. |
 | [Corner pin](/effects/distortion/corner-pin/) | Pulls the four corners to four placed points. |
@@ -125,6 +138,12 @@ Warps, reshapes, twists, and glitches.
 
 {/* END GENERATED */}
 
+| Effect | What it does |
+| --- | --- |
+| [Bend](/effects/distortion/bend/) | Curls the picture round a circle from a point along an angle. |
+| [Four point warp](/effects/distortion/four-point-warp/) | Pins the layer's four corners to four points, and bows each edge in or out. |
+| [Glass](/effects/distortion/glass/) | Refractive glass in the shape of a layer, bending everything behind it. |
+
 ### Generate
 
 Generate textures, colours, and gradients.
@@ -134,7 +153,7 @@ Generate textures, colours, and gradients.
 | Effect | What it does |
 | --- | --- |
 | [Fill](/effects/generate/fill/) | Replace a layer's colour with one colour. |
-| [Gradient](/effects/generate/gradient/) | A two-colour ramp across the frame. |
+| [Gradient](/effects/generate/gradient/) | A ramp of two to five colours across the frame. |
 | [Noise](/effects/generate/noise/) | Monochrome grain over the picture. |
 | [Fractal noise](/effects/generate/fractal-noise/) | Source for generating textures. |
 | [Beam](/effects/generate/beam/) | Draws a tapered shaft of light between two points. |
@@ -143,31 +162,57 @@ Generate textures, colours, and gradients.
 | [Vegas](/effects/generate/vegas/) | Runs a dashed stroke along contours it finds in the picture. |
 | [Add grain](/effects/generate/add-grain/) | Lays film grain over the picture. |
 | [Scribble](/effects/generate/scribble/) | Fills a mask with pencil strokes. |
-| [Stroke](/effects/generate/stroke/) | Draws a stroke along a mask . |
+| [Stroke](/effects/generate/stroke/) | Draws a stroke along a mask. |
 | [Audio spectrum](/effects/generate/audio-spectrum/) | Draws a sound as bars, a line, a ring of bars or a waveform. |
 | [Energy line](/effects/generate/energy-line/) | Draws a hot core of light with a glow along a line, a mask, a shape or text. |
 | [Particulate](/effects/generate/particulate/) | A particle system: many small things born, carried about, and fading. |
-| [Grid](/effects/generate/grid/) | A lattice of points drawn as discs, or a grid of lines. |
-| [Scatter](/effects/generate/scatter/) | Throws points at the picture and keeps the ones that land on something. |
-| [Emit from image](/effects/generate/emit-from-image/) | Throws points at a layer and keeps the ones that land somewhere bright. |
-| [Points along path](/effects/generate/points-along-path/) | Evenly spaced points along one of the layer's masks. |
-| [Text to points](/effects/generate/text-to-points/) | Makes one point for each character, word or line of a Text layer. |
-| [Track points](/effects/generate/track-points/) | Follows things in the layer's footage and hands them out as points. |
-| [Clone to points](/effects/generate/clone-to-points/) | Stamps a layer's picture at every point of a stream. |
-| [Trail](/effects/generate/trail/) | Draws where every point of a stream has just been. |
-| [Connect points](/effects/generate/connect-points/) | Joins points that are near each other with lines. |
-| [Points field](/effects/generate/points-field/) | Draws a picture of where a stream's points are, for other effects to read. |
-| [Label points](/effects/generate/label-points/) | Writes a short piece of text beside every point of a stream. |
 | [Type fill](/effects/generate/type-fill/) | Fills the frame with rows of words that stretch to fill the room a shape leaves them. |
-| [Vary points](/effects/generate/vary-points/) | Makes the points of a stream differ from one another. |
-| [Pick points](/effects/generate/pick-points/) | Keeps some of a stream's points and drops the rest. |
-| [Transform points](/effects/generate/transform-points/) | Moves, scales and turns a whole stream of points about an anchor. |
-| [Merge points](/effects/generate/merge-points/) | Joins up to four streams of points into one. |
-| [Relax points](/effects/generate/relax-points/) | Pushes a stream's points apart until they stop overlapping. |
-| [Flow points](/effects/generate/flow-points/) | Carries a stream's points along a field over time. |
-| [Bake points](/effects/generate/bake-points/) | Writes the points wired into it to disk and hands the written points on. |
 | [Depth points](/effects/generate/depth-points/) | Draws a shot as points in 3D space, pushed back by its depth. |
 | [Smoke and fire](/effects/generate/smoke-and-fire/) | Turns a 3D layer into a box of simulated smoke and fire, lit by the comp's lights. |
+
+{/* END GENERATED */}
+
+| Effect | What it does |
+| --- | --- |
+| [Falloff](/effects/generate/falloff/) | Draws where an effect should act, from full to none, for another effect to take as its matte. |
+| [Conical gradient](/effects/generate/conical-gradient/) | A ramp between two circles, the Start circle swelling and sliding into the End circle. |
+| [Sweep gradient](/effects/generate/sweep-gradient/) | A ramp that turns round a centre, like a radar or a colour wheel. |
+| [Multi-point gradient](/effects/generate/multi-point-gradient/) | Up to six coloured points, each pulling the colours round it. |
+| [Voronoi](/effects/generate/voronoi/) | A cellular pattern of scattered points, drawn as cells, distances or edges. |
+| [Checkerboard](/effects/generate/checkerboard/) | Two colours in squares or rectangles, at any angle. |
+
+### Points
+
+Make a stream of points, change one, or draw from one. The stream travels on a wire between
+their **Points** sockets; see [The node graph](/use/nodes/#mattes-and-points).
+
+{/* GENERATED:list:points - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Effect | What it does |
+| --- | --- |
+| [Grid](/effects/points/grid/) | A lattice of points drawn as discs, or a grid of lines. |
+| [Scatter](/effects/points/scatter/) | Throws points at the picture and keeps the ones that land on something. |
+| [Emit from image](/effects/points/emit-from-image/) | Throws points at a layer and keeps the ones that land somewhere bright. |
+| [Points along path](/effects/points/points-along-path/) | Points along one of the layer's masks, or along a Shape layer's paths. |
+| [Math points](/effects/points/math-points/) | Lays out a stream of points along waves, a rose curve or a spiral. |
+| [Contour points](/effects/points/contour-points/) | Puts one point in the middle of each closed piece of a path. |
+| [Intersection points](/effects/points/intersection-points/) | Puts a point wherever a path crosses itself or another path. |
+| [Text to points](/effects/points/text-to-points/) | Makes one point for each character, word or line of a Text layer. |
+| [Track points](/effects/points/track-points/) | Follows things in the layer's footage and hands them out as points. |
+| [Clone to points](/effects/points/clone-to-points/) | Stamps a layer's picture at every point of a stream. |
+| [Clone deformer](/effects/points/clone-deformer/) | Aligns, cuts or rounds the copies a Clone to points above it drew, as one group. |
+| [Trail](/effects/points/trail/) | Draws where every point of a stream has just been. |
+| [Connect points](/effects/points/connect-points/) | Joins points that are near each other with lines. |
+| [Points field](/effects/points/points-field/) | Draws a picture of where a stream's points are, for other effects to read. |
+| [Label points](/effects/points/label-points/) | Writes a short piece of text beside every point of a stream. |
+| [Vary points](/effects/points/vary-points/) | Makes the points of a stream differ from one another. |
+| [Pick points](/effects/points/pick-points/) | Keeps some of a stream's points and drops the rest. |
+| [Transform points](/effects/points/transform-points/) | Moves, scales and turns a whole stream of points about an anchor. |
+| [Merge points](/effects/points/merge-points/) | Joins up to four streams of points into one. |
+| [Relax points](/effects/points/relax-points/) | Pushes a stream's points apart until they stop overlapping. |
+| [Flow points](/effects/points/flow-points/) | Carries a stream's points along a field over time. |
+| [Bake points](/effects/points/bake-points/) | Writes the points wired into it to disk and hands the written points on. |
+| [Sort distribution](/effects/points/sort-distribution/) | Puts the points of a stream in another order. |
 
 {/* END GENERATED */}
 
@@ -198,6 +243,16 @@ Add elements to existing footage.
 
 {/* END GENERATED */}
 
+| Effect | What it does |
+| --- | --- |
+| [Halftone](/effects/stylise/halftone/) | Redraws the picture as a printed screen of dots, lines or squares. |
+| [Dithering](/effects/stylise/dithering/) | Fewer colours, with the steps between them broken into a fine pattern. |
+| [Inner shadow](/effects/stylise/inner-shadow/) | A soft shadow cast inside the layer's own edges. |
+| [Light sweep](/effects/stylise/light-sweep/) | A soft band of light across the layer. |
+| [Lighting](/effects/stylise/lighting/) | Long shadows cast from a light, and the layer's own pixels brightened by it. |
+| [Stripes](/effects/stylise/stripes/) | Repeats one band of pixels through the picture, pulling it out into streaks. |
+| [Scrape](/effects/stylise/scrape/) | Drags the pixels of a line out across the picture, like paint pulled by a rough edge. |
+
 ### Temporal
 
 Effects that read other frames, or rely on time.
@@ -207,6 +262,7 @@ Effects that read other frames, or rely on time.
 | Effect | What it does |
 | --- | --- |
 | [Echo](/effects/temporal/echo/) | Composite a run of earlier frames for trails. |
+| [Time loop](/effects/temporal/time-loop/) | Plays a stretch of another layer over and over. |
 | [Posterize time](/effects/temporal/posterize-time/) | Hold time on a coarser time grid. |
 | [Accumulation motion blur](/effects/temporal/accumulation-motion-blur/) | Re-render the scene below at sub-frame moments and average them. Slow, and correct. |
 | [Motion blur](/effects/temporal/motion-blur/) | Smear each pixel along motion in footage. |
@@ -257,6 +313,10 @@ Useful tools for specific tasks.
 | [Node graph](/effects/utility/node-graph/) | Applies a node graph composition to the layer, with the graph's Inputs as its rows. |
 
 {/* END GENERATED */}
+
+| Effect | What it does |
+| --- | --- |
+| [Erosion](/effects/utility/erosion/) | Shrinks the layer's shape, or grows it, by a number of pixels. |
 
 
 ### Compositing
@@ -329,7 +389,8 @@ A driver is wired on a layer's own graph, see [The node graph](/use/nodes/), or 
 
 ### Audio
 
-Effects that change a layer's sound. They draw nothing.
+Effects that change a layer's sound. They draw nothing, and have no **Mix** or **Matte**.
+See [Audio](/use/audio/#audio-effects).
 
 {/* GENERATED:list:audio - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
@@ -362,7 +423,8 @@ Effects that change a layer's sound. They draw nothing.
 ### Siceliot
 
 Drivers in the manner of Cavalry's behaviours, which give each copy Clone to points stamps
-its own value. The heading is the name of the set they came from.
+its own value. **Value** and **Time** read the same for every copy. The heading is the name
+of the set they came from.
 
 {/* GENERATED:list:siceliot - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
@@ -373,5 +435,7 @@ its own value. The heading is the name of the set they came from.
 | [Oscillator](/effects/siceliot/oscillator/) | A value that swings between two numbers in a wave, rippling across the copies. |
 | [Value noise](/effects/siceliot/value-noise/) | A value that wanders smoothly between two numbers, differently for each copy. |
 | [Ring wave](/effects/siceliot/ring-wave/) | Rings that grow out across the frame and give each point a value as they cross it. |
+| [Value](/effects/siceliot/value/) | One number to keyframe once and wire into many parameters. |
+| [Time](/effects/siceliot/time/) | The layer's time as a number, in seconds or frames. |
 
 {/* END GENERATED */}

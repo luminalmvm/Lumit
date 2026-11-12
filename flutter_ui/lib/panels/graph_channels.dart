@@ -524,7 +524,7 @@ List<GraphChannel> graphChannels({
         path: path,
         id: path,
         label: '${entry.info.name} · ${animator.name} · '
-            '${textAnimatorValueLabel(value)}',
+            '${textAnimatorValueLabel(value, animator)}',
         colourIndex: out.length,
         scalar: textAnimatorScalarOf(animator, value),
         entry: entry,

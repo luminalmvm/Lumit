@@ -1,6 +1,6 @@
 ---
 title: Audio
-description: Audio layers, waveforms, audio streams, scrubbing, beat markers and the output.
+description: Sound in a composition, from Volume and waveforms to audio streams, scrubbing, beat markers and the output.
 sidebar:
   order: 15
 ---
@@ -10,36 +10,104 @@ import Shot from "../../../components/Shot.astro";
 Audio plays in preview, and exporting will retain audio unless specifically turned off.
 Buses, solo, gain, automation and loudness are on [Mixing](/use/mixing/).
 
+The **Audio** workspace arranges Lumit for sound: the [Mixer](/panels/audio/#mixer) on the left,
+the [Audio panel](/panels/audio/#audio-panel) on the right, and the
+[Audio timeline](/panels/audio/#audio-timeline) across the bottom.
+
+## What is heard
+
+- A layer plays its sound while its audible switch is on.
+- While a layer that makes sound is soloed, only the soloed layers are heard. A soloed layer
+  with no sound silences nothing.
+- A retimed layer or clip plays its sound at its speed. See
+  [Sound](/use/retime/#sound) for **Keep pitch**.
+- The **Mute** mark on the [Viewer's deck](/panels/viewer/#the-deck) silences the output
+  and leaves the mix as it is.
+- During playback the [status line](/use/workspaces/#the-status-line) reads the output's
+  peak, in dB.
+
+The output device is set in [Settings ▸ Audio](/use/settings/#audio). A named device that
+is not connected plays through the system default until it is back.
+
 ## Audio layers
 
 An **Audio layer** is sound with no picture. Placing an audio file in a composition makes
 one. To take just the sound of an item that has a picture too, right-click the item in the
-Project panel and choose **Add audio only**.
+Project panel and choose **Add audio only**. **Layer ▸ New ▸ Audio**, `Ctrl+Alt+Shift+A`,
+adds an empty one, which takes clips in the [Audio timeline](/panels/audio/#audio-timeline).
 
 An Audio layer has no visibility switch.
 
 With **Settings ▸ Timeline ▸ Sound moves in whole frames** off, an Audio layer dragged by
 its bar lands where the pointer is, between frames.
 
+**Detach audio** puts a layer's sound on an Audio layer of its own, directly below, and
+turns the original's audible switch off. It is on a layer's right-click menu in the
+Timeline and in **Layer ▸ Audio**. A layer with no sound is **refused**, and the status
+line says so.
+
+## Volume and Pan
+
+| Property | What it is |
+| --- | --- |
+| **Volume** | The layer's level in decibels. 0 dB leaves the sound as it is. The Audio panel's field runs from −60 to +12 dB. The Mixer's fader runs down to silence, which reads **-inf**. |
+| **Pan** | Where the sound sits between left and right: −100 is full left, 0 is centre and 100 is full right. It reads **C**, **L 50** or **R 30**. |
+
+Both take keyframes. A value changed while the property is animated lands on the keyframe
+under the playhead, or makes one there.
+
+- In the Timeline, twirl a layer open and then its **Audio** group for **Volume**.
+- The [Audio panel](/panels/audio/#selected-layer) sets Volume, Pan and fades for the
+  selected layer.
+- The [Mixer](/panels/audio/#mixer) has a fader and a pan pot for every layer that makes sound,
+  and the composition's master fader.
+
+A layer's [audio effects](#audio-effects) run before its Volume and Pan.
+
 <Shot file="waveform.png" caption="A footage layer's waveform in its lane." eager/>
 
 ## Waveforms
 
-In the Timeline, a Footage layer draws its audio waveform in its lane, and clips inside a
-[Sequence layer](/use/sequence-layers/) draw theirs inside their own box. The drawing is
-trimmed and retimed along with the layer.
+In the Timeline, the **Audio** group of a layer with sound holds a **Waveform** twirl,
+which opens a lane drawing the layer's sound. The drawing is trimmed and retimed along with
+the layer. Clips inside an open [Sequence layer](/use/sequence-layers/) draw theirs inside
+their own box.
+
+`L` opens the Audio group of the selected layers. Pressed twice within half a second it
+opens the waveform as well, and a third press shuts the layer. **Reveal Volume** in
+[Settings ▸ Shortcuts](/use/settings/) opens the Audio group alone, and has no key until it
+is given one.
+
+The chip on the Waveform row sets what the lane draws. Click it to step through the three.
+
+| Chip | The lane draws |
+| --- | --- |
+| **Wave** | One waveform. |
+| **Stack** | Three waveforms over one another: bass, middle and treble. |
+| **Spectral** | A spectrogram. Time runs along the lane, frequency up it from 0 to 12 kHz, and brightness is the level. |
+
+The chip's choice belongs to the layer and is not saved with the project.
 
 **Settings ▸ Appearance ▸ Waveforms** sets how waveforms are drawn.
 
 | Setting | Choices |
 | --- | --- |
-| **Style** | **Plain** draws one wave. **Frequency** splits it into low, mid and high bands. |
+| **Style** | **Plain** draws one wave. **Frequency** splits it into low, mid and high bands. A lane whose chip has not been clicked follows it. |
 | **Anchor** | **Centre** draws the wave about the middle of the row. **Bottom** draws it up from the bottom. |
 | **Scale** | How the height follows the level: **Linear**, **Square root** or **Logarithmic**. **Square root** to begin with. |
 
 A wave is drawn after its clip's gain and its layer's Gain, and a column that reaches full
 scale is drawn in the error colour. Zoomed in past one sample to a pixel, the samples are
 drawn as a line, with a dot on each once they stand apart.
+
+### The volume band
+
+The line across a waveform lane is the layer's Volume, with a diamond on each keyframe. It
+runs from −60 dB at the foot of the lane to +12 dB at the top, and is dragged, keyed and
+right-clicked as a volume [envelope](/use/cutting/#envelopes) is.
+
+Once a composition has been edited in the Audio timeline, its Audio layers fold away in the
+Timeline under a [Sound mix](/panels/timeline/#sound-mix) row.
 
 ## Audio streams
 
@@ -52,11 +120,12 @@ The commands appear when the file has more than one stream.
 
 | Command | What it does |
 | --- | --- |
-| **Audio streams** | Lists the file's streams. The layer plays the ticked ones, mixed. With several layers or clips selected, every one takes the ticks, as one undo step. |
+| **Audio streams** | Lists the file's streams by number, each with its name or its language where the file gives one. The layer plays the ticked ones, mixed, and one always stays ticked. With several layers or clips selected, every one takes the ticks, as one undo step. |
 | **Split audio streams** | Gives each stream a row of its own. |
 | **Merge audio streams** | Puts the streams back on one row, mixed. |
 
-**Split audio streams** and **Merge audio streams** are also in **Layer ▸ Audio**.
+**Split audio streams** and **Merge audio streams** are also in **Layer ▸ Audio**, on any
+layer. Where there is nothing to split or merge, the status line says so.
 
 - A split Footage layer keeps its picture and its first stream. Each other stream becomes
   an Audio layer directly below, with the same span, Volume and effects.
@@ -94,20 +163,52 @@ pointer.
 With **Settings ▸ Audio ▸ Scrub when dragging the playhead** on, a plain drag or click does
 the same.
 
+Scrubbing makes no sound during playback.
+
 ## Beat markers
 
 Lumit can read a composition's audio and place a **beat marker** on each detected beat.
 
-- **Composition ▸ Detect beats** runs the detection. A sound layer's own menu has it too,
-  and listens to that layer alone.
+- **Composition ▸ Detect beats** listens to the composition's mix and replaces its beat
+  markers. Other markers are kept. A sound layer's own menu has it too, and listens to that
+  layer alone.
 - **Composition ▸ Clear beat markers** removes all beat markers in the composition.
+- The **Beats** section of the [Audio panel](/panels/audio/#beats) sets what is listened
+  to, how keenly, over what range and at what tempo.
 
-The [Audio panel](/panels/audio/)'s **Beats** section runs the same detection with a
-source, a sensitivity, a range and a tempo.
+Detection runs in the background behind a progress card, and the status line says how many
+markers were placed and at what tempo. Where a tempo was found, the ruler numbers the bars,
+four beats to the bar.
+
+A composition with nothing sounding is **refused**, and the status line says so.
 
 :::note[Not built yet]
 Placing markers by tapping during playback.
 :::
+
+## Audio effects
+
+An audio effect is an entry in a layer's effect stack. **Effect ▸ Audio** adds one to the
+selected layer, and [Effect controls](/panels/effect-controls/) lists a layer's audio
+effects under an **Audio** heading at the foot of the stack. A clip can carry audio effects
+of its own, added in the [Audio timeline](/panels/audio/#a-clips-header).
+
+- A clip's audio effects run before its layer's, and both run before Volume and Pan.
+- On a Sequence layer the layer's audio effects process each clip separately.
+- On a Precomp layer they process the whole sound of the nested composition.
+
+The built-in ones each have a page under [Effects ▸ Audio](/effects/#audio):
+[Gain](/effects/audio/gain/), [Stereo width](/effects/audio/stereo-width/),
+[Parametric EQ](/effects/audio/parametric-eq/), [Graphic EQ](/effects/audio/graphic-eq/),
+[Compressor](/effects/audio/compressor/), [Limiter](/effects/audio/limiter/),
+[Gate](/effects/audio/gate/), [Distortion](/effects/audio/distortion/),
+[Delay](/effects/audio/delay/), [Reverb](/effects/audio/reverb/),
+[Chorus](/effects/audio/chorus/), [Phaser](/effects/audio/phaser/),
+[Tremolo](/effects/audio/tremolo/), [Vibrato](/effects/audio/vibrato/) and
+[Wah](/effects/audio/wah/).
+
+Installed CLAP and VST3 plugins are offered beside them. See
+[Audio plugins](/use/audio-plugins/).
 
 ## Repairing sound
 
@@ -134,5 +235,8 @@ line says *Sound could not keep up*, once a playback.
 
 - [Mixing](/use/mixing/)
 - [Audio, Mixer and Audio timeline](/panels/audio/)
+- [Audio plugins](/use/audio-plugins/)
+- [Mixing a voice over music](/tutorials/mixing-sound/)
+- [Cutting to the beat](/tutorials/cut-to-the-beat/)
 - [Markers](/use/markers/)
 - [Exporting](/use/export/)

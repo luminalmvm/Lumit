@@ -36,10 +36,14 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/icons.dart' show iconSize;
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import 'controls.dart';
+import 'screen_dropper.dart';
 
 /// A hue/saturation/value triple: `h` in [0, 360), `s` and `v` in [0, 1].
 typedef Hsv = (double h, double s, double v);
@@ -145,6 +149,22 @@ String formatHex(Color colour) {
       .toUpperCase();
 }
 
+/// Scene-linear light as a screen shows it: sRGB's curve, carried on past
+/// white and mirrored below black so an over-range channel keeps its place.
+double screenOf(double linear) {
+  final a = linear.abs();
+  final e = a <= 0.0031308 ? a * 12.92 : 1.055 * math.pow(a, 1 / 2.4) - 0.055;
+  return linear < 0 ? -e : e;
+}
+
+/// The inverse of [screenOf]: what a screen shows, back to scene-linear light.
+double linearOf(double screen) {
+  final a = screen.abs();
+  final l =
+      a <= 0.04045 ? a / 12.92 : math.pow((a + 0.055) / 1.055, 2.4).toDouble();
+  return screen < 0 ? -l : l;
+}
+
 /// The clipboard every colour well shares, an Effect controls row's included:
 /// a colour copied from one pastes exactly into any other.
 abstract final class ColourClipboard {
@@ -154,16 +174,19 @@ abstract final class ColourClipboard {
   /// What it put on the system clipboard, to tell whether it is still there.
   static String? _text;
 
-  static void copy(PickedColour colour) {
+  /// [linear] is a well holding scene-linear light, whose hex is the colour
+  /// as a screen shows it.
+  static void copy(PickedColour colour, {bool linear = false}) {
     _copied = colour;
     // The hex goes on the system clipboard as well, so the colour can be
     // pasted outside Lumit too.
-    _text = '#${formatHex(colour.clipped)}';
+    _text = '#${formatHex((linear ? colour.onScreen : colour).clipped)}';
     Clipboard.setData(ClipboardData(text: _text!));
   }
 
-  static void copyHex(PickedColour colour) =>
-      Clipboard.setData(ClipboardData(text: '#${formatHex(colour.clipped)}'));
+  static void copyHex(PickedColour colour, {bool linear = false}) =>
+      Clipboard.setData(ClipboardData(
+          text: '#${formatHex((linear ? colour.onScreen : colour).clipped)}'));
 
   static Future<String?> read() async =>
       (await Clipboard.getData(Clipboard.kTextPlain))?.text;
@@ -171,11 +194,17 @@ abstract final class ColourClipboard {
   /// What a paste gives from [clip], the system clipboard's text: the colour
   /// copied last while the clipboard still holds it, a hex, or the three or
   /// four numbers Copy value writes. Null for anything else.
-  static PickedColour? from(String? clip) {
+  ///
+  /// [linear] is a well holding scene-linear light: a hex is a colour as a
+  /// screen shows it, so it is carried back to linear for one.
+  static PickedColour? from(String? clip, {bool linear = false}) {
     final copied = _copied;
     if (copied != null && (clip == null || clip == _text)) return copied;
     if (clip == null) return null;
-    if (parseHex(clip) case final hex?) return PickedColour.of(hex);
+    if (parseHex(clip) case final hex?) {
+      final c = PickedColour.of(hex);
+      return linear ? c.inLinear : c;
+    }
     final n = numbersOnly(clip);
     return n == null || n.length < 3 || n.length > 4
         ? null
@@ -191,8 +220,10 @@ Future<void> showColourWellMenu(
   required PickedColour current,
   required ValueChanged<PickedColour> onPicked,
   PickedColour? resetTo,
+  bool linear = false,
 }) async {
-  final paste = ColourClipboard.from(await ColourClipboard.read());
+  final paste =
+      ColourClipboard.from(await ColourClipboard.read(), linear: linear);
   if (!context.mounted) return;
   showLumitPopup<void>(
     context: context,
@@ -225,11 +256,11 @@ Future<void> showColourWellMenu(
                 const MenuDivider(),
               ],
               row('copy', l10n.swatchCopyColour,
-                  () => ColourClipboard.copy(current)),
+                  () => ColourClipboard.copy(current, linear: linear)),
               row('paste', l10n.swatchPasteColour,
                   paste == null ? null : () => onPicked(paste)),
               row('hex', l10n.swatchCopyHex,
-                  () => ColourClipboard.copyHex(current)),
+                  () => ColourClipboard.copyHex(current, linear: linear)),
             ],
           ),
         ),
@@ -284,6 +315,14 @@ class PickedColour {
   /// True when a channel lies outside what a screen can show, so the swatch and
   /// the hex are both standing in for something bigger.
   bool get outOfGamut => r < 0 || g < 0 || b < 0 || r > 1 || g > 1 || b > 1;
+
+  /// This scene-linear colour as a screen shows it ([screenOf]).
+  PickedColour get onScreen =>
+      PickedColour(screenOf(r), screenOf(g), screenOf(b));
+
+  /// This colour as a screen shows it, back to scene-linear ([linearOf]).
+  PickedColour get inLinear =>
+      PickedColour(linearOf(r), linearOf(g), linearOf(b));
 
   /// The brightest channel, or 1 — the factor the square and the strip are read
   /// through, so an over-range colour still has a place on them.
@@ -392,8 +431,20 @@ Future<void> showColourPicker({
   double max = 1,
   List<Color> presets = const [],
   SwatchShelf? shelf,
+  bool linear = false,
 }) async {
   shelf ??= SwatchShelf.open();
+  // A scene-linear colour is chosen as the Viewer shows it: the picker works
+  // on the screen's values, and only what it hands back is carried to linear.
+  // So a hex typed, or a colour taken with the eyedropper, is the colour seen.
+  if (linear) {
+    final commit = onCommit, preview = onPreview ?? onCommit;
+    initial = initial.onScreen;
+    onCommit = (p) => commit(p.inLinear);
+    onPreview = (p) => preview(p.inLinear);
+    min = screenOf(min);
+    max = screenOf(max);
+  }
   // The workspace keeps the recent colours. A host with no workspace above
   // it, a bare test, has no row of them.
   Workspace? workspace;
@@ -404,6 +455,9 @@ Future<void> showColourPicker({
     context: context,
     position: position,
     builder: (close) => FloatSurface(
+      // No shadow: the eyedropper reads the screen right beside the picker,
+      // and a shadow there would darken the colour it takes.
+      shadow: false,
       // An explicit inner width bounds the stretched column — a float in the
       // overlay has unbounded width, which otherwise crashes on layout
       // (the BareDropdown note in controls.dart).
@@ -421,6 +475,7 @@ Future<void> showColourPicker({
           scale: scale,
           min: min,
           max: max,
+          linear: linear,
           onPreview: onPreview ?? onCommit,
           onCommit: onCommit,
           onClose: () => close(null),
@@ -468,6 +523,11 @@ class ColourSwatchButton extends StatelessWidget {
   /// the colour's rows.
   final bool rowMenu;
 
+  /// The colour is scene-linear light: the chip and the picker show it as the
+  /// Viewer does ([showColourPicker]'s `linear`), and [colour] is read as
+  /// the linear numbers rather than as what to draw.
+  final bool linear;
+
   const ColourSwatchButton({
     super.key,
     required this.colour,
@@ -478,6 +538,7 @@ class ColourSwatchButton extends StatelessWidget {
     this.onPreview,
     this.resetTo,
     this.rowMenu = false,
+    this.linear = false,
   });
 
   @override
@@ -490,7 +551,8 @@ class ColourSwatchButton extends StatelessWidget {
           : (d) => showColourWellMenu(context, d.globalPosition,
               current: initial ?? PickedColour.of(colour),
               onPicked: onPicked,
-              resetTo: resetTo),
+              resetTo: resetTo,
+              linear: linear),
       onTap: () async {
         final box = context.findRenderObject();
         if (box is! RenderBox) return;
@@ -500,6 +562,7 @@ class ColourSwatchButton extends StatelessWidget {
           initial: initial ?? PickedColour.of(colour),
           scale: scale,
           max: max,
+          linear: linear,
           onPreview: onPreview,
           onCommit: onPicked,
         );
@@ -510,7 +573,9 @@ class ColourSwatchButton extends StatelessWidget {
           width: 28,
           height: 18,
           decoration: BoxDecoration(
-            color: colour,
+            color: linear
+                ? (initial ?? PickedColour.of(colour)).onScreen.clipped
+                : colour,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
             border: Border.all(color: swatchEdge(t, lit)),
           ),
@@ -539,6 +604,10 @@ class _ColourPickerBody extends StatefulWidget {
   final ColourScale scale;
   final double min, max;
 
+  /// The colour is scene-linear, held here as the screen shows it: the 0–1
+  /// numbers still read and take linear light, everything else the screen.
+  final bool linear;
+
   /// A tick of a drag: show it, do not record it.
   final ValueChanged<PickedColour> onPreview;
 
@@ -556,6 +625,7 @@ class _ColourPickerBody extends StatefulWidget {
     required this.scale,
     required this.min,
     required this.max,
+    required this.linear,
     required this.onPreview,
     required this.onCommit,
     required this.onClose,
@@ -687,7 +757,11 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
 
   /// One of the three channel numbers, in the scale being edited.
   void _setChannel(int index, double value, {required bool settled}) {
-    final v = widget.scale == ColourScale.bytes ? value / 255 : value;
+    final v = widget.scale == ColourScale.bytes
+        ? value / 255
+        : widget.linear
+            ? screenOf(value)
+            : value;
     _setColour(
       PickedColour(
         index == 0 ? v : _colour.r,
@@ -719,10 +793,12 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
   }
 
   /// What a channel field shows: bytes under the 8-bit scale, the value itself
-  /// under the unit one.
+  /// under the unit one, in linear light for a scene-linear colour.
   double _shown(double channel) => widget.scale == ColourScale.bytes
       ? (channel * 255).roundToDouble()
-      : channel;
+      : widget.linear
+          ? linearOf(channel)
+          : channel;
 
   @override
   Widget build(BuildContext context) {
@@ -784,6 +860,8 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
           children: [
             _beforeAndAfter(t),
             const Spacer(),
+            _dropper(t),
+            const SizedBox(width: 6),
             _hexField(t),
           ],
         ),
@@ -870,8 +948,8 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
             child: DragValueField(
               key: Key('colour-picker-$label'),
               value: _shown(channel),
-              min: bytes ? 0 : widget.min,
-              max: bytes ? 255 : widget.max,
+              min: bytes ? 0 : _shown(widget.min),
+              max: bytes ? 255 : _shown(widget.max),
               // A byte steps by one; a unit channel by a hundredth, so black to
               // white is a comfortable drag rather than a twitch.
               speed: bytes ? 1 : 0.01,
@@ -921,6 +999,39 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
               ),
             ),
           ],
+        ),
+      );
+
+  /// The eyedropper: a colour taken off anything in the window — the Viewer,
+  /// a panel, a swatch — by a click (widgets/screen_dropper.dart). What is
+  /// read is the colour on screen, which is what the picker works in, so it is
+  /// taken as it is: a scene-linear colour is carried back to linear light
+  /// only on its way out, and shows in the picture as the very colour it was
+  /// taken from.
+  Widget _dropper(LumitTheme t) => LumitTooltip(
+        message: l10n.tipSampleFromViewer,
+        child: GestureDetector(
+          key: const Key('colour-picker-dropper'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () async {
+            final picked = await pickColourOnScreen(context);
+            if (picked == null || !mounted) return;
+            _setColour(PickedColour.of(picked), settled: true);
+          },
+          child: HoverMark(
+            swells: true,
+            builder: (context, over) => SizedBox(
+              width: 18,
+              height: 18,
+              child: Center(
+                child: LumitIcon(
+                  LumitIcons.eyedropper,
+                  size: iconSize,
+                  colour: Color.lerp(t.textSecondary, t.textPrimary, over),
+                ),
+              ),
+            ),
+          ),
         ),
       );
 

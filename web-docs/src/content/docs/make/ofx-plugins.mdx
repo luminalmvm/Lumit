@@ -85,24 +85,70 @@ An effect with `ofx` in place of `shader` is an OFX plugin. The other fields are
 
 | Field | What it is |
 | --- | --- |
-| `ofx` | The `.ofx.bundle` folder, inside the extension. |
-| `plugin` | The plugin's OFX identifier, as its describe gives it. A project saves the effect as `ofx:<plugin>`. |
+| `ofx` | The `.ofx.bundle` folder, inside the extension. Its name ends `.ofx.bundle`. |
+| `plugin` | The plugin's OFX identifier, as its describe gives it, with no spaces. A project saves the effect as `ofx:<plugin>`. |
 | `interface` | Optional. An interface page, as for an LFX effect. |
 
 An entry with both `shader` and `ofx`, or neither, is refused. **Make a package** refuses a
 bundle with no library for the computer it runs on. A package can hold the libraries for
-all three systems.
+all three systems, in `Contents/Win64`, `Contents/MacOS` and `Contents/Linux-x86-64`. Two
+effects can name one bundle.
 
 ## What Lumit hosts
 
-Lumit is an OpenFX 1.4 host. Images are RGBA, 32-bit float. The contexts are filter,
-general, generator and transition. A plugin's parameters are its rows in Effect controls.
+Lumit is an OpenFX 1.4 host, and gives its name as `com.lumitlab.Lumit`. Images are RGBA,
+32-bit float, with their first row at the bottom. The contexts are filter, general,
+generator and transition, and a plugin that offers several is hosted in the first of those
+it offers.
+
+| Context | What the plugin is given |
+| --- | --- |
+| Filter, general | The layer's picture as `Source`. |
+| Transition | The layer's picture as `SourceFrom`, and a transparent `SourceTo`. |
+| Generator | No picture. |
+
+| Suite | Version |
+| --- | --- |
+| Property, Memory, Image effect, Parameter, Multi-thread | 1 |
+| Message | 1 and 2 |
+| Interact | 1. Every call answers that it is not supported. |
+
+Lumit tells a plugin it does not support tiles, several resolutions, clips of different
+depths or pixel aspects, setting the frame rate or fielding, sequential rendering, OpenGL
+rendering, overlays or custom parameter interacts. It supports reading a clip at other
+times.
+
+### Parameters
+
+A plugin's parameters are its rows in Effect controls, in the order of its pages and groups.
+
+| OFX parameter | Row |
+| --- | --- |
+| Double | A number, with the display range on its slider and the plugin's minimum and maximum as its limits. An angle is in degrees, a spatial double in composition pixels, and a normalised one a share of the frame. |
+| Integer | A whole number. |
+| Double 2D and 3D, Integer 2D and 3D | Two or three rows, `<name>_x`, `<name>_y` and `<name>_z`. |
+| Boolean | A checkbox. |
+| Choice | A menu of the plugin's options. |
+| RGB, RGBA | A colour. |
+| String, as a file or folder path | A file row. |
+| Push button | A button. |
+| Group, Page | A group of rows. |
+| Custom, parametric, and any other string | No row. |
+
+A plugin is told that Boolean parameters animate, and that choice, string, custom and
+parametric ones do not.
+
+### When it fails
 
 Each bundle runs in a process of its own. A render that fails, crashes or runs past its
-time limit, 10 seconds by default, is a strike. After three the plugin is switched off until
-Lumit restarts.
+time limit, 10 seconds by default, is a strike, and the frame comes back as it went in.
+After three in a row the plugin is switched off until Lumit restarts. A plugin has two
+minutes to describe itself, and two for the first frame in a fresh process.
 
 A plugin polls `abort` to stop a frame that is no longer wanted.
+
+A plugin Lumit cannot host is left out, and the reason is written to `plugin-scan.txt`. See
+[Plugins](/use/plugins/#where-lumit-looks).
 
 ## The graphics card
 

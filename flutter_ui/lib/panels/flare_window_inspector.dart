@@ -286,6 +286,7 @@ extension _Inspector on _FlareWindowState {
             alpha: 1, red: _srgb(c[0]), green: _srgb(c[1]), blue: _srgb(c[2])),
         initial: PickedColour(c[0], c[1], c[2]),
         scale: ColourScale.unit,
+        linear: true,
         max: 4,
         onPreview: (p) => write(
             [...colours]..[i] = [p.r, p.g, p.b],

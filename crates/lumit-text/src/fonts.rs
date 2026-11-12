@@ -23,9 +23,17 @@ use skrifa::{FontRef, MetadataProvider};
 type Bytes = Arc<dyn AsRef<[u8]> + Send + Sync>;
 
 /// One face, loaded and ready to shape and draw.
+#[derive(Clone)]
 pub(crate) struct Face {
     bytes: Bytes,
     index: u32,
+    /// The font at its default place, which every other place is built from.
+    base: harfrust::Font,
+    /// The named place the face is, for a face of a variable font.
+    instance: Option<usize>,
+    /// Where the face sits on each of the font's axes, in the font's own
+    /// numbers: its named place, moved by the layer's own axes.
+    place: Vec<([u8; 4], f32)>,
     /// The font where this face sits in a variable font's design space, which
     /// is what makes Bahnschrift's Bold a bold.
     pub(crate) shaper: harfrust::Font,
@@ -34,21 +42,191 @@ pub(crate) struct Face {
 impl Face {
     fn new(bytes: Bytes, index: u32, instance: Option<usize>) -> Option<Self> {
         let font = harfrust::Font::new(bytes.clone(), index)?;
-        let shaper = match instance {
-            Some(i) => font.instance_builder().named_instance(i).build(),
-            None => font,
-        };
-        Some(Self {
+        let mut face = Self {
             bytes,
             index,
-            shaper,
-        })
+            shaper: font.clone(),
+            base: font,
+            instance,
+            place: Vec::new(),
+        };
+        face.place = face.named_place();
+        face.shaper = face.varied(&[]);
+        Some(face)
     }
 
     /// The same font as the outlines and metrics read it.
     pub(crate) fn font(&self) -> Option<FontRef<'_>> {
         FontRef::from_index((*self.bytes).as_ref(), self.index).ok()
     }
+
+    /// The face's named place on every axis the font has.
+    fn named_place(&self) -> Vec<([u8; 4], f32)> {
+        let Some(font) = self.font() else {
+            return Vec::new();
+        };
+        let named = self
+            .instance
+            .and_then(|i| font.named_instances().get(i))
+            .map(|n| n.user_coords().collect::<Vec<f32>>());
+        font.axes()
+            .iter()
+            .enumerate()
+            .map(|(i, axis)| {
+                let value = named
+                    .as_ref()
+                    .and_then(|n| n.get(i).copied())
+                    .unwrap_or_else(|| axis.default_value());
+                (axis.tag().to_be_bytes(), value)
+            })
+            .collect()
+    }
+
+    /// The font at this face's place with `moves` on top, clamped to each
+    /// axis's own range by the font. An axis the font hasn't got is ignored.
+    pub(crate) fn varied(&self, moves: &[([u8; 4], f32)]) -> harfrust::Font {
+        let place: Vec<harfrust::font::Variation> = self
+            .place
+            .iter()
+            .map(|(tag, v)| {
+                let v = moves
+                    .iter()
+                    .rev()
+                    .find(|(t, _)| t == tag)
+                    .map_or(*v, |(_, m)| *m);
+                (harfrust::Tag::new(tag), v).into()
+            })
+            .collect();
+        if place.is_empty() {
+            return self.base.clone();
+        }
+        self.base.instance_builder().variations(place).build()
+    }
+
+    /// This face with the layer's own axes set, which is the place every
+    /// letter starts from.
+    pub(crate) fn with_axes(&self, axes: &[lumit_core::text::FontAxisValue]) -> Face {
+        #[allow(clippy::cast_possible_truncation)] // a place on an axis
+        let moves: Vec<([u8; 4], f32)> = axes
+            .iter()
+            .filter(|a| a.value.is_finite())
+            .filter_map(|a| Some((lumit_core::text::axis_tag(&a.tag)?, a.value as f32)))
+            .collect();
+        if moves.is_empty() || self.place.is_empty() {
+            return self.clone();
+        }
+        let ranges = self.ranges();
+        let place = self
+            .place
+            .iter()
+            .map(|(tag, v)| {
+                let v = moves
+                    .iter()
+                    .rev()
+                    .find(|(t, _)| t == tag)
+                    .map_or(*v, |(_, m)| *m);
+                let v = ranges
+                    .iter()
+                    .find(|(t, ..)| t == tag)
+                    .map_or(v, |(_, lo, hi)| v.clamp(*lo, *hi));
+                (*tag, v)
+            })
+            .collect();
+        let mut face = Face {
+            place,
+            ..self.clone()
+        };
+        face.shaper = face.varied(&[]);
+        face
+    }
+
+    /// Where the face sits on `tag`, or `None` for an axis the font hasn't got.
+    pub(crate) fn place_on(&self, tag: [u8; 4]) -> Option<f32> {
+        self.place.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v)
+    }
+
+    /// Each axis's tag and range.
+    fn ranges(&self) -> Vec<([u8; 4], f32, f32)> {
+        self.font().map_or_else(Vec::new, |font| {
+            font.axes()
+                .iter()
+                .map(|a| (a.tag().to_be_bytes(), a.min_value(), a.max_value()))
+                .collect()
+        })
+    }
+}
+
+/// One axis of a variable font, as the Text panel and an animator show it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontAxis {
+    /// The four-letter tag, such as `wght`.
+    pub tag: String,
+    /// What the font calls it, such as "Weight".
+    pub name: String,
+    pub min: f64,
+    pub max: f64,
+    /// The font's own default place on it.
+    pub default: f64,
+    /// Where the face sits on it, which is what an unset axis reads as.
+    pub face: f64,
+    /// An axis the font asks not to be shown, kept for the animators.
+    pub hidden: bool,
+}
+
+/// An axis tag as text, spaces at its end trimmed.
+fn tag_text(tag: [u8; 4]) -> String {
+    String::from_utf8_lossy(&tag).trim_end().to_owned()
+}
+
+/// The axes of the face a layer names: empty for a font that doesn't vary.
+#[must_use]
+pub fn axes(family: &str, face_name: &str) -> Vec<FontAxis> {
+    let face = face(family, face_name);
+    let Some(font) = face.font() else {
+        return Vec::new();
+    };
+    font.axes()
+        .iter()
+        .map(|axis| {
+            let tag = axis.tag().to_be_bytes();
+            let name = name(&font, axis.name_id()).unwrap_or_else(|| registered_name(tag));
+            FontAxis {
+                tag: tag_text(tag),
+                name,
+                min: f64::from(axis.min_value()),
+                max: f64::from(axis.max_value()),
+                default: f64::from(axis.default_value()),
+                face: f64::from(face.place_on(tag).unwrap_or_else(|| axis.default_value())),
+                hidden: axis.is_hidden(),
+            }
+        })
+        .collect()
+}
+
+/// What OpenType calls a registered axis, for a font that doesn't name it.
+fn registered_name(tag: [u8; 4]) -> String {
+    match &tag {
+        b"wght" => "Weight".to_owned(),
+        b"wdth" => "Width".to_owned(),
+        b"slnt" => "Slant".to_owned(),
+        b"ital" => "Italic".to_owned(),
+        b"opsz" => "Optical size".to_owned(),
+        _ => tag_text(tag),
+    }
+}
+
+/// Whether the family has a font with axes of its own to move. Read from
+/// the lists the system and the registered files keep, so no font file is
+/// opened.
+#[must_use]
+pub fn is_variable(family: &str) -> bool {
+    fonts_named(family).iter().any(|f| !f.axes().is_empty())
+}
+
+/// The installed families that vary, for the Text panel's filter.
+#[must_use]
+pub fn variable_families() -> Vec<String> {
+    families().into_iter().filter(|f| is_variable(f)).collect()
 }
 
 /// The built-in face, the one every layer drew with before there was a choice.

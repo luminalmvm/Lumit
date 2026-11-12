@@ -15,7 +15,8 @@
 use lumit_core::anim::Animation;
 use lumit_core::model::TextDocument;
 use lumit_core::shape::modifier::ShapeEntry;
-use lumit_core::text::{GlyphXform, SelectorBasis, SelectorShape, TextAlign};
+use lumit_core::text::selector::{SelectorBasis, SelectorShape};
+use lumit_core::text::{GlyphXform, TextAlign};
 use lumit_text::TextBlock;
 use serde_json::{json, Map, Value};
 

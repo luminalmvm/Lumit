@@ -374,6 +374,8 @@ BridgeTextDocument _decodeLook(Map<String, dynamic> j) {
   final style = BridgeTextStyle(
     family: s['family'] is String ? s['family'] as String : p.family,
     face: s['face'] is String ? s['face'] as String : p.face,
+    axes: p.axes,
+    axisSpacing: p.axisSpacing,
     leading: (s['leading'] as num?)?.toDouble(),
     kerning: named(BridgeKerning.values, s['kerning'], p.kerning),
     tracking: number(s, 'tracking', p.tracking),

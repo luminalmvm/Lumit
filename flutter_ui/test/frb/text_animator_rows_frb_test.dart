@@ -15,6 +15,7 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
 
@@ -33,6 +34,16 @@ void main() {
     // Deliberately without turning the layer cards on: the Animators section
     // has to be reachable with the panel as it ships, unlike Source
     // and Transform which move to the Timeline's fold.
+    /// Add animator ▸ Blank animator: the button opens the menu every Add
+    /// animator has.
+    Future<void> addBlank(WidgetTester tester) async {
+      await tester.tap(find.byKey(const ValueKey('text-animator-add')));
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('text-animate-blank')));
+    }
+
     Future<void> mount(WidgetTester tester, dynamic p) async {
       await tester.pumpWidget(hostPanel(
         child: const EffectControlsPanelFrb(),
@@ -65,7 +76,7 @@ void main() {
       expect(find.text('Animators'), findsOneWidget);
       expect(text.getText()!.animators, isEmpty);
 
-      await tester.tap(find.byKey(const ValueKey('text-animator-add')));
+      await addBlank(tester);
       await tester.pump();
       expect(text.getText()!.animators.length, 1);
       // A fresh animator changes nothing until a number is moved, and its
@@ -104,7 +115,7 @@ void main() {
       final text = p.comp.addTextLayer();
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
-      await tester.tap(find.byKey(const ValueKey('text-animator-add')));
+      await addBlank(tester);
       await tester.pump();
 
       final entry = p.comp.getModel().layers.single;
@@ -124,7 +135,8 @@ void main() {
       );
       expect(
         rows.whereType<FoldAnimatorValueRow>().map((r) => r.value).toSet(),
-        TextAnimatorValue.values.toSet().difference(solidAnimatorValues),
+        textAnimatorValuesOf(entry.info.textAnimators.single, solid: false)
+            .toSet(),
         reason: 'every number an animator has needs a row to key it on',
       );
 
@@ -143,7 +155,105 @@ void main() {
       expect(text.getText()!.animators.first.selector.offset,
           const BridgeScalar.static_(40));
     });
+
+    testWidgets(
+        'a Proximity selector measures from a target layer and has its own rows',
+        (tester) async {
+      final p = withComp();
+      final target = p.comp.addNullLayer();
+      final text = p.comp.addTextLayer();
+      p.uiState.selectedLayer.value = text;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await addBlank(tester);
+      await tester.pump();
+      expect(
+          find.byKey(const ValueKey('text-animator-kind-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('range-start-0-0')), findsOneWidget);
+
+      // Switched to Proximity, aimed at the null.
+      final fresh = text.getText()!.animators.single;
+      writeTextAnimatorDocument(
+        text,
+        animatorWith(fresh,
+            selector: selectorWith(fresh.selector,
+                kind: BridgeSelectorKind.proximity,
+                target: target.internallayerId)),
+      );
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('range-start-0-0')), findsNothing,
+          reason: 'a Proximity selector has no range');
+      expect(find.byKey(const ValueKey('range-radius-0-0')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('text-animator-target-0')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('text-animator-invert-0')));
+      await tester.pump();
+      final selector = text.getText()!.animators.single.selector;
+      expect(selector.invert, isTrue);
+      expect(selector.target, target.internallayerId);
+      expect(selector.kind, BridgeSelectorKind.proximity);
+
+      // The fold lists the radius instead of the range.
+      final entry = p.comp
+          .getModel()
+          .layers
+          .firstWhere((e) => e.layer.internallayerId == text.internallayerId);
+      final values =
+          textAnimatorValuesOf(entry.info.textAnimators.single, solid: false);
+      expect(values, contains(TextAnimatorValue.radius));
+      expect(values, isNot(contains(TextAnimatorValue.rangeStart)));
+    });
+
+    testWidgets('a font axis on an animator is a keyable row of its own',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      p.uiState.selectedLayer.value = text;
+      await mount(tester, p);
+      await addBlank(tester);
+      await tester.pump();
+      final fresh = text.getText()!.animators.single;
+      writeTextAnimatorDocument(
+        text,
+        animatorWith(fresh, axes: const [
+          BridgeAnimatorAxis(tag: 'wght', value: BridgeScalar.static_(800)),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('anim-axis-wght-0-0')), findsOneWidget);
+
+      // The fold and the graph see it as one more number.
+      final animator = text.getText()!.animators.single;
+      expect(textAnimatorValuesOf(animator, solid: false),
+          contains(TextAnimatorValue.axis0));
+      expect(textAnimatorScalarOf(animator, TextAnimatorValue.axis0),
+          const BridgeScalar.static_(800));
+      expect(textAnimatorValueLabel(TextAnimatorValue.axis0, animator),
+          'Font axis Weight');
+      writeTextAnimatorScalar(
+        layer: text,
+        index: 0,
+        value: TextAnimatorValue.axis0,
+        to: const BridgeScalar.static_(300),
+      );
+      expect(text.getText()!.animators.single.axes.single.value,
+          const BridgeScalar.static_(300));
+
+      await tester.tap(find.byKey(const ValueKey('anim-axis-remove-wght-0')));
+      await tester.pump();
+      expect(text.getText()!.animators.single.axes, isEmpty);
+    });
   });
+}
+
+/// Write [animator] as [layer]'s only animator, the rest of its document as
+/// it is.
+void writeTextAnimatorDocument(
+    LayerReference layer, BridgeTextAnimator animator) {
+  final document = layer.getText()!;
+  layer.setText(document: document.copyWith(animators: [animator]));
 }
 
 /// Reads the same way the panel's picker does, so the assertion above does not

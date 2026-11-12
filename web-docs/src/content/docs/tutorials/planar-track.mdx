@@ -1,0 +1,44 @@
+---
+title: Putting a picture on a tracked surface
+description: Follow a screen through a shot with Planar track, and pin another layer to it.
+sidebar:
+  order: 8
+---
+
+[Planar track](/effects/utility/planar-track/) follows one flat surface through a shot and
+writes its movement onto another layer as a [Corner pin](/effects/distortion/corner-pin/).
+
+The composition has the shot on one Footage layer and the picture to put on the surface on
+a layer above it.
+
+**1. Add the effect.** Select the shot's layer and choose **Effect ▸ Utility ▸ Planar
+track**. Leave **Follow** on **Surface**.
+
+**2. Go to the footage's first frame.** The corners are placed there, and every later frame
+is measured against it.
+
+**3. Place the four corners.** Press the dropper, **Pick**, on the **Upper left** row, then
+press on that corner of the surface in the Viewer and release. Do the same for **Upper
+right**, **Lower left** and **Lower right**. The Viewer marks each corner while the effect
+is selected, and the Selection tool drags a mark.
+
+**4. Mask what crosses the surface.** Draw a [mask](/use/masks/) on the shot's layer round
+anything that passes in front. With **Use masks** on, the layer's masks are left out of the
+track.
+
+**5. Analyse.** Press **Analyse**. The status counts the frames, then reads *Tracked over*
+and the number of frames. A bar above it shows how much of the footage was followed.
+
+**6. Name the layer to pin.** Set **Pin layer** to the picture's layer.
+
+**7. Create the pin.** Press **Create corner pin**. The picture's layer gains a Corner pin
+with a keyframe on every frame.
+
+A status of *Tracked 180 of 400 frames* means the surface could not be followed past that
+frame. *What is inside the shape is not one flat surface* is a refusal, and nothing was
+tracked.
+
+## Related
+
+- [Tracking](/use/tracking/)
+- [Corner pin](/effects/distortion/corner-pin/)

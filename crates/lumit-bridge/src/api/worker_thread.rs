@@ -4651,7 +4651,7 @@ fn apply_text_preview(
         // Keys the seam cannot read are a preview nobody can draw, so the
         // layer keeps the document it has rather than the frame failing.
         if let Ok(mut written) = crate::api::assets::text_document_of(document, offset) {
-            let shift = crate::api::assets::restyle_shift(existing, &written);
+            let shift = crate::api::assets::style::restyle_shift(existing, &written);
             // The preview leaves captions as they are, as the committed write does.
             written.captions = existing.captions.clone();
             *existing = written;

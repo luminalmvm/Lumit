@@ -387,6 +387,52 @@ pub fn driven_volume_db(
     }
 }
 
+/// What every driver wired onto the layer's **Source** box hands its socket at
+/// layer time `lt`, by port: a Text layer's animator numbers
+/// (`crate::text::ports::TEXT_PORT_PREFIX`). A wire that yields no number is left
+/// out, so its number keeps its own keys.
+#[must_use]
+pub fn driven_source_params(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+) -> Vec<(String, f64)> {
+    let ev = Eval {
+        graph,
+        context,
+        audio,
+        projection: points::Projection::FLAT,
+        budget: Cell::new(EVAL_BUDGET),
+        streams: RefCell::new(Vec::new()),
+        arenas: RefCell::new(ArenaPool::default()),
+        cross: true,
+        stack: None,
+        clone: NO_CLONE,
+        point: None,
+        cloud: None,
+    };
+    let mut out = Vec::new();
+    for edge in &graph.edges {
+        let (
+            OutputRef::Driver { node, port },
+            InputRef::Param {
+                node: NodeRef::Source,
+                port: socket,
+            },
+        ) = (&edge.from, &edge.to)
+        else {
+            continue;
+        };
+        if let Some(Value::Float(v)) = ev.output(*node, port, lt, 0) {
+            if v.is_finite() {
+                out.push((socket.clone(), f64::from(v)));
+            }
+        }
+    }
+    out
+}
+
 /// What the wire into `effect`'s row `param` carries at layer time `lt`, or
 /// `None` when the row is unwired. Particulate's Trigger is read through
 /// this at each frame its bursts look back over, since a beat comes in on a
@@ -1444,6 +1490,30 @@ mod tests {
             .param(NodeRef::Effect(target.id), ParamId::new("radius"))
             .expect("the wire carries something")
             .as_f32()
+    }
+
+    /// **A driver moves a text animator's number** through the Source box: the
+    /// wire validates as a number socket, and its value comes back by port.
+    #[test]
+    fn a_wire_onto_a_text_animator_socket_hands_its_number() {
+        let mut remap = inst("remap");
+        set(&mut remap, "out_low", 700.0);
+        set(&mut remap, "out_high", 700.0);
+        let port = crate::text::ports::animator_port(0, "axis.wght");
+        let graph = LayerGraph {
+            edges: vec![edge(&remap, "value", NodeRef::Source, &port)],
+            nodes: vec![remap],
+            ..LayerGraph::default()
+        };
+        assert!(graph.validate(&[]).is_ok(), "{:?}", graph.validate(&[]));
+        let driven = driven_source_params(&graph, 0.0, ctx(), None);
+        assert_eq!(driven.len(), 1);
+        assert_eq!(driven[0].0, port);
+        assert!((driven[0].1 - 700.0).abs() < 1e-3, "{driven:?}");
+        assert_eq!(
+            crate::text::ports::parse_animator_port(&port),
+            Some((0, "axis.wght"))
+        );
     }
 
     /// The *Duck under* road: a wire onto the Layer out's Volume socket is

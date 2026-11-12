@@ -11,11 +11,15 @@ its root. It carries everything the folder does: the page and its effects.
 ## Making one
 
 **Settings ▸ Addons ▸ Extensions ▸ Make a package** takes the folder, checks it as an install
-would, and saves `<id>.lfx`. A package is held to the same limits as a folder. One holding a
-link, or a path outside its root, is refused.
+would, and saves `<id>.lfx` where you choose.
 
-An extension's effects travel in its package. **Make a package** checks them as an install
-would: the category, the `api`, the passes, and that each `shader` is inside the folder.
+- A package is held to the same limits as a folder: 4,096 files and 512 MB.
+- Links, and files and folders whose names start with a dot, are left out.
+- The effects are checked as an install would check them: the category, the `api`, the
+  passes, and that each `shader` and interface page is inside the folder.
+- An [OFX plugin's](/make/ofx-plugins/) bundle with no library for the computer making the
+  package is refused.
+- The package is read back as an install would read it before it is kept.
 
 ## Installing one
 
@@ -24,7 +28,12 @@ Addons ▸ Extensions ▸ Install a package**. Double-clicking a package while L
 sends it to the open Lumit.
 
 The install window lists what the package adds, as **Add effects: Blinds**, and what it
-asks to be allowed.
+asks to be allowed. One carrying an OFX plugin says **Run its own code on this computer**.
+**Installs to** shows the folder it goes in, and **Change…** picks another, which Lumit
+then looks in as well. One extension installs at a time.
+
+A package is refused when it holds a link, a file that would land outside its folder, two
+files whose names differ only in case, or a name Windows cannot write.
 
 Installing a package again replaces the extension and reads its shaders again, and an open
 project draws with the new ones at once.
@@ -34,16 +43,25 @@ alone and keeps every value. The effect's heading names the extension to install
 
 ## Looks
 
-Looks are not extensions. A colour scheme travels as its `.lumtheme` file, read by
-**Settings ▸ Appearance ▸ Your themes ▸ Import…**. A style travels as one `.lumstyle` file,
-which **Your styles ▸ Make a package** makes with its pictures, icons and fonts, and installs
-with a double-click, a drop on the window or **Your styles ▸ Import…**. See
-[Sharing](/make/themes/#sharing). Icons are SVG files put in the **Custom icons** folder.
+Looks are not extensions. A colour scheme travels as its `.lumtheme` file, taken in by a
+double-click or **Settings ▸ Appearance ▸ Your themes ▸ Import…**. A style travels as one
+`.lumstyle` file, which **Your styles ▸ Make a package** makes with its pictures, icons and
+fonts, and installs with a double-click, a drop on the window or **Your styles ▸ Import…**.
+See [Sharing](/make/themes/#sharing). Icons are SVG files put in the **Custom icons** folder.
+
+## Scripts
+
+A script is one `.js` or `.jsx` file, put in the Scripts folder. See
+[Sharing a script](/make/scripts/#sharing-a-script).
 
 ## Without a package
 
 An extension installer of the author's own copies the folder into a folder Lumit looks in.
 See [Where extensions are found](/make/lfx-effects/#where-extensions-are-found).
+
+:::note[Not built yet]
+A catalogue of extensions, styles or scripts in Lumit. Each is shared as a file.
+:::
 
 ## Related
 

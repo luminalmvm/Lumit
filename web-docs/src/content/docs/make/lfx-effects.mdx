@@ -77,6 +77,10 @@ tape/
     deck.js
 ```
 
+The LFX effects that come with Lumit are in the repository at
+[`crates/lumit-extensions/builtin`](https://github.com/luminalmvm/Lumit/tree/main/crates/lumit-extensions/builtin).
+An installed extension with the id of one of them takes its place.
+
 ## The manifest
 
 An extension lists its effects under `effects`. `entry` is optional, so an extension can
@@ -107,13 +111,13 @@ hold effects, a panel, or both. The other fields are as in
 | Field | What it is |
 | --- | --- |
 | `id` | Lower-case letters, digits and hyphens, unique in the extension. A project saves the effect as `lfx:<extension id>/<effect id>`. |
-| `name` | The effect's name in the Effects menu and Effect controls. |
-| `category` | `Blur & sharpen`, `Colour`, `Distortion`, `Generate`, `Stylise`, `Temporal`, `Transition` or `Utility`. |
+| `name` | The effect's name in the Effects menu and Effect controls, at most 64 characters. |
+| `category` | `Blur & sharpen`, `Colour`, `Distortion`, `Generate`, `Stylise`, `Temporal`, `Transition` or `Utility`, in any case. |
 | `version` | A whole number, raised when the pixels change. |
 | `api` | The shader contract, `1`. |
-| `shader` | The `.wgsl` file, inside the folder. |
-| `passes` | Optional. Up to 8, each `{name, scale}`, drawn in order. `scale` is `1`, `0.5` or `0.25`, and the last pass is `1`. With none, there is one pass called `shade`. |
-| `input` | Optional. `{label, kind}`: a second picture, as a layer row called `label`. `kind` is `image` or `depth`. A `depth` input is a Depth socket in the node graph. |
+| `shader` | The `.wgsl` file, inside the folder, at most 1 MB. |
+| `passes` | Optional. Up to 8, each `{name, scale}`, drawn in order. A `name` starts with a lower-case letter and goes on in lower-case letters, digits and `_`, and no two are the same. `scale` is `1`, `0.5` or `0.25`, `1` when left out, and the last pass is `1`. With none, there is one pass called `shade`. |
+| `input` | Optional. `{label, kind}`: a second picture, as a layer row called `label`, at most 64 characters. `kind` is `image` or `depth`. A `depth` input is a Depth socket in the node graph. |
 | `backdrop` | Optional, `false` when left out. `true` runs the effect over the composite of everything below, even on a layer with a picture of its own. That layer is drawn as an adjustment layer, covering the whole frame, and every other effect on it works on the composite too. Its own picture, placed as it sits in the composition, is the second input wherever the `input` row names no other layer. |
 | `interface` | Optional. `{entry, width, height}`: the interface page, and the panel's opening size in pixels, 100 to 4096 each way. |
 
@@ -129,9 +133,10 @@ fn bleed(uv: vec2<f32>) -> vec4<f32> { ... }
 fn shade(uv: vec2<f32>) -> vec4<f32> { ... }
 ```
 
-`uv` runs from 0 to 1 across the frame, whatever size the pass is drawn at. A function
-returns a premultiplied, scene-linear colour. The last pass is the effect's result, mixed
-with its input by the **Mix** row.
+`uv` runs from 0 to 1 across the frame, whatever size the pass is drawn at. On a box in a
+node graph whose picture reaches past the frame, it runs below 0 and above 1 there. A
+function returns a premultiplied, scene-linear colour. The last pass is the effect's result,
+mixed with its input by the **Mix** row. A channel that is not a number is drawn as 0.
 
 | Name | What it is |
 | --- | --- |
@@ -146,10 +151,12 @@ with its input by the **Mix** row.
 | `lumit.time` | The layer's time in seconds. |
 | `lumit.seed` | A number of the instance's own, fixed for its life. |
 | `lumit.comp_scale` | Frame pixels per composition pixel: 1 at Full, 0.5 at Half. |
+| `lumit.input2_on` | 1 when the second input gives a picture, 0 when it does not. |
 
 `lumit.time` and `lumit.seed` are the only values that vary. A shader may not declare
 `@group` or `@binding`, the names `src`, `orig`, `dst`, `matte`, `input2`, `lumit` and `p`,
-or a name starting `lumit_` or `pass_`.
+or a name starting `lumit_` or `pass_`. A shader with no function for one of its passes is
+refused.
 
 ### Rows
 
@@ -173,17 +180,19 @@ struct Params {
 | `f32` | `@slider(lo, hi)` | A number, its slider from `lo` to `hi`. 0 to 1 without one. |
 | `f32` | `@bounded(lo, hi)` | A number held between `lo` and `hi`. |
 | `f32` | `@dial` | An angle in degrees. |
-| `i32` | `@counter(lo, hi)` | A whole number. |
-| `u32` | `@toggle` | A checkbox: 0 or 1. |
-| `u32` | `@choice("A", "B", …)` | A menu. The shader reads the option's index. |
+| `i32` | `@counter(lo, hi)` | A whole number, its slider from `lo` to `hi`. 0 to 100 without one. |
+| `u32` | `@toggle` | A checkbox: 0 or 1. `@default(true)` starts it ticked. |
+| `u32` | `@choice("A", "B", …)` | A menu. The shader reads the option's index. `@default` takes an option's text or its index. |
 | `u32` | `@seed` | A seed. |
 | `u32` | none | A whole number from 0. |
-| `vec4<f32>` | | A colour. `@default(r, g, b, a)`. |
-| `vec2<f32>` | | A point: two rows, `<field>_x` and `<field>_y`, in pixels. |
+| `vec4<f32>` | | A colour. `@default(r, g, b, a)`, white without one. |
+| `vec2<f32>` | | A point: two rows, `<field>_x` and `<field>_y`, in pixels. `@default(x, y)`. |
 
-`@default(v)` is the starting value, and `@unit(px)`, `@unit(deg)` or `@unit(s)` the unit.
-The rest of the comment is the label, or the field's name when there is none. A
-`vec3<f32>` field is refused. An annotation that cannot be read loses its own row only.
+`@default(v)` is the starting value, 0 without one, and `@unit(px)`, `@unit(deg)` or
+`@unit(s)` the unit. The rest of the comment is the label, or the field's name when there
+is none. A field is `f32`, `i32`, `u32`, `vec2<f32>` or `vec4<f32>`. A `vec3<f32>` field,
+a field of another type, and two rows that would share an id are refused. An annotation
+that cannot be read loses its own row only.
 
 `@enabled_if(…)` greys a field's rows in Effect controls. Its terms are `input` and
 `!input`, whether the second input gives a picture, and `field=N` and `field!=N`, a choice
@@ -256,14 +265,14 @@ lumit.on("effect.changed", ({ values }) => redraw(values));
 
 ## Making a package
 
-A package is one `.lfx` file: the extension's folder as a zip, with `extension.json` at its
-root. **Settings ▸ Addons ▸ Extensions ▸ Make a package** takes the folder, checks it as an
-install would, and saves `<id>.lfx`. A package is held to the same limits as a folder. One
-holding a link, or a path outside its root, is refused.
+**Settings ▸ Addons ▸ Extensions ▸ Make a package** takes the extension's folder and saves
+it as one `.lfx` file. Making one reads every installed extension's shaders again, as
+opening **Settings ▸ Addons** does. See [Package and share](/make/share/).
 
 ## Where extensions are found
 
-In this order. Of two with the same id, the first is used.
+In this order. Of two with the same id, the first is used. An extension is found only in a
+folder named after its `id`.
 
 | Folder | Where |
 | --- | --- |

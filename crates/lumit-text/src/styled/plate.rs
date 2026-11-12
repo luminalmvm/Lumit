@@ -58,17 +58,19 @@ pub(super) fn draw(
     laid: &Laid,
     origin: [f32; 2],
     xforms: &[GlyphXform],
+    zoom: f32,
 ) {
     let style = block.style;
     let pad = finite(style.plate_padding).max(0.0) * laid.shrink;
-    let radius = finite(style.plate_radius).max(0.0) * laid.shrink;
-    // A line's box, from its carets and the font's ascent and descent.
+    let radius = finite(style.plate_radius).max(0.0) * laid.shrink * zoom;
+    // A line's box, from its carets and the font's ascent and descent. The
+    // raster is `zoom` of its pixels to each of the layer's own.
     let line_box = |baseline: f32, (left, right): (f32, f32)| {
         [
-            origin[0] + left - pad,
-            origin[1] + baseline - laid.ascent - pad,
-            origin[0] + right + pad,
-            origin[1] + baseline + laid.descent + pad,
+            (origin[0] + left - pad) * zoom,
+            (origin[1] + baseline - laid.ascent - pad) * zoom,
+            (origin[0] + right + pad) * zoom,
+            (origin[1] + baseline + laid.descent + pad) * zoom,
         ]
     };
 

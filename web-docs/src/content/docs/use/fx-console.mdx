@@ -5,15 +5,13 @@ sidebar:
   order: 9.25
 ---
 
-Press **Ctrl+Space**, **Cmd+Space** on macOS, and the effects console opens at the pointer:
-a search row, a strip of categories, the matching rows, and a line saying what choosing a
-row does.
+Press `Ctrl+Space`, `Cmd+Space` on macOS, and the effects console opens at the pointer: a
+search row, a strip of groups and the matching rows.
 
 ## The search
 
-The search box reads **Search**, with the key that opened the
-console at its right. Typing narrows the list. The letters only have to appear in order, so
-`db` finds Directional blur.
+The search box reads **Search**, with the key that opened the console at its right. Typing
+narrows the list. The letters only have to appear in order, so `db` finds Directional blur.
 
 | Key | Does |
 | --- | --- |
@@ -21,42 +19,75 @@ console at its right. Typing narrows the list. The letters only have to appear i
 | **Enter** | Run the highlighted row |
 | **Escape** | Clear the search, then close the console |
 
-A click on a row runs it. A click outside closes the console. A right-click on an effect
-offers **Add to selected**, **Favourite** and **Manual page**.
+A click on a row runs it. A click outside closes the console.
 
 ## What it lists
 
-The strip narrows the list to **All** or to one group. Each row sits under its group's
-heading.
+Each row sits under its group's heading, in this order:
 
 | Rows | Choosing one |
 | --- | --- |
+| **Presets** | Applies the [saved preset](/use/presets/) to the selected layer |
 | Effects, by category | Applies the effect to the selected layer |
-| **Presets** | Applies the saved preset to the selected layer |
 | **Node graphs** | Applies the graph to the selected layer as the [Node graph](/effects/utility/node-graph/) effect |
 | **Compositions** | Opens the composition in the Timeline |
 
-Drivers are filed under **Controls**. Compositions come after every effect, preset and node
-graph that matches. The composition being edited is not offered under Node graphs.
+The strip narrows the list to **All** or to one group. With more groups than fit, the
+wheel scrolls it sideways. Right-clicking a heading in the list offers **All** and that
+group. Compositions have no place in the strip.
 
-The line at the foot reads **Enter applies to the selected layer**. With several layers
-selected, only the primary layer gets it. With none selected, nothing is applied.
+[Drivers](/use/nodes/#drivers) are filed under **Controls**, and one chosen here lands on
+the layer's node graph. The composition being edited is not offered under Node graphs.
+
+With several layers selected, only the primary layer gets the row. With none selected,
+nothing is applied.
+
+## A row's menu
+
+Right-click a row:
+
+| Item | What it does |
+| --- | --- |
+| **Add to selected** | Runs the row. |
+| **Favourite** | Stars an effect or a preset, as its star in [Effects & presets](/panels/effects-presets/#favourites) does. |
+| **Manual page** | Opens the effect's page in this manual. |
+| **Rename…**, **Move to**, **Delete** | On a saved preset of your own. See [Effects & presets](/panels/effects-presets/#groups). |
+| **Show in folder** | On any saved preset. |
 
 ## Over a graph
 
-With a graph canvas focused, **Ctrl+Space** opens the same console with the graph's own
-list; see [The node graph](/use/nodes/) and
-[Node graph compositions](/use/node-graphs/#the-console). The foot reads
-**Adds a box to the graph**, or with a wire in hand **Connects the dragged wire where it
-fits**.
+With a graph canvas focused, `Ctrl+Space` opens the same console with the graph's own
+list, and the chosen box lands at the pointer.
+
+| Canvas | The console lists |
+| --- | --- |
+| A [layer's graph](/use/nodes/) | The drivers, the effects, then the saved groups under **Group**. An effect joins the layer's stack. |
+| A [node graph composition](/use/node-graphs/#the-console) | The project's items as Read boxes, the four Input kinds, the effects, the Compositing boxes, the drivers, then the saved groups. |
+| A [shader graph](/use/shaders/#the-shader-graph) | The shader boxes, with no headings. |
+
+A wire dropped on empty canvas opens the console with the list narrowed to what that wire
+can join.
 
 ## The snapshot button
 
 The camera button, **Save snapshot**, saves the frame on screen as a PNG, in a `Snapshots`
 folder beside the saved project, or in `Pictures\Lumit` if the project has never been
-saved. It is greyed with no composition open.
+saved. The file is named after the composition and its frame number. It is greyed with no
+composition open, and over a graph. A snapshot is refused while an export is running.
+
+## The shortcut
+
+`Ctrl+Space` is **Open the FX console** in
+[Settings ▸ Shortcuts](/use/settings/#shortcuts), where it can be changed.
 
 ## Not the command palette
 
-**Ctrl+Shift+P** opens the command palette. The palette is *every command by name*;
-the console is effects, presets, node graphs and compositions.
+`Ctrl+Shift+P` opens the command palette. The palette is every command by name. The
+console is effects, presets, node graphs and compositions.
+
+## Related
+
+- [Effects](/use/effects/)
+- [Effects & presets](/panels/effects-presets/)
+- [The node graph](/use/nodes/)
+- [Workspaces and panels](/use/workspaces/)

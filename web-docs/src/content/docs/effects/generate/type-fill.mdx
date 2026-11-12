@@ -3,6 +3,8 @@ title: Type fill
 description: "Fills the frame with rows of words that stretch to fill the room a shape leaves them."
 ---
 
+Type fill is a **Generate** effect.
+
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
 
@@ -24,28 +26,61 @@ from a **Text layer**, which can be hidden.
 
 ## Parameters
 
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Text layer** | Layer | Any layer in the composition | None | - |
 | **Words** | Text | A short line of text | Flood\|the\|Grid | - |
+| **Repeat words** | Slider, whole numbers | 1 to 64; up to 256 | 1 | - |
+| **Direction** | Dropdown | Rows · Columns | Rows | - |
+| **Column widths** | Text | A short line of text | Empty | - |
+| **Column mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Region layer** | Layer | Any layer in the composition | None | - |
 | **Region placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Region from** | Dropdown | Alpha · Luminance | Alpha | - |
 | **Invert region** | Checkbox | On or off | Off | - |
 | **Cut words** | Checkbox | On or off | Off | - |
+| **Fit piece** | Checkbox | On or off | Off | - |
+| **Piece scale** | Slider | 0 to 100 | 95 | Per cent |
+| **Clip to region** | Checkbox | On or off | Off | - |
 | **Threshold** | Slider | 0 to 100 | 50 | Per cent |
-| **Rows** | Slider, whole numbers | 1 to 200 | 24 | - |
-| **Row gap** | Slider | 0 to 200 | 6 | Pixels at composition size |
-| **Word gap** | Slider | 0 to 200 | 8 | Pixels at composition size |
-| **Min width** | Slider | 0 to 1000 | 24 | Pixels at composition size |
+| **Rows** | Slider, whole numbers | 1 to 200; up to 400 | 24 | - |
+| **Grid height** | Slider | 0 to 4000; higher | 0 | Pixels at composition size |
+| **Row gap** | Slider | 0 to 200; higher | 6 | Pixels at composition size |
+| **Row open** | Slider | 0 to 100 | 100 | Per cent |
+| **Row stagger** | Slider | 0 to 100 | 0 | Per cent |
+| **Row shift** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Alternate rows** | Checkbox | On or off | Off | - |
+| **Word gap** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
+| **Min width** | Slider | 0 to 1000; higher | 24 | Pixels at composition size |
 | **Order** | Dropdown | In turn · Shift per row · Random | In turn | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
 
 ## What each control does
 
 - **Text layer**: the Text layer whose look the words take. Unset draws nothing.
 - **Words**: the words between bars, left to right in every row.
+- **Repeat words**: how many times Words is set one after another in every row.
+- **Direction**: **Rows** runs the words left to right in rows, one under another.
+  **Columns** stands them one under another in columns side by side, still upright. Rows,
+  Grid height and Row gap then count across the frame, and Row shift moves up and down.
+- **Column widths**: how wide each word's column is, as numbers in the order of Words,
+  between bars, dashes or spaces: `46|8|40`. They are shares of the width. A shorter list
+  goes round again. Left empty, each column is as wide as its word naturally is.
+- **Column mix**: how far the columns go from the words' own widths, at 0, to Column
+  widths, at 100.
 - **Region layer**: where the words may go. Unset, the whole frame is theirs.
 - **Region placement**: where the Region layer's picture sits on this one.
 - **Region from** and **Threshold**: a place is in the region where the Region layer is that
@@ -53,13 +88,29 @@ from a **Text layer**, which can be hidden.
 - **Invert region**: fill where the region is not.
 - **Cut words**: keep every word whole at its column's width and let the region cut it pixel by
   pixel, instead of stretching it into the room it has. Word gap no longer insets the edges.
-  Either way the region cuts the words pixel by pixel, so a tall row never spills a word over a
-  curved edge.
-- **Rows**, **Row gap**: how many rows fill the frame, and the room between them.
+  Either way the region cuts the words pixel by pixel.
+- **Fit piece**: give every piece the region leaves in a column its own whole word, fitted to
+  the piece's box across and down. Nothing is cut, and Cut words does nothing beside it.
+- **Piece scale**: how much of its piece's box a word fills, with Fit piece.
+- **Clip to region**: with Fit piece, cut the words where the region stops, pixel by pixel.
+- **Rows**: how many rows fill the frame from top to bottom.
+- **Grid height**: how tall the rows stand together, centred in the frame. 0 is the frame's
+  height.
+- **Row gap**: the room between one row and the next.
+- **Row open**: how open the rows are. Each row grows out of a flat line through its middle.
+- **Row stagger**: how far apart the rows open. At 0 they open together. Higher, the middle
+  row opens first and the outer rows last.
+- **Row shift**: how far every row slides sideways. The words wrap round.
+- **Alternate rows**: every other row slides the other way.
 - **Word gap**: the room between the words of a row, and at the region's edges.
-- **Min width**: a column whose stretches span less than this gets no word.
+- **Min width**: a column whose word would be narrower than this is left empty.
 - **Order**: each row's words in the same order, moved on one word a row, or shuffled per row by
   the **Seed**.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 Two Type fills with the same Region layer, one with Invert region on and its words in the other
 colour, fill both sides of a shape: black on white outside, white on black inside. With
@@ -67,6 +118,6 @@ colour, fill both sides of a shape: black on white outside, white on black insid
 
 ## Related
 
-- [Label points](/effects/generate/label-points/)
+- [Label points](/effects/points/label-points/)
 - [Text](/use/text/)
 - [Generate](/effects/#generate)

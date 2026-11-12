@@ -31,54 +31,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::anim::Property;
 
+pub mod ports;
+pub mod selector;
 mod spoken;
+#[cfg(test)]
+mod tests;
 
-/// What the selector counts: single letters, or whole words.
-///
-/// The difference is what a weight is *attached* to. Counting characters gives
-/// the letter-by-letter cascade; counting words moves each word as a unit, so
-/// the letters of one word arrive together.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum SelectorBasis {
-    #[default]
-    Characters,
-    Words,
-}
-
-/// How the weight falls off across the range.
-///
-/// `Square` is in-or-out: everything inside the range is moved the whole way,
-/// everything outside is left alone. `Ramp` rises evenly from nothing at the
-/// range's start to the whole way at its end, and stays there afterwards —
-/// which is what turns a cascade into a sweep. `Smooth` eases in and out of
-/// the ramp, and `Bounce` overshoots by about a tenth, then settles. Following
-/// spoken words, the shape is how each word changes over the selector's ease.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum SelectorShape {
-    #[default]
-    Square,
-    Ramp,
-    Smooth,
-    Bounce,
-}
-
-/// What the selector follows: its own range, or the words as they are said.
-///
-/// The spoken modes need the words' times, which only a caption hands in.
-/// Without them they reach no letter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum SelectorMode {
-    #[default]
-    Range,
-    /// The word being said.
-    Current,
-    /// Every word said so far.
-    Said,
-    /// The words still to come.
-    Unsaid,
-    /// The words picked out by hand.
-    Emphasis,
-}
+use selector::{Near, RangeSelector, SelectorBasis, SelectorKind, SelectorMode};
 
 /// One spoken word: which characters of the resolved text it is, and when it
 /// is said, in the layer's own seconds.
@@ -101,116 +60,6 @@ fn is_static_hundred(p: &Property) -> bool {
 
 fn is_static_zero(p: &Property) -> bool {
     matches!(p.animation, crate::anim::Animation::Static(v) if v == 0.0) && p.extra.is_empty()
-}
-
-/// Which stretch of the words an animator applies to, in **per cent of the
-/// run** — 0 is before the first unit, 100 is past the last.
-///
-/// Per cent rather than a letter count, so the same selector reads the same on
-/// a word and on a sentence, and so an expression-driven line whose length
-/// changes every frame does not need its keyframes rewriting. `offset` slides
-/// the whole `start`–`end` window along without disturbing its width, which is
-/// the one number a cascade is usually keyed on.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RangeSelector {
-    #[serde(
-        default = "Property::zero",
-        with = "crate::mask::still_or_keyed",
-        skip_serializing_if = "is_static_zero"
-    )]
-    pub start: Property,
-    #[serde(
-        default = "hundred",
-        with = "crate::mask::still_or_keyed",
-        skip_serializing_if = "is_static_hundred"
-    )]
-    pub end: Property,
-    #[serde(
-        default = "Property::zero",
-        with = "crate::mask::still_or_keyed",
-        skip_serializing_if = "is_static_zero"
-    )]
-    pub offset: Property,
-    #[serde(default, skip_serializing_if = "is_default_basis")]
-    pub basis: SelectorBasis,
-    #[serde(default, skip_serializing_if = "is_default_shape")]
-    pub shape: SelectorShape,
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub mode: SelectorMode,
-    /// Seconds a spoken word takes to change.
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub ease: f64,
-}
-
-fn is_default_basis(b: &SelectorBasis) -> bool {
-    *b == SelectorBasis::Characters
-}
-
-fn is_default_shape(s: &SelectorShape) -> bool {
-    *s == SelectorShape::Square
-}
-
-impl Default for RangeSelector {
-    fn default() -> Self {
-        Self {
-            start: Property::zero(),
-            end: hundred(),
-            offset: Property::zero(),
-            basis: SelectorBasis::default(),
-            shape: SelectorShape::default(),
-            mode: SelectorMode::default(),
-            ease: 0.0,
-        }
-    }
-}
-
-impl RangeSelector {
-    /// The weight this selector gives each **unit** of a run of `units`, at
-    /// layer time `lt`.
-    ///
-    /// A run with nothing in it has no weights, which is the empty line.
-    #[must_use]
-    pub fn weights_at(&self, units: usize, lt: f64) -> Vec<f32> {
-        if units == 0 {
-            return Vec::new();
-        }
-        let offset = self.offset.value_at(lt);
-        let (mut lo, mut hi) = (
-            (self.start.value_at(lt) + offset) / 100.0,
-            (self.end.value_at(lt) + offset) / 100.0,
-        );
-        // A range dragged inside out still means the stretch between its ends.
-        if lo > hi {
-            std::mem::swap(&mut lo, &mut hi);
-        }
-        let shape = self.shape;
-        (0..units)
-            .map(|i| {
-                // The middle of the unit's own share of the run, so the first
-                // and last units are treated the same way as the ones between
-                // them — a selector at 0 % has not reached the first letter's
-                // middle yet, and one at 100 % has passed the last letter's.
-                #[allow(clippy::cast_precision_loss)] // a run of 2^24 letters is not a line
-                let p = (i as f64 + 0.5) / units as f64;
-                weight(shape, lo, hi, p)
-            })
-            .collect()
-    }
-}
-
-/// One unit's weight for a range `lo`–`hi` at position `p`, all in 0–1.
-#[must_use]
-fn weight(shape: SelectorShape, lo: f64, hi: f64, p: f64) -> f32 {
-    let w = match shape {
-        SelectorShape::Square => f64::from(u8::from(p >= lo && p < hi)),
-        // A zero-width ramp is a step, which is the honest limit of the ramp
-        // rather than a division by nothing.
-        _ if hi <= lo => f64::from(u8::from(p >= hi)),
-        _ => spoken::curve(shape, (p - lo) / (hi - lo)),
-    };
-    #[allow(clippy::cast_possible_truncation)] // 0–1
-    let w = w as f32;
-    w
 }
 
 /// One animator group: a set of per-letter offsets and the range they apply to.
@@ -335,9 +184,62 @@ pub struct TextAnimator {
         skip_serializing_if = "is_static_box_blue"
     )]
     pub box_b: Property,
+    /// **Variable font axes**: where a reached letter is set on its font's
+    /// own axes, such as weight or width. Unlike the offsets above, each is a
+    /// place on the axis rather than an amount added, so a weight of 900 asks
+    /// for the font's heaviest whatever the layer is set at; a letter half
+    /// reached is set half way there. Only the axes the font has do anything,
+    /// and a layer moves at most [`MAX_ANIMATED_AXES`] of them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub axes: Vec<AnimatorAxis>,
+    /// **Which property groups the animator shows**, by name (`position`,
+    /// `rotation`, `scale`, `opacity`, `fill`, `position_z`, `rotation_x`,
+    /// `rotation_y`), in the order they were added, as After Effects' Add ▸
+    /// Property builds an animator up. Unset shows them all, which is every
+    /// animator made before there was a choice. A group whose numbers have
+    /// been moved shows whatever this says. It decides only what is listed:
+    /// every number counts whether listed or not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub properties: Option<Vec<String>>,
     /// Unknown fields from newer Lumit versions (docs/10 §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// How many font axes one Text layer's animators can move, as many as After
+/// Effects allows.
+pub const MAX_ANIMATED_AXES: usize = 8;
+
+/// One font axis an animator moves the letters along.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnimatorAxis {
+    /// The axis's four-letter tag, such as `wght`, `wdth`, `slnt` or a
+    /// font's own upper-case one.
+    pub tag: String,
+    /// The place on the axis, in the font's own numbers (a weight of 100 to
+    /// 900, a width in per cent, a slant in degrees).
+    #[serde(with = "crate::mask::still_or_keyed")]
+    pub value: Property,
+}
+
+/// A place the whole layer is set at on one of its font's axes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FontAxisValue {
+    pub tag: String,
+    pub value: f64,
+}
+
+/// An axis tag as the four bytes a font stores it as, spaces filling a short
+/// one. `None` for a tag that isn't one to four printable ASCII letters.
+#[must_use]
+pub fn axis_tag(tag: &str) -> Option<[u8; 4]> {
+    let bytes = tag.as_bytes();
+    if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| b.is_ascii_graphic()) {
+        return None;
+    }
+    let mut out = [b' '; 4];
+    out[..bytes.len()].copy_from_slice(bytes);
+    Some(out)
 }
 
 fn is_default_selector(s: &RangeSelector) -> bool {
@@ -398,6 +300,8 @@ impl TextAnimator {
             box_r: box_red(),
             box_g: box_green(),
             box_b: box_blue(),
+            axes: Vec::new(),
+            properties: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -431,6 +335,9 @@ pub struct GlyphXform {
     pub turn: [f32; 2],
     /// The box behind the letter: scene-linear colour and its alpha, 0–1.
     pub plate: [f32; 4],
+    /// Where the letter is set on its font's axes, relative to the layer's own
+    /// setting, which only the font knows.
+    pub axes: GlyphAxes,
 }
 
 impl Default for GlyphXform {
@@ -444,7 +351,62 @@ impl Default for GlyphXform {
             depth: 0.0,
             turn: [0.0, 0.0],
             plate: [0.0; 4],
+            axes: GlyphAxes::default(),
         }
+    }
+}
+
+/// A letter's places on up to [`MAX_ANIMATED_AXES`] font axes, each written
+/// as `keep × layer's value + add`.
+///
+/// The animators are worked out before the font is opened, so the layer's own
+/// place on an axis is not known yet. Each animator moves the letter from
+/// where it was towards its own value by its weight, and that is a straight
+/// line in the layer's value, so two numbers carry it: a letter no animator
+/// reaches keeps all of the layer's value and adds nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct GlyphAxes {
+    pub tags: [[u8; 4]; MAX_ANIMATED_AXES],
+    pub keep: [f32; MAX_ANIMATED_AXES],
+    pub add: [f32; MAX_ANIMATED_AXES],
+    pub len: u8,
+}
+
+impl GlyphAxes {
+    /// Move the letter towards `value` on `tag` by `weight`. A ninth axis is
+    /// dropped.
+    pub fn mix(&mut self, tag: [u8; 4], value: f32, weight: f32) {
+        let len = usize::from(self.len);
+        let i = match self.tags[..len].iter().position(|t| *t == tag) {
+            Some(i) => i,
+            None if len < MAX_ANIMATED_AXES => {
+                self.tags[len] = tag;
+                self.keep[len] = 1.0;
+                self.add[len] = 0.0;
+                self.len += 1;
+                len
+            }
+            None => return,
+        };
+        self.keep[i] *= 1.0 - weight;
+        self.add[i] = self.add[i] * (1.0 - weight) + weight * value;
+    }
+
+    /// Each axis this letter is moved on, and its place there given the
+    /// layer's value from `base`.
+    pub fn resolved<'a>(
+        &'a self,
+        base: &'a dyn Fn([u8; 4]) -> f32,
+    ) -> impl Iterator<Item = ([u8; 4], f32)> + 'a {
+        (0..usize::from(self.len)).map(move |i| {
+            let tag = self.tags[i];
+            (tag, self.keep[i] * base(tag) + self.add[i])
+        })
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
@@ -518,6 +480,19 @@ pub fn glyph_xforms(
     lt: f64,
     spoken: &[SpokenWord],
 ) -> Vec<GlyphXform> {
+    glyph_xforms_near(animators, text, lt, spoken, &Near::default())
+}
+
+/// [`glyph_xforms`] with the letters' places, which a Proximity selector
+/// needs.
+#[must_use]
+pub fn glyph_xforms_near(
+    animators: &[TextAnimator],
+    text: &str,
+    lt: f64,
+    spoken: &[SpokenWord],
+    near: &Near,
+) -> Vec<GlyphXform> {
     if animators.is_empty() {
         return Vec::new();
     }
@@ -529,12 +504,49 @@ pub fn glyph_xforms(
     for animator in animators {
         let weights: Vec<f32> = if animator.selector.mode == SelectorMode::Range {
             let (units, total) = unit_indices(text, animator.selector.basis);
-            let weights = animator.selector.weights_at(total, lt);
+            let weights = match animator.selector.kind {
+                SelectorKind::Range => animator.selector.weights_at(total, lt),
+                SelectorKind::Wiggly => animator.selector.wiggly_weights(total, lt),
+                SelectorKind::Proximity => {
+                    // A unit's middle is the mean of its characters' middles, so
+                    // a word is measured from its own middle.
+                    let mut sums = vec![([0.0f32; 2], 0u32); total];
+                    for (ch, unit) in units.iter().enumerate() {
+                        if let (Some(Some(m)), Some(sum)) =
+                            (near.middles.get(ch), sums.get_mut(*unit))
+                        {
+                            sum.0[0] += m[0];
+                            sum.0[1] += m[1];
+                            sum.1 += 1;
+                        }
+                    }
+                    #[allow(clippy::cast_precision_loss)] // a word is short
+                    let middles: Vec<Option<[f32; 2]>> = sums
+                        .iter()
+                        .map(|(s, n)| (*n > 0).then(|| [s[0] / *n as f32, s[1] / *n as f32]))
+                        .collect();
+                    animator.selector.proximity_weights(
+                        &middles,
+                        near.target(animator.selector.target),
+                        lt,
+                    )
+                }
+            };
             let at = |u: &usize| weights.get(*u).copied().unwrap_or(0.0);
             units.iter().map(at).collect()
         } else {
             spoken::weights(&animator.selector, count, lt, spoken)
         };
+        if weights.is_empty() {
+            continue;
+        }
+        #[allow(clippy::cast_possible_truncation)] // a place on a font's axis
+        let axes: Vec<([u8; 4], f32)> = animator
+            .axes
+            .iter()
+            .filter_map(|a| Some((axis_tag(&a.tag)?, a.value.value_at(lt) as f32)))
+            .filter(|(_, v)| v.is_finite())
+            .collect();
         #[allow(clippy::cast_possible_truncation)] // px, degrees and per cent, all f32 pictures
         let (px, py, rot, sx, sy, opacity, fr, fg, fb) = (
             animator.position_x.value_at(lt) as f32,
@@ -580,6 +592,9 @@ pub fn glyph_xforms(
             x.fill[0] += w * fr;
             x.fill[1] += w * fg;
             x.fill[2] += w * fb;
+            for (tag, value) in &axes {
+                x.axes.mix(*tag, *value, w);
+            }
             // A later animator's box lies over an earlier one's.
             let a = (w * box_opacity).clamp(0.0, 1.0);
             if a > 0.0 {
@@ -689,6 +704,25 @@ pub enum Script {
     Subscript,
 }
 
+/// How the letters make room for each other when an animator sets them wider
+/// or narrower on a font axis.
+///
+/// - `Adaptive`: each letter takes the room it now needs, and every line is
+///   lined up again the way its paragraph says, so centred words stay centred
+///   as they grow.
+/// - `PerCharacter`: every letter keeps the room it has at the layer's own
+///   setting and grows or shrinks about its middle there, so nothing else on
+///   the line moves (letters may touch).
+/// - `Default`: each letter takes the room it now needs and the line grows
+///   from its start, the way the font's own widths lay it out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum AxisSpacing {
+    #[default]
+    Adaptive,
+    PerCharacter,
+    Default,
+}
+
 /// Which side the lines of a block line up on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TextAlign {
@@ -721,6 +755,17 @@ pub struct TextStyle {
     /// family's regular face.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub face: String,
+    /// **A variable font's axes**, set for the whole layer on top of the face:
+    /// the face is a named place in the font's design space, and these move
+    /// the letters off it. An axis the font doesn't have is kept and does
+    /// nothing, so a project opened where the font is missing keeps its
+    /// settings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub axes: Vec<FontAxisValue>,
+    /// How the letters make room for each other while animators move them on
+    /// the font's axes, After Effects' Variable Font Spacing.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub axis_spacing: AxisSpacing,
     /// Baseline to baseline in px. Unset is auto, 120 % of the size.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub leading: Option<f64>,
@@ -794,6 +839,8 @@ impl Default for TextStyle {
         Self {
             family: String::new(),
             face: String::new(),
+            axes: Vec::new(),
+            axis_spacing: AxisSpacing::Adaptive,
             leading: None,
             kerning: Kerning::Off,
             tracking: 0.0,
@@ -909,12 +956,22 @@ pub fn install_words_box(measure: WordsBox) {
     let _ = WORDS_BOX.set(measure);
 }
 
+/// The middle of each character of a Text layer's words in the layer's own
+/// pixels, as they are drawn at layer time `lt`; `None` for one with no place.
+pub type GlyphMiddles =
+    fn(&crate::model::Layer, &crate::model::TextDocument, &str, f64) -> Vec<Option<[f32; 2]>>;
+
+static GLYPH_MIDDLES: std::sync::OnceLock<GlyphMiddles> = std::sync::OnceLock::new();
+
+/// Hand this crate the text engine's letter places, as [`install_words_box`]
+/// does its measuring. Until it is installed a Proximity selector reaches no
+/// letter.
+pub fn install_glyph_middles(middles: GlyphMiddles) {
+    let _ = GLYPH_MIDDLES.set(middles);
+}
+
 /// The box [`install_words_box`] measures, or `None` before it is installed.
 #[must_use]
 pub fn words_box(document: &crate::model::TextDocument, text: &str) -> Option<[f64; 4]> {
     WORDS_BOX.get()?(document, text)
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests;

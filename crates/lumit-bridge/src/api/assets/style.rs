@@ -1,12 +1,59 @@
 //! A text layer's style and paragraph on their way between the document and
-//! the panel.
+//! the panel, and where a restyle leaves the anchor.
 
 use flutter_rust_bridge::frb;
 
 use super::{
-    colour_of, linear_of, BridgeCaps, BridgeKerning, BridgeParagraphStyle, BridgeScript,
-    BridgeTextAlign, BridgeTextStyle, BridgeVerticalAlign,
+    colour_of, linear_of, BridgeAxisSpacing, BridgeCaps, BridgeFontAxisValue, BridgeKerning,
+    BridgeParagraphStyle, BridgeScript, BridgeTextAlign, BridgeTextStyle, BridgeVerticalAlign,
 };
+
+/// How far the anchor has to move for `after` to sit where `before` sat. The
+/// live preview and the committed write both ask here, so a value being
+/// dragged draws what letting go of it will write.
+#[frb(ignore)]
+pub(crate) fn restyle_shift(
+    before: &lumit_core::model::TextDocument,
+    after: &lumit_core::model::TextDocument,
+) -> (f64, f64) {
+    // A line on a path already has its room and its corner at the layer's
+    // origin, so nothing there moves.
+    let straight = before.path.is_none() && after.path.is_none();
+    let boxed = |d: &lumit_core::model::TextDocument| {
+        d.animators
+            .iter()
+            .any(lumit_core::text::TextAnimator::has_box)
+    };
+    // Retyping the words alone leaves the anchor where it is. A box an
+    // animator adds pads the block, so it moves the words too.
+    let restyled = before.size != after.size
+        || before.style != after.style
+        || before.paragraph != after.paragraph
+        || before.animators.is_empty() != after.animators.is_empty()
+        || boxed(before) != boxed(after);
+    if !(straight && restyled) {
+        return (0.0, 0.0);
+    }
+    let (was, now) = (reference_point(before), reference_point(after));
+    (now.0 - was.0, now.1 - was.1)
+}
+
+/// The point of a block that a restyle leaves where it is: the first
+/// baseline, at the side the lines line up on. In the layer's own pixels.
+fn reference_point(document: &lumit_core::model::TextDocument) -> (f64, f64) {
+    use lumit_core::text::TextAlign;
+    let l = lumit_text::layout(
+        &lumit_text::TextBlock::of(document, &document.text),
+        !document.animators.is_empty(),
+    );
+    let x = match document.paragraph.align {
+        TextAlign::Left => l.left,
+        TextAlign::Centre => (l.left + l.right) * 0.5,
+        TextAlign::Right => l.right,
+    };
+    let y = l.lines.first().map_or(0.0, |line| line.baseline);
+    (f64::from(x), f64::from(y))
+}
 
 #[frb(ignore)]
 pub(super) fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
@@ -14,6 +61,19 @@ pub(super) fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle
     BridgeTextStyle {
         family: style.family.clone(),
         face: style.face.clone(),
+        axes: style
+            .axes
+            .iter()
+            .map(|a| BridgeFontAxisValue {
+                tag: a.tag.clone(),
+                value: a.value,
+            })
+            .collect(),
+        axis_spacing: match style.axis_spacing {
+            lumit_core::text::AxisSpacing::Adaptive => BridgeAxisSpacing::Adaptive,
+            lumit_core::text::AxisSpacing::PerCharacter => BridgeAxisSpacing::PerCharacter,
+            lumit_core::text::AxisSpacing::Default => BridgeAxisSpacing::Default,
+        },
         leading: style.leading,
         kerning: match style.kerning {
             Kerning::Off => BridgeKerning::Off,
@@ -57,6 +117,20 @@ pub(super) fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
     lumit_core::text::TextStyle {
         family: style.family,
         face: style.face,
+        axes: style
+            .axes
+            .into_iter()
+            .filter(|a| a.value.is_finite() && lumit_core::text::axis_tag(&a.tag).is_some())
+            .map(|a| lumit_core::text::FontAxisValue {
+                tag: a.tag,
+                value: a.value,
+            })
+            .collect(),
+        axis_spacing: match style.axis_spacing {
+            BridgeAxisSpacing::Adaptive => lumit_core::text::AxisSpacing::Adaptive,
+            BridgeAxisSpacing::PerCharacter => lumit_core::text::AxisSpacing::PerCharacter,
+            BridgeAxisSpacing::Default => lumit_core::text::AxisSpacing::Default,
+        },
         leading: style.leading.filter(|l| l.is_finite() && *l >= 0.0),
         kerning: match style.kerning {
             BridgeKerning::Off => Kerning::Off,

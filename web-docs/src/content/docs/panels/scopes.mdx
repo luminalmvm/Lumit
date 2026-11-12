@@ -7,7 +7,9 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Scopes read the frame the Viewer previews.
+Scopes read the frame the Viewer previews. Open the panel with **Window ▸ Panels ▸ Scopes**.
+
+The picker at the top chooses one of four scopes.
 
 | Scope | Shows |
 | --- | --- |
@@ -16,11 +18,48 @@ Scopes read the frame the Viewer previews.
 | **Vectorscope** | Hue and saturation on a colour wheel. |
 | **Histogram** | How many pixels sit at each level, as luma or per channel. |
 
+**Luma** and **RGB** beside the picker choose the reading of the Waveform and the
+Histogram.
+
 Right-click the trace to change the scope, its reading, the graticule or the colours.
 
-<Shot file="scopes.png" caption="The waveform and vectorscope reading the current frame." eager/>
+| Row | Does |
+| --- | --- |
+| **Waveform**, **RGB parade**, **Vectorscope**, **Histogram** | Picks the scope. |
+| **Luma**, **RGB** | Picks the reading. Greyed on the RGB parade and the Vectorscope. |
+| **Graticule** | Shows or hides the scale. |
+| **Theme colours** | Draws the scope in the theme's colours. Off, it is drawn in its own fixed colours. |
+
+The menu stays open while rows are picked.
+
+<Shot file="scopes.png" caption="The waveform reading the current frame." eager/>
+
+## The scales
+
+- **Waveform** and **RGB parade**: lines at 0, 25, 50, 75 and 100. 0 is black and 100 is
+  white. The parade has a line between each channel's third of the width.
+- **Vectorscope**: rings at a quarter, a half, three quarters and the whole of the radius,
+  a cross through the centre, targets for red, green, blue, magenta, yellow and cyan, and
+  the skin-tone line.
+- **Histogram**: levels 0, 64, 128, 192 and 255 across. Its height is scaled to the
+  tallest column.
+
+## What is read
+
+The scope reads the open composition at the playhead, at the preview resolution the Viewer
+is using and through the active view's [3D view](/use/camera/#3d-views). It is drawn again
+when the playhead moves and when the picture changes, a value being dragged included.
+
+With a [3D viewport](/use/camera/#3d-viewport) active, the scope reads another view of the
+same composition.
+
+With no composition open the panel reads *No composition selected*.
+
+**Theme colours** is the same switch as **Edit ▸ Settings ▸ Appearance ▸ Viewer ▸ Scopes
+use theme colour**.
 
 ## Related
 
 - [Viewer](/panels/viewer/)
+- [Colour management](/use/colour-management/)
 - [Effects](/use/effects/)
