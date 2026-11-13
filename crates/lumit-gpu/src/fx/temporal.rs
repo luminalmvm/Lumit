@@ -216,8 +216,8 @@ impl FxEngine {
     }
 
     /// Lay a looped picture over `current` (Time loop): `now`, faded with
-    /// `next` by `next_share` while a crossfade runs, laid in front, then
-    /// mixed back toward `current` by `mix`. Echo's own two kernels, so the
+    /// `next` by `next_share` while a crossfade runs, laid in front (or with
+    /// `replace` put in its place), then mixed back toward `current` by `mix`. Echo's own two kernels, so the
     /// blend is the one its In front mode draws.
     #[allow(clippy::too_many_arguments)]
     pub fn time_loop(
@@ -227,6 +227,7 @@ impl FxEngine {
         now: &wgpu::Texture,
         next: Option<&wgpu::Texture>,
         next_share: f32,
+        replace: bool,
         w: u32,
         h: u32,
         mix: f32,
@@ -255,17 +256,23 @@ impl FxEngine {
             }
             _ => now.clone(),
         };
-        let over = work_texture(ctx, w, h, "fx-time-loop-over");
-        self.dispatch(
-            ctx,
-            &self.echo_accumulate,
-            current,
-            &looped,
-            &over,
-            w,
-            h,
-            bytemuck::bytes_of(&params(1.0, 1)),
-        );
+        // The layer looping itself takes its picture's place.
+        let over = if replace {
+            looped
+        } else {
+            let over = work_texture(ctx, w, h, "fx-time-loop-over");
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                current,
+                &looped,
+                &over,
+                w,
+                h,
+                bytemuck::bytes_of(&params(1.0, 1)),
+            );
+            over
+        };
         let out = work_texture(ctx, w, h, "fx-time-loop-out");
         self.dispatch(
             ctx,

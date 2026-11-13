@@ -9165,6 +9165,64 @@ mod tests {
         );
     }
 
+    /// **A Time loop with no Source layer loops its own layer.** The top layer
+    /// darkens over its first second, with Time loop after the darkening and
+    /// Source layer empty: frame 20 is the plain layer's frame 5, and inside
+    /// the first lap the frame is the layer's own, not the loop laid over it.
+    #[test]
+    fn a_time_loop_with_no_source_loops_its_own_layer() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let build = |looped: bool| {
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(32, 16, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let mut darken = lumit_core::fx::builtins::instantiate("exposure").unwrap();
+            for p in &mut darken.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(ramp(0.0, -6.0, 1));
+                }
+            }
+            let mut time_loop = lumit_core::fx::builtins::instantiate("time_loop").unwrap();
+            for p in &mut time_loop.params {
+                if p.id == "duration" {
+                    p.value = EffectValue::Float(Property::fixed(0.5));
+                }
+            }
+            time_loop.enabled = looped;
+            comp.layers[1].effects = vec![darken, time_loop];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let mut frame = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid), f: u64| {
+            r.render_rgba(doc, *comp_id, f, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let looped = build(true);
+        let plain = build(false);
+        assert_eq!(
+            frame(&looped, 20),
+            frame(&plain, 5),
+            "a lap later, the layer as it was"
+        );
+        assert_eq!(
+            frame(&looped, 5),
+            frame(&plain, 5),
+            "the loop takes the layer's place rather than lying over it"
+        );
+        assert_ne!(
+            frame(&looped, 20),
+            frame(&plain, 20),
+            "the loop comes round"
+        );
+    }
+
     /// **A stamp shown at another moment is rendered at that moment.**
     ///
     /// The clone layer darkens over its first second and is stamped on a

@@ -3303,8 +3303,12 @@ fn comp_walk(
                     (takes && def.is_image_op()).then_some((e, def, param))
                 })
                 .map(|(e, def, param)| {
-                    // An effect that shows its own input at other moments.
-                    if def.shows_own_moments() {
+                    // An effect that shows its own input at other moments;
+                    // one with a Layer row of its own (Time loop) only while
+                    // it wants to, with the row empty.
+                    if def.shows_own_moments()
+                        && (def.schema().layer_input().is_none() || def.wants_own_moments(e))
+                    {
                         return moments::own_moments_pictures(
                             doc,
                             comp,

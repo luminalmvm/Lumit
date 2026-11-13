@@ -6368,7 +6368,8 @@ impl GpuEffect for IntersectionPoints {
 }
 
 /// Time loop: its Source layer at the loop's moments, made by the builder,
-/// faded together while a crossfade runs and laid over the picture.
+/// faded together while a crossfade runs and laid over the picture, or
+/// with Source layer empty the layer itself in the picture's place.
 struct TimeLoop;
 impl GpuEffect for TimeLoop {
     fn match_name(&self) -> &'static str {
@@ -6393,7 +6394,10 @@ impl GpuEffect for TimeLoop {
         };
         let mix = (L::read(p).mix / 100.0).clamp(0.0, 1.0);
         let share = p.float(L::DERIVED_NEXT_SHARE, 0.0);
-        fx.time_loop(ctx, tex, now, picture(1), share, w, h, mix)
+        // Source layer empty: the layer itself at the loop's moments, in
+        // the place of its picture.
+        let replace = p.float(L::DERIVED_OWN, 0.0) > 0.5;
+        fx.time_loop(ctx, tex, now, picture(1), share, replace, w, h, mix)
     }
 }
 
