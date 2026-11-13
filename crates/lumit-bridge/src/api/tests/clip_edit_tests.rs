@@ -113,7 +113,7 @@ fn a_kind_keeps_its_rows_and_goes_with_its_overlap() {
     let (_project, comp, top, _) = cut_row(2);
     let ids: Vec<Uuid> = row_clips(&top).iter().map(|c| c.id).collect();
     let set = |kind: Option<&str>| {
-        comp.cut_set_transition(ids[0], true, 12, kind.map(str::to_string), false)
+        comp.cut_set_transition(ids[0], true, 12, kind.map(str::to_string), None, false)
             .expect("answered")
     };
     assert_eq!(set(Some("linear_wipe")), BridgeCutResult::Done);

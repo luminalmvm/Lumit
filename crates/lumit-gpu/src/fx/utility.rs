@@ -615,6 +615,14 @@ pub struct LumaFadeOp {
     pub invert: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The Pattern row: 0 reads the picture.
+    pub pattern: u32,
+    /// Pattern cells a raster pixel.
+    pub step: f32,
+    /// The picture's centre, raster pixels.
+    pub centre: [f32; 2],
+    /// One over the distance from the centre to a corner, raster pixels.
+    pub reach: f32,
 }
 
 #[repr(C)]
@@ -626,7 +634,13 @@ struct LumaFadeParams {
     invert: f32,
     /// 1 = read the brightness from the matte rather than the picture.
     matte_on: f32,
-    _pad: [f32; 3],
+    pattern: u32,
+    step: f32,
+    reach: f32,
+    centre: [f32; 2],
+    /// The noise's depth loop, always 0, as `fx_lumafade.wgsl` says.
+    cycle: i32,
+    _pad: f32,
 }
 
 impl FxEngine {
@@ -658,7 +672,12 @@ impl FxEngine {
                 mix_amt: op.mix,
                 invert: f32::from(op.invert),
                 matte_on: f32::from(matte.is_some()),
-                _pad: [0.0; 3],
+                pattern: op.pattern,
+                step: op.step,
+                reach: op.reach,
+                centre: op.centre,
+                cycle: 0,
+                _pad: 0.0,
             }),
         );
         out

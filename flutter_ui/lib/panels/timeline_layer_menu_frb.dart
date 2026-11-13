@@ -30,6 +30,7 @@ import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
 import 'control_rows.dart' show layerControlRow;
+import 'cut_kinds.dart' show transitionMenu;
 import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
 import 'retime_commands.dart' show reverseRow;
 import 'sequence_view_frb.dart';
@@ -323,6 +324,7 @@ List<MenuEntry> layerMenuEntries(
             )),
         action: 'layer.precompose'),
     if (many) MenuEntry(l10n.menuStaggerLayers, () => showStaggerPanel(ui)),
+    if (many) transitionMenu(app, comp, entries),
     if (source != null)
       MenuEntry(l10n.menuRevealInProject, () => revealInProject(ui, source)),
     MenuEntry.divider(),

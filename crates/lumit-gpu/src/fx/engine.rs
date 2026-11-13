@@ -433,7 +433,10 @@ impl FxEngine {
             "fx-venetian-blinds",
         );
         let iris_wipe_mod = module(include_str!("../fx_iriswipe.wgsl"), "fx-iris-wipe");
-        let luma_fade_mod = module(include_str!("../fx_lumafade.wgsl"), "fx-luma-fade");
+        let luma_fade_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_lumafade.wgsl")),
+            "fx-luma-fade",
+        );
         let srgb_curve_mod = module(include_str!("../fx_srgbcurve.wgsl"), "fx-srgb-curve");
         // The per-card shuffle is the shared hash, so the noise core is
         // prepended exactly as Fractal noise's and Roughen edges' are.
@@ -444,6 +447,14 @@ impl FxEngine {
         let transform_mod = module(include_str!("../fx_transform.wgsl"), "fx-transform");
         let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
         let jolt_mod = module(include_str!("../fx_jolt.wgsl"), "fx-jolt");
+        let light_leak_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_light_leak.wgsl")),
+            "fx-light-leak",
+        );
+        let slices_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_slices.wgsl")),
+            "fx-slices",
+        );
         let glow_mod = module(include_str!("../fx_glow.wgsl"), "fx-glow");
         let glow_exp_mod = module(include_str!("../fx_glow_exp.wgsl"), "fx-glow-exp");
         let block_glitch_mod = module(include_str!("../fx_block_glitch.wgsl"), "fx-block-glitch");
@@ -588,6 +599,8 @@ impl FxEngine {
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
         let jolt = pipeline(&jolt_mod, "fx-jolt", "jolt");
+        let light_leak = pipeline(&light_leak_mod, "fx-light-leak", "light_leak");
+        let slices = pipeline(&slices_mod, "fx-slices", "slices");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
         let glow_exp_down = pipeline(&glow_exp_mod, "fx-glow-exp-down", "glow_exp_down");
@@ -748,6 +761,8 @@ impl FxEngine {
             transform: transform.wait(),
             shake_mb: shake_mb.wait(),
             jolt: jolt.wait(),
+            light_leak: light_leak.wait(),
+            slices: slices.wait(),
             glow_bright: glow_bright.wait(),
             glow_combine: glow_combine.wait(),
             glow_exp_down: glow_exp_down.wait(),

@@ -5809,6 +5809,168 @@
       "matte_role": "own"
     },
     {
+      "slug": "light-leak",
+      "match_name": "light_leak",
+      "label": "Light leak",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 70.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.45,
+            0.12,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "colour_2",
+          "label": "Edge colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.08,
+            0.03,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "angle",
+          "label": "Angle",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 20.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 10.0,
+          "slider_max": 200.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "drift",
+          "label": "Drift",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
       "slug": "shake",
       "match_name": "shake",
       "label": "Shake",
@@ -34843,6 +35005,33 @@
           "hard_max": 100.0
         },
         {
+          "id": "pattern",
+          "label": "Pattern",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Picture",
+            "Noise",
+            "Cells",
+            "Diamonds",
+            "Stripes",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "pattern_scale",
+          "label": "Scale",
+          "kind": "int",
+          "unit": "raw",
+          "default": 8,
+          "slider_min": 1.0,
+          "slider_max": 64.0,
+          "hard_min": 1.0,
+          "hard_max": 64.0
+        },
+        {
           "id": "matte_placement",
           "label": "Map placement",
           "kind": "choice",
@@ -34923,6 +35112,12 @@
           "param": "matte_placement",
           "on": "matte",
           "cond": "layer_set"
+        },
+        {
+          "param": "pattern_scale",
+          "on": "pattern",
+          "cond": "choice_is_not",
+          "value": 0
         }
       ],
       "matte": {
@@ -34930,6 +35125,439 @@
         "meaning": "is where the brightness is read from: the darkest parts of the matte go first, and with no matte set the layer fades by its own brightness"
       },
       "matte_role": "own"
+    },
+    {
+      "slug": "move",
+      "match_name": "move",
+      "label": "Move",
+      "version": 1,
+      "category": "Transition",
+      "category_slug": "transition",
+      "params": [
+        {
+          "id": "completion",
+          "label": "Completion",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "side",
+          "label": "Side",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Outgoing",
+            "Incoming"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "moves",
+          "label": "Moves",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Both",
+            "Outgoing",
+            "Incoming"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 180.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "distance",
+          "label": "Distance",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "zoom",
+          "label": "Zoom",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 800.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "spin",
+          "label": "Spin",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "stretch",
+          "label": "Stretch",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 100.0,
+          "slider_max": 800.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "ease",
+          "label": "Ease",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Linear",
+            "Smooth",
+            "Sharp"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "smear",
+          "label": "Smear",
+          "kind": "float",
+          "unit": "percent",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "samples",
+          "label": "Samples",
+          "kind": "int",
+          "unit": "raw",
+          "default": 16,
+          "slider_min": 2.0,
+          "slider_max": 64.0,
+          "hard_min": 2.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "split",
+          "label": "Split colours",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "cross",
+          "label": "Crossfade",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "fade",
+          "label": "Fade",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
+      "slug": "slices",
+      "match_name": "slices",
+      "label": "Slices",
+      "version": 1,
+      "category": "Transition",
+      "category_slug": "transition",
+      "params": [
+        {
+          "id": "completion",
+          "label": "Completion",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "side",
+          "label": "Side",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Outgoing",
+            "Incoming"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "count",
+          "label": "Count",
+          "kind": "int",
+          "unit": "raw",
+          "default": 8,
+          "slider_min": 2.0,
+          "slider_max": 64.0,
+          "hard_min": 2.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "across",
+          "label": "Across",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Horizontal",
+            "Vertical"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "alternate",
+          "label": "Alternate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "stagger",
+          "label": "Stagger",
+          "kind": "float",
+          "unit": "percent",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "random",
+          "label": "Random order",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ease",
+          "label": "Ease",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Linear",
+            "Smooth",
+            "Sharp"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "smear",
+          "label": "Smear",
+          "kind": "float",
+          "unit": "percent",
+          "default": 3.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "custom-shader",

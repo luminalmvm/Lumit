@@ -872,6 +872,18 @@ impl EffectDef for ShakeDef {
         &<Shake as EffectMetadata>::SCHEMA
     }
 
+    /// A hit that lands on the playhead.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        use crate::fx::presets::PresetValue::{Bool, Keys};
+        &[crate::fx::presets::EffectPreset {
+            name: "Hit",
+            values: &[
+                ("amplitude", Keys(&[(0.0, 0.0), (0.08, 60.0), (0.5, 0.0)])),
+                ("motion_blur", Bool(true)),
+            ],
+        }]
+    }
+
     /// The noise, and the two legacy folds — the whole of what the old resolve
     /// arm did beyond reading its rows, moved unchanged.
     ///
