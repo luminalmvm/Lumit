@@ -280,7 +280,8 @@ pub fn set_window_in_front(front: bool) {
 ///
 /// Windows: on battery, or Battery saver on (`GetSystemPowerStatus`). Linux:
 /// a mains supply reporting offline beside a battery, or the platform
-/// profile at `low-power`. False elsewhere and where it cannot be asked.
+/// profile at `low-power`. macOS: running on the battery, or Low Power Mode
+/// on. False elsewhere and where it cannot be asked.
 #[frb(sync)]
 pub fn power_saving() -> bool {
     #[cfg(windows)]
@@ -320,9 +321,102 @@ pub fn power_saving() -> bool {
         }
         battery && mains_off
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        macos_power_saving()
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         false
+    }
+}
+
+/// macOS's half of [`power_saving`]: the battery is the source power comes
+/// from (IOKit's "Battery Power"), or Low Power Mode is on (`NSProcessInfo`,
+/// macOS 12 and later; asked only where the method is there).
+#[cfg(target_os = "macos")]
+fn macos_power_saving() -> bool {
+    use std::ffi::{c_char, c_void};
+
+    type Id = *mut c_void;
+    type Get = unsafe extern "C" fn(Id, Id) -> Id;
+    type Responds = unsafe extern "C" fn(Id, Id, Id) -> i8;
+    type Flag = unsafe extern "C" fn(Id, Id) -> i8;
+
+    #[link(name = "IOKit", kind = "framework")]
+    extern "C" {
+        fn IOPSCopyPowerSourcesInfo() -> *const c_void;
+        fn IOPSGetProvidingPowerSourceType(blob: *const c_void) -> *const c_void;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *const c_void);
+        fn CFStringGetCString(
+            string: *const c_void,
+            buffer: *mut c_char,
+            size: isize,
+            encoding: u32,
+        ) -> u8;
+    }
+    #[link(name = "Foundation", kind = "framework")]
+    #[link(name = "objc")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Id;
+        fn objc_msgSend();
+        fn objc_autoreleasePoolPush() -> *mut c_void;
+        fn objc_autoreleasePoolPop(pool: *mut c_void);
+    }
+    /// `kCFStringEncodingUTF8`.
+    const UTF8: u32 = 0x0800_0100;
+
+    // SAFETY: `IOPSCopyPowerSourcesInfo` answers an owned blob or null, which
+    // is checked and released once; the source type is a string the blob
+    // owns ("Get"), read into a buffer whose size is passed and whose
+    // NUL-termination `CFStringGetCString` guarantees when it answers true.
+    let on_battery = unsafe {
+        let blob = IOPSCopyPowerSourcesInfo();
+        if blob.is_null() {
+            false
+        } else {
+            let kind = IOPSGetProvidingPowerSourceType(blob);
+            let mut text = [0 as c_char; 64];
+            let read =
+                !kind.is_null() && CFStringGetCString(kind, text.as_mut_ptr(), 64, UTF8) != 0;
+            let battery =
+                read && std::ffi::CStr::from_ptr(text.as_ptr()).to_bytes() == b"Battery Power";
+            CFRelease(blob);
+            battery
+        }
+    };
+    if on_battery {
+        return true;
+    }
+    // SAFETY: as in `claim::bring_forward`: NUL-terminated literal names, and
+    // `objc_msgSend` called through the signature of each method it sends — a
+    // class method answering the shared object, `respondsToSelector:` taking a
+    // selector and answering a BOOL, and the BOOL property itself, sent only
+    // after the object said it has it. The pool is opened and drained here.
+    unsafe {
+        let pool = objc_autoreleasePoolPush();
+        let send = objc_msgSend as unsafe extern "C" fn();
+        let get = std::mem::transmute::<unsafe extern "C" fn(), Get>(send);
+        let responds = std::mem::transmute::<unsafe extern "C" fn(), Responds>(send);
+        let flag = std::mem::transmute::<unsafe extern "C" fn(), Flag>(send);
+        let info = get(
+            objc_getClass(c"NSProcessInfo".as_ptr()),
+            sel_registerName(c"processInfo".as_ptr()),
+        );
+        let low_power = sel_registerName(c"isLowPowerModeEnabled".as_ptr());
+        let on = !info.is_null()
+            && responds(
+                info,
+                sel_registerName(c"respondsToSelector:".as_ptr()),
+                low_power,
+            ) != 0
+            && flag(info, low_power) != 0;
+        objc_autoreleasePoolPop(pool);
+        on
     }
 }
 
