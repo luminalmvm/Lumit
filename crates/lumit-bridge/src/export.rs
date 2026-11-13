@@ -884,6 +884,11 @@ pub(crate) fn queue_job_ready(id: u32) {
     driving::job_ready(id);
 }
 
+/// Whether remote export `job` was done when its row was removed.
+pub(crate) fn queue_job_landed(job: uuid::Uuid) -> bool {
+    driving::job_landed(job)
+}
+
 /// Forget one item. A running item is cancelled first: a row cannot leave the
 /// list while the encoder it named is still writing.
 pub(crate) fn queue_remove(id: u32) {

@@ -105,6 +105,8 @@ struct Run {
     direct_unread: bool,
     /// Keeps the computer awake while an export is in flight.
     awake: Option<crate::awake::Awake>,
+    /// Remote exports whose row was removed once done, until their job asks.
+    landed_jobs: Vec<Uuid>,
 }
 
 impl Run {
@@ -128,6 +130,7 @@ fn slot() -> &'static Mutex<Run> {
             current: None,
             direct_unread: false,
             awake: None,
+            landed_jobs: Vec::new(),
         })
     })
 }
@@ -545,7 +548,24 @@ pub(super) fn queue_remove(id: u32) {
         stop_current(&mut guard);
         guard.current = None;
     }
-    guard.queue.retain(|item| item.id != id);
+    let Run {
+        queue, landed_jobs, ..
+    } = &mut *guard;
+    for item in queue.iter().filter(|item| item.id == id) {
+        if let (Source::Job { job, .. }, ItemState::Done { .. }) = (&item.source, &item.state) {
+            landed_jobs.push(*job);
+        }
+    }
+    queue.retain(|item| item.id != id);
+}
+
+/// Whether remote export `job` was done when its row was removed. Answers
+/// once.
+pub(super) fn job_landed(job: Uuid) -> bool {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let before = guard.landed_jobs.len();
+    guard.landed_jobs.retain(|j| *j != job);
+    guard.landed_jobs.len() != before
 }
 
 /// Start the next waiting item when the queue is running and nothing is in

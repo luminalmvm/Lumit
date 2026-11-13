@@ -577,6 +577,9 @@ impl Remote {
                 // A finished row cleared away while its file goes back: the
                 // file still goes.
                 None if job.stage == Stage::Returning => {}
+                // Cleared away once done, before this saw it done: the file
+                // goes back, or stays, all the same.
+                None if crate::export::queue_job_landed(id) => self.exported_here(job),
                 // Taken out of the queue here: cancelled, on both computers.
                 None => self.cancel_here(id, true),
                 // Its stage is the files' to say until it runs.
