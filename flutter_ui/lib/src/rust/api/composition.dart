@@ -3958,6 +3958,23 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceTimesOfFrames(
               that: this, first: first, count: count);
 
+  /// Put a transition between two layers that overlap in time, as one undo
+  /// step: the kind `kind` at `look`, its first with none. False when they
+  /// don't overlap by two frames, when one sits inside the other, or when
+  /// either has no picture or is locked. One put there before is replaced.
+  ///
+  /// The layer that starts first is going. A wipe runs on the upper layer
+  /// only, and the rest on both. Where the two pictures cross, the upper
+  /// layer's Opacity is keyed, unless it is already keyed.
+  bool transitionBetween(
+          {required UuidValue first,
+          required UuidValue second,
+          required String kind,
+          int? look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceTransitionBetween(
+              that: this, first: first, second: second, kind: kind, look: look);
+
   /// **Trim comp to work area**: the comp becomes as long as its work
   /// area, and everything on the timeline slides back with it.
   ///

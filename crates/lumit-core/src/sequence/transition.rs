@@ -7,7 +7,7 @@
 //! so a transition takes its curve from the clip's fade shape as a dissolve does.
 
 use super::{with, Clip};
-use crate::anim::{Animation, Property};
+use crate::anim::{Animation, Keyframe, Property, SideInterp, EASY_EASE};
 use crate::fx::params::Unit;
 use crate::fx::presets::PresetValue::{Choice, Colour, Float};
 use crate::fx::presets::{EffectPreset, PresetValue};
@@ -488,6 +488,193 @@ pub fn swept(
         Sweep::Iris => iris(&mut out, u, width, height, float),
     }
     out
+}
+
+/// Where along the overlap a kind with an Over row is keyed, up to its middle
+/// and mirrored after it. Closer together near the ends, where the value
+/// climbs steeply, so Linear keys follow the curve to within a few pixels.
+const OVER_KEYS: [f64; 9] = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5];
+
+/// `effect` keyed for one of two layers that overlap across `span`, in that
+/// layer's own time, `frame` being one frame: what [`swept`] draws at the
+/// start, middle and end of the overlap, as keyframes. A row that moves evenly
+/// takes two Linear keys, and one that rises and falls takes three eased ones,
+/// so a Peak kind's Mix is off outside the overlap. A kind with an Over row
+/// takes Linear keys at [`OVER_KEYS`] instead, on whole frames, as its value
+/// is far from even. The rest come from the start, with Fade off, since the
+/// layer's own Opacity does the fading.
+///
+/// A wipe runs on one layer. On the incoming one it runs backwards, so the
+/// layer is revealed rather than taken away, and is turned where it can be so
+/// its edge travels the way it does on a cut. Two pictures side by side run
+/// without a smear, as one layer laid over the other would leave a dark seam
+/// where their smeared edges meet.
+#[must_use]
+pub fn keyed(
+    effect: &EffectInstance,
+    side: Side,
+    span: (Rational, Rational),
+    frame: Rational,
+    width: f64,
+    height: f64,
+) -> EffectInstance {
+    let (start, end) = span;
+    let mut out = effect.clone();
+    let Some(mid) = start
+        .checked_add(end)
+        .ok()
+        .and_then(|t| t.checked_div(Rational::new(2, 1).ok()?).ok())
+    else {
+        return out;
+    };
+    let back = side == Side::In
+        && matches!(
+            sweep_of(&effect.effect.match_name),
+            Sweep::Out | Sweep::Iris
+        );
+    let lt = mid.to_f64();
+    let at = |u: f64| {
+        if back {
+            swept(effect, 1.0 - u, Side::Out, width, height, lt)
+        } else {
+            swept(effect, u, side, width, height, lt)
+        }
+    };
+    let over = matches!(
+        sweep_of(&effect.effect.match_name),
+        Sweep::Peak { rows, .. } if rows.iter().any(|(_, way)| matches!(way, Over(_)))
+    );
+    let dense = over.then(|| over_moments(span, frame)).flatten();
+    let is_dense = dense.is_some();
+    let moments = dense.unwrap_or_else(|| vec![(start, 0.0), (mid, 0.5), (end, 1.0)]);
+    let samples: Vec<EffectInstance> = moments.iter().map(|(_, u)| at(*u)).collect();
+    let float = |e: &EffectInstance, id: &str| match e.param(id) {
+        Some(EffectValue::Float(v)) => Some(v.value_at(lt)),
+        _ => None,
+    };
+    let key = |time, value, interp| Keyframe {
+        time,
+        value,
+        interp_in: interp,
+        interp_out: interp,
+    };
+    for p in &mut out.params {
+        // The peak's sine leaves a trace of a value at either end.
+        let values: Option<Vec<f64>> = samples
+            .iter()
+            .map(|s| float(s, &p.id).map(|v| if v.abs() < 1e-9 { 0.0 } else { v }))
+            .collect();
+        let Some(values) = values else {
+            if let Some(v) = samples.first().and_then(|s| s.param(&p.id)) {
+                p.value = v.clone();
+            }
+            continue;
+        };
+        if values.iter().all(|v| Some(v) == values.first()) {
+            continue;
+        }
+        let keys = if is_dense {
+            // A key between two that hold its value adds nothing.
+            let flat = |i: Option<usize>, v: f64| i.and_then(|i| values.get(i)) == Some(&v);
+            moments
+                .iter()
+                .zip(&values)
+                .enumerate()
+                .filter(|(i, (_, v))| !(flat(i.checked_sub(1), **v) && flat(Some(i + 1), **v)))
+                .map(|(_, ((t, _), v))| key(*t, *v, SideInterp::Linear))
+                .collect()
+        } else if let &[a, b, c] = values.as_slice() {
+            if ((a + c) / 2.0 - b).abs() <= 1e-9 * (a.abs() + c.abs()).max(1.0) {
+                vec![
+                    key(start, a, SideInterp::Linear),
+                    key(end, c, SideInterp::Linear),
+                ]
+            } else {
+                vec![
+                    key(start, a, EASY_EASE),
+                    key(mid, b, EASY_EASE),
+                    key(end, c, EASY_EASE),
+                ]
+            }
+        } else {
+            continue;
+        };
+        p.value = EffectValue::Float(Property {
+            animation: Animation::Keyframed(keys),
+            extra: serde_json::Map::new(),
+        });
+    }
+    for p in &mut out.params {
+        if let ("fade", EffectValue::Bool(b)) = (p.id.as_str(), &mut p.value) {
+            *b = false;
+        }
+    }
+    if side_by_side(effect, lt) {
+        put(&mut out, "smear", 0.0);
+    }
+    if back {
+        turn(&mut out);
+    }
+    out
+}
+
+/// The moments [`OVER_KEYS`] fall on across `span`, each with how far through
+/// it they are: on whole frames from the start, the last at the end, and none
+/// closer than a frame. `None` when `frame` or the span is not a length.
+fn over_moments(
+    (start, end): (Rational, Rational),
+    frame: Rational,
+) -> Option<Vec<(Rational, f64)>> {
+    let len = end.checked_sub(start).ok()?;
+    if frame <= Rational::ZERO || len <= Rational::ZERO {
+        return None;
+    }
+    let count = len.checked_div(frame).ok()?;
+    let frames = count.num().div_euclid(count.den());
+    let mut out: Vec<(Rational, f64)> = Vec::new();
+    let mirrored = OVER_KEYS.iter().rev().map(|u| 1.0 - u);
+    for u in OVER_KEYS.iter().copied().chain(mirrored) {
+        let time = if u >= 1.0 {
+            end
+        } else {
+            let step = Rational::new((u * frames as f64).round() as i64, 1).ok()?;
+            start.checked_add(frame.checked_mul(step).ok()?).ok()?
+        };
+        if out.last().is_some_and(|(t, _)| *t >= time) {
+            continue;
+        }
+        out.push((time, time.checked_sub(start).ok()?.to_f64() / len.to_f64()));
+    }
+    Some(out)
+}
+
+/// A wipe run backwards on the incoming layer, turned so its edge travels the
+/// way it does on a cut: a Linear wipe the other way round, a Radial wipe the
+/// other way or from the far side, a Card wipe's flips in the other order,
+/// and a Luma fade's brightness inverted. An Iris wipe still closes in from
+/// the edges, and Venetian blinds still open from the slats' edges, as
+/// neither has a row that turns it.
+fn turn(out: &mut EffectInstance) {
+    let both = matches!(out.param("wipe"), Some(EffectValue::Choice(2)));
+    let name = out.effect.match_name.clone();
+    for p in &mut out.params {
+        match (name.as_str(), p.id.as_str(), &mut p.value) {
+            ("linear_wipe", "angle", EffectValue::Float(v))
+            | ("radial_wipe", "start_angle", EffectValue::Float(v))
+                if name == "linear_wipe" || both =>
+            {
+                match &mut v.animation {
+                    Animation::Static(a) => *a += 180.0,
+                    Animation::Keyframed(keys) => keys.iter_mut().for_each(|k| k.value += 180.0),
+                    Animation::Expression(_) => {}
+                }
+            }
+            ("radial_wipe", "wipe", EffectValue::Choice(c)) if *c < 2 => *c = 1 - *c,
+            ("card_wipe", "flip_order", EffectValue::Choice(c)) => *c ^= 1,
+            ("luma_fade", "matte_invert", EffectValue::Bool(b)) => *b = !*b,
+            _ => {}
+        }
+    }
 }
 
 /// An Iris wipe's hole at `u`.

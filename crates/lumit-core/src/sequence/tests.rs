@@ -808,10 +808,11 @@ fn the_new_fields_are_absent_until_set_and_round_trip_when_they_are() {
 }
 
 /// A Peak kind is nothing at either end of its overlap and as stored in the
-/// middle, so a hit never shows on a clip outside the overlap.
+/// middle, so a hit never shows on a clip outside the overlap. Keyed onto two
+/// layers, the same moments come back as keys.
 #[test]
 fn a_peak_row_is_nothing_at_both_ends_and_stored_in_the_middle() {
-    use super::transition::{fresh, swept, Side};
+    use super::transition::{fresh, keyed, swept, Side};
     let blur = fresh("blur", None, 1920.0, 1080.0).unwrap();
     let row = |e: &crate::model::EffectInstance, id: &str| match e.param(id) {
         Some(crate::model::EffectValue::Float(p)) => p.value_at(0.0),
@@ -825,5 +826,67 @@ fn a_peak_row_is_nothing_at_both_ends_and_stored_in_the_middle() {
             assert!((row(&at, "radius") - radius).abs() < 1e-6, "radius at {u}");
             assert!((row(&at, "mix") - mix).abs() < 1e-6, "mix at {u}");
         }
+    }
+
+    let span = (rat(1, 1), rat(2, 1));
+    let value = |e: &crate::model::EffectInstance, id: &str, t: f64| match e.param(id) {
+        Some(crate::model::EffectValue::Float(p)) => p.value_at(t),
+        _ => f64::NAN,
+    };
+    let frame = rat(1, 20);
+    let hit = keyed(&blur, Side::Out, span, frame, 1920.0, 1080.0);
+    for (t, radius, mix) in [(1.0, 0.0, 0.0), (1.5, stored, 100.0), (2.0, 0.0, 0.0)] {
+        assert!(
+            (value(&hit, "radius", t) - radius).abs() < 1e-6,
+            "keyed radius at {t}"
+        );
+        assert!(
+            (value(&hit, "mix", t) - mix).abs() < 1e-6,
+            "keyed mix at {t}"
+        );
+    }
+    let push = keyed(
+        &fresh("move", None, 1920.0, 1080.0).unwrap(),
+        Side::In,
+        span,
+        frame,
+        1920.0,
+        1080.0,
+    );
+    for (t, completion) in [(1.0, 0.0), (1.5, 50.0), (2.0, 100.0)] {
+        assert!(
+            (value(&push, "completion", t) - completion).abs() < 1e-6,
+            "completion at {t}"
+        );
+    }
+    assert_eq!(
+        push.param("side"),
+        Some(&crate::model::EffectValue::Choice(1))
+    );
+    assert_eq!(
+        push.param("fade"),
+        Some(&crate::model::EffectValue::Bool(false))
+    );
+
+    // Pixelate's block counts are the stored ones over the peak, far from
+    // even, so they are keyed on whole frames closer together near the ends.
+    let mosaic = fresh("mosaic", None, 1920.0, 1080.0).unwrap();
+    let pixelate = keyed(&mosaic, Side::In, span, frame, 1920.0, 1080.0);
+    let Some(crate::model::EffectValue::Float(blocks)) = pixelate.param("horizontal_blocks") else {
+        panic!("no block count");
+    };
+    let crate::anim::Animation::Keyframed(keys) = &blocks.animation else {
+        panic!("block count not keyed");
+    };
+    let steps = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 15, 16, 17, 18, 19, 20];
+    assert_eq!(keys.len(), steps.len());
+    for (k, step) in keys.iter().zip(steps) {
+        let u = f64::from(step) / 20.0;
+        let want = row(
+            &swept(&mosaic, u, Side::In, 1920.0, 1080.0, 0.0),
+            "horizontal_blocks",
+        );
+        assert_eq!(k.time, rat(20 + i64::from(step), 20), "key time at {u}");
+        assert!((k.value - want).abs() < 1e-6, "blocks at {u}");
     }
 }

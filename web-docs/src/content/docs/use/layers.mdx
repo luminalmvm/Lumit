@@ -121,6 +121,40 @@ Hold `Ctrl+Alt` and drag a selected layer's bar to stagger by hand: `Cmd+Option`
 bar under the pointer follows it, and the ones between are spaced evenly. With the first
 layer's bar in hand, the last layer moves the whole distance.
 
+## Transition between two layers
+
+**Layer ▸ Transition ▸** puts one of the Cut timeline's
+[transitions](/use/cutting/#fades-and-dissolves) between two selected layers, across the
+time they share, as one undo step. It lists the same **Wipes ▸**, **Moves ▸** and
+**Hits ▸**. It is greyed unless exactly two layers are selected and neither is locked.
+
+- It is **refused** for a layer with no picture, which is an Audio, Null, Camera or Light
+  layer, for an overlap shorter than two frames, and where the layer that starts later also
+  ends first. The status line says so.
+- The layer that starts first is the outgoing one. With the same start, it is the one that
+  ends first.
+- A wipe is added to the upper layer only, keyed across the overlap. On the incoming layer
+  it runs backwards, turned so that it travels as it does on a cut. **Iris wipe** and
+  **Venetian blinds** are not turned: the iris closes in from the edges, and the blinds grow
+  from the slats' edges.
+- A move is added to both layers, with **Completion** keyed across the overlap.
+- A hit is added to both layers. Its strength and its **Mix** are keyed from nothing up to
+  the middle of the overlap and back. **Pixelate** keys its block counts at several frames
+  across the overlap.
+- Where the two pictures fade into each other, the upper layer's **Opacity** is keyed, unless
+  it has keys already.
+- The keys are in each layer's own time.
+- Another transition picked for the same overlap replaces the one before. **Opacity** keys
+  from before stay.
+- The stack order is left alone. **Slide**, **Iris wipe** and **Venetian blinds** need the
+  outgoing layer on top, and **Cover** the incoming one.
+- The **Push** looks and **Slices** are written with **Smear** at 0.
+
+:::note
+Between layers, the smeared edges of a Footage layer are dimmed twice. Keep **Smear** low
+or at 0.
+:::
+
 ## Replace a layer's source
 
 **Replace source**, on the row menu and the **Layer** menu, points the selected layers at
@@ -185,6 +219,7 @@ apply to the layer is left out.
 | **Group layers** or **Ungroup** | Folds the selected layers under a group header, or takes them out of their group. |
 | **Precompose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
 | **Stagger layers…** | See [Stagger](#stagger). With several layers selected. |
+| **Transition ▸** | See [Transition between two layers](#transition-between-two-layers). With several layers selected. |
 | **Reveal in Project panel** | Selects the layer's footage or composition in the Project panel. |
 | **Delete** | Deletes the layers. |
 
@@ -474,6 +509,7 @@ or a light but never stretches or mirrors it. See
 | **Lock**, **Unlock all layers** | The [lock switch](#switches). |
 | **Arrange ▸** | [Moves layers in the stack](#order-and-selection). |
 | **Stagger layers…** | Opens the [Stagger](#stagger) panel. |
+| **Transition ▸** | Puts a [transition between two layers](#transition-between-two-layers). |
 | **Markers ▸** | **Add at playhead** puts a [marker](/use/markers/) on each selected layer, in place of one already on that frame. **Delete all markers** clears them. |
 | **Blending mode ▸** | The [blend mode](/use/blend-modes/), with **Next blending mode** and **Previous blending mode** at its foot. |
 | **Matte ▸** | Gates the layer by [another layer](/use/mattes/#the-layer-menu). |

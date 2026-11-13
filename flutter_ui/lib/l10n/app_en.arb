@@ -8895,6 +8895,14 @@
   "@menuStaggerLayers": {
     "description": "Layer menu and layer context-menu item: opens the Stagger panel, which starts the selected layers one after another, a set number of frames apart."
   },
+  "menuLayerTransition": "Transition",
+  "@menuLayerTransition": {
+    "description": "Layer menu and layer context-menu submenu, with two layers that overlap in time selected: puts a transition between them, keyed onto the layers."
+  },
+  "menuLayerTransitionNoOverlap": "A transition needs two picture layers that overlap in time.",
+  "@menuLayerTransitionNoOverlap": {
+    "description": "Status line notice when Layer > Transition is picked for two layers that don't overlap by at least two frames, or where one has no picture."
+  },
   "menuText": "Text",
   "@menuText": {
     "description": "Menu item."
