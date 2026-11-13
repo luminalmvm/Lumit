@@ -577,6 +577,8 @@ class MainFlutterWindow: NSWindow {
         self?.setBackground(call.arguments as? [String: Any] ?? [:])
       case "show":
         self?.reveal()
+      case "close":
+        self?.performClose(nil)
       case "backdrop":
         result(self?.setBackdrop(call.arguments as? [String: Any] ?? [:]) ?? false)
         return

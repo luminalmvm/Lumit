@@ -75,6 +75,32 @@ class PhoneLine extends ChangeNotifier {
   /// unix seconds, by its id in the queue.
   final Map<int, int> _ran = {}, _ended = {};
 
+  /// Set by [RemoteExports], which sends exports to the account's other
+  /// computers and takes theirs: what it adds to what this computer says,
+  /// to each item, and to the queue, and what it is told.
+  Map<String, Object?> Function()? sayAlso;
+  Map<String, Object?> Function(BridgeExportQueueItem item)? itemAlso;
+  List<Map<String, Object?>> Function()? queueAlso;
+
+  /// The account's computers as the room lists them, a command another
+  /// computer sent here, or the answer to one sent from here.
+  void Function(Map<dynamic, dynamic> j)? heardAlso;
+
+  /// A phone's `queue` naming another computer to do the work: why not, or
+  /// null once it is on its way there.
+  Future<String?> Function(Map<dynamic, dynamic> j)? queueOn;
+
+  /// Say [j] on the line, if there is one.
+  bool send(Map<String, Object?> j) {
+    final socket = _live;
+    if (socket == null) return false;
+    socket.add(jsonEncode(j));
+    return true;
+  }
+
+  /// The queue as it is now, rather than at the next beat.
+  void sayNow() => _say();
+
   /// Begin following the account. Not called by a test, which keeps a test
   /// run off the network.
   void start() {
@@ -156,11 +182,15 @@ class PhoneLine extends ChangeNotifier {
       'platform': Platform.operatingSystem,
       'version': versionFromBootLine(lumitVersion()) ?? '',
       'project': projectNameFor(app.project?.path()),
-      'queue': [for (final item in items) _item(item, now)],
+      'queue': [
+        for (final item in items) _item(item, now),
+        ...?queueAlso?.call(),
+      ],
       'compositions': _compositions(),
       // A small file, read again each time so a preset saved shows at once.
       'presets': [for (final preset in exportPresetList()) preset.name],
       'remote': workspace.phonesExport,
+      ...?sayAlso?.call(),
     });
     if (said == _said) return;
     _said = said;
@@ -214,6 +244,7 @@ class PhoneLine extends ChangeNotifier {
       'error': state is BridgeExportQueueState_Failed ? state.error : null,
       'started': _ran[item.id],
       'ended': _ended[item.id],
+      ...?itemAlso?.call(item),
     };
   }
 
@@ -224,12 +255,49 @@ class PhoneLine extends ChangeNotifier {
     } catch (_) {
       return;
     }
-    if (j is Map && j['type'] == 'paired' && j['name'] is String) {
+    if (j is! Map) return;
+    if (j['type'] == 'paired' && j['name'] is String) {
       justPaired = j['name'] as String;
       notifyListeners();
     }
-    if (j is Map && j['type'] == 'command') _command(j);
-    if (j is Map && j['type'] == 'library') onLibrary?.call();
+    // The account's computers, what one of them asks of this one, and their
+    // answers. So is a command for an export this computer sent elsewhere.
+    final mirrors = queueAlso?.call() ?? const <Map<String, Object?>>[];
+    final item = j['item'];
+    final job = j['do'] == 'job' ||
+        (j['type'] == 'command' &&
+            item is int &&
+            mirrors.any((mirror) => mirror['id'] == item));
+    if (j['type'] == 'computers' || j['type'] == 'reply' || job) {
+      heardAlso?.call(j);
+      return;
+    }
+    if (j['type'] == 'command' && j['do'] == 'queue' && j['on'] is String) {
+      unawaited(_queueOn(j));
+      return;
+    }
+    if (j['type'] == 'library') onLibrary?.call();
+    if (j['type'] == 'command') _command(j);
+  }
+
+  /// A phone's `queue` for another computer to do, answered once it has gone
+  /// there or is held for it.
+  Future<void> _queueOn(Map<dynamic, dynamic> j) async {
+    String? error;
+    try {
+      error = !workspace.phonesExport
+          ? 'turned_off'
+          : await (queueOn?.call(j) ?? Future.value('failed'));
+    } catch (_) {
+      error = 'failed';
+    }
+    send({
+      'type': 'reply',
+      'id': j['id'],
+      'to': j['from'],
+      if (error == null) 'ok': true else 'error': error,
+    });
+    _say();
   }
 
   /// Another of the account's computers changed the library. Set by the

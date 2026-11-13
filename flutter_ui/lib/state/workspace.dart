@@ -1379,6 +1379,22 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether the account's other computers may send exports here, and the
+  /// folders looked in for footage one of them sends, so what is already
+  /// here is not sent again. This machine's own, so in no profile group.
+  bool remoteTakes = true;
+  List<String> remoteFolders = const [];
+
+  void setRemoteTakes(bool on) {
+    remoteTakes = on;
+    save();
+  }
+
+  void setRemoteFolders(List<String> folders) {
+    remoteFolders = List.unmodifiable(folders);
+    save();
+  }
+
   /// Whether closing the window leaves Lumit running in the tray, so the
   /// phones still see this computer. This machine's own, so in no profile
   /// group, as is [openAtSignIn].
@@ -2511,6 +2527,8 @@ class Workspace extends ChangeNotifier {
         'share_relay': shareRelay,
         'share_cloud': shareCloud,
         'phones_export': phonesExport,
+        'remote_takes': remoteTakes,
+        'remote_folders': remoteFolders,
         'keep_running': keepRunning,
         'open_at_sign_in': openAtSignIn,
         'share_up_limit': shareUpLimit,
@@ -2679,6 +2697,10 @@ class Workspace extends ChangeNotifier {
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
     phonesExport = j['phones_export'] is! bool || j['phones_export'] as bool;
+    remoteTakes = j['remote_takes'] is! bool || j['remote_takes'] as bool;
+    final folders = j['remote_folders'];
+    remoteFolders = List.unmodifiable(
+        [if (folders is List) ...folders.whereType<String>()]);
     keepRunning = j['keep_running'] == true;
     openAtSignIn = keepRunning && j['open_at_sign_in'] == true;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);

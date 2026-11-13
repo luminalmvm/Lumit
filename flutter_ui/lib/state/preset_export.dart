@@ -1,6 +1,6 @@
 // The export a saved preset makes of a composition, as the export dialogue's
 // Export button would make it with that preset chosen. For what a phone asks
-// for.
+// for, here or on another of the account's computers.
 
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';

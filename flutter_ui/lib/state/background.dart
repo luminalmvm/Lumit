@@ -62,6 +62,15 @@ Future<void> showWindow() async {
   }
 }
 
+/// Close the window, which with Keep running on leaves Lumit in the tray.
+Future<void> closeWindow() async {
+  try {
+    await _channel.invokeMethod<void>('close');
+  } catch (_) {
+    // No runner listening.
+  }
+}
+
 /// Answer the runner. [hidden] runs when the window has been closed into the
 /// tray. Quit in the tray is an ordinary quit, so the unsaved work question
 /// is asked the way closing the window asks it.

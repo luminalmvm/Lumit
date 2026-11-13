@@ -23,6 +23,7 @@ import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show pluginMessages;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/remote.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
@@ -38,6 +39,7 @@ import 'package:lumit_flutter/panels/timeline_timings.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
+import '../state/remote_exports_frb.dart' show remoteEnded, remoteSizeOf;
 import '../state/reviews.dart' show isReviewExport;
 import '../state/settings.dart' show ScriptEvent;
 import '../state/tools.dart' show ToolModifier, ToolsState;
@@ -77,6 +79,21 @@ final ValueNotifier<int> statusLineExportStarted = ValueNotifier<int>(0);
 /// is the only thing either side is asking about.
 final ValueNotifier<int> proxyJobChanged = ValueNotifier<int>(0);
 
+/// A bar in Pro's sweep for a job on another computer, whose readings come
+/// at the room's pace, about one a second. The fill runs to each over that
+/// second, so it moves on steadily rather than in steps. Where motion is
+/// turned off it goes straight there.
+Widget roomPacedBar(double fraction, {double height = 4}) => Builder(
+      builder: (context) => TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: fraction.clamp(0.0, 1.0)),
+        duration: ThemeScope.of(context).motion.mark.isStill
+            ? Duration.zero
+            : const Duration(seconds: 1),
+        builder: (context, shown, _) => HouseProgressBar(
+            fraction: shown, height: height, eased: false, fill: proSweep),
+      ),
+    );
+
 class StatusLineFrb extends StatefulWidget {
   /// The poll seam, injected by tests so no engine has to run an export.
   final BridgeExportState Function()? poll;
@@ -112,6 +129,11 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   BridgeProxyState _proxy = const BridgeProxyState.idle();
   Timer? _timer;
 
+  /// The exports this computer sent to another that haven't ended, oldest
+  /// first, as the queue runs them. The strip follows them while there are
+  /// any.
+  List<BridgeRemoteJob> _sent = const [];
+
   /// One pending repaint for a cache bump that arrived while the tick was
   /// off, so a burst of banked frames coalesces into a single redraw.
   Timer? _bump;
@@ -141,6 +163,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     _exportsLanded();
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
     _app.transcription.progress.addListener(_heard);
+    _sent = _sentUnderWay();
     statusLineExportStarted.addListener(_tick);
     proxyJobChanged.addListener(_tick);
     // Playback fills the caches, so the meter ticks while it runs.
@@ -165,6 +188,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     if (_export != exportWas) _exportsLanded();
     final was = _proxy is BridgeProxyState_Running;
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
+    _sent = _sentUnderWay();
     _outputPeakDb = _readOutputPeak();
     _sayWhatThePluginsSaid();
     _syncTimer();
@@ -232,6 +256,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   void _syncTimer() {
     if (_export is BridgeExportState_Running ||
         _proxy is BridgeProxyState_Running ||
+        _sent.isNotEmpty ||
         _ui.playing.value) {
       _timer ??=
           Timer.periodic(const Duration(milliseconds: 500), (_) => _tick());
@@ -409,12 +434,17 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // At most half the line, which is what these had, but no longer
           // holding the half they do not fill. The meter above takes what
           // is left, so it is cut only when the line is truly full.
+          // A notice beside an export sent to another computer has a little
+          // more, so the two fit side by side on an ordinary window.
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: width / 2),
+            constraints: BoxConstraints(
+                maxWidth: width * (_shownSent == null ? 0.5 : 0.6)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Flexible(child: _notice(t, state)),
+                Flexible(
+                    flex: _shownSent == null ? 1 : _noticeShare(t, state),
+                    child: _notice(t, state)),
                 // The spacer that stood here is the hint's now ([_line]), so
                 // a job follows the notice across a plain gap.
                 if (!roomed) const SizedBox(width: 8),
@@ -1081,7 +1111,126 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     ];
   }
 
-  List<Widget> _exportSection(LumitTheme t) => switch (_export) {
+  static List<BridgeRemoteJob> _sentUnderWay() {
+    try {
+      return [
+        for (final job in remoteJobs())
+          if (job.sent && !remoteEnded(job.stage)) job,
+      ];
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+      return const [];
+    }
+  }
+
+  /// The export sent to another computer the strip follows: the first that
+  /// is moving or exporting, while nothing exports here.
+  BridgeRemoteJob? get _shownSent => _export is BridgeExportState_Running
+      ? null
+      : _sent
+          .where((j) =>
+              j.stage == BridgeRemoteStage.sending ||
+              j.stage == BridgeRemoteStage.exporting ||
+              j.stage == BridgeRemoteStage.returning)
+          .firstOrNull;
+
+  /// How wide [text] is set in the strip's words, at least one.
+  static int _widthOf(LumitTheme t, String text) {
+    final painter = TextPainter(
+        text: TextSpan(text: text, style: t.small),
+        textDirection: TextDirection.ltr,
+        maxLines: 1)
+      ..layout();
+    final width = painter.width.ceil();
+    painter.dispose();
+    return math.max(1, width);
+  }
+
+  /// The share of the strip the notice takes beside a sent export: as wide
+  /// as its words, its action and its close, so the two divide the room as
+  /// their words need it and neither is cut while both fit.
+  int _noticeShare(LumitTheme t, LumitState state) {
+    final notice = state.notice.value;
+    if (notice == null) return 1;
+    final action = notice.action;
+    // Each small button is its word and 5 a side, after a gap of 4.
+    return _widthOf(t, notice.message) +
+        (action == null ? 0 : _widthOf(t, action) + 14) +
+        _widthOf(t, '×') +
+        14 +
+        (t.tokens.roomed ? 28 : 0);
+  }
+
+  /// An export sent to another computer, while nothing exports here: where
+  /// it has got to, a bar in Pro's sweep moving at the room's pace, and
+  /// Cancel. Exporting, it counts frames and says how long is left.
+  List<Widget> _sentSection(LumitTheme t) {
+    final job = _shownSent;
+    if (job == null) return const [];
+    final exporting = job.stage == BridgeRemoteStage.exporting;
+    final (label, done, all) = switch (job.stage) {
+      BridgeRemoteStage.exporting => (
+          job.frame > 0
+              ? '${l10n.remoteStatusExporting(job.compName, job.otherName)}'
+                  ' · ${job.frame}/${job.total}'
+              : l10n.remoteStatusExporting(job.compName, job.otherName),
+          job.frame,
+          job.total
+        ),
+      BridgeRemoteStage.sending => (
+          '${l10n.remoteStatusSending(job.compName, job.otherName)}'
+              ' · ${remoteSizeOf(job.bytes, job.size)}',
+          job.bytes,
+          job.size
+        ),
+      _ => (
+          '${l10n.remoteStatusBringing(job.compName, job.otherName)}'
+              ' · ${remoteSizeOf(job.bytes, job.size)}',
+          job.bytes,
+          job.size
+        ),
+    };
+    return [
+      Flexible(
+        // As wide as its words, with room for the time left once frames
+        // are coming.
+        flex: _widthOf(
+            t,
+            exporting && done > 0
+                ? '$label · ${l10n.exportLeftMinutes('2')}'
+                : label),
+        child: KeyedSubtree(
+          key: const ValueKey('status-remote-export'),
+          child: exporting
+              ? _ExportProgress(
+                  label: label, frame: done.toInt(), total: all.toInt())
+              : Text(label, style: t.small, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+      const SizedBox(width: 8),
+      SizedBox(
+        width: 120,
+        child: roomPacedBar(all <= 0 ? 0.0 : done / all),
+      ),
+      const SizedBox(width: 8),
+      HouseButton(
+        key: const ValueKey('status-remote-cancel'),
+        small: true,
+        frameless: true,
+        onPressed: () => remoteCancel(job: job.job),
+        child: Text(l10n.cancel, style: t.small),
+      ),
+    ];
+  }
+
+  List<Widget> _exportSection(LumitTheme t) {
+    final sent = _export is BridgeExportState_Running
+        ? const <Widget>[]
+        : _sentSection(t);
+    return sent.isNotEmpty ? sent : _localSection(t);
+  }
+
+  List<Widget> _localSection(LumitTheme t) => switch (_export) {
         BridgeExportState_Idle() => const [],
         BridgeExportState_Running(:final frame, :final total, :final encoder) =>
           [

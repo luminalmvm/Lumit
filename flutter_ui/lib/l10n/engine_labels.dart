@@ -2164,6 +2164,7 @@ Map<String, String> get _built => {
       "Import footage": l10n.keyImportFootage,
       "Export the composition": l10n.keyExportTheComposition,
       "Export as Lottie or SVG": l10n.keyExportAsLottieOrSvg,
+      "Export on another computer": l10n.keyExportOnAnotherComputer,
       "New composition": l10n.keyNewComposition,
       "Open Settings": l10n.keyOpenSettings,
       "Open Project settings": l10n.keyOpenProjectSettings,
