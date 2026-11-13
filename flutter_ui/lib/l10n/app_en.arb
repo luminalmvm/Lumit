@@ -13900,6 +13900,22 @@
   "@fxRandomOrder": {
     "description": "Effect Controls, Slices: a switch. When on, the strips set off in a seeded random order instead of one after another."
   },
+  "fxDiamonds": "Diamonds",
+  "@fxDiamonds": {
+    "description": "Effect Controls, Luma fade, a Pattern option, and a look in the cut timeline's Transition menu: the picture goes away in a grid of diamonds that grow from their centres."
+  },
+  "fxBlocks": "Blocks",
+  "@fxBlocks": {
+    "description": "Cut timeline, Transition menu: a Luma fade look where the picture goes away in square blocks, one at a time in a random order."
+  },
+  "fxNoiseDissolve": "Noise dissolve",
+  "@fxNoiseDissolve": {
+    "description": "Cut timeline, Transition menu: a Luma fade look where the picture goes away in soft, cloudy patches."
+  },
+  "fxSoftIris": "Soft iris",
+  "@fxSoftIris": {
+    "description": "Cut timeline, Transition menu: a Luma fade look where a soft-edged circle opens from the centre to show the incoming picture."
+  },
   "cutRemoveTransition": "Remove transition",
   "@cutRemoveTransition": {
     "description": "Cut timeline, Transition list: take the transition off the edit point nearer the pointer, so the two clips meet at a plain cut again."

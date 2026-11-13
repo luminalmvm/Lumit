@@ -120,7 +120,49 @@ pub const TABLE: &[Kind] = &[
         ],
     ),
     wipe("venetian_blinds", Sweep::Out, &[]),
-    wipe("luma_fade", Sweep::Out, &[]),
+    wipe(
+        "luma_fade",
+        Sweep::Out,
+        &[
+            look("Luma fade", &[]),
+            look(
+                "Noise dissolve",
+                &[
+                    ("pattern", Choice(1)),
+                    ("pattern_scale", Float(14.0)),
+                    ("softness", Float(10.0)),
+                ],
+            ),
+            look(
+                "Blocks",
+                &[
+                    ("pattern", Choice(2)),
+                    ("pattern_scale", Float(9.0)),
+                    ("softness", Float(5.0)),
+                ],
+            ),
+            look(
+                "Diamonds",
+                &[
+                    ("pattern", Choice(3)),
+                    ("pattern_scale", Float(6.0)),
+                    ("softness", Float(5.0)),
+                ],
+            ),
+            look(
+                "Stripes",
+                &[
+                    ("pattern", Choice(4)),
+                    ("pattern_scale", Float(8.0)),
+                    ("softness", Float(5.0)),
+                ],
+            ),
+            look(
+                "Soft iris",
+                &[("pattern", Choice(5)), ("softness", Float(40.0))],
+            ),
+        ],
+    ),
     Kind {
         name: "move",
         group: Group::Moves,

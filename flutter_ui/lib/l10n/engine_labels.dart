@@ -2096,6 +2096,11 @@ Map<String, String> get _built => {
       "Slice glitch": l10n.fxSliceGlitch,
       "Alternate": l10n.fxAlternate,
       "Random order": l10n.fxRandomOrder,
+      // Luma fade's patterns, and its looks.
+      "Diamonds": l10n.fxDiamonds,
+      "Blocks": l10n.fxBlocks,
+      "Noise dissolve": l10n.fxNoiseDissolve,
+      "Soft iris": l10n.fxSoftIris,
       // Settings -> Keymap: what each shortcut does, and the headings saying
       // where it is live (crates/lumit-keymap/src/lib.rs).
       "Play or pause": l10n.keyPlayOrPause,

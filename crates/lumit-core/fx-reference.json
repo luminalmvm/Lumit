@@ -35005,6 +35005,33 @@
           "hard_max": 100.0
         },
         {
+          "id": "pattern",
+          "label": "Pattern",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Picture",
+            "Noise",
+            "Cells",
+            "Diamonds",
+            "Stripes",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "pattern_scale",
+          "label": "Scale",
+          "kind": "int",
+          "unit": "raw",
+          "default": 8,
+          "slider_min": 1.0,
+          "slider_max": 64.0,
+          "hard_min": 1.0,
+          "hard_max": 64.0
+        },
+        {
           "id": "matte_placement",
           "label": "Map placement",
           "kind": "choice",
@@ -35085,6 +35112,12 @@
           "param": "matte_placement",
           "on": "matte",
           "cond": "layer_set"
+        },
+        {
+          "param": "pattern_scale",
+          "on": "pattern",
+          "cond": "choice_is_not",
+          "value": 0
         }
       ],
       "matte": {

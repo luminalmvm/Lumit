@@ -433,7 +433,10 @@ impl FxEngine {
             "fx-venetian-blinds",
         );
         let iris_wipe_mod = module(include_str!("../fx_iriswipe.wgsl"), "fx-iris-wipe");
-        let luma_fade_mod = module(include_str!("../fx_lumafade.wgsl"), "fx-luma-fade");
+        let luma_fade_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_lumafade.wgsl")),
+            "fx-luma-fade",
+        );
         let srgb_curve_mod = module(include_str!("../fx_srgbcurve.wgsl"), "fx-srgb-curve");
         // The per-card shuffle is the shared hash, so the noise core is
         // prepended exactly as Fractal noise's and Roughen edges' are.

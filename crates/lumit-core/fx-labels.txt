@@ -162,6 +162,7 @@ Blend
 Blobs
 Block glitch
 Block size
+Blocks
 Bloom
 Blue
 Blue amount
@@ -229,6 +230,7 @@ Card wipe
 Ceiling
 Cell height
 Cell width
+Cells
 Centre
 Centre X
 Centre Y
@@ -436,6 +438,7 @@ Detect edge threshold
 Detected beats
 Detector
 Diagonal
+Diamonds
 Difference
 Digital
 Dip to black
@@ -1062,6 +1065,7 @@ Node graph
 Noise
 Noise by size
 Noise by tone
+Noise dissolve
 Noise only
 Noise reduction
 Noise scale
@@ -1179,6 +1183,7 @@ Pick
 Pick points
 Picked
 Picked and the rest
+Picture
 Piece scale
 Pillow emboss
 Pin layer
@@ -1519,6 +1524,7 @@ Smoothing
 Smoothness
 Smudges
 Soft colour
+Soft iris
 Soft light
 Softness
 Solar
