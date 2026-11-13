@@ -568,7 +568,16 @@ impl Hub {
             self.read_loop(peer, &mut receiver);
         }
         let _ = socket.shutdown(Shutdown::Both);
-        self.links.lock().retain(|l| l.id != id);
+        // A link replaced before its drop was noticed leaves what it was
+        // doing to the one that replaced it, which has asked for it again.
+        let replaced = {
+            let mut links = self.links.lock();
+            links.retain(|l| l.id != id);
+            links.iter().any(|l| l.peer == peer)
+        };
+        if replaced {
+            return;
+        }
         self.withdrawn.lock().retain(|(who, _)| *who != peer);
         if self.host {
             self.dropped(peer);
