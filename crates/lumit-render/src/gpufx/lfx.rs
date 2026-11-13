@@ -776,4 +776,49 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         assert_eq!(render(true), [enc(0.25), enc(0.4), enc(0.6)], "the plate");
         assert_eq!(render(false), [0, 0, 0], "the comp's black");
     }
+
+    /// Gradient's Paint under a Blend that reads the layer: particles drawn
+    /// on nothing, then a Gradient in Colour. Whole frame paints the clear
+    /// part too, opaque, and Colour takes its lightness from that clear
+    /// (black) part, so the layer turns black over a white comp; Inside layer
+    /// paints only where the layer has pixels and the white comp shows.
+    /// Guards a background that should stay clear.
+    #[test]
+    fn a_gradient_inside_its_layer_keeps_the_clear_part_clear() {
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let mut render = |paint: u32| {
+            let mut sparks =
+                lumit_core::fx::builtins::instantiate("particulate").expect("a built-in");
+            for p in &mut sparks.params {
+                if p.id == "composite_on_original" {
+                    p.value = EffectValue::Bool(false);
+                }
+            }
+            let mut ramp = lumit_core::fx::builtins::instantiate("gradient").expect("a built-in");
+            for p in &mut ramp.params {
+                match p.id.as_str() {
+                    "paint" => p.value = EffectValue::Choice(paint),
+                    // Colour.
+                    "blend" => p.value = EffectValue::Choice(24),
+                    _ => {}
+                }
+            }
+            let (mut doc, comp) = project(vec![sparks, ramp]);
+            for item in &mut doc.items {
+                if let ProjectItem::Composition(c) = item {
+                    c.background = LinearColour([1.0, 1.0, 1.0, 1.0]);
+                }
+            }
+            let (rgba, ..) = r
+                .render_rgba(&Arc::new(doc), comp, 0, 1.0)
+                .expect("it renders");
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        assert_eq!(render(1), [0, 0, 0], "Whole frame: opaque, and black");
+        assert_eq!(render(0), [255, 255, 255], "Inside layer: the comp shows");
+    }
 }

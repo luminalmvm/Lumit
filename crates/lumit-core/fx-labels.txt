@@ -735,6 +735,7 @@ Input space
 Input white
 Inside
 Inside colour
+Inside layer
 Inside mask
 Intensity
 Interlace offset
@@ -1013,6 +1014,7 @@ Overlay
 PAL
 Padding x
 Padding y
+Paint
 Paint style
 Parametric EQ
 Part
@@ -1620,6 +1622,7 @@ Wavelength
 Waves
 Weak
 Wet
+Whole frame
 Whole frames
 Width
 Wiggle

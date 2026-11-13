@@ -9626,6 +9626,18 @@
           "hard_max": 100.0
         },
         {
+          "id": "paint",
+          "label": "Paint",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Inside layer",
+            "Whole frame"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "scatter",
           "label": "Scatter",
           "kind": "float",
