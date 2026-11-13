@@ -1415,6 +1415,15 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether the system shows a notification when an export ends while
+  /// Lumit isn't in front. This machine's own, so in no profile group.
+  bool notifyExports = true;
+
+  void setNotifyExports(bool on) {
+    notifyExports = on;
+    save();
+  }
+
   /// The relay a shared project keeps a room at, as `host` or `host:port`,
   /// or null for none. Somebody's own server, which Lumit only uses once it
   /// has been typed here.
@@ -2531,6 +2540,7 @@ class Workspace extends ChangeNotifier {
         'remote_folders': remoteFolders,
         'keep_running': keepRunning,
         'open_at_sign_in': openAtSignIn,
+        'notify_exports': notifyExports,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -2703,6 +2713,7 @@ class Workspace extends ChangeNotifier {
         [if (folders is List) ...folders.whereType<String>()]);
     keepRunning = j['keep_running'] == true;
     openAtSignIn = keepRunning && j['open_at_sign_in'] == true;
+    notifyExports = j['notify_exports'] is! bool || j['notify_exports'] as bool;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;

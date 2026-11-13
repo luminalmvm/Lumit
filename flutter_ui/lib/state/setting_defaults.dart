@@ -97,6 +97,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-export-preset': '',
     'settings-export-template': '',
     'settings-export-destination': 'ask',
+    'settings-notify-exports': w.notifyExports,
     // Preview and cache
     'settings-playback-mode': p.playback,
     'settings-full-res-drags': p.fullResDragPreviews,

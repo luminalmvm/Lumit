@@ -62,6 +62,16 @@ Future<void> showWindow() async {
   }
 }
 
+/// Show [title] and [body] as the system's own notification. A click on it
+/// brings the window back.
+Future<void> notifyDesktop(String title, String body) async {
+  try {
+    await _channel.invokeMethod<void>('notify', {'title': title, 'body': body});
+  } catch (_) {
+    // No runner listening.
+  }
+}
+
 /// Close the window, which with Keep running on leaves Lumit in the tray.
 Future<void> closeWindow() async {
   try {

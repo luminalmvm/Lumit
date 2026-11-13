@@ -979,6 +979,27 @@ static void window_method_cb(FlMethodChannel* channel,
     }
   } else if (g_strcmp0(asked, "show") == 0) {
     reveal(self);
+  } else if (g_strcmp0(method, "notify") == 0) {
+    // An export ended while Lumit wasn't in front (lib/state/background.dart).
+    // Inside a Flatpak it goes through the notification portal by itself. A
+    // click runs app.reveal.
+    FlValue* args = fl_method_call_get_args(call);
+    auto text = [args](const gchar* key) -> const gchar* {
+      FlValue* found = fl_value_get_type(args) == FL_VALUE_TYPE_MAP
+                           ? fl_value_lookup_string(args, key)
+                           : nullptr;
+      return found != nullptr &&
+                     fl_value_get_type(found) == FL_VALUE_TYPE_STRING
+                 ? fl_value_get_string(found)
+                 : "";
+    };
+    g_autoptr(GNotification) notification = g_notification_new(text("title"));
+    if (text("body")[0] != '\0') {
+      g_notification_set_body(notification, text("body"));
+    }
+    g_notification_set_default_action(notification, "app.reveal");
+    g_application_send_notification(G_APPLICATION(self), nullptr,
+                                    notification);
   }
 }
 
@@ -1314,6 +1335,10 @@ static void my_application_init(MyApplication* self) {
       g_simple_action_new("forward", G_VARIANT_TYPE_STRING_ARRAY);
   g_signal_connect(forward, "activate", G_CALLBACK(forward_cb), self);
   g_action_map_add_action(G_ACTION_MAP(self), G_ACTION(forward));
+  // What a click on one of Lumit's notifications runs.
+  g_autoptr(GSimpleAction) shown = g_simple_action_new("reveal", nullptr);
+  g_signal_connect_swapped(shown, "activate", G_CALLBACK(reveal), self);
+  g_action_map_add_action(G_ACTION_MAP(self), G_ACTION(shown));
 }
 
 MyApplication* my_application_new() {

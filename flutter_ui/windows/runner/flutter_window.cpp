@@ -17,6 +17,7 @@
 #include "backdrop.h"
 #include "floating_windows.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "notify.h"
 #include "resource.h"
 #include "utils.h"
 
@@ -580,6 +581,20 @@ bool FlutterWindow::OnCreate() {
           }
         } else if (method == "show") {
           Reveal();
+        } else if (method == "notify") {
+          // An export ended while Lumit wasn't in front (notify.cpp).
+          auto text = [args](const char* key) -> std::wstring {
+            if (args) {
+              auto found = args->find(flutter::EncodableValue(key));
+              if (found != args->end()) {
+                if (const auto* value = std::get_if<std::string>(&found->second)) {
+                  return Utf16FromUtf8(*value);
+                }
+              }
+            }
+            return L"";
+          };
+          ShowNotification(hwnd, text("title"), text("body"));
         } else if (method == "backdrop") {
           // The style's see-through window (backdrop.cpp).
           std::string kind;
@@ -792,6 +807,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       } else if (lparam == WM_RBUTTONUP) {
         TrayMenu();
       }
+      return 0;
+    case kNotifyClickMessage:
+      Reveal();
       return 0;
     case WM_COPYDATA: {
       // A second start's arguments (ForwardToOpenLumit).

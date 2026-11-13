@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart'
     show workAreaFrames;
@@ -28,6 +29,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 
 import 'account.dart';
 import 'app_state.dart';
+import 'background.dart' show notifyDesktop;
 import 'file_dialogs.dart' show pickExportSaveLocation;
 import 'friend_invites.dart';
 import 'phone_line_frb.dart';
@@ -516,6 +518,7 @@ class RemoteExports extends ChangeNotifier {
       case BridgeExportNewsKind.exported || BridgeExportNewsKind.failed:
         break;
     }
+    _gather(news);
   }
 
   /// What stopped short, as the computer it is told on sees it: a file Bring
@@ -533,8 +536,76 @@ class RemoteExports extends ChangeNotifier {
     return l10n.remoteNewsFailed(news.otherName, news.compName);
   }
 
+  // ---- the system's notifications ------------------------------------------
+
+  /// News heard while Lumit isn't in front, gathered for a few seconds so
+  /// exports ending together make one notification.
+  final List<BridgeExportNews> _gathered = [];
+  Timer? _gathering;
+
+  void _gather(BridgeExportNews news) {
+    final front =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    // One cancelled here or from a phone was meant.
+    final cancelled =
+        news.kind == BridgeExportNewsKind.failed && news.error == 'cancelled';
+    if (!workspace.notifyExports || front || cancelled) return;
+    _gathered.add(news);
+    _gathering ??= Timer(const Duration(seconds: 3), _notify);
+  }
+
+  void _notify() {
+    _gathering = null;
+    var all = [..._gathered];
+    _gathered.clear();
+    // An export arriving here is worth saying alone, not counted with
+    // those that ended.
+    if (all.any((n) => n.kind != BridgeExportNewsKind.arrived)) {
+      all = [
+        for (final n in all)
+          if (n.kind != BridgeExportNewsKind.arrived) n,
+      ];
+    }
+    if (all.isEmpty) return;
+    if (all.length > 1) {
+      unawaited(notifyDesktop(l10n.notifyExportsEnded(all.length),
+          [for (final n in all) n.file.isEmpty ? n.compName : n.file]
+              .join(', ')));
+      return;
+    }
+    final news = all.single;
+    // Where the file is: its folder, as the body under the title.
+    final cut = news.path.lastIndexOf(RegExp(r'[/\\]'));
+    final folder = cut > 0 ? news.path.substring(0, cut) : news.path;
+    final (title, body) = switch (news.kind) {
+      BridgeExportNewsKind.exported => (l10n.notifyExported(news.file), folder),
+      BridgeExportNewsKind.failed => (
+          l10n.notifyFailed(news.compName),
+          remoteWhy(news.error)
+        ),
+      BridgeExportNewsKind.landed => (
+          l10n.remoteNewsLanded(news.file, news.otherName),
+          folder
+        ),
+      BridgeExportNewsKind.kept => (
+          l10n.remoteNewsKept(news.otherName, news.file),
+          ''
+        ),
+      BridgeExportNewsKind.remoteFailed => (
+          _failed(news),
+          remoteWhy(news.error)
+        ),
+      BridgeExportNewsKind.arrived => (
+          l10n.remoteNewsArrived(news.compName, news.otherName),
+          ''
+        ),
+    };
+    unawaited(notifyDesktop(title, body));
+  }
+
   @override
   void dispose() {
+    _gathering?.cancel();
     unawaited(_outbox?.cancel());
     unawaited(_news?.cancel());
     if (_started) {
