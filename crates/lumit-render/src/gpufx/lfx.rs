@@ -646,4 +646,90 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             );
         }
     }
+
+    /// Colorama, as the Siceliot extension ships it, on the grey plate:
+    /// a phase of zero lands on the cycle's first colour and Phase shift turns
+    /// it, Modify None leaves the plate, Ramp grey from Red gives the red back
+    /// as grey, a Pixel selection that matches nothing changes nothing, and
+    /// the defaults read Intensity off the display values into the hue ring.
+    /// Guards wrong pixels.
+    #[test]
+    fn colorama_reads_a_phase_and_paints_the_cycle() {
+        const SHADER: &str =
+            include_str!("../../../lumit-extensions/builtin/siceliot/colorama.wgsl");
+        let mut colorama = effect("colorama_test", SHADER, &[]);
+        colorama.category = "Colour".into();
+        colorama.input = Some(lfx::LfxInput {
+            label: "Add phase".into(),
+            kind: lfx::LfxInputKind::Image,
+        });
+        let def = register(colorama).expect("it installs");
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let mut render = |rows: &[(&str, EffectValue)]| {
+            let mut fx = lumit_core::fx::builtins::instantiate(def.schema().match_name)
+                .expect("instantiates");
+            for (id, value) in rows {
+                match fx.params.iter_mut().find(|p| p.id == *id) {
+                    Some(p) => p.value = value.clone(),
+                    None => fx.params.push(lumit_core::model::EffectParam {
+                        id: (*id).into(),
+                        value: value.clone(),
+                        extra: serde_json::Map::new(),
+                    }),
+                }
+            }
+            let (doc, comp) = project(vec![fx]);
+            let (rgba, ..) = r
+                .render_rgba(&Arc::new(doc), comp, 0, 1.0)
+                .expect("it renders");
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let near = |got: [u8; 3], want: [u8; 3], what: &str| {
+            for (g, w) in got.iter().zip(want) {
+                assert!(
+                    (i16::from(*g) - i16::from(w)).abs() <= 2,
+                    "{what}: got {got:?} want {want:?}"
+                );
+            }
+        };
+        let zero = ("get_phase_from", EffectValue::Choice(9));
+        near(
+            render(std::slice::from_ref(&zero)),
+            [255, 0, 0],
+            "a phase of zero is red",
+        );
+        let turned = ("phase_shift", EffectValue::Float(Property::fixed(120.0)));
+        near(
+            render(&[zero, turned]),
+            [0, 255, 0],
+            "a third of a turn on is green",
+        );
+        let enc = lumit_core::pixels::srgb_encode;
+        let plate = [enc(0.25), enc(0.4), enc(0.6)];
+        near(
+            render(&[("modify", EffectValue::Choice(10))]),
+            plate,
+            "Modify None leaves the plate",
+        );
+        near(
+            render(&[
+                ("palette", EffectValue::Choice(2)),
+                ("get_phase_from", EffectValue::Choice(1)),
+            ]),
+            [enc(0.25); 3],
+            "Ramp grey from Red gives the red as grey",
+        );
+        near(
+            render(&[("matching_mode", EffectValue::Choice(1))]),
+            plate,
+            "a selection that matches nothing changes nothing",
+        );
+        // Intensity of the display values: 0.642, between cyan (50 %) and
+        // blue (66.7 %), 85 % of the way.
+        near(render(&[]), [0, 38, 255], "the defaults paint the hue ring");
+    }
 }
