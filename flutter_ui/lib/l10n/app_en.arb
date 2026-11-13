@@ -26940,6 +26940,18 @@
   "@phonesExport": {
     "description": "Switch in Settings, Account, Devices group: whether the paired phones may start, cancel and remove exports on this computer. Kept for this computer only."
   },
+  "remotePaused": "Paused",
+  "@remotePaused": {
+    "description": "Export queue window, status of an export someone paused."
+  },
+  "remotePause": "Pause",
+  "@remotePause": {
+    "description": "Export queue window, an export's right-click menu: hold it where it is."
+  },
+  "remoteGoOn": "Go on",
+  "@remoteGoOn": {
+    "description": "Export queue window, an export's right-click menu: let a paused export carry on."
+  },
   "phoneCodeLeft": "{time} left",
   "@phoneCodeLeft": {
     "description": "Add a phone window, under the code: how long it can still be scanned. {time} is minutes and seconds, such as 4:32.",

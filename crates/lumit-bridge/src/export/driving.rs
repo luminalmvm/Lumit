@@ -33,6 +33,9 @@ struct Item {
     spec: BridgeExportSpec,
     out_path: String,
     state: ItemState,
+    /// Held by someone. Waiting, it is passed over; running, it waits
+    /// between two frames.
+    paused: bool,
     /// When it started encoding, for how long it took.
     started: Option<std::time::Instant>,
     /// Edits made to `doc` when the item starts, and not before: one row's
@@ -254,6 +257,7 @@ pub(super) fn queue_add_version(
         spec: spec.clone(),
         out_path: with_format_extension(out_path, &spec.codec),
         state: ItemState::Waiting,
+        paused: false,
         started: None,
         version,
         group,
@@ -307,6 +311,7 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                         frame,
                         total,
                         encoder: encoder.unwrap_or_default(),
+                        paused: item.paused,
                     }
                 }
                 ItemState::Done { seconds, bytes } => super::QueueRowState::Done {
@@ -350,6 +355,24 @@ pub(super) fn queue_cancel(id: u32) {
     guard
         .queue
         .retain(|item| item.id != id || !matches!(item.state, ItemState::Waiting));
+}
+
+/// Hold item `id` where it is, or let it go on.
+pub(super) fn queue_pause(id: u32, paused: bool) {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let Some(item) = guard.queue.iter_mut().find(|item| item.id == id) else {
+        return;
+    };
+    if !matches!(item.state, ItemState::Waiting | ItemState::Running) {
+        return;
+    }
+    item.paused = paused;
+    if guard.current == Some(id) {
+        if let Some(handle) = &guard.handle {
+            handle.hold(paused);
+        }
+    }
+    pump(&mut guard);
 }
 
 /// What [`queue_move`] says about an item it will not move, or `None` when
@@ -424,7 +447,8 @@ pub(super) fn queue_remove(id: u32) {
 
 /// Start the next waiting item when the queue is running and nothing is in
 /// flight. An item that cannot start at all is marked failed and the one
-/// behind it is tried, so a bad path cannot stall the whole queue.
+/// behind it is tried, so a bad path cannot stall the whole queue. A held
+/// item is passed over.
 ///
 /// The pump is turned by the interface's own polling rather than by a
 /// thread of its own: every caller here already holds the lock, and the
@@ -434,7 +458,7 @@ fn pump(run: &mut Run) {
         let Some(index) = run
             .queue
             .iter()
-            .position(|item| matches!(item.state, ItemState::Waiting))
+            .position(|item| matches!(item.state, ItemState::Waiting) && !item.paused)
         else {
             break;
         };
@@ -499,6 +523,7 @@ pub(super) fn queue_again(id: u32) -> Option<u32> {
         spec: was.spec.clone(),
         out_path: was.out_path.clone(),
         state: ItemState::Waiting,
+        paused: false,
         started: None,
         version: was.version.clone(),
         group: was.group,
@@ -582,6 +607,7 @@ fn drain(run: &mut Run) {
         // strip are two readings of one export, never two answers.
         if let Some(id) = run.current.take() {
             if let Some(item) = run.queue.iter_mut().find(|item| item.id == id) {
+                item.paused = false;
                 item.state = match &state {
                     State::Failed { error } => ItemState::Failed(error.clone()),
                     // A sequence's path names no one file, so it has no size.

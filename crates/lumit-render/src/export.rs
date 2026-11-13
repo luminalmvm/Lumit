@@ -24,6 +24,7 @@ use uuid::Uuid;
 pub mod captions;
 pub mod format;
 mod frame;
+mod held;
 mod sound_only;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
@@ -48,6 +49,12 @@ pub struct ExportHandle {
 impl ExportHandle {
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::Relaxed);
+    }
+
+    /// Hold the export between two frames, or let it go on. The encoder and
+    /// the file stay open while it waits.
+    pub fn hold(&self, on: bool) {
+        held::set(on);
     }
 }
 
@@ -1570,6 +1577,7 @@ pub fn start(
     let (tx, events) = channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
+    held::set(false);
     std::thread::spawn(move || {
         crate::model::stop_reads_with(Arc::clone(&flag));
         let opened = AtomicBool::new(false);
@@ -1903,6 +1911,7 @@ fn run(
         let mut rendered = Ok(());
         let mut waiting = None;
         for frame_n in 0..total {
+            held::wait(cancel);
             if cancel.load(Ordering::Relaxed) {
                 break;
             }

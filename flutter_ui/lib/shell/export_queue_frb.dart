@@ -818,6 +818,12 @@ class _ExportQueueState extends State<_ExportQueue> {
 
         return [
           if (running) _stopAfterRow(() => close(null)),
+          if (item.state case BridgeExportQueueState_Running(:final paused))
+            row(
+                'pause',
+                paused ? l10n.remoteGoOn : l10n.remotePause,
+                () => exportQueuePause(id: item.id, paused: !paused),
+                run),
           if (done && !kIsWeb)
             row('open', l10n.projectShowInFolder,
                 () => revealInFolder(path: item.path), run),
@@ -1017,17 +1023,27 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// than the column, so a failed item shows all of it on hover.
   Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
     final key = ValueKey<String>('export-queue-status-${item.id}');
+    if (item.state case BridgeExportQueueState_Running(paused: true)) {
+      return Text(l10n.remotePaused,
+          key: key,
+          style: dialogMono(t).copyWith(color: t.textMuted),
+          textAlign: TextAlign.right);
+    }
     if (item.state
         case BridgeExportQueueState_Running(
           :final frame,
           :final total,
-          :final encoder
+          :final encoder,
+          :final paused
         ) when total > 0) {
       final seen = _seenRunning[item.id] ??= (DateTime.now(), frame);
-      final left = exportTimeLeft(
-          done: frame - seen.$2,
-          left: total - frame,
-          taken: DateTime.now().difference(seen.$1));
+      // A held export has no time left to tell.
+      final left = paused
+          ? null
+          : exportTimeLeft(
+              done: frame - seen.$2,
+              left: total - frame,
+              taken: DateTime.now().difference(seen.$1));
       return LumitTooltip(
         message: encoder,
         child: Row(

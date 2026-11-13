@@ -720,6 +720,8 @@ pub(crate) enum QueueRowState {
         frame: u64,
         total: u64,
         encoder: String,
+        /// Held between two frames.
+        paused: bool,
     },
     /// How long it took in seconds, and the file's size, zero for a sequence.
     Done {
@@ -854,6 +856,12 @@ pub(crate) fn queue_goes_on() -> bool {
 /// simply never starts.
 pub(crate) fn queue_cancel(id: u32) {
     driving::queue_cancel(id);
+}
+
+/// Hold item `id` between two frames, or let it go on. A waiting item that
+/// is held is passed over until it is let go.
+pub(crate) fn queue_pause(id: u32, paused: bool) {
+    driving::queue_pause(id, paused);
 }
 
 /// Forget one item. A running item is cancelled first: a row cannot leave the
