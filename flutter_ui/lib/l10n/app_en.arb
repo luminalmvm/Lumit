@@ -13734,7 +13734,27 @@
   },
   "cutDissolve": "Dissolve",
   "@cutDissolve": {
-    "description": "Cut timeline, Transition list: the overlap fades one clip into the other. The rest of the list is the Transition effects, by name."
+    "description": "Cut timeline, Transition list: the overlap fades one clip into the other. The rest of the list is the other transitions, in groups."
+  },
+  "cutTransitionWipes": "Wipes",
+  "@cutTransitionWipes": {
+    "description": "Cut timeline, Transition menu: the flyout of transitions that wipe one clip off to show the other."
+  },
+  "cutTransitionMoves": "Moves",
+  "@cutTransitionMoves": {
+    "description": "Cut timeline, Transition menu: the flyout of transitions that move the pictures."
+  },
+  "cutTransitionHits": "Hits",
+  "@cutTransitionHits": {
+    "description": "Cut timeline, Transition menu: the flyout of transitions that flash, blur or distort both clips, strongest in the middle of the cut."
+  },
+  "fxFlip": "Flip",
+  "@fxFlip": {
+    "description": "Cut timeline, Transition menu: a Card wipe look that turns the whole picture over as one card."
+  },
+  "fxShutters": "Shutters",
+  "@fxShutters": {
+    "description": "Cut timeline, Transition menu: a Card wipe look that turns the picture over as a row of tall slats."
   },
   "fxDipToBlack": "Dip to black",
   "@fxDipToBlack": {

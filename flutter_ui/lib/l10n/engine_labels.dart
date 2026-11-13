@@ -2055,6 +2055,8 @@ Map<String, String> get _built => {
       "Rubber": l10n.fxRubber,
       "Emissive": l10n.fxEmissive,
       // The looks a cut's Transition menu offers.
+      "Flip": l10n.fxFlip,
+      "Shutters": l10n.fxShutters,
       "Dip to black": l10n.fxDipToBlack,
       "Blur dissolve": l10n.fxBlurDissolve,
       "Smear": l10n.fxSmear,

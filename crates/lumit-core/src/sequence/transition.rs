@@ -107,7 +107,18 @@ pub const TABLE: &[Kind] = &[
     wipe("linear_wipe", Sweep::Out, &[]),
     wipe("radial_wipe", Sweep::Out, &[]),
     wipe("iris_wipe", Sweep::Iris, &[]),
-    wipe("card_wipe", Sweep::Out, &[]),
+    wipe(
+        "card_wipe",
+        Sweep::Out,
+        &[
+            look("Card wipe", &[]),
+            look("Flip", &[("rows", Float(1.0)), ("columns", Float(1.0))]),
+            look(
+                "Shutters",
+                &[("rows", Float(1.0)), ("columns", Float(12.0))],
+            ),
+        ],
+    ),
     wipe("venetian_blinds", Sweep::Out, &[]),
     wipe("luma_fade", Sweep::Out, &[]),
     hit(

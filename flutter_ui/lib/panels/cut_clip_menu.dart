@@ -212,11 +212,12 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
             ))));
   }
 
-  /// Make the overlap at one edge of [clip] the kind named, or the dissolve
-  /// with none, making the overlap first where the edit point only meets. A
-  /// kind's rows come up in Effect controls when [show] is set.
+  /// Make the overlap at one edge of [clip] the kind named at [look], or the
+  /// dissolve with none, making the overlap first where the edit point only
+  /// meets. A kind's rows come up in Effect controls when [show] is set.
   void _setKind(CompositionReference comp, CutTrack track, BridgeClip clip,
-      bool endEdge, String? kind, int frames, {bool show = false}) {
+      bool endEdge, String? kind, int frames,
+      {int? look, bool show = false}) {
     _afterCut(_cut(() => _named(
         'Transition',
         () => comp.cutSetTransition(
@@ -224,6 +225,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               endEdge: endEdge,
               frames: frames,
               kind: kind,
+              look: look,
               linked: _linked,
             ))));
     if (kind != null && show) {
@@ -241,8 +243,9 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     ui.frontPanel(Panel.effectControls);
   }
 
-  /// The Transition rows for one edit point: the dissolve, then every kind, the
-  /// one in force ticked.
+  /// The Transition rows for one edit point: the dissolve, then a flyout of
+  /// kinds per group, the one in force ticked. A kind with several looks is a
+  /// flyout of them.
   List<Widget> _kindRows(
     void Function(void) close,
     String key,
@@ -256,6 +259,33 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     final overlaps = cutEdgeOverlaps(track, clip, endEdge: endEdge);
     final incoming = endEdge ? other : clip;
     final now = overlaps ? incoming?.transition : null;
+    String? action(BridgeTransitionKind kind) =>
+        _settings.cutDefaultTransition == kind.matchName
+            ? 'cut.transition.default'
+            : null;
+    void pick(BridgeTransitionKind kind, int? look) =>
+        _setKind(comp, track, clip, endEdge, kind.matchName, frames,
+            look: look, show: true);
+    Widget kindRow(BridgeTransitionKind kind) {
+      final looks = kind.looks;
+      if (looks.length < 2) {
+        return _row(close, '$key-${kind.matchName}', kindLabel(kind),
+            () => pick(kind, null),
+            action: action(kind), ticked: now == kind.matchName);
+      }
+      return _flyout(close, '$key-${kind.matchName}', engineLabel(kind.label), [
+        for (var i = 0; i < looks.length; i++)
+          _row(close, '$key-${kind.matchName}-$i', engineLabel(looks[i]),
+              () => pick(kind, i),
+              action: i == 0 ? action(kind) : null),
+      ], ticked: now == kind.matchName);
+    }
+
+    final groups = [
+      l10n.cutTransitionWipes,
+      l10n.cutTransitionMoves,
+      l10n.cutTransitionHits,
+    ];
     return [
       _row(close, '$key-dissolve', l10n.cutDissolve,
           () => _setKind(comp, track, clip, endEdge, null, frames),
@@ -263,17 +293,14 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               ? 'cut.transition.default'
               : null,
           ticked: overlaps && now == null),
-      for (final kind in transitionKinds)
-        _row(
-            close,
-            '$key-${kind.matchName}',
-            engineLabel(kind.label),
-            () => _setKind(comp, track, clip, endEdge, kind.matchName, frames,
-                show: true),
-            action: _settings.cutDefaultTransition == kind.matchName
-                ? 'cut.transition.default'
-                : null,
-            ticked: now == kind.matchName),
+      for (var g = 0; g < groups.length; g++)
+        if (transitionKinds.any((kind) => kind.group == g))
+          _flyout(close, '$key-group-$g', groups[g], [
+            for (final kind in transitionKinds)
+              if (kind.group == g) kindRow(kind),
+          ],
+              ticked: transitionKinds
+                  .any((kind) => kind.group == g && kind.matchName == now)),
     ];
   }
 

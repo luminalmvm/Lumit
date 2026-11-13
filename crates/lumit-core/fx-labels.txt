@@ -608,6 +608,7 @@ Flash colour
 Flicker
 Flicker speed
 Flight
+Flip
 Flip axis
 Flip direction
 Flip order
@@ -1455,6 +1456,7 @@ Shuffle
 Shutter
 Shutter angle
 Shutter phase
+Shutters
 Sibilance only
 Siceliot
 Side

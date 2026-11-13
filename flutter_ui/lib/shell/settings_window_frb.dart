@@ -2464,7 +2464,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               label: (kind) {
                 if (kind == null) return l10n.cutDissolve;
                 for (final each in transitionKinds) {
-                  if (each.matchName == kind) return engineLabel(each.label);
+                  if (each.matchName == kind) return kindLabel(each);
                 }
                 return kind;
               },
