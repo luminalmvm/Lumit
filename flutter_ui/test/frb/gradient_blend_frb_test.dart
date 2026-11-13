@@ -59,10 +59,17 @@ void main() {
       final id = effect.id();
       expect(
         find.descendant(
-            of: find.byKey(ValueKey<String>('fx-row-$id-mix')),
+            of: find.byKey(ValueKey<String>('fx-row-$id-blend')),
             matching: find.byKey(ValueKey<String>('fx-choice-$id-blend'))),
         findsOneWidget,
-        reason: 'the Blend is in view without opening Compositing',
+        reason: 'the Blend is a row of its own, without opening Compositing',
+      );
+      expect(
+        find.descendant(
+            of: find.byKey(ValueKey<String>('fx-row-$id-mix')),
+            matching: find.byKey(ValueKey<String>('fx-choice-$id-blend'))),
+        findsNothing,
+        reason: 'not beside Mix as well',
       );
       final ids = [for (final r in instanceParameters(effect.getInfo())) r.id];
       final mix = ids.indexOf('mix');
@@ -82,6 +89,8 @@ void main() {
       expect([for (final r in box.telling) r.id],
           containsAllInOrder(['mix', 'blend']),
           reason: 'a shut box shows the Blend at its defaults');
+      expect(box.riders['mix'], isNull,
+          reason: 'the box draws the Blend once, as its own row');
 
       // The Timeline lists what the panel lists: the Blend, and no colour
       // the Colours count leaves out.

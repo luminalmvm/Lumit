@@ -3148,15 +3148,21 @@ bool paramGroupVisible(
 /// it always was, as does the Lens flare's own `blend`, which sits BEFORE its
 /// Mix. Choices come before switches so the row reads picker, Channel, Invert.
 ///
+/// A gradient's Blend ([blendInView], the effect named by [effect]) is one of
+/// its own controls and takes a row of its own, as it does in the Timeline.
+///
 /// It costs no bridge call: [params] is the cached schema the caller already
 /// read.
 List<BridgeParamInfo> paramRidersFor(
   List<BridgeParamInfo> params,
-  BridgeParamInfo host,
-) {
+  BridgeParamInfo host, {
+  String? effect,
+}) {
   final names = switch (host.kind) {
     BridgeParamKind_Layer() => {'${host.id}_invert', '${host.id}_channel'},
-    BridgeParamKind_Float() when host.id == 'mix' => {'blend'},
+    BridgeParamKind_Float()
+        when host.id == 'mix' && !(effect != null && blendInView(effect)) =>
+      {'blend'},
     // A bake's two buttons sit on the one row, by the line that says how it goes.
     BridgeParamKind_Action() when host.id == 'bake' => {'cancel'},
     _ => const <String>{},

@@ -3201,7 +3201,7 @@ class _EffectSection extends StatelessWidget {
     // its own. [paramRidersFor] holds the rule, so the box on the node graph
     // canvas folds by the same one.
     List<BridgeParamInfo> ridersFor(BridgeParamInfo p) =>
-        paramRidersFor(params, p);
+        paramRidersFor(params, p, effect: info.name);
 
     final compositing = _compositingRows;
 

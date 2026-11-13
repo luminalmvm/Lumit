@@ -197,7 +197,7 @@ CompBoxRows compBoxRows(
   };
   final riders = <String, List<BridgeParamInfo>>{};
   for (final p in shown) {
-    final beside = paramRidersFor(shown, p);
+    final beside = paramRidersFor(shown, p, effect: effect);
     if (beside.isNotEmpty) riders[p.id] = beside;
   }
   final folded = {
@@ -219,10 +219,10 @@ CompBoxRows compBoxRows(
         !isDefaultEffectValue(value, fallback, owner: owner);
   }
 
-  // A gradient's Mix row carries its Blend, which a shut box keeps in reach.
+  // A gradient's Mix and Blend, which a shut box keeps in reach.
   bool tells(BridgeParamInfo p) =>
       wired.contains(p.id) ||
-      (p.id == 'mix' && blendInView(effect)) ||
+      ((p.id == 'mix' || p.id == 'blend') && blendInView(effect)) ||
       [p, ...?riders[p.id]].any(offDefault);
   // A group the schema folds shut keeps its lead row on view, under its
   // heading, so its switch (Clone to points' Time offset) is in reach from
@@ -886,10 +886,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       // Greyed where another control has taken the row over, so a drag on the
       // box cannot commit an op that changes no pixel.
       enabled: !held.disabled.contains(param),
-      riders: [
-        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
-          (r, valueOf(r.id)),
-      ],
+      // No riders beside it: the box lists each on a row of its own after its
+      // host ([compBoxRows]), and drawing it here as well showed it twice.
       // A Custom shader's two buttons press the way they do in Effect controls.
       // The only other Action a box carries is the Node graph's Open graph, and
       // the canvas already knows how to go in.
