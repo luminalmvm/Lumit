@@ -34932,6 +34932,250 @@
       "matte_role": "own"
     },
     {
+      "slug": "move",
+      "match_name": "move",
+      "label": "Move",
+      "version": 1,
+      "category": "Transition",
+      "category_slug": "transition",
+      "params": [
+        {
+          "id": "completion",
+          "label": "Completion",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "side",
+          "label": "Side",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Outgoing",
+            "Incoming"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "moves",
+          "label": "Moves",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Both",
+            "Outgoing",
+            "Incoming"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 180.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "distance",
+          "label": "Distance",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "zoom",
+          "label": "Zoom",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 800.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "spin",
+          "label": "Spin",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "stretch",
+          "label": "Stretch",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 100.0,
+          "slider_max": 800.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "ease",
+          "label": "Ease",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Linear",
+            "Smooth",
+            "Sharp"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "smear",
+          "label": "Smear",
+          "kind": "float",
+          "unit": "percent",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "samples",
+          "label": "Samples",
+          "kind": "int",
+          "unit": "raw",
+          "default": 16,
+          "slider_min": 2.0,
+          "slider_max": 64.0,
+          "hard_min": 2.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "split",
+          "label": "Split colours",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "cross",
+          "label": "Crossfade",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "fade",
+          "label": "Fade",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
       "slug": "custom-shader",
       "match_name": "custom_shader",
       "label": "Custom shader",

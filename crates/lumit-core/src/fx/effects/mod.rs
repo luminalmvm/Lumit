@@ -101,6 +101,7 @@ pub mod mirror;
 pub mod mood_lighting;
 pub mod mosaic;
 pub mod motion_blur;
+pub mod move_transition;
 pub mod node_graph;
 pub mod noise;
 pub mod ocio;

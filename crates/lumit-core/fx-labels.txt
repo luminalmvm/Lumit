@@ -367,6 +367,8 @@ Correction
 Cosine
 Count
 Count nested inputs
+Cover left
+Cover right
 Crackle
 Create corner pin
 Create transform keys
@@ -376,6 +378,7 @@ Crop bottom
 Crop left
 Crop right
 Crop top
+Crossfade
 Crossfade Bastiuni
 Crystal Archive paper
 Curl noise
@@ -472,6 +475,7 @@ Duration
 Dust
 Each path
 Each point
+Ease
 Ease in
 Ease out
 Echo
@@ -799,6 +803,7 @@ In order
 In the scene
 In turn
 Include spaces
+Incoming
 Index
 Inflate
 Initial speed
@@ -1035,6 +1040,8 @@ Motion
 Motion blur
 Motion vectors
 Mouth clicks
+Move
+Moves
 Multiply
 NTSC
 Name
@@ -1116,6 +1123,7 @@ Outer bevel
 Outer glow
 Outer radius
 Outer softness
+Outgoing
 Outline
 Output
 Output black
@@ -1241,13 +1249,18 @@ Propagate
 Provia 100F
 Pull
 Pulse
+Push down
+Push left
 Push or pull
+Push right
+Push up
 Qualifier
 Quality
 Quarter
 Quarter speed
 RGB
 RGB split
+RGB whip
 Radial
 Radial blur
 Radial wipe
@@ -1445,6 +1458,7 @@ Shape
 Shapes
 Share of frame
 Shared
+Sharp
 Sharp colours
 Sharpen
 Shift per row
@@ -1481,6 +1495,8 @@ Slice end
 Slice repeat
 Slice start
 Slide
+Slide left
+Slide right
 Slider
 Slider control
 Slope
@@ -1545,6 +1561,7 @@ Spin blur
 Spiral
 Split
 Split channels
+Split colours
 Spread
 Spread z
 Sprite
@@ -1804,6 +1821,10 @@ Waves
 Weak
 Wet
 Wheels
+Whip down
+Whip left
+Whip right
+Whip up
 White clip
 Whole frames
 Whole sound
@@ -1858,6 +1879,9 @@ Z wave phase
 Zebra
 Zoom
 Zoom blur
+Zoom in
+Zoom out
+Zoom spin
 sRGB
 sRGB curve
 sRGB to linear

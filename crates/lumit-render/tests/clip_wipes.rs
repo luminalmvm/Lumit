@@ -285,6 +285,33 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             at(&px, 32, 32)
         );
 
+        // Half way through a Push left, the outgoing clip has gone left and
+        // the incoming one has come in from the right.
+        let (doc, comp) = build(Some("move"));
+        let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
+        let (left, right) = (at(&px, 8, 32), at(&px, 56, 32));
+        assert!(
+            near(left, RED) && near(right, BLUE),
+            "{route} push: {left:?} {right:?}"
+        );
+
+        // Half way through a Drift, each clip is half there, in linear light:
+        // a picture the effect made part clear is not dimmed a second time.
+        let (doc, comp) = build(Some("move"));
+        let mut drift = (*doc).clone();
+        if let Some(ProjectItem::Composition(c)) = drift.item_mut(comp) {
+            if let LayerKind::Sequence { clips } = &mut c.layers[0].kind {
+                let looks = transition::kind("move").unwrap().looks;
+                let look = looks.iter().position(|l| l.name == "Drift");
+                clips[1].transition = transition::fresh("move", look, 64.0, 64.0);
+            }
+        }
+        let (px, _, _) = r.render_rgba(&Arc::new(drift), comp, 90, 1.0).unwrap();
+        let mid = at(&px, 32, 32);
+        assert!(
+            (168..=208).contains(&mid[0]) && (168..=208).contains(&mid[2]),
+            "{route} drift: {mid:?}"
+        );
 
         // No kind named is a dissolve: both, at once, everywhere.
         let (doc, comp) = build(None);

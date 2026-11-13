@@ -158,6 +158,7 @@ use super::effects::{
     mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
     motion_blur::{MotionBlur, MotionBlurDef},
+    move_transition::{MoveTransition, MoveTransitionDef},
     node_graph::{NodeGraph, NodeGraphDef},
     noise::{Noise, NoiseDef},
     ocio::{
@@ -463,6 +464,7 @@ crate::catalogue![
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
     LumaFadeDef => LumaFade,
+    MoveTransitionDef => MoveTransition,
     // The one effect whose program the user writes, appended at the
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.

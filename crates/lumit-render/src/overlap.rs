@@ -197,6 +197,11 @@ pub(crate) fn wiped(
             vec![going, coming]
         }
         None if transition::incoming_over(effect) => vec![going, coming],
+        // Two pictures of different sizes don't meet edge to edge.
+        None if size == natural && transition::side_by_side(effect, local) => {
+            coming.blend = Blend::Plus;
+            vec![going, coming]
+        }
         None => vec![coming, going],
     };
     mix(draws, natural, lt)

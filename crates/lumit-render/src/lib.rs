@@ -73,6 +73,7 @@ mod gpufx_film;
 mod gpufx_grade;
 mod gpufx_jolt;
 mod gpufx_luma_fade;
+mod gpufx_move;
 mod gpufx_particulate;
 mod gpufx_srgb_curve;
 mod gpufx_timewarp;

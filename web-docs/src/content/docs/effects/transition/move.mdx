@@ -1,0 +1,112 @@
+---
+title: Move
+description: "Moves one picture out of the frame and the next one in."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Move is a **Transition** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Move" category="transition" slug="move" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Moves the picture out of the frame as **Completion** rises, or into it: pushed, zoomed,
+turned or stretched, with a smear along the way. A transition runs one Move on each of its
+two pictures and sets **Completion**, **Side** and **Fade** itself.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Completion** | Slider | 0 to 100 | 50 | Per cent |
+| **Side** | Dropdown | Outgoing · Incoming | Outgoing | - |
+| **Moves** | Dropdown | Both · Outgoing · Incoming | Both | - |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 180° | Degrees |
+| **Distance** | Slider | 0 to 100; up to 400 | 100 | Per cent |
+| **Zoom** | Slider | 25 to 800; down to 1 and higher | 100 | Per cent |
+| **Spin** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Stretch** | Slider | 100 to 800; down to 1 and higher | 100 | Per cent |
+| **Ease** | Dropdown | Linear · Smooth · Sharp | Smooth | - |
+| **Smear** | Slider | 0 to 100 | 4 | Per cent |
+| **Samples** | Slider, whole numbers | 2 to 64 | 16 | - |
+| **Split colours** | Checkbox | On or off | Off | - |
+| **Crossfade** | Slider | 0 to 100 | 0 | Per cent |
+| **Fade** | Checkbox | On or off | On | - |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Transparent | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Completion** is how far through the move the pictures are.
+- **Side** says which picture this is. Outgoing leaves as Completion rises, and Incoming
+  arrives.
+- **Moves** chooses which pictures travel: Both, Outgoing or Incoming. The other stays
+  still.
+- **Direction** is the way they travel. 0° is right and 90° is down.
+- **Distance** is how far they travel. At 100 a picture leaves the frame exactly.
+- **Zoom** is the scale the outgoing picture reaches. The incoming one starts at the
+  inverse.
+- **Spin** is the turn the outgoing picture reaches. The incoming one starts as far the
+  other way.
+- **Stretch** is how much wider along Direction the outgoing picture gets. The incoming one
+  starts that wide.
+- **Ease** is how the move gathers speed: Linear, Smooth, or Sharp, which is slow at both
+  ends and fast in the middle.
+- **Smear** is how much of the move is smeared into each frame. It narrows to nothing at
+  both ends.
+- **Samples** is how many copies of the picture the smear is made of.
+- **Split colours** has the smear part red, green and blue.
+- **Crossfade** is how much of the move, about its middle, the two pictures fade across.
+  At 0 there is no fade.
+- **Fade** has this picture fade across the Crossfade.
+- **Edges** sets what shows where a picture has moved away: Transparent, Repeat or Mirror.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Presets
+
+On the effect's menu, under **Presets**. The same names are the looks of **Move ▸** in the
+**Moves** group of the [Transition menus](/use/cutting/#fades-and-dissolves). A preset
+leaves **Completion**, **Side** and **Fade** as they are.
+
+- **Push left**, **Push right**, **Push up** and **Push down**: the incoming picture pushes
+  the outgoing one off.
+- **Slide left** and **Slide right**: the outgoing picture slides off the incoming one,
+  which stays still.
+- **Cover left** and **Cover right**: the incoming picture slides in over the outgoing one,
+  which stays still.
+- **Whip left**, **Whip right**, **Whip up** and **Whip down**: a push on the Sharp ease
+  with **Smear** at 60, mirrored edges and a short crossfade.
+- **RGB whip** is Whip left with **Split colours** on.
+- **Zoom in** and **Zoom out**: the outgoing picture grows to 400%, or shrinks to 25%, and
+  the incoming one arrives the same way.
+- **Spin** turns the pictures through 180° as they zoom to 150%.
+- **Zoom spin** turns them through 90° as they zoom to 300%.
+- **Stretch** pulls the pictures to six times their width.
+- **Drift** is a dissolve across the whole move, with the pictures travelling 8% of the
+  frame.
+
+## Related
+
+- [Cutting](/use/cutting/#fades-and-dissolves)
+- [Transition](/effects/#transition)
+- [Effects](/use/effects/)
