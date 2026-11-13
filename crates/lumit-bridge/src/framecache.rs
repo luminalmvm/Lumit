@@ -846,7 +846,7 @@ pub(crate) mod disk {
 
     /// Free space on the drive `path` is on. The folder may not exist yet, so
     /// the nearest one that does is asked.
-    fn free_bytes(path: &Path) -> Option<u64> {
+    pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
         let path = path.ancestors().find(|p| p.is_dir())?;
         #[cfg(windows)]
         {

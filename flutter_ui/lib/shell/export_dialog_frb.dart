@@ -54,7 +54,8 @@ import 'dart:io' show Directory, File;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -62,6 +63,7 @@ import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/src/rust/api/mixer.dart' show BridgeLoudnessTarget;
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/remote.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
@@ -74,6 +76,7 @@ import '../panels/loudness_commands.dart'
     show loudnessPresets, loudnessTargetLabel, presetTruePeakDb;
 import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/file_dialogs.dart';
+import '../state/remote_exports_frb.dart' show remoteAwayWords;
 import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -218,6 +221,10 @@ final Set<ExportSection> exportOpenSections = {};
 /// How much of the composition to write.
 enum _Span { workArea, wholeComp, custom }
 
+/// The other computer last chosen to export on in this run of Lumit, which
+/// Export on another computer… opens on.
+String? exportLastComputer;
+
 /// One field written into the container, in the order the section lists them.
 /// The five classic fields are prefilled with their own names; a field of one's
 /// own carries its key in a well of its own, because the key is FFmpeg's word
@@ -276,6 +283,7 @@ Future<void> showExportDialogFrb({
   Future<String?> Function()? picker,
   List<double>? region,
   int? queued,
+  String? on,
 }) {
   // The Viewer's region of interest, read here rather than inside the dialog:
   // the modal is an overlay, and what is above it in the tree is not what is
@@ -307,6 +315,7 @@ Future<void> showExportDialogFrb({
       picker: picker,
       region: roi,
       queued: queued,
+      on: on,
       onClose: () => close(null),
     ),
   );
@@ -328,6 +337,10 @@ class _ExportDialog extends StatefulWidget {
   /// The queue item being changed, when the dialogue was opened from its row
   /// in the queue. It opens on that item's settings and saves back to it.
   final int? queued;
+
+  /// Where it opens set to export: another computer's id, or `*` for any
+  /// free one. Null for this computer.
+  final String? on;
   final VoidCallback onClose;
 
   const _ExportDialog({
@@ -337,6 +350,7 @@ class _ExportDialog extends StatefulWidget {
     required this.picker,
     required this.region,
     this.queued,
+    this.on,
     required this.onClose,
   });
 
@@ -429,6 +443,17 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// and this is what the footer says about it meanwhile.
   String? _waiting;
   Timer? _waitTimer;
+
+  /// The account's other computers, and how each stands for this export, as
+  /// last read. Empty without Lumit Pro, which leaves the Export on row out.
+  List<BridgeComputer> _computers = const [];
+  Map<String, BridgeRemoteFit> _fits = const {};
+
+  /// Where the export is done: here (empty), any free computer (`*`), or
+  /// another computer by its id. And whether its file stays there.
+  String _on = '';
+  bool _stays = false;
+  Timer? _computersTimer;
 
   /// Whether [_refused] is the addon one, which is the only refusal with
   /// somewhere to send the reader: the Addons page.
@@ -623,6 +648,21 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (_lacking.isNotEmpty && _lacking.every((l) => l.holders.isNotEmpty)) {
       _footage = _footageFrames;
     }
+    try {
+      if (widget.queued == null && context.read<LumitUiState>().account.pro) {
+        _readComputers();
+        final on = widget.on;
+        if ((on == '*' && _computers.length > 1) ||
+            _computers.any((c) => c.id == on)) {
+          _on = on!;
+        } else if (on != null && _computers.isNotEmpty) {
+          _on = _computers.length > 1 ? '*' : _computers.first.id;
+        }
+        _watchComputers();
+      }
+    } catch (_) {
+      // No account or no engine to ask, as in a widget test.
+    }
     final queued = widget.queued;
     final spec = queued == null ? null : exportQueueSpec(id: queued);
     final item =
@@ -677,6 +717,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   @override
   void dispose() {
     _waitTimer?.cancel();
+    _computersTimer?.cancel();
     _scroll.dispose();
     _presetName.dispose();
     for (final field in _metadata) {
@@ -909,8 +950,12 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
         dialogFooter(
           t,
-          summary:
-              _waiting ?? _refused ?? (_check.isNotEmpty ? _check : _summary),
+          summary: _waiting ??
+              _refused ??
+              (_check.isNotEmpty ? _check : _remoteSummary ?? _summary),
+          leading: _waiting == null && _refused == null && _check.isEmpty
+              ? _lacksLine(t)
+              : null,
           keyPrefix: 'export',
           actions: [
             // While footage is on its way there is one thing to press.
@@ -943,12 +988,15 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: Text(_failedItem ? l10n.exportQueueAgain : l10n.save),
               )
             else ...[
-              HouseButton(
-                key: const ValueKey('export-add-to-queue'),
-                onPressed: _canQueue ? () => _queue(start: false) : null,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(l10n.exportAddToQueue),
-              ),
+              // Another computer's queue is its own, so there is nothing to
+              // add to here.
+              if (_on.isEmpty)
+                HouseButton(
+                  key: const ValueKey('export-add-to-queue'),
+                  onPressed: _canQueue ? () => _queue(start: false) : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(l10n.exportAddToQueue),
+                ),
               HouseButton(
                 key: const ValueKey('export-start'),
                 // The window's default action: Enter exports unless a field is
@@ -956,7 +1004,11 @@ class _ExportDialogState extends State<_ExportDialog> {
                 primary: true,
                 autofocus: true,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                onPressed: _canQueue ? () => _queue(start: true) : null,
+                onPressed: !_canQueue
+                    ? null
+                    : _on.isEmpty
+                        ? () => _queue(start: true)
+                        : _send,
                 child: Text(l10n.exportAction),
               ),
             ],
@@ -1108,24 +1160,33 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ),
               ]),
             ),
+            if (_computers.isNotEmpty) ..._remoteRows(t),
             _row(
               t,
               l10n.exportWriteTo,
               Row(children: [
                 Expanded(
                   child: GestureDetector(
-                    onSecondaryTapDown: (d) => _pathMenu(d.globalPosition),
-                    child: _well(
-                      t,
-                      _path == null ? l10n.exportNotChosen : _leaf(_path!),
-                      key: const ValueKey('export-path'),
-                      tone: t.textMuted,
-                      tip: _path,
-                    ),
+                    onSecondaryTapDown: _remoteStays
+                        ? null
+                        : (d) => _pathMenu(d.globalPosition),
+                    child: _remoteStays
+                        // Only the name: the folder is the other computer's.
+                        ? _well(t, _stayingName,
+                            key: const ValueKey('export-path'),
+                            tone: t.textMuted,
+                            lead: _computerName(_on))
+                        : _well(
+                            t,
+                            _path == null ? l10n.exportNotChosen : _leaf(_path!),
+                            key: const ValueKey('export-path'),
+                            tone: t.textMuted,
+                            tip: _path,
+                          ),
                   ),
                 ),
                 // A page has no folders: the browser asks where as it starts.
-                if (!kIsWeb) ...[
+                if (!kIsWeb && !_remoteStays) ...[
                   const SizedBox(width: 6),
                   // A floor rather than a width: a longer word for Browse grows
                   // the button instead of wrapping.
@@ -2428,24 +2489,33 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// A recessed box holding something the user did not type — a chosen path,
   /// or a number this row is not offering to change.
+  /// [lead] is a quiet word before [text], where a path's folder would be.
   Widget _well(LumitTheme t, String text,
-          {Key? key, Color? tone, String? tip}) =>
-      Container(
-        key: key,
-        height: dialogControlHeight,
-        alignment: AlignmentDirectional.centerStart,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: t.surface0,
-          border: Border.all(color: t.hairline),
-          borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
-        ),
-        child: MiddleEllipsis(
-          text,
-          style: t.mono.copyWith(fontSize: 11, color: tone ?? t.textPrimary),
-          tip: tip,
-        ),
-      );
+      {Key? key, Color? tone, String? tip, String? lead}) {
+    final words = MiddleEllipsis(
+      text,
+      style: t.mono.copyWith(fontSize: 11, color: tone ?? t.textPrimary),
+      tip: tip,
+    );
+    return Container(
+      key: key,
+      height: dialogControlHeight,
+      alignment: AlignmentDirectional.centerStart,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: t.surface0,
+        border: Border.all(color: t.hairline),
+        borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+      ),
+      child: lead == null
+          ? words
+          : Row(children: [
+              Text(lead, style: t.small.copyWith(color: t.textMuted)),
+              const SizedBox(width: 8),
+              Expanded(child: words),
+            ]),
+    );
+  }
 
   /// What to do about footage this computer has no original of: the choices
   /// that can be had, the least to send first.
@@ -2872,30 +2942,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// not take — is shown in the footer where the summary was, rather than
   /// swallowed.
   Future<void> _queue({required bool start}) async {
-    if (_path == null) await _choose();
-    if (!mounted) return;
-    var path = _path;
-    if (path == null) return;
-    // A sequence's frames were never in the Save dialogue's question, so its
-    // first frame is always asked about.
-    if ((path != _picked || _images || _captionsBeside) &&
-        exportPathTaken(path: path, codec: _format.key, captions: _captions)) {
-      final keep = await askLumitChoice<bool>(
-        context: context,
-        title: l10n.exportOverwriteTitle,
-        question: l10n.exportOverwriteQuestion(_leaf(path)),
-        answers: [
-          (l10n.exportOverwrite, false),
-          (l10n.exportKeepBoth, true),
-        ],
-      );
-      if (keep == null || !mounted) return;
-      if (keep) {
-        path = exportFreePath(
-            path: path, codec: _format.key, captions: _captions);
-        setState(() => _path = path);
-      }
-    }
+    final path = await _where();
+    if (path == null || !mounted) return;
     setState(() {
       _refused = null;
       _refusedForAddon = false;
@@ -2928,6 +2976,279 @@ class _ExportDialogState extends State<_ExportDialog> {
     // context is the error that filled the screen after an export.
     showExportQueueFrb(context: context);
     widget.onClose();
+  }
+
+  /// Where the file goes, asked for when nothing is chosen yet. A file it would
+  /// write over is asked about first. Null for none.
+  Future<String?> _where() async {
+    if (_path == null) await _choose();
+    if (!mounted) return null;
+    var path = _path;
+    if (path == null) return null;
+    // A sequence's frames were never in the Save dialogue's question, so its
+    // first frame is always asked about.
+    if ((path != _picked || _images || _captionsBeside) &&
+        exportPathTaken(path: path, codec: _format.key, captions: _captions)) {
+      final keep = await askLumitChoice<bool>(
+        context: context,
+        title: l10n.exportOverwriteTitle,
+        question: l10n.exportOverwriteQuestion(_leaf(path)),
+        answers: [
+          (l10n.exportOverwrite, false),
+          (l10n.exportKeepBoth, true),
+        ],
+      );
+      if (keep == null || !mounted) return null;
+      if (keep) {
+        path = exportFreePath(
+            path: path, codec: _format.key, captions: _captions);
+        setState(() => _path = path);
+      }
+    }
+    return path;
+  }
+
+  /// Send the export to the computer chosen, and show the queue, where it
+  /// sits under that computer's name. A file that comes back is asked for
+  /// here first, as one exported here is.
+  Future<void> _send() async {
+    final path = _stays ? _stayingName : await _where();
+    if (path == null || !mounted) return;
+    try {
+      widget.comp.remoteSend(
+          computer: _on == '*' ? '' : _on,
+          spec: _spec,
+          path: path,
+          lands: _stays ? BridgeRemoteLands.worker : BridgeRemoteLands.sender);
+    } catch (_) {
+      // A `BridgeError` has nothing readable on it, and the one refusal a
+      // send has of its own is that no computer can take it.
+      setState(() => _refused = l10n.remoteNoComputer);
+      return;
+    }
+    exportLastComputer = _on;
+    // Wake the status line, which follows a sent export as it does one here.
+    statusLineExportStarted.value++;
+    showExportQueueFrb(context: context);
+    widget.onClose();
+  }
+
+  // ---- another computer ----------------------------------------------------
+
+  /// The account's other computers, and how each stands for this export,
+  /// read off the engine. Asking how one stands asks it, when it hasn't been
+  /// since the project changed, so it is asked as the dialogue opens and has
+  /// its answer by the time the list is.
+  void _readComputers() {
+    _computers = remoteComputers();
+    _fits = {
+      for (final c in _computers)
+        if (c.online && c.takes) c.id: widget.comp.remoteFit(computer: c.id),
+    };
+    // One that has gone from the list can't be exported on.
+    if ((_on == '*' && _computers.length < 2) ||
+        (_on.isNotEmpty &&
+            _on != '*' &&
+            !_computers.any((c) => c.id == _on))) {
+      _on = '';
+      _stays = false;
+    }
+  }
+
+  /// Read again each second while another computer is chosen, so the footer
+  /// follows it: checked, away, back.
+  void _watchComputers() {
+    _computersTimer?.cancel();
+    _computersTimer = _on.isEmpty
+        ? null
+        : Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted) setState(_readComputers);
+          });
+  }
+
+  void _setOn(String on) {
+    setState(() {
+      _on = on;
+      if (on.isEmpty) _stays = false;
+    });
+    _watchComputers();
+  }
+
+  bool get _remoteStays => _on.isNotEmpty && _stays;
+
+  /// The name the file is written under on the other computer.
+  String get _stayingName =>
+      _path != null ? _leaf(_path!) : '$_compName.${_format.extension}';
+
+  String _computerName(String id) => id == '*'
+      ? l10n.remoteThatComputer
+      : _computers.where((c) => c.id == id).firstOrNull?.name ?? '';
+
+  /// What a computer lacks for this export, as a count of each kind.
+  static String _lacks(BridgeRemoteFit_Lacks lacks) => l10n.remoteLacks([
+        if (lacks.plugins.isNotEmpty) l10n.remotePlugins(lacks.plugins.length),
+        if (lacks.fonts.isNotEmpty) l10n.remoteFonts(lacks.fonts.length),
+        if (lacks.models.isNotEmpty) l10n.remoteModels(lacks.models.length),
+      ].join(', '));
+
+  /// Why a computer can't be picked, or null when it can.
+  String? _cannot(String id) {
+    final computer = _computers.where((c) => c.id == id).firstOrNull;
+    if (computer == null) return null;
+    if (!computer.takes) return l10n.remoteNotTaking;
+    if (_fits[id] case BridgeRemoteFit_TooOld(:final needs)) {
+      return l10n.remoteNeedsVersion(needs);
+    }
+    return null;
+  }
+
+  /// The graphics card a computer exports on, and its memory as the card is
+  /// sold by, on hover in the list. Null while it hasn't said.
+  String? _card(String id) {
+    final computer = _computers.where((c) => c.id == id).firstOrNull;
+    if (computer == null || computer.gpu.isEmpty) return null;
+    final memory = (computer.gpuMemory / (1 << 30)).round();
+    return memory > 0
+        ? '${computer.gpu} · $memory ${l10n.unitGb}'
+        : computer.gpu;
+  }
+
+  /// How a computer stands, in a few words beside its name.
+  String? _standing(String id) {
+    final computer = _computers.where((c) => c.id == id).firstOrNull;
+    if (computer == null) return null;
+    if (_cannot(id) case final why?) return why;
+    if (!computer.online) return remoteAwayWords(computer.seen);
+    final fit = _fits[id];
+    if (fit is BridgeRemoteFit_Checking) return l10n.remoteChecking;
+    if (fit is BridgeRemoteFit_Lacks) return _lacks(fit);
+    if (computer.exporting) return l10n.remoteExporting;
+    if (computer.queued > 0) return l10n.remoteQueued(computer.queued);
+    return fit is BridgeRemoteFit_Ready ? l10n.remoteReady : null;
+  }
+
+  /// Export on, and with another computer chosen, where its file goes.
+  List<Widget> _remoteRows(LumitTheme t) => [
+        _row(
+          t,
+          l10n.remoteExportOn,
+          SizedBox(
+            height: dialogControlHeight,
+            // Read again as the list is reached for, by pointer or by Tab,
+            // so it opens on how each computer stands now.
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onFocusChange: (on) {
+                if (on) setState(_readComputers);
+              },
+              child: Listener(
+                onPointerDown: (_) => setState(_readComputers),
+                child: BareDropdown<String>(
+                  key: const ValueKey('export-on'),
+                  value: _on,
+                  options: [
+                    '',
+                    if (_computers.length > 1) '*',
+                    for (final c in _computers) c.id,
+                  ],
+                  label: (id) => switch (id) {
+                    '' => l10n.deviceThisComputer,
+                    '*' => l10n.remoteAnyComputer,
+                    _ => _computerName(id),
+                  },
+                  aside: _standing,
+                  note: _card,
+                  disabledReason: _cannot,
+                  onChanged: _setOn,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_on.isNotEmpty)
+          _row(
+            t,
+            l10n.remoteFileGoesTo,
+            Row(children: [
+              _landsChip(t, false, l10n.deviceThisComputer),
+              _landsChip(t, true, _computerName(_on)),
+            ]),
+          ),
+      ];
+
+  /// One of the two places the file can go, as Format's chips are drawn.
+  /// Tab reaches each, ringed in the accent while it has the focus, and
+  /// Enter or Space picks it.
+  Widget _landsChip(LumitTheme t, bool stays, String label) {
+    final on = _stays == stays;
+    return FocusableActionDetector(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+          setState(() => _stays = stays);
+          return null;
+        }),
+      },
+      child: HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('export-lands-${stays ? 'there' : 'here'}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _stays = stays),
+        child: Container(
+          margin: const EdgeInsetsDirectional.only(end: dialogTabGap),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+            border: Border.all(
+                color: Focus.of(context).hasFocus
+                    ? t.accent
+                    : on
+                        ? t.hairlineStrong
+                        : const Color(0x00000000)),
+          ),
+          child: Text(
+            t.kickerCase(label),
+            style: on
+                ? t.kickerOn
+                : t.kicker.copyWith(
+                    color: Color.lerp(t.kicker.color, t.textPrimary, lit)),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  /// The footer's line for a computer that is away, or null for the usual.
+  String? get _remoteSummary {
+    if (_on.isEmpty || _on == '*') return null;
+    final computer = _computers.where((c) => c.id == _on).firstOrNull;
+    if (computer == null || computer.online) return null;
+    return l10n.remoteWaitsFor(computer.name);
+  }
+
+  /// The footer's line for a computer that lacks what the export uses, in
+  /// the warning colour, with their names on hover. Null for the usual.
+  Widget? _lacksLine(LumitTheme t) {
+    if (_on.isEmpty || _on == '*') return null;
+    final fit = _fits[_on];
+    if (fit is! BridgeRemoteFit_Lacks) return null;
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: LumitTooltip(
+        message: [...fit.plugins, ...fit.fonts, ...fit.models].join(', '),
+        child: Text(
+          _lacks(fit),
+          key: const ValueKey('export-summary'),
+          style: dialogMono(t).copyWith(color: t.warning),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
   }
 
   /// Give the queued item these settings. A file it would newly write over is

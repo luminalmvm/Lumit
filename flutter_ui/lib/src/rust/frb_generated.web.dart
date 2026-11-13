@@ -62,6 +62,7 @@ import 'api/presets.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
 import 'api/projection.dart';
+import 'api/remote.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
 import 'api/routes.dart';
@@ -187,7 +188,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           dynamic raw);
 
   @protected
+  RustStreamSink<BridgeExportNews> dco_decode_StreamSink_bridge_export_news_Sse(
+      dynamic raw);
+
+  @protected
   RustStreamSink<BridgeLiveEvent> dco_decode_StreamSink_bridge_live_event_Sse(
+      dynamic raw);
+
+  @protected
+  RustStreamSink<BridgeRemoteSay> dco_decode_StreamSink_bridge_remote_say_Sse(
       dynamic raw);
 
   @protected
@@ -934,6 +943,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompWiring dco_decode_bridge_comp_wiring(dynamic raw);
 
   @protected
+  BridgeComputer dco_decode_bridge_computer(dynamic raw);
+
+  @protected
   BridgeControl dco_decode_bridge_control(dynamic raw);
 
   @protected
@@ -1019,6 +1031,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportLoudness dco_decode_bridge_export_loudness(dynamic raw);
+
+  @protected
+  BridgeExportNews dco_decode_bridge_export_news(dynamic raw);
+
+  @protected
+  BridgeExportNewsKind dco_decode_bridge_export_news_kind(dynamic raw);
 
   @protected
   BridgeExportPreset dco_decode_bridge_export_preset(dynamic raw);
@@ -1602,6 +1620,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRecovery dco_decode_bridge_recovery(dynamic raw);
+
+  @protected
+  BridgeRemoteFit dco_decode_bridge_remote_fit(dynamic raw);
+
+  @protected
+  BridgeRemoteJob dco_decode_bridge_remote_job(dynamic raw);
+
+  @protected
+  BridgeRemoteLands dco_decode_bridge_remote_lands(dynamic raw);
+
+  @protected
+  BridgeRemoteSay dco_decode_bridge_remote_say(dynamic raw);
+
+  @protected
+  BridgeRemoteStage dco_decode_bridge_remote_stage(dynamic raw);
 
   @protected
   BridgeRemovedRun dco_decode_bridge_removed_run(dynamic raw);
@@ -2212,6 +2245,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeCompRepeat> dco_decode_list_bridge_comp_repeat(dynamic raw);
 
   @protected
+  List<BridgeComputer> dco_decode_list_bridge_computer(dynamic raw);
+
+  @protected
   List<BridgeControl> dco_decode_list_bridge_control(dynamic raw);
 
   @protected
@@ -2446,6 +2482,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeReadNode> dco_decode_list_bridge_read_node(dynamic raw);
+
+  @protected
+  List<BridgeRemoteJob> dco_decode_list_bridge_remote_job(dynamic raw);
 
   @protected
   List<BridgeRemovedRun> dco_decode_list_bridge_removed_run(dynamic raw);
@@ -3167,7 +3206,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<BridgeExportNews> sse_decode_StreamSink_bridge_export_news_Sse(
+      SseDeserializer deserializer);
+
+  @protected
   RustStreamSink<BridgeLiveEvent> sse_decode_StreamSink_bridge_live_event_Sse(
+      SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<BridgeRemoteSay> sse_decode_StreamSink_bridge_remote_say_Sse(
       SseDeserializer deserializer);
 
   @protected
@@ -4058,6 +4105,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompWiring sse_decode_bridge_comp_wiring(SseDeserializer deserializer);
 
   @protected
+  BridgeComputer sse_decode_bridge_computer(SseDeserializer deserializer);
+
+  @protected
   BridgeControl sse_decode_bridge_control(SseDeserializer deserializer);
 
   @protected
@@ -4155,6 +4205,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportLoudness sse_decode_bridge_export_loudness(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExportNews sse_decode_bridge_export_news(SseDeserializer deserializer);
+
+  @protected
+  BridgeExportNewsKind sse_decode_bridge_export_news_kind(
       SseDeserializer deserializer);
 
   @protected
@@ -4828,6 +4885,23 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRecovery sse_decode_bridge_recovery(SseDeserializer deserializer);
+
+  @protected
+  BridgeRemoteFit sse_decode_bridge_remote_fit(SseDeserializer deserializer);
+
+  @protected
+  BridgeRemoteJob sse_decode_bridge_remote_job(SseDeserializer deserializer);
+
+  @protected
+  BridgeRemoteLands sse_decode_bridge_remote_lands(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeRemoteSay sse_decode_bridge_remote_say(SseDeserializer deserializer);
+
+  @protected
+  BridgeRemoteStage sse_decode_bridge_remote_stage(
+      SseDeserializer deserializer);
 
   @protected
   BridgeRemovedRun sse_decode_bridge_removed_run(SseDeserializer deserializer);
@@ -5543,6 +5617,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeComputer> sse_decode_list_bridge_computer(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeControl> sse_decode_list_bridge_control(
       SseDeserializer deserializer);
 
@@ -5841,6 +5919,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeReadNode> sse_decode_list_bridge_read_node(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeRemoteJob> sse_decode_list_bridge_remote_job(
       SseDeserializer deserializer);
 
   @protected
@@ -6677,8 +6759,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           LumitBridgeState self, SseSerializer serializer);
 
   @protected
+  void sse_encode_StreamSink_bridge_export_news_Sse(
+      RustStreamSink<BridgeExportNews> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_StreamSink_bridge_live_event_Sse(
       RustStreamSink<BridgeLiveEvent> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_bridge_remote_say_Sse(
+      RustStreamSink<BridgeRemoteSay> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_bridge_scan_progress_Sse(
@@ -7609,6 +7699,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeCompWiring self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_computer(
+      BridgeComputer self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_control(BridgeControl self, SseSerializer serializer);
 
   @protected
@@ -7713,6 +7807,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_export_loudness(
       BridgeExportLoudness self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_export_news(
+      BridgeExportNews self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_export_news_kind(
+      BridgeExportNewsKind self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_export_preset(
@@ -8471,6 +8573,26 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_recovery(
       BridgeRecovery self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_remote_fit(
+      BridgeRemoteFit self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_remote_job(
+      BridgeRemoteJob self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_remote_lands(
+      BridgeRemoteLands self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_remote_say(
+      BridgeRemoteSay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_remote_stage(
+      BridgeRemoteStage self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_removed_run(
@@ -9245,6 +9367,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeCompRepeat> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_computer(
+      List<BridgeComputer> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_control(
       List<BridgeControl> self, SseSerializer serializer);
 
@@ -9547,6 +9673,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_read_node(
       List<BridgeReadNode> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_remote_job(
+      List<BridgeRemoteJob> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_removed_run(

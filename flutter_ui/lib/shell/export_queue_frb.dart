@@ -42,9 +42,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart' show DragStartBehavior;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/remote.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
@@ -53,12 +56,17 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
 import '../panels/timeline_extras_frb.dart' show showMenuAt;
+import '../state/remote_exports_frb.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/middle_ellipsis.dart';
 import 'dialog_frame.dart';
 import 'export_dialog_frb.dart';
 import 'export_pick_frb.dart';
+import 'pro_window.dart' show writtenBytes;
+import 'profile_chip.dart' show proSweep;
+import 'review_link_parts.dart' show reviewTag;
+import 'settings_account.dart' show askBefore;
 import 'settings_rows.dart' show byteSize;
 import 'status_line_frb.dart';
 
@@ -101,6 +109,8 @@ Future<void> showExportQueueFrb({
   required BuildContext context,
   List<BridgeExportQueueItem> Function()? list,
   void Function({required int id, required int index})? move,
+  List<BridgeRemoteJob> Function()? jobs,
+  List<BridgeComputer> Function()? computers,
 }) =>
     showLumitModal<void>(
       context: context,
@@ -108,6 +118,8 @@ Future<void> showExportQueueFrb({
       builder: (close) => _ExportQueue(
         list: list,
         move: move,
+        jobs: jobs,
+        computers: computers,
         onClose: () => close(null),
       ),
     );
@@ -118,10 +130,18 @@ class _ExportQueue extends StatefulWidget {
 
   /// The reorder seam, injected beside it for the same reason.
   final void Function({required int id, required int index})? move;
+
+  /// The same seams for the exports between computers, and the computers.
+  final List<BridgeRemoteJob> Function()? jobs;
+  final List<BridgeComputer> Function()? computers;
   final VoidCallback onClose;
 
   const _ExportQueue(
-      {required this.list, required this.move, required this.onClose});
+      {required this.list,
+      required this.move,
+      this.jobs,
+      this.computers,
+      required this.onClose});
 
   @override
   State<_ExportQueue> createState() => _ExportQueueState();
@@ -156,6 +176,25 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// Start, and after Stop after this one.
   bool _goesOn = false;
 
+  /// The exports between this computer and the account's others, and those
+  /// computers, read with the queue.
+  List<BridgeRemoteJob> _jobs = const [];
+  List<BridgeComputer> _computers = const [];
+
+  /// The same as [_seenRunning], for an export running on another computer.
+  final Map<String, (DateTime, int)> _jobRunning = {};
+
+  /// The jobs this computer sent, and those it does for another.
+  Iterable<BridgeRemoteJob> get _sent => _jobs.where((j) => j.sent);
+  BridgeRemoteJob? _doing(String job) => job.isEmpty
+      ? null
+      : _jobs.where((j) => !j.sent && j.job == job).firstOrNull;
+
+  /// Jobs this computer does for another that have no place in its queue
+  /// yet, while their files arrive.
+  Iterable<BridgeRemoteJob> get _arriving => _jobs.where((j) =>
+      !j.sent && !_items.any((item) => item.job == j.job));
+
   @override
   void initState() {
     super.initState();
@@ -181,6 +220,12 @@ class _ExportQueueState extends State<_ExportQueue> {
     }
     try {
       _goesOn = exportQueueGoesOn();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+    }
+    try {
+      _jobs = (widget.jobs ?? remoteJobs)();
+      _computers = (widget.computers ?? remoteComputers)();
     } catch (_) {
       // No engine to ask, as in a widget test.
     }
@@ -286,8 +331,37 @@ class _ExportQueueState extends State<_ExportQueue> {
     final done = _items
         .where((item) => item.state is BridgeExportQueueState_Done)
         .length;
+    // Sent exports count where they stand, and they head a group each for
+    // the computer doing them. With none, the list is this computer's alone
+    // and has no headings.
+    final sent = _sent.toList();
+    final arriving = _arriving.toList();
+    final others = {for (final job in sent) job.other: job.otherName};
+    final sentWaiting = sent.where((j) => switch (j.stage) {
+          BridgeRemoteStage.away ||
+          BridgeRemoteStage.checking ||
+          BridgeRemoteStage.sending ||
+          BridgeRemoteStage.queued =>
+            true,
+          BridgeRemoteStage.paused => j.frame == 0,
+          _ => false,
+        });
+    final sentDone =
+        sent.where((j) => j.stage == BridgeRemoteStage.done).length;
+    // Another computer's exports done here count too, while they have no
+    // place in the queue.
+    final arrivingWaiting = arriving
+        .where((j) =>
+            !remoteEnded(j.stage) && j.stage != BridgeRemoteStage.exporting)
+        .length;
+    final arrivingDone =
+        arriving.where((j) => j.stage == BridgeRemoteStage.done).length;
+    final empty = _items.isEmpty && sent.isEmpty && arriving.isEmpty;
 
-    return DialogFrame(
+    return Focus(
+        autofocus: true,
+        onKeyEvent: _menuKey,
+        child: DialogFrame(
       width: exportQueueWidth,
       children: [
         dialogTitleBar(
@@ -302,7 +376,7 @@ class _ExportQueueState extends State<_ExportQueue> {
           onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
           child: Padding(
           padding: exportBodyPaddingForQueue,
-          child: _items.isEmpty
+          child: empty
               ? SizedBox(
                   height: exportQueueRow,
                   child: Align(
@@ -318,6 +392,18 @@ class _ExportQueueState extends State<_ExportQueue> {
                   child: CustomScrollView(
                     shrinkWrap: true,
                     slivers: [
+                      if (others.isNotEmpty &&
+                          (_items.isNotEmpty || arriving.isNotEmpty))
+                        SliverToBoxAdapter(
+                          child: _heading(t, l10n.deviceThisComputer, null,
+                              first: true),
+                        ),
+                      // Another computer's exports with no place in the
+                      // queue are those from before Lumit last started,
+                      // older than any row in it, so they come first.
+                      SliverList.list(children: [
+                        for (final job in arriving) _jobRow(t, job),
+                      ]),
                       if (carries)
                         SliverReorderableList(
                           itemCount: _lines.length,
@@ -335,6 +421,25 @@ class _ExportQueueState extends State<_ExportQueue> {
                           itemBuilder: (context, index) =>
                               _markedRow(t, _lines[index], index),
                         ),
+                      for (final MapEntry(key: id, value: name)
+                          in others.entries) ...[
+                        SliverToBoxAdapter(
+                          child: _heading(
+                              t,
+                              _computers
+                                      .where((c) => c.id == id)
+                                      .firstOrNull
+                                      ?.name ??
+                                  name,
+                              _computers.where((c) => c.id == id).firstOrNull,
+                              first: _items.isEmpty && arriving.isEmpty &&
+                                  id == others.keys.first),
+                        ),
+                        SliverList.list(children: [
+                          for (final job in sent)
+                            if (job.other == id) _jobRow(t, job),
+                        ]),
+                      ],
                     ],
                   ),
                 ),
@@ -345,9 +450,14 @@ class _ExportQueueState extends State<_ExportQueue> {
           onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
           child: dialogFooter(
           t,
-          summary: _items.isEmpty
+          summary: empty
               ? ''
-              : l10n.exportQueueSummary('$waiting', '$done'),
+              : [
+                  l10n.exportQueueSummary(
+                      '${waiting + sentWaiting.length + arrivingWaiting}',
+                      '${done + sentDone + arrivingDone}'),
+                  if (_moving case final moving?) moving,
+                ].join(' · '),
           keyPrefix: 'export-queue',
           actions: [
             HouseButton(
@@ -373,7 +483,19 @@ class _ExportQueueState extends State<_ExportQueue> {
           ],
         )),
       ],
-    );
+    ));
+  }
+
+  /// The queue's menu from the keyboard, as the menu key or Shift+F10 opens
+  /// one: at the foot of the window, where its right-click lands. Its rows
+  /// then answer the arrows and Enter as every menu's do.
+  KeyEventResult _menuKey(FocusNode node, KeyEvent event) {
+    final box = context.findRenderObject();
+    if (!_asksMenu(event) || box is! RenderBox) {
+      return KeyEventResult.ignored;
+    }
+    _queueMenu(box.localToGlobal(Offset(24, box.size.height - 24)));
+    return KeyEventResult.handled;
   }
 
   void _start() {
@@ -698,7 +820,9 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.
-  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => GestureDetector(
+  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => _MenuKeyRow(
+      open: (at) => _showMenu(t, item, at),
+      child: GestureDetector(
       onSecondaryTapDown: (press) => _showMenu(t, item, press.globalPosition),
       // The row's marks come up with the pointer. A row that is doing nothing
       // only says what it is.
@@ -711,7 +835,7 @@ class _ExportQueueState extends State<_ExportQueue> {
           children: [
             SizedBox(
               width: 150,
-              child: FittedText(item.compName, t.body),
+              child: _named(t, item.compName, _doing(item.job)),
             ),
             const SizedBox(width: 10),
             // The preset it was queued on, or its format where it was set
@@ -785,7 +909,7 @@ class _ExportQueueState extends State<_ExportQueue> {
         ),
       ),
       ),
-    );
+    ));
 
   /// A row's menu: what can be done with it as it stands, Remove last.
   void _showMenu(LumitTheme t, BridgeExportQueueItem item, Offset at) {
@@ -794,6 +918,11 @@ class _ExportQueueState extends State<_ExportQueue> {
     final waiting = item.state is BridgeExportQueueState_Waiting;
     final done = item.state is BridgeExportQueueState_Done;
     final index = _items.indexOf(item);
+    final job = item.job.isNotEmpty;
+    // Where the record of another computer's export that failed here is.
+    final log = job && item.state is BridgeExportQueueState_Failed
+        ? remoteLog(job: item.job)
+        : null;
     Widget row(String id, String label, VoidCallback? press,
             void Function(VoidCallback) run) =>
         MenuRow(
@@ -818,11 +947,21 @@ class _ExportQueueState extends State<_ExportQueue> {
 
         return [
           if (running) _stopAfterRow(() => close(null)),
+          if (item.state case BridgeExportQueueState_Running(:final paused))
+            row(
+                'pause',
+                paused ? l10n.remoteGoOn : l10n.remotePause,
+                () => exportQueuePause(id: item.id, paused: !paused),
+                run),
           if (done && !kIsWeb)
             row('open', l10n.projectShowInFolder,
                 () => revealInFolder(path: item.path), run),
-          // A failed row too, where its settings are what has to change.
-          if (waiting || item.state is BridgeExportQueueState_Failed)
+          if (log != null && log.isNotEmpty && !kIsWeb)
+            row('log', l10n.remoteShowLog, () => revealInFolder(path: log),
+                run),
+          // A failed row too, where its settings are what has to change. Not
+          // for another computer's export, whose composition isn't here.
+          if (!job && (waiting || item.state is BridgeExportQueueState_Failed))
             row(
                 'settings',
                 l10n.exportQueueSettingsEllipsis,
@@ -833,7 +972,7 @@ class _ExportQueueState extends State<_ExportQueue> {
                 run),
           // Asks the composition as it is now, so a comp since deleted cannot.
           // A template's row is queued again as it was, so it keeps its row.
-          if (!running)
+          if (!running && !job)
             row(
                 'duplicate',
                 l10n.menuDuplicate,
@@ -843,7 +982,7 @@ class _ExportQueueState extends State<_ExportQueue> {
                         ? null
                         : () => _duplicate(comp, item),
                 run),
-          if (done || item.state is BridgeExportQueueState_Failed)
+          if (!job && (done || item.state is BridgeExportQueueState_Failed))
             row(
                 'again',
                 l10n.exportQueueAgain,
@@ -908,6 +1047,11 @@ class _ExportQueueState extends State<_ExportQueue> {
     final last = _items
         .where((item) => item.state is BridgeExportQueueState_Done)
         .lastOrNull;
+    // Exports between computers that are done go with this computer's own.
+    final doneJobs = [
+      for (final job in _jobs)
+        if (job.stage == BridgeRemoteStage.done) job.job,
+    ];
     unawaited(showMenuAt<void>(
       context: context,
       position: at,
@@ -933,13 +1077,24 @@ class _ExportQueueState extends State<_ExportQueue> {
             row('folder', l10n.projectShowInFolder,
                 last == null ? null : () => revealInFolder(path: last.path)),
           row(
+              'cancel-all',
+              l10n.exportQueueCancelAll,
+              running ||
+                      waiting ||
+                      _sent.any((j) => !remoteEnded(j.stage))
+                  ? () => unawaited(_cancelAll())
+                  : null),
+          row(
               'clear',
               l10n.exportQueueRemoveFinished,
-              done.isEmpty
+              done.isEmpty && doneJobs.isEmpty
                   ? null
                   : () {
                       for (final id in done) {
                         exportQueueRemove(id: id);
+                      }
+                      for (final job in doneJobs) {
+                        remoteRemove(job: job);
                       }
                       _refresh();
                     }),
@@ -1017,17 +1172,36 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// than the column, so a failed item shows all of it on hover.
   Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
     final key = ValueKey<String>('export-queue-status-${item.id}');
+    // Another computer's export: its files on their way here, or its file
+    // on its way back, say so instead.
+    if (_doing(item.job) case final job?
+        when job.stage == BridgeRemoteStage.sending ||
+            job.stage == BridgeRemoteStage.returning ||
+            (job.stage == BridgeRemoteStage.done &&
+                job.lands == BridgeRemoteLands.sender)) {
+      return _jobStatus(t, job);
+    }
+    if (item.state case BridgeExportQueueState_Running(paused: true)) {
+      return Text(l10n.remotePaused,
+          key: key,
+          style: dialogMono(t).copyWith(color: t.textMuted),
+          textAlign: TextAlign.right);
+    }
     if (item.state
         case BridgeExportQueueState_Running(
           :final frame,
           :final total,
-          :final encoder
+          :final encoder,
+          :final paused
         ) when total > 0) {
       final seen = _seenRunning[item.id] ??= (DateTime.now(), frame);
-      final left = exportTimeLeft(
-          done: frame - seen.$2,
-          left: total - frame,
-          taken: DateTime.now().difference(seen.$1));
+      // A held export has no time left to tell.
+      final left = paused
+          ? null
+          : exportTimeLeft(
+              done: frame - seen.$2,
+              left: total - frame,
+              taken: DateTime.now().difference(seen.$1));
       return LumitTooltip(
         message: encoder,
         child: Row(
@@ -1075,6 +1249,406 @@ class _ExportQueueState extends State<_ExportQueue> {
       };
 
   static String _leaf(String path) => path.split(RegExp(r'[/\\]')).last;
+
+  // ---- exports between computers -------------------------------------------
+
+  /// A quiet heading over the rows of one computer: its name, and for
+  /// another one whether it is there.
+  Widget _heading(LumitTheme t, String name, BridgeComputer? computer,
+          {bool first = false}) =>
+      Padding(
+        padding: EdgeInsets.only(top: first ? 0 : 10, bottom: 2),
+        child: Row(children: [
+          Flexible(
+            child: Text(name,
+                style: t.small.copyWith(color: t.textSecondary),
+                overflow: TextOverflow.ellipsis),
+          ),
+          if (computer != null) ...[
+            const SizedBox(width: 8),
+            Text(
+                computer.online
+                    ? l10n.remoteOnline
+                    : remoteAwayWords(computer.seen),
+                style: t.small.copyWith(color: t.textMuted)),
+          ],
+        ]),
+      );
+
+  /// A composition's name, with the computer it is exported for beside it
+  /// when that is another one.
+  Widget _named(LumitTheme t, String name, BridgeRemoteJob? doing) =>
+      doing == null
+          ? FittedText(name, t.body)
+          : Row(children: [
+              Flexible(child: FittedText(name, t.body)),
+              const SizedBox(width: 6),
+              reviewTag(t, doing.otherName),
+            ]);
+
+  /// An export sent to another computer, or one arriving here, in the same
+  /// columns as the queue's own rows.
+  Widget _jobRow(LumitTheme t, BridgeRemoteJob job) => _MenuKeyRow(
+      open: (at) => _jobMenu(job, at),
+      child: GestureDetector(
+        key: ValueKey<String>('export-queue-job-${job.job}'),
+        onSecondaryTapDown: (press) => _jobMenu(job, press.globalPosition),
+        child: HoverMark(
+          cursor: MouseCursor.defer,
+          builder: (context, lit) => SizedBox(
+            height: exportQueueRow,
+            child: Row(children: [
+              SizedBox(
+                width: 150,
+                child: _named(t, job.compName, job.sent ? null : job),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 120,
+                child: LumitTooltip(
+                  message: exportFormatLabel(job.codec),
+                  child: FittedText(
+                      job.preset.isEmpty
+                          ? exportFormatLabel(job.codec)
+                          : job.preset,
+                      t.body.copyWith(color: t.textMuted)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: MiddleEllipsis(
+                  job.path.isEmpty ? job.file : _leaf(job.path),
+                  style: dialogMono(t),
+                  tip: job.path.isEmpty
+                      ? (job.there.isEmpty ? null : job.there)
+                      : job.path,
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(width: 260, child: _jobStatus(t, job)),
+              const SizedBox(width: 8),
+              IgnorePointer(
+                ignoring: lit <= 0,
+                child: Opacity(
+                  opacity: lit > 0 ? 1 : 0,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const SizedBox(width: dialogCloseGlyph + 8),
+                    _jobDrop(t, job),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ));
+
+  /// The mark that cancels a job under way, and forgets one that has ended.
+  Widget _jobDrop(LumitTheme t, BridgeRemoteJob job) {
+    final ended = remoteEnded(job.stage);
+    final label = ended ? l10n.exportQueueRemove : l10n.cancel;
+    return LumitTooltip(
+      message: label,
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey<String>('export-queue-job-drop-${job.job}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (ended) {
+              remoteRemove(job: job.job);
+            } else {
+              remoteCancel(job: job.job);
+            }
+            _refresh();
+          },
+          child: SizedBox(
+            width: dialogCloseGlyph + 8,
+            height: exportQueueRow,
+            child: Center(
+              child: glyph.LumitIcon(
+                LumitIcons.close,
+                size: dialogCloseGlyph,
+                colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+                semanticLabel: label,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// How a job is getting on: in words where it is waiting, as a local
+  /// export is drawn while it exports, and with a thin bar under the words
+  /// while its files move.
+  Widget _jobStatus(LumitTheme t, BridgeRemoteJob job) {
+    final key = ValueKey<String>('export-queue-job-status-${job.job}');
+    final name = job.otherName;
+    Widget words(String text, {bool failed = false}) {
+      final line = Text(
+        text,
+        key: key,
+        style: dialogMono(t).copyWith(color: failed ? t.warning : t.textMuted),
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.right,
+      );
+      // The whole reason on hover, for one longer than the column.
+      return failed ? LumitTooltip(message: text, child: line) : line;
+    }
+
+    final amount = remoteSizeOf(job.bytes, job.size);
+    return switch (job.stage) {
+      BridgeRemoteStage.away => words(l10n.remoteWaitingFor(name)),
+      BridgeRemoteStage.checking => _transfer(t, key, l10n.remoteCheckingFiles,
+          job.size <= 0 ? 0 : job.bytes / job.size,
+          job.size <= 0
+              ? null
+              : l10n.exportQueuePercent((job.bytes * 100 / job.size).floor())),
+      BridgeRemoteStage.sending => _transfer(
+          t,
+          key,
+          job.sent ? l10n.remoteSending(amount) : l10n.remoteReceiving(amount),
+          job.size <= 0 ? 0 : job.bytes / job.size,
+          _leftAt(job)),
+      BridgeRemoteStage.queued => words(l10n.remoteInQueue(name)),
+      BridgeRemoteStage.paused => words(l10n.remotePaused),
+      BridgeRemoteStage.exporting => _exporting(t, key, job),
+      // Done here, and the computer it goes back to is away: it waits.
+      BridgeRemoteStage.returning
+          when !job.sent &&
+              _computers.any((c) => c.id == job.other && !c.online) =>
+        words(l10n.remoteWaitingFor(name)),
+      BridgeRemoteStage.returning => _transfer(
+          t,
+          key,
+          job.sent
+              ? l10n.remoteBringingBack(amount)
+              : l10n.remoteSendingBack(amount),
+          job.size <= 0 ? 0 : job.bytes / job.size,
+          _leftAt(job)),
+      // A kept file brought here since is done here too.
+      BridgeRemoteStage.done => words(job.lands == BridgeRemoteLands.worker
+          ? (job.sent && job.path.isEmpty
+              ? l10n.remoteKeptOn(name)
+              : l10n.exportQueueDone)
+          : (job.sent ? l10n.exportQueueDone : l10n.remoteSentTo(name))),
+      BridgeRemoteStage.failed => words(remoteWhy(job.error), failed: true),
+      BridgeRemoteStage.cancelled => words(l10n.remoteCancelled),
+    };
+  }
+
+  /// Files on the move: what and how far in words, how long is left, and a
+  /// thin bar in Pro's sweep under them, as the shared footage rows have.
+  Widget _transfer(LumitTheme t, Key key, String text, double fraction,
+          String? left) =>
+      Column(
+        key: key,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text(text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: dialogMono(t).copyWith(
+                        color: t.textMuted,
+                        fontFeatures: const [FontFeature.tabularFigures()])),
+              ),
+              if (left != null) ...[
+                const SizedBox(width: 8),
+                Text(left, style: t.small.copyWith(color: t.textMuted)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 3),
+          HouseProgressBar(fraction: fraction, height: 2, fill: proSweep),
+        ],
+      );
+
+  /// Another computer's export while it runs, drawn as one here is. Until
+  /// its first frame it is getting ready there. Its readings come at the
+  /// room's pace, so the bar runs between them, and the time left is
+  /// counted from the first frame on.
+  Widget _exporting(LumitTheme t, Key key, BridgeRemoteJob job) {
+    if (job.total <= 0 || job.frame <= 0) {
+      return Text(l10n.exportQueuePreparing,
+          key: key,
+          style: dialogMono(t).copyWith(color: t.textMuted),
+          textAlign: TextAlign.right);
+    }
+    final seen = _jobRunning[job.job] ??= (DateTime.now(), job.frame);
+    final left = exportTimeLeft(
+        done: job.frame - seen.$2,
+        left: job.total - job.frame,
+        taken: DateTime.now().difference(seen.$1));
+    return Row(
+      key: key,
+      children: [
+        Expanded(child: roomPacedBar(job.frame / job.total)),
+        const SizedBox(width: 8),
+        Text(l10n.exportQueuePercent((job.frame * 100 / job.total).floor()),
+            style: dialogMono(t)),
+        if (left != null) ...[
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(left,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.small.copyWith(color: t.textMuted)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// How long a transfer has left at the rate it is going, or null.
+  static String? _leftAt(BridgeRemoteJob job) =>
+      job.rate <= 0 || job.size <= job.bytes
+          ? null
+          : exportMinutesLeft((job.size - job.bytes) / job.rate / 60);
+
+  /// While files move between computers, how much is left and how fast,
+  /// for the footer. Null while nothing moves.
+  String? get _moving {
+    var left = 0, rate = 0;
+    for (final job in _jobs) {
+      if (job.stage == BridgeRemoteStage.sending ||
+          job.stage == BridgeRemoteStage.returning) {
+        left += (job.size - job.bytes).clamp(0, job.size);
+        rate += job.rate;
+      }
+    }
+    if (left <= 0 || rate <= 0) return null;
+    return l10n.remoteLeftAt(writtenBytes(left), writtenBytes(rate));
+  }
+
+  /// A job's menu: hold it, find its file, send it again or elsewhere, and
+  /// cancel or forget it last.
+  void _jobMenu(BridgeRemoteJob job, Offset at) {
+    final ended = remoteEnded(job.stage);
+    final paused = job.stage == BridgeRemoteStage.paused;
+    // Only an export that hasn't begun can go to another computer instead.
+    final unstarted = !ended &&
+        job.frame == 0 &&
+        job.stage != BridgeRemoteStage.exporting &&
+        job.stage != BridgeRemoteStage.returning;
+    final here = job.lands == BridgeRemoteLands.sender;
+    final log = !job.sent && job.stage == BridgeRemoteStage.failed
+        ? remoteLog(job: job.job)
+        : '';
+    final app = context.read<LumitState>();
+    final others = [
+      if (_computers.length > 1) '',
+      for (final c in _computers)
+        if (c.id != job.other && c.takes) c.id,
+    ];
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        Widget row(String id, String label, VoidCallback press) => MenuRow(
+              key: ValueKey<String>('export-queue-job-menu-$id'),
+              onPressed: () {
+                close(null);
+                press();
+                _refresh();
+              },
+              child: MenuLabel(label),
+            );
+        return [
+          if (!ended)
+            row('pause', paused ? l10n.remoteGoOn : l10n.remotePause,
+                () => remotePause(job: job.job, paused: !paused)),
+          if (job.sent &&
+              job.stage == BridgeRemoteStage.done &&
+              job.path.isNotEmpty &&
+              !kIsWeb)
+            row('open', l10n.projectShowInFolder,
+                () => revealInFolder(path: job.path)),
+          if (job.sent &&
+              job.stage == BridgeRemoteStage.done &&
+              !here &&
+              job.path.isEmpty)
+            row('bring', l10n.remoteBringHere,
+                () => unawaited(remoteBringHere(app, job.job, job.file))),
+          if (log.isNotEmpty && !kIsWeb)
+            row('log', l10n.remoteShowLog, () => revealInFolder(path: log)),
+          if (job.sent && ended)
+            row('again', l10n.remoteExportAgain, () => _try(app, () {
+                  remoteAgain(job: job.job);
+                })),
+          if (job.sent && unstarted && others.isNotEmpty)
+            SubmenuRow(
+              key: const ValueKey('export-queue-job-menu-send-to'),
+              closeParent: () => close(null),
+              submenu: (dismiss) => FloatSurface(
+                child: IntrinsicWidth(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final id in others)
+                        MenuRow(
+                          key: ValueKey<String>(
+                              'export-queue-job-menu-send-to-$id'),
+                          onPressed: () {
+                            dismiss();
+                            _try(app, () {
+                              remoteMove(job: job.job, computer: id);
+                            });
+                            _refresh();
+                          },
+                          child: Text(id.isEmpty
+                              ? l10n.remoteAnyComputer
+                              : _computers.firstWhere((c) => c.id == id).name),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              child: MenuLabel(l10n.remoteSendTo),
+            ),
+          const MenuDivider(),
+          if (!ended)
+            row('cancel', l10n.cancel, () => remoteCancel(job: job.job)),
+          row('remove', l10n.exportQueueRemove,
+              () => remoteRemove(job: job.job)),
+        ];
+      },
+    ));
+  }
+
+  /// [call], which sends a job again or elsewhere, with a refusal said as a
+  /// notice.
+  static void _try(LumitState app, VoidCallback call) {
+    try {
+      call();
+    } catch (_) {
+      app.postNotice(l10n.remoteNoComputer, error: true);
+    }
+  }
+
+  /// Every export here and every one sent elsewhere, stopped, after asking.
+  Future<void> _cancelAll() async {
+    if (!await askBefore(
+            context, l10n.exportQueueCancelAllAsk, l10n.exportQueueCancelAll,
+            no: l10n.exportQueueKeepExporting) ||
+        !mounted) {
+      return;
+    }
+    for (final item in _items) {
+      if (item.state is BridgeExportQueueState_Waiting ||
+          item.state is BridgeExportQueueState_Running) {
+        exportQueueCancel(id: item.id);
+      }
+    }
+    for (final job in _jobs) {
+      if (!remoteEnded(job.stage)) remoteCancel(job: job.job);
+    }
+    _refresh();
+  }
 }
 
 /// [seconds] as a clock reads it: `2:31`, or `1:02:31` past the hour.
@@ -1105,9 +1679,63 @@ const EdgeInsets exportBodyPaddingForQueue =
 String? exportTimeLeft(
     {required int done, required int left, required Duration taken}) {
   if (done <= 0 || left <= 0 || taken < const Duration(seconds: 5)) return null;
-  final minutes = (taken.inMilliseconds / 60000 * left / done).round();
+  return exportMinutesLeft(taken.inMilliseconds / 60000 * left / done);
+}
+
+/// [exact] minutes left, in words for the strip.
+String exportMinutesLeft(double exact) {
+  final minutes = exact.round();
   if (minutes < 1) return l10n.exportLeftUnderMinute;
   return minutes < 120
       ? l10n.exportLeftMinutes('$minutes')
       : l10n.exportLeftHours('${(minutes / 60).round()}');
+}
+
+/// Whether [event] asks for a menu from the keyboard: the menu key, or
+/// Shift+F10.
+bool _asksMenu(KeyEvent event) =>
+    event is KeyDownEvent &&
+    (event.logicalKey == LogicalKeyboardKey.contextMenu ||
+        (event.logicalKey == LogicalKeyboardKey.f10 &&
+            HardwareKeyboard.instance.isShiftPressed));
+
+/// A row Tab can land on, whose menu the menu key or Shift+F10 opens under
+/// it, as a right-click on it does. The accent edge is its focus ring.
+class _MenuKeyRow extends StatefulWidget {
+  const _MenuKeyRow({required this.open, required this.child});
+
+  /// Open the row's menu at a point on the screen.
+  final void Function(Offset at) open;
+  final Widget child;
+
+  @override
+  State<_MenuKeyRow> createState() => _MenuKeyRowState();
+}
+
+class _MenuKeyRowState extends State<_MenuKeyRow> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Focus(
+      onFocusChange: (has) => setState(() => _focused = has),
+      onKeyEvent: (node, event) {
+        final box = context.findRenderObject();
+        if (!_asksMenu(event) || box is! RenderBox) {
+          return KeyEventResult.ignored;
+        }
+        widget.open(box.localToGlobal(Offset(24, box.size.height)));
+        return KeyEventResult.handled;
+      },
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: _focused
+            ? BoxDecoration(
+                border: Border(left: BorderSide(color: t.accent, width: 2)))
+            : const BoxDecoration(),
+        child: widget.child,
+      ),
+    );
+  }
 }

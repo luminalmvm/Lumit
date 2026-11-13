@@ -5,6 +5,7 @@ import 'dart:async' show unawaited;
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1234,6 +1235,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           handled = false;
         } else {
           showVectorExportFrb(context);
+        }
+      case 'export.remote':
+        if (comp == null || kIsWeb) {
+          handled = false;
+        } else {
+          exportRemoteFrb(context);
         }
       // Composition ▸ Save frame as….
       case 'comp.frame.save':

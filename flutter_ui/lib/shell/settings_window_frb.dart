@@ -967,7 +967,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         SettingsPage.viewer => _viewer(t, ui),
         SettingsPage.audio => _audioPage(t, ui),
         SettingsPage.autosave => _autosavePage(t, ui),
-        SettingsPage.export => _exportPage(t),
+        SettingsPage.export => _exportPage(t, ui),
         SettingsPage.addons => _addonsPage(t, ui),
         SettingsPage.previewAndCache => _performance(t, ui),
         SettingsPage.shortcuts => _keymap(t, ui),
@@ -2910,7 +2910,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// of the three, because that is where a person is when they decide a preset
   /// is the one they always want. This page is where the other two are set, and
   /// where all three can be read in one place.
-  List<Widget> _exportPage(LumitTheme t) {
+  List<Widget> _exportPage(LumitTheme t, LumitUiState ui) {
     final defaults = _exportDefaults ?? _noExportDefaults;
     // A default naming a preset that has since been deleted reads as none,
     // rather than as a name the list cannot show.
@@ -3006,6 +3006,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ),
         ],
       ),
+      // The system's own notification, while Lumit isn't in front.
+      if (!kIsWeb)
+        (
+          l10n.exportWhenDone,
+          [
+            _flag(t, 'settings-notify-exports', l10n.settingsNotifyExports,
+                value: ui.workspace.notifyExports,
+                set: ui.workspace.setNotifyExports),
+          ],
+        ),
     ]);
   }
 

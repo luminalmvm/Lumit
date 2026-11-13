@@ -332,6 +332,7 @@ Set<String> get settingsNotInPage => {
       l10n.settingsShareDownLimit,
       l10n.settingsKeepRunning,
       l10n.settingsOpenAtSignIn,
+      l10n.settingsNotifyExports,
       l10n.settingsDiscordStatus,
       l10n.settingsLiveEndpoint,
       l10n.settingsTangentPanels,

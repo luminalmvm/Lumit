@@ -655,6 +655,9 @@ pub struct BridgeExportQueueItem {
     pub range_start_frame: i64,
     pub range_end_frame: i64,
     pub state: BridgeExportQueueState,
+    /// The remote export this item does for another computer, empty for one of
+    /// this computer's own. Its other details are in `remote_jobs`.
+    pub job: String,
 }
 
 /// Where one queued item has got to.
@@ -669,6 +672,8 @@ pub enum BridgeExportQueueState {
         total: u64,
         /// The encoder actually chosen, which may not be the one asked for.
         encoder: String,
+        /// Held by someone between two frames. It goes on from the next frame.
+        paused: bool,
     },
     Done {
         /// How long it took to export, in whole seconds.
@@ -769,10 +774,12 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                     frame,
                     total,
                     encoder,
+                    paused,
                 } => BridgeExportQueueState::Running {
                     frame,
                     total,
                     encoder,
+                    paused,
                 },
                 crate::export::QueueRowState::Done { seconds, bytes } => {
                     BridgeExportQueueState::Done { seconds, bytes }
@@ -781,6 +788,7 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                     BridgeExportQueueState::Failed { error }
                 }
             },
+            job: row.job.map(|job| job.to_string()).unwrap_or_default(),
         })
         .collect()
 }
@@ -815,6 +823,13 @@ pub fn export_queue_cancel(id: u32) {
 #[frb(sync)]
 pub fn export_queue_remove(id: u32) {
     crate::export::queue_remove(id);
+}
+
+/// Hold the running or waiting item `id` between two frames, or let it go
+/// on. A waiting item that is held is passed over until it is let go.
+#[frb(sync)]
+pub fn export_queue_pause(id: u32, paused: bool) {
+    crate::export::queue_pause(id, paused);
 }
 
 /// Move one waiting item to `index` in the queue — the drag the queue window's

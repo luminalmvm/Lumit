@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import UserNotifications
 
 class MainFlutterWindow: NSWindow {
   // The zero-copy Viewer bridge: holds the 'lumit/viewer_texture'
@@ -577,6 +578,10 @@ class MainFlutterWindow: NSWindow {
         self?.setBackground(call.arguments as? [String: Any] ?? [:])
       case "show":
         self?.reveal()
+      case "close":
+        self?.performClose(nil)
+      case "notify":
+        self?.notify(call.arguments as? [String: Any] ?? [:])
       case "backdrop":
         result(self?.setBackdrop(call.arguments as? [String: Any] ?? [:]) ?? false)
         return
@@ -675,5 +680,45 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+
+  /// One of the system's notifications, for an export that ended while Lumit
+  /// wasn't in front (lib/state/background.dart). Permission is asked the
+  /// first time one is about to be shown, not at launch.
+  private func notify(_ args: [String: Any]) {
+    let title = args["title"] as? String ?? ""
+    let body = args["body"] as? String ?? ""
+    let center = UNUserNotificationCenter.current()
+    center.delegate = self
+    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+      guard granted else { return }
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      content.sound = .default
+      center.add(
+        UNNotificationRequest(
+          identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+  }
+}
+
+extension MainFlutterWindow: UNUserNotificationCenterDelegate {
+  /// A click on one of Lumit's notifications brings the window forward.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    DispatchQueue.main.async { self.reveal() }
+    completionHandler()
+  }
+
+  /// Shown even with Lumit active, as when it sits in the menu bar.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+    withCompletionHandler completionHandler:
+      @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .sound])
   }
 }

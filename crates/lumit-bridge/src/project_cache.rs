@@ -41,7 +41,8 @@ pub(crate) fn root(project: &LumitBridgeState, location: &Location) -> Option<Pa
     }
 }
 
-fn point_bakes_at(project: &LumitBridgeState) {
+/// Bakes go to and come from `project`'s cache folder from now on.
+pub(crate) fn point_bakes_at(project: &LumitBridgeState) {
     let (_, location) = crate::framecache::disk::location();
     lumit_render::sim::bake::set_root(root(project, &location));
 }

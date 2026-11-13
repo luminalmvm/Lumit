@@ -88,6 +88,7 @@ fn write_sound(
     on_encoder(encoder.encoder_label());
     let chunk = rate as usize * chans;
     for (n, block) in mix.chunks(chunk).enumerate() {
+        super::held::wait(cancel);
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }

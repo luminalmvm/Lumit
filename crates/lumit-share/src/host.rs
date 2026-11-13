@@ -32,14 +32,14 @@ pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// How many connections may be part-way through saying hello. Anyone can
 /// connect before proving they hold the invite, so this is what a flood of
 /// strangers is held to.
-const GREETING_ROOM: usize = 8;
+pub(crate) const GREETING_ROOM: usize = 8;
 
 /// How many of those may come from one address, so one machine cannot take
 /// every place.
-const GREETING_EACH: usize = 3;
+pub(crate) const GREETING_EACH: usize = 3;
 
 /// How long a caller that failed to say hello keeps its place.
-const GUESS_PAUSE: Duration = Duration::from_secs(1);
+pub(crate) const GUESS_PAUSE: Duration = Duration::from_secs(1);
 
 /// One caller still saying hello.
 struct Greeter {
@@ -173,7 +173,7 @@ fn restore(store: &DocumentStore, lost: &[Pair]) -> usize {
 /// Listen at `address`. Every address, `0.0.0.0`, means IPv6 as well where
 /// the system keeps the two apart, as Windows does. Where one listener takes
 /// both, the second is refused and not needed.
-fn listen(address: IpAddr, port: u16) -> std::io::Result<(Vec<TcpListener>, u16)> {
+pub(crate) fn listen(address: IpAddr, port: u16) -> std::io::Result<(Vec<TcpListener>, u16)> {
     let first = TcpListener::bind((address, port))?;
     let port = first.local_addr()?.port();
     let second = address

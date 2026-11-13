@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "floating_windows.cpp"
   "flutter_window.cpp"
   "main.cpp"
+  "notify.cpp"
   "utils.cpp"
   "viewer_texture_bridge.cpp"
   "win32_window.cpp"

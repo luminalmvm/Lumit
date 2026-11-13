@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 part 'make.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `commit_multicam`, `commit_resync`, `files_of`, `find`, `fitted`, `orphaned`, `plan`, `probe`, `probed`, `start_frame`, `start_job`, `whole_frames`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `File`, `Kind`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `File`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// What makes an angle.

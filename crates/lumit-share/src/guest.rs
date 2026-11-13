@@ -179,7 +179,7 @@ pub(crate) fn left(
 }
 
 /// How long a relay is left untried, for the host to answer by itself.
-const HEAD_START: Duration = Duration::from_millis(400);
+pub(crate) const HEAD_START: Duration = Duration::from_millis(400);
 
 /// A connection that has proved both ends hold the invite's secret.
 type Opened = (TcpStream, Sender, Receiver);

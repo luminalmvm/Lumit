@@ -131,6 +131,12 @@ void exportQueueCancel({required int id}) =>
 void exportQueueRemove({required int id}) =>
     BridgeLib.instance.api.crateApiExportExportQueueRemove(id: id);
 
+/// Hold the running or waiting item `id` between two frames, or let it go
+/// on. A waiting item that is held is passed over until it is let go.
+void exportQueuePause({required int id, required bool paused}) =>
+    BridgeLib.instance.api
+        .crateApiExportExportQueuePause(id: id, paused: paused);
+
 /// Move one waiting item to `index` in the queue — the drag the queue window's
 /// list offers, so the order work runs in is the order it is looked at in.
 ///
@@ -433,6 +439,10 @@ class BridgeExportQueueItem {
   final int rangeEndFrame;
   final BridgeExportQueueState state;
 
+  /// The remote export this item does for another computer, empty for one of
+  /// this computer's own. Its other details are in `remote_jobs`.
+  final String job;
+
   const BridgeExportQueueItem({
     required this.id,
     this.group,
@@ -445,6 +455,7 @@ class BridgeExportQueueItem {
     required this.rangeStartFrame,
     required this.rangeEndFrame,
     required this.state,
+    required this.job,
   });
 
   @override
@@ -459,7 +470,8 @@ class BridgeExportQueueItem {
       codec.hashCode ^
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
-      state.hashCode;
+      state.hashCode ^
+      job.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -476,7 +488,8 @@ class BridgeExportQueueItem {
           codec == other.codec &&
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&
-          state == other.state;
+          state == other.state &&
+          job == other.job;
 }
 
 @freezed
@@ -494,6 +507,9 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
 
     /// The encoder actually chosen, which may not be the one asked for.
     required String encoder,
+
+    /// Held by someone between two frames. It goes on from the next frame.
+    required bool paused,
   }) = BridgeExportQueueState_Running;
   const factory BridgeExportQueueState.done({
     /// How long it took to export, in whole seconds.

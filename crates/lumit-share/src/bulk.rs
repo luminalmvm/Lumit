@@ -289,6 +289,8 @@ pub(crate) struct Hub {
     footage: Arc<dyn Footage>,
     limits: Arc<Limits>,
     host: bool,
+    /// A host whose one guest goes and comes back ([`Hub::patient`]).
+    patient: bool,
     stop: AtomicBool,
     next: AtomicU64,
     /// One a guest on the host, one at most on a guest.
@@ -300,7 +302,8 @@ pub(crate) struct Hub {
     /// Who has the original of which footage item, by person. An entry goes
     /// when the person does.
     holds: Mutex<HashMap<u32, Vec<Held>>>,
-    /// What a guest wants and has no link to ask down yet.
+    /// What a guest, or a patient host, wants and has no link to ask down
+    /// yet.
     waiting: Mutex<Vec<Wanted>>,
     /// What a peer asked this end for and has since said it does not want:
     /// the peer, and its request. Checked before a file is made and between
@@ -317,10 +320,23 @@ fn part(path: &Path) -> PathBuf {
 
 impl Hub {
     pub(crate) fn new(footage: Arc<dyn Footage>, limits: Arc<Limits>, host: bool) -> Arc<Hub> {
-        Arc::new(Hub {
+        Arc::new(Hub::with(footage, limits, host, false))
+    }
+
+    /// A host with one guest, which has nobody else to ask and comes back
+    /// when it drops, as the sender of an export done on another computer
+    /// does. What it wants with no link, or was taking when the link went,
+    /// waits for the next link rather than being refused.
+    pub(crate) fn patient(footage: Arc<dyn Footage>, limits: Arc<Limits>) -> Arc<Hub> {
+        Arc::new(Hub::with(footage, limits, true, true))
+    }
+
+    fn with(footage: Arc<dyn Footage>, limits: Arc<Limits>, host: bool, patient: bool) -> Hub {
+        Hub {
             footage,
             limits,
             host,
+            patient,
             stop: AtomicBool::new(false),
             next: AtomicU64::new(1),
             links: Mutex::new(Vec::new()),
@@ -329,7 +345,7 @@ impl Hub {
             holds: Mutex::new(HashMap::new()),
             waiting: Mutex::new(Vec::new()),
             withdrawn: Mutex::new(Vec::new()),
-        })
+        }
     }
 
     /// Stop every transfer and let go of every link.
@@ -431,17 +447,27 @@ impl Hub {
         }
         if !self.host {
             if self.out(0).is_none() {
-                let mut waiting = self.waiting.lock();
-                if !waiting.contains(&wanted) {
-                    waiting.push(wanted);
-                }
+                self.wait(wanted);
                 return;
             }
             self.ask(0, wanted);
             return;
         }
-        if !self.fetch(&wanted, None) {
+        if self.fetch(&wanted, None) {
+            return;
+        }
+        if self.patient && self.links.lock().is_empty() {
+            self.wait(wanted);
+        } else {
             self.footage.told(News::Refused { wanted });
+        }
+    }
+
+    /// Keep `wanted` to ask for on the next link.
+    fn wait(&self, wanted: Wanted) {
+        let mut waiting = self.waiting.lock();
+        if !waiting.contains(&wanted) {
+            waiting.push(wanted);
         }
     }
 
@@ -568,7 +594,16 @@ impl Hub {
             self.read_loop(peer, &mut receiver);
         }
         let _ = socket.shutdown(Shutdown::Both);
-        self.links.lock().retain(|l| l.id != id);
+        // A link replaced before its drop was noticed leaves what it was
+        // doing to the one that replaced it, which has asked for it again.
+        let replaced = {
+            let mut links = self.links.lock();
+            links.retain(|l| l.id != id);
+            links.iter().any(|l| l.peer == peer)
+        };
+        if replaced {
+            return;
+        }
         self.withdrawn.lock().retain(|(who, _)| *who != peer);
         if self.host {
             self.dropped(peer);
@@ -576,7 +611,8 @@ impl Hub {
     }
 
     /// On the host: `peer`'s link has gone. What it was giving is asked of
-    /// someone else, and what it was owed is let go of.
+    /// someone else, or on a patient host waits for it to come back, and
+    /// what it was owed is let go of.
     fn dropped(self: &Arc<Self>, peer: u32) {
         self.owed.lock().retain(|o| o.peer != peer);
         let lost: Vec<Wanted> = {
@@ -592,7 +628,9 @@ impl Hub {
                 .collect()
         };
         for wanted in lost {
-            if !self.stopped() && !self.fetch(&wanted, Some(peer)) {
+            if self.patient {
+                self.wait(wanted);
+            } else if !self.stopped() && !self.fetch(&wanted, Some(peer)) {
                 self.refuse(&wanted);
             }
         }
@@ -661,143 +699,6 @@ impl Hub {
                 }
             }
         }
-    }
-
-    /// Send what is queued for a link: frames as they come, and a file a
-    /// piece at a time with any frame that turns up let past between pieces.
-    fn send_loop(&self, peer: u32, mut sender: Sender, outbox: &Queue<Out>) {
-        let mut files: VecDeque<(u64, Wanted, PathBuf, Resume)> = VecDeque::new();
-        let mut said = Instant::now();
-        'link: loop {
-            let next = if files.is_empty() {
-                match outbox.recv_timeout(PING) {
-                    Ok(next) => Some(next),
-                    Err(RecvTimeoutError::Timeout) => None,
-                    Err(RecvTimeoutError::Disconnected) => break,
-                }
-            } else {
-                outbox.try_recv().ok()
-            };
-            match next {
-                Some(Out::Frame(bytes)) => {
-                    if sender.send(&bytes).is_err() {
-                        break;
-                    }
-                    said = Instant::now();
-                    continue;
-                }
-                Some(Out::File {
-                    request,
-                    wanted,
-                    path,
-                    resume,
-                }) => {
-                    files.push_back((request, wanted, path, resume));
-                    continue;
-                }
-                None if files.is_empty() => {
-                    if said.elapsed() >= PING && sender.send(&[STILL_HERE]).is_err() {
-                        break;
-                    }
-                    said = Instant::now();
-                    continue;
-                }
-                None => {}
-            }
-            // One whole file, unless a frame wants out between its pieces.
-            let Some((request, wanted, path, (have, start))) = files.pop_front() else {
-                continue;
-            };
-            if self.unwanted(peer, request) {
-                continue;
-            }
-            let opened = File::open(&path).and_then(|mut file| {
-                let total = file.metadata()?.len();
-                // Carried on from where the other end got to only if what
-                // it has is how this file starts.
-                let same = have > 0 && have <= total && start_of(&path, have) == Some(start);
-                let from = if same { have } else { 0 };
-                file.seek(SeekFrom::Start(from))?;
-                Ok((file, total, from))
-            });
-            let Ok((mut file, total, from)) = opened else {
-                if sender.send(&frame(NO, request, &[])).is_err() {
-                    break;
-                }
-                continue;
-            };
-            let mut sizes = total.to_le_bytes().to_vec();
-            sizes.extend_from_slice(&from.to_le_bytes());
-            if sender.send(&frame(SIZE, request, &sizes)).is_err() {
-                break;
-            }
-            let mut done = from;
-            let mut told = Instant::now();
-            let mut piece = vec![0u8; PIECE];
-            let mut dropped = false;
-            loop {
-                if self.stopped() {
-                    break 'link;
-                }
-                if self.unwanted(peer, request) {
-                    dropped = true;
-                    break;
-                }
-                while let Ok(between) = outbox.try_recv() {
-                    match between {
-                        Out::Frame(bytes) => {
-                            if sender.send(&bytes).is_err() {
-                                break 'link;
-                            }
-                        }
-                        Out::File {
-                            request,
-                            wanted,
-                            path,
-                            resume,
-                        } => files.push_back((request, wanted, path, resume)),
-                    }
-                }
-                let Ok(n) = file.read(&mut piece) else {
-                    break 'link;
-                };
-                if n == 0 {
-                    break;
-                }
-                self.limits.up.take(n, &self.stop);
-                if sender.send(&frame(DATA, request, &piece[..n])).is_err() {
-                    break 'link;
-                }
-                done += n as u64;
-                if told.elapsed() >= TELLING {
-                    told = Instant::now();
-                    self.footage.told(News::Moving {
-                        wanted: wanted.clone(),
-                        done,
-                        total,
-                        sending: true,
-                    });
-                }
-            }
-            // Given up on by the other end: nothing more is said of it.
-            if dropped {
-                continue;
-            }
-            if sender
-                .send(&frame(END, request, &done.to_le_bytes()))
-                .is_err()
-            {
-                break;
-            }
-            said = Instant::now();
-            self.footage.told(News::Moving {
-                wanted,
-                done,
-                total,
-                sending: true,
-            });
-        }
-        sender.close();
     }
 
     /// Read a link until it drops or says something that is not a frame.
@@ -995,6 +896,8 @@ impl Hub {
         true
     }
 }
+
+mod send;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

@@ -1133,6 +1133,7 @@ void main() {
           rangeStartFrame: -1,
           rangeEndFrame: -1,
           state: state,
+          job: '',
         );
 
     /// Drag one row by [dy], in steps rather than one jump: a lift needs a

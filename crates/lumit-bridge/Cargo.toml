@@ -121,6 +121,11 @@ png = "0.18"
 # The strip of frames a graphics template's tile scrubs, kept small. The
 # version and feature lumit-lottie already brings in.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# A remote export names each file by the hash of what is in it, as the
+# shared-project crates already do with this one.
+blake3 = "1"
+# The key that opens a remote export's link, at the version lumit-share uses.
+getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v5", "v7", "serde"] }
@@ -158,6 +163,8 @@ features = [
     "Win32_Media",
     # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
     "Win32_Storage_FileSystem",
+    # `PowerSetRequest`, so the computer stays awake while an export runs.
+    "Win32_System_Power",
 ]
 
 # The live endpoint's pipe. The browser build has no other programs to talk to.

@@ -6877,6 +6877,10 @@
   "@keyExportTheComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. Also the tooltip of the Timeline's Export button."
   },
+  "keyExportOnAnotherComputer": "Export on another computer",
+  "@keyExportOnAnotherComputer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyFitTheCurvesToThePane": "Fit the curves to the pane",
   "@keyFitTheCurvesToThePane": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -8372,6 +8376,10 @@
   "menuExport": "Export…",
   "@menuExport": {
     "description": "Menu item."
+  },
+  "menuExportRemote": "Export on another computer…",
+  "@menuExportRemote": {
+    "description": "File menu item, after Export: export the composition on another of the account's computers. Lumit Pro."
   },
   "menuFile": "File",
   "@menuFile": {
@@ -26092,6 +26100,14 @@
   "@proFeatureReviewBody": {
     "description": "What the third Lumit Pro feature does: people watch an export in a browser and comment on a frame of it."
   },
+  "proFeatureRemoteTitle": "Export on another computer",
+  "@proFeatureRemoteTitle": {
+    "description": "A Lumit Pro feature in the Lumit Pro window: an export is started on this computer and done by another of the account's computers."
+  },
+  "proFeatureRemoteBody": "Start it here. Your other computer does the work.",
+  "@proFeatureRemoteBody": {
+    "description": "What the Lumit Pro feature Export on another computer does."
+  },
   "shareOnline": "Keep online",
   "@shareOnline": {
     "description": "Share this project page of the Shared project window: row label of the tick box that keeps the shared project on Lumit's server, which comes with Lumit Pro."
@@ -27131,6 +27147,462 @@
   "phonesExport": "Phones can start exports",
   "@phonesExport": {
     "description": "Switch in Settings, Account, Devices group: whether the paired phones may start, cancel and remove exports on this computer. Kept for this computer only."
+  },
+  "settingsComputers": "Computers",
+  "@settingsComputers": {
+    "description": "Settings, Account: heading of the group about exports between the account's computers, with Lumit Pro. Beside Devices."
+  },
+  "remoteTakes": "Other computers can export here",
+  "@remoteTakes": {
+    "description": "Switch in Settings, Account, Computers group: whether the account's other computers may send exports to this one to do. Kept for this computer only."
+  },
+  "remoteFolders": "Look for footage in",
+  "@remoteFolders": {
+    "description": "Settings, Account, Computers group: label of the list of folders this computer looks in for footage another computer sends, so a file already here is not sent again."
+  },
+  "remoteFolderAdd": "Add folder…",
+  "@remoteFolderAdd": {
+    "description": "Settings, Account, Computers group: button that picks a folder to add to the Look for footage in list."
+  },
+  "remoteFolderRemove": "Remove folder",
+  "@remoteFolderRemove": {
+    "description": "Settings, Account, Computers group: tooltip of the × beside a folder in the Look for footage in list."
+  },
+  "remoteKept": "Kept for other computers",
+  "@remoteKept": {
+    "description": "Settings, Account, Computers group: row showing how much room the footage kept for the account's other computers takes, with a Clear button."
+  },
+  "remoteKeptClearAsk": "Clear the files kept for other computers?",
+  "@remoteKeptClearAsk": {
+    "description": "Question before the footage kept for the account's other computers is deleted. The answer button is Clear."
+  },
+  "remoteExportOn": "Export on",
+  "@remoteExportOn": {
+    "description": "Export dialogue: label of the row that picks which of the account's computers does the export."
+  },
+  "remoteAnyComputer": "Any free computer",
+  "@remoteAnyComputer": {
+    "description": "Export dialogue, Export on list: whichever of the account's other computers can do the export soonest."
+  },
+  "remoteFileGoesTo": "File goes to",
+  "@remoteFileGoesTo": {
+    "description": "Export dialogue: label of the row that picks whether the finished file comes back to this computer or stays on the one that exports it."
+  },
+  "remoteThatComputer": "That computer",
+  "@remoteThatComputer": {
+    "description": "Export dialogue, File goes to row: the computer that does the export, when Any free computer is chosen and it is not yet known which."
+  },
+  "remoteReady": "Ready",
+  "@remoteReady": {
+    "description": "Export dialogue, Export on list: beside a computer that has everything the export needs."
+  },
+  "remoteChecking": "Checking",
+  "@remoteChecking": {
+    "description": "Export dialogue, Export on list: beside a computer that is being asked whether it has what the export needs."
+  },
+  "remoteLacks": "Lacks {what}",
+  "@remoteLacks": {
+    "description": "Export dialogue: beside a computer, and in the footer, when it lacks plugins, fonts or model packs the export uses. {what} is a list such as \"2 plugins, 1 font\".",
+    "placeholders": {
+      "what": {
+        "type": "String"
+      }
+    }
+  },
+  "remotePlugins": "{count, plural, =1{1 plugin} other{{count} plugins}}",
+  "@remotePlugins": {
+    "description": "Part of the Lacks list in the export dialogue: how many plugins a computer lacks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteFonts": "{count, plural, =1{1 font} other{{count} fonts}}",
+  "@remoteFonts": {
+    "description": "Part of the Lacks list in the export dialogue: how many fonts a computer lacks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteModels": "{count, plural, =1{1 model pack} other{{count} model packs}}",
+  "@remoteModels": {
+    "description": "Part of the Lacks list in the export dialogue: how many model packs a computer lacks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteQueued": "{count} waiting",
+  "@remoteQueued": {
+    "description": "Export dialogue, Export on list: beside a computer, how many exports wait in its queue.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remoteExporting": "Exporting",
+  "@remoteExporting": {
+    "description": "Export dialogue, Export on list: beside a computer that is exporting something now."
+  },
+  "remoteAway": "Away",
+  "@remoteAway": {
+    "description": "Beside one of the account's computers that is offline or asleep, when it was never seen online."
+  },
+  "remoteAwaySince": "Away since {time}",
+  "@remoteAwaySince": {
+    "description": "Beside one of the account's computers that is offline or asleep: when it was last online, a time such as 14:02 or a day such as 4 October.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteOnline": "Online",
+  "@remoteOnline": {
+    "description": "Export queue window: beside the heading of one of the account's other computers that is online."
+  },
+  "remoteNotTaking": "Not taking exports",
+  "@remoteNotTaking": {
+    "description": "Why a computer cannot be picked to export on: it has turned off taking exports from other computers. Also why one of its exports failed."
+  },
+  "remoteNeedsVersion": "Needs Lumit {version}",
+  "@remoteNeedsVersion": {
+    "description": "Export dialogue, Export on list: why a computer cannot be picked: its Lumit is too old for this project. {version} is a version such as 0.12.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteWaitsFor": "Waits for {computer}",
+  "@remoteWaitsFor": {
+    "description": "Export dialogue footer: the chosen computer is offline or asleep, and the export goes once it is back. {computer} is its name.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteWaitingFor": "Waiting for {computer}",
+  "@remoteWaitingFor": {
+    "description": "Export queue window, status of an export sent to another computer that is offline or asleep.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteCheckingFiles": "Checking files",
+  "@remoteCheckingFiles": {
+    "description": "Export queue window, status of an export sent to another computer: working out which files that computer lacks."
+  },
+  "remoteSizeOf": "{done} of {total}",
+  "@remoteSizeOf": {
+    "description": "How far a transfer has got, as in \"2.1 of 8.4 GB\". {total} carries the unit.",
+    "placeholders": {
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteSending": "Sending {amount}",
+  "@remoteSending": {
+    "description": "Export queue window, status of an export sent to another computer: its project and footage are on their way there. {amount} is such as \"2.1 of 8.4 GB\".",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteReceiving": "Receiving {amount}",
+  "@remoteReceiving": {
+    "description": "Export queue window, status of an export another computer sent here: its project and footage are on their way here. {amount} is such as \"2.1 of 8.4 GB\".",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteBringingBack": "Bringing back {amount}",
+  "@remoteBringingBack": {
+    "description": "Export queue window, status of an export sent to another computer: the finished file is on its way back. {amount} is such as \"300 of 812 MB\".",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteSendingBack": "Sending back {amount}",
+  "@remoteSendingBack": {
+    "description": "Export queue window, status of an export done here for another computer: the finished file is on its way back there. {amount} is such as \"300 of 812 MB\".",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteInQueue": "In {computer}'s queue",
+  "@remoteInQueue": {
+    "description": "Export queue window, status of an export sent to another computer: it has everything and waits its turn there.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remotePaused": "Paused",
+  "@remotePaused": {
+    "description": "Export queue window, status of an export someone paused."
+  },
+  "remoteKeptOn": "On {computer}",
+  "@remoteKeptOn": {
+    "description": "Export queue window, status of an export done on another computer whose file stays there.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteSentTo": "Sent to {computer}",
+  "@remoteSentTo": {
+    "description": "Export queue window, status of an export done here for another computer, whose file has gone back there.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteCancelled": "Cancelled",
+  "@remoteCancelled": {
+    "description": "Export queue window, status of an export between two computers that was cancelled."
+  },
+  "remoteWhyTooOld": "Needs a newer Lumit",
+  "@remoteWhyTooOld": {
+    "description": "Why an export on another computer failed: its Lumit is too old for the project."
+  },
+  "remoteWhyNoSpace": "Out of disk space",
+  "@remoteWhyNoSpace": {
+    "description": "Why an export on another computer failed: no room for the files or the export."
+  },
+  "remoteWhyLost": "Lost the connection",
+  "@remoteWhyLost": {
+    "description": "Why an export on another computer failed: the two computers lost each other for good."
+  },
+  "remoteWhyGone": "The file is no longer there",
+  "@remoteWhyGone": {
+    "description": "Why the file of an export kept on another computer couldn't be brought here: it has been moved or deleted there."
+  },
+  "remoteWhyFailed": "Stopped with an error",
+  "@remoteWhyFailed": {
+    "description": "Why an export between two of the account's computers stopped, when there is nothing more to say than that it failed."
+  },
+  "remotePause": "Pause",
+  "@remotePause": {
+    "description": "Export queue window, an export's right-click menu: hold it where it is."
+  },
+  "remoteGoOn": "Go on",
+  "@remoteGoOn": {
+    "description": "Export queue window, an export's right-click menu: let a paused export carry on."
+  },
+  "remoteShowLog": "Show log",
+  "@remoteShowLog": {
+    "description": "Export queue window, right-click menu of an export done here for another computer that failed: show its log file in the folder."
+  },
+  "remoteExportAgain": "Export again",
+  "@remoteExportAgain": {
+    "description": "Export queue window, right-click menu of an export sent to another computer: send the same export there once more."
+  },
+  "remoteSendTo": "Send to",
+  "@remoteSendTo": {
+    "description": "Export queue window, right-click menu of an export sent to another computer that has not started: a submenu of the computers to send it to instead."
+  },
+  "remoteBringHere": "Bring here",
+  "@remoteBringHere": {
+    "description": "Export queue window menu and notice: bring the file of an export that stayed on the other computer to this one."
+  },
+  "exportQueueCancelAll": "Cancel all",
+  "@exportQueueCancelAll": {
+    "description": "Export queue window, the queue's right-click menu: cancel every export here and every one sent to another computer. Also the answer to the question before it."
+  },
+  "exportQueueCancelAllAsk": "Cancel every export?",
+  "@exportQueueCancelAllAsk": {
+    "description": "Question before every export in the queue is cancelled. The answer buttons are Keep exporting and Cancel all."
+  },
+  "exportQueueKeepExporting": "Keep exporting",
+  "@exportQueueKeepExporting": {
+    "description": "Answer to the question Cancel every export?: leave the exports as they are."
+  },
+  "remoteLeftAt": "{size} left at {rate}/s",
+  "@remoteLeftAt": {
+    "description": "Export queue window footer, after the count, while files move between computers: how much is left to move and how fast, as in \"6.3 GB left at 42 MB/s\".",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteStatusExporting": "Exporting {composition} on {computer}",
+  "@remoteStatusExporting": {
+    "description": "Status line: a composition is exporting on another of the account's computers.",
+    "placeholders": {
+      "composition": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteStatusSending": "Sending {composition} to {computer}",
+  "@remoteStatusSending": {
+    "description": "Status line: a composition's project and footage are on their way to the computer that exports it.",
+    "placeholders": {
+      "composition": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteStatusBringing": "Bringing back {composition} from {computer}",
+  "@remoteStatusBringing": {
+    "description": "Status line: the file another computer exported is on its way back.",
+    "placeholders": {
+      "composition": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteNewsLanded": "{file} is here from {computer}",
+  "@remoteNewsLanded": {
+    "description": "Notice: the file another computer exported has come back. {file} is its file name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteNewsKept": "{computer} exported {file}",
+  "@remoteNewsKept": {
+    "description": "Notice: another computer has finished an export, and its file stays there. A Bring here action follows.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      },
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteNewsFailed": "{computer} couldn't export {composition}",
+  "@remoteNewsFailed": {
+    "description": "Error notice on the computer that sent an export: the export on another computer failed. The reason follows it.",
+    "placeholders": {
+      "computer": {
+        "type": "String"
+      },
+      "composition": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteNewsFailedFor": "Couldn't export {composition} for {computer}",
+  "@remoteNewsFailedFor": {
+    "description": "Error notice on the computer doing an export another of the account's computers sent: it failed here. {computer} is the computer that sent it. The reason follows it.",
+    "placeholders": {
+      "composition": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteNewsArrived": "Exporting {composition} for {computer}",
+  "@remoteNewsArrived": {
+    "description": "Quiet notice when another of the account's computers sends this one an export. Also the question when Lumit is closed while it runs.",
+    "placeholders": {
+      "composition": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteShow": "Show",
+  "@remoteShow": {
+    "description": "Action on the notice for an export that came back from another computer: show the file in its folder."
+  },
+  "remotePhoneSent": "A phone sent {composition} to {computer}",
+  "@remotePhoneSent": {
+    "description": "Quiet notice on the status line: a paired phone sent an export of a composition to another of the account's computers.",
+    "placeholders": {
+      "composition": {
+        "type": "String"
+      },
+      "computer": {
+        "type": "String"
+      }
+    }
+  },
+  "remoteKeepRunning": "Keep running",
+  "@remoteKeepRunning": {
+    "description": "Answer to the question when Lumit is closed while it exports for another computer: close the window and keep Lumit running in the tray."
+  },
+  "remoteNoComputer": "None of your computers can take this export",
+  "@remoteNoComputer": {
+    "description": "Shown when an export can't be sent to another of the account's computers: none named is one of them, or none online takes exports and can read the project."
+  },
+  "remoteFetchFailed": "Couldn't bring {file} here",
+  "@remoteFetchFailed": {
+    "description": "Error notice when the file an export left on another computer can't be fetched to this one.",
+    "placeholders": {
+      "file": {"type": "String", "example": "Solstice.mp4"}
+    }
+  },
+  "settingsNotifyExports": "Notify when exports end",
+  "@settingsNotifyExports": {
+    "description": "Settings > Export switch: the system shows a notification when an export ends while Lumit isn't the window in front."
+  },
+  "notifyExported": "{file} is ready",
+  "@notifyExported": {
+    "description": "Title of the system notification when an export on this computer has written its file. The body is the folder it is in.",
+    "placeholders": {
+      "file": {"type": "String", "example": "Solstice.mp4"}
+    }
+  },
+  "notifyFailed": "Couldn't export {composition}",
+  "@notifyFailed": {
+    "description": "Title of the system notification when an export on this computer stopped short. The body is the reason.",
+    "placeholders": {
+      "composition": {"type": "String", "example": "Solstice"}
+    }
+  },
+  "notifyExportsEnded": "{count, plural, =1{1 export ended} other{{count} exports ended}}",
+  "@notifyExportsEnded": {
+    "description": "Title of one system notification for several exports that ended within a few seconds of each other, some finished and some perhaps failed. The body lists their files.",
+    "placeholders": {
+      "count": {"type": "int", "example": "3"}
+    }
   },
   "phoneCodeLeft": "{time} left",
   "@phoneCodeLeft": {

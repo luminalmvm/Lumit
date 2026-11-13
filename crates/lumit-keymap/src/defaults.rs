@@ -127,6 +127,8 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+Alt+Shift+M", "comp.frame.save"),
         // The comp as a Lottie or an animated SVG, the third of the family.
         row(Global, "Mod+Shift+M", "file.export.vector"),
+        // Export on another of the account's computers, beside Export.
+        row(Global, "Alt+M", "export.remote"),
         row(Global, "Mod+N", "comp.new"),
         row(Global, "Mod+A", "edit.select.all"),
         row(Global, "Mod+Shift+A", "edit.deselect.all"),

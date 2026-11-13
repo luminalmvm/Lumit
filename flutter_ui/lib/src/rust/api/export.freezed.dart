@@ -154,7 +154,8 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? waiting,
-    TResult Function(int frame, int total, String encoder)? running,
+    TResult Function(int frame, int total, String encoder, bool paused)?
+        running,
     TResult Function(int seconds, int bytes)? done,
     TResult Function(String error)? failed,
     required TResult orElse(),
@@ -164,7 +165,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
       case BridgeExportQueueState_Waiting() when waiting != null:
         return waiting();
       case BridgeExportQueueState_Running() when running != null:
-        return running(_that.frame, _that.total, _that.encoder);
+        return running(_that.frame, _that.total, _that.encoder, _that.paused);
       case BridgeExportQueueState_Done() when done != null:
         return done(_that.seconds, _that.bytes);
       case BridgeExportQueueState_Failed() when failed != null:
@@ -190,7 +191,8 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() waiting,
-    required TResult Function(int frame, int total, String encoder) running,
+    required TResult Function(int frame, int total, String encoder, bool paused)
+        running,
     required TResult Function(int seconds, int bytes) done,
     required TResult Function(String error) failed,
   }) {
@@ -199,7 +201,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
       case BridgeExportQueueState_Waiting():
         return waiting();
       case BridgeExportQueueState_Running():
-        return running(_that.frame, _that.total, _that.encoder);
+        return running(_that.frame, _that.total, _that.encoder, _that.paused);
       case BridgeExportQueueState_Done():
         return done(_that.seconds, _that.bytes);
       case BridgeExportQueueState_Failed():
@@ -222,7 +224,8 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? waiting,
-    TResult? Function(int frame, int total, String encoder)? running,
+    TResult? Function(int frame, int total, String encoder, bool paused)?
+        running,
     TResult? Function(int seconds, int bytes)? done,
     TResult? Function(String error)? failed,
   }) {
@@ -231,7 +234,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
       case BridgeExportQueueState_Waiting() when waiting != null:
         return waiting();
       case BridgeExportQueueState_Running() when running != null:
-        return running(_that.frame, _that.total, _that.encoder);
+        return running(_that.frame, _that.total, _that.encoder, _that.paused);
       case BridgeExportQueueState_Done() when done != null:
         return done(_that.seconds, _that.bytes);
       case BridgeExportQueueState_Failed() when failed != null:
@@ -267,7 +270,10 @@ class BridgeExportQueueState_Waiting extends BridgeExportQueueState {
 
 class BridgeExportQueueState_Running extends BridgeExportQueueState {
   const BridgeExportQueueState_Running(
-      {required this.frame, required this.total, required this.encoder})
+      {required this.frame,
+      required this.total,
+      required this.encoder,
+      required this.paused})
       : super._();
 
   final int frame;
@@ -277,6 +283,9 @@ class BridgeExportQueueState_Running extends BridgeExportQueueState {
 
   /// The encoder actually chosen, which may not be the one asked for.
   final String encoder;
+
+  /// Held by someone between two frames. It goes on from the next frame.
+  final bool paused;
 
   /// Create a copy of BridgeExportQueueState
   /// with the given fields replaced by the non-null parameter values.
@@ -293,15 +302,16 @@ class BridgeExportQueueState_Running extends BridgeExportQueueState {
             other is BridgeExportQueueState_Running &&
             (identical(other.frame, frame) || other.frame == frame) &&
             (identical(other.total, total) || other.total == total) &&
-            (identical(other.encoder, encoder) || other.encoder == encoder));
+            (identical(other.encoder, encoder) || other.encoder == encoder) &&
+            (identical(other.paused, paused) || other.paused == paused));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, frame, total, encoder);
+  int get hashCode => Object.hash(runtimeType, frame, total, encoder, paused);
 
   @override
   String toString() {
-    return 'BridgeExportQueueState.running(frame: $frame, total: $total, encoder: $encoder)';
+    return 'BridgeExportQueueState.running(frame: $frame, total: $total, encoder: $encoder, paused: $paused)';
   }
 }
 
@@ -313,7 +323,7 @@ abstract mixin class $BridgeExportQueueState_RunningCopyWith<$Res>
           $Res Function(BridgeExportQueueState_Running) _then) =
       _$BridgeExportQueueState_RunningCopyWithImpl;
   @useResult
-  $Res call({int frame, int total, String encoder});
+  $Res call({int frame, int total, String encoder, bool paused});
 }
 
 /// @nodoc
@@ -331,6 +341,7 @@ class _$BridgeExportQueueState_RunningCopyWithImpl<$Res>
     Object? frame = null,
     Object? total = null,
     Object? encoder = null,
+    Object? paused = null,
   }) {
     return _then(BridgeExportQueueState_Running(
       frame: null == frame
@@ -345,6 +356,10 @@ class _$BridgeExportQueueState_RunningCopyWithImpl<$Res>
           ? _self.encoder
           : encoder // ignore: cast_nullable_to_non_nullable
               as String,
+      paused: null == paused
+          ? _self.paused
+          : paused // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }

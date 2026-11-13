@@ -1298,6 +1298,10 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuExportVector,
                 comp == null ? null : () => showVectorExportFrb(context),
                 action: 'file.export.vector'),
+            if (!kIsWeb)
+              MenuEntry(l10n.menuExportRemote,
+                  comp == null ? null : () => exportRemoteFrb(context),
+                  action: 'export.remote', needsPro: needsPro()),
             // Scripts, sharing this project and joining somebody else's, and
             // exports sent out for comments. A page runs and sends nothing.
             if (!kIsWeb) ...[
@@ -2924,6 +2928,18 @@ Future<void> exportFrb(BuildContext context) async {
   final comp = context.read<LumitUiState>().selectedComp;
   if (comp == null) return;
   await showExportDialogFrb(context: context, comp: comp);
+}
+
+/// Export on another computer…: the export dialogue set to the computer last
+/// chosen in this run of Lumit, else any free one. Without Lumit Pro, the Pro
+/// window.
+Future<void> exportRemoteFrb(BuildContext context) async {
+  final ui = context.read<LumitUiState>();
+  if (!ui.account.pro) return showProWindow(context);
+  final comp = ui.selectedComp;
+  if (comp == null) return;
+  await showExportDialogFrb(
+      context: context, comp: comp, on: exportLastComputer ?? '*');
 }
 
 void undoFrb(LumitState app) {

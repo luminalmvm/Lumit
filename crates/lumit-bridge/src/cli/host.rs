@@ -62,12 +62,19 @@ struct Export {
     /// the comp.
     waiting: Option<(Arc<Document>, Uuid)>,
     status: ExportStatus,
+    /// The encoder the export settled on, once it has.
+    encoder: Option<&'static str>,
 }
 
 impl Headless {
     /// A new, empty project with no file yet.
     pub fn new_project() -> Self {
         Self::with(Document::new(), None, None)
+    }
+
+    /// A project from a document in hand, with no file.
+    pub fn from_document(doc: Document) -> Self {
+        Self::with(doc, None, None)
     }
 
     /// Open the project saved at `path`, or the graphics template in a
@@ -102,6 +109,11 @@ impl Headless {
         let read_out = read_out_packed(&mut doc, &path, &dir);
         let (_, missing) = lumit_project::resolve_all_media(&mut doc, &dir, &[]);
         let host = Self::with(doc, Some(path), read_out);
+        // What an open in Lumit reads back besides the document: the solves,
+        // mattes and planes its analyses made, and where its simulations are
+        // baked. Without them an export draws none of those.
+        crate::project_cache::point_bakes_at(&host.bridge_state());
+        lumit_render::sent::warm(&host.store.snapshot());
         Ok((host, missing))
     }
 
@@ -217,6 +229,24 @@ impl Headless {
             .any(|e| drain(e, Duration::ZERO).state == ExportState::Running)
     }
 
+    /// The encoder export `job` settled on, once it has.
+    pub fn export_encoder(&self, job: u64) -> Option<&'static str> {
+        let mut exports = self.exports.borrow_mut();
+        job_of(&mut exports, job).ok()?.encoder
+    }
+
+    /// Hold export `job` between two frames, or let it go on.
+    pub fn export_hold(&self, job: u64, on: bool) {
+        let mut exports = self.exports.borrow_mut();
+        if let Ok(Export {
+            handle: Some(handle),
+            ..
+        }) = job_of(&mut exports, job)
+        {
+            handle.hold(on);
+        }
+    }
+
     /// Stop every running export, and every one waiting its turn.
     pub fn cancel_exports(&self) {
         for export in self.exports.borrow_mut().iter_mut() {
@@ -264,6 +294,7 @@ impl Headless {
         exports.push(Export {
             handle: Some(handle),
             waiting: None,
+            encoder: None,
             status: ExportStatus {
                 state: ExportState::Running,
                 done: 0,
@@ -422,7 +453,7 @@ fn drain(export: &mut Export, wait: Duration) -> &ExportStatus {
         };
         let status = &mut export.status;
         match event {
-            ExportEvent::Encoder(_) => {}
+            ExportEvent::Encoder(label) => export.encoder = Some(label),
             ExportEvent::Progress { frame, total } => {
                 status.done = frame as u64;
                 status.total = total as u64;
@@ -637,6 +668,7 @@ impl Host for Headless {
         exports.push(Export {
             handle: None,
             waiting: Some((Arc::new(doc), comp)),
+            encoder: None,
             status: ExportStatus {
                 state: ExportState::Running,
                 done: 0,

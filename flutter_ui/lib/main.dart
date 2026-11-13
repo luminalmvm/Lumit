@@ -152,6 +152,7 @@ Future<void> _start(List<String> args) async {
     ui.phones.start();
     ui.friendInvites.start();
     ui.library.start();
+    ui.remoteExports.start();
   }
   // Closing the window into the tray, when Settings asks for it. The frames
   // held for the preview are given back meanwhile, nobody is looking at them.

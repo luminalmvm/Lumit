@@ -709,6 +709,8 @@ pub(crate) struct QueueRow {
     /// queue time, else the whole comp.
     pub range: Option<(u64, u64)>,
     pub state: QueueRowState,
+    /// The remote export this item does for another computer, if it is one.
+    pub job: Option<uuid::Uuid>,
 }
 
 /// Where one queued item has got to.
@@ -720,6 +722,8 @@ pub(crate) enum QueueRowState {
         frame: u64,
         total: u64,
         encoder: String,
+        /// Held between two frames.
+        paused: bool,
     },
     /// How long it took in seconds, and the file's size, zero for a sequence.
     Done {
@@ -856,6 +860,40 @@ pub(crate) fn queue_cancel(id: u32) {
     driving::queue_cancel(id);
 }
 
+/// Hold item `id` between two frames, or let it go on. A waiting item that
+/// is held is passed over until it is let go.
+pub(crate) fn queue_pause(id: u32, paused: bool) {
+    driving::queue_pause(id, paused);
+}
+
+/// Add the remote export `job`, whose files are gathered in `folder`, as an
+/// item passed over until [`queue_job_ready`]. Returns the item's id.
+pub(crate) fn queue_add_job(
+    job: uuid::Uuid,
+    folder: std::path::PathBuf,
+    comp: uuid::Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: String,
+) -> u32 {
+    driving::queue_add_job(job, folder, comp, comp_name, spec, out_path)
+}
+
+/// The job item `id` has all its files, and runs when its turn comes.
+pub(crate) fn queue_job_ready(id: u32) {
+    driving::job_ready(id);
+}
+
+/// Whether remote export `job` was done when its row was removed.
+pub(crate) fn queue_job_landed(job: uuid::Uuid) -> bool {
+    driving::job_landed(job)
+}
+
+#[cfg(all(test, feature = "media"))]
+pub(crate) fn queue_done_for_test(id: u32) {
+    driving::queue_done_for_test(id);
+}
+
 /// Forget one item. A running item is cancelled first: a row cannot leave the
 /// list while the encoder it named is still writing.
 pub(crate) fn queue_remove(id: u32) {
@@ -885,7 +923,7 @@ pub(crate) fn queue_update(id: u32, spec: &BridgeExportSpec, out_path: &str) -> 
 
 /// The first file an export to `path` writes: the file itself, or frame one
 /// of an image sequence, which is the one to ask about for the whole run.
-fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
+pub(crate) fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
     #[cfg(feature = "media")]
     if let Ok(lumit_render::export::format::ExportFormat::Images(_)) = export_format(codec) {
         return lumit_media::encode::sequence_frame_path(std::path::Path::new(path), 1);
@@ -941,6 +979,7 @@ pub(crate) fn free_path(out_path: &str, codec: &str, captions: BridgeCaptionsOut
         .unwrap_or(path)
 }
 
+mod child;
 mod driving;
 
 #[cfg(test)]

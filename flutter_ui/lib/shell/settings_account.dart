@@ -17,11 +17,13 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/app_state.dart';
+import '../state/file_dialogs.dart' show pickFolder;
 import '../state/phone_line_frb.dart' show AccountDevice;
 import '../state/profiles.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 import 'add_phone_window.dart';
 import 'library_parts.dart' show libraryStatusWords;
 import 'library_window.dart' show showLibrary;
@@ -53,6 +55,10 @@ List<String> accountSettingsRows() => [
       l10n.settingsStorage,
       l10n.settingsPhones,
       l10n.phonesExport,
+      l10n.settingsComputers,
+      l10n.remoteTakes,
+      l10n.remoteFolders,
+      l10n.remoteKept,
       l10n.settingsSyncOn,
       for (final group in ProfileGroup.values) profileGroupLabel(group),
       l10n.settingsLibrary,
@@ -95,6 +101,18 @@ class AccountSettings extends StatelessWidget {
             (matches(l10n.settingsPhones) || matches(l10n.phonesExport))) {
           sections.add(_Phones(
               key: ValueKey(('phones', ui.account.account?.id)),
+              ui: ui,
+              first: sections.isEmpty));
+        }
+        if (ui.account.pro &&
+            [
+              l10n.settingsComputers,
+              l10n.remoteTakes,
+              l10n.remoteFolders,
+              l10n.remoteKept,
+            ].any(matches)) {
+          sections.add(_Computers(
+              key: ValueKey(('computers', ui.account.account?.id)),
               ui: ui,
               first: sections.isEmpty));
         }
@@ -1063,10 +1081,163 @@ class _PhonesState extends State<_Phones> {
   }
 }
 
+/// This computer's part in exports between the account's computers: whether
+/// it takes them, the folders it finds footage it already has in, and the
+/// room the files it keeps for them take.
+class _Computers extends StatefulWidget {
+  final LumitUiState ui;
+
+  /// Whether this is the page's first section, which has no rule above it.
+  final bool first;
+  const _Computers({super.key, required this.ui, required this.first});
+
+  @override
+  State<_Computers> createState() => _ComputersState();
+}
+
+class _ComputersState extends State<_Computers> {
+  int _kept = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _readKept();
+  }
+
+  void _readKept() {
+    try {
+      _kept = widget.ui.remoteExports.keptBytes();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+    }
+  }
+
+  Future<void> _add() async {
+    final folder = await pickFolder();
+    final folders = widget.ui.workspace.remoteFolders;
+    if (folder == null || !mounted || folders.contains(folder)) return;
+    setState(() => widget.ui.remoteExports.setFolders([...folders, folder]));
+  }
+
+  Future<void> _clear() async {
+    if (!await askBefore(context, l10n.remoteKeptClearAsk, l10n.clear) ||
+        !mounted) {
+      return;
+    }
+    final before = _kept;
+    widget.ui.remoteExports.clearKept();
+    // The files go on the engine's own thread, so the size is read again
+    // until it moves, for a few seconds at most.
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      setState(_readKept);
+      if (_kept != before) return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final workspace = widget.ui.workspace;
+    Widget button(String id, String label, VoidCallback? onPressed) =>
+        HouseButton(
+          key: ValueKey<String>('settings-remote-$id'),
+          small: true,
+          onPressed: onPressed,
+          child: Text(label, style: t.small),
+        );
+    return settingsSection(
+      t,
+      l10n.settingsComputers,
+      [
+        settingsRow(
+          t,
+          l10n.remoteTakes,
+          '',
+          HouseToggle(
+            key: const ValueKey('settings-remote-takes'),
+            value: workspace.remoteTakes,
+            onChanged: (on) =>
+                setState(() => widget.ui.remoteExports.setTakes(on)),
+          ),
+        ),
+        settingsRow(t, l10n.remoteFolders, '', const SizedBox.shrink(),
+            actions: [
+              button('folder-add', l10n.remoteFolderAdd,
+                  () => unawaited(_add())),
+            ]),
+        for (final folder in workspace.remoteFolders) _folder(t, folder),
+        settingsRow(
+          t,
+          l10n.remoteKept,
+          '',
+          Text(writtenBytes(_kept),
+              style: t.small.copyWith(color: t.textSecondary)),
+          actions: [
+            button('kept-clear', l10n.clear,
+                _kept > 0 ? () => unawaited(_clear()) : null),
+          ],
+        ),
+      ],
+      first: widget.first,
+    );
+  }
+
+  /// One folder looked in, as Settings writes a path under its row and cut
+  /// in the middle, and the way to take it off the list when the row is
+  /// pointed at.
+  Widget _folder(LumitTheme t, String folder) => Padding(
+        key: ValueKey<String>('settings-remote-folder-$folder'),
+        padding: const EdgeInsets.symmetric(horizontal: settingsRowPadding),
+        child: HoverMark(
+          cursor: MouseCursor.defer,
+          builder: (context, lit) => SizedBox(
+            height: 22,
+            child: Row(
+              children: [
+                Expanded(
+                  child: MiddleEllipsis(folder,
+                      style: t.small.copyWith(color: t.textMuted),
+                      tip: folder),
+                ),
+                IgnorePointer(
+                  ignoring: lit <= 0,
+                  child: Opacity(
+                    opacity: lit > 0 ? 1 : 0,
+                    child: LumitTooltip(
+                      message: l10n.remoteFolderRemove,
+                      child: HouseButton(
+                        key: ValueKey<String>(
+                            'settings-remote-folder-remove-$folder'),
+                        frameless: true,
+                        small: true,
+                        padding: const EdgeInsets.all(4),
+                        onPressed: () => setState(() => widget.ui.remoteExports
+                            .setFolders([
+                          for (final f in widget.ui.workspace.remoteFolders)
+                            if (f != folder) f,
+                        ])),
+                        child: glyph.LumitIcon(LumitIcons.close,
+                            size: 10,
+                            colour: t.textMuted,
+                            semanticLabel: l10n.remoteFolderRemove),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
 /// Ask before something that can't be taken back. True for yes. The question
-/// is the title, and the whole of the window.
-Future<bool> askBefore(
-    BuildContext context, String question, String yes) async {
+/// is the title, and the whole of the window. [no] words the other answer
+/// where Cancel would read like yes.
+Future<bool> askBefore(BuildContext context, String question, String yes,
+    {String? no}) async {
   final sure = await showLumitModal<bool>(
     context: context,
     builder: (close) => QuestionWindow(
@@ -1074,7 +1245,7 @@ Future<bool> askBefore(
       keyPrefix: 'confirm',
       onClose: () => close(false),
       actions: [
-        questionPlain('confirm-no', l10n.cancel, () => close(false)),
+        questionPlain('confirm-no', no ?? l10n.cancel, () => close(false)),
         questionFilled('confirm-yes', yes, () => close(true)),
       ],
     ),

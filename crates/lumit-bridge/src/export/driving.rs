@@ -1,6 +1,7 @@
 use super::{err_json, to_export_spec, with_format_extension, BridgeExportSpec};
 use lumit_render::export::{ExportEvent, ExportHandle};
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use uuid::Uuid;
 
@@ -20,12 +21,26 @@ enum State {
     },
 }
 
-/// One item waiting its turn. The document was snapshotted when it was
-/// added (docs/06 §7.1), so later edits never alter what it renders.
+/// What an item exports.
+enum Source {
+    /// A composition of this document, snapshotted when the item was added
+    /// (docs/06 §7.1), so later edits never alter what it renders.
+    Document(std::sync::Arc<lumit_core::model::Document>),
+    /// A remote export another computer sent: its job, and the folder its
+    /// files are gathered in. It runs in a `lumit-cli` of its own, and only
+    /// once `ready` says the files are all here.
+    Job {
+        job: Uuid,
+        folder: PathBuf,
+        ready: bool,
+    },
+}
+
+/// One item waiting its turn.
 struct Item {
     id: u32,
     comp_name: String,
-    doc: std::sync::Arc<lumit_core::model::Document>,
+    source: Source,
     comp: Uuid,
     /// The dialogue's fields as they stood when this was queued — the
     /// *when done* ticks included, which is why the queue can honour them
@@ -33,6 +48,9 @@ struct Item {
     spec: BridgeExportSpec,
     out_path: String,
     state: ItemState,
+    /// Held by someone. Waiting, it is passed over; running, it waits
+    /// between two frames.
+    paused: bool,
     /// When it started encoding, for how long it took.
     started: Option<std::time::Instant>,
     /// Edits made to `doc` when the item starts, and not before: one row's
@@ -60,7 +78,8 @@ pub(super) enum ItemState {
 }
 
 /// The one in-flight export: its state plus the handle whose receiver a poll
-/// drains. The handle is dropped once a terminal event arrives.
+/// drains, or the child process a job runs in. Either is dropped once its
+/// export has ended.
 ///
 /// The queue lives here too rather than in a slot of its own, because "is
 /// anything running" is the question both halves ask: one lock answers it
@@ -68,6 +87,7 @@ pub(super) enum ItemState {
 struct Run {
     state: State,
     handle: Option<ExportHandle>,
+    child: Option<super::child::Child>,
     queue: Vec<Item>,
     /// What each run of rows is called, by its number.
     groups: Vec<(u32, String)>,
@@ -79,6 +99,20 @@ struct Run {
     /// The queued item the handle belongs to, when the export in flight
     /// came from the queue rather than from a direct start.
     current: Option<u32>,
+    /// A direct start whose end nobody has polled yet. The queue starts
+    /// nothing meanwhile, or the next item would take over the state its
+    /// poll is waiting to read.
+    direct_unread: bool,
+    /// Keeps the computer awake while an export is in flight.
+    awake: Option<crate::awake::Awake>,
+    /// Remote exports whose row was removed once done, until their job asks.
+    landed_jobs: Vec<Uuid>,
+}
+
+impl Run {
+    fn in_flight(&self) -> bool {
+        self.handle.is_some() || self.child.is_some()
+    }
 }
 
 static EXPORT: OnceLock<Mutex<Run>> = OnceLock::new();
@@ -88,11 +122,15 @@ fn slot() -> &'static Mutex<Run> {
         Mutex::new(Run {
             state: State::Idle,
             handle: None,
+            child: None,
             queue: Vec::new(),
             groups: Vec::new(),
             next_id: 1,
             running: false,
             current: None,
+            direct_unread: false,
+            awake: None,
+            landed_jobs: Vec::new(),
         })
     })
 }
@@ -115,7 +153,7 @@ pub(super) fn start_with_document(
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     // Drain first so a just-finished export frees the slot for a new one.
     drain(&mut guard);
-    if matches!(guard.state, State::Running { .. }) {
+    if guard.in_flight() {
         return err_json("an export is already running");
     }
 
@@ -123,6 +161,8 @@ pub(super) fn start_with_document(
     match launch(&mut guard, &doc, comp, spec, &out_path) {
         Ok(()) => {
             guard.current = None;
+            guard.direct_unread = true;
+            keep_awake(&mut guard);
             json!({ "ok": true }).to_string()
         }
         Err(e) => err_json(e),
@@ -232,18 +272,70 @@ pub(super) fn queue_add_version(
     if out_path.trim().is_empty() {
         return Err("export: no output path".to_owned());
     }
+    let out_path = with_format_extension(out_path, &spec.codec);
+    Ok(add(
+        Source::Document(doc),
+        comp,
+        comp_name,
+        spec,
+        out_path,
+        version,
+        group,
+        start,
+    ))
+}
 
+/// Add the remote export `job`, whose files are gathered in `folder`, as an
+/// item that waits its turn and is passed over until [`job_ready`]. The queue
+/// is let run, as nobody may be at this computer to start it.
+pub(super) fn queue_add_job(
+    job: Uuid,
+    folder: PathBuf,
+    comp: Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: String,
+) -> u32 {
+    let source = Source::Job {
+        job,
+        folder,
+        ready: false,
+    };
+    add(
+        source,
+        comp,
+        comp_name,
+        spec,
+        out_path,
+        Vec::new(),
+        None,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add(
+    source: Source,
+    comp: Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: String,
+    version: Vec<lumit_core::ops::Op>,
+    group: Option<u32>,
+    start: bool,
+) -> u32 {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     let id = guard.next_id;
     guard.next_id += 1;
     guard.queue.push(Item {
         id,
         comp_name,
-        doc,
+        source,
         comp,
         spec: spec.clone(),
-        out_path: with_format_extension(out_path, &spec.codec),
+        out_path,
         state: ItemState::Waiting,
+        paused: false,
         started: None,
         version,
         group,
@@ -252,7 +344,18 @@ pub(super) fn queue_add_version(
         guard.running = true;
     }
     pump(&mut guard);
-    Ok(id)
+    id
+}
+
+/// The job item `id` has all its files and may run.
+pub(super) fn job_ready(id: u32) {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    for item in guard.queue.iter_mut().filter(|item| item.id == id) {
+        if let Source::Job { ready, .. } = &mut item.source {
+            *ready = true;
+        }
+    }
+    pump(&mut guard);
 }
 
 pub(super) fn queue_list() -> Vec<super::QueueRow> {
@@ -297,6 +400,7 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                         frame,
                         total,
                         encoder: encoder.unwrap_or_default(),
+                        paused: item.paused,
                     }
                 }
                 ItemState::Done { seconds, bytes } => super::QueueRowState::Done {
@@ -304,6 +408,10 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                     bytes: *bytes,
                 },
                 ItemState::Failed(error) => super::QueueRowState::Failed(error.clone()),
+            },
+            job: match &item.source {
+                Source::Job { job, .. } => Some(*job),
+                Source::Document(_) => None,
             },
         })
         .collect()
@@ -327,12 +435,20 @@ pub(super) fn queue_goes_on() -> bool {
     slot().lock().unwrap_or_else(|p| p.into_inner()).running
 }
 
+/// Stop what is in flight: the export at its next frame, or a job's child.
+fn stop_current(run: &mut Run) {
+    if let Some(handle) = &run.handle {
+        handle.cancel();
+    }
+    if let Some(child) = run.child.as_mut() {
+        child.stop();
+    }
+}
+
 pub(super) fn queue_cancel(id: u32) {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     if guard.current == Some(id) {
-        if let Some(handle) = &guard.handle {
-            handle.cancel();
-        }
+        stop_current(&mut guard);
         return;
     }
     // A waiting item has nothing to stop and nothing to report, so it
@@ -340,6 +456,27 @@ pub(super) fn queue_cancel(id: u32) {
     guard
         .queue
         .retain(|item| item.id != id || !matches!(item.state, ItemState::Waiting));
+}
+
+/// Hold item `id` where it is, or let it go on.
+pub(super) fn queue_pause(id: u32, paused: bool) {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let Some(item) = guard.queue.iter_mut().find(|item| item.id == id) else {
+        return;
+    };
+    if !matches!(item.state, ItemState::Waiting | ItemState::Running) {
+        return;
+    }
+    item.paused = paused;
+    if guard.current == Some(id) {
+        if let Some(handle) = &guard.handle {
+            handle.hold(paused);
+        }
+        if let Some(child) = guard.child.as_mut() {
+            child.hold(paused);
+        }
+    }
+    pump(&mut guard);
 }
 
 /// What [`queue_move`] says about an item it will not move, or `None` when
@@ -396,6 +533,10 @@ pub(super) fn queue_update(id: u32, spec: &BridgeExportSpec, out_path: &str) -> 
     if let Some(refusal) = move_refusal(&item.state) {
         return Err(refusal.to_owned());
     }
+    // A remote export's settings are the computer's that sent it.
+    if matches!(item.source, Source::Job { .. }) {
+        return Err(GONE.to_owned());
+    }
     item.spec = spec.clone();
     item.out_path = with_format_extension(out_path, &spec.codec);
     Ok(())
@@ -404,42 +545,75 @@ pub(super) fn queue_update(id: u32, spec: &BridgeExportSpec, out_path: &str) -> 
 pub(super) fn queue_remove(id: u32) {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     if guard.current == Some(id) {
-        if let Some(handle) = &guard.handle {
-            handle.cancel();
-        }
+        stop_current(&mut guard);
         guard.current = None;
     }
-    guard.queue.retain(|item| item.id != id);
+    let Run {
+        queue, landed_jobs, ..
+    } = &mut *guard;
+    for item in queue.iter().filter(|item| item.id == id) {
+        if let (Source::Job { job, .. }, ItemState::Done { .. }) = (&item.source, &item.state) {
+            landed_jobs.push(*job);
+        }
+    }
+    queue.retain(|item| item.id != id);
+}
+
+/// Whether remote export `job` was done when its row was removed. Answers
+/// once.
+pub(super) fn job_landed(job: Uuid) -> bool {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    let before = guard.landed_jobs.len();
+    guard.landed_jobs.retain(|j| *j != job);
+    guard.landed_jobs.len() != before
+}
+
+/// Mark item `id` done, as an export that has just ended.
+#[cfg(all(test, feature = "media"))]
+pub(super) fn queue_done_for_test(id: u32) {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    for item in guard.queue.iter_mut().filter(|item| item.id == id) {
+        item.state = ItemState::Done {
+            seconds: 0,
+            bytes: 0,
+        };
+    }
 }
 
 /// Start the next waiting item when the queue is running and nothing is in
 /// flight. An item that cannot start at all is marked failed and the one
-/// behind it is tried, so a bad path cannot stall the whole queue.
+/// behind it is tried, so a bad path cannot stall the whole queue. A held
+/// item, and a remote export whose files are not all here, are passed over.
 ///
 /// The pump is turned by the interface's own polling rather than by a
 /// thread of its own: every caller here already holds the lock, and the
 /// queue moves on the same 250 ms tick the progress does.
 fn pump(run: &mut Run) {
-    while run.handle.is_none() && run.running {
-        let Some(index) = run
-            .queue
-            .iter()
-            .position(|item| matches!(item.state, ItemState::Waiting))
-        else {
-            return;
+    while !run.in_flight() && run.running && !run.direct_unread {
+        let next = run.queue.iter().position(|item| {
+            matches!(item.state, ItemState::Waiting)
+                && !item.paused
+                && !matches!(item.source, Source::Job { ready: false, .. })
+        });
+        let Some(index) = next else {
+            break;
         };
-        let (doc, comp, spec, out_path, id) = {
-            let item = &run.queue[index];
-            (
-                versioned(item),
-                item.comp,
-                item.spec.clone(),
-                item.out_path.clone(),
-                item.id,
-            )
+        let item = &run.queue[index];
+        let (comp, spec, out_path, id) =
+            (item.comp, item.spec.clone(), item.out_path.clone(), item.id);
+        let launched = match &item.source {
+            Source::Document(doc) => versioned(doc, &item.version)
+                .and_then(|doc| launch(run, &doc, comp, &spec, &out_path)),
+            Source::Job { folder, .. } => super::child::start(folder).map(|child| {
+                run.child = Some(child);
+                run.state = State::Running {
+                    frame: 0,
+                    total: 0,
+                    encoder: None,
+                };
+            }),
         };
-        let started = doc.and_then(|doc| launch(run, &doc, comp, &spec, &out_path));
-        match started {
+        match launched {
             Ok(()) => {
                 run.queue[index].state = ItemState::Running;
                 run.queue[index].started = Some(std::time::Instant::now());
@@ -448,15 +622,28 @@ fn pump(run: &mut Run) {
             Err(error) => run.queue[index].state = ItemState::Failed(error),
         }
     }
+    keep_awake(run);
+}
+
+/// Hold the computer awake while an export is in flight, and only then.
+fn keep_awake(run: &mut Run) {
+    if !run.in_flight() {
+        run.awake = None;
+    } else if run.awake.is_none() {
+        run.awake = Some(crate::awake::hold());
+    }
 }
 
 /// The document an item renders: its snapshot, with its row's edits made.
-fn versioned(item: &Item) -> Result<std::sync::Arc<lumit_core::model::Document>, String> {
-    if item.version.is_empty() {
-        return Ok(item.doc.clone());
+fn versioned(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    version: &[lumit_core::ops::Op],
+) -> Result<std::sync::Arc<lumit_core::model::Document>, String> {
+    if version.is_empty() {
+        return Ok(doc.clone());
     }
-    let mut doc = lumit_core::model::Document::clone(&item.doc);
-    for op in &item.version {
+    let mut doc = lumit_core::model::Document::clone(doc);
+    for op in version {
         lumit_core::ops::apply(&mut doc, op)
             .map_err(|e| format!("export: the row could not be made: {e}"))?;
     }
@@ -464,21 +651,27 @@ fn versioned(item: &Item) -> Result<std::sync::Arc<lumit_core::model::Document>,
 }
 
 /// Queue a finished or failed item again as it was: the same snapshot, the
-/// same row. Answers the new item's id, or `None` for an id that has gone.
+/// same row. Answers the new item's id, or `None` for an id that has gone or
+/// a remote export, which only the computer that sent it can send again.
 pub(super) fn queue_again(id: u32) -> Option<u32> {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     let at = guard.queue.iter().position(|item| item.id == id)?;
+    let Source::Document(doc) = &guard.queue[at].source else {
+        return None;
+    };
+    let doc = doc.clone();
     let new = guard.next_id;
     guard.next_id += 1;
     let was = &guard.queue[at];
     let again = Item {
         id: new,
         comp_name: was.comp_name.clone(),
-        doc: was.doc.clone(),
+        source: Source::Document(doc),
         comp: was.comp,
         spec: was.spec.clone(),
         out_path: was.out_path.clone(),
         state: ItemState::Waiting,
+        paused: false,
         started: None,
         version: was.version.clone(),
         group: was.group,
@@ -490,6 +683,10 @@ pub(super) fn queue_again(id: u32) -> Option<u32> {
 pub(super) fn poll() -> String {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     drain(&mut guard);
+    // Its end is read now, so the queue may go on.
+    if matches!(guard.state, State::Done { .. } | State::Failed { .. }) {
+        guard.direct_unread = false;
+    }
     match &guard.state {
         State::Idle => json!({ "ok": true, "state": "idle" }).to_string(),
         State::Running {
@@ -512,21 +709,48 @@ pub(super) fn poll() -> String {
 }
 
 pub(super) fn cancel() -> String {
-    let guard = slot().lock().unwrap_or_else(|p| p.into_inner());
-    if let Some(handle) = &guard.handle {
-        handle.cancel();
-    }
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    stop_current(&mut guard);
     json!({ "ok": true }).to_string()
 }
 
 /// Drain every pending exporter event into the held state. A terminal event
 /// (Done/Failed) drops the handle so the slot is free for the next export.
 fn drain(run: &mut Run) {
-    let Some(handle) = &run.handle else {
+    let events: Vec<ExportEvent> = if let Some(handle) = &run.handle {
+        handle.events.try_iter().collect()
+    } else if let Some(child) = run.child.as_mut() {
+        let out = run
+            .current
+            .and_then(|id| run.queue.iter().find(|item| item.id == id))
+            .map(|item| PathBuf::from(&item.out_path))
+            .unwrap_or_default();
+        child
+            .heard()
+            .into_iter()
+            .map(|heard| match heard {
+                super::child::Heard::Progress {
+                    frame,
+                    total,
+                    encoder,
+                } => {
+                    // The child names its encoder in words of its own.
+                    if let (Some(label), State::Running { encoder: e, .. }) =
+                        (encoder, &mut run.state)
+                    {
+                        *e = Some(label);
+                    }
+                    ExportEvent::Progress { frame, total }
+                }
+                super::child::Heard::Done => ExportEvent::Done(out.clone()),
+                super::child::Heard::Failed(why) => ExportEvent::Failed(why),
+            })
+            .collect()
+    } else {
         return;
     };
     let mut terminal: Option<State> = None;
-    while let Ok(ev) = handle.events.try_recv() {
+    for ev in events {
         match ev {
             ExportEvent::Encoder(label) => {
                 if let State::Running { encoder, .. } = &mut run.state {
@@ -558,6 +782,7 @@ fn drain(run: &mut Run) {
         // strip are two readings of one export, never two answers.
         if let Some(id) = run.current.take() {
             if let Some(item) = run.queue.iter_mut().find(|item| item.id == id) {
+                item.paused = false;
                 item.state = match &state {
                     State::Failed { error } => ItemState::Failed(error.clone()),
                     // A sequence's path names no one file, so it has no size.
@@ -568,24 +793,41 @@ fn drain(run: &mut Run) {
                         bytes: std::fs::metadata(&item.out_path).map_or(0, |m| m.len()),
                     },
                 };
-                // The ticks the dialogue set, honoured here rather than by
-                // whatever window happens to be watching: an export that
-                // lands after its dialogue closed still makes its noise and
-                // opens its folder. Both are independent — a long export
-                // left running wants the sound *and* the folder — and the
-                // noise is silent, never an error, when no sound has been
-                // supplied.
-                if matches!(item.state, ItemState::Done { .. }) {
-                    if item.spec.make_a_noise {
-                        lumit_render::export::play_done_sound();
-                    }
-                    if item.spec.open_folder {
-                        super::reveal_in_folder(&item.out_path);
-                    }
+                // A remote export says how it ended through its own news,
+                // and its file goes where its job says.
+                if matches!(item.source, Source::Document(_)) {
+                    landed(item);
                 }
             }
         }
         run.state = state;
         run.handle = None;
+        run.child = None;
+        keep_awake(run);
+    }
+}
+
+/// An export of this computer's own has ended: the ticks the dialogue set,
+/// and the news of it.
+fn landed(item: &Item) {
+    // The ticks the dialogue set, honoured here rather than by whatever
+    // window happens to be watching: an export that lands after its dialogue
+    // closed still makes its noise and opens its folder. Both are independent,
+    // as a long export left running wants the sound *and* the folder, and the
+    // noise is silent, never an error, when no sound has been supplied.
+    match &item.state {
+        ItemState::Done { .. } => {
+            if item.spec.make_a_noise {
+                lumit_render::export::play_done_sound();
+            }
+            if item.spec.open_folder {
+                super::reveal_in_folder(&item.out_path);
+            }
+            crate::remote::exported(&item.comp_name, &item.out_path, None);
+        }
+        ItemState::Failed(error) => {
+            crate::remote::exported(&item.comp_name, &item.out_path, Some(error.as_str()));
+        }
+        _ => {}
     }
 }

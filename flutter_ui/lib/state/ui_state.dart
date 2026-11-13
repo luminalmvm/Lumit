@@ -106,6 +106,7 @@ import 'package:lumit_flutter/state/online_footage.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:lumit_flutter/state/panel_folds.dart';
 import 'package:lumit_flutter/state/friend_invites.dart';
+import 'package:lumit_flutter/state/remote_exports_frb.dart';
 import 'package:lumit_flutter/state/phone_line_frb.dart';
 import 'package:lumit_flutter/state/playback_loop.dart';
 import 'package:lumit_flutter/state/preview_progress.dart';
@@ -496,6 +497,10 @@ class LumitUiState extends ChangeNotifier {
 
   /// Invites to multi-edit that friends sent this computer, and sending them.
   late final FriendInvites friendInvites = FriendInvites(account);
+
+  /// Exports sent to the account's other computers, and theirs done here.
+  late final RemoteExports remoteExports = RemoteExports(
+      account, _app, workspace, phones, friendInvites, relayDoor);
   /// The open project's backup and the account's backed-up projects.
   late final BackupState backup = BackupState(_app, account, profiles,
       looking: () => (selectedComp, playheadFrame.value));
@@ -3664,6 +3669,7 @@ class LumitUiState extends ChangeNotifier {
     _lifecycle.dispose();
     _clock.dispose();
     reviews.dispose();
+    remoteExports.dispose();
     phones.dispose();
     backup.dispose();
     library.dispose();

@@ -219,6 +219,7 @@ impl ActionId {
             "file.import" => "Import footage",
             "file.export" => "Export the composition",
             "file.export.vector" => "Export as Lottie or SVG",
+            "export.remote" => "Export on another computer",
             "comp.new" => "New composition",
             "app.settings" => "Open Settings",
             "project.settings" => "Open Project settings",

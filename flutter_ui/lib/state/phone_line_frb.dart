@@ -30,6 +30,7 @@ import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 
 import 'account.dart';
 import 'app_state.dart';
+import 'preset_export.dart';
 import 'reviews.dart';
 import 'updates.dart' show versionFromBootLine;
 import 'workspace.dart';
@@ -73,6 +74,32 @@ class PhoneLine extends ChangeNotifier {
   /// When each export was first seen running, and first seen finished, in
   /// unix seconds, by its id in the queue.
   final Map<int, int> _ran = {}, _ended = {};
+
+  /// Set by [RemoteExports], which sends exports to the account's other
+  /// computers and takes theirs: what it adds to what this computer says,
+  /// to each item, and to the queue, and what it is told.
+  Map<String, Object?> Function()? sayAlso;
+  Map<String, Object?> Function(BridgeExportQueueItem item)? itemAlso;
+  List<Map<String, Object?>> Function()? queueAlso;
+
+  /// The account's computers as the room lists them, a command another
+  /// computer sent here, or the answer to one sent from here.
+  void Function(Map<dynamic, dynamic> j)? heardAlso;
+
+  /// A phone's `queue` naming another computer to do the work: why not, or
+  /// null once it is on its way there.
+  Future<String?> Function(Map<dynamic, dynamic> j)? queueOn;
+
+  /// Say [j] on the line, if there is one.
+  bool send(Map<String, Object?> j) {
+    final socket = _live;
+    if (socket == null) return false;
+    socket.add(jsonEncode(j));
+    return true;
+  }
+
+  /// The queue as it is now, rather than at the next beat.
+  void sayNow() => _say();
 
   /// Begin following the account. Not called by a test, which keeps a test
   /// run off the network.
@@ -155,11 +182,15 @@ class PhoneLine extends ChangeNotifier {
       'platform': Platform.operatingSystem,
       'version': versionFromBootLine(lumitVersion()) ?? '',
       'project': projectNameFor(app.project?.path()),
-      'queue': [for (final item in items) _item(item, now)],
+      'queue': [
+        for (final item in items) _item(item, now),
+        ...?queueAlso?.call(),
+      ],
       'compositions': _compositions(),
       // A small file, read again each time so a preset saved shows at once.
       'presets': [for (final preset in exportPresetList()) preset.name],
       'remote': workspace.phonesExport,
+      ...?sayAlso?.call(),
     });
     if (said == _said) return;
     _said = said;
@@ -213,6 +244,7 @@ class PhoneLine extends ChangeNotifier {
       'error': state is BridgeExportQueueState_Failed ? state.error : null,
       'started': _ran[item.id],
       'ended': _ended[item.id],
+      ...?itemAlso?.call(item),
     };
   }
 
@@ -223,12 +255,49 @@ class PhoneLine extends ChangeNotifier {
     } catch (_) {
       return;
     }
-    if (j is Map && j['type'] == 'paired' && j['name'] is String) {
+    if (j is! Map) return;
+    if (j['type'] == 'paired' && j['name'] is String) {
       justPaired = j['name'] as String;
       notifyListeners();
     }
-    if (j is Map && j['type'] == 'command') _command(j);
-    if (j is Map && j['type'] == 'library') onLibrary?.call();
+    // The account's computers, what one of them asks of this one, and their
+    // answers. So is a command for an export this computer sent elsewhere.
+    final mirrors = queueAlso?.call() ?? const <Map<String, Object?>>[];
+    final item = j['item'];
+    final job = j['do'] == 'job' ||
+        (j['type'] == 'command' &&
+            item is int &&
+            mirrors.any((mirror) => mirror['id'] == item));
+    if (j['type'] == 'computers' || j['type'] == 'reply' || job) {
+      heardAlso?.call(j);
+      return;
+    }
+    if (j['type'] == 'command' && j['do'] == 'queue' && j['on'] is String) {
+      unawaited(_queueOn(j));
+      return;
+    }
+    if (j['type'] == 'library') onLibrary?.call();
+    if (j['type'] == 'command') _command(j);
+  }
+
+  /// A phone's `queue` for another computer to do, answered once it has gone
+  /// there or is held for it.
+  Future<void> _queueOn(Map<dynamic, dynamic> j) async {
+    String? error;
+    try {
+      error = !workspace.phonesExport
+          ? 'turned_off'
+          : await (queueOn?.call(j) ?? Future.value('failed'));
+    } catch (_) {
+      error = 'failed';
+    }
+    send({
+      'type': 'reply',
+      'id': j['id'],
+      'to': j['from'],
+      if (error == null) 'ok': true else 'error': error,
+    });
+    _say();
   }
 
   /// Another of the account's computers changed the library. Set by the
@@ -309,66 +378,14 @@ class PhoneLine extends ChangeNotifier {
     final area = j['range'] == 'whole' ? null : workAreaFrames(comp);
     final start = area?.start ?? 0;
     final end = area?.end ?? comp.durationFrames();
-    // The dialogue's fields as the preset fills them. Its own ticks are off,
-    // the Viewer's region is not in it, and it sends the size the frame
-    // comes out at unless that is the composition's own.
-    BridgeExportSpec spec(int width, int height) => BridgeExportSpec(
-          preset: preset,
-          codec: stored.codec,
-          width: width,
-          height: height,
-          bitrateMbps: stored.bitrateMbps,
-          peakMbps: stored.peakMbps,
-          bitrateAuto: stored.bitrateAuto,
-          fps: stored.fps,
-          rangeStartFrame: start,
-          rangeEndFrame: end,
-          includeAudio: stored.includeAudio,
-          audioBitRate: stored.audioBitRate,
-          audioRate: stored.audioRate,
-          audioDepth: stored.audioDepth,
-          audioChannels: stored.audioChannels,
-          depth: stored.depth,
-          alphaChannel: stored.alphaChannel,
-          straightAlpha: stored.straightAlpha,
-          colourSpace: stored.colourSpace,
-          resample: stored.resample,
-          cropTop: stored.cropTop,
-          cropLeft: stored.cropLeft,
-          cropBottom: stored.cropBottom,
-          cropRight: stored.cropRight,
-          useRegionOfInterest: false,
-          region: Float64List(0),
-          metadata: const [],
-          qualityDivisor: stored.qualityDivisor,
-          diskCacheReadOnly: stored.diskCacheReadOnly,
-          effects: stored.effects,
-          honourSolo: stored.honourSolo,
-          renderGuides: stored.renderGuides,
-          captions: stored.captions,
-          motionBlur: stored.motionBlur,
-          retimeBlend: stored.retimeBlend,
-          useProxies: stored.useProxies,
-          makeANoise: false,
-          openFolder: false,
-          gifDither: stored.gifDither,
-          gifPalettePerFrame: stored.gifPalettePerFrame,
-          gifPlays: stored.gifPlays,
-        );
-    var (width, height) = (stored.width, stored.height);
-    if (width <= 0 || height <= 0) {
-      final crop = exportCropFor(
-          spec: spec(0, 0),
-          compWidth: settings.width,
-          compHeight: settings.height);
-      final divisor = stored.qualityDivisor.clamp(1, 4);
-      width = (crop.width / divisor).round().clamp(1, 16384);
-      height = (crop.height / divisor).round().clamp(1, 16384);
-    }
-    final own = width == settings.width && height == settings.height;
     try {
       comp.queueExport(
-          spec: spec(own ? 0 : width, own ? 0 : height),
+          spec: presetExportSpec(
+              preset: preset,
+              stored: stored,
+              settings: settings,
+              start: start,
+              end: end),
           path: path,
           start: true);
     } catch (_) {

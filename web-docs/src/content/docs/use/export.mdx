@@ -28,6 +28,9 @@ When the file is already there, or the first frame of a sequence is, the dialogu
 first: **Overwrite**, **Keep both**, which writes `name_2`, `name_3` and so on, or
 **Cancel**.
 
+With [Lumit Pro](/use/profiles/#lumit-pro), the **Export on** row sends the export to
+another of your computers. See [Export on another computer](/use/remote-export/).
+
 ## The dialogue
 
 The top of the dialogue holds the preset, the format (video, image sequence or audio only),
@@ -267,10 +270,15 @@ failure shows the whole of it. The footer counts the rows waiting and done.
   **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it. **Duplicate**
   writes to a file of its own, and **Queue again** writes over the row's file. On a
   failed row, **Settings…** queues it again with the changes. On the running row,
-  **Stop after this one** lets that export finish and starts nothing after it.
+  **Stop after this one** lets that export finish and starts nothing after it, and
+  **Pause** holds it between two frames until **Go on**. On a row reached with `Tab`,
+  `Shift+F10` or the menu key opens the same menu.
 - **Right-click around the rows**, or the count under them, for **Start**, **Stop after
-  this one**, **Add compositions…**, **Show in folder** for the last file written, and
-  **Remove finished**.
+  this one**, **Add compositions…**, **Show in folder** for the last file written,
+  **Cancel all**, which asks first, and **Remove finished**. `Shift+F10` or the menu key
+  opens the same menu while no row has the focus.
+- Exports sent to another computer are listed under its name. See
+  [Export on another computer](/use/remote-export/#the-export-queue).
 
 An item's settings are captured the moment it is queued, so working on the project 
 afterwards does not impact the export. The queue is not saved with the project.
@@ -301,6 +309,10 @@ You can carry on editing while an export writes. The status strip at the bottom 
 window says which frame it is on and about how long is left, and has a Cancel. When the
 export is done, click the file's path on the strip to open its folder.
 
+The computer stays awake while an export runs. While Lumit is not the window in front, the
+system shows a notification when an export ends, unless
+[**Notify when exports end**](/use/settings/#export) is off.
+
 Closing Lumit while an export is writing asks **Stop the export and quit?**. **Quit** stops
 the export.
 
@@ -319,6 +331,7 @@ the project names, or *No OCIO configuration*, and cannot be set from here.
 
 - [Lottie and SVG](/use/lottie-and-svg/)
 - [Preview and playback](/use/preview/)
+- [Export on another computer](/use/remote-export/)
 - [Compositions](/use/compositions/)
 - [Colour management](/use/colour-management/)
 - [Previews](/use/review-links/)

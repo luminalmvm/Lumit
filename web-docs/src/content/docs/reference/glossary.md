@@ -121,6 +121,7 @@ areas and components of Lumit.
 | **Render** | The engine making pixels, for anything. |
 | **Preview** | Playback inside Lumit. |
 | **Export** | Renders and outputs a composition as a file. |
+| **[Remote export](/use/remote-export/)** | An export one of an account's computers does for another. |
 | **Cache** | Rendered frames kept in VRAM, RAM and on disk. |
 | **[Proxy](/use/proxies/)** | A smaller copy of a footage file, kept beside the original and read in its place while working. |
 | **Stand-in** | In a shared project, a small copy of a whole clip sent to someone who has not got the file. |
