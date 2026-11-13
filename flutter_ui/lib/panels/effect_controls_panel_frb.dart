@@ -2773,10 +2773,12 @@ class _EffectSection extends StatelessWidget {
 
   /// The Mix and Matte rows nearly every effect ends with: what the Compositing
   /// fold holds. One the schema keeps in a group of its own (the Lens flare's
-  /// source matte) stays where it is.
+  /// source matte) stays where it is, and so does a gradient's Mix, whose
+  /// Blend is one of its own controls ([blendInView]).
   List<BridgeParamInfo> get _compositingRows {
     final grouped = {
       for (final g in cachedListParameterGroups(info.name)) ...g.params,
+      if (blendInView(info.name)) 'mix',
     };
     final hidden = info.hiddenRows.toSet();
     return [

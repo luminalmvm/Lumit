@@ -3067,8 +3067,12 @@ List<BridgeParamInfo> cachedListParameters(String effect) =>
 /// derives, each under the name the instance gives it right now
 /// ([BridgeEffectInstanceInfo.rowLabels]: Type fill's rows read as columns
 /// when its Direction is Columns).
+///
+/// A gradient's Mix and Blend come after its own rows ([blendInView]): an
+/// extension's effect declares them before the rows its shader derives.
 List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
-  final rows = [...cachedListParameters(info.name), ...info.derivedParams];
+  var rows = [...cachedListParameters(info.name), ...info.derivedParams];
+  if (blendInView(info.name)) rows = blendAfterOwnRows(rows);
   if (info.rowLabels.isEmpty) return rows;
   final names = {for (final l in info.rowLabels) l.id: l.label};
   return [
@@ -3083,6 +3087,26 @@ List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
       else
         p,
   ];
+}
+
+/// Whether [effect]'s Mix row, with its Blend beside it, stays in view rather
+/// than in the Compositing fold, which starts shut and takes no room at its
+/// defaults. A gradient is mostly laid over its layer in Multiply, Screen or
+/// Overlay, so its Blend is one of its own controls: the built-in Gradient,
+/// and every extension gradient (Conical, Sweep and Multi-point gradient,
+/// Gradient map).
+bool blendInView(String effect) =>
+    effect == 'gradient' ||
+    (effect.startsWith('lfx:') && effect.contains('gradient'));
+
+/// [rows] with Mix and Blend moved to just before the Matte rows, or to the
+/// end when there are none.
+List<BridgeParamInfo> blendAfterOwnRows(List<BridgeParamInfo> rows) {
+  bool moved(BridgeParamInfo p) => p.id == 'mix' || p.id == 'blend';
+  final rest = [for (final p in rows) if (!moved(p)) p];
+  final at = rest.indexWhere((p) => p.id == 'matte');
+  rest.insertAll(at < 0 ? rest.length : at, rows.where(moved));
+  return rest;
 }
 
 /// An effect's parameter groups (docs/08 §1.2), memoised like

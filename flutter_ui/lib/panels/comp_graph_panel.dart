@@ -59,6 +59,7 @@ import '../widgets/marquee.dart';
 import 'node_menus.dart';
 import 'effect_param_row_frb.dart'
     show
+        blendInView,
         cachedListParameterGroups,
         instanceParameters,
         defaultEffectValue,
@@ -218,8 +219,11 @@ CompBoxRows compBoxRows(
         !isDefaultEffectValue(value, fallback, owner: owner);
   }
 
+  // A gradient's Mix row carries its Blend, which a shut box keeps in reach.
   bool tells(BridgeParamInfo p) =>
-      wired.contains(p.id) || [p, ...?riders[p.id]].any(offDefault);
+      wired.contains(p.id) ||
+      (p.id == 'mix' && blendInView(effect)) ||
+      [p, ...?riders[p.id]].any(offDefault);
   // A group the schema folds shut keeps its lead row on view, under its
   // heading, so its switch (Clone to points' Time offset) is in reach from
   // the box itself; once that row tells something, the whole group opens.
