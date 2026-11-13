@@ -3390,7 +3390,10 @@ fn one_turn(
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
         crate::turns::playback_priority(state.prioritised);
+        crate::turns::playing(state.prioritised);
     }
+    // An export that ended behind other windows lets Windows save power again.
+    crate::turns::follow_power();
     sync_caches(state);
     #[cfg(target_arch = "wasm32")]
     web::finish(state, stream);

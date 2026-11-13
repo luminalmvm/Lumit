@@ -52,6 +52,7 @@ import 'package:lumit_flutter/src/rust/api/model.dart'
     show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/system.dart' show setWindowInFront;
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show
         setAutosave,
@@ -3135,6 +3136,16 @@ class LumitUiState extends ChangeNotifier {
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
     _lifecycle = AppLifecycleListener(
+      // In front or not, for the engine's power throttling: behind other
+      // windows with nothing playing or exporting, Windows may run Lumit
+      // slowly to save power (crates/lumit-bridge/src/turns.rs).
+      onStateChange: (state) {
+        try {
+          setWindowInFront(front: state == AppLifecycleState.resumed);
+        } catch (_) {
+          // No engine, which is a test.
+        }
+      },
       onInactive: () {
         rememberSession();
         _keepWatched();

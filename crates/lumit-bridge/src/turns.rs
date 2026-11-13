@@ -133,6 +133,85 @@ pub(crate) fn opt_out_of_power_throttling() {
 #[cfg(not(windows))]
 pub(crate) fn opt_out_of_power_throttling() {}
 
+/// Whether Lumit's window is the one in front, as the interface last said.
+/// In front until told otherwise, which is how Lumit starts.
+static IN_FRONT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Whether the worker is playing, as it last said.
+static PLAYING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether Windows is now left to throttle this process, as last applied.
+/// Not at start: the worker opts out as it starts.
+static THROTTLE_ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The interface's window has come in front or gone behind something else.
+pub(crate) fn window_in_front(front: bool) {
+    IN_FRONT.store(front, std::sync::atomic::Ordering::Relaxed);
+    follow_power();
+}
+
+/// The worker has started or stopped playing.
+pub(crate) fn playing(on: bool) {
+    PLAYING.store(on, std::sync::atomic::Ordering::Relaxed);
+    follow_power();
+}
+
+/// **Out of power throttling only while it matters** (Windows; nothing
+/// elsewhere). In front, playing, or exporting, Lumit is opted out of
+/// throttling, as [`opt_out_of_power_throttling`] says why; behind other
+/// windows with none of that going on it hands the choice back to Windows,
+/// which then may run it slowly and ignore its timer request, as it does any
+/// background program, and so saves the battery an editor nobody is looking
+/// at would spend. An export or a playback goes on at full speed behind
+/// other windows. Asked when the window comes and goes and on each turn of
+/// the worker, which is how an export that ends in the background is noticed.
+pub(crate) fn follow_power() {
+    use std::sync::atomic::Ordering::Relaxed;
+    let allow = throttle_allowed(IN_FRONT.load(Relaxed), || {
+        PLAYING.load(Relaxed) || crate::export::export_running()
+    });
+    if THROTTLE_ALLOWED.swap(allow, Relaxed) != allow {
+        if allow {
+            hand_power_throttling_back();
+        } else {
+            opt_out_of_power_throttling();
+        }
+    }
+}
+
+/// The rule: Windows may throttle Lumit only behind other windows and with
+/// nothing playing or exporting. `busy` is asked only behind other windows.
+fn throttle_allowed(in_front: bool, busy: impl FnOnce() -> bool) -> bool {
+    !in_front && !busy()
+}
+
+/// Let Windows decide again whether to throttle this process (Windows).
+#[cfg(windows)]
+fn hand_power_throttling_back() {
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
+        PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_STATE,
+    };
+    // An empty control mask: this process decides nothing, the system does.
+    let state = PROCESS_POWER_THROTTLING_STATE {
+        Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        ControlMask: 0,
+        StateMask: 0,
+    };
+    // SAFETY: as in `opt_out_of_power_throttling`.
+    unsafe {
+        let _ = SetProcessInformation(
+            GetCurrentProcess(),
+            ProcessPowerThrottling,
+            std::ptr::from_ref(&state).cast(),
+            u32::try_from(std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>()).unwrap_or(0),
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn hand_power_throttling_back() {}
+
 /// Run this thread a step above the rest of the machine while it plays, and
 /// back at the ordinary priority when it stops (Windows).
 ///
@@ -289,5 +368,26 @@ mod web {
             return;
         }
         schedule(soonest.unwrap_or_default().as_secs_f64() * 1000.0);
+    }
+}
+
+#[cfg(test)]
+mod power_tests {
+    use super::throttle_allowed;
+
+    /// **Throttled only behind other windows with nothing running.** In front,
+    /// or playing or exporting behind other windows, Lumit stays out of power
+    /// throttling; behind them and idle, Windows decides. In front, whether
+    /// anything runs is not even asked.
+    #[test]
+    fn power_throttling_is_allowed_only_behind_other_windows_and_idle() {
+        assert!(!throttle_allowed(true, || unreachable!(
+            "not asked in front"
+        )));
+        assert!(throttle_allowed(false, || false), "behind and idle");
+        assert!(
+            !throttle_allowed(false, || true),
+            "behind, playing or exporting"
+        );
     }
 }

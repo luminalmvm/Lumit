@@ -35,6 +35,13 @@ int residentMemoryBytes() =>
 int systemMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemSystemMemoryBytes();
 
+/// Lumit's window has come in front (`true`) or gone behind other windows,
+/// minimised or hidden (`false`). Behind, with no playback and no export
+/// running, Windows is let throttle the editor to save power; in front, or
+/// while either runs, it is not. Nothing elsewhere.
+void setWindowInFront({required bool front}) =>
+    BridgeLib.instance.api.crateApiSystemSetWindowInFront(front: front);
+
 /// Whether this computer is running on battery or saving power, which on a
 /// laptop holds the graphics card at low clocks: a frame that takes a few
 /// milliseconds plugged in can take ten times that. The status line says so,
@@ -42,7 +49,8 @@ int systemMemoryBytes() =>
 ///
 /// Windows: on battery, or Battery saver on (`GetSystemPowerStatus`). Linux:
 /// a mains supply reporting offline beside a battery, or the platform
-/// profile at `low-power`. False elsewhere and where it cannot be asked.
+/// profile at `low-power`. macOS: running on the battery, or Low Power Mode
+/// on. False elsewhere and where it cannot be asked.
 bool powerSaving() => BridgeLib.instance.api.crateApiSystemPowerSaving();
 
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.

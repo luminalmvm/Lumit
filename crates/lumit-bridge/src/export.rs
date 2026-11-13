@@ -722,6 +722,12 @@ pub(crate) fn export_poll() -> String {
     driving::poll()
 }
 
+/// Whether an export is rendering now, for the power throttling decision
+/// ([`crate::turns::follow_power`]).
+pub(crate) fn export_running() -> bool {
+    driving::running()
+}
+
 /// Ask the running export to cancel (no-op when none is running). The export
 /// stops at the next frame and poll then reports `failed` with "cancelled".
 pub(crate) fn export_cancel() -> String {

@@ -264,6 +264,15 @@ pub(crate) fn free_memory_bytes() -> u64 {
     }
 }
 
+/// Lumit's window has come in front (`true`) or gone behind other windows,
+/// minimised or hidden (`false`). Behind, with no playback and no export
+/// running, Windows is let throttle the editor to save power; in front, or
+/// while either runs, it is not. Nothing elsewhere.
+#[frb(sync)]
+pub fn set_window_in_front(front: bool) {
+    crate::turns::window_in_front(front);
+}
+
 /// Whether this computer is running on battery or saving power, which on a
 /// laptop holds the graphics card at low clocks: a frame that takes a few
 /// milliseconds plugged in can take ten times that. The status line says so,

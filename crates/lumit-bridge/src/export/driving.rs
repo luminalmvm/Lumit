@@ -396,6 +396,13 @@ fn pump(run: &mut Run) {
     }
 }
 
+/// Whether an export is rendering now.
+pub(super) fn running() -> bool {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    drain(&mut guard);
+    matches!(guard.state, State::Running { .. })
+}
+
 pub(super) fn poll() -> String {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     drain(&mut guard);
