@@ -83,6 +83,7 @@ mod project_cache;
 #[cfg(feature = "media")]
 mod audio;
 mod autosave;
+mod awake;
 mod beats;
 mod captioning;
 // ASC CDL files, read and written.

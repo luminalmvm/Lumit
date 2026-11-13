@@ -83,6 +83,8 @@ struct Run {
     /// nothing meanwhile, or the next item would take over the state its
     /// poll is waiting to read.
     direct_unread: bool,
+    /// Keeps the computer awake while an export is in flight.
+    awake: Option<crate::awake::Awake>,
 }
 
 static EXPORT: OnceLock<Mutex<Run>> = OnceLock::new();
@@ -98,6 +100,7 @@ fn slot() -> &'static Mutex<Run> {
             running: false,
             current: None,
             direct_unread: false,
+            awake: None,
         })
     })
 }
@@ -129,6 +132,7 @@ pub(super) fn start_with_document(
         Ok(()) => {
             guard.current = None;
             guard.direct_unread = true;
+            keep_awake(&mut guard);
             json!({ "ok": true }).to_string()
         }
         Err(e) => err_json(e),
@@ -432,7 +436,7 @@ fn pump(run: &mut Run) {
             .iter()
             .position(|item| matches!(item.state, ItemState::Waiting))
         else {
-            return;
+            break;
         };
         let (doc, comp, spec, out_path, id) = {
             let item = &run.queue[index];
@@ -453,6 +457,16 @@ fn pump(run: &mut Run) {
             }
             Err(error) => run.queue[index].state = ItemState::Failed(error),
         }
+    }
+    keep_awake(run);
+}
+
+/// Hold the computer awake while an export is in flight, and only then.
+fn keep_awake(run: &mut Run) {
+    if run.handle.is_none() {
+        run.awake = None;
+    } else if run.awake.is_none() {
+        run.awake = Some(crate::awake::hold());
     }
 }
 
@@ -597,5 +611,6 @@ fn drain(run: &mut Run) {
         }
         run.state = state;
         run.handle = None;
+        keep_awake(run);
     }
 }
