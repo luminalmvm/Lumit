@@ -979,19 +979,13 @@ static void window_method_cb(FlMethodChannel* channel,
     }
   } else if (g_strcmp0(asked, "show") == 0) {
     reveal(self);
-  } else if (g_strcmp0(method, "notify") == 0) {
+  } else if (g_strcmp0(asked, "notify") == 0) {
     // An export ended while Lumit wasn't in front (lib/state/background.dart).
     // Inside a Flatpak it goes through the notification portal by itself. A
     // click runs app.reveal.
-    FlValue* args = fl_method_call_get_args(call);
     auto text = [args](const gchar* key) -> const gchar* {
-      FlValue* found = fl_value_get_type(args) == FL_VALUE_TYPE_MAP
-                           ? fl_value_lookup_string(args, key)
-                           : nullptr;
-      return found != nullptr &&
-                     fl_value_get_type(found) == FL_VALUE_TYPE_STRING
-                 ? fl_value_get_string(found)
-                 : "";
+      FlValue* found = argument(args, key, FL_VALUE_TYPE_STRING);
+      return found != nullptr ? fl_value_get_string(found) : "";
     };
     g_autoptr(GNotification) notification = g_notification_new(text("title"));
     if (text("body")[0] != '\0') {
