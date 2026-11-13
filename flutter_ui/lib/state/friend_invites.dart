@@ -28,35 +28,33 @@ const _info = 'lumit friend invite v1';
 final _x25519 = X25519();
 final _aead = Chacha20.poly1305Aead();
 
-Future<SecretKey> _key(SecretKey shared, List<int> sender, List<int> to) =>
+Future<SecretKey> _key(
+        SecretKey shared, List<int> sender, List<int> to, String info) =>
     Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
-        secretKey: shared, nonce: [...sender, ...to], info: utf8.encode(_info));
+        secretKey: shared, nonce: [...sender, ...to], info: utf8.encode(info));
 
 /// [text] sealed so only the holder of [to]'s private half can open it: the
 /// sender's public key, the nonce, then the sealed text and its tag, as
-/// base64url without padding.
-Future<String> sealInvite(InviteText text, List<int> to) async {
+/// base64url without padding. [info] says what it is, so a box made for one
+/// purpose never opens as another.
+Future<String> sealBox(List<int> text, List<int> to,
+    {required String info}) async {
   final mine = await _x25519.newKeyPair();
   final sender = (await mine.extractPublicKey()).bytes;
   final shared = await _x25519.sharedSecretKey(
       keyPair: mine,
       remotePublicKey: SimplePublicKey(to, type: KeyPairType.x25519));
-  final box = await _aead.encrypt(
-      utf8.encode(jsonEncode({
-        'link': text.link,
-        'password': text.password,
-        'project': text.project,
-        'look': text.look,
-      })),
-      secretKey: await _key(shared, sender, to));
+  final box = await _aead.encrypt(text,
+      secretKey: await _key(shared, sender, to, info));
   return base64Url
       .encode([...sender, ...box.nonce, ...box.cipherText, ...box.mac.bytes])
       .replaceAll('=', '');
 }
 
-/// What [sealed] says, opened with [keys]. Null for anything that is not an
-/// invite sealed to them.
-Future<InviteText?> openInvite(String sealed, SimpleKeyPair keys) async {
+/// What [sealed] holds, opened with [keys]. Null for anything that is not a
+/// box sealed to them as [info].
+Future<List<int>?> openBox(String sealed, SimpleKeyPair keys,
+    {required String info}) async {
   try {
     final bytes = base64Url.decode(base64Url.normalize(sealed));
     if (bytes.length < 32 + 12 + 16) return null;
@@ -65,11 +63,33 @@ Future<InviteText?> openInvite(String sealed, SimpleKeyPair keys) async {
     final shared = await _x25519.sharedSecretKey(
         keyPair: keys,
         remotePublicKey: SimplePublicKey(sender, type: KeyPairType.x25519));
-    final opened = await _aead.decrypt(
+    return await _aead.decrypt(
         SecretBox(bytes.sublist(44, bytes.length - 16),
             nonce: bytes.sublist(32, 44),
             mac: Mac(bytes.sublist(bytes.length - 16))),
-        secretKey: await _key(shared, sender, to));
+        secretKey: await _key(shared, sender, to, info));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// An invite sealed for [to], as [sealBox] seals it.
+Future<String> sealInvite(InviteText text, List<int> to) => sealBox(
+    utf8.encode(jsonEncode({
+      'link': text.link,
+      'password': text.password,
+      'project': text.project,
+      'look': text.look,
+    })),
+    to,
+    info: _info);
+
+/// What [sealed] says, opened with [keys]. Null for anything that is not an
+/// invite sealed to them.
+Future<InviteText?> openInvite(String sealed, SimpleKeyPair keys) async {
+  try {
+    final opened = await openBox(sealed, keys, info: _info);
+    if (opened == null) return null;
     final j = jsonDecode(utf8.decode(opened));
     if (j is! Map || j['link'] is! String) return null;
     return (
@@ -83,10 +103,10 @@ Future<InviteText?> openInvite(String sealed, SimpleKeyPair keys) async {
   }
 }
 
-String _hex(List<int> bytes) =>
+String hexOf(List<int> bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-List<int> _unhex(String hex) => [
+List<int> unhex(String hex) => [
       for (var i = 0; i + 1 < hex.length; i += 2)
         int.parse(hex.substring(i, i + 2), radix: 16)
     ];
@@ -104,6 +124,10 @@ class FriendInvites extends ChangeNotifier {
   void Function(FriendInvite)? onNew;
 
   SimpleKeyPair? _keys;
+
+  /// This computer's key pair for the account, once it is ready. The
+  /// account's other computers seal what they send it to the public half.
+  SimpleKeyPair? get keys => _keys;
   String? _for;
   Timer? _poll;
   final Set<String> _seen = {};
@@ -135,16 +159,17 @@ class FriendInvites extends ChangeNotifier {
   Future<void> _ready(String who) async {
     final slot = 'friend-key-$who';
     final kept = await readSecret(slot);
-    var keys = kept == null ? null : await _x25519.newKeyPairFromSeed(_unhex(kept));
+    var keys = kept == null ? null : await _x25519.newKeyPairFromSeed(unhex(kept));
     if (keys == null) {
       keys = await _x25519.newKeyPair();
-      await writeSecret(slot, _hex(await keys.extractPrivateKeyBytes()));
+      await writeSecret(slot, hexOf(await keys.extractPrivateKeyBytes()));
     }
     if (_for != who) return;
     _keys = keys;
+    notifyListeners();
     try {
       await account.call('PUT', '/v1/keys',
-          body: {'key': _hex((await keys.extractPublicKey()).bytes)});
+          body: {'key': hexOf((await keys.extractPublicKey()).bytes)});
     } on CloudError {
       // Tried again at the next sign-in.
     }
@@ -198,7 +223,7 @@ class FriendInvites extends ChangeNotifier {
     await account.call('POST', '/v1/invites', body: {
       'to': username,
       'sealed': [
-        for (final k in keys) {'key': k, 'box': await sealInvite(text, _unhex(k))}
+        for (final k in keys) {'key': k, 'box': await sealInvite(text, unhex(k))}
       ],
     });
     return true;
