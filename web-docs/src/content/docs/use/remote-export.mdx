@@ -1,0 +1,246 @@
+---
+title: Export on another computer
+description: Have another of your computers do an export.
+sidebar:
+  order: 18.2
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **remote export** is an export one of your computers does for another. The project and
+the files the other computer lacks go to it, it exports there, and the file comes back or
+stays there. It is part of [Lumit Pro](/use/profiles/#lumit-pro). Both computers run Lumit,
+signed in to the same account.
+
+<Shot file="remote-export.png" caption="Export on, in the export dialogue." eager/>
+
+Exports on this computer need no account. Without Lumit Pro the **Export on** row is absent,
+and **File ▸ Export on another computer…** opens the **Lumit Pro** window.
+
+## Send an export
+
+1. Front the composition, or select it in the Project panel.
+2. Choose **File ▸ Export on another computer…**, or press `Alt+M`.
+3. On the **Export on** row, choose a computer, or **Any free computer**.
+4. On the **File goes to** row, choose **This computer** or the other computer.
+5. Press **Export**.
+
+The [export queue](#the-export-queue) opens, with the export under the other computer's name.
+
+**File ▸ Export on another computer…** opens the export dialogue with **Export on** set to
+the computer last chosen since Lumit started. Before one is chosen it is **Any free
+computer**, or the other computer when the list has only one. **File ▸ Export…** opens the
+same dialogue set to **This computer**.
+
+The **Export on** row is shown while its list has another computer. With another computer
+chosen there is no **Add to queue**.
+
+## Export on
+
+The list holds **This computer** and the account's other computers. Each of those has a
+note beside its name.
+
+| Note | Meaning |
+| --- | --- |
+| **Ready** | It has every plugin, font and model pack the export uses. |
+| **Checking** | It is being asked what it has. |
+| **Lacks 2 plugins, 1 font** | It lacks plugins, fonts or model packs the export uses. The export runs there without them. |
+| **Exporting** | It is exporting now. |
+| **2 waiting** | Exports wait in its queue. |
+| **Away since 14:02** | It is offline or asleep, with the time or day it was last online. The export goes when it is back. One never seen online reads **Away**. |
+| **Needs Lumit 0.12.0** | Its Lumit cannot read the project. It cannot be chosen. |
+| **Not taking exports** | **Other computers can export here** is off there. It cannot be chosen. |
+
+Pointing at a computer that can be chosen shows its graphics card and the card's memory.
+With the list open, the arrow keys move through it and `Enter` chooses.
+
+A computer is left out of the list when it has signed out, when it has been away for more
+than 30 days, or when it is an older sign-in of a computer that has signed in again under
+the same name.
+
+With a computer chosen that lacks something, the footer says **Lacks …**, and pointing at it
+names what is missing. With one that is away, the footer says **Waits for …**.
+
+**Any free computer** is listed when the list has more than one other computer. It chooses
+among those online that take exports and can read the project: one with an empty queue
+first, then one on this computer's network, then the one with the most graphics memory.
+With none, **Export** sends nothing and the footer says **None of your computers can take
+this export**.
+
+## File goes to
+
+| Choice | Where the file is written |
+| --- | --- |
+| **This computer** | It comes back, to the place **Write to** names. |
+| The other computer's name | It stays there. **Write to** shows that computer's name and the file's name, and has no **Browse…**. |
+
+With **Any free computer**, the second choice reads **That computer**. `Tab` reaches each
+choice, and `Enter` or `Space` picks it.
+
+A file that stays is written to the folder **Settings ▸ Export ▸ Destination** names on the
+other computer when that is **A folder I choose**, and otherwise to `Lumit` in its videos
+folder. It never replaces a file. **When done** applies when the file arrives on this
+computer.
+
+A file that comes back replaces one that was at its place when the export was sent, or when
+**Bring here** was chosen. One that turned up since is kept, and the file that comes back is
+named `name_2` or the next free number, as its notice says.
+
+## What is sent
+
+- The project as it was when **Export** was pressed.
+- The files the export reads: footage, proxies, the colour configuration, files effects
+  read such as a LUT, analyses and simulation bakes.
+- Not plugins, fonts or model packs.
+- Not footage missing on this computer.
+
+A file the other computer has is not sent: one kept from an earlier export, one at the same
+place on its disk, or one of the same name in its **Look for footage in** folders. Files are
+compared by their contents.
+
+Files go straight between two computers on one network, and through
+[Lumit's relay](/use/projects/#relays) otherwise, encrypted with a key the relay is never
+given. They move within the **Footage upload limit** and **Footage download limit** in
+[Settings ▸ General](/use/settings/#general). Each file is checked against its contents when
+it arrives.
+
+## The export queue
+
+**Window ▸ Export queue…** lists an export sent to another computer under that computer's
+name, which has **Online** or **Away since …** beside it. This computer's own exports are
+under **This computer**. Under another computer's name the oldest is first.
+
+| Status | Meaning |
+| --- | --- |
+| **Waiting for …** | The other computer is offline or asleep. |
+| **Checking files** | This computer is reading the files the export uses, with a percentage. |
+| **Sending …** | The project and files are on their way, with how much has gone and the time left. |
+| **In …'s queue** | The other computer has everything, and the export waits its turn there. |
+| **Preparing…** | It has started there and has no frame yet. |
+| A bar | It is exporting there, with a percentage and the time left. |
+| **Paused** | Someone paused it. |
+| **Bringing back …** | The file is on its way here. |
+| **Done** | The file is here. |
+| **On …** | The file stays on the other computer. |
+| **Cancelled** | It was cancelled, on either computer. |
+
+While files move, the count under the rows adds how much is left and how fast.
+
+A failed export shows the reason. Any other reason is the export's own message.
+
+| Reason | Meaning |
+| --- | --- |
+| **Needs a newer Lumit** | The other computer's Lumit cannot read the project. |
+| **Out of disk space** | The other computer lacks room for the files and 1 GB more. |
+| **Not taking exports** | **Other computers can export here** is off there. |
+| **Lost the connection** | A file did not arrive whole, the other computer no longer has the export, or seven days passed. |
+| **The file is no longer there** | **Bring here** asked for a file that has been moved or deleted on the other computer. |
+| **Stopped with an error** | It failed, and no more is known. |
+
+Right-click a row:
+
+| Action | What it does |
+| --- | --- |
+| **Pause**, **Go on** | Holds the export and its files where they are, on both computers, and lets them carry on. |
+| **Show in folder** | Shows a file that came back. |
+| **Bring here** | Brings a file that stayed, to a place you choose. If it is cancelled, or fails with the file still there, the row goes back to **On …**. |
+| **Export again** | Sends an ended export to the same computer and place, with the project as it was when first sent. |
+| **Send to** | Moves it to another computer, or **Any free computer**, before it starts exporting. Its row moves under that computer's name. |
+| **Cancel** | Stops it on both computers. |
+| **Remove** | Takes it off the list. One still under way is cancelled first. |
+
+The × on a row cancels an export under way and removes one that has ended.
+
+**Cancel all** is in the menu a right-click around the rows opens. `Shift+F10` or the menu
+key opens it too. It asks **Cancel every export?** first. **Keep exporting** leaves them, and
+**Cancel all** cancels every export on this computer and every one sent to another.
+
+A [paired phone](/use/profiles/#devices) follows these exports with this computer's own, and
+can cancel, remove or send one again. It can send one too, and the notice here reads **A
+phone sent … to …**.
+
+### On the computer that exports
+
+An export done for another computer is a row in this computer's queue, with the other
+computer's name beside its composition and the name of the preset it was sent with. It
+takes its turn with the rest, and sets the queue running when it arrives.
+
+| Status | Meaning |
+| --- | --- |
+| **Receiving …** | Its files are arriving. |
+| **Sending back …** | Its file is going back. |
+| **Waiting for …** | Its file is ready to go back, and the other computer is offline. |
+| **Sent to …** | The other computer has the file. |
+
+Its right-click menu has no **Settings…**, **Duplicate** or **Queue again**. On a failed one,
+**Show log** shows the export's log in its folder. A row removed at **Sending back …** or
+**Waiting for …** still sends its file back.
+
+## The status line
+
+While nothing exports on this computer, the [status line](/use/workspaces/#the-status-line)
+follows the oldest export sent to another that is moving or exporting, with a bar and
+**Cancel**.
+
+| Reads | With |
+| --- | --- |
+| **Sending … to …** | How much has gone. |
+| **Exporting … on …** | From its first frame, the frame it is on, of how many, and the time left. |
+| **Bringing back … from …** | How much has come. |
+
+The bar moves steadily from one reading to the next. With **Motion** at **None** it steps.
+
+## Sleep and the network
+
+- Both computers keep each remote export on disk. Either can sleep, lose the network or
+  quit Lumit, and the export carries on when both are back.
+- An export sent to a computer that is away waits, and goes when it is back.
+- A transfer that stops carries on from where it was.
+- Once the other computer has the files, this one can sleep. The file comes back when it
+  wakes.
+- An export under way when the other computer's Lumit quits starts again when Lumit is back.
+- A computer stays awake while it exports, while a remote export's files move with the other
+  computer online, and while one waits in its queue. Its screen can still turn off.
+- A remote export that has not ended after seven days stops.
+
+Lumit on the other computer can be in the tray, with
+[**Keep running in the background**](/use/settings/#general) on. Quitting Lumit while it
+exports for another computer asks first: **Quit**, or **Keep running**, which turns that
+setting on and closes the window.
+
+## Notices
+
+| When | Notice |
+| --- | --- |
+| The file comes back | **… is here from …**, with **Show** |
+| The file stays there | **… exported …**, with **Bring here** |
+| It fails, or the other computer cancels it | **… couldn't export …**, with the reason |
+| **Bring here** fails | **Couldn't bring … here**, with the reason |
+| Another computer sends this one an export | **Exporting … for …** |
+| That export fails here, or the other computer cancels it | **Couldn't export … for …**, with the reason |
+
+While Lumit is not the window in front, each is also a notification from the system, and so
+is an export ending on this computer: **… is ready**, or **Couldn't export …**. Exports
+that end within three seconds of each other share one. An export cancelled on this computer
+sends none. A click on the notification brings Lumit's window back.
+[**Settings ▸ Export ▸ Notify when exports end**](/use/settings/#export) turns them off.
+
+## Computers
+
+With Lumit Pro, **Settings ▸ Account ▸ Computers** holds this computer's part.
+
+| Setting | What it does |
+| --- | --- |
+| **Other computers can export here** | Takes exports from the account's other computers. On by default. |
+| **Look for footage in** | Folders this computer looks in for footage it already has. **Add folder…** adds one. Pointing at a folder shows the × that removes it. |
+| **Kept for other computers** | The size of the footage sent here and kept for later exports. **Clear** asks first, then deletes it, apart from files an export under way needs. |
+
+Kept footage is held up to 100 GB, or a quarter of its own size and the disk's free space
+together, whichever is less. The least recently used goes first. At most 200,000 files and
+folders are looked through for one export.
+
+## Related
+
+- [Exporting](/use/export/)
+- [Profiles and accounts](/use/profiles/)
+- [Exporting on your other computer](/tutorials/export-on-another-computer/)
