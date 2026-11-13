@@ -60,6 +60,7 @@ import 'node_menus.dart';
 import 'effect_param_row_frb.dart'
     show
         blendInView,
+        compositingRowIds,
         cachedListParameterGroups,
         instanceParameters,
         defaultEffectValue,
@@ -204,10 +205,14 @@ CompBoxRows compBoxRows(
     for (final beside in riders.values)
       for (final p in beside) p.id,
   };
+  // A gradient's Matte is the socket on the box, and its Invert and Channel
+  // are rows of their own under it.
+  final inView = blendInView(effect);
   final rows = [
     for (final p in shown)
       if (!gated.contains(p.id) &&
           !folded.contains(p.id) &&
+          !(inView && p.id == 'matte') &&
           p.kind is! BridgeParamKind_Curve)
         p,
   ];
@@ -219,10 +224,10 @@ CompBoxRows compBoxRows(
         !isDefaultEffectValue(value, fallback, owner: owner);
   }
 
-  // A gradient's Mix and Blend, which a shut box keeps in reach.
+  // A gradient's compositing rows, which a shut box keeps in reach.
   bool tells(BridgeParamInfo p) =>
       wired.contains(p.id) ||
-      ((p.id == 'mix' || p.id == 'blend') && blendInView(effect)) ||
+      (inView && compositingRowIds.contains(p.id)) ||
       [p, ...?riders[p.id]].any(offDefault);
   // A group the schema folds shut keeps its lead row on view, under its
   // heading, so its switch (Clone to points' Time offset) is in reach from

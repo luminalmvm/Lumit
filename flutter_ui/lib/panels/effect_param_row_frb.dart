@@ -3068,8 +3068,8 @@ List<BridgeParamInfo> cachedListParameters(String effect) =>
 /// ([BridgeEffectInstanceInfo.rowLabels]: Type fill's rows read as columns
 /// when its Direction is Columns).
 ///
-/// A gradient's Mix and Blend come after its own rows ([blendInView]): an
-/// extension's effect declares them before the rows its shader derives.
+/// A gradient's compositing rows come after its own rows ([blendInView]):
+/// an extension's effect declares them before the rows its shader derives.
 List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
   var rows = [...cachedListParameters(info.name), ...info.derivedParams];
   if (blendInView(info.name)) rows = blendAfterOwnRows(rows);
@@ -3089,23 +3089,39 @@ List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
   ];
 }
 
-/// Whether [effect]'s Mix row, with its Blend beside it, stays in view rather
-/// than in the Compositing fold, which starts shut and takes no room at its
-/// defaults. A gradient is mostly laid over its layer in Multiply, Screen or
-/// Overlay, so its Blend is one of its own controls: the built-in Gradient,
-/// and every extension gradient (Conical, Sweep and Multi-point gradient,
-/// Gradient map).
+/// Whether [effect]'s compositing rows (Mix, Blend, Matte, Invert, Channel)
+/// stay in view, each a row of its own as the Timeline lists them, rather than
+/// in the Compositing fold, which starts shut and takes no room at its
+/// defaults, with Blend, Invert and Channel riding beside their hosts. A
+/// gradient is mostly laid over its layer in Multiply, Screen or Overlay and
+/// gated by another layer, so these are its own controls: the built-in
+/// Gradient, and every extension gradient (Conical, Sweep and Multi-point
+/// gradient, Gradient map).
 bool blendInView(String effect) =>
     effect == 'gradient' ||
     (effect.startsWith('lfx:') && effect.contains('gradient'));
 
-/// [rows] with Mix and Blend moved to just before the Matte rows, or to the
-/// end when there are none.
+/// The compositing rows [blendInView] keeps in view, in the order they are
+/// listed: after the effect's own rows.
+const compositingRowIds = [
+  'mix',
+  'blend',
+  'matte',
+  'matte_invert',
+  'matte_channel',
+];
+
+/// [rows] with the compositing rows moved to the end, in
+/// [compositingRowIds]' order: an extension's effect declares them before the
+/// rows its shader derives.
 List<BridgeParamInfo> blendAfterOwnRows(List<BridgeParamInfo> rows) {
-  bool moved(BridgeParamInfo p) => p.id == 'mix' || p.id == 'blend';
-  final rest = [for (final p in rows) if (!moved(p)) p];
-  final at = rest.indexWhere((p) => p.id == 'matte');
-  rest.insertAll(at < 0 ? rest.length : at, rows.where(moved));
+  final rest = [
+    for (final p in rows)
+      if (!compositingRowIds.contains(p.id)) p,
+  ];
+  for (final id in compositingRowIds) {
+    rest.addAll(rows.where((p) => p.id == id));
+  }
   return rest;
 }
 
@@ -3158,11 +3174,14 @@ List<BridgeParamInfo> paramRidersFor(
   BridgeParamInfo host, {
   String? effect,
 }) {
+  // A gradient's compositing rows are each a row of their own.
+  final inView = effect != null && blendInView(effect);
   final names = switch (host.kind) {
-    BridgeParamKind_Layer() => {'${host.id}_invert', '${host.id}_channel'},
-    BridgeParamKind_Float()
-        when host.id == 'mix' && !(effect != null && blendInView(effect)) =>
-      {'blend'},
+    BridgeParamKind_Layer() when !(inView && host.id == 'matte') => {
+        '${host.id}_invert',
+        '${host.id}_channel'
+      },
+    BridgeParamKind_Float() when host.id == 'mix' && !inView => {'blend'},
     // A bake's two buttons sit on the one row, by the line that says how it goes.
     BridgeParamKind_Action() when host.id == 'bake' => {'cancel'},
     _ => const <String>{},
