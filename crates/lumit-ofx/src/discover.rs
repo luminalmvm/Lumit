@@ -164,7 +164,10 @@ pub fn follow_gpu_setting() {
         let mut broker = shared.broker.lock();
         if !broker.disabled && broker.config.env != env {
             broker.config.env.clone_from(&env);
-            let _ = broker.restart();
+            // A parked broker starts with the new setting when it is next woken.
+            if !broker.is_parked() {
+                let _ = broker.restart();
+            }
         }
     }
     renote_paths();
@@ -479,6 +482,9 @@ fn scan_through_broker(
     // A definition holds it now, so it lives for the session. Otherwise it
     // ends here, as a rescan's broker for a bundle it knows does.
     if Arc::strong_count(&shared) > 1 {
+        // Parked until a plugin of the bundle is applied or rendered: the
+        // description is all the catalogue needs (see `Broker::park`).
+        shared.broker.lock().park();
         if let Ok(mut brokers) = BROKERS.lock() {
             brokers.push((binary.to_path_buf(), shared));
         }

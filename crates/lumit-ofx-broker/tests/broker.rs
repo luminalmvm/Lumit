@@ -580,3 +580,50 @@ fn a_cancelled_frame_stops_a_plugin_that_polls_abort() {
     assert!(took < Duration::from_millis(1500), "it stopped in {took:?}");
     assert_eq!(broker.strikes(), 0);
 }
+
+#[test]
+fn a_parked_broker_wakes_for_its_next_frame_and_renders_as_before() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some((mut broker, plugin)) = a_broker(root.path(), &[]) else {
+        skipped("a_parked_broker_wakes_for_its_next_frame_and_renders_as_before");
+        return;
+    };
+    let instance = broker
+        .create_instance(plugin, Context::Filter, ParamSnapshot::new())
+        .expect("an instance");
+    let before = broker
+        .render(
+            instance,
+            &RenderRequest::filter(1.0, a_flat_frame(0.5)),
+            &|_, _| None,
+        )
+        .expect("a frame back");
+    assert!(!before.errored);
+
+    // Parked, as the scan leaves every bundle: no process, the description
+    // and the instance kept.
+    broker.park();
+    assert!(broker.is_parked(), "no process while parked");
+    assert!(!broker.descriptors().is_empty(), "the description stays");
+
+    // The next frame starts a process, makes the instance again and renders.
+    let after = broker
+        .render(
+            instance,
+            &RenderRequest::filter(2.0, a_flat_frame(0.5)),
+            &|_, _| None,
+        )
+        .expect("a frame back");
+    assert!(!after.errored, "the woken broker renders for real");
+    assert!((first(&after.frame) - 0.5).abs() < 1e-2);
+    assert!(!broker.is_parked(), "awake after the frame");
+    assert_eq!(broker.restarts(), 0, "waking is not a restart");
+    assert_eq!(broker.strikes(), 0, "nor a failure");
+
+    // An instance destroyed while parked needs no process at all.
+    broker.park();
+    broker.destroy(instance).expect("destroyed");
+    assert!(broker.is_parked(), "destroying did not wake it");
+}

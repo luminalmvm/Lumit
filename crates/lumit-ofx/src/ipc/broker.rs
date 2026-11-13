@@ -531,6 +531,7 @@ impl Broker {
         context: Context,
         params: ParamSnapshot,
     ) -> Result<InstanceId, BrokerError> {
+        self.wake()?;
         // A ceiling on how many of one bundle's plugins may be alive at once.
         //
         // Every instance is memory and state inside the broker, and every one
@@ -579,6 +580,7 @@ impl Broker {
         instance: InstanceId,
         params: ParamSnapshot,
     ) -> Result<(), BrokerError> {
+        self.wake()?;
         let record = self
             .instances
             .get_mut(&instance)
@@ -615,6 +617,7 @@ impl Broker {
         if !self.instances.contains_key(&instance) {
             return Err(BrokerError::NoSuchInstance);
         }
+        self.wake()?;
         let bounds = RectI::sized(
             i32::try_from(source.width()).unwrap_or(0),
             i32::try_from(source.height()).unwrap_or(0),
@@ -649,6 +652,7 @@ impl Broker {
         if !self.instances.contains_key(&instance) {
             return Err(BrokerError::NoSuchInstance);
         }
+        self.wake()?;
         let deadline = self.config.quirks.render_timeout;
         let answer = self.action(&HostMessage::Settle { instance, time }, deadline, None);
         self.settled(instance, answer)
@@ -696,6 +700,7 @@ impl Broker {
         request: &RenderRequest,
         source: &FrameSource<'_>,
     ) -> Result<BrokerRender, BrokerError> {
+        self.wake()?;
         let identity = request
             .inputs
             .values()
@@ -795,6 +800,10 @@ impl Broker {
             return Err(BrokerError::NoSuchInstance);
         }
         self.warm.remove(&instance);
+        // A parked broker has no copy to destroy: the record was all there was.
+        if self.is_parked() {
+            return Ok(());
+        }
         let control = self.config.quirks.control_timeout;
         let _ = self.action(&HostMessage::Destroy { instance }, control, None);
         Ok(())
@@ -1074,11 +1083,51 @@ impl Broker {
         }
     }
 
+    /// **End the process and keep the description**, until an action needs
+    /// the plugin again (docs/12 §2.3). The scan leaves every bundle's broker
+    /// parked: a machine with another editor's plugin folder holds dozens of
+    /// bundles, and a broker each for the whole session was dozens of
+    /// processes and gigabytes of memory for plugins most sessions never
+    /// apply. Not a failure: no strike, no restart counted, the card kept.
+    pub fn park(&mut self) {
+        self.kill();
+        self.warm.clear();
+    }
+
+    /// Whether the broker is parked: no process, and not put away.
+    #[must_use]
+    pub fn is_parked(&self) -> bool {
+        self.link.is_none() && !self.disabled
+    }
+
+    /// Start a parked broker for the action about to be asked of it, the way a
+    /// restart does: describe the bundle, make every instance with the values
+    /// the host holds. Nothing for a broker that is running or put away.
+    fn wake(&mut self) -> Result<(), BrokerError> {
+        if !self.is_parked() {
+            return Ok(());
+        }
+        self.respawn()
+    }
+
     /// Start a broker again and put it back where the last one was: describe
     /// the bundle, make every instance, with the values the host holds.
     pub(crate) fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
+        // A broker that died with plugins on the card comes back on the CPU: a
+        // crash in a driver cannot be redone on the CPU in place, and trying
+        // the card again would only spend the next strike.
+        if self.paths.iter().any(Option::is_some) {
+            self.config
+                .env
+                .push((crate::gpu::GPU_ENV.to_owned(), "0".to_owned()));
+        }
+        self.respawn()
+    }
+
+    /// A new process in the old one's place, told everything again.
+    fn respawn(&mut self) -> Result<(), BrokerError> {
         // A new process loads everything again, so every instance warms up again.
         self.warm.clear();
         // A fresh ring, not the old one.
@@ -1093,14 +1142,6 @@ impl Broker {
         let (width, height) = self.ring_frame;
         self.ring = Ring::create(&ring_path(&fresh_identifier()?), width, height)?;
         self.next_slot = 0;
-        // A broker that died with plugins on the card comes back on the CPU: a
-        // crash in a driver cannot be redone on the CPU in place, and trying
-        // the card again would only spend the next strike.
-        if self.paths.iter().any(Option::is_some) {
-            self.config
-                .env
-                .push((crate::gpu::GPU_ENV.to_owned(), "0".to_owned()));
-        }
         self.start(&fresh_identifier()?)?;
 
         let describe = describe_deadline(&self.config.quirks);
