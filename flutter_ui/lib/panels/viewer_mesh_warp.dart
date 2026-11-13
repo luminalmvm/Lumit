@@ -115,12 +115,13 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
   /// The crossing whose handles are shown: its mesh's key and its index.
   (String, int)? _picked;
 
-  /// The drag in flight: the mesh, the crossing and what of it is held, where
-  /// the press was and where the held thing started, and where it is now.
+  /// The drag in flight: the mesh, the crossing and what of it is held, how
+  /// far the pointer has gone since the press, where the held thing started,
+  /// and where it is now.
   _Mesh? _mesh;
   int _index = -1;
   _Grip _grip = _Grip.point;
-  Offset _down = Offset.zero;
+  Offset _travel = Offset.zero;
   Offset _from = Offset.zero;
   Offset? _to;
 
@@ -228,8 +229,12 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
         cursor: SystemMouseCursors.move,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanDown: (d) => _start(m, i, grip, at - half + d.localPosition),
-          onPanUpdate: (d) => _move(at - half + d.localPosition),
+          onPanDown: (_) => _start(m, i, grip),
+          // The pointer's travel, not its place: a drag's events keep the
+          // grip's box as it was at the press, while the grip itself follows
+          // the point, so a place read off the moved grip ran ahead of the
+          // pointer by however far the grip had gone, faster at every tick.
+          onPanUpdate: (d) => _move(d.delta),
           onPanEnd: (_) => _end(),
           onPanCancel: _cancel,
         ),
@@ -237,13 +242,13 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     );
   }
 
-  void _start(_Mesh m, int i, _Grip grip, Offset screen) {
+  void _start(_Mesh m, int i, _Grip grip) {
     _cancel();
     setState(() {
       _mesh = m;
       _index = i;
       _grip = grip;
-      _down = screen;
+      _travel = Offset.zero;
       _from = m.gripAt(i, grip);
       // A press on a crossing shows its handles, as in After Effects.
       if (grip == _Grip.point) _picked = (m.key, i);
@@ -265,10 +270,11 @@ class _ViewerMeshWarpState extends State<ViewerMeshWarp> {
     };
   }
 
-  void _move(Offset screen) {
+  void _move(Offset delta) {
     final m = _mesh;
     if (m == null) return;
-    var d = screen - _down;
+    _travel += delta;
+    var d = _travel;
     // Shift keeps it to one axis, as it does for a layer's move.
     if (HardwareKeyboard.instance.isShiftPressed) d = constrainToAxis(d);
     final to = m.toPercent(m.toScreen(_from) + d);
