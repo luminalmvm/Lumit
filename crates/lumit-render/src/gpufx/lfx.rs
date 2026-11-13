@@ -648,10 +648,12 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     }
 
     /// Colorama, as the Siceliot extension ships it, on the grey plate:
-    /// a phase of zero lands on the cycle's first colour and Phase shift turns
-    /// it, Modify None leaves the plate, Ramp grey from Red gives the red back
-    /// as grey, a Pixel selection that matches nothing changes nothing, and
-    /// the defaults read Intensity off the display values into the hue ring.
+    /// a phase of zero lands on the top of the wheel and Phase shift turns it
+    /// anticlockwise, Modify None leaves the plate, Negative from Red gives
+    /// the red back as grey, a Pixel selection that matches nothing changes
+    /// nothing, Alpha ramp lays its white over the plate (Composite over
+    /// layer), and the defaults read Intensity off the display values into
+    /// the hue wheel.
     /// Guards wrong pixels.
     #[test]
     fn colorama_reads_a_phase_and_paints_the_cycle() {
@@ -705,8 +707,8 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         let turned = ("phase_shift", EffectValue::Float(Property::fixed(120.0)));
         near(
             render(&[zero, turned]),
-            [0, 255, 0],
-            "a third of a turn on is green",
+            [0, 0, 255],
+            "a third of a turn on, anticlockwise, is blue",
         );
         let enc = lumit_core::pixels::srgb_encode;
         let plate = [enc(0.25), enc(0.4), enc(0.6)];
@@ -717,19 +719,30 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         );
         near(
             render(&[
-                ("palette", EffectValue::Choice(2)),
+                ("palette", EffectValue::Choice(3)),
                 ("get_phase_from", EffectValue::Choice(1)),
             ]),
             [enc(0.25); 3],
-            "Ramp grey from Red gives the red as grey",
+            "Negative from Red gives the red as grey",
         );
         near(
             render(&[("matching_mode", EffectValue::Choice(1))]),
             plate,
             "a selection that matches nothing changes nothing",
         );
-        // Intensity of the display values: 0.642, between cyan (50 %) and
-        // blue (66.7 %), 85 % of the way.
-        near(render(&[]), [0, 38, 255], "the defaults paint the hue ring");
+        // Intensity of the display values: 0.642, so 0.358 clockwise round the
+        // wheel: between green (33.3 %) and cyan (50 %), 15 % of the way.
+        near(
+            render(&[]),
+            [0, 255, 38],
+            "the defaults paint the hue wheel",
+        );
+        // Alpha ramp there is white at 0.358 opacity, laid over the plate.
+        let over = |c: f32| enc(0.358 + c * 0.642);
+        near(
+            render(&[("palette", EffectValue::Choice(1))]),
+            [over(0.25), over(0.4), over(0.6)],
+            "Alpha ramp is laid over the layer",
+        );
     }
 }
