@@ -8,6 +8,7 @@ pub mod library_home;
 pub mod pack;
 pub mod plugins;
 pub mod template_file;
+pub mod videos;
 
 use lumit_core::model::Document;
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};

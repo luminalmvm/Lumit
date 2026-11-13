@@ -116,6 +116,7 @@ mod probe;
 mod profiling;
 mod proxy;
 mod realtime;
+mod remote;
 mod render;
 mod scratch;
 mod script;

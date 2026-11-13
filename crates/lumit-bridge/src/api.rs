@@ -66,6 +66,7 @@ pub mod presets;
 pub mod project;
 pub mod project_item;
 pub mod projection;
+pub mod remote;
 pub mod retime;
 pub mod roto;
 pub mod routes;
@@ -187,6 +188,9 @@ pub enum BridgeError {
     AddonInvalid(String),
     /// A document or a command needs an addon that is not installed.
     AddonMissing,
+    /// None of the account's other computers can take this export: the one
+    /// named is not the account's, or none online takes exports.
+    NoComputer,
     /// Convert to keyframes was asked of a camera with no solve link to bake,
     /// or one whose link resolves nowhere.
     NotLinked,
@@ -349,6 +353,7 @@ impl fmt::Display for BridgeError {
             BridgeError::AddonBusy => write!(f, "Another addon is installing"),
             BridgeError::AddonInvalid(why) => write!(f, "{why}"),
             BridgeError::AddonMissing => write!(f, "That addon is not installed"),
+            BridgeError::NoComputer => write!(f, "None of your computers can take that export"),
             BridgeError::NotLinked => write!(f, "That camera has no solve to bake"),
             BridgeError::NoSolve => write!(f, "Nothing has been solved at those points"),
             BridgeError::NotSequence => write!(f, "That is not a sequence layer"),

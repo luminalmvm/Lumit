@@ -2720,7 +2720,9 @@ dependencies = [
 name = "lumit_bridge"
 version = "0.11.1"
 dependencies = [
+ "blake3",
  "flutter_rust_bridge",
+ "getrandom 0.4.3",
  "image",
  "interprocess",
  "js-sys",

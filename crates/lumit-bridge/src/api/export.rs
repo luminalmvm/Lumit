@@ -655,6 +655,9 @@ pub struct BridgeExportQueueItem {
     pub range_start_frame: i64,
     pub range_end_frame: i64,
     pub state: BridgeExportQueueState,
+    /// The remote export this item does for another computer, empty for one of
+    /// this computer's own. Its other details are in `remote_jobs`.
+    pub job: String,
 }
 
 /// Where one queued item has got to.
@@ -785,6 +788,7 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                     BridgeExportQueueState::Failed { error }
                 }
             },
+            job: row.job.map(|job| job.to_string()).unwrap_or_default(),
         })
         .collect()
 }

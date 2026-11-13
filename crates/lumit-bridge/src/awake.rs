@@ -1,6 +1,8 @@
-//! Keeping the computer awake while an export runs.
+//! Keeping the computer awake while an export runs or a remote export's files
+//! move.
 //!
-//! A computer that sleeps halfway through an export stops it. So while
+//! A computer that sleeps halfway through an export stops it, and one that
+//! sleeps while a job's files cross keeps the other computer waiting. So while
 //! anything holds it, the system is asked not to sleep, and let go when the
 //! last hold goes. The screen may still turn off.
 //!

@@ -9,7 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'track.dart';
 
 // These functions are ignored because they are not marked as `pub`: `draw`, `open`, `own_pixels`, `window_plan`, `write_keys`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `NodeLuma`, `Source`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `NodeLuma`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `info`, `luma`
 
 /// Stop the window track running on the Correction `effect`. The frames

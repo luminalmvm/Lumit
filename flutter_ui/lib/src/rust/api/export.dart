@@ -439,6 +439,10 @@ class BridgeExportQueueItem {
   final int rangeEndFrame;
   final BridgeExportQueueState state;
 
+  /// The remote export this item does for another computer, empty for one of
+  /// this computer's own. Its other details are in `remote_jobs`.
+  final String job;
+
   const BridgeExportQueueItem({
     required this.id,
     this.group,
@@ -451,6 +455,7 @@ class BridgeExportQueueItem {
     required this.rangeStartFrame,
     required this.rangeEndFrame,
     required this.state,
+    required this.job,
   });
 
   @override
@@ -465,7 +470,8 @@ class BridgeExportQueueItem {
       codec.hashCode ^
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
-      state.hashCode;
+      state.hashCode ^
+      job.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -482,7 +488,8 @@ class BridgeExportQueueItem {
           codec == other.codec &&
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&
-          state == other.state;
+          state == other.state &&
+          job == other.job;
 }
 
 @freezed

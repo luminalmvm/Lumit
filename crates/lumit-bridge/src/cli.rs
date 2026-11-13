@@ -26,6 +26,7 @@ macro_rules! out {
 
 mod host;
 mod interrupt;
+mod job;
 mod relay;
 mod rows;
 mod vector;
@@ -121,6 +122,10 @@ enum Command {
         /// `None` for the project open in Lumit.
         project: Option<PathBuf>,
     },
+    /// A remote export another computer sent, which Lumit starts this for.
+    ExportJob {
+        folder: PathBuf,
+    },
 }
 
 /// Which comps `export` writes, and how.
@@ -194,6 +199,7 @@ fn main() -> i32 {
         Command::Mcp {
             project: Some(project),
         } => mcp(&project),
+        Command::ExportJob { folder } => job::export_job(&folder),
     };
     match done {
         Ok(()) => 0,
@@ -400,6 +406,9 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 args: script_args,
             })
         }
+        "export-job" => Ok(Command::ExportJob {
+            folder: one("a job folder")?,
+        }),
         "mcp" => {
             if !positional.is_empty() {
                 return Err("mcp takes the project with --project.".into());

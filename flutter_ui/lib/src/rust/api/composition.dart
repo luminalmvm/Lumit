@@ -34,6 +34,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'planes.dart';
 import 'project_item.dart';
+import 'remote.dart';
 import 'roto.dart';
 import 'routes.dart';
 import 'shape.dart';
@@ -2926,6 +2927,24 @@ class CompositionReference {
   Future<void> reloadData({required String folder}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceReloadData(
           that: this, folder: folder);
+
+  /// Whether `computer` can do this composition's export as the project now
+  /// stands, asking it when it hasn't been asked since the project changed.
+  BridgeRemoteFit remoteFit({required String computer}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceRemoteFit(
+          that: this, computer: computer);
+
+  /// Send this composition's export by `spec` to `computer`, or with an empty
+  /// one to whichever of the account's computers can do it soonest. With
+  /// `lands` `Sender` the file comes back to `path`. With `Worker` it stays
+  /// there, named as `path` names it. Answers the job.
+  String remoteSend(
+          {required String computer,
+          required BridgeExportSpec spec,
+          required String path,
+          required BridgeRemoteLands lands}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceRemoteSend(
+          that: this, computer: computer, spec: spec, path: path, lands: lands);
 
   /// Take controls away. Copies keep what they had set for them, unread, so
   /// undoing this brings every value back.

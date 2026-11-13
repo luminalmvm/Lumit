@@ -1267,6 +1267,7 @@ impl GpuContext {
             // Kept for the bridge, which writes it to the diagnostics file once
             // a session (see [`adapter_summary`]).
             let _ = ADAPTER_SUMMARY.set(summary);
+            card::keep(&info.name);
         }
         // wgpu's defaults for both of these panic. An engine crate may not panic
         // (docs/14-ENGINEERING-RULES.md), and neither condition is recoverable
@@ -3405,6 +3406,7 @@ mod tests {
     }
 }
 
+pub mod card;
 mod compiling;
 pub mod composite;
 pub mod device;
