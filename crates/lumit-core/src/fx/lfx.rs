@@ -419,9 +419,12 @@ fn def_for(name: &str, effect: &LfxEffect, category: FxCategory) -> &'static Lfx
     def
 }
 
-/// A leaked schema: the Custom shader's own Mix row, and its second input
-/// under the manifest's label when there is one. Its traits are the Custom
-/// shader's too, for the same reasons.
+/// A leaked schema: the Custom shader's own Mix row with the Blend choice
+/// beside it, and its second input under the manifest's label when there is
+/// one. Its traits are the Custom shader's too, for the same reasons. Blend is
+/// kept so an extension's effect combines with its input as every built-in
+/// does: a gradient laid over the layer in Multiply, Screen, Overlay and the
+/// rest.
 fn schema_for(match_name: &'static str, key: &ShapeKey) -> &'static EffectSchema {
     let base = &<CustomShader as EffectMetadata>::SCHEMA;
     let params: Vec<ParamSchema> = base
@@ -432,7 +435,7 @@ fn schema_for(match_name: &'static str, key: &ShapeKey) -> &'static EffectSchema
                 label: Box::leak(input.label.clone().into_boxed_str()),
                 ..*row
             }),
-            ("mix", _) => Some(*row),
+            ("mix" | "blend", _) => Some(*row),
             _ => None,
         })
         .collect();
@@ -611,6 +614,7 @@ mod tests {
         let (old_rows, old_key) = (rows(def), render_term(name));
         let def = install(effect(&TWO_PASS.replace("amount", "strength"))).expect("again");
         assert_eq!(old_rows, ["amount"]);
+        assert!(def.schema().blend(), "an extension's effect has the Blend row");
         assert_eq!(rows(def), ["strength"]);
         assert_ne!(render_term(name), old_key);
         assert_ne!(old_key, 0);

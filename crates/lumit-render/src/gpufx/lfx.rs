@@ -599,4 +599,51 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             .unwrap_or(u8::MAX);
         assert!(off <= 1, "off by {off}");
     }
+
+    /// An extension's effect has the Blend row every built-in has: a flat
+    /// grey drawn in Multiply darkens the plate by that grey, where Normal
+    /// replaces it. Guards wrong pixels.
+    #[test]
+    fn an_lfx_effect_blends_with_its_input() {
+        const GREY: &str = r"
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return vec4<f32>(0.5, 0.5, 0.5, 1.0);
+}
+";
+        let def = register(effect("blend_grey", GREY, &[])).expect("it installs");
+        assert!(def.schema().blend(), "the Blend row is there");
+        let grey = |mode: u32| {
+            let mut fx = lumit_core::fx::builtins::instantiate(def.schema().match_name)
+                .expect("instantiates");
+            let blend = fx
+                .params
+                .iter_mut()
+                .find(|p| p.id == lumit_core::fx::schema::BLEND_PARAM)
+                .expect("a fresh instance carries Blend");
+            blend.value = EffectValue::Choice(mode);
+            let (doc, comp) = project(vec![fx]);
+            (Arc::new(doc), comp)
+        };
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let centre = |rgba: &[u8]| {
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let (doc, comp) = grey(0);
+        let (normal, ..) = r.render_rgba(&doc, comp, 0, 1.0).expect("Normal renders");
+        let (doc, comp) = grey(2);
+        let (multiply, ..) = r.render_rgba(&doc, comp, 0, 1.0).expect("Multiply renders");
+        let enc = lumit_core::pixels::srgb_encode;
+        assert_eq!(centre(&normal), [enc(0.5); 3], "Normal is the grey");
+        let want = [enc(0.125), enc(0.2), enc(0.3)];
+        for (got, want) in centre(&multiply).iter().zip(want) {
+            assert!(
+                (i16::from(*got) - i16::from(want)).abs() <= 1,
+                "Multiply: got {got} want {want}"
+            );
+        }
+    }
 }
