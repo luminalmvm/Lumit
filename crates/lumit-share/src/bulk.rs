@@ -289,6 +289,8 @@ pub(crate) struct Hub {
     footage: Arc<dyn Footage>,
     limits: Arc<Limits>,
     host: bool,
+    /// A host whose one guest goes and comes back ([`Hub::patient`]).
+    patient: bool,
     stop: AtomicBool,
     next: AtomicU64,
     /// One a guest on the host, one at most on a guest.
@@ -300,7 +302,8 @@ pub(crate) struct Hub {
     /// Who has the original of which footage item, by person. An entry goes
     /// when the person does.
     holds: Mutex<HashMap<u32, Vec<Held>>>,
-    /// What a guest wants and has no link to ask down yet.
+    /// What a guest, or a patient host, wants and has no link to ask down
+    /// yet.
     waiting: Mutex<Vec<Wanted>>,
     /// What a peer asked this end for and has since said it does not want:
     /// the peer, and its request. Checked before a file is made and between
@@ -317,10 +320,23 @@ fn part(path: &Path) -> PathBuf {
 
 impl Hub {
     pub(crate) fn new(footage: Arc<dyn Footage>, limits: Arc<Limits>, host: bool) -> Arc<Hub> {
-        Arc::new(Hub {
+        Arc::new(Hub::with(footage, limits, host, false))
+    }
+
+    /// A host with one guest, which has nobody else to ask and comes back
+    /// when it drops, as the sender of an export done on another computer
+    /// does. What it wants with no link, or was taking when the link went,
+    /// waits for the next link rather than being refused.
+    pub(crate) fn patient(footage: Arc<dyn Footage>, limits: Arc<Limits>) -> Arc<Hub> {
+        Arc::new(Hub::with(footage, limits, true, true))
+    }
+
+    fn with(footage: Arc<dyn Footage>, limits: Arc<Limits>, host: bool, patient: bool) -> Hub {
+        Hub {
             footage,
             limits,
             host,
+            patient,
             stop: AtomicBool::new(false),
             next: AtomicU64::new(1),
             links: Mutex::new(Vec::new()),
@@ -329,7 +345,7 @@ impl Hub {
             holds: Mutex::new(HashMap::new()),
             waiting: Mutex::new(Vec::new()),
             withdrawn: Mutex::new(Vec::new()),
-        })
+        }
     }
 
     /// Stop every transfer and let go of every link.
@@ -431,17 +447,27 @@ impl Hub {
         }
         if !self.host {
             if self.out(0).is_none() {
-                let mut waiting = self.waiting.lock();
-                if !waiting.contains(&wanted) {
-                    waiting.push(wanted);
-                }
+                self.wait(wanted);
                 return;
             }
             self.ask(0, wanted);
             return;
         }
-        if !self.fetch(&wanted, None) {
+        if self.fetch(&wanted, None) {
+            return;
+        }
+        if self.patient && self.links.lock().is_empty() {
+            self.wait(wanted);
+        } else {
             self.footage.told(News::Refused { wanted });
+        }
+    }
+
+    /// Keep `wanted` to ask for on the next link.
+    fn wait(&self, wanted: Wanted) {
+        let mut waiting = self.waiting.lock();
+        if !waiting.contains(&wanted) {
+            waiting.push(wanted);
         }
     }
 
@@ -585,7 +611,8 @@ impl Hub {
     }
 
     /// On the host: `peer`'s link has gone. What it was giving is asked of
-    /// someone else, and what it was owed is let go of.
+    /// someone else, or on a patient host waits for it to come back, and
+    /// what it was owed is let go of.
     fn dropped(self: &Arc<Self>, peer: u32) {
         self.owed.lock().retain(|o| o.peer != peer);
         let lost: Vec<Wanted> = {
@@ -601,7 +628,9 @@ impl Hub {
                 .collect()
         };
         for wanted in lost {
-            if !self.stopped() && !self.fetch(&wanted, Some(peer)) {
+            if self.patient {
+                self.wait(wanted);
+            } else if !self.stopped() && !self.fetch(&wanted, Some(peer)) {
                 self.refuse(&wanted);
             }
         }
