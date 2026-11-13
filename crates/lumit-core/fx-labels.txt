@@ -769,6 +769,7 @@ Highlight saturation
 Highlight threshold
 Highlight tonal width
 Highlights
+Hit
 Hold
 Hold frame
 Hold off
