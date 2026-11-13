@@ -309,6 +309,10 @@ class LumitAppView extends StatefulWidget {
 }
 
 class _LumitAppViewState extends State<LumitAppView> {
+  /// Low-spec mode on battery's power reading, from after the first-run
+  /// questions until the window goes.
+  BatteryWatch? _battery;
+
   /// Lets go of this view's Escape claim (the maximised pane).
   VoidCallback? _escapeRelease;
 
@@ -378,6 +382,9 @@ class _LumitAppViewState extends State<LumitAppView> {
           // questions and before anything else opens.
           .then((_) => mounted ? maybeOfferLowSpec(context, ui) : null)
           .then((_) {
+        // Low-spec mode on battery follows the power from here, and is
+        // offered once the first time Lumit finds itself on battery.
+        if (mounted) _battery = BatteryWatch(ui)..start(context);
         // The update check follows the questions rather than racing them:
         // the setup screen is where somebody may have just switched it off.
         ui.maybeCheckForUpdates();
@@ -485,6 +492,7 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   @override
   void dispose() {
+    _battery?.stop();
     _share.removeListener(_offerConflicts);
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);

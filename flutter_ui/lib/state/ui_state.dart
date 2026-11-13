@@ -1267,9 +1267,13 @@ class LumitUiState extends ChangeNotifier {
   /// [_compResolution]). While it is on the playhead tells the panels at most
   /// [_lowSpecPlayheadHz] times a second during playback. Off, it puts the
   /// settings back as they were.
-  void setLowSpecMode(bool on) {
+  /// [byBattery] when Low-spec mode on battery turns it, so that only its own
+  /// turning on is undone when the power comes back; a hand on the switch
+  /// makes it the user's.
+  void setLowSpecMode(bool on, {bool byBattery = false}) {
     final perf = workspace.performance;
     if (perf.lowSpecMode == on) return;
+    perf.lowSpecByBattery = on && byBattery;
     final look = workspace.interface;
     if (on) {
       perf.lowSpecWas = {
@@ -1306,6 +1310,40 @@ class LumitUiState extends ChangeNotifier {
     }
     workspace.beforeLookChange?.call();
     workspace.recompose();
+    workspace.settingsChanged();
+  }
+
+  /// Follow the power, for Low-spec mode on battery: on when the computer
+  /// runs on battery or saves power and Low-spec mode is off, off again when
+  /// it is plugged back in, if it was the battery that turned it on. Only a
+  /// change of power counts, and the first reading: a switch turned off by
+  /// hand on battery stays off until the power has come and gone again.
+  void followBattery(bool saving) {
+    if (saving == _lastSaving) return;
+    _lastSaving = saving;
+    final perf = workspace.performance;
+    if (saving) {
+      if (perf.lowSpecOnBattery && !perf.lowSpecMode) {
+        setLowSpecMode(true, byBattery: true);
+      }
+    } else if (perf.lowSpecByBattery && perf.lowSpecMode) {
+      setLowSpecMode(false);
+    }
+  }
+
+  /// The power as [followBattery] last read it; null before the first reading.
+  bool? _lastSaving;
+
+  /// Settings ▸ Performance ▸ Low-spec mode on battery. Turned on, the next
+  /// reading counts as a change, so a computer already on battery follows at
+  /// once; turned off, what the battery turned on goes off.
+  void setLowSpecOnBattery(bool on) {
+    final perf = workspace.performance;
+    perf.lowSpecOnBattery = on;
+    _lastSaving = null;
+    if (!on && perf.lowSpecByBattery && perf.lowSpecMode) {
+      setLowSpecMode(false);
+    }
     workspace.settingsChanged();
   }
 

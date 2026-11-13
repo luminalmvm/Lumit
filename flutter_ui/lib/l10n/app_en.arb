@@ -9980,6 +9980,18 @@
   "@lowSpecOfferNo": {
     "description": "Button in the Low-spec mode offer: leaves the settings as they are. The offer is not shown again."
   },
+  "settingsLowSpecOnBattery": "Low-spec mode on battery",
+  "@settingsLowSpecOnBattery": {
+    "description": "Settings window, Performance: switch under Low-spec mode. On, Low-spec mode comes on by itself while the computer runs on battery or saves power, and goes off again when it is plugged back in. Off by default."
+  },
+  "lowSpecBatteryOfferTitle": "Lumit is on battery",
+  "@lowSpecBatteryOfferTitle": {
+    "description": "Title of the question Lumit asks once, the first time it finds the computer on battery or saving power: whether to use Low-spec mode whenever that happens."
+  },
+  "lowSpecBatteryOfferBody": "On battery the graphics card runs slower. Lumit can switch to Low-spec mode by itself whenever this computer runs on battery, and back when it is plugged in. It can be changed at any time in Settings, Performance.",
+  "@lowSpecBatteryOfferBody": {
+    "description": "Body of the question Lumit asks once on battery. Low-spec mode turns motion, transparency and the preview's resolution down together."
+  },
   "tipShownSize": "Shown size",
   "@tipShownSize": {
     "description": "Tooltip on the Viewer deck's mark for Decode footage at shown size: lit while footage shown smaller is decoded smaller for the preview."

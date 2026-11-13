@@ -3770,6 +3770,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _flag(t, 'settings-low-spec', l10n.settingsLowSpecMode,
               value: ui.workspace.performance.lowSpecMode,
               set: (on) => setState(() => ui.setLowSpecMode(on))),
+          _flag(t, 'settings-low-spec-on-battery',
+              l10n.settingsLowSpecOnBattery,
+              value: ui.workspace.performance.lowSpecOnBattery,
+              set: (on) => setState(() => ui.setLowSpecOnBattery(on))),
           _row(
             t,
             l10n.settingsWhenTheMachineCannotKeep,

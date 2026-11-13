@@ -104,6 +104,18 @@ class PerformanceSettings {
   /// Whether Lumit has already offered Low-spec mode on this machine.
   bool lowSpecOffered;
 
+  /// **Low-spec mode on battery**: Low-spec mode comes on by itself while the
+  /// computer runs on battery or saves power, and goes off again when it is
+  /// plugged back in. Off by default: a strong laptop has no need of it.
+  bool lowSpecOnBattery;
+
+  /// Whether Lumit has already offered [lowSpecOnBattery].
+  bool lowSpecBatteryOffered;
+
+  /// Whether the battery, rather than the user, turned Low-spec mode on, so
+  /// only that is undone when the power comes back.
+  bool lowSpecByBattery;
+
   /// Whether footage is decoded by the graphics card's video unit. On by
   /// default. Off is slower, and is the way out when a graphics driver
   /// misbehaves with it.
@@ -145,6 +157,9 @@ class PerformanceSettings {
     this.lowSpecMode = false,
     this.lowSpecWas,
     this.lowSpecOffered = false,
+    this.lowSpecOnBattery = false,
+    this.lowSpecBatteryOffered = false,
+    this.lowSpecByBattery = false,
     this.hardwareDecode = true,
     this.largestPicture,
   });
@@ -165,6 +180,9 @@ class PerformanceSettings {
         'low_spec_mode': lowSpecMode,
         if (lowSpecWas != null) 'low_spec_was': lowSpecWas,
         'low_spec_offered': lowSpecOffered,
+        'low_spec_on_battery': lowSpecOnBattery,
+        'low_spec_battery_offered': lowSpecBatteryOffered,
+        'low_spec_by_battery': lowSpecByBattery,
         'hardware_decode': hardwareDecode,
         if (largestPicture != null) 'largest_picture': largestPicture,
       };
@@ -208,6 +226,9 @@ class PerformanceSettings {
             ? j['low_spec_was'] as Map<String, dynamic>
             : null,
         lowSpecOffered: j['low_spec_offered'] == true,
+        lowSpecOnBattery: j['low_spec_on_battery'] == true,
+        lowSpecBatteryOffered: j['low_spec_battery_offered'] == true,
+        lowSpecByBattery: j['low_spec_by_battery'] == true,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
         largestPicture: _positiveInt(j['largest_picture']),
