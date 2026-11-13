@@ -47,6 +47,7 @@ Alpha
 Alpha bias
 Alpha blur
 Alpha from
+Alternate
 Alternate rows
 Altitude
 Ambient
@@ -1270,6 +1271,7 @@ Ramp
 Random
 Random hue
 Random offset scale
+Random order
 Random origin
 Random rate
 Random span offsets
@@ -1492,8 +1494,10 @@ Size with distance
 Skew
 Skew axis
 Slice end
+Slice glitch
 Slice repeat
 Slice start
+Slices
 Slide
 Slide left
 Slide right

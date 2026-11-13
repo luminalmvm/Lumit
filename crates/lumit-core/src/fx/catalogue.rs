@@ -198,6 +198,7 @@ use super::effects::{
     shake::{Shake, ShakeDef},
     sharpen::{Sharpen, SharpenDef},
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
+    slices::{Slices, SlicesDef},
     slider_control::{SliderControl, SliderControlDef},
     smoke::{Smoke, SmokeDef},
     sort_points::{SortPoints, SortPointsDef},
@@ -465,6 +466,7 @@ crate::catalogue![
     CardWipeDef => CardWipe,
     LumaFadeDef => LumaFade,
     MoveTransitionDef => MoveTransition,
+    SlicesDef => Slices,
     // The one effect whose program the user writes, appended at the
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.

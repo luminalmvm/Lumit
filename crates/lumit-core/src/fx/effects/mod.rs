@@ -138,6 +138,7 @@ pub mod shadow_highlight;
 pub mod shake;
 pub mod sharpen;
 pub mod sharpen_simple;
+pub mod slices;
 pub mod slider_control;
 pub mod smoke;
 pub mod sort_points;

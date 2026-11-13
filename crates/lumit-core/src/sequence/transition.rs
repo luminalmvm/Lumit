@@ -127,6 +127,12 @@ pub const TABLE: &[Kind] = &[
         sweep: Sweep::Both,
         looks: crate::fx::effects::move_transition::MOVE_LOOKS,
     },
+    Kind {
+        name: "slices",
+        group: Group::Moves,
+        sweep: Sweep::Both,
+        looks: crate::fx::effects::slices::SLICES_LOOKS,
+    },
     hit(
         "flash",
         &[("intensity", Steep)],
@@ -352,16 +358,19 @@ pub fn incoming_over(effect: &EffectInstance) -> bool {
         && matches!(effect.param("moves"), Some(EffectValue::Choice(2)))
 }
 
-/// Whether the two clips only ever sit side by side, its rows read at `lt`: a
-/// Move when both travel at least a frame in a straight line, with nothing
-/// round them. Their smeared edges then add up to a whole picture, where one
-/// laid over the other would leave a dark seam.
+/// Whether the two clips only ever sit side by side, its rows read at `lt`:
+/// always for Slices, and for a Move when both travel at least a frame in a
+/// straight line, with nothing round them. Their smeared edges then add up to
+/// a whole picture, where one laid over the other would leave a dark seam.
 #[must_use]
 pub fn side_by_side(effect: &EffectInstance, lt: f64) -> bool {
     let float = |id: &str| match effect.param(id) {
         Some(EffectValue::Float(v)) => v.value_at(lt),
         _ => f64::NAN,
     };
+    if effect.effect.match_name == "slices" {
+        return true;
+    }
     effect.effect.match_name == "move"
         && matches!(effect.param("moves"), Some(EffectValue::Choice(0)))
         && matches!(effect.param("edge"), Some(EffectValue::Choice(0)))

@@ -13876,6 +13876,22 @@
   "@fxZoomSpin": {
     "description": "Transition look: the outgoing picture zooms in and turns, and the incoming one arrives the same way."
   },
+  "fxSlices": "Slices",
+  "@fxSlices": {
+    "description": "Effect name in the Effects list, and a look in the cut timeline's Transition menu. The outgoing picture is cut into strips that slide out one after another, with the incoming picture's strips right behind them."
+  },
+  "fxSliceGlitch": "Slice glitch",
+  "@fxSliceGlitch": {
+    "description": "Cut timeline, Transition menu, and a Slices preset: many thin strips that leave in a random order, smeared as they go."
+  },
+  "fxAlternate": "Alternate",
+  "@fxAlternate": {
+    "description": "Effect Controls, Slices: a switch. When on, every other strip travels the opposite way."
+  },
+  "fxRandomOrder": "Random order",
+  "@fxRandomOrder": {
+    "description": "Effect Controls, Slices: a switch. When on, the strips set off in a seeded random order instead of one after another."
+  },
   "cutRemoveTransition": "Remove transition",
   "@cutRemoveTransition": {
     "description": "Cut timeline, Transition list: take the transition off the edit point nearer the pointer, so the two clips meet at a plain cut again."

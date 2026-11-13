@@ -45,6 +45,7 @@ pub mod particulate_scene;
 pub mod particulate_sim;
 pub mod points_draw;
 pub mod points_field;
+pub mod slices;
 pub mod smoke;
 pub mod split;
 pub mod sprite_flare;
@@ -326,6 +327,8 @@ pub struct FxEngine {
     shake_mb: wgpu::ComputePipeline,
     /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
     jolt: wgpu::ComputePipeline,
+    /// Slices: strips read back along their length, one pass.
+    slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.

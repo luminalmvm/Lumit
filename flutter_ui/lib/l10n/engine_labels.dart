@@ -2088,6 +2088,11 @@ Map<String, String> get _built => {
       "Whip down": l10n.fxWhipDown,
       "RGB whip": l10n.fxRgbWhip,
       "Zoom spin": l10n.fxZoomSpin,
+      // Slices, and its looks.
+      "Slices": l10n.fxSlices,
+      "Slice glitch": l10n.fxSliceGlitch,
+      "Alternate": l10n.fxAlternate,
+      "Random order": l10n.fxRandomOrder,
       // Settings -> Keymap: what each shortcut does, and the headings saying
       // where it is live (crates/lumit-keymap/src/lib.rs).
       "Play or pause": l10n.keyPlayOrPause,
