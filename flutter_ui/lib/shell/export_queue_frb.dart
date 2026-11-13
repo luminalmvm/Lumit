@@ -490,12 +490,8 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// one: at the foot of the window, where its right-click lands. Its rows
   /// then answer the arrows and Enter as every menu's do.
   KeyEventResult _menuKey(FocusNode node, KeyEvent event) {
-    final key = event.logicalKey;
-    final asked = key == LogicalKeyboardKey.contextMenu ||
-        (key == LogicalKeyboardKey.f10 &&
-            HardwareKeyboard.instance.isShiftPressed);
     final box = context.findRenderObject();
-    if (event is! KeyDownEvent || !asked || box is! RenderBox) {
+    if (!_asksMenu(event) || box is! RenderBox) {
       return KeyEventResult.ignored;
     }
     _queueMenu(box.localToGlobal(Offset(24, box.size.height - 24)));
@@ -824,7 +820,9 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.
-  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => GestureDetector(
+  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => _MenuKeyRow(
+      open: (at) => _showMenu(t, item, at),
+      child: GestureDetector(
       onSecondaryTapDown: (press) => _showMenu(t, item, press.globalPosition),
       // The row's marks come up with the pointer. A row that is doing nothing
       // only says what it is.
@@ -911,7 +909,7 @@ class _ExportQueueState extends State<_ExportQueue> {
         ),
       ),
       ),
-    );
+    ));
 
   /// A row's menu: what can be done with it as it stands, Remove last.
   void _showMenu(LumitTheme t, BridgeExportQueueItem item, Offset at) {
@@ -1290,7 +1288,9 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   /// An export sent to another computer, or one arriving here, in the same
   /// columns as the queue's own rows.
-  Widget _jobRow(LumitTheme t, BridgeRemoteJob job) => GestureDetector(
+  Widget _jobRow(LumitTheme t, BridgeRemoteJob job) => _MenuKeyRow(
+      open: (at) => _jobMenu(job, at),
+      child: GestureDetector(
         key: ValueKey<String>('export-queue-job-${job.job}'),
         onSecondaryTapDown: (press) => _jobMenu(job, press.globalPosition),
         child: HoverMark(
@@ -1340,7 +1340,7 @@ class _ExportQueueState extends State<_ExportQueue> {
             ]),
           ),
         ),
-      );
+      ));
 
   /// The mark that cancels a job under way, and forgets one that has ended.
   Widget _jobDrop(LumitTheme t, BridgeRemoteJob job) {
@@ -1689,4 +1689,53 @@ String exportMinutesLeft(double exact) {
   return minutes < 120
       ? l10n.exportLeftMinutes('$minutes')
       : l10n.exportLeftHours('${(minutes / 60).round()}');
+}
+
+/// Whether [event] asks for a menu from the keyboard: the menu key, or
+/// Shift+F10.
+bool _asksMenu(KeyEvent event) =>
+    event is KeyDownEvent &&
+    (event.logicalKey == LogicalKeyboardKey.contextMenu ||
+        (event.logicalKey == LogicalKeyboardKey.f10 &&
+            HardwareKeyboard.instance.isShiftPressed));
+
+/// A row Tab can land on, whose menu the menu key or Shift+F10 opens under
+/// it, as a right-click on it does. The accent edge is its focus ring.
+class _MenuKeyRow extends StatefulWidget {
+  const _MenuKeyRow({required this.open, required this.child});
+
+  /// Open the row's menu at a point on the screen.
+  final void Function(Offset at) open;
+  final Widget child;
+
+  @override
+  State<_MenuKeyRow> createState() => _MenuKeyRowState();
+}
+
+class _MenuKeyRowState extends State<_MenuKeyRow> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Focus(
+      onFocusChange: (has) => setState(() => _focused = has),
+      onKeyEvent: (node, event) {
+        final box = context.findRenderObject();
+        if (!_asksMenu(event) || box is! RenderBox) {
+          return KeyEventResult.ignored;
+        }
+        widget.open(box.localToGlobal(Offset(24, box.size.height)));
+        return KeyEventResult.handled;
+      },
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: _focused
+            ? BoxDecoration(
+                border: Border(left: BorderSide(color: t.accent, width: 2)))
+            : const BoxDecoration(),
+        child: widget.child,
+      ),
+    );
+  }
 }
