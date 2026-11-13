@@ -79,6 +79,10 @@ struct Run {
     /// The queued item the handle belongs to, when the export in flight
     /// came from the queue rather than from a direct start.
     current: Option<u32>,
+    /// A direct start whose end nobody has polled yet. The queue starts
+    /// nothing meanwhile, or the next item would take over the state its
+    /// poll is waiting to read.
+    direct_unread: bool,
 }
 
 static EXPORT: OnceLock<Mutex<Run>> = OnceLock::new();
@@ -93,6 +97,7 @@ fn slot() -> &'static Mutex<Run> {
             next_id: 1,
             running: false,
             current: None,
+            direct_unread: false,
         })
     })
 }
@@ -123,6 +128,7 @@ pub(super) fn start_with_document(
     match launch(&mut guard, &doc, comp, spec, &out_path) {
         Ok(()) => {
             guard.current = None;
+            guard.direct_unread = true;
             json!({ "ok": true }).to_string()
         }
         Err(e) => err_json(e),
@@ -420,7 +426,7 @@ pub(super) fn queue_remove(id: u32) {
 /// thread of its own: every caller here already holds the lock, and the
 /// queue moves on the same 250 ms tick the progress does.
 fn pump(run: &mut Run) {
-    while run.handle.is_none() && run.running {
+    while run.handle.is_none() && run.running && !run.direct_unread {
         let Some(index) = run
             .queue
             .iter()
@@ -490,6 +496,10 @@ pub(super) fn queue_again(id: u32) -> Option<u32> {
 pub(super) fn poll() -> String {
     let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
     drain(&mut guard);
+    // Its end is read now, so the queue may go on.
+    if matches!(guard.state, State::Done { .. } | State::Failed { .. }) {
+        guard.direct_unread = false;
+    }
     match &guard.state {
         State::Idle => json!({ "ok": true, "state": "idle" }).to_string(),
         State::Running {
