@@ -5,7 +5,7 @@
 use flutter_rust_bridge::frb;
 use lumit_core::anim::{Animation, Keyframe, SideInterp};
 use lumit_core::model::LayerKind;
-use lumit_core::sequence::transition::{swept_rows, KINDS};
+use lumit_core::sequence::transition::{swept_rows, Group, TABLE};
 use lumit_core::sequence::Clip;
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
@@ -27,6 +27,11 @@ pub struct BridgeTransitionKind {
     pub match_name: String,
     /// The effect's own label, as Effect controls heads it.
     pub label: String,
+    /// Which flyout of the menu it sits in: 0 Wipes, 1 Moves, 2 Hits.
+    pub group: u8,
+    /// Its looks by name, in menu order, the first being what it starts as.
+    /// Empty for a kind with none.
+    pub looks: Vec<String>,
     /// The rows the overlap decides for it, which Effect controls leaves out.
     pub swept_rows: Vec<String>,
 }
@@ -34,14 +39,23 @@ pub struct BridgeTransitionKind {
 /// Every kind an overlap can be, in menu order.
 #[frb(sync)]
 pub fn cut_transition_kinds() -> Vec<BridgeTransitionKind> {
-    KINDS
+    TABLE
         .iter()
-        .filter_map(|name| {
-            let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(*name)?;
+        .filter_map(|kind| {
+            let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(kind.name)?;
             Some(BridgeTransitionKind {
-                match_name: (*name).to_string(),
+                match_name: kind.name.to_string(),
                 label: def.schema().label.to_string(),
-                swept_rows: swept_rows(name).iter().map(|r| (*r).to_string()).collect(),
+                group: match kind.group {
+                    Group::Wipes => 0,
+                    Group::Moves => 1,
+                    Group::Hits => 2,
+                },
+                looks: kind.looks.iter().map(|l| l.name.to_string()).collect(),
+                swept_rows: swept_rows(kind.name)
+                    .iter()
+                    .map(|r| (*r).to_string())
+                    .collect(),
             })
         })
         .collect()
@@ -134,9 +148,10 @@ impl CompositionReference {
     }
 
     /// Make the overlap at this edge of `clip` the kind named by its match
-    /// name, or the dissolve with `None`. An edit point that only meets gets an
-    /// overlap of `frames` first. Asked for the kind it already is, an overlap
-    /// keeps the rows it was given.
+    /// name at `look`, by its place among the kind's looks, or the dissolve
+    /// with `None`. An edit point that only meets gets an overlap of `frames`
+    /// first. Asked for the kind it already is with no look, an overlap keeps
+    /// the rows it was given.
     #[frb(sync)]
     pub fn cut_set_transition(
         &self,
@@ -144,9 +159,11 @@ impl CompositionReference {
         end_edge: bool,
         frames: i64,
         kind: Option<String>,
+        look: Option<u32>,
         linked: bool,
     ) -> Result<BridgeCutResult, BridgeError> {
-        cut::transition::set_kind(self, clip, end_edge, frames, kind.as_deref(), linked)
+        let kind = kind.as_deref();
+        cut::transition::set_kind(self, clip, end_edge, frames, kind, look, linked)
     }
 }
 

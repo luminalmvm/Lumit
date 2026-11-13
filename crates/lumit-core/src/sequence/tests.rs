@@ -806,3 +806,24 @@ fn the_new_fields_are_absent_until_set_and_round_trip_when_they_are() {
     let text = serde_json::to_string(&set).unwrap();
     assert_eq!(serde_json::from_str::<Clip>(&text).unwrap(), set);
 }
+
+/// A Peak kind is nothing at either end of its overlap and as stored in the
+/// middle, so a hit never shows on a clip outside the overlap.
+#[test]
+fn a_peak_row_is_nothing_at_both_ends_and_stored_in_the_middle() {
+    use super::transition::{fresh, swept, Side};
+    let blur = fresh("blur", None, 1920.0, 1080.0).unwrap();
+    let row = |e: &crate::model::EffectInstance, id: &str| match e.param(id) {
+        Some(crate::model::EffectValue::Float(p)) => p.value_at(0.0),
+        _ => f64::NAN,
+    };
+    let stored = row(&blur, "radius");
+    assert!(stored > 0.0);
+    for (u, radius, mix) in [(0.0, 0.0, 0.0), (0.5, stored, 100.0), (1.0, 0.0, 0.0)] {
+        for side in [Side::Out, Side::In] {
+            let at = swept(&blur, u, side, 1920.0, 1080.0, 0.0);
+            assert!((row(&at, "radius") - radius).abs() < 1e-6, "radius at {u}");
+            assert!((row(&at, "mix") - mix).abs() < 1e-6, "mix at {u}");
+        }
+    }
+}

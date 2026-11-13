@@ -174,6 +174,7 @@ Blue phase
 Blues
 Blur
 Blur & sharpen
+Blur dissolve
 Blur radius
 Blur size
 Boolean
@@ -433,6 +434,7 @@ Detector
 Diagonal
 Difference
 Digital
+Dip to black
 Direction
 Direction x
 Direction y
@@ -672,7 +674,9 @@ Ghost softness
 Glass
 Glass curvature
 Glass dirt
+Glitch
 Glitch hit
+Glitch slices
 Global balance
 Glow
 Glow colour
@@ -1176,6 +1180,7 @@ Pipe segments
 Pivot
 Pixel motion
 Pixel sort
+Pixelate
 Pixels
 Place
 Place x
@@ -1479,6 +1484,7 @@ Slider control
 Slope
 Slope channel
 Slow motion with blur
+Smear
 Smoke
 Smoke and fire
 Smoke colour
@@ -1533,6 +1539,7 @@ Sphere
 Spherize
 Spiky
 Spin
+Spin blur
 Spiral
 Split
 Split channels
@@ -1848,6 +1855,7 @@ Z wave frequency
 Z wave phase
 Zebra
 Zoom
+Zoom blur
 sRGB
 sRGB curve
 sRGB to linear

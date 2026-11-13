@@ -67,8 +67,9 @@ composites over it.
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
   earlier goes out, through the later clip's fade-in shape, for as long as they overlap. On
-  an audio-only layer it is a crossfade. A picture overlap may instead be a **transition**,
-  one of the Transition effects run over the earlier clip. A fade at an end nothing overlaps
+  an audio-only layer it is a crossfade. A picture overlap may instead be a **transition**:
+  a Transition kind runs on the outgoing clip, or on both clips, across the overlap. A
+  kind's named variants are its **looks**. A fade at an end nothing overlaps
   runs to transparent, or to silence. A cut between clips is an **edit point**.
 - **Linked clips**: a picture clip and its sound clip, on two Sequence layers, that move,
   trim and cut together while Linked is on.
@@ -193,7 +194,7 @@ Not interchangeable.
 | **Playhead** | The current time. Not *CTI* |
 | **Scopes** | Waveform, RGB parade, vectorscope, histogram, CIE chromaticity. One, two or four in a panel |
 | **Grade panel** | The selected layer's grade as wheels, primaries, curves and a look, over its Colour effects |
-| **Look** | A preset of Colour effects in the library's Looks group, picked from the Grade panel. It takes the place of the layer's grade |
+| **Look** | A preset of Colour effects in the library's Looks group, picked from the Grade panel. It takes the place of the layer's grade. A Transition kind's looks are a separate thing |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
 | **Retime panel** | The selected layer's speed, length, freeze, reverse and in-between frames |
 | **Text panel** | Sets a text layer's font, size, spacing and outline |

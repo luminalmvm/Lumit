@@ -1597,14 +1597,16 @@ class CompositionReference {
           that: this, clip: clip, take: take);
 
   /// Make the overlap at this edge of `clip` the kind named by its match
-  /// name, or the dissolve with `None`. An edit point that only meets gets an
-  /// overlap of `frames` first. Asked for the kind it already is, an overlap
-  /// keeps the rows it was given.
+  /// name at `look`, by its place among the kind's looks, or the dissolve
+  /// with `None`. An edit point that only meets gets an overlap of `frames`
+  /// first. Asked for the kind it already is with no look, an overlap keeps
+  /// the rows it was given.
   BridgeCutResult cutSetTransition(
           {required UuidValue clip,
           required bool endEdge,
           required int frames,
           String? kind,
+          int? look,
           required bool linked}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutSetTransition(
@@ -1613,6 +1615,7 @@ class CompositionReference {
               endEdge: endEdge,
               frames: frames,
               kind: kind,
+              look: look,
               linked: linked);
 
   /// Shorten every pause longer than `longer_than_ms` to `keep_ms`, or only

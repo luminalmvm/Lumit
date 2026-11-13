@@ -85,6 +85,10 @@ pub fn user_facing_labels() -> BTreeSet<String> {
             out.insert(preset.name.to_owned());
         }
     }
+    // The looks a cut's Transition menu offers.
+    for kind in crate::sequence::transition::TABLE {
+        out.extend(kind.looks.iter().map(|l| l.name.to_owned()));
+    }
     for def in super::catalogue::BUILTIN_DEFS.iter() {
         let signature = def.signature();
         for port in signature.inputs().iter().chain(signature.outputs()) {

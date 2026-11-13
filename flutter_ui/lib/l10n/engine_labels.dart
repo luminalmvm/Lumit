@@ -2054,6 +2054,15 @@ Map<String, String> get _built => {
       "Plastic": l10n.fxPlastic,
       "Rubber": l10n.fxRubber,
       "Emissive": l10n.fxEmissive,
+      // The looks a cut's Transition menu offers.
+      "Dip to black": l10n.fxDipToBlack,
+      "Blur dissolve": l10n.fxBlurDissolve,
+      "Smear": l10n.fxSmear,
+      "Zoom blur": l10n.fxZoomBlur,
+      "Spin blur": l10n.fxSpinBlur,
+      "Glitch": l10n.fxGlitch,
+      "Glitch slices": l10n.fxGlitchSlices,
+      "Pixelate": l10n.fxPixelate,
       // Settings -> Keymap: what each shortcut does, and the headings saying
       // where it is live (crates/lumit-keymap/src/lib.rs).
       "Play or pause": l10n.keyPlayOrPause,

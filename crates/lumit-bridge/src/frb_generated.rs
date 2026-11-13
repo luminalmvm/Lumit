@@ -6922,6 +6922,7 @@ fn wire__crate__api__composition__composition_reference_cut_set_transition_impl(
             let api_end_edge = <bool>::sse_decode(&mut deserializer);
             let api_frames = <i64>::sse_decode(&mut deserializer);
             let api_kind = <Option<String>>::sse_decode(&mut deserializer);
+            let api_look = <Option<u32>>::sse_decode(&mut deserializer);
             let api_linked = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
@@ -6931,6 +6932,7 @@ fn wire__crate__api__composition__composition_reference_cut_set_transition_impl(
                     api_end_edge,
                     api_frames,
                     api_kind,
+                    api_look,
                     api_linked,
                 )?;
                 Ok(output_ok)
@@ -46065,10 +46067,14 @@ impl SseDecode for crate::api::clip_edits::BridgeTransitionKind {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_matchName = <String>::sse_decode(deserializer);
         let mut var_label = <String>::sse_decode(deserializer);
+        let mut var_group = <u8>::sse_decode(deserializer);
+        let mut var_looks = <Vec<String>>::sse_decode(deserializer);
         let mut var_sweptRows = <Vec<String>>::sse_decode(deserializer);
         return crate::api::clip_edits::BridgeTransitionKind {
             match_name: var_matchName,
             label: var_label,
+            group: var_group,
+            looks: var_looks,
             swept_rows: var_sweptRows,
         };
     }
@@ -63616,6 +63622,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::clip_edits::BridgeTransitionK
         [
             self.match_name.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
+            self.group.into_into_dart().into_dart(),
+            self.looks.into_into_dart().into_dart(),
             self.swept_rows.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -71446,6 +71454,8 @@ impl SseEncode for crate::api::clip_edits::BridgeTransitionKind {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.match_name, serializer);
         <String>::sse_encode(self.label, serializer);
+        <u8>::sse_encode(self.group, serializer);
+        <Vec<String>>::sse_encode(self.looks, serializer);
         <Vec<String>>::sse_encode(self.swept_rows, serializer);
     }
 }

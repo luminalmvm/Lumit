@@ -13736,6 +13736,38 @@
   "@cutDissolve": {
     "description": "Cut timeline, Transition list: the overlap fades one clip into the other. The rest of the list is the Transition effects, by name."
   },
+  "fxDipToBlack": "Dip to black",
+  "@fxDipToBlack": {
+    "description": "Cut timeline, Transition menu: a Flash look that goes to black in the middle of the cut."
+  },
+  "fxBlurDissolve": "Blur dissolve",
+  "@fxBlurDissolve": {
+    "description": "Cut timeline, Transition menu: the two clips blur as they dissolve, sharpest at both ends."
+  },
+  "fxSmear": "Smear",
+  "@fxSmear": {
+    "description": "Cut timeline, Transition menu: a sideways streak that swells over the cut."
+  },
+  "fxZoomBlur": "Zoom blur",
+  "@fxZoomBlur": {
+    "description": "Cut timeline, Transition menu: a Radial blur look that streaks out from the middle over the cut."
+  },
+  "fxSpinBlur": "Spin blur",
+  "@fxSpinBlur": {
+    "description": "Cut timeline, Transition menu: a Radial blur look that blurs round the middle over the cut."
+  },
+  "fxGlitch": "Glitch",
+  "@fxGlitch": {
+    "description": "Cut timeline, Transition menu: a Block glitch look that tears the picture into blocks over the cut."
+  },
+  "fxGlitchSlices": "Glitch slices",
+  "@fxGlitchSlices": {
+    "description": "Cut timeline, Transition menu: a Block glitch look that tears the picture into repeating strips over the cut."
+  },
+  "fxPixelate": "Pixelate",
+  "@fxPixelate": {
+    "description": "Cut timeline, Transition menu: the picture breaks into big blocks and back over the cut."
+  },
   "cutRemoveTransition": "Remove transition",
   "@cutRemoveTransition": {
     "description": "Cut timeline, Transition list: take the transition off the edit point nearer the pointer, so the two clips meet at a plain cut again."

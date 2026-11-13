@@ -853,6 +853,7 @@ abstract class BridgeLibApi extends BaseApi {
       required bool endEdge,
       required int frames,
       String? kind,
+      int? look,
       required bool linked});
 
   BridgeCutResult crateApiCompositionCompositionReferenceCutShortenPauses(
@@ -9346,6 +9347,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required bool endEdge,
       required int frames,
       String? kind,
+      int? look,
       required bool linked}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
@@ -9355,6 +9357,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_bool(endEdge, serializer);
         sse_encode_CastedPrimitive_i_64(frames, serializer);
         sse_encode_opt_String(kind, serializer);
+        sse_encode_opt_box_autoadd_u_32(look, serializer);
         sse_encode_bool(linked, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 177)!;
       },
@@ -9365,7 +9368,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ),
       constMeta:
           kCrateApiCompositionCompositionReferenceCutSetTransitionConstMeta,
-      argValues: [that, clip, endEdge, frames, kind, linked],
+      argValues: [that, clip, endEdge, frames, kind, look, linked],
       apiImpl: this,
     ));
   }
@@ -9374,7 +9377,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceCutSetTransitionConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_cut_set_transition",
-            argNames: ["that", "clip", "endEdge", "frames", "kind", "linked"],
+            argNames: [
+              "that",
+              "clip",
+              "endEdge",
+              "frames",
+              "kind",
+              "look",
+              "linked"
+            ],
           );
 
   @override
@@ -42076,12 +42087,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeTransitionKind dco_decode_bridge_transition_kind(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BridgeTransitionKind(
       matchName: dco_decode_String(arr[0]),
       label: dco_decode_String(arr[1]),
-      sweptRows: dco_decode_list_String(arr[2]),
+      group: dco_decode_u_8(arr[2]),
+      looks: dco_decode_list_String(arr[3]),
+      sweptRows: dco_decode_list_String(arr[4]),
     );
   }
 
@@ -52818,9 +52831,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_matchName = sse_decode_String(deserializer);
     var var_label = sse_decode_String(deserializer);
+    var var_group = sse_decode_u_8(deserializer);
+    var var_looks = sse_decode_list_String(deserializer);
     var var_sweptRows = sse_decode_list_String(deserializer);
     return BridgeTransitionKind(
-        matchName: var_matchName, label: var_label, sweptRows: var_sweptRows);
+        matchName: var_matchName,
+        label: var_label,
+        group: var_group,
+        looks: var_looks,
+        sweptRows: var_sweptRows);
   }
 
   @protected
@@ -63444,6 +63463,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.matchName, serializer);
     sse_encode_String(self.label, serializer);
+    sse_encode_u_8(self.group, serializer);
+    sse_encode_list_String(self.looks, serializer);
     sse_encode_list_String(self.sweptRows, serializer);
   }
 
