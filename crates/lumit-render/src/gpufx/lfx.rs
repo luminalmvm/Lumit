@@ -745,4 +745,35 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             "Alpha ramp is laid over the layer",
         );
     }
+
+    /// Particulate's Composite on original: on, its layer's own picture is
+    /// under the particles; off, the layer is clear where no particle is and
+    /// the comp's black shows. The emitter sits at a 1080p centre, outside
+    /// this small comp, so no particle lands on the pixel read. Kept with the
+    /// plate this module already builds. Guards a solid that should vanish.
+    #[test]
+    fn particulate_off_its_original_leaves_the_layer_clear() {
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let mut render = |on: bool| {
+            let mut fx = lumit_core::fx::builtins::instantiate("particulate").expect("a built-in");
+            let row = fx
+                .params
+                .iter_mut()
+                .find(|p| p.id == "composite_on_original")
+                .expect("the row");
+            row.value = EffectValue::Bool(on);
+            let (doc, comp) = project(vec![fx]);
+            let (rgba, ..) = r
+                .render_rgba(&Arc::new(doc), comp, 0, 1.0)
+                .expect("it renders");
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let enc = lumit_core::pixels::srgb_encode;
+        assert_eq!(render(true), [enc(0.25), enc(0.4), enc(0.6)], "the plate");
+        assert_eq!(render(false), [0, 0, 0], "the comp's black");
+    }
 }

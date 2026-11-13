@@ -13670,6 +13670,13 @@
           "unit": "raw"
         },
         {
+          "id": "composite_on_original",
+          "label": "Composite on original",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",

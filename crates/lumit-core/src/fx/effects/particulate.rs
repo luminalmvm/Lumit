@@ -751,6 +751,13 @@ pub struct Particulate {
     #[seed]
     pub seed: u32,
 
+    /// On, the particles are drawn over the layer's own picture (a solid's
+    /// colour, footage, the effects above); off, over nothing, so the layer is
+    /// clear wherever no particle is and what is under it shows through. On by
+    /// default: the picture every Particulate drew before the row existed.
+    #[toggle(label = "Composite on original", default = true)]
+    pub composite_on_original: bool,
+
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
