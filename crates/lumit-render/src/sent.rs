@@ -91,3 +91,19 @@ pub fn adopt(doc: &Document, id: Uuid, bytes: &[u8]) -> bool {
     track::run(job, &AtomicBool::new(false));
     true
 }
+
+/// Read every analysis `doc` has in this machine's sidecar folders into the
+/// stores, on this thread. Opening a project does the same on threads of its
+/// own, which an export that starts straight after would race.
+pub fn warm(doc: &Document) {
+    let never = AtomicBool::new(false);
+    for job in planes::warm_jobs(doc) {
+        planes::run(job, &never);
+    }
+    for job in roto::warm_jobs(doc) {
+        roto::run(job, &never);
+    }
+    for job in track::warm_jobs(doc) {
+        track::run(job, &never);
+    }
+}

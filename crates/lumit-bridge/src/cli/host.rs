@@ -102,6 +102,11 @@ impl Headless {
         let read_out = read_out_packed(&mut doc, &path, &dir);
         let (_, missing) = lumit_project::resolve_all_media(&mut doc, &dir, &[]);
         let host = Self::with(doc, Some(path), read_out);
+        // What an open in Lumit reads back besides the document: the solves,
+        // mattes and planes its analyses made, and where its simulations are
+        // baked. Without them an export draws none of those.
+        crate::project_cache::point_bakes_at(&host.bridge_state());
+        lumit_render::sent::warm(&host.store.snapshot());
         Ok((host, missing))
     }
 
