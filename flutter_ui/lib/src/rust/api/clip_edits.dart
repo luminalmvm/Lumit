@@ -19,17 +19,31 @@ class BridgeTransitionKind {
   /// The effect's own label, as Effect controls heads it.
   final String label;
 
+  /// Which flyout of the menu it sits in: 0 Wipes, 1 Moves, 2 Hits.
+  final int group;
+
+  /// Its looks by name, in menu order, the first being what it starts as.
+  /// Empty for a kind with none.
+  final List<String> looks;
+
   /// The rows the overlap decides for it, which Effect controls leaves out.
   final List<String> sweptRows;
 
   const BridgeTransitionKind({
     required this.matchName,
     required this.label,
+    required this.group,
+    required this.looks,
     required this.sweptRows,
   });
 
   @override
-  int get hashCode => matchName.hashCode ^ label.hashCode ^ sweptRows.hashCode;
+  int get hashCode =>
+      matchName.hashCode ^
+      label.hashCode ^
+      group.hashCode ^
+      looks.hashCode ^
+      sweptRows.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -38,5 +52,7 @@ class BridgeTransitionKind {
           runtimeType == other.runtimeType &&
           matchName == other.matchName &&
           label == other.label &&
+          group == other.group &&
+          looks == other.looks &&
           sweptRows == other.sweptRows;
 }

@@ -55,6 +55,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/control_rows.dart' show addToControlsRow;
+import '../panels/cut_kinds.dart' show transitionMenu;
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import 'create_captions_dialog_frb.dart'
     show createCaptionsFrb, importCaptionsFrb;
@@ -1764,6 +1765,7 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuStaggerLayers,
                 comp == null ? null : () => showStaggerPanel(ui)),
+            transitionMenu(app, comp, selectedEntries(ui)),
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),

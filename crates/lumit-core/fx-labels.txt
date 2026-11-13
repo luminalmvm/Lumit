@@ -47,6 +47,7 @@ Alpha
 Alpha bias
 Alpha blur
 Alpha from
+Alternate
 Alternate rows
 Altitude
 Ambient
@@ -161,6 +162,7 @@ Blend
 Blobs
 Block glitch
 Block size
+Blocks
 Bloom
 Blue
 Blue amount
@@ -174,6 +176,7 @@ Blue phase
 Blues
 Blur
 Blur & sharpen
+Blur dissolve
 Blur radius
 Blur size
 Boolean
@@ -227,6 +230,7 @@ Card wipe
 Ceiling
 Cell height
 Cell width
+Cells
 Centre
 Centre X
 Centre Y
@@ -366,6 +370,8 @@ Correction
 Cosine
 Count
 Count nested inputs
+Cover left
+Cover right
 Crackle
 Create corner pin
 Create transform keys
@@ -375,6 +381,7 @@ Crop bottom
 Crop left
 Crop right
 Crop top
+Crossfade
 Crossfade Bastiuni
 Crystal Archive paper
 Curl noise
@@ -431,8 +438,10 @@ Detect edge threshold
 Detected beats
 Detector
 Diagonal
+Diamonds
 Difference
 Digital
+Dip to black
 Direction
 Direction x
 Direction y
@@ -470,6 +479,7 @@ Duration
 Dust
 Each path
 Each point
+Ease
 Ease in
 Ease out
 Echo
@@ -580,6 +590,7 @@ Fill cell
 Fill feather
 Fill from
 Film
+Film burn
 Film colour
 Filter
 Final
@@ -606,6 +617,7 @@ Flash colour
 Flicker
 Flicker speed
 Flight
+Flip
 Flip axis
 Flip direction
 Flip order
@@ -672,7 +684,9 @@ Ghost softness
 Glass
 Glass curvature
 Glass dirt
+Glitch
 Glitch hit
+Glitch slices
 Global balance
 Glow
 Glow colour
@@ -755,6 +769,7 @@ Highlight saturation
 Highlight threshold
 Highlight tonal width
 Highlights
+Hit
 Hold
 Hold frame
 Hold off
@@ -794,6 +809,7 @@ In order
 In the scene
 In turn
 Include spaces
+Incoming
 Index
 Inflate
 Initial speed
@@ -897,6 +913,7 @@ Light distance (m)
 Light exposure
 Light flicker
 Light from
+Light leak
 Light range
 Light saturation
 Light size
@@ -1030,6 +1047,8 @@ Motion
 Motion blur
 Motion vectors
 Mouth clicks
+Move
+Moves
 Multiply
 NTSC
 Name
@@ -1047,6 +1066,7 @@ Node graph
 Noise
 Noise by size
 Noise by tone
+Noise dissolve
 Noise only
 Noise reduction
 Noise scale
@@ -1111,6 +1131,7 @@ Outer bevel
 Outer glow
 Outer radius
 Outer softness
+Outgoing
 Outline
 Output
 Output black
@@ -1163,6 +1184,7 @@ Pick
 Pick points
 Picked
 Picked and the rest
+Picture
 Piece scale
 Pillow emboss
 Pin layer
@@ -1176,6 +1198,7 @@ Pipe segments
 Pivot
 Pixel motion
 Pixel sort
+Pixelate
 Pixels
 Place
 Place x
@@ -1235,13 +1258,18 @@ Propagate
 Provia 100F
 Pull
 Pulse
+Push down
+Push left
 Push or pull
+Push right
+Push up
 Qualifier
 Quality
 Quarter
 Quarter speed
 RGB
 RGB split
+RGB whip
 Radial
 Radial blur
 Radial wipe
@@ -1251,6 +1279,7 @@ Ramp
 Random
 Random hue
 Random offset scale
+Random order
 Random origin
 Random rate
 Random span offsets
@@ -1439,6 +1468,7 @@ Shape
 Shapes
 Share of frame
 Shared
+Sharp
 Sharp colours
 Sharpen
 Shift per row
@@ -1450,6 +1480,7 @@ Shuffle
 Shutter
 Shutter angle
 Shutter phase
+Shutters
 Sibilance only
 Siceliot
 Side
@@ -1471,14 +1502,19 @@ Size with distance
 Skew
 Skew axis
 Slice end
+Slice glitch
 Slice repeat
 Slice start
+Slices
 Slide
+Slide left
+Slide right
 Slider
 Slider control
 Slope
 Slope channel
 Slow motion with blur
+Smear
 Smoke
 Smoke and fire
 Smoke colour
@@ -1489,6 +1525,7 @@ Smoothing
 Smoothness
 Smudges
 Soft colour
+Soft iris
 Soft light
 Softness
 Solar
@@ -1533,9 +1570,11 @@ Sphere
 Spherize
 Spiky
 Spin
+Spin blur
 Spiral
 Split
 Split channels
+Split colours
 Spread
 Spread z
 Sprite
@@ -1795,6 +1834,10 @@ Waves
 Weak
 Wet
 Wheels
+Whip down
+Whip left
+Whip right
+Whip up
 White clip
 Whole frames
 Whole sound
@@ -1848,6 +1891,10 @@ Z wave frequency
 Z wave phase
 Zebra
 Zoom
+Zoom blur
+Zoom in
+Zoom out
+Zoom spin
 sRGB
 sRGB curve
 sRGB to linear

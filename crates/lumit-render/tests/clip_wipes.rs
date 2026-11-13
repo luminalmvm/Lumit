@@ -8,7 +8,7 @@ use lumit_core::model::{
     Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, ProjectItem,
     SolidDef, Switches, TransformGroup,
 };
-use lumit_core::sequence::{transition::KINDS, Clip, ClipSource, FadeShape};
+use lumit_core::sequence::{transition, Clip, ClipSource, FadeShape};
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -164,8 +164,7 @@ fn overlap(
     let clip = |source, at| Clip::new(source, Rational::ZERO, second(2), second(at), second(2));
     let mut incoming = clip(coming, 1);
     incoming.fade_in.shape = FadeShape::Linear;
-    incoming.transition =
-        kind.map(|k| lumit_core::fx::builtins::instantiate_for_raster(k, 64.0, 64.0).unwrap());
+    incoming.transition = kind.map(|k| transition::fresh(k, None, 64.0, 64.0).unwrap());
     let comp = composition(vec![sequence(vec![clip(going, 0), incoming])]);
     let id = comp.id;
     doc.items.push(ProjectItem::Composition(comp));
@@ -212,7 +211,7 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             };
             overlap(doc, a, b, kind)
         };
-        for kind in KINDS {
+        for kind in transition::TABLE.iter().map(|k| k.name) {
             let (doc, comp) = build(Some(kind));
             let (px, _, _) = r.render_rgba(&doc, comp, 60, 1.0).unwrap();
             for (x, y) in [(2, 2), (32, 32), (61, 61), (2, 61), (61, 2)] {
@@ -242,8 +241,30 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
             at(&px, 56, 32)
         );
 
+        // At half preview an Iris wipe half way is still a hole in the middle.
+        let (doc, comp) = build(Some("iris_wipe"));
+        let half_res = lumit_render::plan::Quality {
+            auto_res: true,
+            display_scale: 0.5,
+            ..lumit_render::plan::Quality::default()
+        };
+        let (px, w, _) = r.render_preview(&doc, comp, 90, half_res, 0.5).unwrap();
+        let half = |x: u32, y: u32| {
+            let d = ((y * w + x) * 4) as usize;
+            [px[d], px[d + 1], px[d + 2]]
+        };
+        let last = w - 1;
+        assert!(near(half(w / 2, w / 2), BLUE), "{route} half iris centre");
+        for (x, y) in [(0, 0), (last, 0), (0, last), (last, last)] {
+            assert!(
+                near(half(x, y), RED),
+                "{route} half iris corner {x},{y}: {:?}",
+                half(x, y)
+            );
+        }
+
         // Near the end of each kind, what's left is less than half of it.
-        for kind in KINDS {
+        for kind in transition::TABLE.iter().map(|k| k.name) {
             let (doc, comp) = build(Some(kind));
             let (px, _, _) = r.render_rgba(&doc, comp, 119, 1.0).unwrap();
             let blue = (0..SIZE * SIZE)
@@ -254,6 +275,43 @@ fn every_kind_sweeps_from_the_outgoing_clip_to_the_incoming_one() {
                 "{route} {kind}: {blue} of the picture is through"
             );
         }
+
+        // A flash is white at the middle of its overlap.
+        let (doc, comp) = build(Some("flash"));
+        let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
+        assert!(
+            near(at(&px, 32, 32), [255, 255, 255]),
+            "{route} flash: {:?}",
+            at(&px, 32, 32)
+        );
+
+        // Half way through a Push left, the outgoing clip has gone left and
+        // the incoming one has come in from the right.
+        let (doc, comp) = build(Some("move"));
+        let (px, _, _) = r.render_rgba(&doc, comp, 90, 1.0).unwrap();
+        let (left, right) = (at(&px, 8, 32), at(&px, 56, 32));
+        assert!(
+            near(left, RED) && near(right, BLUE),
+            "{route} push: {left:?} {right:?}"
+        );
+
+        // Half way through a Drift, each clip is half there, in linear light:
+        // a picture the effect made part clear is not dimmed a second time.
+        let (doc, comp) = build(Some("move"));
+        let mut drift = (*doc).clone();
+        if let Some(ProjectItem::Composition(c)) = drift.item_mut(comp) {
+            if let LayerKind::Sequence { clips } = &mut c.layers[0].kind {
+                let looks = transition::kind("move").unwrap().looks;
+                let look = looks.iter().position(|l| l.name == "Drift");
+                clips[1].transition = transition::fresh("move", look, 64.0, 64.0);
+            }
+        }
+        let (px, _, _) = r.render_rgba(&Arc::new(drift), comp, 90, 1.0).unwrap();
+        let mid = at(&px, 32, 32);
+        assert!(
+            (168..=208).contains(&mid[0]) && (168..=208).contains(&mid[2]),
+            "{route} drift: {mid:?}"
+        );
 
         // No kind named is a dissolve: both, at once, everywhere.
         let (doc, comp) = build(None);

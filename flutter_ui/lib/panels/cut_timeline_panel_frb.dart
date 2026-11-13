@@ -20,6 +20,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart' show SvgStringLoader, SvgTheme, vg;
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/clip_edits.dart'
+    show BridgeTransitionKind;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart';
 import 'package:lumit_flutter/src/rust/api/cut/multicam.dart';
@@ -600,7 +602,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// What each Transition effect is called, by its match name. Asked once.
   late final Map<String, String> _transitionNames = {
     for (final kind in transitionKinds)
-      kind.matchName: engineLabel(kind.label),
+      kind.matchName: kindLabel(kind),
   };
   bool get _quantise => _settings.quantiseSound;
 

@@ -144,6 +144,7 @@ use super::effects::{
     lens_distort::{LensDistort, LensDistortDef},
     lens_flare::{LensFlare, LensFlareDef},
     levels::{Levels, LevelsDef},
+    light_leak::{LightLeak, LightLeakDef},
     light_wrap::{LightWrap, LightWrapDef},
     lightning::{Lightning, LightningDef},
     linear_wipe::{LinearWipe, LinearWipeDef},
@@ -158,6 +159,7 @@ use super::effects::{
     mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
     motion_blur::{MotionBlur, MotionBlurDef},
+    move_transition::{MoveTransition, MoveTransitionDef},
     node_graph::{NodeGraph, NodeGraphDef},
     noise::{Noise, NoiseDef},
     ocio::{
@@ -197,6 +199,7 @@ use super::effects::{
     shake::{Shake, ShakeDef},
     sharpen::{Sharpen, SharpenDef},
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
+    slices::{Slices, SlicesDef},
     slider_control::{SliderControl, SliderControlDef},
     smoke::{Smoke, SmokeDef},
     sort_points::{SortPoints, SortPointsDef},
@@ -272,6 +275,7 @@ crate::catalogue![
     // Crop, beside Transform: the two halves of Vegas's Pan/Crop.
     CropDef => Crop,
     GlowDef => Glow,
+    LightLeakDef => LightLeak,
     ShakeDef => Shake,
     JoltDef => Jolt,
     BlockGlitchDef => BlockGlitch,
@@ -463,6 +467,8 @@ crate::catalogue![
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
     LumaFadeDef => LumaFade,
+    MoveTransitionDef => MoveTransition,
+    SlicesDef => Slices,
     // The one effect whose program the user writes, appended at the
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.

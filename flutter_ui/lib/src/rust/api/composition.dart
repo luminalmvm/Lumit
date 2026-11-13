@@ -1598,14 +1598,16 @@ class CompositionReference {
           that: this, clip: clip, take: take);
 
   /// Make the overlap at this edge of `clip` the kind named by its match
-  /// name, or the dissolve with `None`. An edit point that only meets gets an
-  /// overlap of `frames` first. Asked for the kind it already is, an overlap
-  /// keeps the rows it was given.
+  /// name at `look`, by its place among the kind's looks, or the dissolve
+  /// with `None`. An edit point that only meets gets an overlap of `frames`
+  /// first. Asked for the kind it already is with no look, an overlap keeps
+  /// the rows it was given.
   BridgeCutResult cutSetTransition(
           {required UuidValue clip,
           required bool endEdge,
           required int frames,
           String? kind,
+          int? look,
           required bool linked}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutSetTransition(
@@ -1614,6 +1616,7 @@ class CompositionReference {
               endEdge: endEdge,
               frames: frames,
               kind: kind,
+              look: look,
               linked: linked);
 
   /// Shorten every pause longer than `longer_than_ms` to `keep_ms`, or only
@@ -3973,6 +3976,23 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceTimesOfFrames(
               that: this, first: first, count: count);
+
+  /// Put a transition between two layers that overlap in time, as one undo
+  /// step: the kind `kind` at `look`, its first with none. False when they
+  /// don't overlap by two frames, when one sits inside the other, or when
+  /// either has no picture or is locked. One put there before is replaced.
+  ///
+  /// The layer that starts first is going. A wipe runs on the upper layer
+  /// only, and the rest on both. Where the two pictures cross, the upper
+  /// layer's Opacity is keyed, unless it is already keyed.
+  bool transitionBetween(
+          {required UuidValue first,
+          required UuidValue second,
+          required String kind,
+          int? look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceTransitionBetween(
+              that: this, first: first, second: second, kind: kind, look: look);
 
   /// **Trim comp to work area**: the comp becomes as long as its work
   /// area, and everything on the timeline slides back with it.

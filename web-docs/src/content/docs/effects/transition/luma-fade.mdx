@@ -16,7 +16,8 @@ Luma fade is a **Transition** effect.
 ## What it does
 
 Takes the layer away in order of brightness as Completion rises, the darkest parts first.
-The brightness is the layer's own, or another layer's when **Matte** is set.
+The brightness is the layer's own, a **Pattern** drawn over the frame, or another layer's
+when **Matte** is set.
 
 ## Parameters
 
@@ -26,6 +27,8 @@ The brightness is the layer's own, or another layer's when **Matte** is set.
 | --- | --- | --- | --- | --- |
 | **Completion** | Slider | 0 to 100 | 50 | Per cent |
 | **Softness** | Slider | 0 to 100 | 10 | Per cent |
+| **Pattern** | Dropdown | Picture · Noise · Cells · Diamonds · Stripes · Centre | Picture | - |
+| **Scale** | Slider, whole numbers | 1 to 64 | 8 | - |
 | **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -35,6 +38,7 @@ The brightness is the layer's own, or another layer's when **Matte** is set.
 In the Effect Controls panel:
 
 - **Map placement** is editable while **Matte** names a layer.
+- **Scale** is editable while **Pattern** is anything but Picture.
 - **Matte** is where the brightness is read from: the darkest parts of the matte go first, and with no matte set the layer fades by its own brightness. **Invert** reads that matte inverted.
 
 {/* END GENERATED */}
@@ -43,6 +47,11 @@ In the Effect Controls panel:
 
 - **Completion** is how far the fade has got as a percentage.
 - **Softness** sets how wide the edge between gone and kept is.
+- **Pattern** sets where the brightness comes from with no Matte set. Picture is the layer's
+  own. Noise goes in cloudy patches, Cells in square blocks in a random order, Diamonds in
+  diamonds that grow from their centres, Stripes in upright bars that each go from the left,
+  and Centre in a circle that opens from the middle.
+- **Scale** is how many of the pattern's cells fit across the picture's shorter side.
 - **Map placement** sets where the Matte layer's picture sits on this one.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
@@ -56,6 +65,19 @@ On the effect's menu, under **Presets**. Each starts at the playhead.
 - **Luma reveal** brings the layer in over a second, with a soft edge.
 - **Luma hide** takes the layer away over a second, with a soft edge.
 - **Hard hide** takes the layer away over a second, with a hard edge.
+
+## Looks
+
+The looks of **Luma fade ▸** in the **Wipes** group of the
+[Transition menus](/use/cutting/#fades-and-dissolves). They are not on the effect's own
+**Presets** menu.
+
+- **Luma fade** is the effect as it starts.
+- **Noise dissolve** sets **Pattern** to Noise, **Scale** to 14 and **Softness** to 10.
+- **Blocks** sets **Pattern** to Cells, **Scale** to 9 and **Softness** to 5.
+- **Diamonds** sets **Pattern** to Diamonds, **Scale** to 6 and **Softness** to 5.
+- **Stripes** sets **Pattern** to Stripes, **Scale** to 8 and **Softness** to 5.
+- **Soft iris** sets **Pattern** to Centre and **Softness** to 40.
 
 ## Related
 

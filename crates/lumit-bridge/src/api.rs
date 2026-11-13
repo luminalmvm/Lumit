@@ -86,6 +86,7 @@ pub mod system;
 pub mod template;
 pub mod track;
 pub mod transcript;
+pub mod transitions;
 pub mod vector;
 pub mod web_files;
 pub mod wire_tie;

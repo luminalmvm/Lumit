@@ -8903,6 +8903,14 @@
   "@menuStaggerLayers": {
     "description": "Layer menu and layer context-menu item: opens the Stagger panel, which starts the selected layers one after another, a set number of frames apart."
   },
+  "menuLayerTransition": "Transition",
+  "@menuLayerTransition": {
+    "description": "Layer menu and layer context-menu submenu, with two layers that overlap in time selected: puts a transition between them, keyed onto the layers."
+  },
+  "menuLayerTransitionNoOverlap": "A transition needs two picture layers that overlap in time.",
+  "@menuLayerTransitionNoOverlap": {
+    "description": "Status line notice when Layer > Transition is picked for two layers that don't overlap by at least two frames, or where one has no picture."
+  },
   "menuText": "Text",
   "@menuText": {
     "description": "Menu item."
@@ -13742,7 +13750,191 @@
   },
   "cutDissolve": "Dissolve",
   "@cutDissolve": {
-    "description": "Cut timeline, Transition list: the overlap fades one clip into the other. The rest of the list is the Transition effects, by name."
+    "description": "Cut timeline, Transition list: the overlap fades one clip into the other. The rest of the list is the other transitions, in groups."
+  },
+  "cutTransitionWipes": "Wipes",
+  "@cutTransitionWipes": {
+    "description": "Cut timeline, Transition menu: the flyout of transitions that wipe one clip off to show the other."
+  },
+  "cutTransitionMoves": "Moves",
+  "@cutTransitionMoves": {
+    "description": "Cut timeline, Transition menu: the flyout of transitions that move the pictures."
+  },
+  "cutTransitionHits": "Hits",
+  "@cutTransitionHits": {
+    "description": "Cut timeline, Transition menu: the flyout of transitions that flash, blur or distort both clips, strongest in the middle of the cut."
+  },
+  "fxFlip": "Flip",
+  "@fxFlip": {
+    "description": "Cut timeline, Transition menu: a Card wipe look that turns the whole picture over as one card."
+  },
+  "fxShutters": "Shutters",
+  "@fxShutters": {
+    "description": "Cut timeline, Transition menu: a Card wipe look that turns the picture over as a row of tall slats."
+  },
+  "fxDipToBlack": "Dip to black",
+  "@fxDipToBlack": {
+    "description": "Cut timeline, Transition menu: a Flash look that goes to black in the middle of the cut."
+  },
+  "fxBlurDissolve": "Blur dissolve",
+  "@fxBlurDissolve": {
+    "description": "Cut timeline, Transition menu: the two clips blur as they dissolve, sharpest at both ends."
+  },
+  "fxSmear": "Smear",
+  "@fxSmear": {
+    "description": "Cut timeline, Transition menu: a sideways streak that swells over the cut. Also the Move effect's control for how much of the move is streaked."
+  },
+  "fxZoomBlur": "Zoom blur",
+  "@fxZoomBlur": {
+    "description": "Cut timeline, Transition menu: a Radial blur look that streaks out from the middle over the cut."
+  },
+  "fxSpinBlur": "Spin blur",
+  "@fxSpinBlur": {
+    "description": "Cut timeline, Transition menu: a Radial blur look that blurs round the middle over the cut."
+  },
+  "fxGlitch": "Glitch",
+  "@fxGlitch": {
+    "description": "Cut timeline, Transition menu: a Block glitch look that tears the picture into blocks over the cut."
+  },
+  "fxGlitchSlices": "Glitch slices",
+  "@fxGlitchSlices": {
+    "description": "Cut timeline, Transition menu: a Block glitch look that tears the picture into repeating strips over the cut."
+  },
+  "fxPixelate": "Pixelate",
+  "@fxPixelate": {
+    "description": "Cut timeline, Transition menu: the picture breaks into big blocks and back over the cut."
+  },
+  "fxMove": "Move",
+  "@fxMove": {
+    "description": "Effect name: a transition where the pictures travel, zoom or turn from one to the other."
+  },
+  "fxMoves": "Moves",
+  "@fxMoves": {
+    "description": "Move effect control: which of the two pictures travel. The other one stays still."
+  },
+  "fxOutgoing": "Outgoing",
+  "@fxOutgoing": {
+    "description": "Move effect option: the picture that leaves at the cut, the earlier of the two."
+  },
+  "fxIncoming": "Incoming",
+  "@fxIncoming": {
+    "description": "Move effect option: the picture that arrives at the cut, the later of the two."
+  },
+  "fxEase": "Ease",
+  "@fxEase": {
+    "description": "Move effect control: how the move speeds up and slows down."
+  },
+  "fxSharp": "Sharp",
+  "@fxSharp": {
+    "description": "Move effect, Ease option: slow at both ends and very fast in the middle."
+  },
+  "fxSplitColours": "Split colours",
+  "@fxSplitColours": {
+    "description": "Move effect switch: the streak of the move pulls red, green and blue apart."
+  },
+  "fxCrossfade": "Crossfade",
+  "@fxCrossfade": {
+    "description": "Move effect control: how much of the cut, about its middle, the two pictures fade across. 0 is a hard change."
+  },
+  "fxPushLeft": "Push left",
+  "@fxPushLeft": {
+    "description": "Transition look: the incoming picture pushes the outgoing one off to the left."
+  },
+  "fxPushRight": "Push right",
+  "@fxPushRight": {
+    "description": "Transition look: the incoming picture pushes the outgoing one off to the right."
+  },
+  "fxPushUp": "Push up",
+  "@fxPushUp": {
+    "description": "Transition look: the incoming picture pushes the outgoing one off the top."
+  },
+  "fxPushDown": "Push down",
+  "@fxPushDown": {
+    "description": "Transition look: the incoming picture pushes the outgoing one off the bottom."
+  },
+  "fxSlideLeft": "Slide left",
+  "@fxSlideLeft": {
+    "description": "Transition look: the outgoing picture slides off to the left, showing the incoming one still beneath it."
+  },
+  "fxSlideRight": "Slide right",
+  "@fxSlideRight": {
+    "description": "Transition look: the outgoing picture slides off to the right, showing the incoming one still beneath it."
+  },
+  "fxCoverLeft": "Cover left",
+  "@fxCoverLeft": {
+    "description": "Transition look: the incoming picture slides in from the right, over the outgoing one, which stays still."
+  },
+  "fxCoverRight": "Cover right",
+  "@fxCoverRight": {
+    "description": "Transition look: the incoming picture slides in from the left, over the outgoing one, which stays still."
+  },
+  "fxWhipLeft": "Whip left",
+  "@fxWhipLeft": {
+    "description": "Transition look: a fast blurred pan to the left from one picture to the other."
+  },
+  "fxWhipRight": "Whip right",
+  "@fxWhipRight": {
+    "description": "Transition look: a fast blurred pan to the right from one picture to the other."
+  },
+  "fxWhipUp": "Whip up",
+  "@fxWhipUp": {
+    "description": "Transition look: a fast blurred pan upwards from one picture to the other."
+  },
+  "fxWhipDown": "Whip down",
+  "@fxWhipDown": {
+    "description": "Transition look: a fast blurred pan downwards from one picture to the other."
+  },
+  "fxRgbWhip": "RGB whip",
+  "@fxRgbWhip": {
+    "description": "Transition look: a fast blurred pan to the left whose blur splits into red, green and blue."
+  },
+  "fxZoomSpin": "Zoom spin",
+  "@fxZoomSpin": {
+    "description": "Transition look: the outgoing picture zooms in and turns, and the incoming one arrives the same way."
+  },
+  "fxHit": "Hit",
+  "@fxHit": {
+    "description": "Effect preset on Flash, Blur, Block glitch, Shake and RGB split: one short burst of the effect, keyed from the playhead."
+  },
+  "fxLightLeak": "Light leak",
+  "@fxLightLeak": {
+    "description": "Effect name in the Effects list, and a look in the cut timeline's Transition menu. A warm band of drifting light laid over the picture, as from fogged film."
+  },
+  "fxFilmBurn": "Film burn",
+  "@fxFilmBurn": {
+    "description": "Cut timeline, Transition menu, and a Light leak preset: a hot, fast light leak that burns the picture towards yellow in the middle of the cut."
+  },
+  "fxSlices": "Slices",
+  "@fxSlices": {
+    "description": "Effect name in the Effects list, and a look in the cut timeline's Transition menu. The outgoing picture is cut into strips that slide out one after another, with the incoming picture's strips right behind them."
+  },
+  "fxSliceGlitch": "Slice glitch",
+  "@fxSliceGlitch": {
+    "description": "Cut timeline, Transition menu, and a Slices preset: many thin strips that leave in a random order, smeared as they go."
+  },
+  "fxAlternate": "Alternate",
+  "@fxAlternate": {
+    "description": "Effect Controls, Slices: a switch. When on, every other strip travels the opposite way."
+  },
+  "fxRandomOrder": "Random order",
+  "@fxRandomOrder": {
+    "description": "Effect Controls, Slices: a switch. When on, the strips set off in a seeded random order instead of one after another."
+  },
+  "fxDiamonds": "Diamonds",
+  "@fxDiamonds": {
+    "description": "Effect Controls, Luma fade, a Pattern option, and a look in the cut timeline's Transition menu: the picture goes away in a grid of diamonds that grow from their centres."
+  },
+  "fxBlocks": "Blocks",
+  "@fxBlocks": {
+    "description": "Cut timeline, Transition menu: a Luma fade look where the picture goes away in square blocks, one at a time in a random order."
+  },
+  "fxNoiseDissolve": "Noise dissolve",
+  "@fxNoiseDissolve": {
+    "description": "Cut timeline, Transition menu: a Luma fade look where the picture goes away in soft, cloudy patches."
+  },
+  "fxSoftIris": "Soft iris",
+  "@fxSoftIris": {
+    "description": "Cut timeline, Transition menu: a Luma fade look where a soft-edged circle opens from the centre to show the incoming picture."
   },
   "cutRemoveTransition": "Remove transition",
   "@cutRemoveTransition": {
