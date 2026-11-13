@@ -310,20 +310,45 @@ that overlap crossfade.
 - With **Select**, drag the handle at a clip's top corner to set the length of its fade.
   A readout beside the pointer gives the length in frames. Dragged back to the corner, the
   fade is removed.
-- An edit point on a picture track can be a wipe rather than a dissolve. **Transition ▸** on a
-  clip's menu lists **Dissolve**, **Linear wipe**, **Radial wipe**, **Iris wipe**, **Card
-  wipe**, **Venetian blinds** and **Luma fade**, and **Remove transition** where there is an
-  overlap. The effect runs over the outgoing clip with the incoming clip beneath it, from
-  nothing to everything across the overlap.
+- An edit point on a picture track can be something other than a dissolve. **Transition ▸**
+  on a clip's menu lists **Dissolve**, then **Wipes ▸**, **Moves ▸** and **Hits ▸**, and
+  **Remove transition** where there is an overlap. A kind with several looks lists them
+  under its name.
+- A wipe runs over the outgoing clip with the incoming clip beneath it, from nothing to
+  everything across the overlap. A move runs on both clips. A hit runs on both clips while
+  they dissolve about the middle of the overlap: nothing at either end, strongest in the
+  middle.
 - Right-click an overlap on a picture track to change what it is. **Effect controls** on that
   menu opens its rows in [Effect controls](/panels/effect-controls/), marked **Transition**,
-  less the ones the overlap decides. Bypassed there, it is a dissolve again.
+  less the ones the overlap decides. A hit keeps the row it sweeps, as its strength in the
+  middle of the overlap. Bypassed there, it is a dissolve again.
 - **Settings ▸ Timeline ▸ Default transition** picks what `Ctrl`+`Shift`+`D` adds, and what a
   clip dragged across another under **Auto crossfade** takes.
 - Right-click a fade, a dissolve or a crossfade for its curve: **Linear**, **Fast**,
   **Slow**, **Smooth** or **Sharp**. **Length…** on the same menu types its length in frames,
   and the last row removes it.
 - A dissolve between two clips with no spare media at the cut is **refused**.
+
+| Under **Transition ▸** | Lists |
+| --- | --- |
+| **Wipes** | **Linear wipe**, **Radial wipe**, **Iris wipe**, **Card wipe ▸** with **Card wipe**, **Flip** and **Shutters**, **Venetian blinds**, and **Luma fade ▸** with **Luma fade**, **Noise dissolve**, **Blocks**, **Diamonds**, **Stripes** and **Soft iris**. |
+| **Moves** | **Move ▸** with **Push left**, **Push right**, **Push up**, **Push down**, **Slide left**, **Slide right**, **Cover left**, **Cover right**, **Whip left**, **Whip right**, **Whip up**, **Whip down**, **RGB whip**, **Zoom in**, **Zoom out**, **Spin**, **Zoom spin**, **Stretch** and **Drift**, and **Slices ▸** with **Slices** and **Slice glitch**. |
+| **Hits** | **Flash ▸** with **Flash** and **Dip to black**, **Blur dissolve**, **Smear**, **Radial blur ▸** with **Zoom blur** and **Spin blur**, **Block glitch ▸** with **Glitch** and **Glitch slices**, **RGB split**, **Shake**, **Pixelate**, **Twirl**, **Bulge**, **Warp**, **Bloom**, and **Light leak ▸** with **Light leak** and **Film burn**. |
+
+The looks are described on [Card wipe](/effects/transition/card-wipe/#looks),
+[Luma fade](/effects/transition/luma-fade/#looks), [Move](/effects/transition/move/#presets),
+[Slices](/effects/transition/slices/#presets) and
+[Light leak](/effects/stylise/light-leak/#presets). **Blur dissolve** is
+[Gaussian blur](/effects/blur-sharpen/gaussian-blur/), **Smear**
+[Directional blur](/effects/blur-sharpen/directional-blur/), **Pixelate**
+[Mosaic](/effects/stylise/mosaic/), **Bulge** [Spherize](/effects/distortion/spherize/),
+**Warp** [Turbulent displace](/effects/distortion/turbulent-displace/) and **Bloom**
+[Glow](/effects/stylise/glow/). **Dip to black** is [Flash](/effects/stylise/flash/) with
+**Colour** at black. **Zoom blur** and **Spin blur** are
+[Radial blur](/effects/blur-sharpen/radial-blur/) with **Type** on Zoom and on Spin.
+**Glitch** is [Block glitch](/effects/distortion/block-glitch/) with **Channel offset**
+parting the colours of its blocks, and **Glitch slices** is larger blocks with **Slice
+repeat** at 100.
 
 ## Effects and blend mode on a clip
 
