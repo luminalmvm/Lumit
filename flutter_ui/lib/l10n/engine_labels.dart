@@ -2088,6 +2088,9 @@ Map<String, String> get _built => {
       "Whip down": l10n.fxWhipDown,
       "RGB whip": l10n.fxRgbWhip,
       "Zoom spin": l10n.fxZoomSpin,
+      // Light leak, and its looks.
+      "Light leak": l10n.fxLightLeak,
+      "Film burn": l10n.fxFilmBurn,
       // Slices, and its looks.
       "Slices": l10n.fxSlices,
       "Slice glitch": l10n.fxSliceGlitch,

@@ -13876,6 +13876,14 @@
   "@fxZoomSpin": {
     "description": "Transition look: the outgoing picture zooms in and turns, and the incoming one arrives the same way."
   },
+  "fxLightLeak": "Light leak",
+  "@fxLightLeak": {
+    "description": "Effect name in the Effects list, and a look in the cut timeline's Transition menu. A warm band of drifting light laid over the picture, as from fogged film."
+  },
+  "fxFilmBurn": "Film burn",
+  "@fxFilmBurn": {
+    "description": "Cut timeline, Transition menu, and a Light leak preset: a hot, fast light leak that burns the picture towards yellow in the middle of the cut."
+  },
   "fxSlices": "Slices",
   "@fxSlices": {
     "description": "Effect name in the Effects list, and a look in the cut timeline's Transition menu. The outgoing picture is cut into strips that slide out one after another, with the incoming picture's strips right behind them."

@@ -144,6 +144,7 @@ use super::effects::{
     lens_distort::{LensDistort, LensDistortDef},
     lens_flare::{LensFlare, LensFlareDef},
     levels::{Levels, LevelsDef},
+    light_leak::{LightLeak, LightLeakDef},
     light_wrap::{LightWrap, LightWrapDef},
     lightning::{Lightning, LightningDef},
     linear_wipe::{LinearWipe, LinearWipeDef},
@@ -274,6 +275,7 @@ crate::catalogue![
     // Crop, beside Transform: the two halves of Vegas's Pan/Crop.
     CropDef => Crop,
     GlowDef => Glow,
+    LightLeakDef => LightLeak,
     ShakeDef => Shake,
     JoltDef => Jolt,
     BlockGlitchDef => BlockGlitch,

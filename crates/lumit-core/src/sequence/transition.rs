@@ -277,6 +277,12 @@ pub const TABLE: &[Kind] = &[
             ],
         )],
     ),
+    hit(
+        "light_leak",
+        &[("amount", Times)],
+        0.6,
+        crate::fx::effects::light_leak::LIGHT_LEAK_LOOKS,
+    ),
 ];
 
 /// The kind `name` is, or `None` for a name that is not one.

@@ -38,6 +38,7 @@ pub mod lens_blur;
 mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
+pub mod light_leak;
 pub mod lighting;
 pub mod particulate;
 pub mod particulate_params;
@@ -327,6 +328,8 @@ pub struct FxEngine {
     shake_mb: wgpu::ComputePipeline,
     /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
     jolt: wgpu::ComputePipeline,
+    /// Light leak: a band of drifting light screened on in one pass.
+    light_leak: wgpu::ComputePipeline,
     /// Slices: strips read back along their length, one pass.
     slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,

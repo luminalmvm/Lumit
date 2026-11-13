@@ -587,6 +587,7 @@ Fill cell
 Fill feather
 Fill from
 Film
+Film burn
 Film colour
 Filter
 Final
@@ -908,6 +909,7 @@ Light distance (m)
 Light exposure
 Light flicker
 Light from
+Light leak
 Light range
 Light saturation
 Light size
