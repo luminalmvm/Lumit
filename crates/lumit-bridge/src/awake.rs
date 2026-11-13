@@ -11,7 +11,9 @@
 
 use std::sync::Mutex;
 
-/// Why the computer is kept awake, for whoever asks the system.
+/// Why the computer is kept awake, for whoever asks the system. macOS's
+/// caffeinate takes no reason.
+#[cfg(not(target_os = "macos"))]
 const WHY: &str = "Lumit is exporting";
 
 /// One hold. Dropping it lets go.
