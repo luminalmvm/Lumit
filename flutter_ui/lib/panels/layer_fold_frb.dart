@@ -2544,7 +2544,7 @@ List<LayerFoldRow> groupHeaderFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...instanceParameters(fx).where((p) => !meshRowHidden(fx, p)),
+        ...foldEffectParams(fx, values),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 2, group: group.id));
@@ -2564,6 +2564,24 @@ String clipFoldPrefix(UuidValue clip) => 'c:$clip';
 /// Viewer.
 bool meshRowHidden(BridgeEffectInstanceInfo fx, BridgeParamInfo param) =>
     fx.name == 'mesh_warp' && param.id.startsWith('mesh_');
+
+/// The rows an effect's fold lists, as Effect controls lists them: none a
+/// plugin is hiding, and none of a group whose `visible_when` is unmet (the
+/// Gradient's Colour 3 and 4 while Colours is Two or Three).
+List<BridgeParamInfo> foldEffectParams(
+  BridgeEffectInstanceInfo fx,
+  Map<String, BridgeEffectValue> values,
+) {
+  final hidden = {
+    ...fx.hiddenRows,
+    for (final g in cachedListParameterGroups(fx.name))
+      if (!paramGroupVisible(g, values)) ...g.params,
+  };
+  return [
+    for (final p in instanceParameters(fx))
+      if (!meshRowHidden(fx, p) && !hidden.contains(p.id)) p,
+  ];
+}
 
 /// The rows a clip's twirl shows (docs/impl/audio-timeline.md §5): a heading
 /// with the clip's name, then one heading per effect on the clip and the
@@ -2601,7 +2619,7 @@ List<LayerFoldRow> clipFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...instanceParameters(fx).where((p) => !meshRowHidden(fx, p)),
+        ...foldEffectParams(fx, values),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 3, clip: clip.id));
@@ -3250,7 +3268,7 @@ List<LayerFoldRow> layerFoldRows({
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
           for (final param in [
-            ...instanceParameters(fx).where((p) => !meshRowHidden(fx, p)),
+            ...foldEffectParams(fx, values),
           ]) {
             rows.add(FoldEffectParamRow(fx, param, values[param.id],
                 depth: 3, driven: driven['${fx.id}/${param.id}']));

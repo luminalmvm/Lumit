@@ -8,6 +8,7 @@ import 'package:lumit_flutter/panels/comp_graph_panel.dart' show compBoxRows;
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show blendInView, instanceParameters;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show foldEffectParams;
 import 'package:lumit_flutter/src/rust/api/extensions.dart'
     show extensionRescan;
 
@@ -81,6 +82,19 @@ void main() {
       expect([for (final r in box.telling) r.id],
           containsAllInOrder(['mix', 'blend']),
           reason: 'a shut box shows the Blend at its defaults');
+
+      // The Timeline lists what the panel lists: the Blend, and no colour
+      // the Colours count leaves out.
+      final fold = [
+        for (final r in foldEffectParams(
+            info, {for (final v in info.values) v.id: v.value}))
+          r.id
+      ];
+      expect(fold, contains('blend'));
+      if (name == 'gradient') {
+        expect(fold, isNot(contains('colour_2')),
+            reason: 'Colours is Two: no colour in between');
+      }
     });
   }
 }
