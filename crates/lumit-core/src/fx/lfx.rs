@@ -21,8 +21,7 @@ use super::effects::custom_shader::{self as cs, CustomShader};
 use super::shader::{self, ShaderProgram, ShaderRefusal};
 use super::{
     builtins::LFX_MATCH_PREFIX, params::Value, registry::EffectDef, registry::EffectMetadata,
-    registry::ResolveCx, schema::EffectSchema, schema::FxCategory, schema::MatteRole,
-    schema::ParamSchema,
+    registry::ResolveCx, schema::EffectSchema, schema::FxCategory, schema::ParamSchema,
 };
 use crate::model::EffectInstance;
 
@@ -424,7 +423,9 @@ fn def_for(name: &str, effect: &LfxEffect, category: FxCategory) -> &'static Lfx
 /// one. Its traits are the Custom shader's too, for the same reasons. Blend is
 /// kept so an extension's effect combines with its input as every built-in
 /// does: a gradient laid over the layer in Multiply, Screen, Overlay and the
-/// rest.
+/// rest. The Matte pair and its Channel are kept with the Custom shader's
+/// generic strength role, so a layer gates an extension's effect as it gates
+/// a built-in.
 fn schema_for(match_name: &'static str, key: &ShapeKey) -> &'static EffectSchema {
     let base = &<CustomShader as EffectMetadata>::SCHEMA;
     let params: Vec<ParamSchema> = base
@@ -435,7 +436,7 @@ fn schema_for(match_name: &'static str, key: &ShapeKey) -> &'static EffectSchema
                 label: Box::leak(input.label.clone().into_boxed_str()),
                 ..*row
             }),
-            ("mix" | "blend", _) => Some(*row),
+            ("mix" | "blend" | "matte" | "matte_invert" | "matte_channel", _) => Some(*row),
             _ => None,
         })
         .collect();
@@ -448,7 +449,7 @@ fn schema_for(match_name: &'static str, key: &ShapeKey) -> &'static EffectSchema
         params: Box::leak(params.into_boxed_slice()),
         groups: &[],
         enabled_when: &[],
-        matte: MatteRole::None,
+        matte: base.matte,
     }))
 }
 
@@ -614,7 +615,14 @@ mod tests {
         let (old_rows, old_key) = (rows(def), render_term(name));
         let def = install(effect(&TWO_PASS.replace("amount", "strength"))).expect("again");
         assert_eq!(old_rows, ["amount"]);
-        assert!(def.schema().blend(), "an extension's effect has the Blend row");
+        assert!(
+            def.schema().blend(),
+            "an extension's effect has the Blend row"
+        );
+        assert!(
+            def.schema().matte.param().is_some(),
+            "and the Matte row, gated as a built-in is"
+        );
         assert_eq!(rows(def), ["strength"]);
         assert_ne!(render_term(name), old_key);
         assert_ne!(old_key, 0);
