@@ -5,6 +5,7 @@
 #include <windowsx.h>
 
 #include <fstream>
+#include <thread>
 
 #include "resource.h"
 
@@ -344,6 +345,20 @@ Win32Window::MessageHandler(HWND hwnd,
       // place the next run's opening size is written.
       SaveWindowPlacement(hwnd);
       window_handle_ = nullptr;
+      // **A quit always ends the process.** Tearing Flutter's view down
+      // destroys its window, and Windows uninitialises the text services
+      // (IME) for it there; on some machines that waits on the system's
+      // TextInputHost for ever, and the window, already hidden by
+      // DestroyWindow, stays a process with every plugin broker alive behind
+      // it. Dart has said its goodbyes by now (the session, the journal, the
+      // endpoint), so a teardown that has not finished in three seconds is
+      // cut short. An ordinary one returns from wWinMain long before.
+      if (quit_on_close_) {
+        std::thread([] {
+          ::Sleep(3000);
+          ::TerminateProcess(::GetCurrentProcess(), 0);
+        }).detach();
+      }
       Destroy();
       if (quit_on_close_) {
         PostQuitMessage(0);
