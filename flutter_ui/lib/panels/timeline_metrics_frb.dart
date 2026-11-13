@@ -349,9 +349,7 @@ class LayerRow {
   /// fx twirl shows, then — unless the fold is shut — its own row, the rows
   /// it draws, and its open view.
   double get height =>
-      (groupHeader == null
-          ? 0
-          : rowHeight * (1 + drawnGroupRows.length)) +
+      (groupHeader == null ? 0 : rowHeight * (1 + drawnGroupRows.length)) +
       (bodyDrawn
           ? rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0)
           : 0);
@@ -727,6 +725,56 @@ class _LazyBlocksState extends State<LazyBlocks> {
   Widget _blockAt(BuildContext context, int i) => _built[i] ??=
       KeyedSubtree(key: ValueKey<int>(i), child: widget.builder(context, i));
 
+  /// Whether this build follows a scroll, the one case whose new blocks may
+  /// wait: the window slid, and the blocks it brought in at its far edge are
+  /// a screenful away from being seen.
+  bool _sliding = false;
+
+  /// Which way the last scroll went, so the blocks it is heading for fill first.
+  bool _down = true;
+
+  /// A frame is already asked for to build the blocks still waiting.
+  bool _fillAsked = false;
+
+  /// **How many off-screen blocks one frame builds after a scroll.** A wheel
+  /// notch slides the window by several rows at once, and building them all in
+  /// the frame of the notch put a 200-layer comp's scroll at twice B1
+  /// (docs/13 §2) while the frames between notches built nothing. The blocks
+  /// in view are always built at once; the margin's are spread over the frames
+  /// that follow, two a frame, each held open by a blank of its own height
+  /// until its turn, so nothing that can be seen waits. One a frame lets a
+  /// steady scroll drain the margin, and then the rows in view are built all
+  /// at once again.
+  static const int marginBlocksPerFrame = 2;
+
+  /// The blocks a viewport scrolled to [_offset] shows, as `[first, last)`.
+  (int, int) _inView() {
+    final top = _offset;
+    final bottom = _offset + widget.viewport;
+    var first = widget.heights.length;
+    var last = 0;
+    var y = 0.0;
+    for (var i = 0; i < widget.heights.length; i++) {
+      final next = y + widget.heights[i];
+      if (next > top && y < bottom) {
+        if (i < first) first = i;
+        last = i + 1;
+      }
+      y = next;
+    }
+    return (first, last);
+  }
+
+  void _askFill() {
+    if (_fillAsked) return;
+    _fillAsked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fillAsked = false;
+      if (!mounted) return;
+      setState(() => _sliding = true);
+    });
+  }
+
   (int, int) _windowNow() {
     _offset = positionOf(widget.controller)?.pixels ?? _offset;
     return blockWindow(widget.heights, _offset, widget.viewport);
@@ -764,6 +812,8 @@ class _LazyBlocksState extends State<LazyBlocks> {
     // which blocks are in view, so take the window again rather than hold one
     // measured against heights that have gone.
     _window = _windowNow();
+    // A rebuild from above builds its whole window, as it always has.
+    _sliding = false;
   }
 
   @override
@@ -774,9 +824,14 @@ class _LazyBlocksState extends State<LazyBlocks> {
   }
 
   void _follow() {
+    final was = _offset;
     final next = _windowNow();
+    if (_offset != was) _down = _offset > was;
     if (next == _window) return;
-    setState(() => _window = next);
+    setState(() {
+      _window = next;
+      _sliding = true;
+    });
   }
 
   @override
@@ -809,13 +864,47 @@ class _LazyBlocksState extends State<LazyBlocks> {
     final over = raised != null && raised >= first && raised < last
         ? raised - first + (above > 0 ? 1 : 0)
         : null;
+    // After a scroll, the blocks the window brought in off screen wait their
+    // turn (see [marginBlocksPerFrame]); a drag in hand builds them all, since
+    // every block it can slide has to be real while it moves.
+    final lazy = _sliding && raised == null;
+    _sliding = false;
+    final (seenFirst, seenLast) = lazy ? _inView() : (first, last);
+    var budget = marginBlocksPerFrame;
+    var waiting = false;
+    Widget block(int i) {
+      if (!lazy || _built.containsKey(i) || (i >= seenFirst && i < seenLast)) {
+        return _blockAt(context, i);
+      }
+      if (budget > 0) {
+        budget--;
+        return _blockAt(context, i);
+      }
+      waiting = true;
+      return KeyedSubtree(
+          key: ValueKey<int>(i), child: SizedBox(height: widget.heights[i]));
+    }
+
+    // Nearest the view first, on the side the scroll is heading for, so the
+    // rows about to be seen are the first filled.
+    final belowView = [for (var i = seenLast; i < last; i++) i];
+    final aboveView = [for (var i = seenFirst - 1; i >= first; i--) i];
+    final made = <int, Widget>{
+      for (var i = seenFirst; i < seenLast; i++)
+        if (i >= first && i < last) i: block(i),
+      for (final i in _down
+          ? [...belowView, ...aboveView]
+          : [...aboveView, ...belowView])
+        i: block(i),
+    };
+    if (waiting) _askFill();
     return RepaintBoundary(
       child: RaisedColumn(
         raised: over,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (above > 0) SizedBox(height: above),
-          for (var i = first; i < last; i++) _blockAt(context, i),
+          for (var i = first; i < last; i++) made[i] ?? _blockAt(context, i),
           if (below > 0) SizedBox(height: below),
         ],
       ),
