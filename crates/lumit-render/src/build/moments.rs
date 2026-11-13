@@ -73,6 +73,7 @@ pub(super) fn picture_of(
         natural: [comp.width as f32, comp.height as f32],
         graph_fx: Vec::new(),
         place: None,
+        points_schedules: Vec::new(),
     }
 }
 
@@ -140,6 +141,7 @@ pub(super) fn plain_input(
         natural: [natural.0, natural.1],
         graph_fx: Vec::new(),
         place: None,
+        points_schedules: Vec::new(),
     }
 }
 
@@ -196,6 +198,7 @@ pub(super) fn own_moments_pictures(
     };
     let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
     let Some((upto, moments)) = lumit_core::fx::moments::stack_own_moments(
+        owner,
         &layer.effects,
         layer.switches.fx,
         lt,

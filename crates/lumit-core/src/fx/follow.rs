@@ -181,6 +181,7 @@ pub fn times(comp: &Composition, layer: &Layer, t: f64) -> Vec<f64> {
             let markers = crate::fx::markers::MarkerContext::for_layer(comp, layer);
             let start = layer.start_offset.0.to_f64();
             crate::fx::moments::stack_own_moments(
+                layer.id,
                 &tail(layer, at, follow).effects,
                 true,
                 lt,

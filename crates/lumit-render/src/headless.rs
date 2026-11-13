@@ -9169,6 +9169,7 @@ mod tests {
     /// darkens over its first second, with Time loop after the darkening and
     /// Source layer empty: frame 20 is the plain layer's frame 5, and inside
     /// the first lap the frame is the layer's own, not the loop laid over it.
+    /// Source layer naming the layer itself does the same.
     #[test]
     fn a_time_loop_with_no_source_loops_its_own_layer() {
         let mut r = match HeadlessRenderer::shared() {
@@ -9178,11 +9179,12 @@ mod tests {
                 return;
             }
         };
-        let build = |looped: bool| {
+        let build = |looped: bool, itself: bool| {
             use lumit_core::model::EffectValue;
             let (mut doc, comp_id, _) = matrix_base(32, 16, LinearColour([0.8, 0.1, 0.1, 1.0]));
             matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
             let comp = doc.comp_mut(comp_id).unwrap();
+            let own = comp.layers[1].id;
             let mut darken = lumit_core::fx::builtins::instantiate("exposure").unwrap();
             for p in &mut darken.params {
                 if p.id == "stops" {
@@ -9191,8 +9193,10 @@ mod tests {
             }
             let mut time_loop = lumit_core::fx::builtins::instantiate("time_loop").unwrap();
             for p in &mut time_loop.params {
-                if p.id == "duration" {
-                    p.value = EffectValue::Float(Property::fixed(0.5));
+                match p.id.as_str() {
+                    "duration" => p.value = EffectValue::Float(Property::fixed(0.5)),
+                    "source" if itself => p.value = EffectValue::Layer(Some(own)),
+                    _ => {}
                 }
             }
             time_loop.enabled = looped;
@@ -9204,12 +9208,17 @@ mod tests {
                 .expect("the export path renders")
                 .0
         };
-        let looped = build(true);
-        let plain = build(false);
+        let looped = build(true, false);
+        let plain = build(false, false);
         assert_eq!(
             frame(&looped, 20),
             frame(&plain, 5),
             "a lap later, the layer as it was"
+        );
+        assert_eq!(
+            frame(&build(true, true), 20),
+            frame(&plain, 5),
+            "Source layer naming the layer itself loops it too"
         );
         assert_eq!(
             frame(&looped, 5),
@@ -9220,6 +9229,62 @@ mod tests {
             frame(&looped, 20),
             frame(&plain, 20),
             "the loop comes round"
+        );
+    }
+
+    /// **A Particulate above a Time loop loops its particles.** The layer drawn
+    /// again at the loop's moment carries its own birth schedules, so a lap
+    /// later the particles are where they were, not gone.
+    #[test]
+    fn a_time_loop_loops_the_particles_above_it() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        use lumit_core::model::EffectValue;
+        // In the middle of this small comp, large and many: an emitter at a
+        // 1080p centre would draw nothing here. One instance for both comps,
+        // so both draw from the same seed.
+        let mut particles = lumit_core::fx::builtins::instantiate("particulate").unwrap();
+        for p in &mut particles.params {
+            let v = match p.id.as_str() {
+                "position_x" | "position_y" => 32.0,
+                "size" => 6.0,
+                "emit_rate" => 400.0,
+                _ => continue,
+            };
+            p.value = EffectValue::Float(Property::fixed(v));
+        }
+        let build = |looped: bool| {
+            let (mut doc, comp_id, _) = matrix_base(64, 64, LinearColour([0.0, 0.0, 0.0, 1.0]));
+            matrix_top(&mut doc, comp_id, LinearColour([0.0, 0.0, 0.0, 0.0]));
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let particles = particles.clone();
+            let mut time_loop = lumit_core::fx::builtins::instantiate("time_loop").unwrap();
+            for p in &mut time_loop.params {
+                if p.id == "duration" {
+                    p.value = EffectValue::Float(Property::fixed(0.5));
+                }
+            }
+            time_loop.enabled = looped;
+            comp.layers[1].effects = vec![particles, time_loop];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let mut frame = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid), f: u64| {
+            r.render_rgba(doc, *comp_id, f, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let plain = build(false);
+        let looped = build(true);
+        assert_ne!(frame(&plain, 5), frame(&plain, 20), "the particles move");
+        assert_eq!(
+            frame(&looped, 20),
+            frame(&plain, 5),
+            "a lap later, the particles as they were"
         );
     }
 

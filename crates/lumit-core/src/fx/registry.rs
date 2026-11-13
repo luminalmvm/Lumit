@@ -513,7 +513,8 @@ pub trait EffectDef: Sync + Send + 'static {
     /// Whether this instance, as its rows stand, is the one in its stack that
     /// shows its input at other moments. Read off the rows rather than the
     /// clock, so which effect it is never changes from frame to frame.
-    fn wants_own_moments(&self, _e: &EffectInstance) -> bool {
+    /// `owner` is the layer the instance is on.
+    fn wants_own_moments(&self, _e: &EffectInstance, _owner: uuid::Uuid) -> bool {
         self.shows_own_moments()
     }
 
