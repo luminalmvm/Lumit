@@ -44,13 +44,22 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- The interface can be used to directly alter the curve.
-- **Black**, **Shadows**, **Midtones**, **Highlights** and **White** are the
-  channel's curve outputs at inputs 0, 0.25, 0.5, 0.75 and 1.
-- **Master** applies to all three channels, while **Red**, **Green** and
-  **Blue** apply to individual channels.
+The five curves share one graph. The buttons beside it pick which curve it shows.
+
+- Click the graph to add a point, up to 32 on a curve. Drag a point to move it. Drag it
+  well clear of the graph to remove it. The two end points cannot be removed.
+- **Reset curve**, under the buttons once the curve showing is bent, straightens that
+  curve.
+- A right-click on the graph offers **Add point**, **Delete point**, **Reset curve**,
+  **Copy curve** and **Paste curve**, and the graph's size: **Small**, **Medium** or
+  **Large**.
+- **Master** applies to red, green and blue together, after their own curves.
+- **Red**, **Green** and **Blue** apply to individual channels.
+- **Alpha** applies to the layer's transparency.
 - **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
 
 ## Related
 

@@ -14,7 +14,7 @@ pub(crate) fn read_animator(
     animator: &lumit_core::text::TextAnimator,
     offset: lumit_core::time::Rational,
 ) -> BridgeTextAnimator {
-    use lumit_core::text::{SelectorBasis, SelectorKind, SelectorShape};
+    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorShape};
     let read = |p| BridgeScalar::read_at(p, offset);
     let s = &animator.selector;
     BridgeTextAnimator {
@@ -76,7 +76,7 @@ pub(super) fn animator_from(
     animator: BridgeTextAnimator,
     offset: lumit_core::time::Rational,
 ) -> Result<lumit_core::text::TextAnimator, BridgeError> {
-    use lumit_core::text::{SelectorBasis, SelectorKind, SelectorShape};
+    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorShape};
     let write = |s: &BridgeScalar| -> Result<lumit_core::anim::Property, BridgeError> {
         Ok(lumit_core::anim::Property {
             animation: s.animation_at(offset)?,
@@ -102,7 +102,7 @@ pub(super) fn animator_from(
     }
     Ok(lumit_core::text::TextAnimator {
         name: animator.name.clone(),
-        selector: lumit_core::text::RangeSelector {
+        selector: lumit_core::text::selector::RangeSelector {
             start: write(&s.start)?,
             end: write(&s.end)?,
             offset: write(&s.offset)?,

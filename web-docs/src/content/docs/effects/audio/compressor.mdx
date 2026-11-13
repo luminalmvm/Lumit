@@ -44,7 +44,8 @@ layer's sound is placed that much earlier.
 - **Release**: how fast it lets go again, in milliseconds.
 - **Makeup**: gain put back after the compression, in dB.
 - **Detector**: what the detector listens to: 0 peak, 1 RMS.
-- **Lookahead**: how far ahead the detector hears, in milliseconds.
+- **Lookahead**: how far ahead the detector hears, in milliseconds. It is read once, at the
+  start of the sound, and does not follow keyframes.
 - **Wet**: how much of the compressed sound is in the output. Below 100 the untouched sound
   is mixed in beside it.
 

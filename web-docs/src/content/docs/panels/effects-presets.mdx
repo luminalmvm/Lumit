@@ -9,36 +9,83 @@ import Shot from "../../../components/Shot.astro";
 
 Every available effect can be found in this panel grouped by category. Within a category
 the effects are in alphabetical order, here and in the **Effect** menu.
-Presets saved to the application's preset folder also appear at the top.
-The search also finds an effect by the After Effects or plugin name it is imported from,
-such as Deep Glow or S_Glow for Glow.
+Saved presets are listed above the categories.
+
+Open it from **Window ▸ Panels ▸ Effects & presets**, or press `Ctrl+5`.
 
 | Group | What it holds |
 | --- | --- |
-| **Built-in** | Effects that ship with Lumit. |
-| **Presets** | Saved presets which can hold keyframes and multiple effects values. |
-| A plugin's own heading | [OpenFX plugins](/use/plugins/), under the grouping each declares. |
+| **Favourites** | The starred effects and presets. Drawn once something is starred. |
+| **Saved presets** | The presets in the preset library, in their groups, and the presets that come with Lumit under **Film**. See [Effect presets](/use/presets/). |
+| The categories | The effects that ship with Lumit, and the effects of installed [extensions](/use/extensions/). [Drivers](/use/nodes/#drivers) are under **Controls**. |
+| A plugin's own heading | [OpenFX plugins](/use/plugins/), under the grouping each declares. One that declares none is under **Plugins**, and [audio plugins](/use/audio-plugins/) are under **Audio plugins**. |
 
-:::note[Not yet built]
-LFX, Lumit's own plugin format, still requires implementing.
-:::
+A click on a heading folds it. Right-click any heading for **Collapse** or **Expand**,
+**Expand all** and **Collapse all**.
 
 <Shot file="effects-presets.png" caption="The Effects & presets panel." eager/>
 
+## Search
+
+The box at the top filters effects by their name or their heading's, and presets by their
+name or their group's. It also finds an effect by the After Effects or plugin name it is
+imported from, such as Deep Glow or S_Glow for Glow. While it holds text every heading
+with a match is open. `Ctrl+F` puts the cursor in it while the panel is focused. With
+nothing found the panel reads **No effects match**.
+
 ## Apply one
 
-Drag an effect or a saved preset onto a layer, or onto a clip in the Cut timeline. You can
-also select layers and double-click the effect, or right-click it and choose **Add to
-selected**. With several layers selected, it goes on all of them.
-The **Effect** menu does the same job on the primary layer.
+Drag an effect or a saved preset onto a layer in the Timeline, onto
+[Effect controls](/panels/effect-controls/), onto the [node graph](/use/nodes/) or onto a
+clip in the Cut timeline.
+
+A double-click, or **Add to selected** on the right-click menu, applies it to the clip
+selected in the Cut timeline, or else to every selected layer as one undo step.
+
+## Save and load a preset
+
+The two marks beside the search box are **Load preset…**, which applies a preset file
+from anywhere on disk to the primary selected layer, and **Save preset…**, which saves
+that layer as one. Both are greyed with no layer selected. The right-click menus of
+**Saved presets** and of the empty panel hold the same two. See
+[Effect presets](/use/presets/).
+
+## An effect's menu
+
+Right-click an effect:
+
+| Item | What it does |
+| --- | --- |
+| **Add to selected** | Applies the effect. Greyed with no layer or clip selected. |
+| **Favourite** | Stars the effect, or takes the star off. |
+| **Manual page** | Opens the effect's page in this manual. |
+| **From an OpenFX plugin**, **From an audio plugin**, **From an extension** | A line saying where an effect that is not Lumit's own came from. |
+| [**Switch this plugin off**](/use/plugins/#switch-one-off) | On a plugin. |
+
+## Groups
+
+Saved presets are grouped by the folders they sit in inside the preset library. Right-click
+**Saved presets** or a group for **New group**, **Rename…**, **Show in folder** and **Delete**.
+Deleting a group deletes the presets in it, and asks first when there are any. Drag a preset
+onto a group to move it there, or right-click it and choose **Move to**. A preset's own menu
+also has **Add to selected**, **Favourite**, **Rename…**, **Show in folder** and **Delete**,
+which asks first. The presets that come with Lumit can't be renamed, moved or deleted.
+
+A preset that carries transform keys or text animators wears a key mark.
+
+## Favourites
+
+The star beside an effect or a preset makes it a favourite. A row that is not a favourite
+shows its star while the pointer is over it. The star by the search box lists the
+favourites alone, and is greyed until there are some. Favourites are kept between launches.
 
 ## After Effects presets
 
 **Settings ▸ General ▸ After Effects presets ▸ Import** turns every `.ffx` in a folder,
 and the folders inside it, into a Lumit preset listed here, grouped by those folders. A
 preset with no effects, or named like one already in its group, is skipped. The same preset
-left at the top by an earlier import moves into its group. **Animation ▸ Apply animation preset** and the
-Effect Controls panel's preset load also open an `.ffx` directly.
+left at the top by an earlier import moves into its group. **Load preset…** and
+**Animation ▸ Apply animation preset…** also open an `.ffx` directly.
 
 | In the preset | Arrives as |
 | --- | --- |
@@ -50,28 +97,9 @@ Effect Controls panel's preset load also open an `.ffx` directly.
 
 A layer's own transform, masks and text animators in a preset are not read.
 
-## Groups
-
-Saved presets are grouped by the folders they sit in inside the preset folder. Right-click
-**Saved presets** or a group for **New group**, **Rename…**, **Show in folder** and **Delete**.
-Deleting a group deletes the presets in it, and asks first when there are any. Drag a preset
-onto a group to move it there, or right-click it and choose **Move to**. A preset's own menu
-also has **Rename…**, **Show in folder** and **Delete**. The presets that come with Lumit
-can't be renamed, moved or deleted.
-
-The two marks beside the search box load a preset onto the selected layer and save its effects
-as one.
-
-Right-click any heading for **Expand all** and **Collapse all**.
-
-## Favourites
-
-If there's particular effects or presets you use regularly, you can save them as 
-favourites by clicking the star next to their name. A row that is not a
-favourite shows its star while the pointer is over it. Toggling the star by the search bar
-displays only favourited items, and it is greyed until there are some.
-
 ## Related
 
 - [Effects](/use/effects/)
+- [Effect presets](/use/presets/)
 - [Effect Controls](/panels/effect-controls/)
+- [Effects console](/use/fx-console/)

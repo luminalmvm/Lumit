@@ -19,31 +19,71 @@ is [layer](/use/layers/).
 A Sequence layer suits cutting more than compositing. One row holds a whole run of shots,
 so the timeline remains clean.
 
+## Make one
+
+- **Layer ▸ New ▸ Sequence**, `Ctrl+Alt+Shift+S`, adds an empty Sequence layer.
+- **Convert to sequence layer**, on a Footage layer's right-click menu and in the **Layer**
+  menu, turns the layer into a Sequence layer holding one clip of what it showed. A retimed
+  layer is **refused**.
+- **Convert to footage layer** turns a Sequence layer of one clip back. A layer of several
+  clips, or one whose clip plays a composition, is **refused**.
+- With **Settings ▸ Timeline ▸ Video arrives as a Sequence layer** on, footage with a
+  moving picture is placed as a Sequence layer of one clip. A still is placed as a Footage
+  layer.
+- Footage placed in the [Cut workspace](/use/cutting/) lands on Sequence layers.
+
+An audio-only Sequence layer holds sound clips. See the
+[Audio timeline](/panels/audio/#audio-timeline).
+
 ## Each clip carries its own
 
-- Source.
+- Source: a footage item or a composition.
 - Trim, in and out.
 - [Retime](/use/retime/).
+- A fade in and a fade out.
+- An effect stack, and on a picture clip a blend mode.
+
+Two clips may overlap, never three. The overlap is a dissolve on a picture layer and a
+crossfade on an audio-only one. A gap between clips is transparent, or silent.
 
 ## Edit clips
 
 To edit a Sequence layer's clips or their speed, double-click the Sequence layer in the
-Timeline.
+Timeline. The row opens in place, with the clips across the top and their speed envelope
+below. Double-click the clips to shut it.
 
 - Drag a clip's edge to trim it.
-- Drag a clip along the row to move it.
-- Use the razor to split a clip at the playhead. A cut between two clips is an
-  **edit point**.
-- Right-click a clip for the menu it has in the [Cut timeline](/use/cutting/).
+- Drag a clip along the row to move it. It overwrites what it lands on.
+- With the [Razor](/panels/toolbar/) armed, click a clip to cut it there. `Shift`+click
+  cuts every layer at that frame. A cut between two clips is an **edit point**.
+- Right-click a clip for the menu it has in the [Cut timeline](/use/cutting/), with **Copy
+  the layer's cuts** and **Paste the layer's cuts** for its [shape](#sequence-shapes).
+- Right-click the row's empty ground for **Paste**, **Close gap**, the same two rows and
+  **Close Sequence view**.
 - `Ctrl+,` and `Ctrl+.` move the playhead to the previous and the next edit point.
 
 Under the clips is the **speed envelope**, a line per clip in per cent. See
-[Speed on a clip](/use/retime/#speed-on-a-clip).
+[Speed on a clip](/use/retime/#speed-on-a-clip). Drag the divider above it to make it
+taller or shorter. Double-click the divider, or right-click it for **Reset height**, to put
+it back.
 
 Editing a clip's speed never moves its start or changes its length.
 
 The razor cuts through an eased speed ramp. What it refuses is a cut on a
 clip's own ends, or a retime driven by an expression.
+
+## Sequence shapes
+
+A **shape** is where a Sequence layer's cuts fall and how each clip is retimed, without the
+footage. Pasted onto another Sequence layer it cuts and retimes that layer to match, and
+the layer keeps its own footage.
+
+- **Copy sequence shape** and **Paste sequence shape** are on a Sequence layer's right-click
+  menu in the Timeline. **Copy the layer's cuts** and **Paste the layer's cuts**, in the
+  open row, are the same commands.
+- The layer plays the source of its first clip throughout.
+- A shape longer than the layer it is pasted onto is cut off at the layer's end.
+- The copied shape is kept until Lumit closes.
 
 ## What applies to the whole layer
 
@@ -53,7 +93,11 @@ the clips have been retimed. So do the layer's own effects.
 A clip also carries an effect stack and a blend mode of its own, set in the
 [Cut workspace](/use/cutting/#effects-and-blend-mode-on-a-clip).
 
+**Layer ▸ Enable Retime** is disabled on a Sequence layer, where it reads *Retime (open the
+layer to ramp its clips)*.
+
 ## Related
 
 - [Layers](/use/layers/)
+- [Cutting](/use/cutting/)
 - [Retiming and speed](/use/retime/)

@@ -11522,7 +11522,7 @@ fn copies_on_a_flattened_curve_face_the_curve() {
 /// room for, while a slice 4 px thin is rounded by 2 and stays.
 #[test]
 fn clone_deformer_cuts_and_fillets_on_the_paths() {
-    use effects::clone_deformer::{filleted, overlay};
+    use effects::clone_deformer::{fillet::filleted, overlay};
     let square = vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]];
     let bar = vec![vec![
         [-10.0, 45.0],
@@ -11557,7 +11557,7 @@ fn clone_deformer_cuts_and_fillets_on_the_paths() {
 /// the tip of a narrow wedge stay.
 #[test]
 fn round_corners_closes_a_nicked_corner() {
-    use effects::clone_deformer::{filleted, without_nicks};
+    use effects::clone_deformer::fillet::{filleted, without_nicks};
     let nicked = vec![
         [0.0, 0.0],
         [100.0, 0.0],
@@ -11659,7 +11659,7 @@ fn round_corners_closes_a_nicked_corner() {
 /// Cavalry's Bevel: a 120° corner's arc starts 20 px from it on both sides.
 #[test]
 fn round_corners_radius_is_along_the_sides() {
-    use effects::clone_deformer::filleted;
+    use effects::clone_deformer::fillet::filleted;
     let h = 100.0 * 3f32.sqrt() / 2.0;
     let hexagon: Vec<[f32; 2]> = (0..6)
         .map(|k| {

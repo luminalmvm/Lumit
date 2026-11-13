@@ -2,7 +2,7 @@
 title: Working with the node graph
 description: Drive a glow from the music, and feed one effect's points into another.
 sidebar:
-  order: 2
+  order: 3
 ---
 
 import Shot from "../../../components/Shot.astro";
@@ -22,16 +22,16 @@ The composition has a music layer and a layer you want to react to it.
 **1. Put a Glow on the layer.** Select the layer and add **Effect ▸ Stylise ▸ Glow**. It appears
 in the graph as a box between Source and Layer out.
 
-**2. Add the driver.** Click empty canvas and press `ctrl+spacebar`. This brings up the 
+**2. Add the driver.** Click empty canvas and press `Ctrl+Space`. This brings up the
 effect console. Type `audio` and pick **[Audio level](/effects/drivers/audio-level/)**.
 
-**3. Point it at the sound.** Pick the sound layer on Audio level's **Audio** row. Audio
-level returns two values — **Amplitude**, the whole sound, and **Low**, the bottom end alone.
+**3. Point it at the sound.** With the Audio level box picked, set **Source** to **Layer**
+in the Node panel and choose the sound layer on its **Audio** row.
 
 **4. Expose Glow's parameters.** Click the **twirl** in Glow's header and a socket
 appears beside every one of its parameters.
 
-**5. Fit the range.** Press `ctrl+space` again and add a **[Remap](/effects/drivers/remap/)**.
+**5. Fit the range.** Press `Ctrl+Space` again and add a **[Remap](/effects/drivers/remap/)**.
 Drag from Audio level's **Low** socket to Remap's **Value** socket, then set **In high**
 to about `0.4` and **Out low** / **Out high** to the quiet and loud ends of the glow you
 want.
@@ -39,36 +39,38 @@ want.
 **6. Wire to output.** Drag from Remap's output to Glow's **Intensity** socket. Play the
 composition back.
 
-The Intensity row in [Effect controls](/panels/effect-controls/) now names the driver
-where its value was. Any keyframes it had are overridden while the wire is there, and
-come back when it is removed.
+The Intensity row in [Effect controls](/panels/effect-controls/) now reads **driven**.
+Any keyframes it had are overridden while the wire is there, and come back when it is
+removed.
 
 ## Feed one effect's points into another
 
-The points family produces a **stream** — a set of positions, and another effect reads it. 
+The points family produces a **stream**, a set of positions, and another effect reads it.
 
-**1. Add the producer.** On a layer, add **Effect ▸ Generate ▸ Grid**. It draws a lattice
-of soft discs, and can output the same lattice's points on a **Points** socket.
+**1. Add the producer.** On a layer, add **Effect ▸ Points ▸ Grid**. It draws a lattice
+of soft discs, and hands out the same lattice's points on a **Points** socket.
 
-**2. Add the consumer, below it.** Add **Effect ▸ Generate ▸ Clone to points**. It must
-sit **after** Grid in the stack.
+**2. Add the consumer, below it.** Add **Effect ▸ Points ▸ Clone to points**. It arrives
+wired to Grid: its **Points** row in Effect controls reads Grid.
 
-**3. Wire them.** Drag from Grid's Points socket to Clone to points' Points socket.
+**3. Choose what gets cloned.** Set **Clone layer** on Clone to points to the layer you
+want stamped at each point.
 
-**4. Choose what gets cloned.** Set **Clone layer** on the Clone to points row to the
-layer you want stamped at each point.
+**4. Hide the lattice.** Turn Grid's **Mix** down to zero. The stream is still handed out.
 
-**5. Hide the lattice.** Turn Grid's **Mix** down to zero: the stream
-is still handed out while nothing is drawn.
+**5. Read another producer.** Add **Effect ▸ Points ▸ Scatter** and drag its heading above
+Clone to points in Effect controls. Pick it on Clone to points' **Points** row, or in the
+Node graph drag a wire from its **Points** socket to Clone to points' **Points** socket.
 
-[Connect points](/effects/generate/connect-points/),
-[Trail](/effects/generate/trail/), [Scatter](/effects/generate/scatter/) and
-[Emit from image](/effects/generate/emit-from-image/) feed or read the same socket.
+[Connect points](/effects/points/connect-points/),
+[Trail](/effects/points/trail/), [Scatter](/effects/points/scatter/) and
+[Emit from image](/effects/points/emit-from-image/) feed or read the same socket.
 
 ## Related
 
 - [The node graph](/use/nodes/)
 - [Node graph compositions](/use/node-graphs/)
+- [Building a node graph composition](/tutorials/node-graph-composition/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)
 - [Expressions](/use/expressions/)

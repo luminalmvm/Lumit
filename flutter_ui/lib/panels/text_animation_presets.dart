@@ -180,16 +180,25 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
   final comp = ui.selectedComp;
   // The axes of the picked layer's font, offered to every picked text layer.
   BridgeTextStyle? style;
+  var moved = const <String>{};
   try {
-    style = ui.selectedLayer.value?.getText()?.style;
+    final document = ui.selectedLayer.value?.getText();
+    style = document?.style;
+    moved = {
+      for (final a in document?.animators ?? const <BridgeTextAnimator>[])
+        for (final x in a.axes) x.tag,
+    };
   } catch (_) {
     // The layer has gone since it was picked.
   }
   // Asked now, answered a moment later: the row below is live, so a font
   // just switched to a variable one fills it while the menu is open.
-  List<BridgeFontAxis> axesNow() => style == null
-      ? const <BridgeFontAxis>[]
-      : shownFontAxes(style.family, style.face);
+  List<BridgeFontAxis> axesNow() => [
+        if (style != null)
+          for (final axis in shownFontAxes(style.family, style.face))
+            if (moved.contains(axis.tag) || moved.length < maxAnimatedFontAxes)
+              axis,
+      ];
   axesNow();
   BridgeTextAnimator fresh(LayerReference layer) => freshTextAnimator(l10n
       .textAnimatorDefaultName((layer.getText()?.animators.length ?? 0) + 1));

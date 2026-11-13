@@ -28,25 +28,119 @@ gives its shortcut as it is bound now, and the right-hand end of the
 | **Anchor point** | `Y` | Move the anchor point without moving the layer. |
 | **Razor** | `C` | Split a layer or a clip within a [Sequence layer](/use/sequence-layers/). |
 | **Shape** | `Q` | Rectangle, Rounded rectangle, Ellipse, Polygon, Star. Creates a mask or shape layer. |
-| **Pen** | `G` | Draw a bezier path. Click the first point to close it, or press `Enter` to leave it open. Creates a mask or shape layer. |
+| **3D shape** | `Shift+D` | Cube, Sphere, Cylinder, Cone, Torus, Plane, Pyramid. A click in the Viewer adds the [3D shape](/use/layers/#3d-shapes) there. |
+| **Pen** | `G` | Draw a bezier path. Click the first point to close it, or press `Enter` to leave it open. Creates a mask or shape layer. Add vertex, Delete vertex, Convert vertex and Mask feather edit a finished path. |
 | **Type** | `Ctrl+T` | Add [text](/use/text/). |
-| **Paint** | `Ctrl+B` | Brush, Clone stamp, Eraser. |
-| **Camera** | `Shift+C` | Orbit, Pan, Dolly the [camera](/use/camera/). |
+| **Paint** | `Ctrl+B` | Brush, Clone stamp, Eraser. See [Paint](/use/paint/). |
+| **Roto** | `Alt+W` | Roto brush, Refine edge. See [Roto brush](/use/roto-brush/). |
+| **Puppet** | `Ctrl+P` | Puppet position pin, starch pin, overlap pin, bend pin. See [Puppet](/use/puppet/). |
+| **Camera** | `Shift+C` | Unified camera, Orbit camera, Track camera, Dolly camera. See [Cameras and 3D](/use/camera/#camera-tools). |
+
+Lumit starts with the Selection tool armed.
+
+## Groups
+
+A button with a mark in its corner holds several tools. Press and hold it to open the
+flyout. The button keeps the tool last picked from it.
+
+Right-click any tool's button for its menu: the tools in its group, with the armed one
+ticked, **Reset tool options** where the tool has options, and **Change shortcut…**.
+
+## What the keys do
+
+| Tool | In the Viewer |
+| --- | --- |
+| **Selection** | `Shift` adds to the selection, keeps a move to one axis and a scale in proportion. The arrow keys nudge a pixel, ten with `Shift`. `Ctrl` suspends snapping. `Alt` moves a 3D layer across the view. `Ctrl+Alt` on a path point converts it. See [the Viewer](/panels/viewer/#in-the-picture). |
+| **Hand** | A drag pans. |
+| **Zoom** | A click zooms in, `Alt` zooms out, and a dragged box becomes the view. |
+| **Rotation** | A drag anywhere turns the selected layers, each about its own anchor point. `Shift` turns in 45° steps. `Shift`-click adds to the selection. |
+| **Anchor point** | A click or a drag places the anchor point. `Shift` keeps a drag to one axis. `Ctrl` snaps to the layer's corners, edge midpoints and centre. |
+| **Razor** | Nothing in the Viewer. Click a layer in the Timeline to cut it there. `Shift` cuts every layer at that frame. |
+| **Shape** | `Shift` keeps the width and height equal. `Alt` draws a mask on a selected shape layer. |
+| **Pen** | A drag pulls out a point's handles, and `Alt` pulls out one only. `Backspace` removes the last point. `Esc` or `Enter` ends the path and leaves it open. |
+| **Add vertex** | A click on a path's line adds a point there. |
+| **Delete vertex** | A click on a point removes it. |
+| **Convert vertex** | A click on a point switches it between corner and smooth. A drag on a point pulls out a pair of handles, and a drag on a handle moves that handle alone. |
+| **Mask feather** | A drag on a mask's point sets that point's feather width. |
+| **Type** | `Shift+Enter` starts a new line. `Enter` or `Esc` finishes the edit. |
+| **Brush**, **Eraser** | `Backspace` removes the last stroke. `Esc` abandons a stroke in progress. |
+| **Clone stamp** | `Alt`-click sets the source. `Backspace` removes the last stroke. |
+| **Roto brush** | `Alt` marks the background. `Esc` abandons a stroke in progress. |
+| **Puppet position**, **starch** and **overlap pins** | A click places a pin and a drag moves one. `Delete` removes the pin under the pointer. |
+| **Puppet bend pin** | A click places a pin and a drag turns it. `Alt` scales it instead. `Delete` removes the pin under the pointer. |
+| **Unified camera** | The left button orbits, the middle button tracks and the right button dollies. `Shift` keeps orbiting and tracking to one axis. |
+| **Orbit camera**, **Track camera** | `Shift` keeps the move to one axis. |
+
+The camera tools move the active camera whatever is selected. In a fixed or custom
+[3D view](/use/camera/#3d-views) they move the view.
 
 ## Shape and Pen: layer or mask?
 
 <Shot file="toolbar-flyout.png" caption="A shape group's flyout, with the five shape tools." />
 
 With a **layer selected**, these draw a [mask](/use/masks/) on the layer. With **nothing
-selected**, they create a [shape layer](/use/shapes/) at the top of the composition.
+selected**, they create a [shape layer](/use/shapes/) at the top of the composition. With a
+**shape layer selected**, they add a shape to it, and `Alt` draws a mask on it instead.
 
 :::note[Not yet built]
-These are left out of the flyouts until they work:
-- Vertical text
-- The Pen's alternative options: Add vertex, Delete vertex, Convert vertex, Mask feather
+Vertical text is not built, and is left off the toolbar.
 :::
 
 ## Tool options
 
 If a tool has additional customisation, such as fill colour or stroke width, then these options appear to the 
 right-hand side of the tools when available.
+
+| Tool | Options | As shipped |
+| --- | --- | --- |
+| **Selection**, **Rotation** | **Local axes**, **World axes**, **View axes**. The Rotation tool adds **Orientation** and **Rotation**. Shown while the composition has a 3D layer, a light or a camera. See [3D handles](/use/camera/#3d-handles). | Local axes, Orientation |
+| **Type** | **Fill**, and the text size, 1 to 2000 px. | White, 72 px |
+| **Shape**, **Pen** | **Fill**, **Stroke**, and **Width**, 0 to 1000 px. A width of 0 draws no outline. | White, black, 2 px |
+| **Paint** | **Fill**, **Size**, 1 to 2000 px, **Shape**, Round or Square, **Hardness**, 0 to 100%, **Pressure**, on or off, and **Opacity**, 0 to 100%. | White, 20 px, Round, 80%, on, 100% |
+| **Roto** | **Size**, 1 to 2000 px. | 40 px |
+| **Puppet** | **Density**, 2 to 500 px, and **Expansion**, 0 to 100 px. | 24 px, 3 px |
+| **Camera** | **Orbit around**: **Point of interest**, **Cursor**, **Scene** or **Selection**. | Cursor |
+
+- **Fill** and **Stroke** are colour wells. Click one for the colour picker.
+- With a Shape tool or the Pen, click the word **Fill** or **Stroke** to choose **Solid
+  colour** or **None**. A well set to None wears a red slash.
+- **Hardness** runs from 0%, a brush that fades from its centre, to 100%, a hard edge.
+- **Pressure** lets a stylus's pressure widen the mark.
+
+The options are kept until Lumit is closed, and are not saved with the project. **Reset
+tool options** in a tool's right-click menu puts that tool's back as shipped.
+
+## Snapping
+
+The magnet at the end of the tools switches snapping for drags in the Viewer. It is the
+same switch as **Snap to guides** in the Viewer's
+[Guides menu](/panels/viewer/#guides-grid-and-rulers). Holding `Ctrl` suspends it for one
+drag.
+
+Right-click the magnet for what a drag lands on: **Snap to guides**, **Snap to grid** and
+**Snap to layers**.
+
+## Where the toolbar stands
+
+**Edit ▸ Settings ▸ Appearance ▸ Viewer ▸ Toolbar position** is **Style's choice**, **Top**
+or **Left**. Top is a strip under the menu bar. Left is a column down the window's left
+edge, with the tool options and the workspace names moved to the top line. The Desk style
+chooses Left. A right-click on an empty stretch of the toolbar offers the same three.
+
+A toolbar too short for its tools folds the last of them into **⋯**.
+
+## In a project you can only look at
+
+Invited to look at a [shared project](/use/projects/#shared-projects), only the Hand and
+Zoom tools can be armed.
+
+## Related
+
+- [Viewer](/panels/viewer/)
+- [Masks](/use/masks/)
+- [Shapes](/use/shapes/)
+- [Text](/use/text/)
+- [Paint](/use/paint/)
+- [Roto brush](/use/roto-brush/)
+- [Puppet](/use/puppet/)
+- [Cameras and 3D](/use/camera/)

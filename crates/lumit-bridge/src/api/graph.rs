@@ -383,7 +383,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
                         .map(move |(name, label)| (i, animator.name.clone(), name, label))
                 })
                 .map(|(i, animator, name, label)| {
-                    let port = lumit_core::text::animator_port(i, &name);
+                    let port = lumit_core::text::ports::animator_port(i, &name);
                     BridgePort {
                         wired: input_wired(InputRef::Param {
                             node: NodeRef::Source,

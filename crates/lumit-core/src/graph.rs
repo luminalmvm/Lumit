@@ -754,7 +754,7 @@ impl LayerGraph {
                 // ones the layer has is the document's to say; a port that
                 // names none is ignored when the letters are worked out.
                 if matches!(node, NodeRef::Source)
-                    && port.starts_with(crate::text::TEXT_PORT_PREFIX)
+                    && port.starts_with(crate::text::ports::TEXT_PORT_PREFIX)
                 {
                     return Ok(PortType::Number);
                 }

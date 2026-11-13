@@ -1,0 +1,96 @@
+---
+title: Puppet
+description: Bend a layer's picture with pins on a mesh.
+sidebar:
+  order: 13.2
+---
+
+**Puppet** lays a mesh over the opaque part of a layer and bends the picture between
+**pins**. It bends the layer after its paint and masks, and before its effects.
+
+For a walkthrough, see [Pinning a character with Puppet](/tutorials/puppet/).
+
+## The pin tools
+
+Four tools share one toolbar button. `Ctrl+P` arms it, and pressing again steps through
+them.
+
+| Tool | Its pin |
+| --- | --- |
+| **Puppet position pin** | Holds a spot of the picture, or moves it. |
+| **Puppet starch pin** | Stiffens the mesh round it. |
+| **Puppet overlap pin** | Says which part draws in front where the picture folds over itself. |
+| **Puppet bend pin** | Turns and scales the mesh round it. |
+
+With a pin tool armed, the selected layer shows its mesh as a wireframe.
+
+- **Click** the mesh to place a pin of the armed tool's kind. A click on a pin places
+  nothing.
+- **Drag** a pin to move it. With the Bend pin tool, dragging a bend pin turns it and
+  `Alt`-dragging scales it.
+- `Delete` removes the pin under the pointer.
+- `Escape` abandons a drag.
+- **Right-click** a pin for **Rename…**, **Delete all pins** and **Delete pin**.
+
+The wireframe and the pin follow a drag, and the picture bends when it is released. A
+drag on a pin whose stopwatch is on sets a keyframe at the playhead.
+
+## The mesh
+
+The mesh is cut from the layer's alpha at the frame the first pin is placed on. Pixels
+under 10 % opaque are outside it. The mesh is not saved in the project.
+
+| Option | What it does |
+| --- | --- |
+| **Density** | The size the mesh's triangles aim for, in the layer's pixels, from 2 to 500. Starts at 24. |
+| **Expansion** | How far past the opaque edge the mesh reaches, in pixels, from 0 to 100. Starts at 3. |
+
+Both are on the toolbar while a pin tool is armed. Changing one with a pinned layer
+selected rebuilds that layer's mesh.
+
+A mesh holds at most 1,500 points. A **Density** finer than that allows is coarsened to
+fit, and a layer too large for the coarsest mesh is left unbent.
+
+## Pins in the Timeline
+
+A layer with pins has a **Puppet** heading in the Timeline, a row for each pin, and a row
+under it for each of the pin's numbers. Every number row has a stopwatch. A pin is named
+after its kind and numbered.
+
+| Pin | Rows |
+| --- | --- |
+| **Position pin** | **Position x**, **Position y** |
+| **Starch pin** | **Position x**, **Position y**, **Amount**: how stiff, from 0 to 100 % |
+| **Overlap pin** | **Position x**, **Position y**, **Amount**: from −100 to 100 %, positive in front |
+| **Bend pin** | **Position x**, **Position y**, **Rotation** in degrees, **Scale** from 1 to 1,000 % |
+
+**Amount** starts at 0, so a new starch or overlap pin changes nothing until it is raised.
+
+A starch, overlap or bend pin's own row carries its **extent**: how far it reaches, in
+pixels, from 1 to 10,000. It starts at 50, cannot be keyframed, and is drawn as a circle
+round the pin while the pin is dragged.
+
+Double-click a pin's name to rename it. Right-click it for **Rename** and **Delete pin**.
+
+A pin left outside the mesh after the mesh is rebuilt is drawn hollow and does nothing.
+
+## Refusals
+
+| Status line | When |
+| --- | --- |
+| **Select a layer to pin** | No layer is selected. |
+| **Nothing opaque here** | The layer has no mesh at this frame. |
+| **That point is outside the puppet's mesh** | The click missed the mesh. |
+
+:::note[Limitation]
+A pin's keyframes draw as diamonds on its Timeline lane and have no curve in the
+[graph editor](/panels/graph-editor/). A pin placed on a puppet that is already bent
+pulls its spot back to where it was before the bend. On a footage layer the mesh is cut
+from each frame's own alpha.
+:::
+
+## Related
+
+- [Pinning a character with Puppet](/tutorials/puppet/)
+- [Keyframes](/use/keyframes/)
+- [The toolbar](/panels/toolbar/)

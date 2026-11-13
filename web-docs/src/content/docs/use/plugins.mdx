@@ -11,6 +11,8 @@ Lumit is an **OpenFX host**. Plugins you have installed for other applications
 that use OFX are found on start-up and offered beside the built-in effects, 
 and behave in the same way.
 
+CLAP and VST3 audio plugins are hosted too. See [Audio plugins](/use/audio-plugins/).
+
 <Shot file="effects-presets-ofx.png" caption="A plugin's own heading in the Effects & presets panel, under the built-in categories." eager/>
 
 ## Where Lumit looks
@@ -22,15 +24,22 @@ The standard OpenFX locations, scanned once at start-up:
 | Windows | `C:\Program Files\Common Files\OFX\Plugins` |
 | macOS | `/Library/OFX/Plugins` |
 | Linux | `/usr/OFX/Plugins` |
+| Linux, in the Flatpak | `/usr/OFX/Plugins` on the machine, read at `/run/host/usr/OFX/Plugins` |
 
-Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too.
+Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too. Each folder is
+searched four folders deep for `.ofx.bundle` bundles.
 
-The scan runs in the background. Install a plugin while Lumit is running and it appears
-the next time you launch.
+The scan runs as Lumit starts, before its window opens, and the splash names each bundle
+as it is read. Install a plugin while Lumit is running and it appears the next time you
+launch.
 
 A plugin Lumit cannot use is turned away, and the reason is written to `plugin-scan.txt`
 beside `plugins.json`; see [Troubleshooting](/reference/troubleshooting/#a-plugin-is-missing).
-The other plugins in the folder are unaffected. Retimer and paint plugins are turned away.
+A scan that turns nothing away leaves the last report in place. The other plugins in the
+folder are unaffected. Retimer and paint plugins are turned away.
+
+An installed [extension](/use/extensions/) can carry an OpenFX bundle in its own folder.
+It is found by the same scan.
 
 ## Where they appear
 
@@ -38,6 +47,12 @@ In the [Effects & presets](/panels/effects-presets/) panel, under the plugin's o
 grouping as a heading of its own. A plugin declaring no grouping goes under **Plugins**.
 
 From there it groups, folds, searches, stars and drags exactly like a built-in effect.
+It is listed in the **Effect** menu, the **Add effect** menu and the
+[effects console](/use/fx-console/) under the same heading. Its right-click menu in the
+panel reads **From an OpenFX plugin**.
+
+A plugin's parameters are rows in [Effect controls](/panels/effect-controls/). A plugin
+hides, shows and greys its own rows. What a plugin has to say appears on the bottom strip.
 
 A filter works on the layer's picture. A transition takes the layer to transparent through
 the plugin's **Transition** row. A generator replaces the layer's picture.
@@ -45,10 +60,13 @@ the plugin's **Transition** row. A generator replaces the layer's picture.
 ## Switch one off
 
 **Switch this plugin off**, on the plugin's right-click menu in that panel. It stops being
-offered and stops rendering, and the choice is remembered between sessions.
+offered and stops rendering, and the choice is remembered between launches.
 
-Switching one off takes effect immediately. Switching one back on may need a restart
-before it is offered again.
+An audio plugin is switched off the same way, and wears **This plugin is switched off**.
+
+Switching one off takes effect immediately. Lumit has no command that switches one back
+on. The list is kept in `plugins.json` in Lumit's data folder, and a plugin taken off that
+list is offered again at the next launch.
 
 Any effect already in a project using a switched-off plugin is **kept as it was saved**,
 and renders as if it were not there.
@@ -78,12 +96,14 @@ happened:
 | **This build does not know this effect** | The project names something the used version of Lumit has never heard of. |
 
 :::note[Not built yet]
-Lumit's own native plugin interface. There is no Settings page listing what is installed,
-and no command to rescan without relaunching.
+A Settings page listing what is installed, a command to switch a plugin back on, and a
+command to rescan without relaunching.
 :::
 
 ## Related
 
 - [Effects](/use/effects/)
 - [Effects & presets](/panels/effects-presets/)
+- [Audio plugins](/use/audio-plugins/)
+- [Extensions](/use/extensions/)
 - [Make your own](/make/ofx-plugins/)

@@ -9,7 +9,7 @@ An **expression** is a line of script on a property, calculated every frame.
 
 ## Put one on a property
 
-1. Right-click the property's value field.
+1. Right-click the property's row.
 2. Choose **Add expression**.
 
 An editor opens over the row, seeded with the value that was there. The number under the
@@ -38,12 +38,13 @@ it, puts a keyframe on every frame of the layer in place of the expression, each
 the number it came to. The same menu lists
 **JavaScript** and **Rhai**, with the expression's language marked.
 
-**Animation ▸ Add expression** opens the same editor for the property rows selected in the
-Timeline, and puts the expression on every one of them.
+**Animation ▸ Add expression**, `Alt+Shift+=`, opens the same editor for the property rows
+selected in the Timeline, and puts the expression on every one of them, in place of what
+each held. A mask's **Path** row is left out.
 
 Transform properties and effect parameters both take one. An effect's point takes one on
-each half, and is then drawn as two rows. A colour does not yet, and the menu does not offer
-it there.
+each half, and is then drawn as two rows. On a row with several axes, **Add expression ▸**
+names the axis. A colour does not yet, and the menu does not offer it there.
 
 ## Follow another property
 
@@ -91,6 +92,10 @@ counted from its in point.
 | **A layer** | `layer()` for this one, `layer("Name")` for another — `.name`, `.time`, `.x`, `.y`, `.rotation`, `.scale_x`, `.scale_y`, `.scale_z`, `.anchor_x`, `.anchor_y`, `.anchor_z`, `.opacity`, `.z`, `.rotation_x`, `.rotation_y`, `.rotation_z`, `.orientation`, and a camera's `.zoom` and `.point_of_interest` |
 | **3D** | `.to_comp(p)`, `.from_comp(p)`, `.to_world(p)`, `.from_world(p)`, `.to_comp_vec(v)`, `.from_comp_vec(v)`, `.to_world_vec(v)`, `.from_world_vec(v)`, `.from_comp_to_surface(p)` on a layer, each with an optional time after the point |
 
+Inside a [node graph](/use/node-graphs/#expressions), `input("Name")` reads one of the
+graph's Inputs. Every name is listed in the
+[expression reference](/reference/expressions/#rhai).
+
 A few to start from:
 
 ```rust
@@ -123,6 +128,9 @@ on arrays adds and scales them as it does in After Effects.
 
 An effect is found by the name on its header, and a row by its label.
 `effect("Transform")("Position")` reads both halves of a point as one array.
+
+Every name, with what it takes and returns, is listed in the
+[expression reference](/reference/expressions/#javascript).
 
 ```js
 wiggle(3, 20)                              // wander twenty either side, three times a second
@@ -166,8 +174,8 @@ other, rolled so the layer's x axis stays level.
   front faces the camera.
 
 :::note[Not yet built]
-`lookAt`, `smooth`, markers, text properties, `footage`, `new`, classes and regular
-expressions.
+`smooth`, which returns the value unchanged, markers, text properties, `footage`, `new`,
+classes and regular expressions.
 :::
 
 ## Save expressions to use again
@@ -183,11 +191,12 @@ expressions.
   in JavaScript. **Duplicate** keeps one as yours to change.
 - **Apply** puts the script on every property row selected in the Timeline, named under the
   editor, in the language the dropdown shows. Double-clicking an entry does the same.
-- **Export…** writes every saved expression to one file. **Import…** adds a file's
-  expressions to yours. A name you already have for a different script or language is kept,
-  and the new one gets a number after it.
+- **Export…** writes every saved expression to one `.lumexpressions` file. **Import…** adds
+  a file's expressions to yours. A name you already have for a different script or language
+  is kept, and the new one gets a number after it. A file that is not one of these is
+  **refused**.
 
-The search box matches names and scripts.
+The search box matches names and scripts. `Ctrl+F` reaches it while the panel is in front.
 
 The editor also follows the Timeline. Select a property that has an expression and the
 editor shows it, with the property's name and its value at the playhead underneath. What
@@ -200,7 +209,10 @@ back to following.
 
 - **A Rhai expression that fails reads as −1.** A JavaScript expression that fails leaves
   the property at `value`. The editor shows why, and the row turns red.
-- **A text layer's expression is Rhai.**
+- **An expression that runs too long is stopped.** A Rhai expression has 100,000
+  operations a run, and a JavaScript one 2,000,000 steps. The
+  [expression reference](/reference/expressions/) lists every limit.
+- **A text layer's expression is Rhai.** See [Text](/use/text/#words-from-an-expression).
 
 - **One property reading another that reads it back** stops after a hundred cycles 
   rather than at the first.
@@ -212,6 +224,7 @@ keyframes to take hold of — to change the shape, change the script.
 
 ## Related
 
+- [Expression reference](/reference/expressions/)
 - [Keyframes](/use/keyframes/)
 - [Custom controls](/effects/controls/custom-controls/)
 - [The graph editor](/use/graph-editor/)

@@ -3829,12 +3829,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ui.followCapsLock();
             ui.workspace.settingsChanged();
           }),
-          _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
-              value: ui.workspace.performance.hardwareDecode, set: (on) {
-            ui.workspace.performance.hardwareDecode = on;
-            setHardwareDecode(on_: on);
-            ui.workspace.settingsChanged();
-          }),
+          // Only Windows decodes on the graphics card (D3D11VA).
+          if (Platform.isWindows)
+            _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
+                value: ui.workspace.performance.hardwareDecode, set: (on) {
+              ui.workspace.performance.hardwareDecode = on;
+              setHardwareDecode(on_: on);
+              ui.workspace.settingsChanged();
+            }),
           _flag(t, 'settings-plugins-on-card', l10n.settingsPluginsOnCard,
               value: _pluginsOnCard, set: (on) {
             _pluginsOnCard = on;

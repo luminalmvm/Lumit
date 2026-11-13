@@ -7,7 +7,8 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Open the settings window from **Edit ▸ Settings…**.
+Open the settings window from **Edit ▸ Settings…**, or with `Ctrl+Alt+;`. On macOS the row
+is in the **Lumit** menu.
 
 <Shot file="settings.png" caption="The settings window, on the Appearance page." eager/>
 
@@ -19,48 +20,65 @@ and the same dot beside a page's name says the page holds one.
 Right-click a row for **Reset** and, where there is a number, path or colour, **Copy value**.
 **Reset page**, at the foot of the window or on a right-click of a page's or section's name,
 puts every setting on that page back, after asking. On **Preview and cache** it leaves the
-cache budgets as they are.
+cache budgets as they are. **Addons** and **Account** have no **Reset page**.
+
+The window resizes from its corner and opens where it was left.
 
 ## General
 
-- **Display**: **Language**. **Same as this machine** follows the system's.
-- **Workspace**: **Welcome screen on launch**. **Keep running in the background**: closing
-  the window leaves Lumit in the system tray, or the menu bar on macOS, where paired phones
-  still see it. **Open Lumit** on the tray icon's menu brings the window back and **Quit
-  Lumit** ends Lumit. Opening Lumit again also brings the window back, which is the only way
-  on a desktop with no tray, such as GNOME as it ships. **Open Lumit when you sign in**
-  appears once that is on, and starts Lumit in the tray when you sign in to the computer.
-  **New project template**, a project that every new one starts as a copy of: **Choose…**
-  picks it and **Clear** goes back to an empty project. **Reset workspace** puts the current
-  arrangement back to how it shipped.
+- **Display**: **Language**. **Same as this machine** follows the system's. The others are
+  English, العربية, Deutsch, Español, Italiano, Қазақша, Polski, Português (Brasil),
+  Українська, 简体中文 and 繁體中文.
+- **Workspace**: **Welcome screen on launch**, whether Lumit opens on the
+  [welcome screen](/start/install/#the-welcome-screen). **Keep running in the background**:
+  closing the window leaves Lumit in the system tray, or the menu bar on macOS, where paired
+  phones still see it. **Open Lumit** on the tray icon's menu brings the window back and
+  **Quit Lumit** ends Lumit. Opening Lumit again also brings the window back, which is the
+  only way on a desktop with no tray, such as GNOME as it ships. **Open Lumit when you sign
+  in** appears once that is on, and starts Lumit in the tray when you sign in to the
+  computer. **New project template**, a project that every new one starts as a copy of:
+  **Choose…** picks it and **Clear** goes back to an empty project. **Panel layout ▸ Reset
+  workspace** puts the panels back in the
+  [Edit arrangement](/use/workspaces/#the-shipped-workspaces).
 - **Updates**: **Automatic updates** checks for a new version at launch, at most once a
   day; downloading waits for a click. **Nightly builds** follows nightly builds instead of
   releases, and asks first. **Nightly icon**, on a nightly build on Windows or macOS,
   chooses between the nightly's own icon and the regular one. **This version** names the
   build installed and what the last check found, beside the same update button as the
-  **Help** menu. See [Installation](/start/install/).
+  **Help** menu. See [Installation](/start/install/#updating).
 - **Shared projects**: **Footage upload limit** and **Footage download limit**, the speed
-  footage in a [shared project](/use/projects/#shared-projects) moves at, from 128 KB/s up,
-  or **No limit**.
+  footage in a [shared project](/use/projects/#shared-projects) moves at, from 128 KB/s to
+  25,600 KB/s, or **No limit**.
 - **Connections**: **Discord status** sets what Discord shows while Lumit is open: **Off**,
   **Lumit only**, or **Project and composition**, which adds the names of the open project
-  and composition. **After Effects presets** turns a folder of `.ffx` presets into
+  and composition. **Let other programs drive Lumit**, off as shipped, lets a program on
+  this computer
+  [edit the open project](/use/command-line/#let-another-program-edit-the-project-open-in-lumit).
+  **After Effects presets** turns a folder of `.ffx` presets into
   [Lumit presets](/panels/effects-presets/#after-effects-presets). **3D app**, the Blender
   that opens `.blend`, USD, Alembic, PLY and STL files, with its version. Lumit finds one on
   its own; **Choose…** picks another program and **Clear** goes back to the one found.
-
-## Account
-
-The profiles on this machine, the Lumit account the one in use is signed in to, and what
-of it is synced. See [Profiles and accounts](/use/profiles/).
+- **Scripts**: **Scripts folder**, the folder **File ▸ Scripts** lists. **Choose…** picks
+  another and **Clear** goes back to Lumit's own. **Export finished**, **Project opened**
+  and **Project saved** each name a script from that folder to run after the event, or
+  **None**. See [Scripts](/use/scripts/#event-scripts).
 
 ## Appearance
 
 - **Theme**: **Colour scheme** offers 33 built-in schemes grouped dark and light, plus your
-  own, and pointing at one previews it. **Customise…** opens the theme editor, and **Your
-  themes** holds the ones you have made; themes can be exported and imported. **Accent** and
-  **Style** tune whichever scheme is in force. Style is how the interface is built: **Studio**,
-  **Desk** or **Lantern**. **Label case** sets how panel titles, headings and other labels
+  own, and pointing at one previews it. **Customise…** opens
+  [the theme editor](#the-theme-editor). **Your themes** acts on the ones you have made:
+  **Duplicate** copies the theme in use to a new one of your own, **Rename…** and **Delete**
+  act on one of your own, **Import…** reads a `.lumtheme` file and switches to it, and
+  **Export…** writes the colours on screen to one. An imported theme never replaces one of
+  your own: a name already taken gets a number. **Accent** and **Style** tune whichever
+  scheme is in force. Accent has six colours, with the accent in force written beside them,
+  and pointing at one previews it. **Splash uses theme colour** lights the start-up splash
+  with the accent. Style is how the interface is built: **Studio**, **Desk** or **Lantern**,
+  then any styles of your own. **Your styles** takes a style in with **Import…**, packs the
+  one in use into a file with **Make a package**, and opens the folder with **Show folder**.
+  See [Make a theme](/make/themes/#a-style). **Reduce transparency** draws a style's
+  see-through parts solid. **Label case** sets how panel titles, headings and other labels
   are cased: **Style's choice**, **All caps**, **First letter** or **Lower case**. Left to the
   style, Studio writes the first letter as a capital, Desk is lower case and Lantern is all
   caps.
@@ -68,9 +86,12 @@ of it is synced. See [Profiles and accounts](/use/profiles/).
 - **Interface**: [**Scale**](/use/workspaces/#how-large-everything-draws), 75 % to 200 %.
   **Tooltips**, on or off. **Motion**, for how much controls animate: **Full**, **Minimal**
   or **None**. **Compact**, which tightens the row spacing throughout. And **Chrome
-  labels**, deciding whether the bars carry **Words**, **Icons**, or **Icons everywhere**.
+  labels**, deciding whether the bars carry **Words**, **Icons**, or **Icons everywhere**,
+  which turns panel titles into icons too.
 - **Viewer**: whether the scopes and an effect's own graphs take the theme's colours or their
   own, and whether the **Surround** behind the picture is **Neutral** or **Theme colour**.
+  **Align to the first picked layer** lines the selection up with the first layer picked
+  rather than the box round them all. See [Align](/panels/align/).
   **Viewer bars** places the Viewer's bars: **Split, top and bottom**, **One bar, at the
   top**, **One bar, at the bottom** or **Deck**. **Toolbar position** is **Style's choice**,
   **Top** or **Left**, and the toolbar's own right-click menu has the same three. **Range
@@ -79,8 +100,9 @@ of it is synced. See [Profiles and accounts](/use/profiles/).
   **Lumit's own title bar** replaces the system's, from the next start. **Icon set** draws
   the icons **Regular**, **Engraved** or **Bold**. Viewer bars, Toolbar position and Icon
   set can also be left to the **Style's choice**. **Custom icons** reads your own icons from
-  the folder it shows, one SVG per icon named after it, and counts how many it replaces;
-  **Reload icons** reads the folder again.
+  the folder it shows, one SVG per icon named after it, and counts how many it replaces.
+  The folder is read again when Lumit's window comes back to the front. See
+  [Make an icon set](/make/icons/).
 - **Panels**: whether footage rows in the Project panel carry thumbnails, whether layer names
   are drawn on the lane bars, whether [markers](/use/markers/) draw lines down the rows
   (**Marker lines**), and whether a minimap of the bars is drawn under the lanes (**Minimap
@@ -90,31 +112,93 @@ of it is synced. See [Profiles and accounts](/use/profiles/).
 - **Waveforms**: **Style** is **Plain** or **Frequency**, which splits the waveform into low,
   mid and high bands. **Anchor** draws it from the **Centre** or the **Bottom**.
 
+A `splash.png` in Lumit's settings folder, `%APPDATA%\lumit` on Windows and
+`~/.config/lumit` on macOS and Linux, replaces the picture on the start-up splash. The
+splash is 640 by 500.
+
+### The theme editor
+
+**Customise…** lists every colour of the theme in use, in groups: surfaces, text, lines,
+roles, waveforms, graph curves and layer kinds. A click on a swatch opens the colour picker,
+and the interface redraws as the colour changes. Right-click a swatch for **Copy**,
+**Paste**, which takes a hex colour from the clipboard, and **Reset**.
+
+- **Save** on a built-in scheme asks for a name and makes a theme of your own. On one of
+  your own it updates that theme.
+- **Save a copy…** writes the colours under a new name.
+- **Cancel** puts the colours back. Closing with unsaved changes asks whether to **Save** or
+  **Discard** them.
+
+The Viewer's surround is not among the colours. See [Make a theme](/make/themes/).
+
+## Shortcuts
+
+Every command and its shortcut, grouped by where it works. The defaults are listed under
+[Keyboard shortcuts](/reference/shortcuts/).
+
+- Click a shortcut and press the keys to rebind it. `Esc` leaves it as it was, and
+  `Backspace` or `Delete` clears it. A key another command in the same group held is taken
+  from that command, which then reads **Not set**.
+- **Reset** on a row's right-click puts back the shortcut Lumit ships, whichever preset is
+  loaded. **Reset page** loads the **Lumit default** preset.
+- A shortcut that runs two commands in one group is flagged above the table.
+- **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**. The Vegas
+  one puts split on `S`, snapping on `F8`, zoom on `↑` and `↓` and on the wheel with no key
+  held, looping on `Q`, grouping on `G` and `U`, the Cut timeline's switches on `Ctrl`+`L`,
+  `Ctrl`+`Shift`+`X` and `Alt`+`F8`, and sets **Clip drags in Cut** to **Vegas**. The other
+  two set it to **Lumit default**. See
+  [the two presets](/reference/shortcuts/#the-after-effects-preset).
+- **Keymap file ▸ Import…** and **Export…** read and write the whole keymap as a `.json`
+  file. A file that is not a keymap is refused. A command the file does not name keeps the
+  shortcut Lumit ships.
+- **After Effects shortcuts ▸ Import…** reads a shortcut file saved by After Effects, the
+  `.txt` in its `aeks` folder. Commands Lumit has no match for are skipped, and a command
+  the file leaves out takes the After Effects preset's shortcut.
+- **Keyboard** shows which keys have a shortcut. A filled key works anywhere and an outlined
+  key works in one panel. Click **Ctrl**, **Alt** or **Shift** on it to see the keys they
+  change, and point at a key to read what it does.
+
+**Scroll wheel** sets the key held with the wheel to zoom the Timeline, scroll it sideways,
+zoom the graph editor's values, change the dropper's sample size, and dolly a 3D view:
+`Ctrl`, `Alt`, `Shift` or **No key**, which answers the wheel with no key held. Two that
+would clash in one panel swap keys.
+
+**Dragging** sets the modifier that breaks or joins handles in the
+[graph editor](/use/graph-editor/): `Alt` or `Ctrl`. **Clip drags in Cut** picks
+**Lumit default** or **Vegas** drags for the [Cut timeline](/use/cutting/#vegas-drags).
+
 ## Timeline
 
 - **Editing**: whether [Retime](/use/retime/) opens to the Speed lens rather than Value
-  (**Retime opens to Speed**) and whether it reads in seconds, whether video is placed in a
-  [Sequence layer](/use/sequence-layers/) automatically, where a video's sound goes in the
-  [Cut timeline](/use/cutting/), whether its tracks stand in any order, whether pasted
-  layers keep their original time rather than pasting at the playhead, and whether the
-  playhead stays where playback stopped. **Several audio streams arrive as** sets what a
-  file with more than one audio stream becomes when placed: **The first stream**, **One
+  (**Retime opens to Speed**) and whether it reads in seconds rather than as a timecode
+  (**Retime values in seconds**), whether video and image sequences are placed in a
+  [Sequence layer](/use/sequence-layers/) automatically (**Video arrives as a Sequence
+  layer**), whether a video's sound in the [Cut timeline](/use/cutting/) goes **On its own
+  track** or **With the picture** (**Video sound in Cut**), whether its tracks stand in any
+  order (**Cut tracks in any order**), whether pasted layers keep their original time rather
+  than pasting at the playhead (**Paste layers at their original time**), and whether the
+  playhead stays where playback stopped rather than going back to where it started
+  (**Playhead stays where playback stopped**). **Several audio streams arrive as** sets what
+  a file with more than one audio stream becomes when placed: **The first stream**, **One
   layer, mixed** or **A layer each**. **New expressions are written in** **JavaScript** or
   **Rhai**; each expression keeps its own language afterwards.
-- **Panels**: whether Transform appears in Effect controls, whether Effect controls shows its
-  keyframes beside the parameters (**Keyframes in Effect controls**), whether an ease opens
-  in a popup or the [Easing panel](/use/workspaces/), and whether sound dragged in the Cut
-  or Audio timeline lands on whole frames (**Sound moves in whole frames**). **Sound plays on
-  through a freeze** and **Default transition** are for the
+- **Panels**: whether Transform appears in Effect controls (**Transform in Effect
+  controls**), whether Effect controls shows its keyframes beside the parameters
+  (**Keyframes in Effect controls**), whether an ease opens in a popup or the
+  [Easing panel](/use/workspaces/) (**Shape eases in a popup**), and whether sound dragged
+  in the Cut or Audio timeline lands on whole frames (**Sound moves in whole frames**).
+  **Sound plays on through a freeze** and **Default transition** are for the
   [Cut timeline](/use/cutting/#fades-and-dissolves).
 - **Node graphs**: whether `Tab` or `Shift+A` on a node graph canvas opens
-[node search](/use/nodes/), both on by default, and whether a right-click on empty canvas
-opens the search instead of the canvas menu, off by default.
+  [node search](/use/nodes/), both on by default, and whether a right-click on empty canvas
+  opens the search instead of the canvas menu, off by default.
 
 ## Viewer
 
-Whether the picture is smoothed when zoomed in, and whether the tone-map button appears on
-the Viewer bar. Turning the button off turns the tone map off too.
+- **Picture**: whether the picture is smoothed when zoomed in, and whether the tone-map
+  button appears on the Viewer bar. Turning the button off turns the tone map off too.
+- **Orbit**: **Invert left and right** and **Invert up and down** turn a
+  [3D view](/use/camera/#3d-views) the other way as it is dragged.
 
 ## Audio
 
@@ -128,15 +212,50 @@ the Viewer bar. Turning the button off turns the tone map off too.
 
 ## Autosave
 
-How often a spare copy is written, and how many are kept. Setting the interval to nothing
-turns autosave off.
+- **Save a copy every**: the minutes between spare copies, 0 to 240. Zero turns autosave
+  off. 5 as shipped.
+- **Copies kept**: 1 to 50. 5 as shipped.
 
 ## Export
 
-What the export dialogue opens on: a preset, a filename template, and whether it asks for a
-destination each time or uses a folder you name.
+What the export dialogue opens on.
+
+- **Default preset**: an export preset, or **None**.
+- **Filename template**: the name suggested for a file. `{comp}` is the composition's name,
+  `{preset}` the export preset's own file name and `{date}` the date.
+- **Destination**: **Ask every time**, **Beside the project**, or **A folder I choose**,
+  which **Choose…** names.
+
+## Preview and cache
+
+- **Playback**: **When the machine cannot keep up** is **Every frame**, or **Adaptive**,
+  which lowers the resolution to keep time. See [Preview and playback](/use/preview/).
+  **Full resolution while dragging** draws a value drag at the Viewer's own resolution
+  rather than a reduced one.
+- **Hardware video decoding**: Windows only, on by default. The graphics card decodes
+  video. If importing video freezes the computer, turn it off and open the project again.
+- **Render plugins on the graphics card**: on by default. OFX plugins that support CUDA,
+  OpenCL or Metal render on the graphics card.
+- **Largest picture**: the widest and tallest picture Lumit makes, 8192 px by default. The
+  list offers what this machine's graphics card and memory can take. A frame cut to it shows
+  **Cut to the largest picture** in the Viewer.
+- **Quality tier**: the resolution playback has stepped down to, **Full**, **Half**,
+  **Third** or **Quarter**. **Reset** starts it again at full.
+- **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
+  graphics card, and frames parked on disk. Each **Budget** is typed or dragged in
+  megabytes, from 64. Each tier shows what is **In use**, with **Clear**, and clearing the
+  disk tier asks first. The disk cache's location is set here too: **Where** is **With
+  Lumit**, **Beside the project** or **A folder I choose**, and **Applies to** makes the
+  choice for **Everything** or **This project**.
+- **Resource governor**: how much **Graphics memory** and **Ordinary memory** is in use
+  against its budget, the most held at once, and how many requests it has turned away. Under
+  each is **Room to spare**, **Getting tight**, **Nearly full**, which pauses cache fill, or
+  **Full**, which gives back frames.
 
 ## Addons
+
+The model runtime and the model packs, and installed [extensions](/use/extensions/). See
+[Addons and models](/use/addons/).
 
 - **Runtime**: the **Model runtime**, with **Install**, or once installed **Remove**. Once an
   effect has asked for it, the line under it says what it is running on, or that it would
@@ -145,55 +264,24 @@ destination each time or uses a folder you name.
   with files missing says **Files are missing**.
 - **Available**: **Catalogue ▸ Check for addons** lists what can be downloaded, each with
   its licence and size and **Install**, or **Update** for a newer version of one already
-  here. Nothing installs before the runtime. **Install from file** installs from a manifest
-  on disk. **Where they are kept ▸ Show** opens the folder.
+  here. A download shows a bar and **Cancel**. Nothing installs before the runtime.
+  **Install from file** installs from a manifest on disk. **Where they are kept ▸ Show**
+  opens the folder.
 - **Extensions**: each installed [extension](/use/extensions/), with **Show panel** or
-  **Hide panel**, and **Remove**. **Install from a folder** takes the folder containing
-  `extension.json`. **Extensions folder ▸ Show** opens the folder.
+  **Hide panel**, and **Remove**. **Install a package** takes a `.lfx` file and **Install
+  from a folder** the folder containing `extension.json`. **Make a package** packs a folder
+  into a `.lfx` file. See [Package and share](/make/share/).
+- **Extension folders**: **Extensions folder ▸ Show** opens Lumit's own. A **Machine-wide
+  folder** is listed where there is one. **Add a folder** names another to read extensions
+  from, and each one added has **Remove**. See
+  [Extension folders](/use/extensions/#extension-folders).
 
 **Licence**, on a row, opens that licence in the browser.
 
-## Preview and cache
+## Account
 
-- **Playback**: when the machine cannot keep up, every frame, or adaptive resolution.
-  **Full resolution while dragging** draws a value drag at the Viewer's own resolution
-  rather than a reduced one.
-- **Hardware video decoding**: on by default. If importing video freezes the computer,
-  turn it off and open the project again.
-- **Render plugins on the graphics card**: on by default. OFX plugins that support CUDA,
-  OpenCL or Metal render on the graphics card.
-- **Largest picture**: the widest and tallest picture Lumit makes, 8192 px by default. The
-  list offers what this machine's graphics card and memory can take. A frame cut to it shows
-  **Cut to the largest picture** in the Viewer.
-- **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
-  graphics card, and frames parked on disk. Each shows what is **In use**, with **Clear**.
-  The disk cache's location is set here too (**Where**), for **Everything** or **This
-  project**.
-- **Quality tier**: the resolution playback has stepped down to, **Full**, **Half**,
-  **Third** or **Quarter**. **Reset** starts it again at full.
-- **Resource governor**: how much **Graphics memory** and **Ordinary memory** is in use
-  against its budget, and how many requests it has turned away.
-
-## Shortcuts
-
-Every command and its shortcut. Rebind by clicking one; conflicts are flagged. Keymaps export
-and import.
-
-- **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**. The Vegas
-  one puts split on `S`, snapping on `F8`, zoom on `↑` and `↓` and on the wheel with no key
-  held, looping on `Q`, grouping on `G` and `U`, the Cut timeline's switches on `Ctrl`+`L`,
-  `Ctrl`+`Shift`+`X` and `Alt`+`F8`, and sets **Clip drags in Cut** to **Vegas**.
-- **After Effects shortcuts ▸ Import…** reads a shortcut file saved by After Effects, the
-  `.txt` in its `aeks` folder. Commands Lumit has no match for are skipped.
-- **Keyboard** shows which keys have a shortcut. A filled key works anywhere and an outlined
-  key works in one panel. Click **Ctrl**, **Alt** or **Shift** on it to see the keys they
-  change, and point at a key to read what it does.
-
-**Dragging** sets the modifier that breaks or joins handles in the
-[graph editor](/use/graph-editor/): `Alt` or `Ctrl`. **Clip drags in Cut** picks
-**Lumit default** or **Vegas** drags for the [Cut timeline](/use/cutting/#vegas-drags).
-
-A wheel action set to **No key** answers the wheel with no key held.
+The profiles on this machine, the Lumit account the one in use is signed in to, and what
+of it is synced. See [Profiles and accounts](/use/profiles/).
 
 :::note[Not built yet]
 There is no page listing installed [plugins](/use/plugins/) — switching one off is a command
@@ -203,5 +291,7 @@ on its row in the Effects & presets panel.
 ## Related
 
 - [Workspaces and panels](/use/workspaces/)
+- [Keyboard shortcuts](/reference/shortcuts/)
+- [Make Lumit yours](/tutorials/customise/)
 - [Colour management](/use/colour-management/)
-- [Previewing](/use/preview/)
+- [Preview and playback](/use/preview/)

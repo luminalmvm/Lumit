@@ -71,7 +71,10 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Matte** is the depth pass.
-- **Focus distance** picks which colour value is in focus.
+- **Focus distance** picks which colour value is in focus. Once **Matte** names a layer,
+  the row carries a **Focal point** dropper: a click in the Viewer reads that layer's depth
+  at the point, with **Invert** applied, and writes it as the focus. On a keyframed row it
+  sets a keyframe at the playhead.
 - **Use focus point** with **Focus point x** and **Focus point y** read the depth
   value at a specific spot and focus there.
 - **Focus range** is the area around the focus point which stays sharp before 
@@ -112,6 +115,7 @@ Additional properties:
 - **Zebra** draws stripes over what is in focus. They are part of the picture, in exports
   too.
 - **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
 
 ## Related
 

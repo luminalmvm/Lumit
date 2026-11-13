@@ -4,6 +4,33 @@ use super::{straight_to_composite, upload_roto_matte, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 
 impl Realiser<'_> {
+    /// A roto matte, filed at the file's own size, stretched to the `w × h`
+    /// raster the stack runs on. A preview tier decodes below the file's
+    /// size, and a matte cut round its centre there sat in the wrong place.
+    pub(super) fn roto_texture(
+        &self,
+        m: &crate::draw::RotoMatteDraw,
+        w: u32,
+        h: u32,
+    ) -> wgpu::Texture {
+        let uploaded = upload_roto_matte(&self.ctx, m);
+        if (m.width, m.height) == (w, h) {
+            return uploaded;
+        }
+        crate::fxops::layer_input::render_layer_input(
+            self.compositor,
+            &self.ctx,
+            w,
+            h,
+            &uploaded,
+            // Grey in all four channels reads as premultiplied, so a soft
+            // edge keeps its value rather than being multiplied by itself.
+            true,
+            m.width as f32,
+            m.height as f32,
+        )
+    }
+
     /// A Precomp layer read as another's input: its comp with the strokes on
     /// the layer itself over it, as the layer's own picture has them.
     pub(super) fn painted_input(&self, n: &crate::draw::NestedInputDraw) -> wgpu::Texture {
@@ -191,18 +218,16 @@ impl Realiser<'_> {
                 }
                 _ => l.fx.clone(),
             };
-            // The baked pictures a background analysis filed. A roto matte
-            // is uploaded at its own raster and `fit_centred` inside the
-            // walk takes it to the working one; a plane is resampled to
-            // the working raster here instead, by `plane_texture`, because
-            // it is at the model's own few-hundred-pixel raster and a
-            // crop-and-pad would leave a small square of depth in a sea of
-            // nothing. Empty on every layer with no such effect, which
-            // costs nothing at all.
+            // The baked pictures a background analysis filed, each resampled
+            // to the working raster: a roto matte by `roto_texture`, since a
+            // preview tier decodes below the file's size, and a plane by
+            // `plane_texture`, because it is at the model's own
+            // few-hundred-pixel raster. Empty on every layer with no such
+            // effect, which costs nothing at all.
             let roto_mattes: Vec<Option<wgpu::Texture>> = l
                 .roto_mattes
                 .iter()
-                .map(|slot| slot.as_ref().map(|m| upload_roto_matte(&self.ctx, m)))
+                .map(|slot| slot.as_ref().map(|m| self.roto_texture(m, w, h)))
                 .collect();
             // The graphs this layer's Node graph effects apply
             // (docs/impl/node-graph-comp.md §2.4): `run_ops` cannot reach

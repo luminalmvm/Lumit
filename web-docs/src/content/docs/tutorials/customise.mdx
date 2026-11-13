@@ -2,7 +2,7 @@
 title: Make Lumit yours
 description: Colour schemes, accents, styles, icons, wires and shortcuts, in one tour.
 sidebar:
-  order: 6
+  order: 14
 ---
 
 import Shot from "../../../components/Shot.astro";
@@ -41,7 +41,8 @@ unsaved edits asks whether to keep them.
 travels as a `.lumtheme` file, so one can be passed to a friend. It's written like CSS, so
 one can be made by hand too: see [Make a theme](/make/themes/).
 
-The Viewer's surround is not in the editor. It stays neutral unless a theme file sets it.
+The Viewer's surround is not in the editor. It stays neutral unless a theme file sets it or
+**Surround** is set to **Theme colour**.
 
 <Shot file="customise-appearance.png" caption="Settings ▸ Appearance: scheme, theme, accent and style at the top."/>
 
@@ -108,9 +109,10 @@ counts how many it replaced. See [Make an icon set](/make/icons/).
 
 ## Shortcuts
 
-**Settings ▸ Shortcuts** lists every command. Click a shortcut to rebind it; a clash is
-flagged. **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**, and
-**After Effects shortcuts ▸ Import…** reads your own file from After Effects.
+**Settings ▸ Shortcuts** lists every command. Click a shortcut to rebind it. A key another
+command in the group held is taken from it. **Preset** loads a whole keymap: Lumit's own,
+**After Effects** or **Vegas**, and **After Effects shortcuts ▸ Import…** reads your own
+file from After Effects.
 
 <Shot file="customise-keyboard.png" caption="The keyboard on the Shortcuts page. Filled keys work anywhere, outlined ones in one panel."/>
 

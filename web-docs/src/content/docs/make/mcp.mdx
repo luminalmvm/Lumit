@@ -73,18 +73,67 @@ Each frame is written beside the project. Closing standard input ends **lumit-cl
 ## What the program sees
 
 - `tools/list` answers every tool with a JSON schema of its arguments. The
-  [Scripting reference](/reference/scripting/) lists the same commands.
+  [Scripting reference](/reference/scripting/) lists the same commands, and
+  [Scripts](/make/scripts/#what-commands-answer) what each answers.
 - A tool's answer is one `text` item holding the command's answer as JSON. `comp_frame`
   adds an `image` item with the PNG when it is 2 MB or smaller.
 - A command that fails answers `isError: true`, and the text is the reason.
-- `script_run` takes `{ "source": "..." }` and runs JavaScript as one undo step, with the
-  `lumit` object of [Scripts](/make/scripts/#the-lumit-object).
 - Nothing is saved until `project_save` is called.
 
 The limits on files, saves and exports are in
 [Command line](/use/command-line/#let-another-program-edit-a-project). Without `--project`,
 **lumit-cli mcp** edits the project open in Lumit instead, once **Settings ▸ General ▸ Let
 other programs drive Lumit** is on.
+
+## The tools
+
+There is a tool for each command, and `script_run`. Lumit offers tools alone: no resources
+and no prompts.
+
+`script_run` runs JavaScript as one undo step, with the `lumit` object of
+[Scripts](/make/scripts/#the-lumit-object) and the After Effects objects.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `source` | string | yes | The script. |
+| `name` | string |  | What its undo step is called. **Script** if left out. |
+
+It answers `{value, log}`: the script's last value, and the lines it printed. A script that
+fails answers `isError: true` with the reason, the line it failed on, and the lines it
+printed.
+
+- The script reads and writes no files, and `lumit.chooseFile` answers `null`.
+- A window the script shows is cancelled at once, and an `alert` goes to the log.
+- With `--project` it stops after a minute. In Lumit it runs until it ends or **Stop** is
+  pressed.
+
+## The protocol
+
+| Method | Answers |
+| --- | --- |
+| `initialize` | `protocolVersion`, `capabilities` and `serverInfo`. The version is the one the program asked for when it is `2025-11-25`, `2025-06-18`, `2025-03-26` or `2024-11-05`, and `2025-11-25` otherwise. |
+| `server/discover` | `supportedVersions`, `capabilities`, `ttlMs` and `cacheScope`. |
+| `ping` | `{}`. |
+| `tools/list` | `tools`, each with `name`, `description` and `inputSchema`, and `ttlMs` of an hour. |
+| `tools/call` | `content` and `isError`. Takes `name` and `arguments`. |
+
+`serverInfo` is `{ "name": "lumit", "version": "..." }`, and `capabilities` is
+`{ "tools": {} }`.
+
+A request can also name revision `2026-07-28` in its `_meta`, as
+`io.modelcontextprotocol/protocolVersion`, with no `initialize` first. It has to carry
+`io.modelcontextprotocol/clientCapabilities` beside it. Its answer adds
+`resultType: "complete"`, and `serverInfo` under `_meta`.
+
+A message with no `id` is not answered. An empty line is skipped.
+
+| Error | When |
+| --- | --- |
+| `-32700` | The line is not JSON. |
+| `-32600` | The message is not one JSON object, or has an `id` and no `method`. |
+| `-32601` | Lumit has no such method. |
+| `-32602` | `tools/call` names no tool or one Lumit does not have, or `_meta` names a revision without the client's capabilities. |
+| `-32022` | `_meta` names a revision Lumit does not answer. `data` carries `supported` and `requested`. |
 
 ## Related
 

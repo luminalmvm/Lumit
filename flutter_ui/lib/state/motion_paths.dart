@@ -61,7 +61,7 @@ double? _reach(List<BridgeKeyframe> keys, int i, {required bool out}) {
   return switch (resolvedSide(keys, i, isOut: out)) {
     BridgeSideInterp_Bezier(:final field0) => (out ? 1 : -1) *
         field0.speed *
-        field0.influence.clamp(1e-3, 1.0) *
+        field0.influence.clamp(minTangentReach, maxInfluence) *
         dt,
     BridgeSideInterp_Linear() => (keys[j].value - keys[i].value) / 3,
     _ => null,

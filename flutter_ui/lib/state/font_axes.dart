@@ -6,6 +6,7 @@
 // ticks with the answer.
 
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 
 final Map<String, List<BridgeFontAxis>> _axes = {};
@@ -63,11 +64,11 @@ String fontAxisName(String family, String face, String tag) {
     if (a.tag == tag) return a.name;
   }
   return switch (tag) {
-    'wght' => 'Weight',
-    'wdth' => 'Width',
-    'slnt' => 'Slant',
-    'ital' => 'Italic',
-    'opsz' => 'Optical size',
+    'wght' => l10n.textAxisWeight,
+    'wdth' => l10n.textAxisWidth,
+    'slnt' => l10n.textAxisSlant,
+    'ital' => l10n.textAxisItalic,
+    'opsz' => l10n.textAxisOpticalSize,
     _ => tag,
   };
 }

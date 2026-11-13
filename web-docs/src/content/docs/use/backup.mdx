@@ -15,8 +15,10 @@ a project's versions are its **history**. It is part of
 - Footage, only when the project is [packed](/use/projects/#packed-projects).
 - Between saves, the newest [autosave](/use/projects/#autosave).
 - Not a project file over 95 MB.
+- Up to 1,000 projects.
 
-Without a connection the save waits and is sent later.
+Without a connection the save waits and is sent later. A project that has never been
+saved has no history.
 
 ## The mark on the bottom strip
 
@@ -34,14 +36,18 @@ Beside **Saved**, a mark shows the backup of the open project. Press it to open
 ## Project history
 
 **File ▸ Project history…** lists the versions of the open project, newest first. **All**
-and **Named** filter the list, and **Changed** lists what changed in the chosen version.
+and **Named** filter the list, and **Changed** lists what changed in the chosen version:
+compositions added, removed and renamed, layers added, removed and changed in each
+composition, effects added and removed, and footage items added and removed. Autosaves
+between two saves fold into one row that counts them.
 
 | Action | How |
 | --- | --- |
 | Open a version as a copy | **Open a copy**. It is saved beside the project file. |
 | Bring one composition back | **Bring a composition back…**, choose it, then **Bring back**. |
-| Put a version back | **Put back**. Unsaved changes are saved as a version first. |
+| Put a version back | **Put back**. It asks first. Unsaved changes are saved as a version first, and the current project stays in the history. |
 | Name a version | The **…** on its row: **Name this version…** |
+| Rename a named version | The **…** on its row: **Rename…** |
 | Remove a name | The **…** on its row: **Remove name** |
 | Save and name in one go | **File ▸ Save a version…**, `Ctrl+Alt+S` by default. |
 | Delete a version | The **…** on its row: **Delete version…** |
@@ -49,6 +55,12 @@ and **Named** filter the list, and **Changed** lists what changed in the chosen 
 | Free up storage | **Free up space…** |
 | Open a newer version from another device | **Open that version…** |
 | Keep the project out of backup | Switch off **Back up this project**. |
+
+A right-click on a row opens the same menu as its **…**. Lumit refuses to delete the only
+version of a project. The project is deleted from **Open from backup** instead.
+
+The history of a project that is not the open one has **Open a copy**, and no **Put back**
+or **Bring a composition back…**.
 
 | Key | Does |
 | --- | --- |
@@ -80,14 +92,19 @@ Autosaves are thinned sooner.
 ## Open from backup
 
 **File ▸ Open from backup…** shows every backed-up project, most recently saved first, and
-how much storage is used. Previews and footage kept online use the same storage.
+how much storage is used. Previews and footage kept online use the same storage. With more
+than eight projects, **Search backups** narrows the cards.
 
 | Action | How |
 | --- | --- |
 | Open a project | Click its card. |
 | See another project's history | The **…** on its card: **Project history…** |
+| Find the file on the device | The **…** on its card: **Show in folder** |
 | Rename a project in backup | The **…** on its card: **Rename…** |
 | Delete a project from backup | The **…** on its card: **Delete from backup…** The file on the device stays. |
+
+The welcome screen lists the newest five backed-up projects that are not among the recent
+ones, under **Backed up**. **All backups** there opens this window.
 
 A project that is not on the device is downloaded to a folder you choose. When footage is
 missing, the bottom strip says how many files. Press the notice to relink them.
@@ -100,7 +117,8 @@ newer version, the bottom strip says so, and **Open that version…** takes it.
 ## Settings
 
 **Settings ▸ Account ▸ Back up projects when they are saved** turns backup off for the
-profile on that device. **Storage** shows how much is used.
+profile on that device. **Project history** then reads *Backup is off in Settings*.
+**Storage** shows how much is used.
 
 :::note
 After Lumit Pro ends, backed-up projects can still be opened. Nothing new is backed up.

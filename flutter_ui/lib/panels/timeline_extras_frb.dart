@@ -560,17 +560,19 @@ Widget clipColourMenu(
   required void Function(int?) onPick,
 }) =>
     FloatSurface(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          MenuRow(
-            key: ValueKey<String>('$keyPrefix-track'),
-            onPressed: () => onPick(null),
-            child: Text(l10n.clipColourFromTrack),
-          ),
-          labelChips(t, keyPrefix: keyPrefix, onPick: onPick),
-        ],
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+              key: ValueKey<String>('$keyPrefix-track'),
+              onPressed: () => onPick(null),
+              child: Text(l10n.clipColourFromTrack),
+            ),
+            labelChips(t, keyPrefix: keyPrefix, onPick: onPick),
+          ],
+        ),
       ),
     );
 

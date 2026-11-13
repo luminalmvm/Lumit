@@ -389,7 +389,7 @@ pub fn driven_volume_db(
 
 /// What every driver wired onto the layer's **Source** box hands its socket at
 /// layer time `lt`, by port: a Text layer's animator numbers
-/// (`crate::text::TEXT_PORT_PREFIX`). A wire that yields no number is left
+/// (`crate::text::ports::TEXT_PORT_PREFIX`). A wire that yields no number is left
 /// out, so its number keeps its own keys.
 #[must_use]
 pub fn driven_source_params(
@@ -1497,7 +1497,7 @@ mod tests {
         let mut remap = inst("remap");
         set(&mut remap, "out_low", 700.0);
         set(&mut remap, "out_high", 700.0);
-        let port = crate::text::animator_port(0, "axis.wght");
+        let port = crate::text::ports::animator_port(0, "axis.wght");
         let graph = LayerGraph {
             edges: vec![edge(&remap, "value", NodeRef::Source, &port)],
             nodes: vec![remap],
@@ -1509,7 +1509,7 @@ mod tests {
         assert_eq!(driven[0].0, port);
         assert!((driven[0].1 - 700.0).abs() < 1e-3, "{driven:?}");
         assert_eq!(
-            crate::text::parse_animator_port(&port),
+            crate::text::ports::parse_animator_port(&port),
             Some((0, "axis.wght"))
         );
     }

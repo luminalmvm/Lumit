@@ -21,6 +21,39 @@ dropdown on the layer that should be gated.
 
 Both can be inverted.
 
+## Set a matte
+
+The dropdown is in the **Matte** column of the
+[Timeline](/panels/timeline/#the-outline-columns), beside the blend mode. It lists every
+other layer in the composition that has a picture. Camera, Null and Audio layers are not
+offered. **No matte** takes the matte off.
+
+With a matte set, two marks sit beside the dropdown:
+
+- **α** or **L** switches between an alpha matte and a luma matte.
+- **−** inverts the matte.
+
+The matte layer is read with its own transform, masks and effects. Setting a matte does not
+hide the matte layer. A layer whose matte layer is deleted has no matte.
+
+## The Layer menu
+
+**Layer ▸ Matte**, also on the layer's [row menu](/use/layers/#the-row-menu), acts on
+every selected layer.
+
+| Row | Does |
+| --- | --- |
+| **No matte** | Takes the matte off. |
+| The matte layer's number and name | Lists every layer that can be a matte. A pick keeps the kind in force, or makes an alpha matte. |
+| **Alpha matte** | Gates by the transparency of the matte layer. |
+| **Alpha inverted matte** | The same, inverted. |
+| **Luma matte** | Gates by the luminance of the matte layer. |
+| **Luma inverted matte** | The same, inverted. |
+
+On a layer with no matte, the four matte rows use the nearest layer above it that has a
+picture, or the nearest below with none above. The row under **No matte** names that
+layer.
+
 ## Pick any layer
 
 Any layer can be chosen as a matte. It does not have to sit directly above the layer it
@@ -29,12 +62,18 @@ gates. You can also use a single layer as a matte for as many layers as you need
 A matte follows the matte layer's parents. With a region of interest set in the Viewer, the
 matte covers the same window as the layer it gates.
 
+A Precomp layer used as a matte does not
+[collapse](/use/layers/#collapse-transformations).
+
 ## Matte or mask?
 
 - Use a [mask](/use/masks/) when you can draw the shape, normally best when trying to 
   isolate a subject from the background it's on.
 - Use a matte when the shape comes from an image, text, or shape that can change or needs
   applying to multiple layers.
+
+An effect's own **Matte** row is a different thing, see
+[Effects](/use/effects/#matte).
 
 ## Related
 

@@ -20,6 +20,8 @@ a radial gradient. Where no circle between the two reaches, the result is clear.
 | **End radius** | Slider | 0 to 4000; any value by typing | 800 | Pixels at composition size |
 | **Spread** | Dropdown | Pad · Repeat · Mirror | Pad | - |
 | **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Scatter** | Slider | 0 to 100; any value by typing | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
 | **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
 | **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
@@ -33,14 +35,15 @@ a radial gradient. Where no circle between the two reaches, the result is clear.
   the ramp again and **Mirror** runs it back.
 - **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
   the whole of the layer's picture.
+- **Scatter**: how far each pixel's place on the ramp is moved at random, as a per cent of
+  the ramp.
+- **Seed**: which random pattern Scatter follows.
 - **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
   **Constant** holds each colour until the next stop.
 - **Stops**: how many colours are used, from Colour 1.
 - **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour,
   and where it sits on the ramp. Stops are sorted by Position.
 - **Mix**: how much of the result replaces the original.
-- **Matte** and **Invert** drive the strength of the effect from another layer's
-  brightness; see [Effects](/use/effects/).
 
 ## Related
 

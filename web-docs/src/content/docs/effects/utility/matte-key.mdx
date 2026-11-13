@@ -64,14 +64,23 @@ In the Effect Controls panel:
 - **Alpha bias**: shifts what is neutral when judging the matte itself.
 - **Despill amount**: how much screen colour is drained out of the subject.
 - **Mix**: how much of the result replaces the original.
-- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Blend**: the blend mode the result is laid over the original with.
 
 The **Screen matte** group cleans up what the key leaves:
 
+- **Screen pre-blur**: softens the picture the key is judged from. The colour that comes
+  out stays sharp.
 - **Clip black**: the matte level at or below which a pixel becomes fully
   transparent.
 - **Clip white**: the level at or above which a pixel becomes fully opaque.
 - **Clip rollback**: eases both clips back toward the unclipped matte.
+- **Screen shrink/grow**: moves the matte's edge outward above 0 and inward below it.
+- **Screen softness**: blurs the matte alone.
+- **Despot black**: how far an isolated dark speck in the matte is lifted to its
+  neighbours.
+- **Despot white**: how far an isolated bright speck is dropped to its neighbours.
+- **Inside mask**: a mask of this layer whose inside is kept opaque.
+- **Outside mask**: a mask of this layer whose inside is made transparent.
 - **Replace method**: what colour is put where spill was removed.
 - **Replace colour**: the colour those two methods blend in.
 

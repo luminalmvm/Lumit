@@ -1,0 +1,100 @@
+---
+title: Math points
+description: "Lays out a stream of points along waves, a rose curve or a spiral."
+---
+
+Math points is a **Points** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Makes **Count** points and places each by a formula. **Waves** moves each point across by
+one wave and down by another, by how far along the stream it is. Two waves across one
+another draw a Lissajous figure. **Rose** lays the points round a rose curve. **Spiral**
+winds them out from the position.
+
+A point's place comes from its number alone, so a [Trail](/effects/points/trail/) below
+follows each point from frame to frame.
+
+The points go out on the **Points** socket and are drawn as discs. Each shape shows its own
+rows and hides the others'.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape** | Dropdown | Waves · Rose · Spiral | Waves | - |
+| **Count** | Slider, whole numbers | 1 to 500; down to 0 and up to 100000 | 40 | - |
+| **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Position y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Wave x** | Dropdown | Linear · Sine · Cosine · Triangle · Square | Linear | - |
+| **Amplitude x** | Slider | -2000 to 2000; any value by typing | 400 | Pixels at composition size |
+| **Frequency x** | Slider | 0 to 20; any value by typing | 1 | - |
+| **Phase x** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Wave y** | Dropdown | Linear · Sine · Cosine · Triangle · Square | Sine | - |
+| **Amplitude y** | Slider | -2000 to 2000; any value by typing | 150 | Pixels at composition size |
+| **Frequency y** | Slider | 0 to 20; any value by typing | 2 | - |
+| **Phase y** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Radius** | Slider | 0 to 2000; higher | 300 | Pixels at composition size |
+| **Petals** | Slider | 1 to 20; down to 0 and higher | 5 | - |
+| **Denominator** | Slider | 1 to 20; down to 0.01 and higher | 1 | - |
+| **Turns** | Slider | 0 to 20; any value by typing | 3 | - |
+| **Size** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
+| **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shape**: the formula the points are laid out by.
+- **Count**: how many points there are.
+- **Position x** and **Position y**: the middle of the figure.
+- **Rotation**: how far the whole figure is turned about its position, clockwise.
+- **Wave x** (Waves): the wave that places a point across. **Linear** is a straight ramp.
+- **Amplitude x** (Waves): how far across the wave reaches either side of the position.
+- **Frequency x** (Waves): how many times the wave runs from the first point to the last.
+- **Phase x** (Waves): where along itself the wave starts. Keyframed, it runs the wave
+  through the points.
+- **Wave y**, **Amplitude y**, **Frequency y** and **Phase y** (Waves): the same four for
+  the wave that places a point down.
+- **Radius** (Rose, Spiral): how far the figure reaches from the position.
+- **Petals** (Rose): the petals, over **Denominator**. A whole odd number draws that many
+  petals and a whole even number twice as many.
+- **Denominator** (Rose): what Petals is divided by. At anything but 1 the petals overlap.
+- **Turns** (Spiral): how many times it winds round from the first point to the last.
+- **Size**: the diameter of the disc a point is drawn as.
+- **Feather**: how soft the disc's edge is.
+- **Colour**: the colour a point is drawn in.
+- **Mix**: how much of the drawing lands on the picture. At nought the points are still
+  handed on.
+- **Blend**: the blend mode the drawing is laid over the picture with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Grid](/effects/points/grid/)
+- [Points along path](/effects/points/points-along-path/)
+- [Trail](/effects/points/trail/)
+- [Clone to points](/effects/points/clone-to-points/)
+- [Points](/effects/#points)
+- [Effects](/use/effects/)

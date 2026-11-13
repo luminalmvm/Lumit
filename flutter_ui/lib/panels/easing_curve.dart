@@ -18,7 +18,12 @@
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 import 'graph_maths.dart'
-    show minTangentReach, rationalSeconds, sideInfluence, sideSpeedAtKey;
+    show
+        minTangentReach,
+        rationalSeconds,
+        sideInfluence,
+        sideSpeedAtKey,
+        spanInfluences;
 
 /// How far past the unit box a control point may reach vertically, in box
 /// heights — so y lives in −0.5 … 1.5.
@@ -172,8 +177,11 @@ EasingCurve? easingCurveOfSpan(List<BridgeKeyframe> keys, int index) {
   final dv = b.value - a.value;
   if (dt <= 0 || dv == 0) return null;
   final slope = dv / dt;
-  final out = sideInfluence(a.interpOut);
-  final inReach = sideInfluence(b.interpIn);
+  // The pair the curve uses, held within the span the shape is drawn in.
+  final (r1, r2) =
+      spanInfluences(sideInfluence(a.interpOut), sideInfluence(b.interpIn));
+  final out = r1.clamp(0.0, 1.0);
+  final inReach = r2.clamp(0.0, 1.0);
   return EasingCurve(
     out,
     sideSpeedAtKey(keys, index, isOut: true) * out / slope,

@@ -17,34 +17,107 @@ applying in that order.
 1. Select a layer.
 2. Choose **Effect**, then a category, then the effect.
 
-You can also choose effects via the [Effects console](/use/fx-console/), or dragged onto 
-a layer from the Effects & presets panel. With nothing selected, the whole menu is disabled.
+An effect is also applied from:
+
+- **Effect ▸** on a layer's right-click menu in the Timeline.
+- **Add effect** in the header of [Effect controls](/panels/effect-controls/), which lists
+  the same categories.
+- The [Effects console](/use/fx-console/), `Ctrl+Space`.
+- [Effects & presets](/panels/effects-presets/), by a double-click, or by a drag onto a
+  layer in the Timeline, onto Effect controls, onto a clip in the Cut timeline or onto the
+  [node graph](/use/nodes/).
+- The command palette, where every effect is a row.
+
+With nothing selected, the whole Effect menu is disabled, and the palette's effect rows
+read **Select a layer first**.
 
 The first row of the Effect menu applies the last effect again (`Ctrl`+`Alt`+`Shift`+`E`),
 and **Remove all effects** (`Ctrl`+`Shift`+`E`) clears the selected layers' stacks.
 
+A [driver](/use/nodes/#drivers) chosen from any of these lands on the layer's node graph,
+not in its stack. The **Drivers** menu lists the drivers alone and puts one on the first
+selected layer's graph. The [Compositing](/effects/#compositing) boxes and a bare
+**Node graph** are refused on a stack.
+
 A clip on a Sequence layer carries an effect stack of its own. See
-[Cutting](/use/cutting/#effects-and-blend-mode-on-a-clip).
+[Cutting](/use/cutting/#effects-and-blend-mode-on-a-clip). A layer group's header carries
+one too, shown in Effect controls while the header is selected. A driver is refused on a
+clip and on a group header.
+
+Effects on a **null layer** change no picture. Their parameters still animate and can be
+read by [expressions](/use/expressions/).
+
+### Several layers
+
+| Applied from | Goes on |
+| --- | --- |
+| The Effect menu, a layer's right-click menu, the command palette, a double-click in Effects & presets | Every selected layer, as one undo step. |
+| The Effects console | The primary layer. |
+| **Add effect** in Effect controls | The layer the panel is showing. |
+| A drag | The layer or clip it is dropped on. |
 
 ## Edit the parameters
 
-Select the layer and open the **Effect Controls** panel. Every parameter there can be
-animated: turn on its stopwatch to begin. See [Keyframes](/use/keyframes/).
+Select the layer and open the **Effect Controls** panel, `F3`. Every parameter there can
+be animated: turn on its stopwatch to begin. See
+[Effect Controls](/panels/effect-controls/) and [Keyframes](/use/keyframes/).
 
-Right-click a parameter and choose **Drive with** to wire a driver onto it: **Wiggle**,
-**Audio level** or **Beat trigger** on a number, **Colour cycle** on a colour, or an
-**Expression** box. Each is one undo step. The row then names the driver, and a click on
-that word opens it in the Node panel. **Drive with ▸ Remove driver** takes the wire and its
-boxes away. On a transform row, **Wiggle** writes an expression.
+Right-click a parameter and choose **Drive with** to wire a driver onto it:
 
-**Ctrl+F**, or the search mark in the panel's header, opens a filter that keeps the rows
-whose names match, Transform's included.
-An effect's heading has **Reveal in node graph**.
+| Row | Wires |
+| --- | --- |
+| **Wiggle** | A [Wiggle](/effects/drivers/wiggle/), on a number. On a transform row it writes an expression. |
+| **Audio level ▸**, **Beat trigger ▸** | An [Audio level](/effects/drivers/audio-level/) or a [Beat trigger](/effects/drivers/beat-trigger/), on a number, listening to **Whole composition** or to one layer that carries sound. |
+| **Colour cycle** | A [Colour cycle](/effects/drivers/colour-cycle/), on a colour. |
+| **Expression…** | An [Expression](/effects/drivers/expression/) box, and opens its text. |
+| **Remove driver** | Takes the wire and its boxes away. Listed while a wire feeds the row. |
+
+Each is one undo step. The row then reads **driven**, and a click on that word opens the
+driver in the Node panel. A driver that cannot be wired says so on the bottom strip. An
+effect on a clip or a group header has no **Drive with**.
+
+### Points on the picture
+
+With an effect selected, each of its points wears a mark on the picture in the Viewer.
+With the Selection tool a mark is dragged, and `Shift` holds the drag to one axis. A point
+worked out by an expression or fed by a wire does not move. Right-click a mark for
+**Move to centre**, **Reset point** and **Reveal in Effect controls**.
 
 ## Order matters
 
 Effects run in stack order. An exposure ahead of a glow does not look like a glow ahead of an
-exposure. Drag an effect up or down the stack to reorder it.
+exposure. Drag an effect's heading up or down the stack to reorder it, or right-click the
+heading for **Move ▸**, which holds **Move up**, **Move to top**, **Move down** and
+**Move to bottom**. With several effects picked, the menu moves them together.
+
+## Switch off, reset, rename and remove
+
+On an effect's heading in Effect controls:
+
+- **The tick** switches the effect off and on. Off, the picture passes through it and its
+  values are kept. Dragging from one tick across others sets each to match the first.
+- **Reset** puts every parameter back to its default and removes its keyframes, as one
+  undo step. The arrow at the end of a row resets that parameter alone.
+- **Rename** on the right-click menu, or `Enter` with one effect picked, names the effect.
+  `Escape` leaves the name as it was.
+- **×**, **Delete** on the right-click menu, or `Delete` removes the picked effects.
+- **Bypass** on the right-click menu is the tick. `Ctrl+D`, or **Duplicate**, copies the
+  picked effects, each copy right after its original.
+
+## Copy and paste
+
+Click an effect's heading to pick it. `Ctrl`-click toggles one, `Shift`-click picks the run
+between, and `Ctrl+A` with the panel focused picks the whole stack. A click on empty panel
+clears the pick.
+
+- `Ctrl+C`, or **Copy** on the heading's right-click menu, copies the picked effects with
+  their values and keyframes, in stack order. **Cut** copies and removes them. An effect's
+  row in the Timeline has the same menu.
+- `Ctrl+V` adds them to the end of the stack of the layer Effect controls is showing.
+  **Paste** on a heading's menu puts them right below that effect. The earliest copied
+  keyframe lands on the playhead and the rest keep their spacing.
+
+Copied effects are the same document as a [preset](/use/presets/).
 
 ## Past the layer's edges
 
@@ -60,18 +133,16 @@ An effect after one of these works on the grown layer. Its points and mask paths
 where they were on the layer. A **Matte** is black past the layer's edges. On an
 adjustment layer nothing reaches past the frame.
 
-## Several layers
-
-With several layers selected, an effect from the Effect menu, the Effects console or the
-Effects & presets panel goes on the primary layer only.
+## Adjustment layers
 
 Effects on **adjustment layers** apply to the composite of everything
 below them. See [Layers](/use/layers/).
 
-## Every effect has a Matte
+## Matte
 
-Every effect's controls have a layer picker labelled **Matte**, with a **Channel**
-dropdown and an **Invert** checkbox beside it. It sits with the **Mix** row under
+A picture effect's controls have a layer picker labelled **Matte**, with a **Channel**
+dropdown and an **Invert** checkbox beside it. Audio effects, drivers and controls have
+none, and an effect from an extension has **Mix** alone. It sits with the **Mix** row under
 **Compositing** at the foot of the effect. Channel picks what is read from the matte
 layer: its brightness by default, or its alpha or one of the colour channels. Select a
 layer and that layer's brightness decides how much of the effect each pixel gets. White
@@ -86,7 +157,7 @@ blend and the matte layer.
 
 A matte is different from a mask on the effect. A mask can hide what an effect does,
 whereas a matte drives the effect itself. For a handful of effects it applies more than
-just strength:
+strength:
 
 - **Gaussian blur** narrows its radius.
 - **Turbulent displace** scales its turbulence.
@@ -96,9 +167,8 @@ just strength:
 - **Set matte** reads it as the alpha itself, which is the whole effect.
 
 Lumit renders the matte layer on its own and reads it where it sits in the
-composition. Beside the picker, the **Layer source** dropdown has the option to read
-that layer raw, with its masks, or with its effects applied. If it is the same layer the effect is *on*, it reads that
-layer's own picture at that point in the stack.
+composition. If it is the same layer the effect is *on*, it reads that layer's own picture
+at that point in the stack.
 
 ## The built-in roster
 
@@ -111,14 +181,16 @@ and its range, default and units.
 | [Colour](/effects/#colour) | Grading: exposure, balance, contrast, and colour altering. |
 | [Distortion](/effects/#distortion) | Warp pixels. |
 | [Generate](/effects/#generate) | Effects that make a picture instead of changing one. |
+| [Points](/effects/#points) | Effects that make, change and draw [points](/use/nodes/#mattes-and-points). |
 | [Stylise](/effects/#stylise) | Glow, flare, relief and blocks. |
 | [Temporal](/effects/#temporal) | Effects that read frames at other times, or change which frame is drawn. |
 | [Transition](/effects/#transition) | Wipes, driven by a completion parameter you keyframe. |
 | [Utility](/effects/#utility) | Keying, mattes, transform, and other useful effects. |
 | [Audio](/effects/#audio) | Effects that change a layer's sound. They draw nothing. |
-| [Compositing](/effects/#compositing) | Merge, Switch and Time offset. They exist only inside a [node graph composition](/use/node-graphs/), and the Effect menu never offers them. |
-| [Controls](/effects/#controls) | Values for expressions to read. |
+| [Compositing](/effects/#compositing) | Merge, Switch, Time offset, Split channels, Combine channels, Repeat start and Repeat end. They work only inside a [node graph composition](/use/node-graphs/), and the Effect menu never offers them. |
+| [Controls](/effects/#controls) | Values for [expressions](/use/expressions/) to read. |
 | [Drivers](/effects/#drivers) | Values other effects follow, wired on a graph. The Effect menu files them under Controls. |
+| [Siceliot](/effects/#siceliot) | Drivers that give each copy [Clone to points](/effects/points/clone-to-points/) stamps its own value. |
 
 ### The three kinds of motion blur
 
@@ -130,16 +202,21 @@ These are easy to confuse:
 | **Motion blur** effect | An effect | Calculates estimated motion vectors for what it's applied on, and generates motion blur based on that. |
 | **Accumulation motion blur** effect | An effect | Re-renders the scene below at sub-frame times and averages out to calculate almost true to life motion blur. Slow, as every sample is a full render. |
 
-## Plugins
+## Plugins and extensions
 
-OpenFX plugins appear beside the built-in effects. See [Plugins](/use/plugins/).
-
-:::note[Not built yet]
-LFX, Lumit's own plugin type.
-:::
+OpenFX plugins appear beside the built-in effects. See [Plugins](/use/plugins/). The
+effects of an installed [extension](/use/extensions/) are listed under the built-in
+categories.
 
 ## Related
 
 - [Every effect, one page each](/effects/)
+- [Effect Controls](/panels/effect-controls/)
+- [Effect presets](/use/presets/)
+- [The node graph](/use/nodes/)
+- [Custom shaders](/use/shaders/)
+- [Plugins](/use/plugins/)
+- [Extensions](/use/extensions/)
+- [Addons and models](/use/addons/)
 - [Layers](/use/layers/)
 - [Keyframes](/use/keyframes/)

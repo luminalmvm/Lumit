@@ -1,0 +1,66 @@
+---
+title: Layer groups
+description: Fold a run of layers under one header row in the Timeline.
+sidebar:
+  order: 3.5
+---
+
+A **layer group** is a header row in the Timeline over a run of layers. It folds them away
+and switches them together. It does not change the picture unless effects are put on it.
+
+## Make a group
+
+Select layers that sit next to one another in the stack and choose **Layer ▸ Group
+layers**, or press `Ctrl+G` in the Timeline. **Group layers** is also on a layer's
+right-click menu. The group is named **Group**.
+
+A selection that is not one unbroken run of the stack is **refused**, and so is one holding
+a layer that is already in a group.
+
+## The header row
+
+| Part | Does |
+| --- | --- |
+| **Twirl** | Folds the group, hiding its layers' rows, and unfolds it. |
+| **Colour** | Opens the nine-colour picker a layer's label opens. |
+| **Name** | Double-click it to rename the group. `Enter` renames the selected group. |
+| **Count** | How many layers the group holds. |
+| **Visible**, **Audible**, **Solo**, **Lock** | Sets that switch on every layer in the group, as one undo step. A switch reads on only when it is on for every layer. |
+
+Clicking the header selects every layer in the group, so a command or a drag on the
+selection acts on all of them.
+
+In the lanes the group draws one bar, from its earliest layer's in point to its latest
+layer's out point. Drag the bar to move every layer in the group together. It has no ends
+to trim.
+
+Right-click the header or the bar for **Rename group**, **Select all**, **Ungroup**,
+**Precompose group** and **Label colour…**.
+
+## Take layers out
+
+- **Layer ▸ Ungroup**, `Ctrl+Shift+G`, or **Ungroup** on the header's right-click menu
+  removes every group the selection touches. The layers stay where they are.
+- A layer dragged out of the group's run in the stack is drawn outside the group. Dragged
+  back into the run, it is in the group again.
+
+**Precompose group** opens the Precompose dialogue on the group's layers. The group's
+effects move onto the new Precomp layer and the group is removed. See
+[Compositions](/use/compositions/#nest-one-composition-in-another).
+
+## Effects on a group
+
+Click a group's header and [Effect controls](/panels/effect-controls/) shows the group's
+own effect stack. Add an effect there, or drag one onto the panel from Effects & presets.
+
+A group with effects renders its layers together, on their own, and runs the effects on
+that one picture. A [driver](/effects/#drivers) is **refused**.
+
+The header carries an **fx** mark while the group has effects. Press it to open the
+effects' rows and keyframes under the header.
+
+## Related
+
+- [Layers](/use/layers/)
+- [The Timeline](/panels/timeline/)
+- [Compositions](/use/compositions/)

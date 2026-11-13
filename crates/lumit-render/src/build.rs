@@ -1594,7 +1594,8 @@ fn text_carriage(
         spine.is_none() && !xforms.is_empty(),
     );
     let chars: Vec<char> = line.chars().collect();
-    let (words, _) = lumit_core::text::unit_indices(&line, lumit_core::text::SelectorBasis::Words);
+    let (words, _) =
+        lumit_core::text::unit_indices(&line, lumit_core::text::selector::SelectorBasis::Words);
     let half = (laid.ascent - laid.descent) * 0.5;
     // How far along the path this line starts. Lines run on one after another.
     let mut along = document.path_offset.value_at(lt) as f32;

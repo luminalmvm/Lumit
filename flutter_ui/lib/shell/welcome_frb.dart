@@ -258,8 +258,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final app = context.read<LumitState>();
-    final ui = context.watch<LumitUiState>();
-    final workspace = ui.workspace;
 
     return ColoredBox(
       color: t.surface0,
@@ -287,7 +285,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     const SizedBox(height: welcomeBlockGap),
                     _cards(),
                     const SizedBox(height: welcomeBlockGap),
-                    _recents(app, workspace),
+                    RecentProjectsList(onOpened: widget.onDone),
                     _arriving(OpenReveal(
                       open: _backedUp.isNotEmpty,
                       child: Column(
@@ -333,125 +331,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           openPicker: widget.openPicker,
         ),
       );
-
-  Widget _recents(LumitState app, Workspace workspace) {
-    final t = ThemeScope.of(context).theme;
-    final paths = workspace.recentProjects;
-    return SizedBox(
-      width: welcomeColumnWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // No heading over nothing.
-          if (paths.isNotEmpty)
-          SizedBox(
-            key: const ValueKey('welcome-recent-header'),
-            height: welcomeRecentHeaderHeight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Row(
-                children: [
-                  Text(t.kickerCase(l10n.welcomeRecent), style: t.kicker),
-                  const Spacer(),
-                  // No question first. The one destructive control that asks
-                  // is the disk cache, because that one throws away a night's
-                  // rendering with nothing to undo (shell/cache_confirm_frb);
-                  // a list of paths costs a trip to File ▸ Open to rebuild.
-                  // Not drawn with nothing to clear.
-                  if (paths.isNotEmpty)
-                    _Quiet(
-                      id: 'welcome-clear-recent',
-                      label: l10n.welcomeClearRecent,
-                      onTap: workspace.clearRecentProjects,
-                    ),
-                ],
-              ),
-            ),
-          ),
-          // A Container, not a DecoratedBox: a decoration's border has to
-          // *inset* the rows, or the well measures its content and paints its
-          // hairline over the first and last row rather than around them.
-          // No well with nothing in it: the heading alone says so.
-          if (paths.isNotEmpty)
-          Container(
-            key: const ValueKey('welcome-recent-well'),
-            decoration: BoxDecoration(
-              color: t.surface1,
-              borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
-              border: Border.all(color: t.hairline),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                  for (var i = 0; i < paths.length; i++)
-                    _RecentRow(
-                      key: ValueKey<String>('welcome-recent-row-$i'),
-                      index: i,
-                      path: paths[i],
-                      openedAt: workspace.recentOpenedAt(paths[i]),
-                      last: i == paths.length - 1,
-                      onOpen: () {
-                        app.openProject(paths[i]);
-                        widget.onDone();
-                      },
-                      onForget: () => workspace.forgetProject(paths[i]),
-                      onMenu: (at) => _recentMenu(
-                          app, workspace, paths[i], at),
-                    ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// A recent project's menu.
-  void _recentMenu(
-      LumitState app, Workspace workspace, String path, Offset at) {
-    unawaited(showMenuAt<void>(
-      context: context,
-      position: at,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey('welcome-menu-open'),
-          onPressed: () {
-            close(null);
-            app.openProject(path);
-            widget.onDone();
-          },
-          child: Text(l10n.welcomeOpenProject),
-        ),
-        if (!kIsWeb)
-          MenuRow(
-            key: const ValueKey('welcome-menu-reveal'),
-            onPressed: () {
-              close(null);
-              revealInFolder(path: path);
-            },
-            child: Text(l10n.projectShowInFolder),
-          ),
-        MenuRow(
-          key: const ValueKey('welcome-menu-copy-path'),
-          onPressed: () {
-            close(null);
-            Clipboard.setData(ClipboardData(text: path));
-          },
-          child: Text(l10n.welcomeCopyPath),
-        ),
-        const MenuDivider(),
-        MenuRow(
-          key: const ValueKey('welcome-menu-forget'),
-          onPressed: () {
-            close(null);
-            workspace.forgetProject(path);
-          },
-          child: Text(l10n.welcomeForgetProject),
-        ),
-      ],
-    ));
-  }
 
   /// Backed-up projects that are not among the recents, in the recents' own
   /// rows, with the way to the rest of them. Only there for an account with
@@ -552,6 +431,148 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
       );
 }
 
+/// The projects worked on recently, newest first: on the welcome screen all of
+/// them, and under the empty stage the first [limit]. Clear is only offered
+/// with the whole list in view.
+///
+/// [onOpened] runs once a row has opened its project. On the welcome that
+/// hands the window to the shell.
+class RecentProjectsList extends StatelessWidget {
+  const RecentProjectsList({super.key, this.limit, this.onOpened});
+
+  final int? limit;
+  final VoidCallback? onOpened;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final app = context.read<LumitState>();
+    final workspace = context.read<LumitUiState>().workspace;
+    return ListenableBuilder(
+      listenable: workspace,
+      builder: (context, _) {
+        final all = workspace.recentProjects;
+        final paths = all.take(limit ?? all.length).toList();
+        return SizedBox(
+          width: welcomeColumnWidth,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // No heading over nothing.
+              if (paths.isNotEmpty)
+                SizedBox(
+                  key: const ValueKey('welcome-recent-header'),
+                  height: welcomeRecentHeaderHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Row(
+                      children: [
+                        Text(t.kickerCase(l10n.welcomeRecent),
+                            style: t.kicker),
+                        const Spacer(),
+                        // No question first. The one destructive control that
+                        // asks is the disk cache, because that one throws away
+                        // a night's rendering with nothing to undo
+                        // (shell/cache_confirm_frb); a list of paths costs a
+                        // trip to File ▸ Open to rebuild.
+                        if (limit == null)
+                          _Quiet(
+                            id: 'welcome-clear-recent',
+                            label: l10n.welcomeClearRecent,
+                            onTap: workspace.clearRecentProjects,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              // A Container, not a DecoratedBox: a decoration's border has to
+              // *inset* the rows, or the well measures its content and paints
+              // its hairline over the first and last row rather than around
+              // them. No well with nothing in it: the heading alone says so.
+              if (paths.isNotEmpty)
+                Container(
+                  key: const ValueKey('welcome-recent-well'),
+                  decoration: BoxDecoration(
+                    color: t.surface1,
+                    borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+                    border: Border.all(color: t.hairline),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < paths.length; i++)
+                        _RecentRow(
+                          key: ValueKey<String>('welcome-recent-row-$i'),
+                          index: i,
+                          path: paths[i],
+                          openedAt: workspace.recentOpenedAt(paths[i]),
+                          last: i == paths.length - 1,
+                          onOpen: () {
+                            app.openProject(paths[i]);
+                            onOpened?.call();
+                          },
+                          onForget: () => workspace.forgetProject(paths[i]),
+                          onMenu: (at) => _recentMenu(
+                              context, app, workspace, paths[i], at),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// A recent project's menu.
+  void _recentMenu(BuildContext context, LumitState app, Workspace workspace,
+      String path, Offset at) {
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('welcome-menu-open'),
+          onPressed: () {
+            close(null);
+            app.openProject(path);
+            onOpened?.call();
+          },
+          child: Text(l10n.welcomeOpenProject),
+        ),
+        if (!kIsWeb)
+          MenuRow(
+            key: const ValueKey('welcome-menu-reveal'),
+            onPressed: () {
+              close(null);
+              revealInFolder(path: path);
+            },
+            child: Text(l10n.projectShowInFolder),
+          ),
+        MenuRow(
+          key: const ValueKey('welcome-menu-copy-path'),
+          onPressed: () {
+            close(null);
+            Clipboard.setData(ClipboardData(text: path));
+          },
+          child: Text(l10n.welcomeCopyPath),
+        ),
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('welcome-menu-forget'),
+          onPressed: () {
+            close(null);
+            workspace.forgetProject(path);
+          },
+          child: Text(l10n.welcomeForgetProject),
+        ),
+      ],
+    ));
+  }
+}
+
 // --- The two ways to start work -------------------------------------------
 
 /// New project: no file, no questions.
@@ -642,7 +663,8 @@ class StartCards extends StatelessWidget {
 /// In plain terms: the welcome screen can be closed with nothing open, so
 /// something has to be behind it — and an empty editor whose largest panel says
 /// "select a composition" when there is no composition to select is a dead end.
-/// The ways to start work stand there instead, until something is displayed.
+/// The ways to start work stand there instead, with the five most recent
+/// projects under them, until something is displayed.
 ///
 /// A project that *has* compositions and simply has none fronted is a different
 /// sentence, and keeps the panel's ordinary empty line.
@@ -666,15 +688,28 @@ class EmptyStageFrb extends StatelessWidget {
         hint: l10n.selectACompositionFirst,
       );
     }
-    return Center(
-      key: const ValueKey('empty-stage'),
-      child: Padding(
-        padding: const EdgeInsets.all(welcomeBlockGap),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: welcomeColumnWidth),
-          child: StartCards(
-            openPicker: openPicker,
-            inShell: true,
+    return LayoutBuilder(
+      builder: (context, box) => Center(
+        key: const ValueKey('empty-stage'),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(welcomeBlockGap),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: welcomeColumnWidth),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                StartCards(openPicker: openPicker, inShell: true),
+                // A recent row's fixed parts need about 270px with the
+                // padding, so a narrower Viewer leaves them out.
+                if (box.maxWidth >= 270) ...[
+                  const SizedBox(height: welcomeBlockGap),
+                  // Not const: opening a project rebuilds this, and the list
+                  // has to pick up the new first row, which notifies nothing.
+                  RecentProjectsList(limit: 5),
+                ],
+              ],
+            ),
           ),
         ),
       ),

@@ -22,11 +22,26 @@ Whenever a keyframed property's value is altered by you, it creates a new keyfra
 at the current playhead position. When editing a frame that currently has a keyframe
 it will update that keyframe's value instead.
 
-Turn the stopwatch off to remove every keyframe on that property.
+Turning the stopwatch on adds one keyframe at the playhead, holding the value already there.
+Turn the stopwatch off to remove every keyframe on that property. The property keeps the
+value it reads at the playhead.
 
 `Alt+K` adds a keyframe at the playhead to every selected property row, or removes the one
 already there. `Alt+Shift+P`, `S`, `R`, `T` and `A` do the same to Position, Scale,
-Rotation, Opacity and Anchor point on the selected layers.
+Rotation, Opacity and Anchor point on the selected layers, and open those rows in the
+Timeline.
+
+## The controls on a row
+
+| Control | Does |
+| --- | --- |
+| **Stopwatch** | Turns animation on and off for the property. |
+| **Previous keyframe**, **Next keyframe** | Moves the playhead to the neighbouring keyframe on that row. |
+| **Add keyframe** | Adds a keyframe at the playhead holding the value read there, or removes the one already there. It is lit while the playhead is on a keyframe. |
+
+A new keyframe takes its interpolation from the keyframes either side of it. The first
+keyframe on a property is linear. Removing a property's last keyframe leaves it at the value
+that keyframe held.
 
 ## Move and delete
 
@@ -35,21 +50,49 @@ Rotation, Opacity and Anchor point on the selected layers.
 - Hold `Ctrl+Alt` (`Cmd+Option` on macOS, `Ctrl+Shift` on Linux) to stagger them instead.
   Each layer's keyframes move by their share, in the order the
   [Stagger panel](/use/layers/#stagger) sets. Keyframes on one layer stagger by property.
+- `Ctrl`+click a lane that has keyframes to add one under the pointer.
 - Press delete to remove the selected keyframes.
+- With several keyframes selected on one row and the playhead on one of them, dragging
+  the row's value moves each by the same amount, and typing a number sets each to it.
 
 `,` and `.` move the playhead to the previous and the next keyframe on the selected layers,
 or on every layer when none is selected.
 
-Pasted keyframes start at the playhead. With layers selected and no property rows, each layer
-takes them on its own matching property. Masks and shape items are matched by name, then by
-position; effects by kind. A layer lacking the effect gets a copy of it, and anything else a
-layer lacks is skipped. The paste is one undo step.
+Every gesture on a lane is listed under [Timeline](/panels/timeline/#keyframes-on-a-lane),
+and on a curve under [Graph editor](/panels/graph-editor/#keyframes).
+
+## Copy and paste
+
+`Ctrl+C` copies the selected keyframes. With property rows selected and no keyframes, it
+copies those rows: every keyframe of an animated row, and the value of a row with none.
+
+`Ctrl+V` pastes into the selected property rows, in order, the first row copied into the
+first row selected.
+
+- The earliest copied keyframe lands on the playhead and the rest keep their spacing.
+- A copied value replaces the value of a row with no keyframes, and sets a keyframe at the
+  playhead on a row that has them.
+- With layers selected and no property rows, each layer takes the keyframes on its own
+  matching property. Masks and shape items are matched by name, then by position; effects
+  by kind. A layer lacking the effect gets a copy of it, and anything else a layer lacks is
+  skipped.
+- One paste is one undo step.
+
+A copy also puts the keyframes on the system clipboard as text: a tab-separated table of
+frames and values under the heading `Lumit … Keyframe Data`, with each side's easing.
+`Ctrl+V` reads that text back when Lumit has nothing else copied. Keyframe text from
+another application pastes as linear keyframes.
+
+## The keyframe menu
 
 Right-click a keyframe in the Timeline's lanes for **Linear**, **Easy ease**, **Easy ease in**,
 **Easy ease out**, **Hold**, **Tangents**, **Ease…**, **Keyframe speed…**, **Join handles**,
 **Reverse**, **Copy**, **Paste**, **Copy ease**, **Paste ease** and **Delete keyframe**. The
 graph editor, the Audio timeline and Effect controls have the same menu. On a
 selected keyframe the menu acts on the whole selection.
+
+**Reverse** needs several keyframes selected. It plays them backwards over the same stretch
+of time.
 
 ## Interpolation
 
@@ -60,24 +103,93 @@ Each side of a keyframe has its own interpolation:
 | **Hold** | The value does not change until the next keyframe. |
 | **Linear** | A straight line to the next value. |
 | **Bezier** | A curve you can alter. |
+| **Automatic** | A curve whose direction follows the keyframes either side. |
 
 A bezier keyframe carries **speed** and **influence**. Speed is the rate of change in
 units per second. Influence is how far the handle reaches, as a percentage.
 
-**Copy ease** and **Paste ease**, on a keyframe's right-click menu and in the **Ease** box,
+On a lane a keyframe's mark is drawn in two halves, one for each side: a diamond half for
+linear, an hourglass half for bezier or automatic, a square half for hold.
+
+### Set the interpolation
+
+| Where | What it sets |
+| --- | --- |
+| **Linear**, **Easy ease**, **Hold** on the Timeline's bottom bar | Both sides of every selected keyframe. |
+| A keyframe's right-click menu | The same three, and **Easy ease in** and **Easy ease out** for one side. |
+| `F9`, `Shift+F9`, `Ctrl+Shift+F9` | Easy ease on both sides, on the side coming in, on the side going out. |
+| **Auto**, **Clamp**, **Free** in [Graph mode](/panels/graph-editor/#tangent-modes), and **Tangents** on a keyframe's menu | The tangent mode of the selected keyframes. |
+| **Ease** on the bottom bar, **Ease…** on a keyframe's menu, or the badge on a block of keyframes | Opens the Ease popover. |
+| The [Easing panel](/panels/easing/) | A drawn shape on every selected span. |
+| The **Animation** menu | The keyframes under the playhead. See below. |
+
+**Easy ease** is a bezier with speed 0 and influence 33.33% on each side.
+
+**Copy ease** and **Paste ease**, on a keyframe's right-click menu and in the Ease popover,
 copy the easing of the selected keyframes onto others. Values and times stay.
 
-The **Animation** menu sets these on the keyframes under the playhead, on the selected
-property rows.
+### The Ease popover
 
-| Command | Shortcut |
+| Row | Sets |
 | --- | --- |
-| **Toggle hold keyframe** | `Ctrl+Alt+H` |
-| **Keyframe interpolation…** | `Ctrl+Alt+K` |
-| **Keyframe speed…** | `Ctrl+Shift+K` |
+| **Curve** | A shape by name, from the shapes that come with the [Easing panel](/panels/easing/#the-shapes). |
+| **Influence** | How far the curve reaches out of a span's first keyframe and into its second, from 1% to 100%. Picking a curve loads its own two numbers. |
+| **Stagger** | Frames between one row's keyframes and the next, from 0 to 240, **Top down** or **Bottom up**. |
+| **Copy ease**, **Paste ease** | The easing of the selected keyframes. |
+
+**Apply** eases every selected span and then staggers the rows, as one undo step. The
+popover stays open. **Open graph** shows the same selection in Graph mode.
+
+## The Animation menu
+
+The four keyframe commands act on the property rows selected in the Timeline, and on the
+keyframes those rows have **under the playhead**. The last three are greyed when no
+selected row has a keyframe there. A mask's **Path** row is left out.
+
+| Command | Shortcut | Does |
+| --- | --- | --- |
+| **Save animation preset…** | | Saves the selected layer's effect stack as a `.lumfx` preset. See [Effect presets](/use/presets/). |
+| **Apply animation preset…** | | Applies a `.lumfx` or an After Effects `.ffx` to the selected layer. |
+| **Set keyframe** | `Alt+K` | Adds a keyframe at the playhead to every selected row. It reads **Remove keyframe** when every one of them has a keyframe there, and removes those. |
+| **Toggle hold keyframe** | `Ctrl+Alt+H` | Makes the side going out hold, or puts it back to linear. Ticked while it holds. |
+| **Keyframe interpolation…** | `Ctrl+Alt+K` | Opens the Keyframe interpolation dialogue. |
+| **Keyframe speed…** | `Ctrl+Shift+K` | Opens the Keyframe speed dialogue. |
+| **Animate text ▸** | | Adds an animator to every selected Text layer. See [Text](/use/text/#animators). |
+| **Add expression** | `Alt+Shift+=` | Opens the expression editor for the selected rows. See [Expressions](/use/expressions/). |
+| **Separate dimensions ▸** | | Separates or combines the axes of Anchor point, Position or Scale on the selected layers. See [Transforming layers](/use/transform/#separate-axes). |
+| **Track camera** | | Applies [Camera track](/effects/utility/camera-track/) to the selected Footage or Precomp layers and starts its analysis. A layer that already has it is analysed again. |
+| **Reveal properties with keyframes**, **Reveal properties with animation**, **Reveal all modified properties**, **Reveal selected properties** | `U` for the first, `Shift+U` for the third | See [the Timeline](/panels/timeline/#reveal-keys). |
+
+Set keyframe skips a row driven by an expression and a row on a locked layer. A
+[Retime](/use/retime/) row keeps its last keyframe.
+
+### Keyframe interpolation
+
+**In** and **Out** each take **Linear**, **Bezier**, **Hold** or **Automatic**. The
+dialogue opens on the first selected row's keyframe, and **Apply** or `Enter` writes both
+sides to every keyframe under the playhead.
+
+A linear or held side made Bezier or Automatic starts as an easy ease. A side that was
+already a curve keeps its shape.
+
+### Keyframe speed
+
+| Field | Sets |
+| --- | --- |
+| **Speed in**, **Speed out** | How fast the value is changing as it arrives at the keyframe and as it leaves, in the property's units per second. |
+| **Influence in**, **Influence out** | How far each handle reaches towards the neighbouring keyframe, from 0.1% to 1000%. |
+| **Continuous** | Keeps the speed out equal to the speed in. |
+
+Only the numbers typed are written. A linear or held side given a number becomes a
+bezier. The first and last keyframe of a curve show only the side they have.
+
+**Keyframe speed…** on a keyframe's right-click menu opens the same dialogue on the first
+selected keyframe, and writes to every selected one.
 
 ## Related
 
 - [The graph editor](/use/graph-editor/)
+- [The Easing panel](/panels/easing/)
+- [Editing many keyframes at once](/tutorials/many-keyframes/)
 - [Retiming and speed](/use/retime/)
 - [Expressions](/use/expressions/)
