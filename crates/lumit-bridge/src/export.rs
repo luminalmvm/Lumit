@@ -889,6 +889,11 @@ pub(crate) fn queue_job_landed(job: uuid::Uuid) -> bool {
     driving::job_landed(job)
 }
 
+#[cfg(all(test, feature = "media"))]
+pub(crate) fn queue_done_for_test(id: u32) {
+    driving::queue_done_for_test(id);
+}
+
 /// Forget one item. A running item is cancelled first: a row cannot leave the
 /// list while the encoder it named is still writing.
 pub(crate) fn queue_remove(id: u32) {

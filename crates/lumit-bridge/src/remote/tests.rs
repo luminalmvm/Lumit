@@ -352,7 +352,8 @@ fn left(worker: &Remote, job: Uuid) -> Vec<String> {
 }
 
 /// A cancel from the sender while files move, and from the worker's queue
-/// while the job waits there, ends the job on both computers.
+/// while the job waits there, ends the job on both computers. A row removed
+/// once done is no cancel: the file still comes back.
 #[test]
 fn a_cancel_on_either_computer_ends_the_job_on_both() {
     let _queue = crate::api::tests::export_queue_test();
@@ -391,6 +392,23 @@ fn a_cancel_on_either_computer_ends_the_job_on_both() {
     until("the worker's folder is empty", || {
         left(&worker, job).is_empty()
     });
+
+    // Done, and its row removed before the worker looks at the queue again.
+    let job = rig.send();
+    let item = rig.hold_item(job);
+    until("the job waits in the queue", || {
+        rig.stage(&worker, job) == Stage::Queued
+    });
+    std::fs::write(worker.job(job).unwrap().path, b"exported").unwrap();
+    crate::export::queue_done_for_test(item);
+    crate::export::queue_remove(item);
+    until("the file comes back", || {
+        let stage = rig.stage(&sender, job);
+        assert_ne!(stage, Stage::Cancelled, "a removed row cancelled the job");
+        stage == Stage::Done
+    });
+    let landed = std::fs::read(sender.job(job).unwrap().path).unwrap();
+    assert_eq!(landed, b"exported");
 }
 
 /// A sender that quits while its files move takes the job up again from its

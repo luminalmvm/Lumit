@@ -568,6 +568,18 @@ pub(super) fn job_landed(job: Uuid) -> bool {
     guard.landed_jobs.len() != before
 }
 
+/// Mark item `id` done, as an export that has just ended.
+#[cfg(all(test, feature = "media"))]
+pub(super) fn queue_done_for_test(id: u32) {
+    let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+    for item in guard.queue.iter_mut().filter(|item| item.id == id) {
+        item.state = ItemState::Done {
+            seconds: 0,
+            bytes: 0,
+        };
+    }
+}
+
 /// Start the next waiting item when the queue is running and nothing is in
 /// flight. An item that cannot start at all is marked failed and the one
 /// behind it is tried, so a bad path cannot stall the whole queue. A held
