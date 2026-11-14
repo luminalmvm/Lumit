@@ -420,8 +420,9 @@ fn macos_power_saving() -> bool {
     }
 }
 
-/// One `/proc/meminfo` figure in bytes, or 0.
-#[cfg(target_os = "linux")]
+/// One `/proc/meminfo` figure in bytes, or 0. Built everywhere, so the bridge
+/// lists the same functions whichever system generates it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn meminfo_bytes(field: &str) -> u64 {
     std::fs::read_to_string("/proc/meminfo")
         .ok()

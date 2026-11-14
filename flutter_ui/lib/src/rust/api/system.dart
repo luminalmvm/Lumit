@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `card_memory`, `free_memory_bytes`, `low_memory_floor`, `memory_low`, `short_of_memory`
+// These functions are ignored because they are not marked as `pub`: `card_memory`, `free_memory_bytes`, `low_memory_floor`, `meminfo_bytes`, `memory_low`, `short_of_memory`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Card`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
 
