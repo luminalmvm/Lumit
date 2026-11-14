@@ -38,6 +38,7 @@ use serde_json::{json, Value};
 
 pub(crate) mod caps;
 mod names;
+pub(crate) mod taken;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
@@ -115,7 +116,7 @@ use crate::api::export::{
     BridgeCaptionsOut, BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec,
 };
 use lumit_render::colour::ColourState;
-use lumit_render::export::captions::{sidecar_taken, CaptionsOut, SubtitleFormat};
+use lumit_render::export::captions::{CaptionsOut, SubtitleFormat};
 // Only the conversion names a metadata field, and only a build with an encoder
 // converts anything.
 #[cfg(feature = "media")]
@@ -777,16 +778,6 @@ pub(crate) fn queue_add_version(
     )
 }
 
-/// `out_path` with its format's ending, or the first free numbered name
-/// beside it when that is taken already, by a file or by the queue.
-pub(crate) fn untaken_path(out_path: &str, codec: &str, captions: BridgeCaptionsOut) -> String {
-    if path_taken(out_path, codec, captions) {
-        free_path(out_path, codec, captions)
-    } else {
-        with_format_extension(out_path, codec)
-    }
-}
-
 /// Queue an item that has run, or failed, again as it was.
 pub(crate) fn queue_again(id: u32) -> Option<u32> {
     driving::queue_again(id)
@@ -941,43 +932,6 @@ fn captions_out(captions: BridgeCaptionsOut) -> CaptionsOut {
         BridgeCaptionsOut::Vtt => CaptionsOut::File(SubtitleFormat::Vtt),
         BridgeCaptionsOut::Embed => CaptionsOut::Embed,
     }
-}
-
-/// Whether an export to `out_path` would write over something: a file already
-/// there, or an export still waiting or running in the queue under that name.
-/// The caption files it writes beside it count too.
-pub(crate) fn path_taken(out_path: &str, codec: &str, captions: BridgeCaptionsOut) -> bool {
-    let path = with_format_extension(out_path, codec);
-    first_file(&path, codec).exists()
-        || sidecar_taken(std::path::Path::new(&path), captions_out(captions))
-        || queue_list().iter().any(|row| {
-            row.out_path == path
-                && matches!(
-                    row.state,
-                    QueueRowState::Waiting | QueueRowState::Running { .. }
-                )
-        })
-}
-
-/// The first of `name_2.ext`, `name_3.ext`, … that writes over nothing, for
-/// Keep both. `out_path` itself when every number up to the cap is taken.
-pub(crate) fn free_path(out_path: &str, codec: &str, captions: BridgeCaptionsOut) -> String {
-    let path = with_format_extension(out_path, codec);
-    let file = std::path::Path::new(&path);
-    let stem = file
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("export");
-    let ext = file
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{e}"))
-        .unwrap_or_default();
-    (2..10_000)
-        .map(|n| file.with_file_name(format!("{stem}_{n}{ext}")))
-        .map(|p| p.to_string_lossy().into_owned())
-        .find(|p| !path_taken(p, codec, captions))
-        .unwrap_or(path)
 }
 
 mod child;

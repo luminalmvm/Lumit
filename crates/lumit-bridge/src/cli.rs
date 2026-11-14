@@ -567,8 +567,8 @@ fn export_name(dir: &Path, settings: &BridgeExportSpec, name: &str) -> PathBuf {
     let stem = file.strip_suffix(".mp4").unwrap_or(&file);
     let path = dir.join(stem).to_string_lossy().into_owned();
     let path = crate::export::with_format_extension(&path, &settings.codec);
-    if crate::export::path_taken(&path, &settings.codec, settings.captions) {
-        PathBuf::from(crate::export::free_path(
+    if crate::export::taken::path_taken(&path, &settings.codec, settings.captions) {
+        PathBuf::from(crate::export::taken::free_path(
             &path,
             &settings.codec,
             settings.captions,

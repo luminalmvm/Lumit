@@ -873,7 +873,7 @@ pub fn export_queue_update(
 /// writes beside it count too.
 #[frb(sync)]
 pub fn export_path_taken(path: String, codec: String, captions: BridgeCaptionsOut) -> bool {
-    crate::export::path_taken(&path, &codec, captions)
+    crate::export::taken::path_taken(&path, &codec, captions)
 }
 
 /// Queue an item that has run, or failed, again exactly as it was: the same
@@ -887,7 +887,7 @@ pub fn export_queue_again(id: u32) -> Option<u32> {
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
 #[frb(sync)]
 pub fn export_free_path(path: String, codec: String, captions: BridgeCaptionsOut) -> String {
-    crate::export::free_path(&path, &codec, captions)
+    crate::export::taken::free_path(&path, &codec, captions)
 }
 
 #[frb(ignore)]

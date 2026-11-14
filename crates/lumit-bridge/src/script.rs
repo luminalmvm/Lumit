@@ -582,8 +582,8 @@ impl Host for AppHost<'_> {
         };
         // Never over a file that is there already.
         let out = crate::export::with_format_extension(&out, &spec.codec);
-        let out = if crate::export::path_taken(&out, &spec.codec, spec.captions) {
-            crate::export::free_path(&out, &spec.codec, spec.captions)
+        let out = if crate::export::taken::path_taken(&out, &spec.codec, spec.captions) {
+            crate::export::taken::free_path(&out, &spec.codec, spec.captions)
         } else {
             out
         };
@@ -627,8 +627,8 @@ impl Host for AppHost<'_> {
         }
         // Never over a file that is there already.
         let path = crate::export::with_format_extension(&out.to_string_lossy(), &spec.codec);
-        let path = if crate::export::path_taken(&path, &spec.codec, spec.captions) {
-            crate::export::free_path(&path, &spec.codec, spec.captions)
+        let path = if crate::export::taken::path_taken(&path, &spec.codec, spec.captions) {
+            crate::export::taken::free_path(&path, &spec.codec, spec.captions)
         } else {
             path
         };

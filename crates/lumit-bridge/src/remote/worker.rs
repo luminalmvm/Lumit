@@ -879,8 +879,8 @@ fn kept_path(file: &str, codec: &str) -> String {
     let _ = std::fs::create_dir_all(&folder);
     let path = folder.join(file).to_string_lossy().into_owned();
     let burn = crate::api::export::BridgeCaptionsOut::Burn;
-    if crate::export::path_taken(&path, codec, burn) {
-        crate::export::free_path(&path, codec, burn)
+    if crate::export::taken::path_taken(&path, codec, burn) {
+        crate::export::taken::free_path(&path, codec, burn)
     } else {
         path
     }
