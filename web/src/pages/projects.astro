@@ -25,6 +25,8 @@ import floodShot from "../assets/projects/flood-the-grid.png";
 import floodClip from "../assets/projects/flood-the-grid.mp4";
 import decodeShot from "../assets/projects/decode.png";
 import decodeClip from "../assets/projects/decode.mp4";
+import booleansShot from "../assets/projects/booleans.png";
+import booleansClip from "../assets/projects/booleans.mp4";
 
 // A file's size is read off the file, from web/, which is where both
 // `astro dev` and `astro build` are run.
@@ -142,6 +144,22 @@ const projects = [
     credit: [{ name: "andrea68", href: "https://github.com/andrea68git" }],
     c: "teal",
   },
+  {
+    slug: "booleans",
+    shot: booleansShot,
+    clip: booleansClip,
+    name: "Booleans",
+    tag: "Boolean cuts",
+    p: "Bars cloned along a path cut a square, and Clone deformer rounds every corner.",
+    alt: "Black rounded shapes cut apart by thin orange gaps into a hexagon and triangles, on an orange ground",
+    layers: 5,
+    fonts: [],
+    credit: [
+      { name: "andrea68", href: "https://github.com/andrea68git" },
+      { pre: ", after ", name: "Booleanexplore by Fafamotion" },
+    ],
+    c: "coral",
+  },
 ].map((project) => ({ ...project, file: file(project.slug) }));
 ---
 
@@ -153,7 +171,7 @@ const projects = [
     <div class="wrap flex flex-col gap-14">
       <SectionHead page kicker="Projects" title="Made in Lumit.">
         <Fragment slot="lede">
-          Eight projects to download and take apart.
+          Nine projects to download and take apart.
         </Fragment>
       </SectionHead>
 
@@ -187,18 +205,20 @@ const projects = [
                     <div>
                       <dt>By</dt>
                       <dd>
-                        {/* Kept on one line, or a space lands before each comma. */}
-                        {project.credit.map((c) => <Fragment>{c.pre}<a href={c.href}>{c.name}</a></Fragment>)}
+                        {/* Kept on one line, or a space lands before each comma. A name with nowhere to point is plain text. */}
+                        {project.credit.map((c) => <Fragment>{c.pre}{c.href ? <a href={c.href}>{c.name}</a> : c.name}</Fragment>)}
                       </dd>
                     </div>
                   )}
-                  <div>
-                    <dt>Fonts</dt>
-                    <dd>
-                      {/* Kept on one line, or a space lands before each comma. */}
-                      {project.fonts.map((f, i) => <Fragment>{i > 0 && ", "}<a href={f.href}>{f.name}</a></Fragment>)}
-                    </dd>
-                  </div>
+                  {project.fonts.length > 0 && (
+                    <div>
+                      <dt>Fonts</dt>
+                      <dd>
+                        {/* Kept on one line, or a space lands before each comma. */}
+                        {project.fonts.map((f, i) => <Fragment>{i > 0 && ", "}<a href={f.href}>{f.name}</a></Fragment>)}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
 
                 <div class="get">
