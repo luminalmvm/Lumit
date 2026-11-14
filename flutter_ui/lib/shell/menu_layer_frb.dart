@@ -1296,7 +1296,7 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
 
   return [
     MenuEntry(
-      l10n.none,
+      l10n.noMatte,
       onSelection(app, ui, (entry) => entry.layer.setMatte(),
           when: (entry) => entry.info.matte != null),
       checked: first?.info.matte == null,

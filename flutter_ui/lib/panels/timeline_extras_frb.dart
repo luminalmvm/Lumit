@@ -1051,15 +1051,22 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
   }
 }
 
-/// A row picker, drawn the same at rest as under the pointer: its box, its
-/// word and its caret, so a column of default values (Normal, None) reads as
-/// a column of pickers rather than of loose words.
+/// A row picker showing its default value, at rest: its word alone in the
+/// muted colour, with no box and no caret.
 ///
-/// [resting] and [word] are kept for the callers; the picker is drawn either
-/// way.
-Widget restingPicker(
-        {required bool resting, required Widget picker, String? word}) =>
-    picker;
+/// [picker] is still underneath, laid out and taking the click, so the cell's
+/// width and its target are what they always were. It only stops being
+/// painted. The word stands exactly where the picker's own label does (the
+/// same inset, the same type, and the caret's room kept beside it), so
+/// nothing moves when the box comes back. The tree is the same shape either
+/// way, so a picker keeps its focus as it comes and goes.
+///
+/// [trailing] is room at the cell's end that is not the picker's face: the
+/// matte cell's two toggles.
+Widget restingPicker({required bool resting, required Widget picker}) =>
+    // Still laid out and still clickable, so the cell keeps its width and a
+    // click on the empty cell opens the picker.
+    Opacity(opacity: resting ? 0 : 1, child: picker);
 
 /// The parent picker: every *other* layer in the comp, plus None.
 ///
@@ -1128,9 +1135,7 @@ class ParentPickerFrb extends StatelessWidget {
       ),
     );
     return restingPicker(
-        resting: resting && info.parent == null,
-        picker: picker,
-        word: l10n.none);
+        resting: resting && info.parent == null, picker: picker);
   }
 }
 
@@ -1207,7 +1212,7 @@ class MattePickerFrb extends StatelessWidget {
               dense: true,
               layers: all,
               value: matte?.layer,
-              empty: l10n.none,
+              empty: l10n.noMatte,
               missing: engineLabel('Matte'),
               // A matte gates this layer with another layer's *picture*, so
               // a layer with none (a camera, a Null, an audio-only clip) is
@@ -1253,8 +1258,7 @@ class MattePickerFrb extends StatelessWidget {
         ],
       ),
     );
-    return restingPicker(
-        resting: resting && matte == null, picker: cell, word: l10n.none);
+    return restingPicker(resting: resting && matte == null, picker: cell);
   }
 
   Widget _toggle(

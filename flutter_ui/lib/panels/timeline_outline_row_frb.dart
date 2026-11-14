@@ -1280,10 +1280,7 @@ class _OutlineRowState extends State<OutlineRow> {
         },
       ),
     );
-    return restingPicker(
-        resting: _resting && value == 0,
-        picker: picker,
-        word: engineLabel(modes[0]));
+    return restingPicker(resting: _resting && value == 0, picker: picker);
   }
 
   /// The layer menu, shared with every other place a layer is shown. This
