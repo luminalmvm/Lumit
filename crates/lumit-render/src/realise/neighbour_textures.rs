@@ -124,6 +124,17 @@ impl super::CompositeFlow {
     pub fn next_frame(&mut self) {
         self.neighbours.next_frame();
     }
+
+    /// Fail a frame whose model will not paint rather than draw it with the
+    /// built-in engine. Set on the renderer an export writes through.
+    pub fn refuse_substitution(&mut self) {
+        self.refuse = true;
+    }
+
+    /// Why the last frame was failed, once.
+    pub fn take_refusal(&mut self) -> Option<String> {
+        self.refused.take()
+    }
 }
 
 impl NeighbourTextures {

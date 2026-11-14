@@ -1571,6 +1571,9 @@ impl HeadlessRenderer {
             if crate::cancel::drawn_short() {
                 break 'frame Err(crate::cancel::CANCELLED.to_string());
             }
+            if let Some(why) = parts.flow.borrow_mut().take_refusal() {
+                break 'frame Err(why);
+            }
             let linear = match roi {
                 Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
                     crop_texture(&self.gpu, &linear, r, realiser.render_scale, (cw, ch))
@@ -1808,6 +1811,9 @@ impl HeadlessRenderer {
     /// carries the substitution (docs/08 §3.1, docs/impl/addons.md §6.3).
     pub fn refuse_substitution(&mut self) {
         self.pool.refuse_substitution();
+        if let Some(parts) = &self.parts {
+            parts.flow.borrow_mut().refuse_substitution();
+        }
     }
 
     /// Hand frames decoded ahead to the render rather than copy them
