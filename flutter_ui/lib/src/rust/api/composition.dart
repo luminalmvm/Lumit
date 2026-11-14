@@ -1524,7 +1524,9 @@ class CompositionReference {
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
   /// linked to one that was cut is cut too, and the later halves are
-  /// linked to each other and no longer to the earlier ones.
+  /// linked to each other and no longer to the earlier ones. A plain
+  /// footage layer named here is made a Sequence layer first, in the same
+  /// undo step.
   BridgeCutResult cutRazor(
           {required List<LayerReference> layers,
           required int atFrame,

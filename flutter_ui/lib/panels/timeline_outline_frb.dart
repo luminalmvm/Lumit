@@ -607,7 +607,7 @@ class KeyReadoutRow extends StatelessWidget {
           key: ValueKey<String>(name),
           value: percent,
           min: 0,
-          max: 100,
+          max: 1000,
           decimals: 0,
           onChanged: set,
         ),

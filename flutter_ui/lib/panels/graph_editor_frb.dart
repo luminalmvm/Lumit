@@ -505,9 +505,9 @@ class _CentreDrag {
   });
 
   double get outInfluence =>
-      (outFrom + rawDx / spanPx).clamp(1e-3, 1.0).toDouble();
+      (outFrom + rawDx / spanPx).clamp(minTangentReach, 1.0).toDouble();
   double get inInfluence =>
-      (inFrom - rawDx / spanPx).clamp(1e-3, 1.0).toDouble();
+      (inFrom - rawDx / spanPx).clamp(minTangentReach, 1.0).toDouble();
 
   /// [keys] with the two sides this drag shapes written in.
   List<BridgeKeyframe> applied(List<BridgeKeyframe> keys) {
@@ -2039,7 +2039,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             drag.influence =
                 ((drag.isOut ? pointerTime - keyTime : keyTime - pointerTime) /
                         dt)
-                    .clamp(1e-3, 1.0)
+                    .clamp(minTangentReach, maxInfluence)
                     .toDouble();
           }
         }
@@ -2140,9 +2140,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final nb = _neighbour(keys, drag.index, drag.isOut);
     if (nb == null) return;
 
-    // Where the dragged handle actually ended up (its reach is clamped inside
-    // the span), so the partner is opposite what is drawn, not opposite the
-    // raw pointer.
+    // Where the dragged handle actually ended up (its reach is clamped to
+    // [maxInfluence] of the span), so the partner is opposite what is drawn,
+    // not opposite the raw pointer.
     final e = handleEndpoint(
       keyTime: keyTime,
       keyValue: key.value,

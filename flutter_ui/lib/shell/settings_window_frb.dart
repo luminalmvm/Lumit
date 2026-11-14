@@ -4023,12 +4023,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             setFullResDragPreviews(fullRes: on);
             ui.workspace.settingsChanged();
           }),
-          _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
-              value: ui.workspace.performance.hardwareDecode, set: (on) {
-            ui.workspace.performance.hardwareDecode = on;
-            setHardwareDecode(on_: on);
-            ui.workspace.settingsChanged();
-          }),
+          // Windows (D3D11VA) and Linux (NVDEC, VA-API) decode on the graphics
+          // card. macOS does not yet, so it has no tick.
+          if (Platform.isWindows || Platform.isLinux)
+            _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,
+                value: ui.workspace.performance.hardwareDecode, set: (on) {
+              ui.workspace.performance.hardwareDecode = on;
+              setHardwareDecode(on_: on);
+              ui.workspace.settingsChanged();
+            }),
           _flag(t, 'settings-plugins-on-card', l10n.settingsPluginsOnCard,
               value: _pluginsOnCard, set: (on) {
             _pluginsOnCard = on;
