@@ -2,8 +2,9 @@
 // blue. The Grade panel's Bars mode.
 //
 // In plain terms: the same three numbers a wheel holds, one bar each, with a
-// fourth that moves all three together. A drag is relative, half speed and a
-// tenth with Shift, as the wheel is; a double-click puts one bar back.
+// fourth that moves all three together. A drag is relative, at a fifth of the
+// pointer's speed and a twentieth with Shift or Ctrl, as the wheel is; a
+// double-click puts one bar back.
 
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/services.dart' show HardwareKeyboard;
@@ -63,7 +64,10 @@ class _GradeBarsState extends State<GradeBars> {
   List<double>? _live;
   int _bar = 0;
 
-  double get _rate => HardwareKeyboard.instance.isShiftPressed ? 0.1 : 0.5;
+  double get _rate {
+    final keys = HardwareKeyboard.instance;
+    return keys.isShiftPressed || keys.isControlPressed ? 0.05 : 0.2;
+  }
 
   List<double> get _rgb => _live ?? widget.rgb;
 
