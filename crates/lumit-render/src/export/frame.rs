@@ -11,7 +11,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use super::{
-    frame_span, pack_frame, AlphaMode, AudioLayout, Channels, ColourTransform, Crop, ExportSpec,
+    frame_span, letterbox_resize_f32, pack_frame, pack_frame_f32, AlphaMode, AudioLayout, Channels,
+    ColourTransform, Crop, ExportSpec,
 };
 use crate::mix::graph::{build_graph, GraphInfo};
 use crate::mix::jobs::AudioJob;
@@ -231,5 +232,23 @@ impl Pack {
             )
         };
         pack_frame(&px, self.channels, self.alpha, self.colour.as_ref())
+    }
+
+    /// The composite in floats, as the file's bytes. The resize runs on the
+    /// floats, so a delivered EXR is filtered rather than point-sampled.
+    pub(super) fn float(&self, px: Vec<f32>) -> Vec<u8> {
+        let px = self.crop.apply(px, self.comp.0, self.comp.1, 4);
+        let px = if self.size == self.cropped {
+            px
+        } else {
+            letterbox_resize_f32(
+                &px,
+                self.cropped.0,
+                self.cropped.1,
+                self.size.0,
+                self.size.1,
+            )
+        };
+        pack_frame_f32(&px, self.channels, self.alpha)
     }
 }

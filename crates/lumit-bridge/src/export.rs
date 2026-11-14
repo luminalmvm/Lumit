@@ -512,6 +512,7 @@ pub(crate) fn to_export_spec(
                 true_peak_db: l.true_peak_db,
             }),
         stems: spec.stems,
+        also: Vec::new(),
     })
 }
 

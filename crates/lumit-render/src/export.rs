@@ -24,6 +24,7 @@ pub mod captions;
 pub mod format;
 mod frame;
 mod held;
+pub mod outputs;
 mod sound_only;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
@@ -1362,6 +1363,9 @@ pub struct ExportSpec {
     pub loudness: Option<format::ExportLoudness>,
     /// Each top-level bus also written to a file of its own beside this one.
     pub stems: bool,
+    /// Other files written beside this one from the same frames, in other
+    /// formats ([`outputs`]).
+    pub also: Vec<outputs::AlsoWrite>,
 }
 
 impl Default for ExportSpec {
@@ -1392,6 +1396,7 @@ impl Default for ExportSpec {
             captions: captions::CaptionsOut::default(),
             loudness: None,
             stems: false,
+            also: Vec::new(),
         }
     }
 }
@@ -1478,7 +1483,8 @@ impl ExportSpec {
         if !caps.video && !caps.audio {
             return Err("this format can carry neither picture nor sound".to_owned());
         }
-        captions::check(self)
+        captions::check(self)?;
+        outputs::check(self)
     }
 
     /// The render settings this export actually runs with.
@@ -1583,13 +1589,26 @@ pub fn start(
         crate::model::stop_reads_with(Arc::clone(&flag));
         let opened = AtomicBool::new(false);
         let mut sidecars = Vec::new();
+        let mut beside = Vec::new();
         // The caption files go beside the file, and go first: one that
         // cannot be written stops the export before the picture starts, not
         // after it, when failing would take the finished file with it.
         let stop = || flag.load(Ordering::Relaxed);
         let result = captions::write_files(&doc, comp_id, &out_path, &spec, &stop)
             .map(|written| sidecars = written)
-            .and_then(|()| run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened))
+            .and_then(|()| {
+                run(
+                    &doc,
+                    comp_id,
+                    &audio,
+                    &out_path,
+                    &spec,
+                    &tx,
+                    &flag,
+                    &opened,
+                    &mut beside,
+                )
+            })
             .and_then(|()| sound_only::write_stems(&doc, comp_id, &audio, &out_path, &spec, &flag));
         // No half files, but only a file this export began. One that failed
         // before it opened anything has written nothing, and an image
@@ -1599,8 +1618,8 @@ pub fn start(
             if opened.load(Ordering::Relaxed) {
                 let _ = std::fs::remove_file(&out_path);
             }
-            for sidecar in &sidecars {
-                let _ = std::fs::remove_file(sidecar);
+            for file in sidecars.iter().chain(&beside) {
+                let _ = std::fs::remove_file(file);
             }
         };
         let _ = match result {
@@ -1630,13 +1649,25 @@ fn run(
     // Raised just before the output file is opened, which is the first moment
     // there is anything of this export's at `out_path`.
     opened: &AtomicBool,
+    // Given every file finished beside the chosen one, for the caller to
+    // remove if what comes after fails.
+    beside: &mut Vec<PathBuf>,
 ) -> Result<(), String> {
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
+    // Files beside this one are refused before anything is drawn.
+    outputs::check(spec)?;
     let overridden = apply_render_overrides(doc, &spec.render_options());
     let doc = overridden.as_ref().unwrap_or(doc);
-    let mut subtitles =
-        captions::Embedded::of(doc, comp_id, spec, &|| cancel.load(Ordering::Relaxed));
+    // The chosen file first, then each written beside it.
+    let specs: Vec<ExportSpec> = std::iter::once(spec.clone())
+        .chain(spec.also.iter().map(|also| outputs::spec_for(spec, also)))
+        .collect();
+    let stop = || cancel.load(Ordering::Relaxed);
+    let subtitles: Vec<_> = specs
+        .iter()
+        .map(|s| captions::Embedded::of(doc, comp_id, s, &stop))
+        .collect();
     let hidden = captions::leave_out(doc, comp_id, spec);
     let doc = hidden.as_ref().unwrap_or(doc);
     // A Stabilise drawn before its analysis lands would go out unsteadied.
@@ -1653,7 +1684,13 @@ fn run(
     let alone = matches!(spec.format, ExportFormat::Audio(_));
     let runs = if spec.loudness.is_some() { 2 } else { 1 };
     let mixed = total * runs / (runs + 1);
-    let audio_mix = frame::sound(spec, doc, comp, audio_jobs, &span, cancel, &mut |f| {
+    // Mixed once, for the first file that carries sound: a still sequence
+    // carries none, so a video beside one still has its sound.
+    let sounding = specs
+        .iter()
+        .find(|s| frame::carries_sound(s))
+        .unwrap_or(spec);
+    let audio_mix = frame::sound(sounding, doc, comp, audio_jobs, &span, cancel, &mut |f| {
         if alone {
             let frame = (f * mixed as f64) as usize;
             let _ = tx.send(ExportEvent::Progress { frame, total });
@@ -1702,30 +1739,66 @@ fn run(
     // of one transform in the delivery path, which is the exact structure the
     // preview-equals-export promise forbids.
     renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
-    let mut sink = open_sink(
-        spec,
-        comp,
-        out_path,
-        out_fps,
-        audio_mix.as_deref(),
-        &subtitles,
-        tx,
-        opened,
-    )?;
-    write::frames(
-        &mut renderer,
-        doc,
-        comp_id,
-        comp,
-        spec,
-        &span,
-        &mut sink,
-        &mut subtitles,
-        audio_mix.as_deref(),
-        out_path,
-        tx,
-        cancel,
-    )
+    // Every file is opened before the first frame, so one that cannot be
+    // stops the export before anything is written. Only the chosen file
+    // reports its encoder and its progress.
+    let (quiet, _) = channel();
+    let begun: Vec<AtomicBool> = spec.also.iter().map(|_| AtomicBool::new(false)).collect();
+    let mut outs = Vec::with_capacity(specs.len());
+    let mut result = Ok(());
+    for (n, (out_spec, subtitles)) in specs.into_iter().zip(subtitles).enumerate() {
+        let (path, events, flag) = match n.checked_sub(1) {
+            None => (out_path.to_path_buf(), tx, opened),
+            Some(i) => (
+                outputs::path_for(out_path, &spec.also[i]),
+                &quiet,
+                &begun[i],
+            ),
+        };
+        let sound = audio_mix
+            .as_deref()
+            .filter(|_| frame::carries_sound(&out_spec));
+        match open_sink(
+            &out_spec, comp, &path, out_fps, sound, &subtitles, events, flag,
+        ) {
+            Ok(sink) => outs.push(write::Out::new(out_spec, path, subtitles, sink, comp)),
+            Err(e) => {
+                result = Err(e);
+                break;
+            }
+        }
+    }
+    if result.is_ok() {
+        result = write::frames(
+            &mut renderer,
+            doc,
+            comp_id,
+            &span,
+            &mut outs,
+            audio_mix.as_deref(),
+            tx,
+            cancel,
+        );
+    }
+    // The one way out of a run that did not finish: the stills removed, every
+    // file closed, then the files beside the chosen one removed. The chosen
+    // file and its caption files are the caller's to remove.
+    if result.is_err() || cancel.load(Ordering::Relaxed) {
+        for out in &outs {
+            out.sink.remove_written(&out.path);
+        }
+        drop(outs);
+        for (also, begun) in spec.also.iter().zip(&begun) {
+            if begun.load(Ordering::Relaxed) {
+                let _ = std::fs::remove_file(outputs::path_for(out_path, also));
+            }
+        }
+    } else {
+        for out in outs.iter().skip(1) {
+            beside.extend(out.sink.files(&out.path));
+        }
+    }
+    result
 }
 
 /// Open the file one export writes, ready for its first frame. `opened` is
@@ -2041,7 +2114,7 @@ mod tests {
         (Arc::new(doc), comp_id)
     }
 
-    fn spec(format: ExportFormat, w: u32, h: u32) -> ExportSpec {
+    pub(super) fn spec(format: ExportFormat, w: u32, h: u32) -> ExportSpec {
         ExportSpec {
             format,
             target: Some((w, h)),
@@ -2052,7 +2125,7 @@ mod tests {
 
     /// Run an export to completion on this thread, skipping (Ok(None)) on a
     /// machine with no GPU adapter — the lavapipe convention.
-    fn run_now(
+    pub(super) fn run_now(
         doc: &Arc<Document>,
         comp: Uuid,
         path: &std::path::Path,
@@ -2069,6 +2142,7 @@ mod tests {
             &tx,
             &cancel,
             &AtomicBool::new(false),
+            &mut Vec::new(),
         ) {
             Err(e) if e.starts_with("export renderer:") => {
                 lumit_gpu::no_adapter();
@@ -3033,6 +3107,7 @@ mod tests {
                             &tx,
                             &cancel,
                             &AtomicBool::new(false),
+                            &mut Vec::new(),
                         )
                         .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
 
