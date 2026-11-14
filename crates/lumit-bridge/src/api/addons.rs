@@ -101,6 +101,16 @@ pub fn addon_list() -> Vec<BridgeAddon> {
     store::scan().into_iter().map(flatten).collect()
 }
 
+/// Whether this build would take a manifest at all. The catalogue is read from
+/// the web and moves faster than a release, so it can offer a pack this build
+/// has no code for. The page leaves those out rather than download one and
+/// have the install refused.
+#[frb(sync)]
+#[must_use]
+pub fn addon_accepts(manifest: String) -> bool {
+    lumit_ml::manifest::parse(&manifest).is_ok()
+}
+
 /// Install an addon from its manifest and the files Dart fetched and verified,
 /// one file per download of this platform's block, in the manifest's order.
 ///
