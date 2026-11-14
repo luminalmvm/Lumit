@@ -637,7 +637,14 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         let (doc, comp) = grey(2);
         let (multiply, ..) = r.render_rgba(&doc, comp, 0, 1.0).expect("Multiply renders");
         let enc = lumit_core::pixels::srgb_encode;
-        assert_eq!(centre(&normal), [enc(0.5); 3], "Normal is the grey");
+        // One step either way: a software rasteriser rounds the grey a step
+        // off the card's.
+        for got in centre(&normal) {
+            assert!(
+                (i16::from(got) - i16::from(enc(0.5))).abs() <= 1,
+                "Normal is the grey: got {got}"
+            );
+        }
         let want = [enc(0.125), enc(0.2), enc(0.3)];
         for (got, want) in centre(&multiply).iter().zip(want) {
             assert!(
