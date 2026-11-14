@@ -7222,10 +7222,11 @@ impl LayerReference {
     /// Append the built-in effect named `name` to this layer's stack — or, when
     /// `name` is a **driver**, to this layer's graph.
     ///
-    /// Seeded at composition size, because a few effects' defaults are positions
-    /// (a transform's anchor and position start at the centre of the frame), and
-    /// a fresh effect should look like identity rather than dragging the picture
-    /// to a corner. An unknown name is refused; nothing partial is committed.
+    /// Seeded at the size of the picture the stack runs on, because a few
+    /// effects' defaults are positions (a transform's anchor and position start
+    /// at the centre of the layer), and a fresh effect should look like identity
+    /// rather than dragging the picture to a corner. An unknown name is refused;
+    /// nothing partial is committed.
     ///
     /// **The fork is here rather than in each caller.** A driver is browsed as
     /// one more Controls entry, so the console, the Effect menu, the palette and
@@ -7249,13 +7250,11 @@ impl LayerReference {
         {
             return Err(BridgeError::NotAStackEffect);
         }
-        let comp = self.composition()?;
-        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
-            &name,
-            f64::from(comp.width),
-            f64::from(comp.height),
-        )
-        .ok_or(BridgeError::UnknownEffectName)?;
+        let (w, h) =
+            crate::api::denoise::seed_size(&*self.document()?, &self.composition()?, &self.item()?);
+        let mut instance =
+            lumit_core::fx::builtins::instantiate_for_raster(&name, f64::from(w), f64::from(h))
+                .ok_or(BridgeError::UnknownEffectName)?;
         // A `self_default` layer reference starts pointed at the layer the
         // effect is landing on (docs/impl/layer-input.md): the Lens
         // flare's Matte source, whose natural reading is "the lights in this

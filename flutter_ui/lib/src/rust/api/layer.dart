@@ -2941,10 +2941,11 @@ class LayerReference {
   /// Append the built-in effect named `name` to this layer's stack — or, when
   /// `name` is a **driver**, to this layer's graph.
   ///
-  /// Seeded at composition size, because a few effects' defaults are positions
-  /// (a transform's anchor and position start at the centre of the frame), and
-  /// a fresh effect should look like identity rather than dragging the picture
-  /// to a corner. An unknown name is refused; nothing partial is committed.
+  /// Seeded at the size of the picture the stack runs on, because a few
+  /// effects' defaults are positions (a transform's anchor and position start
+  /// at the centre of the layer), and a fresh effect should look like identity
+  /// rather than dragging the picture to a corner. An unknown name is refused;
+  /// nothing partial is committed.
   ///
   /// **The fork is here rather than in each caller.** A driver is browsed as
   /// one more Controls entry, so the console, the Effect menu, the palette and
