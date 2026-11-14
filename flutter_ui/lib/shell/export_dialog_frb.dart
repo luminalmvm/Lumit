@@ -88,6 +88,7 @@ import 'status_line_frb.dart';
 
 part 'export_rows.dart';
 part 'export_formats.dart';
+part 'export_also.dart';
 
 /// The frame the drawing gives this dialog.
 const double exportDialogWidth = 640;
@@ -407,6 +408,13 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// A file of each bus's sound beside the main one.
   bool _stems = false;
 
+  /// Other files written beside the main one from the same frames, the
+  /// formats the engine would write beside it, and while that is being
+  /// asked, the files asked about.
+  final List<_Also> _also = [];
+  List<String> _alsoOffered = const [];
+  List<BridgeExportAlso>? _alsoProbe;
+
   /// The comp's loudness target and whether it has a bus, read once.
   BridgeLoudnessTarget? _compTarget;
   bool _hasBus = false;
@@ -723,6 +731,9 @@ class _ExportDialogState extends State<_ExportDialog> {
     for (final field in _metadata) {
       field.dispose();
     }
+    for (final also in _also) {
+      also.suffix.dispose();
+    }
     super.dispose();
   }
 
@@ -872,6 +883,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       gifPlays: _gifPlays,
       loudness: _loudness,
       stems: _stems,
+      also: _alsoProbe ?? _alsoSpec,
     );
   }
 
@@ -902,6 +914,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     // Asked of the composition, not free-standing: whether a colour space can
     // be delivered is a question about this project's colour config.
     _check = widget.comp.exportSpecCheck(spec: spec);
+    _recomputeAlso();
   }
 
   // ---- the frame -----------------------------------------------------------
@@ -1204,6 +1217,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ],
               ]),
             ),
+            ..._alsoRows(t),
             // *When done* is two independent answers: a long export left
             // running wants the sound and the folder both.
             _row(
@@ -2788,6 +2802,12 @@ class _ExportDialogState extends State<_ExportDialog> {
         _truePeakDb = target.truePeakDb;
       }
       _stems = stored.stems;
+      for (final also in _also) {
+        also.suffix.dispose();
+      }
+      _also
+        ..clear()
+        ..addAll([for (final a in stored.also) _Also(a.codec, a.suffix)]);
       _colourSpace = stored.colourSpace;
       _resample = stored.resample;
       _renderGuides = stored.renderGuides;
@@ -2987,7 +3007,10 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (path == null) return null;
     // A sequence's frames were never in the Save dialogue's question, so its
     // first frame is always asked about.
-    if ((path != _picked || _images || _captionsBeside) &&
+    if ((path != _picked ||
+            _images ||
+            _captionsBeside ||
+            _also.isNotEmpty) &&
         exportPathTaken(
             path: path,
             codec: _format.key,
@@ -3077,6 +3100,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     setState(() {
       _on = on;
       if (on.isEmpty) _stays = false;
+      _recompute();
     });
     _watchComputers();
   }
@@ -3265,7 +3289,10 @@ class _ExportDialogState extends State<_ExportDialog> {
     final id = widget.queued;
     if (path == null || id == null) return;
     if (path != _queuedPath &&
-        (path != _picked || _images || _captionsBeside) &&
+        (path != _picked ||
+            _images ||
+            _captionsBeside ||
+            _also.isNotEmpty) &&
         exportPathTaken(
             path: path,
             codec: _format.key,

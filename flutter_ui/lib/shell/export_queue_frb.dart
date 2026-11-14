@@ -854,9 +854,12 @@ class _ExportQueueState extends State<_ExportQueue> {
             const SizedBox(width: 10),
             Expanded(
               child: MiddleEllipsis(
-                _leaf(item.path),
+                item.also.isEmpty
+                    ? _leaf(item.path)
+                    : '${_leaf(item.path)} '
+                        '${l10n.exportQueueAlsoMore(item.also.length)}',
                 style: dialogMono(t),
-                tip: item.path,
+                tip: [item.path, ...item.also].join('\n'),
               ),
             ),
             const SizedBox(width: 10),

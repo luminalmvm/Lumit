@@ -143,6 +143,15 @@ Quick Sync, or VAAPI on Linux. Otherwise it is encoded in software.
 - **Write to**: the file, chosen with **Browse…**. A change of format changes its
   extension. A right-click on the file has **Copy path**, **Browse…** and **Show in
   folder**.
+- **Also write**: up to three more files from the same frames, each a video or an image
+  sequence, written beside the file as `<file name><suffix>.<extension>`. **Add a file**
+  adds one and **Remove** takes it off. Each takes the export's span, rate, size, crop,
+  depth, colour space and sound. A format that cannot carry them is not offered, and one
+  that no longer can is refused by name. Its bitrate is always automatic, and an alpha
+  channel, sound depth or embedded captions it cannot carry are left out, not refused. Two
+  files with the same extension need different suffixes. Caption files and stems are
+  written beside the main file only. An export sent to another computer writes the main
+  file only.
 - **When done**: **Make a noise** plays a sound, and **Open folder** opens the folder the
   file was written to.
 
@@ -257,8 +266,9 @@ Export queue…** (`Ctrl+Alt+0`) reopens it later.
 One export runs at a time and the rest wait. Each row says which composition it came
 from, its preset or format, the file it writes, and how it is getting on: *Waiting*, a
 bar with how much is done and about how long is left, *Done* with how long it took and the
-file's size, or the failure. Pointing at the bar names the encoder, and pointing at a
-failure shows the whole of it. The footer counts the rows waiting and done.
+size of its files, or the failure. A row that writes other files beside its own shows how
+many after the file's name, and pointing at the name lists them all. Pointing at the bar
+names the encoder, and pointing at a failure shows the whole of it. The footer counts the rows waiting and done.
 
 - **Start** sets the waiting rows running.
 - **Add compositions…** queues several compositions at once. See
