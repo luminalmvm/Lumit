@@ -363,7 +363,7 @@ static EMPTY_FILE: Mutex<Option<PathBuf>> = Mutex::new(None);
 /// a transitions pack) can hold dozens of bundles Lumit cannot use, and each
 /// one cost a process started, a library loaded off the disk and a describe,
 /// at every start, only to be refused again. A bundle is known by its path,
-/// its size and when it was written, and the list by the Lumit version that
+/// its size and when it was written, and the list by the broker that
 /// made it, so a changed bundle or a new Lumit asks it again. Only a bundle
 /// that answered and offered nothing is remembered: one that would not start
 /// or timed out may only have been slow this once.
@@ -386,9 +386,9 @@ impl KnownEmpty {
         std::fs::read(file)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<KnownEmpty>(&bytes).ok())
-            .filter(|known| known.version == env!("CARGO_PKG_VERSION"))
+            .filter(|known| known.version == host_build())
             .unwrap_or_else(|| KnownEmpty {
-                version: env!("CARGO_PKG_VERSION").to_owned(),
+                version: host_build(),
                 bundles: BTreeMap::new(),
             })
     }
@@ -414,6 +414,15 @@ impl KnownEmpty {
                 .insert(binary.to_string_lossy().into_owned(), now);
         }
     }
+}
+
+/// What this host can drive is decided by the broker, so the list is only
+/// good for the broker that made it: the Lumit version and the broker's own
+/// size and write time. A build that gains support asks every bundle again,
+/// even where the version number did not move.
+fn host_build() -> String {
+    let broker = crate::ipc::broker::broker_exe();
+    format!("{}+{:?}", env!("CARGO_PKG_VERSION"), stamp(&broker))
 }
 
 /// A binary's size and when it was last written, in nanoseconds since the
