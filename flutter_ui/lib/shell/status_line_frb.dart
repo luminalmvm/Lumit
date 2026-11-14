@@ -35,6 +35,7 @@ import '../widgets/share_marks.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeSharePerson;
 import 'package:lumit_flutter/panels/timeline_timings.dart';
+import 'power_saving_mark.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
@@ -378,6 +379,13 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // header, which is where nobody found it.
           _bubble(t, const RenderTimingsToggle()),
           _divider(t),
+          // A laptop on battery or saving power, which slows the card.
+          PowerSavingMark(
+            wrap: (mark) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [_bubble(t, mark), _divider(t)],
+            ),
+          ),
           // A program driving Lumit, for as long as it is connected.
           ValueListenableBuilder<String?>(
             valueListenable: liveProgram,

@@ -92,6 +92,7 @@ pub mod matte_key;
 pub mod median;
 pub mod merge;
 pub mod merge_points;
+pub mod mesh_warp;
 pub mod mirror;
 pub mod mood_lighting;
 pub mod mosaic;

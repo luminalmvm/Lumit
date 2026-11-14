@@ -75,6 +75,24 @@ class PerformanceSettings {
   /// whose machine can afford it, not a better default.
   bool fullResDragPreviews;
 
+  /// The **Adaptive resolution limit**: how coarse a drag may go when its
+  /// frames come slower than 50 ms. 0 is Auto (down to an eighth); 2, 4, 8 or
+  /// 16 cap it there, as After Effects CS6 had it.
+  int dragResolutionLimit;
+
+  /// **Wireframe while dragging**: a drag draws each layer as the outline of
+  /// its rectangle, and the release draws the frame. Off by default.
+  bool wireframeDrags;
+
+  /// Whether Caps Lock suspends the Viewer's updates, as in After Effects.
+  /// On by default, as there.
+  bool capsLockSuspends;
+
+  /// **Decode footage at shown size**: a plain 2D footage layer shown
+  /// smaller than its own size is decoded for the preview no larger than it is
+  /// shown. Export always decodes at full size. On by default.
+  bool decodeAtShownSize;
+
   /// Whether footage is decoded by the graphics card's video unit. On by
   /// default. Off is slower, and is the way out when a graphics driver
   /// misbehaves with it.
@@ -109,6 +127,10 @@ class PerformanceSettings {
     this.diskCacheLocation,
     this.diskCacheFolder,
     this.fullResDragPreviews = false,
+    this.dragResolutionLimit = 0,
+    this.wireframeDrags = false,
+    this.capsLockSuspends = true,
+    this.decodeAtShownSize = true,
     this.hardwareDecode = true,
     this.largestPicture,
   });
@@ -122,6 +144,10 @@ class PerformanceSettings {
         if (diskCacheLocation != null) 'disk_cache_location': diskCacheLocation,
         if (diskCacheFolder != null) 'disk_cache_folder': diskCacheFolder,
         'full_res_drag_previews': fullResDragPreviews,
+        'drag_resolution_limit': dragResolutionLimit,
+        'wireframe_drags': wireframeDrags,
+        'caps_lock_suspends_viewer': capsLockSuspends,
+        'decode_at_shown_size': decodeAtShownSize,
         'hardware_decode': hardwareDecode,
         if (largestPicture != null) 'largest_picture': largestPicture,
       };
@@ -151,6 +177,15 @@ class PerformanceSettings {
         // Absent — a file written before the switch existed — is off, which is
         // the behaviour that file was written under.
         fullResDragPreviews: j['full_res_drag_previews'] == true,
+        // Absent, or anything but a limit offered, is Auto.
+        dragResolutionLimit: const [2, 4, 8, 16].contains(j['drag_resolution_limit'])
+            ? j['drag_resolution_limit'] as int
+            : 0,
+        wireframeDrags: j['wireframe_drags'] == true,
+        // A new key: builds that had this off by default wrote false under
+        // the old one, which is not a choice anybody made.
+        capsLockSuspends: j['caps_lock_suspends_viewer'] != false,
+        decodeAtShownSize: j['decode_at_shown_size'] != false,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
         largestPicture: _positiveInt(j['largest_picture']),

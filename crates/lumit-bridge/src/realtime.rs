@@ -29,7 +29,7 @@
 //! switches back to Auto), so a fresh run starts optimistic at Full.
 
 use lumit_eval::schedule::{RealtimeController, COARSEST_TIER, FINEST_TIER};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// The session-lifetime controller behind its own lock (independent of the
@@ -118,17 +118,149 @@ pub(crate) fn set_full_res_drags(on: bool) {
 /// drag budget is the only thing being turned off, so a drag then renders
 /// exactly as a committed frame does, and takes exactly as long.
 pub(crate) fn drag_scale(width: u32, height: u32, scale: f32) -> f32 {
-    drag_scale_for(FULL_RES_DRAGS.load(Ordering::Relaxed), width, height, scale)
+    let full_res = FULL_RES_DRAGS.load(Ordering::Relaxed);
+    if full_res {
+        return scale;
+    }
+    let tier = drag_tier(width, height, scale);
+    let divisor = adaptive_divisor(
+        tier,
+        DRAG_EXTRA.load(Ordering::Relaxed),
+        DRAG_LIMIT.load(Ordering::Relaxed),
+    );
+    scale / divisor as f32
 }
 
-/// [`drag_scale`] with the preference passed in rather than read — the rule
-/// itself, so a test can state both answers without setting a session-wide
-/// switch the tests beside it are also reading.
-fn drag_scale_for(full_res: bool, width: u32, height: u32, scale: f32) -> f32 {
-    if full_res {
-        scale
+/// **Adaptive resolution limit** (Settings → Performance), as After Effects
+/// CS6 had it: how coarse a drag may go when even the drag budget's tier is
+/// too slow. 0 is Auto, which goes as far as an eighth; 2, 4, 8 and 16 cap the
+/// divisor there.
+static DRAG_LIMIT: AtomicU32 = AtomicU32::new(0);
+
+/// How many times coarser than the drag budget's tier the drags are drawing
+/// now, learnt from what they cost: doubled while a drag frame takes longer
+/// than [`SLOW_DRAG`], halved back once one takes under [`QUICK_DRAG`]. 1 is
+/// the budget's tier itself, which is where every machine fast enough for it
+/// stays, so a drag there looks exactly as it did before.
+static DRAG_EXTRA: AtomicU32 = AtomicU32::new(1);
+
+/// A drag frame slower than this coarsens the next one: the 50 ms a drag
+/// tick has (docs/13 §2, budget B3).
+const SLOW_DRAG: f64 = 0.050;
+/// A drag frame quicker than this sharpens the next one back.
+const QUICK_DRAG: f64 = 0.020;
+
+/// The coarsest divisor Auto goes to.
+const AUTO_LIMIT: u32 = 8;
+
+/// Set the adaptive resolution limit: 0 for Auto, else 2, 4, 8 or 16. A new
+/// limit starts the learning again.
+pub(crate) fn set_drag_limit(divisor: u32) {
+    let divisor = match divisor {
+        0 => 0,
+        d => d.clamp(2, 16),
+    };
+    DRAG_LIMIT.store(divisor, Ordering::Relaxed);
+    DRAG_EXTRA.store(1, Ordering::Relaxed);
+}
+
+/// The divisor a drag frame is drawn at: the budget's `tier` times what was
+/// learnt (`extra`), capped by `limit` (0 for Auto). A manual limit finer
+/// than the budget's tier is taken as asked: the drag is then sharper and
+/// slower, which is what choosing it says.
+fn adaptive_divisor(tier: u32, extra: u32, limit: u32) -> u32 {
+    let cap = if limit == 0 {
+        AUTO_LIMIT.max(tier)
     } else {
-        scale * tier_scale(drag_tier(width, height, scale))
+        limit
+    };
+    tier.saturating_mul(extra.max(1)).clamp(1, cap.max(1))
+}
+
+/// Report what a drag frame cost, so the next one is drawn coarser while
+/// drags are slow and finer again once they are quick. Ignored with full
+/// resolution drags on, which ask for the Viewer's own scale whatever it
+/// costs.
+pub(crate) fn observe_drag(cost_secs: f64) {
+    if FULL_RES_DRAGS.load(Ordering::Relaxed) {
+        return;
+    }
+    let extra = DRAG_EXTRA.load(Ordering::Relaxed);
+    let next = next_extra(extra, cost_secs);
+    DRAG_EXTRA.store(next, Ordering::Relaxed);
+}
+
+/// [`observe_drag`]'s rule: double while slow, halve while quick, never under
+/// 1 and never past 16 (the cap in [`adaptive_divisor`] does the rest).
+fn next_extra(extra: u32, cost_secs: f64) -> u32 {
+    if cost_secs > SLOW_DRAG {
+        (extra.max(1) * 2).min(16)
+    } else if cost_secs < QUICK_DRAG {
+        (extra / 2).max(1)
+    } else {
+        extra.max(1)
+    }
+}
+
+/// **Wireframe while dragging** (Settings → Performance, off by default): a
+/// drag frame draws every layer as the outline of its rectangle, with no
+/// effects, styles, mattes or motion blur, placed exactly as the frame places
+/// it, and the release draws the real frame. After Effects CS6's Wireframe
+/// fast preview.
+static WIREFRAME_DRAGS: AtomicBool = AtomicBool::new(false);
+
+/// **Live Update** (the Viewer's switch, on by default): off, a drag draws no
+/// frame at all, and the Viewer keeps the last one until the release commits,
+/// as After Effects' Live Update switch.
+static LIVE_UPDATE: AtomicBool = AtomicBool::new(true);
+
+pub(crate) fn set_wireframe_drags(on: bool) {
+    WIREFRAME_DRAGS.store(on, Ordering::Relaxed);
+}
+
+pub(crate) fn wireframe_drags() -> bool {
+    WIREFRAME_DRAGS.load(Ordering::Relaxed)
+}
+
+pub(crate) fn set_live_update(on: bool) {
+    LIVE_UPDATE.store(on, Ordering::Relaxed);
+}
+
+pub(crate) fn live_update() -> bool {
+    LIVE_UPDATE.load(Ordering::Relaxed)
+}
+
+/// **Decode footage at shown size** (Settings → Performance), on by default: a
+/// plain 2D footage layer shown smaller than its own size is decoded for the
+/// preview no larger than it is shown (`lumit_core::shown_size`). Export
+/// never reads this.
+static SHOWN_SIZE: AtomicBool = AtomicBool::new(true);
+
+pub(crate) fn set_decode_at_shown_size(on: bool) {
+    SHOWN_SIZE.store(on, Ordering::Relaxed);
+}
+
+pub(crate) fn decode_at_shown_size() -> bool {
+    SHOWN_SIZE.load(Ordering::Relaxed)
+}
+
+/// Strip a drag frame's document down to what a wireframe shows: no effect,
+/// style, matte or motion blur on any layer, every layer blended Normal, so
+/// each one's outline is drawn where it sits and nothing hides or gates it.
+/// The document is the drag's own clone; the project is untouched.
+pub(crate) fn wireframe_document(document: &mut lumit_core::model::Document) {
+    for item in &mut document.items {
+        let lumit_core::model::ProjectItem::Composition(comp) = item else {
+            continue;
+        };
+        for layer in &mut comp.layers {
+            for fx in layer.effects.iter_mut().chain(layer.styles.iter_mut()) {
+                fx.enabled = false;
+            }
+            layer.matte = None;
+            layer.switches.motion_blur = false;
+            layer.blend = lumit_core::model::BlendMode::default();
+        }
     }
 }
 
@@ -190,7 +322,7 @@ pub(crate) fn reset() {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{drag_tier, DRAG_PIXEL_BUDGET};
+    use super::{adaptive_divisor, drag_tier, next_extra, DRAG_PIXEL_BUDGET};
 
     /// Whatever tier is picked, the raster it implies is inside the budget —
     /// unless the floor was hit, in which case it is the floor's fault and not
@@ -236,5 +368,32 @@ mod tests {
             assert_eq!(drag_tier(1920, 1080, scale), 3, "scale {scale}");
         }
         assert_eq!(drag_tier(1920, 1080, 4.0), 3);
+    }
+
+    /// A machine fast enough for the drag budget stays at its tier; a slow
+    /// one goes coarser up to the limit, and comes back once drags are quick.
+    #[test]
+    fn slow_drags_go_coarser_up_to_the_limit_and_come_back() {
+        assert_eq!(
+            adaptive_divisor(2, 1, 0),
+            2,
+            "nothing learnt: the budget's tier"
+        );
+        assert_eq!(adaptive_divisor(2, 2, 0), 4);
+        assert_eq!(adaptive_divisor(2, 16, 0), 8, "Auto stops at an eighth");
+        assert_eq!(adaptive_divisor(2, 16, 16), 16);
+        assert_eq!(adaptive_divisor(3, 4, 4), 4, "a manual limit caps it");
+        assert_eq!(
+            adaptive_divisor(3, 1, 2),
+            2,
+            "a finer manual limit is taken as asked"
+        );
+
+        assert_eq!(next_extra(1, 0.080), 2);
+        assert_eq!(next_extra(8, 0.080), 16);
+        assert_eq!(next_extra(16, 0.080), 16);
+        assert_eq!(next_extra(4, 0.030), 4, "between the two: stay");
+        assert_eq!(next_extra(4, 0.010), 2);
+        assert_eq!(next_extra(1, 0.010), 1);
     }
 }

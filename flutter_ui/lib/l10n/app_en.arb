@@ -2777,7 +2777,7 @@
   },
   "formatVp9": "VP9 video (.webm)",
   "@formatVp9": {
-    "description": "Export format, offered in the browser version only. VP9 and .webm are technical names and stay as they are."
+    "description": "Export format, with transparency. VP9 and .webm are technical names and stay as they are."
   },
   "formatAv1": "AV1 video (.webm)",
   "@formatAv1": {
@@ -2810,6 +2810,14 @@
   "formatProRes4444Xq": "ProRes 4444 XQ (.mov)",
   "@formatProRes4444Xq": {
     "description": "Export format that can carry transparency, at a higher data rate than ProRes 4444. ProRes 4444 XQ and .mov are technical names and stay as they are."
+  },
+  "formatQtAnimation": "QuickTime Animation (.mov)",
+  "@formatQtAnimation": {
+    "description": "Export format: lossless QuickTime with transparency. QuickTime, Animation and .mov are technical names and stay as they are."
+  },
+  "formatWebmPicker": "WebM video",
+  "@formatWebmPicker": {
+    "description": "The file type shown in the system Save dialogue for a .webm file. WebM stays as it is."
   },
   "formatGif": "GIF (.gif)",
   "@formatGif": {
@@ -3783,6 +3791,14 @@
   "@fxBake": {
     "description": "Effect controls — a button on Bake points: write the points to disk now."
   },
+  "fxAnimateMesh": "Animate mesh",
+  "@fxAnimateMesh": {
+    "description": "Effect controls — a switch on Mesh warp, After Effects' stopwatch on Distortion Mesh: on, a drag of a grid point in the Viewer keys the whole mesh at the playhead."
+  },
+  "fxResetMesh": "Reset mesh",
+  "@fxResetMesh": {
+    "description": "Effect controls — a button on Mesh warp: every grid point back where a flat grid has it, keys and all."
+  },
   "fxRead": "Read",
   "@fxRead": {
     "description": "Effect controls — a Mode option on Bake points: hand on only the points that were written to disk, whatever has changed since."
@@ -4214,6 +4230,30 @@
   "fxEchoes": "Echoes",
   "@fxEchoes": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxEchoOperator": "Echo operator",
+  "@fxEchoOperator": {
+    "description": "Effect controls — a control on Echo: how its echoes combine, as After Effects' Echo Operator."
+  },
+  "fxEchoTimeSeconds": "Echo time (seconds)",
+  "@fxEchoTimeSeconds": {
+    "description": "Effect controls — a control on Echo: how far apart its echoes are, in seconds."
+  },
+  "fxCompositeInBack": "Composite in back",
+  "@fxCompositeInBack": {
+    "description": "Effect controls — an Echo operator: each echo drawn behind the ones before."
+  },
+  "fxCompositeInFront": "Composite in front",
+  "@fxCompositeInFront": {
+    "description": "Effect controls — an Echo operator: each echo drawn in front of the ones before."
+  },
+  "fxNumberOfEchoes": "Number of echoes",
+  "@fxNumberOfEchoes": {
+    "description": "Effect controls — a control on Echo: how many echoes it draws."
+  },
+  "fxStartingIntensity": "Starting intensity",
+  "@fxStartingIntensity": {
+    "description": "Effect controls — a control on Echo: how strong the layer itself is."
   },
   "fxEdges": "Edges",
   "@fxEdges": {
@@ -9908,6 +9948,50 @@
   "@settingsFullResolutionWhileDragging": {
     "description": "Settings window: the name of the setting that renders a value drag at the Viewer's own resolution instead of the reduced one, so previews stay sharp and get slower."
   },
+  "settingsAdaptiveResolutionLimit": "Adaptive resolution limit",
+  "@settingsAdaptiveResolutionLimit": {
+    "description": "Settings window: how coarse a drag preview may go when its frames come slowly. Auto, or 1/2 to 1/16."
+  },
+  "settingsWireframeWhileDragging": "Wireframe while dragging",
+  "@settingsWireframeWhileDragging": {
+    "description": "Settings window: a drag shows each layer as the outline of its rectangle, and the release shows the frame."
+  },
+  "settingsDecodeAtShownSize": "Decode footage at shown size",
+  "@settingsDecodeAtShownSize": {
+    "description": "Settings window: a footage layer shown smaller than its own size is decoded for the preview no larger than it is shown. Export always decodes at full size."
+  },
+  "tipShownSize": "Shown size",
+  "@tipShownSize": {
+    "description": "Tooltip on the Viewer deck's mark for Decode footage at shown size: lit while footage shown smaller is decoded smaller for the preview."
+  },
+  "tipWireframeDrags": "Wireframe drags",
+  "@tipWireframeDrags": {
+    "description": "Tooltip on the Viewer deck's mark for Wireframe while dragging: lit while a drag shows each layer as the outline of its rectangle."
+  },
+  "tipSuspendUpdates": "Suspend updates",
+  "@tipSuspendUpdates": {
+    "description": "Tooltip on the Viewer deck's eye mark while the Viewer updates: pressing it keeps the picture as it is while edits go on (Caps Lock does the same)."
+  },
+  "tipResumeUpdates": "Resume updates",
+  "@tipResumeUpdates": {
+    "description": "Tooltip on the Viewer deck's eye mark while Viewer updates are suspended: pressing it draws the frame again and follows edits."
+  },
+  "settingsCapsLockSuspendsViewer": "Caps Lock suspends Viewer updates",
+  "@settingsCapsLockSuspendsViewer": {
+    "description": "Settings window: while Caps Lock is on, the Viewer keeps its picture and draws the frame once it is off."
+  },
+  "viewerMenuLiveUpdate": "Live update",
+  "@viewerMenuLiveUpdate": {
+    "description": "Viewer menu: when off, a drag shows no new frame until the release."
+  },
+  "viewerMenuSuspendUpdates": "Suspend updates",
+  "@viewerMenuSuspendUpdates": {
+    "description": "Viewer menu: the Viewer keeps its picture while edits go on, and draws the frame once resumed."
+  },
+  "viewerUpdatesSuspended": "Viewer updates suspended",
+  "@viewerUpdatesSuspended": {
+    "description": "Shown over the Viewer while its updates are suspended."
+  },
   "settingsFramesWaitingToBeWritten": "Frames waiting to be written",
   "@settingsFramesWaitingToBeWritten": {
     "description": "Settings window: the name of one setting."
@@ -11125,6 +11209,14 @@
   "tipStopAnimating": "Stop animating",
   "@tipStopAnimating": {
     "description": "Tooltip on the stopwatch when the property is already animated. One or two words."
+  },
+  "tipPowerSaving": "Plug in",
+  "@tipPowerSaving": {
+    "description": "Tooltip on the Power saving word in the bottom strip: the way out, since a laptop on battery or saving power slows the graphics card. One or two words."
+  },
+  "powerSaving": "Power saving",
+  "@powerSaving": {
+    "description": "Word in the bottom strip while the laptop is on battery or in a power saver mode. One or two words."
   },
   "tipStopMeasuring": "Stop measuring",
   "@tipStopMeasuring": {
@@ -13763,6 +13855,10 @@
   "@fxMedian": {
     "description": "Effect name in the Add effect menu — replaces each pixel with the middle value of its neighbours."
   },
+  "fxMeshWarp": "Mesh warp",
+  "@fxMeshWarp": {
+    "description": "Effect name in the Add effect menu — the picture bent by a grid of points that can each be dragged, as After Effects' Mesh Warp."
+  },
   "fxMosaic": "Mosaic",
   "@fxMosaic": {
     "description": "Effect name in the Add effect menu — the frame in flat rectangular blocks."
@@ -16252,6 +16348,26 @@
   "exportBitRateAuto": "Auto",
   "@exportBitRateAuto": {
     "description": "Export dialog, Bit rate row: a tick that works a delivery-quality rate out from the frame and the rate. Unticked, the number beside it is used."
+  },
+  "exportBitRateEncoding": "Bitrate encoding",
+  "@exportBitRateEncoding": {
+    "description": "Export dialog, a row label: how the video bitrate is spent, varying (VBR) or constant (CBR)."
+  },
+  "exportBitRateVbr": "VBR",
+  "@exportBitRateVbr": {
+    "description": "Export dialog, Bitrate encoding: variable bitrate, more where the picture is busy up to a maximum. VBR is a technical name and stays as it is."
+  },
+  "exportBitRateCbr": "CBR",
+  "@exportBitRateCbr": {
+    "description": "Export dialog, Bitrate encoding: constant bitrate throughout. CBR is a technical name and stays as it is."
+  },
+  "exportBitRateMaximum": "Maximum",
+  "@exportBitRateMaximum": {
+    "description": "Export dialog, a row label: the highest a variable bitrate may go, in megabits a second."
+  },
+  "exportBitRateMaximumAuto": "1.5 × bitrate",
+  "@exportBitRateMaximumAuto": {
+    "description": "Export dialog, Maximum row while it is worked out: half as much again as the bitrate."
   },
   "exportResampleHigh": "High",
   "@exportResampleHigh": {
@@ -19854,6 +19970,10 @@
   "viewerPictureCut": "Cut to the largest picture",
   "@viewerPictureCut": {
     "description": "Viewer, bottom right in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Clicking it opens that setting."
+  },
+  "viewerPictureCutMark": "Cut",
+  "@viewerPictureCutMark": {
+    "description": "Viewer, bottom right, a small mark in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Its tooltip is viewerPictureCut, and clicking it opens that setting."
   },
   "colourPickerWas": "Was",
   "@colourPickerWas": {

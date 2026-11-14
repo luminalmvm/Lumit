@@ -599,4 +599,238 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             .unwrap_or(u8::MAX);
         assert!(off <= 1, "off by {off}");
     }
+
+    /// An extension's effect has the Blend row every built-in has: a flat
+    /// grey drawn in Multiply darkens the plate by that grey, where Normal
+    /// replaces it. Guards wrong pixels.
+    #[test]
+    fn an_lfx_effect_blends_with_its_input() {
+        const GREY: &str = r"
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return vec4<f32>(0.5, 0.5, 0.5, 1.0);
+}
+";
+        let def = register(effect("blend_grey", GREY, &[])).expect("it installs");
+        assert!(def.schema().blend(), "the Blend row is there");
+        let grey = |mode: u32| {
+            let mut fx = lumit_core::fx::builtins::instantiate(def.schema().match_name)
+                .expect("instantiates");
+            let blend = fx
+                .params
+                .iter_mut()
+                .find(|p| p.id == lumit_core::fx::schema::BLEND_PARAM)
+                .expect("a fresh instance carries Blend");
+            blend.value = EffectValue::Choice(mode);
+            let (doc, comp) = project(vec![fx]);
+            (Arc::new(doc), comp)
+        };
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let centre = |rgba: &[u8]| {
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let (doc, comp) = grey(0);
+        let (normal, ..) = r.render_rgba(&doc, comp, 0, 1.0).expect("Normal renders");
+        let (doc, comp) = grey(2);
+        let (multiply, ..) = r.render_rgba(&doc, comp, 0, 1.0).expect("Multiply renders");
+        let enc = lumit_core::pixels::srgb_encode;
+        // One step either way: a software rasteriser rounds the grey a step
+        // off the card's.
+        for got in centre(&normal) {
+            assert!(
+                (i16::from(got) - i16::from(enc(0.5))).abs() <= 1,
+                "Normal is the grey: got {got}"
+            );
+        }
+        let want = [enc(0.125), enc(0.2), enc(0.3)];
+        for (got, want) in centre(&multiply).iter().zip(want) {
+            assert!(
+                (i16::from(*got) - i16::from(want)).abs() <= 1,
+                "Multiply: got {got} want {want}"
+            );
+        }
+    }
+
+    /// Colorama, as the Siceliot extension ships it, on the grey plate:
+    /// a phase of zero lands on the top of the wheel and Phase shift turns it
+    /// anticlockwise, Modify None leaves the plate, Negative from Red gives
+    /// the red back as grey, a Pixel selection that matches nothing changes
+    /// nothing, Alpha ramp lays its white over the plate (Composite over
+    /// layer), and the defaults read Intensity off the display values into
+    /// the hue wheel.
+    /// Guards wrong pixels.
+    #[test]
+    fn colorama_reads_a_phase_and_paints_the_cycle() {
+        const SHADER: &str =
+            include_str!("../../../lumit-extensions/builtin/siceliot/colorama.wgsl");
+        let mut colorama = effect("colorama_test", SHADER, &[]);
+        colorama.category = "Colour".into();
+        colorama.input = Some(lfx::LfxInput {
+            label: "Add phase".into(),
+            kind: lfx::LfxInputKind::Image,
+        });
+        let def = register(colorama).expect("it installs");
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        // Mesa's software rasteriser (llvmpipe, as on CI) loses the device
+        // while it compiles this kernel. A card draws it.
+        if lumit_gpu::adapter_summary().is_some_and(|summary| summary.contains("(Cpu,")) {
+            return;
+        }
+        let mut render = |rows: &[(&str, EffectValue)]| {
+            let mut fx = lumit_core::fx::builtins::instantiate(def.schema().match_name)
+                .expect("instantiates");
+            for (id, value) in rows {
+                match fx.params.iter_mut().find(|p| p.id == *id) {
+                    Some(p) => p.value = value.clone(),
+                    None => fx.params.push(lumit_core::model::EffectParam {
+                        id: (*id).into(),
+                        value: value.clone(),
+                        extra: serde_json::Map::new(),
+                    }),
+                }
+            }
+            let (doc, comp) = project(vec![fx]);
+            let (rgba, ..) = r
+                .render_rgba(&Arc::new(doc), comp, 0, 1.0)
+                .expect("it renders");
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let near = |got: [u8; 3], want: [u8; 3], what: &str| {
+            for (g, w) in got.iter().zip(want) {
+                assert!(
+                    (i16::from(*g) - i16::from(w)).abs() <= 2,
+                    "{what}: got {got:?} want {want:?}"
+                );
+            }
+        };
+        let zero = ("get_phase_from", EffectValue::Choice(9));
+        near(
+            render(std::slice::from_ref(&zero)),
+            [255, 0, 0],
+            "a phase of zero is red",
+        );
+        let turned = ("phase_shift", EffectValue::Float(Property::fixed(120.0)));
+        near(
+            render(&[zero, turned]),
+            [0, 0, 255],
+            "a third of a turn on, anticlockwise, is blue",
+        );
+        let enc = lumit_core::pixels::srgb_encode;
+        let plate = [enc(0.25), enc(0.4), enc(0.6)];
+        near(
+            render(&[("modify", EffectValue::Choice(10))]),
+            plate,
+            "Modify None leaves the plate",
+        );
+        near(
+            render(&[
+                ("palette", EffectValue::Choice(3)),
+                ("get_phase_from", EffectValue::Choice(1)),
+            ]),
+            [enc(0.25); 3],
+            "Negative from Red gives the red as grey",
+        );
+        near(
+            render(&[("matching_mode", EffectValue::Choice(1))]),
+            plate,
+            "a selection that matches nothing changes nothing",
+        );
+        // Intensity of the display values: 0.642, so 0.358 clockwise round the
+        // wheel: between green (33.3 %) and cyan (50 %), 15 % of the way.
+        near(
+            render(&[]),
+            [0, 255, 38],
+            "the defaults paint the hue wheel",
+        );
+        // Alpha ramp there is white at 0.358 opacity, laid over the plate.
+        let over = |c: f32| enc(0.358 + c * 0.642);
+        near(
+            render(&[("palette", EffectValue::Choice(1))]),
+            [over(0.25), over(0.4), over(0.6)],
+            "Alpha ramp is laid over the layer",
+        );
+    }
+
+    /// Particulate's Composite on original: on, its layer's own picture is
+    /// under the particles; off, the layer is clear where no particle is and
+    /// the comp's black shows. The emitter sits at a 1080p centre, outside
+    /// this small comp, so no particle lands on the pixel read. Kept with the
+    /// plate this module already builds. Guards a solid that should vanish.
+    #[test]
+    fn particulate_off_its_original_leaves_the_layer_clear() {
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let mut render = |on: bool| {
+            let mut fx = lumit_core::fx::builtins::instantiate("particulate").expect("a built-in");
+            let row = fx
+                .params
+                .iter_mut()
+                .find(|p| p.id == "composite_on_original")
+                .expect("the row");
+            row.value = EffectValue::Bool(on);
+            let (doc, comp) = project(vec![fx]);
+            let (rgba, ..) = r
+                .render_rgba(&Arc::new(doc), comp, 0, 1.0)
+                .expect("it renders");
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        let enc = lumit_core::pixels::srgb_encode;
+        assert_eq!(render(true), [enc(0.25), enc(0.4), enc(0.6)], "the plate");
+        assert_eq!(render(false), [0, 0, 0], "the comp's black");
+    }
+
+    /// Gradient's Paint under a Blend that reads the layer: particles drawn
+    /// on nothing, then a Gradient in Colour. Whole frame paints the clear
+    /// part too, opaque, and Colour takes its lightness from that clear
+    /// (black) part, so the layer turns black over a white comp; Inside layer
+    /// paints only where the layer has pixels and the white comp shows.
+    /// Guards a background that should stay clear.
+    #[test]
+    fn a_gradient_inside_its_layer_keeps_the_clear_part_clear() {
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let mut render = |paint: u32| {
+            let mut sparks =
+                lumit_core::fx::builtins::instantiate("particulate").expect("a built-in");
+            for p in &mut sparks.params {
+                if p.id == "composite_on_original" {
+                    p.value = EffectValue::Bool(false);
+                }
+            }
+            let mut ramp = lumit_core::fx::builtins::instantiate("gradient").expect("a built-in");
+            for p in &mut ramp.params {
+                match p.id.as_str() {
+                    "paint" => p.value = EffectValue::Choice(paint),
+                    // Colour.
+                    "blend" => p.value = EffectValue::Choice(24),
+                    _ => {}
+                }
+            }
+            let (mut doc, comp) = project(vec![sparks, ramp]);
+            for item in &mut doc.items {
+                if let ProjectItem::Composition(c) = item {
+                    c.background = LinearColour([1.0, 1.0, 1.0, 1.0]);
+                }
+            }
+            let (rgba, ..) = r
+                .render_rgba(&Arc::new(doc), comp, 0, 1.0)
+                .expect("it renders");
+            let i = ((16 * 32 + 16) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        assert_eq!(render(1), [0, 0, 0], "Whole frame: opaque, and black");
+        assert_eq!(render(0), [255, 255, 255], "Inside layer: the comp shows");
+    }
 }

@@ -250,6 +250,7 @@ Future<CompositionReference?> showNewCompositionFrb({
   final name =
       nodeGraph ? project.nextNodeGraphName() : project.nextCompName();
   var placed = const <LayerReference>[];
+  BridgeRational? start;
   final made = await showLumitModal<CompositionReference>(
     context: context,
     id: 'new-comp',
@@ -268,6 +269,10 @@ Future<CompositionReference?> showNewCompositionFrb({
         motionBlurSamples: initial.motionBlurSamples,
         motionBlurLimit: initial.motionBlurLimit,
       ),
+      // Where its timecode starts, as in After Effects' Composition
+      // Settings: 00:00:00:00 unless changed.
+      initialStart: const BridgeRational(num: 0, den: 1),
+      onStart: (s) => start = s,
       // A node graph has no layers to light.
       lightsLikeAfterEffects: nodeGraph ? null : false,
       onConfirm: (settings, likeAfterEffects) {
@@ -279,6 +284,9 @@ Future<CompositionReference?> showNewCompositionFrb({
                   name: settings.name, settings: settings);
           if (likeAfterEffects ?? false) {
             comp.setLightingLikeAfterEffects(on_: true);
+          }
+          if (start case final s? when s.num != 0) {
+            comp.setStartTimecode(start: s);
           }
           // A node graph has no layers, so nothing is dropped on this door.
           placed = comp.addFootageLayers(

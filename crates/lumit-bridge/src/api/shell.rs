@@ -103,6 +103,36 @@ pub fn set_full_res_drag_previews(full_res: bool) {
     crate::realtime::set_full_res_drags(full_res);
 }
 
+/// The **Adaptive resolution limit** (Settings → Performance): how coarse a
+/// drag may go when its frames come slower than 50 ms. 0 is Auto (down to an
+/// eighth); 2, 4, 8 or 16 cap it there. Held as the drag setting above is.
+#[frb(sync)]
+pub fn set_drag_resolution_limit(divisor: u32) {
+    crate::realtime::set_drag_limit(divisor);
+}
+
+/// **Wireframe while dragging** (Settings → Performance): a drag draws each
+/// layer as the outline of its rectangle, and the release draws the frame.
+#[frb(sync)]
+pub fn set_wireframe_drags(on: bool) {
+    crate::realtime::set_wireframe_drags(on);
+}
+
+/// **Live Update** (the Viewer's menu): off, a drag draws no frame until the
+/// release.
+#[frb(sync)]
+pub fn set_live_update(on: bool) {
+    crate::realtime::set_live_update(on);
+}
+
+/// **Decode footage at shown size** (Settings → Performance and the Viewer's
+/// bar): a footage layer shown smaller than its own size is decoded no larger
+/// for the preview. Export always decodes at full size.
+#[frb(sync)]
+pub fn set_decode_at_shown_size(on: bool) {
+    crate::realtime::set_decode_at_shown_size(on);
+}
+
 /// Let footage be decoded by the graphics card's video unit, or keep it on the
 /// processor.
 ///

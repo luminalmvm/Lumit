@@ -39,6 +39,7 @@ impl OwnMoments {
 /// second one shows its input at the frame's own time.
 #[must_use]
 pub fn stack_own_moments(
+    owner: uuid::Uuid,
     effects: &[EffectInstance],
     fx_on: bool,
     lt: f64,
@@ -52,7 +53,7 @@ pub fn stack_own_moments(
             return None;
         }
         let def = crate::fx::builtins::def(&e.effect.match_name)?;
-        def.wants_own_moments(e).then_some((i, e, def))
+        def.wants_own_moments(e, owner).then_some((i, e, def))
     })?;
     def.own_moments(e, lt, markers).map(|m| (i, m))
 }
@@ -81,7 +82,7 @@ pub fn own_moment_comp_times(
     let start = layer.start_offset.0.to_f64();
     let lt = crate::time::layer_time(t_comp, layer.start_offset.0);
     let markers = crate::fx::markers::MarkerContext::for_layer(comp, layer);
-    stack_own_moments(&layer.effects, layer.switches.fx, lt, &markers)
+    stack_own_moments(layer.id, &layer.effects, layer.switches.fx, lt, &markers)
         .map_or_else(Vec::new, |(_, m)| {
             m.times().into_iter().map(|at| at + start).collect()
         })

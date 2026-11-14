@@ -66,6 +66,7 @@ Angle control
 Angle offset
 Angular
 Animate
+Animate mesh
 Animation
 Anticlockwise
 Anywhere
@@ -132,7 +133,6 @@ Beat markers
 Beat pulse
 Beat trigger
 Beats
-Behind
 Bend
 Between
 Bevel
@@ -296,6 +296,8 @@ Comp
 Completion
 Complexity
 Composite
+Composite in back
+Composite in front
 Composite on original
 Compositing
 Compressor
@@ -431,7 +433,8 @@ Each point
 Ease in
 Ease out
 Echo
-Echoes
+Echo operator
+Echo time (seconds)
 Edge
 Edge colour
 Edge fade
@@ -711,7 +714,6 @@ IOR
 Ice
 Image
 Image layer
-In front
 In high
 In low
 In order
@@ -733,6 +735,7 @@ Input space
 Input white
 Inside
 Inside colour
+Inside layer
 Inside mask
 Intensity
 Interlace offset
@@ -894,6 +897,7 @@ Measure
 Median
 Merge
 Merge points
+Mesh warp
 Metallic
 Method
 Micro Four Thirds
@@ -950,6 +954,7 @@ Nothing
 Number
 Number by input
 Number from
+Number of echoes
 Number range
 Number to
 OCIO colour space transform
@@ -1009,6 +1014,7 @@ Overlay
 PAL
 Padding x
 Padding y
+Paint
 Paint style
 Parametric EQ
 Part
@@ -1178,6 +1184,7 @@ Repeat words
 Replace colour
 Replace method
 Reset interval
+Reset mesh
 Resolution
 Resonance
 Result
@@ -1394,6 +1401,7 @@ Start size
 Start thickness
 Start x
 Start y
+Starting intensity
 Static
 Status
 Steps per second
@@ -1614,6 +1622,7 @@ Wavelength
 Waves
 Weak
 Wet
+Whole frame
 Whole frames
 Width
 Wiggle

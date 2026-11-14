@@ -45,6 +45,9 @@ pub struct BridgeExportSpec {
     /// `bitrate_mbps`; a blank field (zero) with this off means the encoder
     /// chooses its own quality, which is what blank has always meant.
     pub bitrate_auto: bool,
+    /// Hold the bitrate constant (CBR) rather than letting it vary up to
+    /// `peak_mbps` (VBR).
+    pub constant_bitrate: bool,
     /// Output frame rate; zero means the composition's own. A different rate
     /// resamples by nearest comp frame over the same wall-clock span.
     pub fps: f64,
@@ -178,6 +181,7 @@ impl Default for BridgeExportSpec {
             bitrate_mbps: 0,
             peak_mbps: 0,
             bitrate_auto: true,
+            constant_bitrate: false,
             fps: 0.0,
             range_start_frame: -1,
             range_end_frame: -1,

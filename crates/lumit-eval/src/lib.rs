@@ -82,6 +82,20 @@ pub trait SourceStamper {
     /// same way.
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)>;
 
+    /// [`Self::stamp`] for a footage layer's own picture, which may decode
+    /// smaller than the preview tier when the layer is shown smaller
+    /// (`lumit_core::shown_size`). A stamper that never decodes at shown
+    /// size names it as [`Self::stamp`] does.
+    fn stamp_layer(
+        &self,
+        item: Uuid,
+        lt: f64,
+        native: bool,
+        _layer: &lumit_core::model::Layer,
+    ) -> Option<(String, u64)> {
+        self.stamp(item, lt, native)
+    }
+
     /// The source's own frame rate, when known.
     ///
     /// Only the flow engagement gate needs this: flow that cannot help
@@ -1791,6 +1805,23 @@ fn feed_layer(
     // neighbour frames, exactly the ones the render decodes (same window, same
     // retime mapping, same comp frame step). Footage layers only, as the render
     // decodes; a plain layer's key is untouched.
+    // **A time effect that follows the layer's motion** (Echo, Motion blur,
+    // Timewarp, Posterize time) reads the layer as the effects above it leave
+    // it, where it was at each moment it reads, so that layer at each of
+    // those moments is part of this frame's name: a key moved a frame back
+    // changes the trail.
+    if let Some((at, how)) = lumit_core::fx::follow::split(layer) {
+        let above = lumit_core::fx::follow::inner(layer, at, how);
+        h.update(b"follow/");
+        for (i, tau) in lumit_core::fx::follow::times(comp, layer, t)
+            .into_iter()
+            .enumerate()
+        {
+            let llt = lumit_core::time::layer_time(tau, layer.start_offset.0);
+            h.update(&(i as u32).to_le_bytes());
+            feed_layer(h, doc, comp, &above, tau, llt, quality, stamper, visited)?;
+        }
+    }
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -2217,7 +2248,7 @@ fn feed_source(
                 stamper,
             );
             let native = wants_flow(layer, effective);
-            let (identity, frame) = stamper.stamp(*item, source_time, native)?;
+            let (identity, frame) = stamper.stamp_layer(*item, source_time, native, layer)?;
             h.update(b"footage/");
             h.update(identity.as_bytes());
             h.update(&frame.to_le_bytes());

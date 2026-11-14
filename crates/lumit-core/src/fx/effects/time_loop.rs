@@ -1,4 +1,5 @@
-//! Time loop plays a stretch of another layer over and over.
+//! Time loop plays a stretch of a layer over and over: its Source layer, or
+//! with Source layer empty the layer it is on.
 //!
 //! Source layer is drawn as it is at a moment inside the loop, with its own
 //! effects, the drivers wired into them and, under Map placement As placed in
@@ -14,6 +15,13 @@
 //!
 //! The looped picture is laid over the layer's own, so the effect is usually
 //! put on a clear solid. Hide the Source layer so only the loop shows.
+//!
+//! With **Source layer empty**, or naming the layer the effect is on, the loop
+//! is the layer itself, as the effects above Time loop leave it (the stack
+//! Timewarp shows at other moments), and it takes the place of the layer's
+//! picture rather than lying over it: a solid with Particulate on it loops its
+//! particles with no second layer.
+//! The effects below Time loop run on the looped picture.
 
 use crate::fx::{
     params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
@@ -59,7 +67,8 @@ pub const TIME_LOOP_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = TIME_LOOP_ENABLED_WHEN,
 )]
 pub struct TimeLoop {
-    /// The layer whose stretch is looped.
+    /// The layer whose stretch is looped. Empty or this layer, the layer the
+    /// effect is on.
     #[layer(label = "Source layer")]
     pub source: bool,
 
@@ -132,6 +141,9 @@ pub struct Moments {
 impl TimeLoop {
     /// How much of the lap after this one shows, read back by the draw.
     pub const DERIVED_NEXT_SHARE: ParamId = ParamId::new("derived.next_share");
+    /// 1 when Source layer is empty: the loop takes the place of the
+    /// layer's picture instead of lying over it.
+    pub const DERIVED_OWN: ParamId = ParamId::new("derived.own");
 
     /// The moments, on this layer's clock, that the frame at layer time `lt`
     /// shows.
@@ -181,7 +193,13 @@ impl TimeLoop {
         let Some(source) = e.layer_ref("source") else {
             return Vec::new();
         };
-        if !comp.layers.iter().any(|l| l.id == source) {
+        // A source missing, or the layer the effect is on, which loops itself
+        // through its own moments instead.
+        if !comp
+            .layers
+            .iter()
+            .any(|l| l.id == source && !l.effects.iter().any(|x| x.id == e.id))
+        {
             return Vec::new();
         }
         let m = Self::stored(e, lt).moments(lt);
@@ -230,8 +248,42 @@ impl EffectDef for TimeLoopDef {
         }
     }
 
+    /// With Source layer empty, the layer's own picture at the loop's
+    /// moments: the same moments a Source layer is drawn at.
+    fn own_moments(
+        &self,
+        e: &EffectInstance,
+        lt: f64,
+        _markers: &crate::fx::markers::MarkerContext,
+    ) -> Option<crate::fx::moments::OwnMoments> {
+        let m = TimeLoop::stored(e, lt).moments(lt);
+        Some(crate::fx::moments::OwnMoments {
+            a: m.now,
+            b: m.next.map(|n| (n, m.next_share)),
+        })
+    }
+
+    fn shows_own_moments(&self) -> bool {
+        true
+    }
+
+    /// Only while Source layer is empty or names the layer the effect is on:
+    /// another layer is drawn through the row, and a Timewarp below in the
+    /// stack keeps the moments.
+    fn wants_own_moments(&self, e: &EffectInstance, owner: Uuid) -> bool {
+        e.layer_ref("source").is_none_or(|s| s == owner)
+    }
+
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         let m = TimeLoop::stored(cx.inst, cx.lt).moments(cx.lt);
         push(TimeLoop::DERIVED_NEXT_SHARE, Value::Float(m.next_share));
+        let own = cx
+            .inst
+            .layer_ref("source")
+            .is_none_or(|s| Some(s) == cx.context.layer);
+        push(
+            TimeLoop::DERIVED_OWN,
+            Value::Float(if own { 1.0 } else { 0.0 }),
+        );
     }
 }

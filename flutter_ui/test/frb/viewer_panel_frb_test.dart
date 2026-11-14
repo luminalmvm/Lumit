@@ -930,22 +930,31 @@ void main() {
           reason: 'a keyed position draws its motion path');
       expect(drawn.single.motionPath!.keys, hasLength(2));
 
-      // A body drag still leaves the curve alone.
-      final stage = find.byType(ViewerPanelFrb);
-      var gesture = await tester.startGesture(tester.getCenter(stage));
+      // A body drag, grabbed anywhere on the layer, keys the position at the
+      // playhead, as in After Effects, and one undo takes it back.
+      final fitted = fittedRect(tester, p.comp);
+      final scale = fitted.width / p.comp.getSize().width;
+      // Off its middle: the layer, comp-sized, sits on x 0 at the playhead.
+      final size = p.comp.getSize();
+      var gesture = await tester.startGesture(fitted.topLeft +
+          Offset(size.width * 0.2 * scale, size.height * 0.3 * scale));
       await tester.pump();
       await gesture.moveBy(const Offset(40, 0));
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
+      final keyed = p.layer.getTransform().positionX as BridgeScalar_Keyframed;
+      expect(keyed.field0[0].value, closeTo(40 / scale, 0.5),
+          reason: 'the key at the playhead took the drag');
+      expect(keyed.field0[1].value, 400, reason: 'the other key stayed');
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
       final held = p.layer.getTransform().positionX as BridgeScalar_Keyframed;
-      expect(held.field0.map((k) => k.value), [0, 400],
-          reason: 'a curve is not overwritten by a drag it never accepted');
+      expect(held.field0.map((k) => k.value), [0, 400]);
 
       // Dragging the last key's box moves that key. It sits at (400, y) in
       // comp pixels, on the picture's own placement.
-      final fitted = fittedRect(tester, p.comp);
-      final scale = fitted.width / p.comp.getSize().width;
       final y = (p.layer.getTransform().positionY as BridgeScalar_Static).field0;
       final dot = fitted.topLeft + Offset(400 * scale, y * scale);
       // One long first move, as the body drag above makes: a touch pan is

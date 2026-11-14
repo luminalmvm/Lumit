@@ -243,6 +243,22 @@ impl FxEngine {
     /// The picture is copied first and the particles drawn over it, so this is
     /// an ordinary "picture in, picture out" pass with an instanced draw in the
     /// middle rather than a compositor of its own.
+    /// A clear picture of `w` by `h`: what a Particulate with Composite on
+    /// original off draws over in place of its layer's picture. Cleared
+    /// explicitly, as a pooled working texture holds whatever it last held.
+    pub fn particulate_clear(&self, ctx: &GpuContext, w: u32, h: u32) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-particulate-clear");
+        let view = out.create_view(&Default::default());
+        let mut enc = ctx.encoder("fx-particulate-clear");
+        drop(draw_pass(
+            &mut enc,
+            &view,
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+        ));
+        drop(enc);
+        out
+    }
+
     pub fn particulate(
         &self,
         ctx: &GpuContext,

@@ -184,6 +184,55 @@ class ViewerDeck extends StatelessWidget {
                   viewerLoopMark(t,
                       loop: loop, onLoop: ui.workspace.setLoopMode),
                   viewerBarGapBox(viewerBarGap),
+                  // The three switches for a slow machine, lit while on:
+                  // Decode footage at shown size, Wireframe while dragging and
+                  // the Viewer's updates (Caps Lock drives the last as well).
+                  viewerBarMark(
+                    key: const ValueKey('viewer-shown-size'),
+                    icon: LumitIcon.footage,
+                    colour: ui.workspace.performance.decodeAtShownSize
+                        ? t.accent
+                        : t.textMuted,
+                    onPressed: () => ui.setDecodeAtShownSize(
+                        !ui.workspace.performance.decodeAtShownSize),
+                    tip: l10n.tipShownSize,
+                  ),
+                  viewerBarMark(
+                    key: const ValueKey('viewer-wireframe-drags'),
+                    icon: LumitIcon.wireframe,
+                    colour: ui.workspace.performance.wireframeDrags
+                        ? t.accent
+                        : t.textMuted,
+                    onPressed: () => ui.setWireframeWhileDragging(
+                        !ui.workspace.performance.wireframeDrags),
+                    tip: l10n.tipWireframeDrags,
+                  ),
+                  // The Adaptive resolution limit beside them: how coarse a
+                  // slow drag may go.
+                  LumitTooltip(
+                    message: l10n.settingsAdaptiveResolutionLimit,
+                    child: BareDropdown<int>(
+                      key: const ValueKey('viewer-drag-limit'),
+                      dense: true,
+                      value: ui.workspace.performance.dragResolutionLimit,
+                      options: const [0, 2, 4, 8, 16],
+                      label: (d) => d == 0 ? l10n.menuAuto : '1/$d',
+                      onChanged: ui.setAdaptiveResolutionLimit,
+                    ),
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: ui.viewerSuspended,
+                    builder: (context, suspended, _) => viewerBarMark(
+                      key: const ValueKey('viewer-updates'),
+                      icon: suspended ? LumitIcon.eyeClosed : LumitIcon.eye,
+                      colour: suspended ? t.error : t.textMuted,
+                      onPressed: () => ui.setViewerSuspended(!suspended),
+                      tip: suspended
+                          ? l10n.tipResumeUpdates
+                          : l10n.tipSuspendUpdates,
+                    ),
+                  ),
+                  viewerBarGapBox(viewerBarGap),
                   // The mute: lit while the output is silenced, which is the
                   // state worth noticing.
                   viewerBarMark(

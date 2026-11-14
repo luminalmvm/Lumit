@@ -43,6 +43,28 @@ BridgePlaybackTier resetRealtime() =>
 void setFullResDragPreviews({required bool fullRes}) => BridgeLib.instance.api
     .crateApiShellSetFullResDragPreviews(fullRes: fullRes);
 
+/// The **Adaptive resolution limit** (Settings → Performance): how coarse a
+/// drag may go when its frames come slower than 50 ms. 0 is Auto (down to an
+/// eighth); 2, 4, 8 or 16 cap it there. Held as the drag setting above is.
+void setDragResolutionLimit({required int divisor}) => BridgeLib.instance.api
+    .crateApiShellSetDragResolutionLimit(divisor: divisor);
+
+/// **Wireframe while dragging** (Settings → Performance): a drag draws each
+/// layer as the outline of its rectangle, and the release draws the frame.
+void setWireframeDrags({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetWireframeDrags(on_: on_);
+
+/// **Live Update** (the Viewer's menu): off, a drag draws no frame until the
+/// release.
+void setLiveUpdate({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetLiveUpdate(on_: on_);
+
+/// **Decode footage at shown size** (Settings → Performance and the Viewer's
+/// bar): a footage layer shown smaller than its own size is decoded no larger
+/// for the preview. Export always decodes at full size.
+void setDecodeAtShownSize({required bool on_}) =>
+    BridgeLib.instance.api.crateApiShellSetDecodeAtShownSize(on_: on_);
+
 /// Let footage be decoded by the graphics card's video unit, or keep it on the
 /// processor.
 ///

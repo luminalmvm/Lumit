@@ -313,6 +313,7 @@ class PhoneLine extends ChangeNotifier {
           bitrateMbps: stored.bitrateMbps,
           peakMbps: stored.peakMbps,
           bitrateAuto: stored.bitrateAuto,
+          constantBitrate: stored.constantBitrate,
           fps: stored.fps,
           rangeStartFrame: start,
           rangeEndFrame: end,

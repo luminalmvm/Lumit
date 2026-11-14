@@ -59,6 +59,7 @@ pub mod sequence;
 pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.
 pub mod shared;
+pub mod shown_size;
 pub mod store;
 /// Text animators: a Text layer's words moved a letter at a time.
 pub mod text;

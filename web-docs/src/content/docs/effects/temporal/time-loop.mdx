@@ -1,6 +1,6 @@
 ---
 title: Time loop
-description: "Plays a stretch of another layer over and over."
+description: "Plays a stretch of a layer over and over."
 ---
 
 Time loop is a **Temporal** effect.
@@ -16,6 +16,10 @@ Time loop is a **Temporal** effect.
 Draws the **Source layer** as it is at a moment inside the loop, with its own effects and
 the drivers wired into them. The loop runs on the clock of the layer the effect is on:
 from **Start**, **Duration** long. The looped picture is laid over the layer's own.
+
+With Source layer empty, or set to the layer the effect is on, the loop is that layer as
+the effects above Time loop leave it, and it takes the place of the layer's picture. The
+effects below Time loop run on the looped picture.
 
 With **Map placement** on As placed in comp, the source's transform is read at the looped
 moment too, so its movement loops.
@@ -52,7 +56,8 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Source layer**: the layer whose stretch is looped.
+- **Source layer**: the layer whose stretch is looped. Empty, it is the layer the effect
+  is on.
 - **Map placement**: where the source sits on this layer: as it sits in the composition,
   stretched over the frame, or centred at its own size.
 - **Type**: how the loop comes round. **Cycle** starts again. **Ping-pong** plays forwards

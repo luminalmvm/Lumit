@@ -50,6 +50,7 @@ import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
+import 'viewer_mesh_warp.dart';
 import 'viewer_follow.dart';
 import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
@@ -404,13 +405,13 @@ class ViewerStage extends StatelessWidget {
                     : null) ??
                 uiState.layerBounds.boundsOf(entry,
                     compSize: compSize, revision: revision, t: playheadSeconds),
-        // A keyed position has no one value for a body drag to add to; its
-        // keys are dragged on the motion path instead. Keyed scale or
-        // rotation likewise grows no handles. A 3D layer keys at the playhead
-        // instead, as its 3D handles do, unless an expression drives it.
+        // A keyed position is dragged by its body from wherever it is
+        // grabbed, as in After Effects, and takes a key at the playhead; its
+        // keys can still be dragged on the motion path. Only an expression
+        // leaves it no value for a drag to set. Keyed scale or rotation
+        // grows no handles.
         draggable: positionStill ||
-            (map.projected &&
-                tf.positionX is! BridgeScalar_Expression &&
+            (tf.positionX is! BridgeScalar_Expression &&
                 tf.positionY is! BridgeScalar_Expression),
         // A light is a place, with nothing to scale or turn on the picture,
         // and a model's box has no flat side for the handles.
@@ -855,8 +856,6 @@ class ViewerStage extends StatelessWidget {
                 ),
               ),
             ),
-            _missingSlate(),
-            _cutSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
             // called once per tool layer — six times per build, sixty times a
@@ -1172,6 +1171,16 @@ class ViewerStage extends StatelessWidget {
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
               ),
+            // A picked Mesh warp's grid, over its layer, to drag.
+            if (wireframes)
+              ViewerMeshWarp(
+                comp: comp,
+                uiState: uiState,
+                boxes: _boxes,
+                colour: t.accent,
+                tool: uiState.tools.tool,
+                onChanged: onChanged,
+              ),
             // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a
@@ -1285,6 +1294,10 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
+            // The notices sit over the tools, which would otherwise take
+            // their clicks.
+            _missingSlate(),
+            _cutSlate(),
             // The selection's name, over the stage's own corner. Last
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.
@@ -1327,14 +1340,32 @@ class ViewerStage extends StatelessWidget {
           builder: (context, cut, _) {
             if (!cut) return const SizedBox.shrink();
             final t = ThemeScope.of(context).theme;
-            return HouseButton(
-              key: const ValueKey('viewer-cut'),
-              small: true,
-              onPressed: () => unawaited(showSettingsWindowFrb(context,
-                  initialPage: SettingsPage.previewAndCache,
-                  row: l10n.settingsLargestPicture)),
-              child: Text(l10n.viewerPictureCut,
-                  style: t.small.copyWith(color: t.warning)),
+            // A small mark, not a button's worth of words: the sentence is
+            // the tooltip.
+            return LumitTooltip(
+              message: l10n.viewerPictureCut,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: const ValueKey('viewer-cut'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => unawaited(showSettingsWindowFrb(context,
+                      initialPage: SettingsPage.previewAndCache,
+                      row: l10n.settingsLargestPicture)),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: t.surface2,
+                      border: Border.all(color: t.warning),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                    child: Text(l10n.viewerPictureCutMark,
+                        style: t.small.copyWith(color: t.warning)),
+                  ),
+                ),
+              ),
             );
           },
         ),
@@ -1892,7 +1923,36 @@ class _Picture extends StatelessWidget {
                     ),
                   )
                 : const SizedBox.expand();
-            return pictureChannelFilter(channel, picture);
+            // Suspended, the picture stays as it was, and says so across its
+            // bottom, a red bar as After Effects has.
+            return Stack(
+              fit: StackFit.passthrough,
+              children: [
+                pictureChannelFilter(channel, picture),
+                ValueListenableBuilder<bool>(
+                  valueListenable: uiState.viewerSuspended,
+                  builder: (context, suspended, _) {
+                    if (!suspended) return const SizedBox.shrink();
+                    final t = ThemeScope.of(context).theme;
+                    return Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: IgnorePointer(
+                        child: Container(
+                          key: const ValueKey('viewer-suspended'),
+                          color: t.error,
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          alignment: Alignment.center,
+                          child: Text(l10n.viewerUpdatesSuspended,
+                              style: t.small.copyWith(color: t.surface0)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            );
           },
         ),
       ),

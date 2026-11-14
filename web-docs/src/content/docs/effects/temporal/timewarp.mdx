@@ -20,9 +20,8 @@ frame**. Between two frames it holds the first, mixes the two, or makes the fram
 them from the motion it measures. On a precomp it retimes the comp inside, and on an
 adjustment layer everything below it.
 
-The effects above Timewarp in the stack are retimed with the layer. The effects below it
-are not. A layer's own transform keeps its own time, so on a text or shape layer the
-motion of the layer itself is not retimed; precompose it to retime that too.
+The effects above Timewarp in the stack are retimed with the layer, and so are the layer's
+own transform and its parents'. The effects below it are not.
 
 ## Parameters
 

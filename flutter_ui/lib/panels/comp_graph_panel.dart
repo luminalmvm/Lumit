@@ -59,6 +59,8 @@ import '../widgets/marquee.dart';
 import 'node_menus.dart';
 import 'effect_param_row_frb.dart'
     show
+        blendInView,
+        compositingRowIds,
         cachedListParameterGroups,
         instanceParameters,
         defaultEffectValue,
@@ -196,17 +198,21 @@ CompBoxRows compBoxRows(
   };
   final riders = <String, List<BridgeParamInfo>>{};
   for (final p in shown) {
-    final beside = paramRidersFor(shown, p);
+    final beside = paramRidersFor(shown, p, effect: effect);
     if (beside.isNotEmpty) riders[p.id] = beside;
   }
   final folded = {
     for (final beside in riders.values)
       for (final p in beside) p.id,
   };
+  // A gradient's Matte is the socket on the box, and its Invert and Channel
+  // are rows of their own under it.
+  final inView = blendInView(effect);
   final rows = [
     for (final p in shown)
       if (!gated.contains(p.id) &&
           !folded.contains(p.id) &&
+          !(inView && p.id == 'matte') &&
           p.kind is! BridgeParamKind_Curve)
         p,
   ];
@@ -218,8 +224,11 @@ CompBoxRows compBoxRows(
         !isDefaultEffectValue(value, fallback, owner: owner);
   }
 
+  // A gradient's compositing rows, which a shut box keeps in reach.
   bool tells(BridgeParamInfo p) =>
-      wired.contains(p.id) || [p, ...?riders[p.id]].any(offDefault);
+      wired.contains(p.id) ||
+      (inView && compositingRowIds.contains(p.id)) ||
+      [p, ...?riders[p.id]].any(offDefault);
   // A group the schema folds shut keeps its lead row on view, under its
   // heading, so its switch (Clone to points' Time offset) is in reach from
   // the box itself; once that row tells something, the whole group opens.
@@ -882,10 +891,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       // Greyed where another control has taken the row over, so a drag on the
       // box cannot commit an op that changes no pixel.
       enabled: !held.disabled.contains(param),
-      riders: [
-        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
-          (r, valueOf(r.id)),
-      ],
+      // No riders beside it: the box lists each on a row of its own after its
+      // host ([compBoxRows]), and drawing it here as well showed it twice.
       // A Custom shader's two buttons press the way they do in Effect controls.
       // The only other Action a box carries is the Node graph's Open graph, and
       // the canvas already knows how to go in.

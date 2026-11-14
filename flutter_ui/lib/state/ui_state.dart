@@ -52,13 +52,18 @@ import 'package:lumit_flutter/src/rust/api/model.dart'
     show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/system.dart' show setWindowInFront;
 import 'package:lumit_flutter/src/rust/api/shell.dart'
     show
         setAutosave,
         setDiscordStatus,
+        setDragResolutionLimit,
         setFullResDragPreviews,
         setHardwareDecode,
-        setLargestPicture;
+        setLargestPicture,
+        setWireframeDrags;
+import 'package:lumit_flutter/src/rust/api/shell.dart' as shell
+    show setDecodeAtShownSize, setLiveUpdate;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
@@ -1237,8 +1242,96 @@ class LumitUiState extends ChangeNotifier {
   /// whatever piles up behind a render in flight (`drain_to_newest`), which is
   /// why this can be called freely and needs no in-flight bookkeeping here.
   /// Ignored during playback, where the engine is already choosing frames.
+  /// **Live Update** (the Viewer's menu), as After Effects' switch: off, a
+  /// drag draws no frame until the release. On by default; for the session.
+  final ValueNotifier<bool> liveUpdate = ValueNotifier(true);
+
+  void setLiveUpdate(bool on) {
+    liveUpdate.value = on;
+    shell.setLiveUpdate(on_: on);
+  }
+
+  /// **Viewer updates suspended** (the Viewer's menu, or Caps Lock where
+  /// Settings → Performance says so), as After Effects' Caps Lock: the views
+  /// keep the picture they have while the edits go on, and draw the frame
+  /// once updates resume.
+  final ValueNotifier<bool> viewerSuspended = ValueNotifier(false);
+
+  /// **Adaptive resolution limit**, from Settings → Performance or the deck:
+  /// 0 is Auto, otherwise the coarsest divisor a slow drag may reach.
+  void setAdaptiveResolutionLimit(int divisor) {
+    workspace.performance.dragResolutionLimit = divisor;
+    setDragResolutionLimit(divisor: divisor);
+    workspace.settingsChanged();
+  }
+
+  /// **Wireframe while dragging**, from Settings → Performance or the deck.
+  void setWireframeWhileDragging(bool on) {
+    workspace.performance.wireframeDrags = on;
+    setWireframeDrags(on_: on);
+    workspace.settingsChanged();
+  }
+
+  /// **Decode footage at shown size**, from Settings → Performance or the
+  /// deck. The frame under the playhead is drawn again at the new size.
+  void setDecodeAtShownSize(bool on) {
+    workspace.performance.decodeAtShownSize = on;
+    shell.setDecodeAtShownSize(on_: on);
+    workspace.settingsChanged();
+    requestFrame();
+  }
+
+  void setViewerSuspended(bool on) {
+    if (viewerSuspended.value == on) return;
+    viewerSuspended.value = on;
+    if (!on) requestFrame();
+  }
+
+  /// Follows Caps Lock into [viewerSuspended] while the setting asks for it.
+  ///
+  /// Every key event looks at the lock, and only a *change* of the lock moves
+  /// the Viewer. Windows reports Caps Lock as a key down at each press, macOS
+  /// as a down when it locks and an up when it unlocks, and Linux can bring
+  /// the lock along with any other key; comparing the lock with the last one
+  /// seen works the same on all three. And a key typed after the deck's eye was
+  /// pressed leaves the eye's choice alone, since the lock did not change.
+  /// Never takes the key.
+  bool _capsLockWatch(KeyEvent _) {
+    if (workspace.performance.capsLockSuspends) _followLock();
+    return false;
+  }
+
+  /// The lock as last seen, so only a change of it counts.
+  bool? _capsLocked;
+
+  void _followLock({bool force = false}) {
+    final locked = HardwareKeyboard.instance.lockModesEnabled
+        .contains(KeyboardLockMode.capsLock);
+    if (!force && locked == _capsLocked) return;
+    _capsLocked = locked;
+    setViewerSuspended(locked);
+  }
+
+  bool _capsLockWatching = false;
+
+  /// Starts or stops following Caps Lock, as the setting now says.
+  void followCapsLock() {
+    final want = workspace.performance.capsLockSuspends;
+    if (want && !_capsLockWatching) {
+      HardwareKeyboard.instance.addHandler(_capsLockWatch);
+      _capsLockWatching = true;
+      // A lock already on when the setting is turned on counts at once.
+      _followLock(force: true);
+    } else if (!want && _capsLockWatching) {
+      HardwareKeyboard.instance.removeHandler(_capsLockWatch);
+      _capsLockWatching = false;
+      setViewerSuspended(false);
+    }
+  }
+
   void requestFrame() {
     if (playing.value) return;
+    if (viewerSuspended.value) return;
     _releaseClosedViews();
     // **The view being worked in is asked whatever it last asked for.** This
     // is the explicit ask: something moved, or a caller wants the frame made
@@ -2947,6 +3040,16 @@ class LumitUiState extends ChangeNotifier {
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
     _lifecycle = AppLifecycleListener(
+      // In front or not, for the engine's power throttling: behind other
+      // windows with nothing playing or exporting, Windows may run Lumit
+      // slowly to save power (crates/lumit-bridge/src/turns.rs).
+      onStateChange: (state) {
+        try {
+          setWindowInFront(front: state == AppLifecycleState.resumed);
+        } catch (_) {
+          // No engine, which is a test.
+        }
+      },
       onInactive: () {
         rememberSession();
         _keepWatched();
@@ -3013,6 +3116,10 @@ class LumitUiState extends ChangeNotifier {
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
+    setDragResolutionLimit(divisor: perf.dragResolutionLimit);
+    setWireframeDrags(on_: perf.wireframeDrags);
+    shell.setDecodeAtShownSize(on_: perf.decodeAtShownSize);
+    followCapsLock();
     setHardwareDecode(on_: perf.hardwareDecode);
     final largest = perf.largestPicture;
     if (largest != null) setLargestPicture(side: largest);

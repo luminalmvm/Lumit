@@ -2082,6 +2082,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           )) {
             return;
           }
+          // Mesh warp's Reset mesh puts every crossing back where a flat grid
+          // has it, keys and all, as one undo step.
+          if (fx.name == 'mesh_warp' && param == 'reset_mesh') {
+            _effects.writeAll(layer, effect, {
+              for (final p in fx.derivedParams)
+                if (p.kind case BridgeParamKind_Float(:final default_))
+                  p.id: BridgeEffectValue.float(BridgeScalar.static_(default_)),
+            });
+            ui.model.refresh();
+            return;
+          }
           // The Node graph's Open graph row is the frontend's own the same
           // way: fronting a comp is not an event the engine could answer.
           if (fx.name == 'node_graph' && param == 'open') {
@@ -2762,10 +2773,13 @@ class _EffectSection extends StatelessWidget {
 
   /// The Mix and Matte rows nearly every effect ends with: what the Compositing
   /// fold holds. One the schema keeps in a group of its own (the Lens flare's
-  /// source matte) stays where it is.
+  /// source matte) stays where it is, and so do a gradient's Mix and Matte,
+  /// each listed on rows of its own with Blend, Invert and Channel
+  /// ([blendInView]).
   List<BridgeParamInfo> get _compositingRows {
     final grouped = {
       for (final g in cachedListParameterGroups(info.name)) ...g.params,
+      if (blendInView(info.name)) ...['mix', 'matte'],
     };
     final hidden = info.hiddenRows.toSet();
     return [
@@ -3188,7 +3202,7 @@ class _EffectSection extends StatelessWidget {
     // its own. [paramRidersFor] holds the rule, so the box on the node graph
     // canvas folds by the same one.
     List<BridgeParamInfo> ridersFor(BridgeParamInfo p) =>
-        paramRidersFor(params, p);
+        paramRidersFor(params, p, effect: info.name);
 
     final compositing = _compositingRows;
 

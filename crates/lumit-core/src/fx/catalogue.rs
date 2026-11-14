@@ -141,6 +141,7 @@ use super::effects::{
     median::{Median, MedianDef},
     merge::{Merge, MergeDef},
     merge_points::{MergePoints, MergePointsDef},
+    mesh_warp::{MeshWarp, MeshWarpDef},
     mirror::{Mirror, MirrorDef},
     mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
@@ -280,6 +281,7 @@ crate::catalogue![
     WaveWarpDef => WaveWarp,
     BezierWarpDef => BezierWarp,
     WarpDef => Warp,
+    MeshWarpDef => MeshWarp,
     // The Generate family, in docs/08 §3.34–§3.37 order.
     FillDef => Fill,
     GradientDef => Gradient,

@@ -43,10 +43,46 @@ use lumit_fx_macros::Effect;
     ),
 )]
 pub struct Echo {
-    /// Count of trailing frames; each is one comp frame further back (v1 fixed
-    /// spacing). Capped at the 16-frame window (FX-17, raised from 8).
-    #[slider(min = 1.0, max = 16.0, default = 4.0, hard_min = 1.0, hard_max = 16.0, unit = Raw)]
+    /// How far apart the echoes are, in seconds, as After Effects' Echo Time:
+    /// negative reaches back, positive ahead. A layer drawn as its placed
+    /// picture (`crate::fx::follow`) is built again at exactly these times;
+    /// an instance saved before this row reads as one comp frame back.
+    #[slider(
+        label = "Echo time (seconds)",
+        min = -2.0,
+        max = 2.0,
+        default = -0.0333,
+        hard_min = -60.0,
+        hard_max = 60.0,
+        unit = Seconds
+    )]
+    pub echo_time: f32,
+
+    /// Count of echoes, each Echo time further on. Capped at the 16-frame
+    /// window (FX-17, raised from 8).
+    #[slider(
+        label = "Number of echoes",
+        min = 1.0,
+        max = 16.0,
+        default = 4.0,
+        hard_min = 1.0,
+        hard_max = 16.0,
+        unit = Raw
+    )]
     pub echoes: f32,
+
+    /// The intensity of the layer itself, the first image: echo *k* has
+    /// `starting_intensity * decay^k`.
+    #[slider(
+        label = "Starting intensity",
+        min = 0.0,
+        max = 1.0,
+        default = 1.0,
+        hard_min = 0.0,
+        hard_max = 1.0,
+        unit = Raw
+    )]
+    pub starting_intensity: f32,
 
     /// Per-echo intensity falloff: echo *k* has intensity `decay^k`.
     #[slider(min = 0.0, max = 1.0, default = 0.6, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
@@ -58,22 +94,27 @@ pub struct Echo {
     /// / dodge modes a layer offers are omitted: they are ill-defined on a
     /// premultiplied light trail (see §3.13 Open questions). Pre-release, no
     /// migration — old stored indices simply re-map.
+    // After Effects' Echo Operator names where it has the same one:
+    // Composite in back and in front, Add, Screen, Maximum, Minimum, and
+    // Blend, the echoes averaged, last so the stored indices keep.
     #[choice(
+        label = "Echo operator",
         options = [
-            "Behind",
-            "In front",
+            "Composite in back",
+            "Composite in front",
             "Add",
             "Screen",
             "Multiply",
             "Overlay",
             "Soft light",
             "Hard light",
-            "Lighten",
-            "Darken",
+            "Maximum",
+            "Minimum",
             "Difference",
             "Exclusion",
             "Subtract",
-            "Divide"
+            "Divide",
+            "Blend"
         ],
         default = 3, // Screen
         dividers_after = &[1] // divider after In front
@@ -101,20 +142,56 @@ impl Echo {
     /// over. Both render paths read this one method, so the CPU reference and the
     /// WGSL kernel cannot drift apart.
     pub fn packed(self) -> ([f32; 16], u32, f32) {
+        let (weights, _, mode, mix) = self.packed_with_start();
+        (weights, mode, mix)
+    }
+
+    /// [`Echo::packed`] with the layer's own intensity: Starting intensity
+    /// scales the frame itself and every echo after it. **Blend** averages
+    /// them, which is Add with every weight shared out over the images.
+    pub fn packed_with_start(self) -> ([f32; 16], f32, u32, f32) {
         let count = (self.echoes.round() as i32).clamp(1, 16);
         let decay = self.decay.clamp(0.0, 1.0);
+        let start = self.starting_intensity.clamp(0.0, 1.0);
+        let blend = self.mode == BLEND;
+        // Blend: every image's share of the average.
+        let share = if blend {
+            1.0 / (count as f32 + 1.0)
+        } else {
+            1.0
+        };
         let mut weights = [0.0f32; 16];
         for (i, w) in weights.iter_mut().enumerate() {
             if (i as i32) < count {
-                *w = decay.powi(i as i32 + 1);
+                *w = start * decay.powi(i as i32 + 1) * share;
             }
         }
         (
             weights,
-            self.mode.min(13),
+            start * share,
+            if blend { ADD } else { self.mode.min(13) },
             (self.mix / 100.0).clamp(0.0, 1.0),
         )
     }
+}
+
+/// The Add operator's index.
+const ADD: u32 = 2;
+/// The Blend operator's index, after the kernel's own fourteen.
+const BLEND: u32 = 14;
+
+/// How far apart the echoes of `echo` are at layer time `lt`, in seconds, and
+/// whether its row says so: an instance saved before Echo time had none, and
+/// its echoes are a comp frame apart.
+#[must_use]
+pub fn echo_time(echo: &crate::model::EffectInstance, lt: f64) -> Option<f64> {
+    echo.params
+        .iter()
+        .find(|p| p.id == "echo_time")
+        .and_then(|p| match &p.value {
+            crate::model::EffectValue::Float(v) => Some(v.value_at(lt)),
+            _ => None,
+        })
 }
 
 /// Echo's behaviour: no CPU reference (the neighbours are textures), so
@@ -126,4 +203,18 @@ impl EffectDef for EchoDef {
     fn schema(&self) -> &'static EffectSchema {
         &<Echo as EffectMetadata>::SCHEMA
     }
+}
+
+/// How many earlier frames the Echo instance `echo` shows at layer time `lt`,
+/// counted as its kernel counts them.
+#[must_use]
+pub fn shown(echo: &crate::model::EffectInstance, lt: f64) -> i32 {
+    echo.params
+        .iter()
+        .find(|p| p.id == "echoes")
+        .and_then(|p| match &p.value {
+            crate::model::EffectValue::Float(v) => Some(v.value_at(lt)),
+            _ => None,
+        })
+        .map_or(4, |n| (n.round() as i32).clamp(1, 16))
 }

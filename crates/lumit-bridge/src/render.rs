@@ -69,6 +69,7 @@ pub(crate) fn quality_for(scale: f32) -> lumit_render::plan::Quality {
         auto_res: rung < 1.0,
         display_scale: rung,
         divisor: 1,
+        shown_size: crate::realtime::decode_at_shown_size(),
     }
 }
 

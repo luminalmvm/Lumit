@@ -147,6 +147,8 @@ pub mod discover {
 
     pub fn set_disabled(_list: &BTreeSet<String>) {}
 
+    pub fn remember_empty_bundles_in(_file: PathBuf) {}
+
     pub fn scan(
         _options: &ScanOptions,
         _register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,

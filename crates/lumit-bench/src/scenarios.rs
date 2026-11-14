@@ -84,6 +84,7 @@ const FULL: Quality = Quality {
     auto_res: false,
     display_scale: 1.0,
     divisor: 1,
+    shown_size: false,
 };
 
 /// The scrub draft: decode capped hard so a frame comes back fast, which is
@@ -93,6 +94,7 @@ pub(crate) const SCRUB: Quality = Quality {
     auto_res: true,
     display_scale: 0.5,
     divisor: 1,
+    shown_size: false,
 };
 
 /// Half scale — the middle rung of the degradation ladder (docs/13 §4 step 3),
@@ -116,6 +118,7 @@ pub(crate) const HALF: Quality = Quality {
     auto_res: true,
     display_scale: 0.5,
     divisor: 1,
+    shown_size: false,
 };
 
 /// Scrub jumps sampled for B3's 95th percentile.

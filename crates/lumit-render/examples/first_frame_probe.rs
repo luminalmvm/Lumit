@@ -87,6 +87,7 @@ fn main() {
         auto_res: false,
         display_scale: 1.0,
         divisor: 1,
+        shown_size: false,
     };
 
     let t = Instant::now();

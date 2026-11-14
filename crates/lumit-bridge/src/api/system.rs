@@ -17,7 +17,7 @@
 //! 15.5 GB on a 16 GB host). That errs low, which is the safe direction for a
 //! budget ceiling — the same choice `video_memory_bytes` makes below.
 //!
-//! Video memory is answered on all three too: the first DXGI adapter's
+//! Video memory is answered on all three too: the renderer's DXGI adapter's
 //! dedicated video memory on Windows, and on the other two through the graphics
 //! API the engine already links — see [`video_memory_bytes`].
 
@@ -232,12 +232,276 @@ pub fn system_memory_bytes() -> u64 {
     }
 }
 
+/// The memory free on the machine right now, in bytes, or 0 where it cannot be
+/// asked. Read once as the session opens, to keep the memory cache inside what
+/// is actually free (see `framecache::size_to_machine`).
+pub(crate) fn free_memory_bytes() -> u64 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+        let mut status = MEMORYSTATUSEX {
+            dwLength: u32::try_from(std::mem::size_of::<MEMORYSTATUSEX>()).unwrap_or(0),
+            ..Default::default()
+        };
+        // SAFETY: as in `system_memory_bytes`.
+        if unsafe { GlobalMemoryStatusEx(&mut status) }.is_ok() {
+            return status.ullAvailPhys;
+        }
+        0
+    }
+    // `MemAvailable`: what can be had without swapping, which counts the page
+    // cache the kernel would give up, unlike `MemFree`.
+    #[cfg(target_os = "linux")]
+    {
+        meminfo_bytes("MemAvailable:")
+    }
+    // macOS keeps memory full of cache by design, so a "free" figure there
+    // reads low on a machine with plenty to spare; it answers "not known",
+    // and its pressure level is asked instead ([`memory_low`]).
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        0
+    }
+}
+
+/// Lumit's window has come in front (`true`) or gone behind other windows,
+/// minimised or hidden (`false`). Behind, with no playback and no export
+/// running, Windows is let throttle the editor to save power; in front, or
+/// while either runs, it is not. Nothing elsewhere.
+#[frb(sync)]
+pub fn set_window_in_front(front: bool) {
+    crate::turns::window_in_front(front);
+}
+
+/// Whether this computer is running on battery or saving power, which on a
+/// laptop holds the graphics card at low clocks: a frame that takes a few
+/// milliseconds plugged in can take ten times that. The status line says so,
+/// because somebody whose editor is slow rarely suspects the power plan.
+///
+/// Windows: on battery, or Battery saver on (`GetSystemPowerStatus`). Linux:
+/// a mains supply reporting offline beside a battery, or the platform
+/// profile at `low-power`. macOS: running on the battery, or Low Power Mode
+/// on. False elsewhere and where it cannot be asked.
+#[frb(sync)]
+pub fn power_saving() -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+        let mut status = SYSTEM_POWER_STATUS::default();
+        // SAFETY: a zeroed, correctly sized struct the call fills; the result
+        // is checked before it is read.
+        if unsafe { GetSystemPowerStatus(&mut status) }.is_err() {
+            return false;
+        }
+        // 0 is offline (on battery), 1 online, 255 unknown; flag 1 is
+        // Battery saver.
+        status.ACLineStatus == 0 || status.SystemStatusFlag == 1
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let read = |path: std::path::PathBuf| {
+            std::fs::read_to_string(path)
+                .map(|s| s.trim().to_owned())
+                .unwrap_or_default()
+        };
+        if read("/sys/firmware/acpi/platform_profile".into()) == "low-power" {
+            return true;
+        }
+        let Ok(supplies) = std::fs::read_dir("/sys/class/power_supply") else {
+            return false;
+        };
+        let (mut battery, mut mains_off) = (false, false);
+        for supply in supplies.flatten() {
+            let path = supply.path();
+            match read(path.join("type")).as_str() {
+                "Battery" => battery = true,
+                "Mains" => mains_off |= read(path.join("online")) == "0",
+                _ => {}
+            }
+        }
+        battery && mains_off
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos_power_saving()
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    {
+        false
+    }
+}
+
+/// macOS's half of [`power_saving`]: the battery is the source power comes
+/// from (IOKit's "Battery Power"), or Low Power Mode is on (`NSProcessInfo`,
+/// macOS 12 and later; asked only where the method is there).
+#[cfg(target_os = "macos")]
+fn macos_power_saving() -> bool {
+    use std::ffi::{c_char, c_void};
+
+    type Id = *mut c_void;
+    type Get = unsafe extern "C" fn(Id, Id) -> Id;
+    type Responds = unsafe extern "C" fn(Id, Id, Id) -> i8;
+    type Flag = unsafe extern "C" fn(Id, Id) -> i8;
+
+    #[link(name = "IOKit", kind = "framework")]
+    extern "C" {
+        fn IOPSCopyPowerSourcesInfo() -> *const c_void;
+        fn IOPSGetProvidingPowerSourceType(blob: *const c_void) -> *const c_void;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *const c_void);
+        fn CFStringGetCString(
+            string: *const c_void,
+            buffer: *mut c_char,
+            size: isize,
+            encoding: u32,
+        ) -> u8;
+    }
+    #[link(name = "Foundation", kind = "framework")]
+    #[link(name = "objc")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Id;
+        fn objc_msgSend();
+        fn objc_autoreleasePoolPush() -> *mut c_void;
+        fn objc_autoreleasePoolPop(pool: *mut c_void);
+    }
+    /// `kCFStringEncodingUTF8`.
+    const UTF8: u32 = 0x0800_0100;
+
+    // SAFETY: `IOPSCopyPowerSourcesInfo` answers an owned blob or null, which
+    // is checked and released once; the source type is a string the blob
+    // owns ("Get"), read into a buffer whose size is passed and whose
+    // NUL-termination `CFStringGetCString` guarantees when it answers true.
+    let on_battery = unsafe {
+        let blob = IOPSCopyPowerSourcesInfo();
+        if blob.is_null() {
+            false
+        } else {
+            let kind = IOPSGetProvidingPowerSourceType(blob);
+            let mut text = [0 as c_char; 64];
+            let read =
+                !kind.is_null() && CFStringGetCString(kind, text.as_mut_ptr(), 64, UTF8) != 0;
+            let battery =
+                read && std::ffi::CStr::from_ptr(text.as_ptr()).to_bytes() == b"Battery Power";
+            CFRelease(blob);
+            battery
+        }
+    };
+    if on_battery {
+        return true;
+    }
+    // SAFETY: as in `claim::bring_forward`: NUL-terminated literal names, and
+    // `objc_msgSend` called through the signature of each method it sends — a
+    // class method answering the shared object, `respondsToSelector:` taking a
+    // selector and answering a BOOL, and the BOOL property itself, sent only
+    // after the object said it has it. The pool is opened and drained here.
+    unsafe {
+        let pool = objc_autoreleasePoolPush();
+        let send = objc_msgSend as unsafe extern "C" fn();
+        let get = std::mem::transmute::<unsafe extern "C" fn(), Get>(send);
+        let responds = std::mem::transmute::<unsafe extern "C" fn(), Responds>(send);
+        let flag = std::mem::transmute::<unsafe extern "C" fn(), Flag>(send);
+        let info = get(
+            objc_getClass(c"NSProcessInfo".as_ptr()),
+            sel_registerName(c"processInfo".as_ptr()),
+        );
+        let low_power = sel_registerName(c"isLowPowerModeEnabled".as_ptr());
+        let on = !info.is_null()
+            && responds(
+                info,
+                sel_registerName(c"respondsToSelector:".as_ptr()),
+                low_power,
+            ) != 0
+            && flag(info, low_power) != 0;
+        objc_autoreleasePoolPop(pool);
+        on
+    }
+}
+
+/// One `/proc/meminfo` figure in bytes, or 0. Built everywhere, so the bridge
+/// lists the same functions whichever system generates it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn meminfo_bytes(field: &str) -> u64 {
+    std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .find(|line| line.starts_with(field))
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|kb| kb.parse::<u64>().ok())
+        })
+        .map_or(0, |kb| kb * 1024)
+}
+
+/// Whether the machine is short of memory now: less free than
+/// [`low_memory_floor`] of what it has on Windows and Linux, and the system's
+/// own pressure level at warning or worse on macOS. False where it cannot be
+/// asked.
+pub(crate) fn memory_low() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // 1 normal, 2 warning, 4 critical.
+        extern "C" {
+            fn sysctlbyname(
+                name: *const std::os::raw::c_char,
+                oldp: *mut std::os::raw::c_void,
+                oldlenp: *mut usize,
+                newp: *mut std::os::raw::c_void,
+                newlen: usize,
+            ) -> std::os::raw::c_int;
+        }
+        let mut level: u32 = 0;
+        let mut len = std::mem::size_of::<u32>();
+        // SAFETY: a NUL-terminated name, a u32 the size the sysctl writes and
+        // its length, and the null/0 pair for a read; the return code is
+        // checked before the value is read.
+        let ret = unsafe {
+            sysctlbyname(
+                c"kern.memorystatus_vm_pressure_level".as_ptr(),
+                std::ptr::from_mut(&mut level).cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        ret == 0 && level >= 2
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        short_of_memory(system_memory_bytes(), free_memory_bytes())
+    }
+}
+
+/// The free memory under which the machine counts as short: a tenth of it,
+/// and never under 512 MiB. Close to what After Effects left the system by
+/// default on a small machine, and well before Windows' own low-memory
+/// signal, which comes when the page file is already busy.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn low_memory_floor(total: u64) -> u64 {
+    (total / 10).max(512 << 20)
+}
+
+/// [`memory_low`]'s rule on two figures, either of them 0 for "not known".
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn short_of_memory(total: u64, free: u64) -> bool {
+    total > 0 && free > 0 && free < low_memory_floor(total)
+}
+
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
-/// On Windows, the *first* adapter DXGI enumerates, which is the one the
-/// renderer takes too. A machine with a discrete card behind an integrated one
-/// would report the integrated adapter's memory; that is a smaller ceiling than
-/// the truth, which errs the safe way for a budget.
+/// On Windows, the dedicated memory of the adapter the renderer opened, matched
+/// by its PCI ids ([`lumit_gpu::adapter_ids`]); before the renderer has opened
+/// one, the hardware adapter with the most, which is the one it asks for.
+///
+/// It used to be the *first* adapter DXGI enumerates. On a laptop with an
+/// integrated card and a discrete one (an Intel UHD and an Nvidia MX, say) the
+/// first is the integrated card, whose dedicated memory is a token 128 MB,
+/// while the renderer draws on the discrete one. The governor then held a 2 GB
+/// card to about 90 MB, and every frame ran the degradation ladder: work
+/// refused, frames tiled, kernels sent to the processor. That is not "errs the
+/// safe way", it is a machine made many times slower than it is.
 ///
 /// macOS and Linux answer through the graphics API the engine already links —
 /// Metal's recommended working-set size, or the largest device-local Vulkan
@@ -250,26 +514,127 @@ pub fn system_memory_bytes() -> u64 {
 pub fn video_memory_bytes() -> u64 {
     #[cfg(windows)]
     {
-        use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIAdapter, IDXGIFactory1};
-        // SAFETY: both calls are plain COM creation/enumeration, and every
-        // result is checked before it is read.
+        use windows::Win32::Graphics::Dxgi::{
+            CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
+        };
+        let mut cards = Vec::new();
+        // SAFETY: plain COM creation and enumeration; every result is checked
+        // before it is read, and enumeration stops at the first index DXGI
+        // refuses (DXGI_ERROR_NOT_FOUND past the last adapter).
         unsafe {
             let Ok(factory) = CreateDXGIFactory1::<IDXGIFactory1>() else {
                 return 0;
             };
-            let Ok(adapter) = factory.EnumAdapters(0) else {
-                return 0;
-            };
-            let adapter: IDXGIAdapter = adapter;
-            let Ok(desc) = adapter.GetDesc() else {
-                return 0;
-            };
-            u64::try_from(desc.DedicatedVideoMemory).unwrap_or(0)
+            let mut index = 0;
+            while let Ok(adapter) = factory.EnumAdapters1(index) {
+                index += 1;
+                let Ok(desc) = adapter.GetDesc1() else {
+                    continue;
+                };
+                cards.push(Card {
+                    vendor: desc.VendorId,
+                    device: desc.DeviceId,
+                    dedicated: u64::try_from(desc.DedicatedVideoMemory).unwrap_or(0),
+                    software: desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0,
+                });
+            }
         }
+        card_memory(&cards, lumit_gpu::adapter_ids())
     }
     #[cfg(not(windows))]
     {
         lumit_gpu::video_memory_bytes()
+    }
+}
+
+/// One graphics adapter as DXGI lists it, for [`card_memory`].
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Debug, Clone, Copy)]
+struct Card {
+    vendor: u32,
+    device: u32,
+    dedicated: u64,
+    software: bool,
+}
+
+/// The dedicated memory of the card the renderer is on: the one whose ids are
+/// `renderer`'s, or, where those are not known yet or match nothing, the
+/// hardware card with the most (the one a high-performance request takes).
+/// 0 when there is no hardware card at all, which the budget reads as "not
+/// known here".
+#[cfg_attr(not(windows), allow(dead_code))]
+fn card_memory(cards: &[Card], renderer: Option<(u32, u32)>) -> u64 {
+    let hardware = || cards.iter().filter(|c| !c.software);
+    renderer
+        .and_then(|(vendor, device)| hardware().find(|c| c.vendor == vendor && c.device == device))
+        .map(|c| c.dedicated)
+        .or_else(|| hardware().map(|c| c.dedicated).max())
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::short_of_memory;
+
+    const GB: u64 = 1 << 30;
+    const MB: u64 = 1 << 20;
+
+    #[test]
+    fn short_is_under_a_tenth_and_never_under_half_a_gigabyte() {
+        // An 8 GB laptop at 92% has about 650 MB free: short.
+        assert!(short_of_memory(8 * GB, 650 * MB));
+        assert!(!short_of_memory(8 * GB, 1200 * MB));
+        // A small machine still keeps half a gigabyte.
+        assert!(short_of_memory(4 * GB, 450 * MB));
+        assert!(!short_of_memory(32 * GB, 4 * GB));
+        // Not known is never short.
+        assert!(!short_of_memory(0, 100 * MB));
+        assert!(!short_of_memory(8 * GB, 0));
+    }
+}
+
+#[cfg(test)]
+mod card_tests {
+    use super::{card_memory, Card};
+
+    const MB: u64 = 1 << 20;
+    const INTEL: Card = Card {
+        vendor: 0x8086,
+        device: 0x9b41,
+        dedicated: 128 * MB,
+        software: false,
+    };
+    const MX230: Card = Card {
+        vendor: 0x10de,
+        device: 0x1d11,
+        dedicated: 2048 * MB,
+        software: false,
+    };
+    const WARP: Card = Card {
+        vendor: 0x1414,
+        device: 0x8c,
+        dedicated: 0,
+        software: true,
+    };
+
+    /// A laptop lists its integrated card first; the renderer is on the
+    /// discrete one, and that is the card measured.
+    #[test]
+    fn the_renderers_card_is_measured_not_the_first() {
+        let cards = [INTEL, MX230, WARP];
+        assert_eq!(card_memory(&cards, Some((0x10de, 0x1d11))), 2048 * MB);
+        // Pinned to the integrated card (WGPU_POWER_PREF=low), it is that one.
+        assert_eq!(card_memory(&cards, Some((0x8086, 0x9b41))), 128 * MB);
+    }
+
+    /// Before the renderer opens, or for ids DXGI does not list, the hardware
+    /// card with the most; the software rasteriser never counts.
+    #[test]
+    fn unknown_ids_take_the_largest_hardware_card() {
+        assert_eq!(card_memory(&[INTEL, MX230, WARP], None), 2048 * MB);
+        assert_eq!(card_memory(&[INTEL, MX230], Some((1, 2))), 2048 * MB);
+        assert_eq!(card_memory(&[WARP], None), 0);
+        assert_eq!(card_memory(&[], None), 0);
     }
 }
 

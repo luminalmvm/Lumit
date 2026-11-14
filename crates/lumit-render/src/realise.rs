@@ -780,11 +780,9 @@ impl Realiser<'_> {
                         // No mask paths through a referenced layer's own stack
                         // — the same v1 boundary its mattes take.
                         &[],
-                        // And no birth schedules: a Particulate inside a
-                        // referenced layer's own stack takes the same v1
-                        // boundary, and an unscheduled op passes its picture
-                        // through.
-                        &[],
+                        // Its own birth schedules, so a Particulate in the
+                        // referenced layer's stack draws its particles.
+                        &d.points_schedules,
                         &side,
                         &graphs,
                         // A matte's own stack is part of the effect that reads

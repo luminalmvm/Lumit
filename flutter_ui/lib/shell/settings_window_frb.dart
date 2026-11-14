@@ -3793,6 +3793,37 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             setFullResDragPreviews(fullRes: on);
             ui.workspace.settingsChanged();
           }),
+          // How far a slow drag may give up resolution, and the outline-only
+          // drag: After Effects CS6's Fast Previews, for a machine that cannot
+          // keep up even at the drag budget.
+          _row(
+            t,
+            l10n.settingsAdaptiveResolutionLimit,
+            _dropdown<int>(
+              key: 'settings-drag-limit',
+              value: ui.workspace.performance.dragResolutionLimit,
+              options: const [0, 2, 4, 8, 16],
+              width: _ddWide,
+              label: (d) => d == 0 ? l10n.menuAuto : '1/$d',
+              onChanged: (d) =>
+                  setState(() => ui.setAdaptiveResolutionLimit(d)),
+            ),
+          ),
+          _flag(t, 'settings-wireframe-drags',
+              l10n.settingsWireframeWhileDragging,
+              value: ui.workspace.performance.wireframeDrags,
+              set: ui.setWireframeWhileDragging),
+          _flag(t, 'settings-decode-at-shown-size',
+              l10n.settingsDecodeAtShownSize,
+              value: ui.workspace.performance.decodeAtShownSize,
+              set: ui.setDecodeAtShownSize),
+          _flag(t, 'settings-caps-lock-suspends',
+              l10n.settingsCapsLockSuspendsViewer,
+              value: ui.workspace.performance.capsLockSuspends, set: (on) {
+            ui.workspace.performance.capsLockSuspends = on;
+            ui.followCapsLock();
+            ui.workspace.settingsChanged();
+          }),
           // Only Windows decodes on the graphics card (D3D11VA).
           if (Platform.isWindows)
             _flag(t, 'settings-hardware-decode', l10n.settingsHardwareDecode,

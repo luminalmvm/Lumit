@@ -52,6 +52,7 @@ void saveSnapshotFrb(LumitState app, LumitUiState ui) {
         bitrateMbps: 0,
         peakMbps: 0,
         bitrateAuto: false,
+        constantBitrate: false,
         fps: 0,
         rangeStartFrame: ui.playheadFrame.value,
         rangeEndFrame: ui.playheadFrame.value + 1,

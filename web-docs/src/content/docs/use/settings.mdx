@@ -232,13 +232,22 @@ What the export dialogue opens on.
   which lowers the resolution to keep time. See [Preview and playback](/use/preview/).
   **Full resolution while dragging** draws a value drag at the Viewer's own resolution
   rather than a reduced one.
+- **Adaptive resolution limit**: how coarse a slow drag may be drawn. **Auto**, or **1/2**,
+  **1/4**, **1/8** or **1/16**.
+- **Wireframe while dragging**: off by default. A drag draws each layer as the outline of
+  its rectangle, and the release draws the frame.
+- **Decode footage at shown size**: on by default. A footage layer shown smaller than its
+  own size is decoded for the preview no larger than it is shown. An export decodes at full
+  size. See [Preview and playback](/use/preview/#footage-at-shown-size).
+- **Caps Lock suspends Viewer updates**: on by default. While `Caps Lock` is on, the Viewer
+  keeps its picture, and draws the frame once it is off.
 - **Hardware video decoding**: Windows only, on by default. The graphics card decodes
   video. If importing video freezes the computer, turn it off and open the project again.
 - **Render plugins on the graphics card**: on by default. OFX plugins that support CUDA,
   OpenCL or Metal render on the graphics card.
 - **Largest picture**: the widest and tallest picture Lumit makes, 8192 px by default. The
   list offers what this machine's graphics card and memory can take. A frame cut to it shows
-  **Cut to the largest picture** in the Viewer.
+  a **Cut** mark in the Viewer.
 - **Quality tier**: the resolution playback has stepped down to, **Full**, **Half**,
   **Third** or **Quarter**. **Reset** starts it again at full.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the

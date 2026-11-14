@@ -409,6 +409,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Ripple,
     &WaveWarp,
     &BezierWarp,
+    &MeshWarp,
     &Warp,
     &RoughenEdges,
     &Median,
@@ -2018,6 +2019,46 @@ impl GpuEffect for BezierWarp {
                 steps: b.steps,
                 mix: b.mix,
                 frame: b.frame,
+            },
+        )
+    }
+}
+
+struct MeshWarp;
+impl GpuEffect for MeshWarp {
+    fn match_name(&self) -> &'static str {
+        "mesh_warp"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let m = effects::mesh_warp::MeshWarp::packed_in(p);
+        // A flat grid changes nothing, so it costs nothing.
+        if m.is_flat() {
+            return tex.clone();
+        }
+        fx.mesh_warp(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::distort::MeshWarpOp {
+                rows: m.rows,
+                columns: m.columns,
+                pts: m.pts,
+                hs: m.hs,
+                vs: m.vs,
+                steps: m.steps,
+                mix: m.mix,
+                frame: m.frame,
             },
         )
     }
@@ -3797,7 +3838,7 @@ impl GpuEffect for Echo {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let (weights, mode, mix) = effects::echo::Echo::read(p).packed();
+        let (weights, start, mode, mix) = effects::echo::Echo::read(p).packed_with_start();
         // The kernel is called whether or not any neighbour arrived, exactly as
         // the old arm called it: an offset with no frame simply contributes
         // nothing, so a layer at its first frame trails off rather than
@@ -3810,7 +3851,12 @@ impl GpuEffect for Echo {
             w,
             h,
             aux.matte(),
-            &lumit_gpu::fx::temporal::EchoOp { weights, mode, mix },
+            &lumit_gpu::fx::temporal::EchoOp {
+                weights,
+                mode,
+                mix,
+                start,
+            },
         )
     }
 }
@@ -6322,7 +6368,8 @@ impl GpuEffect for IntersectionPoints {
 }
 
 /// Time loop: its Source layer at the loop's moments, made by the builder,
-/// faded together while a crossfade runs and laid over the picture.
+/// faded together while a crossfade runs and laid over the picture, or
+/// with Source layer empty the layer itself in the picture's place.
 struct TimeLoop;
 impl GpuEffect for TimeLoop {
     fn match_name(&self) -> &'static str {
@@ -6347,7 +6394,10 @@ impl GpuEffect for TimeLoop {
         };
         let mix = (L::read(p).mix / 100.0).clamp(0.0, 1.0);
         let share = p.float(L::DERIVED_NEXT_SHARE, 0.0);
-        fx.time_loop(ctx, tex, now, picture(1), share, w, h, mix)
+        // Source layer empty: the layer itself at the loop's moments, in
+        // the place of its picture.
+        let replace = p.float(L::DERIVED_OWN, 0.0) > 0.5;
+        fx.time_loop(ctx, tex, now, picture(1), share, replace, w, h, mix)
     }
 }
 

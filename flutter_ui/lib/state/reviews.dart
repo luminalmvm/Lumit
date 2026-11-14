@@ -1453,6 +1453,7 @@ class ReviewsState extends ChangeNotifier {
         bitrateMbps: edge >= 1080 ? 6 : 3,
         peakMbps: 0,
         bitrateAuto: false,
+        constantBitrate: false,
         fps: 0,
         rangeStartFrame: start,
         rangeEndFrame: end,
