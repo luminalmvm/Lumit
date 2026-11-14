@@ -102,13 +102,24 @@ pub(crate) fn raise_timer_resolution() {}
 /// then sleeps a tick. Lumit is an editor somebody is looking at, so it asks
 /// for neither, as a video player does. A refusal is harmless: things stay as
 /// they were.
+///
+/// With Battery saver on, Windows keeps its own say: somebody who asked the
+/// machine to save power is not overruled. It is read once, as the editor
+/// starts.
 #[cfg(windows)]
 pub(crate) fn opt_out_of_power_throttling() {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
     use windows::Win32::System::Threading::{
         GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
         PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
         PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, PROCESS_POWER_THROTTLING_STATE,
     };
+    let mut power = SYSTEM_POWER_STATUS::default();
+    // SAFETY: a zeroed, correctly sized struct the call fills; the result is
+    // checked before it is read. Flag 1 is Battery saver.
+    if unsafe { GetSystemPowerStatus(&mut power) }.is_ok() && power.SystemStatusFlag == 1 {
+        return;
+    }
     // The mask names what this process decides; a state of 0 for each says
     // "not throttled".
     let state = PROCESS_POWER_THROTTLING_STATE {
