@@ -1176,7 +1176,7 @@ class LumitUiState extends ChangeNotifier {
       end: _clockEnd,
       reverse: _reverse,
     );
-    if (_ahead(frame)) _playbackPlayhead(frame);
+    if (_ahead(frame)) playheadFrame.value = frame;
   }
 
   /// Whether `frame` is further along the running leg than the playhead.
@@ -1226,8 +1226,6 @@ class LumitUiState extends ChangeNotifier {
   void _returnPlayhead({bool restore = true}) {
     _clock.stop();
     _clockWatch.stop();
-    // The frame playback stopped on, if Low-spec mode was holding it back.
-    _flushPlayhead();
     final from = _playedFrom;
     _playedFrom = null;
     if (!restore || from == null) return;
@@ -1258,136 +1256,6 @@ class LumitUiState extends ChangeNotifier {
   /// keep the picture they have while the edits go on, and draw the frame
   /// once updates resume.
   final ValueNotifier<bool> viewerSuspended = ValueNotifier(false);
-
-  /// **Low-spec mode** (Settings → Performance), one switch for a weak
-  /// machine. On, it keeps what the settings it touches were and turns them
-  /// down together: Motion to None, Reduce transparency on, playback Adaptive,
-  /// Decode footage at shown size on, the Adaptive resolution limit to 1/16,
-  /// and the fronted comp's Resolution to Auto (the comps not yet set follow,
-  /// [_compResolution]). While it is on the playhead tells the panels at most
-  /// [_lowSpecPlayheadHz] times a second during playback. Off, it puts the
-  /// settings back as they were.
-  /// [byBattery] when Low-spec mode on battery turns it, so that only its own
-  /// turning on is undone when the power comes back; a hand on the switch
-  /// makes it the user's.
-  void setLowSpecMode(bool on, {bool byBattery = false}) {
-    final perf = workspace.performance;
-    if (perf.lowSpecMode == on) return;
-    perf.lowSpecByBattery = on && byBattery;
-    final look = workspace.interface;
-    if (on) {
-      perf.lowSpecWas = {
-        'animation': workspace.animationLevel.name,
-        'reduce_transparency': look.reduceTransparency,
-        'playback': perf.playback.name,
-        'shown_size': perf.decodeAtShownSize,
-        'drag_limit': perf.dragResolutionLimit,
-      };
-      workspace.animationLevel = AnimationLevel.none;
-      look.reduceTransparency = true;
-      perf.playback = PlaybackMode.adaptive;
-      perf.lowSpecMode = true;
-      setDecodeAtShownSize(true);
-      setAdaptiveResolutionLimit(16);
-      setPreviewResolution(PreviewResolution.auto);
-    } else {
-      final was = perf.lowSpecWas ?? const <String, dynamic>{};
-      workspace.animationLevel = AnimationLevel.values
-              .where((a) => a.name == was['animation'])
-              .firstOrNull ??
-          AnimationLevel.all;
-      look.reduceTransparency = was['reduce_transparency'] == true;
-      perf.playback = PlaybackMode.values
-              .where((m) => m.name == was['playback'])
-              .firstOrNull ??
-          PerformanceSettings().playback;
-      perf.lowSpecMode = false;
-      perf.lowSpecWas = null;
-      setDecodeAtShownSize(was['shown_size'] != false);
-      setAdaptiveResolutionLimit(
-          was['drag_limit'] is int ? was['drag_limit'] as int : 0);
-      _flushPlayhead();
-    }
-    workspace.beforeLookChange?.call();
-    workspace.recompose();
-    workspace.settingsChanged();
-  }
-
-  /// Follow the power, for Low-spec mode on battery: on when the computer
-  /// runs on battery or saves power and Low-spec mode is off, off again when
-  /// it is plugged back in, if it was the battery that turned it on. Only a
-  /// change of power counts, and the first reading: a switch turned off by
-  /// hand on battery stays off until the power has come and gone again.
-  void followBattery(bool saving) {
-    if (saving == _lastSaving) return;
-    _lastSaving = saving;
-    final perf = workspace.performance;
-    if (saving) {
-      if (perf.lowSpecOnBattery && !perf.lowSpecMode) {
-        setLowSpecMode(true, byBattery: true);
-      }
-    } else if (perf.lowSpecByBattery && perf.lowSpecMode) {
-      setLowSpecMode(false);
-    }
-  }
-
-  /// The power as [followBattery] last read it; null before the first reading.
-  bool? _lastSaving;
-
-  /// Settings ▸ Performance ▸ Low-spec mode on battery. Turned on, the next
-  /// reading counts as a change, so a computer already on battery follows at
-  /// once; turned off, what the battery turned on goes off.
-  void setLowSpecOnBattery(bool on) {
-    final perf = workspace.performance;
-    perf.lowSpecOnBattery = on;
-    _lastSaving = null;
-    if (!on && perf.lowSpecByBattery && perf.lowSpecMode) {
-      setLowSpecMode(false);
-    }
-    workspace.settingsChanged();
-  }
-
-  /// How many times a second the playhead tells the panels while playing in
-  /// Low-spec mode. The Viewer's picture is the engine's and keeps its pace.
-  static const int _lowSpecPlayheadHz = 15;
-
-  /// The newest frame playback reached that the panels have not been told.
-  int? _heldPlayhead;
-  Timer? _playheadTimer;
-  final Stopwatch _sincePlayhead = Stopwatch()..start();
-
-  /// Move the playhead for playback, at most [_lowSpecPlayheadHz] times a
-  /// second in Low-spec mode, and the newest frame always arrives.
-  void _playbackPlayhead(int frame) {
-    if (!workspace.performance.lowSpecMode) {
-      playheadFrame.value = frame;
-      return;
-    }
-    const gap = Duration(microseconds: 1000000 ~/ _lowSpecPlayheadHz);
-    final since = _sincePlayhead.elapsed;
-    if (since >= gap && _playheadTimer == null) {
-      _sincePlayhead.reset();
-      _heldPlayhead = null;
-      playheadFrame.value = frame;
-      return;
-    }
-    _heldPlayhead = frame;
-    _playheadTimer ??= Timer(since >= gap ? Duration.zero : gap - since, () {
-      _playheadTimer = null;
-      _flushPlayhead();
-    });
-  }
-
-  /// Tell the panels the newest frame playback held back, if any.
-  void _flushPlayhead() {
-    _playheadTimer?.cancel();
-    _playheadTimer = null;
-    final held = _heldPlayhead;
-    _heldPlayhead = null;
-    if (held == null) return;
-    _sincePlayhead.reset();
-    playheadFrame.value = held;
-  }
 
   /// **Adaptive resolution limit**, from Settings → Performance or the deck:
   /// 0 is Auto, otherwise the coarsest divisor a slow drag may reach.
@@ -1962,7 +1830,7 @@ class LumitUiState extends ChangeNotifier {
     // The adaptive clock may already stand a frame past this picture, and pulling
     // the playhead back would make it twitch at every present.
     if (_ahead(frame) || !_clock.isActive) {
-      _playbackPlayhead(frame);
+      playheadFrame.value = frame;
     }
     // The end of the work area: the frame there is shown, then the loop mode
     // says what comes next (docs/07 §9). A new leg is started through `play`
@@ -2917,9 +2785,7 @@ class LumitUiState extends ChangeNotifier {
 
   PreviewResolution get _compResolution =>
       previewResolutions[_selectedComp?.internalid.toString()] ??
-      (workspace.performance.lowSpecMode
-          ? PreviewResolution.auto
-          : PreviewResolution.full);
+      PreviewResolution.full;
 
   /// Choose the preview resolution for the fronted comp, and ask for the frame
   /// again — the setting changes what the *next* frame is made of, so without

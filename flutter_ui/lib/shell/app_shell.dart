@@ -19,7 +19,6 @@ import 'package:lumit_flutter/panels/viewer_camera.dart'
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
-import 'package:lumit_flutter/shell/low_spec_offer.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/extension_install_frb.dart';
 import 'package:lumit_flutter/shell/look_fade.dart';
@@ -309,10 +308,6 @@ class LumitAppView extends StatefulWidget {
 }
 
 class _LumitAppViewState extends State<LumitAppView> {
-  /// Low-spec mode on battery's power reading, from after the first-run
-  /// questions until the window goes.
-  BatteryWatch? _battery;
-
   /// Lets go of this view's Escape claim (the maximised pane).
   VoidCallback? _escapeRelease;
 
@@ -378,13 +373,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
       maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
-          // Low-spec mode, offered once on a small machine, after the
-          // questions and before anything else opens.
-          .then((_) => mounted ? maybeOfferLowSpec(context, ui) : null)
           .then((_) {
-        // Low-spec mode on battery follows the power from here, and is
-        // offered once the first time Lumit finds itself on battery.
-        if (mounted) _battery = BatteryWatch(ui)..start(context);
         // The update check follows the questions rather than racing them:
         // the setup screen is where somebody may have just switched it off.
         ui.maybeCheckForUpdates();
@@ -492,7 +481,6 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   @override
   void dispose() {
-    _battery?.stop();
     _share.removeListener(_offerConflicts);
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);

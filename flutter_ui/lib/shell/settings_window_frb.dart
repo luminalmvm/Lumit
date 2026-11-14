@@ -3765,15 +3765,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       (
         l10n.settingsGroupPlayback,
         [
-          // First, because it moves the rows under it: one switch for a weak
-          // machine, which turns them down together and puts them back.
-          _flag(t, 'settings-low-spec', l10n.settingsLowSpecMode,
-              value: ui.workspace.performance.lowSpecMode,
-              set: (on) => setState(() => ui.setLowSpecMode(on))),
-          _flag(t, 'settings-low-spec-on-battery',
-              l10n.settingsLowSpecOnBattery,
-              value: ui.workspace.performance.lowSpecOnBattery,
-              set: (on) => setState(() => ui.setLowSpecOnBattery(on))),
           _row(
             t,
             l10n.settingsWhenTheMachineCannotKeep,

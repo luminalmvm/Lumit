@@ -93,29 +93,6 @@ class PerformanceSettings {
   /// shown. Export always decodes at full size. On by default.
   bool decodeAtShownSize;
 
-  /// **Low-spec mode**: one switch for a weak machine. On, it turns the
-  /// other settings below down together and the playhead tells the panels
-  /// less often while playing; off, it puts back what they were.
-  bool lowSpecMode;
-
-  /// What the settings Low-spec mode turned down were, kept to put back.
-  Map<String, dynamic>? lowSpecWas;
-
-  /// Whether Lumit has already offered Low-spec mode on this machine.
-  bool lowSpecOffered;
-
-  /// **Low-spec mode on battery**: Low-spec mode comes on by itself while the
-  /// computer runs on battery or saves power, and goes off again when it is
-  /// plugged back in. Off by default: a strong laptop has no need of it.
-  bool lowSpecOnBattery;
-
-  /// Whether Lumit has already offered [lowSpecOnBattery].
-  bool lowSpecBatteryOffered;
-
-  /// Whether the battery, rather than the user, turned Low-spec mode on, so
-  /// only that is undone when the power comes back.
-  bool lowSpecByBattery;
-
   /// Whether footage is decoded by the graphics card's video unit. On by
   /// default. Off is slower, and is the way out when a graphics driver
   /// misbehaves with it.
@@ -154,12 +131,6 @@ class PerformanceSettings {
     this.wireframeDrags = false,
     this.capsLockSuspends = true,
     this.decodeAtShownSize = true,
-    this.lowSpecMode = false,
-    this.lowSpecWas,
-    this.lowSpecOffered = false,
-    this.lowSpecOnBattery = false,
-    this.lowSpecBatteryOffered = false,
-    this.lowSpecByBattery = false,
     this.hardwareDecode = true,
     this.largestPicture,
   });
@@ -177,12 +148,6 @@ class PerformanceSettings {
         'wireframe_drags': wireframeDrags,
         'caps_lock_suspends_viewer': capsLockSuspends,
         'decode_at_shown_size': decodeAtShownSize,
-        'low_spec_mode': lowSpecMode,
-        if (lowSpecWas != null) 'low_spec_was': lowSpecWas,
-        'low_spec_offered': lowSpecOffered,
-        'low_spec_on_battery': lowSpecOnBattery,
-        'low_spec_battery_offered': lowSpecBatteryOffered,
-        'low_spec_by_battery': lowSpecByBattery,
         'hardware_decode': hardwareDecode,
         if (largestPicture != null) 'largest_picture': largestPicture,
       };
@@ -221,14 +186,6 @@ class PerformanceSettings {
         // the old one, which is not a choice anybody made.
         capsLockSuspends: j['caps_lock_suspends_viewer'] != false,
         decodeAtShownSize: j['decode_at_shown_size'] != false,
-        lowSpecMode: j['low_spec_mode'] == true,
-        lowSpecWas: j['low_spec_was'] is Map<String, dynamic>
-            ? j['low_spec_was'] as Map<String, dynamic>
-            : null,
-        lowSpecOffered: j['low_spec_offered'] == true,
-        lowSpecOnBattery: j['low_spec_on_battery'] == true,
-        lowSpecBatteryOffered: j['low_spec_battery_offered'] == true,
-        lowSpecByBattery: j['low_spec_by_battery'] == true,
         // Absent is on, which is what every file before the switch ran with.
         hardwareDecode: j['hardware_decode'] != false,
         largestPicture: _positiveInt(j['largest_picture']),
