@@ -19,6 +19,13 @@ String? addonsDir() => BridgeLib.instance.api.crateApiAddonsAddonsDir();
 List<BridgeAddon> addonList() =>
     BridgeLib.instance.api.crateApiAddonsAddonList();
 
+/// Whether this build would take a manifest at all. The catalogue is read from
+/// the web and moves faster than a release, so it can offer a pack this build
+/// has no code for. The page leaves those out rather than download one and
+/// have the install refused.
+bool addonAccepts({required String manifest}) =>
+    BridgeLib.instance.api.crateApiAddonsAddonAccepts(manifest: manifest);
+
 /// Install an addon from its manifest and the files Dart fetched and verified,
 /// one file per download of this platform's block, in the manifest's order.
 ///
