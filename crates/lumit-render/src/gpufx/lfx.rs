@@ -677,6 +677,11 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             lumit_gpu::no_adapter();
             return;
         };
+        // Mesa's software rasteriser (llvmpipe, as on CI) loses the device
+        // while it compiles this kernel. A card draws it.
+        if lumit_gpu::adapter_summary().is_some_and(|summary| summary.contains("(Cpu,")) {
+            return;
+        }
         let mut render = |rows: &[(&str, EffectValue)]| {
             let mut fx = lumit_core::fx::builtins::instantiate(def.schema().match_name)
                 .expect("instantiates");
