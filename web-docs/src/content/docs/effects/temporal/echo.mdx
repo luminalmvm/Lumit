@@ -15,7 +15,11 @@ Echo is a [Temporal](/effects/#temporal) effect.
 
 ## What it does
 
-Lays a run of the layer's own earlier frames over or behind the present one.
+Lays a run of the layer at other moments over or behind the present one. Each echo is the
+layer as it was then: where its transform and its parents had it, with the effects above
+Echo. The controls are those of After Effects' Echo.
+
+On an adjustment layer the echoes are of everything below it, one frame apart.
 
 ## Parameters
 
@@ -23,9 +27,11 @@ Lays a run of the layer's own earlier frames over or behind the present one.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Echoes** | Slider | 1 to 16 | 4 | - |
+| **Echo time (seconds)** | Slider | -2 to 2; down to -60 and up to 60 | -0.0333 | Seconds |
+| **Number of echoes** | Slider | 1 to 16 | 4 | - |
+| **Starting intensity** | Slider | 0 to 1 | 1 | - |
 | **Decay** | Slider | 0 to 1 | 0.6 | - |
-| **Mode** | Dropdown | Behind · In front · Add · Screen · Multiply · Overlay · Soft light · Hard light · Lighten · Darken · Difference · Exclusion · Subtract · Divide | Screen | - |
+| **Echo operator** | Dropdown | Composite in back · Composite in front · Add · Screen · Multiply · Overlay · Soft light · Hard light · Maximum · Minimum · Difference · Exclusion · Subtract · Divide · Blend | Screen | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -40,10 +46,15 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Echoes** sets how many earlier frames are displayed.
-- **Decay** governs how quickly each successive echo fades.
-- **Mode** says how each echo is combined into the trail. **Behind** puts each
-  echo behind the ones after it; **In front** lays them over.
+- **Echo time (seconds)** sets how far apart the echoes are. Below 0 they are earlier
+  moments, above 0 later ones.
+- **Number of echoes** sets how many echoes are shown.
+- **Starting intensity** sets how strong the layer itself is. Every echo is scaled by it too.
+- **Decay** sets how much of the intensity each echo keeps from the one before.
+- **Echo operator** says how the echoes are combined. **Composite in back** puts each echo
+  behind the ones before it, and **Composite in front** lays it over them. **Maximum** and
+  **Minimum** keep the lighter or the darker. **Blend** averages the layer and its echoes.
+  The rest are the [blend modes](/use/blend-modes/) of the same names.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
