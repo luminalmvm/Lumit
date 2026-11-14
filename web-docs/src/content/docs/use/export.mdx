@@ -95,6 +95,8 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | **HEVC (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
 | **ProRes 422 Proxy, LT, 422, HQ (.mov)** | Yes | Yes | No | 8 or 16 bit | No | Stated in the file | Yes |
 | **ProRes 4444, 4444 XQ (.mov)** | Yes | Yes | Yes | 8 or 16 bit | No | Stated in the file | Yes |
+| **QuickTime Animation (.mov)** | Yes | Yes | Yes | 8 bit | No | Stated in the file | Yes |
+| **VP9 video (.webm)** | Yes | Yes | Yes | 8 bit | Yes | Stated in the file | Yes |
 | **GIF (.gif)** | Yes | No | Yes | 8 bit | No | None stated | No |
 | **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
@@ -106,6 +108,9 @@ HEVC is tagged `hvc1`, so Apple's players open it.
 
 ProRes files are ten-bit. At **16 bit** they are filled from the sixteen-bit picture.
 Their sound is uncompressed PCM, at 16 or 24 bit.
+
+QuickTime Animation is lossless, with uncompressed PCM sound at 16 or 24 bit. A VP9 file's
+sound is Opus at 48 kHz.
 
 A GIF holds 256 colours. Three rows in **Picture** apply to a GIF and nothing else:
 
@@ -123,7 +128,8 @@ sequence with a span of one frame.
 An OpenEXR sequence is written scene-linear, with no colour transform and nothing clipped.
 
 Video is encoded by the graphics card where it has an encoder: NVENC, AMD AMF, Intel
-Quick Sync, or VAAPI on Linux. Otherwise it is encoded in software.
+Quick Sync, or VAAPI on Linux. Otherwise it is encoded in software. VP9 and QuickTime
+Animation are always encoded in software.
 
 ## What each row does
 
@@ -171,6 +177,8 @@ composition. Under the rows, **Start**, **End** and **Duration** read the span a
 | **Alpha** | *Premultiplied* or *Straight*, where alpha is written. |
 | **Depth** | The bits in each channel. |
 | **Bit rate** | **Auto** works one out from the size and the rate. Unticked, it takes a number up to 400 Mb/s. |
+| **Bitrate encoding** | **VBR** spends more where the picture is busy, up to **Maximum**. **CBR** holds the bit rate throughout. |
+| **Maximum** | The most a VBR file may spend, up to 800 Mb/s, with a bit rate typed. Left empty, and under **Auto**, it is 1.5 × the bit rate. |
 | **Resize** | A size in pixels, from 16 to 16384 each way. The picture is fitted whole inside it and centred on black. |
 | **Lock aspect** | Changes the other side with the one typed. |
 | *Fast*, *High* | The resampler a resized picture goes through. |
@@ -283,8 +291,8 @@ the export.
 
 ## In the browser
 
-The browser version of Lumit offers the formats the browser has an encoder for. **VP9 video
-(.webm)** and **AV1 video (.webm)** are offered there and nowhere else. There is no
+The browser version of Lumit offers the formats the browser has an encoder for. **AV1 video
+(.webm)** is offered there and nowhere else. There is no
 **Browse…**: the browser asks where to save as the export starts.
 
 :::note[Not built yet]

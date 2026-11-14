@@ -136,6 +136,10 @@ a strip under it:
 | **Preview resolution** | Auto, full, half, third or quarter. |
 | **Playback speed** | 1×, 0.5× or 0.25×. |
 | **Loop** | As on the bar. |
+| **Shown size** | Switches **Decode footage at shown size**. Lit while it is on. See [Preview and playback](/use/preview/#footage-at-shown-size). |
+| **Wireframe drags** | Switches **Wireframe while dragging**. Lit while it is on. |
+| **Adaptive resolution limit** | How coarse a slow drag may be drawn: Auto, or 1/2 to 1/16. |
+| **Suspend updates** | An eye. A press keeps the Viewer on the picture it has, and the eye turns red and shut. Another press, **Resume updates**, draws the frame. See [Preview and playback](/use/preview/#suspend-updates). |
 | **Mute** | Silences the sound output. It is not remembered between launches. |
 | **Cache ready** | How much of the work area is cached at the size the Viewer shows, as a meter and a percentage. It shows once something is cached. |
 | **Progress** | The [progress bar](/use/preview/#the-progress-bar), at the right. |
@@ -225,8 +229,9 @@ of the composition, with **Snap to layers** ticked on the edges and middles of t
 and with **View ▸ Snap to grid** ticked on the grid. A line across the picture marks what it
 landed on. `Ctrl` suspends snapping. A locked layer or a guide layer is not snapped to.
 
-A layer whose position is keyframed does not move under a drag. A nudge sets a keyframe
-at the playhead.
+A layer whose position is keyframed is dragged from anywhere on it, and the drag sets a
+keyframe at the playhead, as a nudge does. A position worked out by an expression does not
+drag.
 
 ### Effect points
 
@@ -239,6 +244,9 @@ the marks.
   works out.
 - A keyed half takes a key at the playhead.
 - The drag is one undo step.
+
+A selected [Mesh warp](/effects/distortion/mesh-warp/#in-the-viewer) draws its grid over
+the layer the same way, and its points and handles drag.
 
 ### The right-click menu
 
@@ -257,6 +265,8 @@ Right-click the picture, with any tool.
 | **Copy frame**, **Save frame as…** | The frame at the playhead at the composition's full size, on the clipboard or as a PNG. **Save frame as…** is also in the Composition menu, on `Ctrl`+`Alt`+`Shift`+`M`. On Linux, **Copy frame** needs `wl-copy` or `xclip`. |
 | **Snapshot** | **Take snapshot**, **Show snapshot**, **Clear snapshot**. |
 | **Zoom**, **Resolution**, **Channel view** | The same choices as the strips'. |
+| **Live update** | Ticked by default. Unticked, a drag draws no frame until the release. |
+| **Suspend updates** | Keeps the Viewer on the picture it has while edits go on. See [Preview and playback](/use/preview/#suspend-updates). |
 | **Show** | The marks over the picture, ticked. |
 | **View layout**, **Compare** | As in the **View** menu. |
 | **Region of interest** | As in the **Guides** menu. |
@@ -407,8 +417,8 @@ Surround** sets it to **Theme colour**.
 
 - **Missing files**: a count at the bottom left of the picture, while footage in the
   composition has lost its file. See [Importing](/use/importing/#missing-files).
-- **Cut to the largest picture**: at the bottom right, while the frame was cut to
-  **Largest picture**. A click opens that row in
+- **Cut**: a small mark at the bottom right, while the frame was cut to **Largest
+  picture**. Its tooltip reads **Cut to the largest picture**, and a click opens that row in
   [Settings ▸ Preview and cache](/use/settings/#preview-and-cache).
 - On Linux, a machine rendering on an NVIDIA card while drawing its window with another
   shows a message in place of the picture. Switch to NVIDIA Performance mode, or start
