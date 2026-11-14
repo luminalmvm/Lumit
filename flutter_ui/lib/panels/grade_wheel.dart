@@ -51,10 +51,11 @@ double wheelMaster(List<double> rgb) => (rgb[0] + rgb[1] + rgb[2]) / 3;
 
 /// One wheel: the disc, its dot, and the master bar at its right.
 ///
-/// A drag on the disc is relative — the dot moves with the pointer at half
-/// its speed, a tenth with Shift — so a precise lean is a matter of moving
-/// slowly, not of hitting a pixel. A double-click puts the dot back in the
-/// middle. The bar works the same way up and down.
+/// A drag on the disc is relative and free in both directions. The dot moves
+/// with the pointer at a fifth of its speed, a twentieth with Shift or Ctrl,
+/// so a precise lean is a matter of moving slowly, not of hitting a pixel. A
+/// double-click puts the dot back in the middle. The bar works the same way
+/// up and down.
 class GradeWheel extends StatefulWidget {
   /// The three channels as the document holds them, at the playhead.
   final List<double> rgb;
@@ -117,20 +118,30 @@ class _GradeWheelState extends State<GradeWheel> {
   Offset? _chroma;
   bool _onBar = false;
 
+  /// Where the pointer was at the last tick, in the wheel's own space.
+  Offset _at = Offset.zero;
+
   double get _liveMaster => _master ?? wheelMaster(widget.rgb);
   Offset get _liveChroma => _chroma ?? wheelChroma(widget.rgb);
 
-  /// Half speed, a tenth with Shift: the disc is a control, not a target.
-  double get _rate => HardwareKeyboard.instance.isShiftPressed ? 0.1 : 0.5;
+  /// A fifth of the pointer's speed, a twentieth with Shift or Ctrl: the disc
+  /// is a control, not a target.
+  double get _rate {
+    final keys = HardwareKeyboard.instance;
+    return keys.isShiftPressed || keys.isControlPressed ? 0.05 : 0.2;
+  }
 
-  void _start(bool bar) {
+  void _start(bool bar, Offset at) {
     _onBar = bar;
+    _at = at;
     _master = wheelMaster(widget.rgb);
     _chroma = wheelChroma(widget.rgb);
     widget.onStart();
   }
 
-  void _move(Offset delta) {
+  void _move(Offset at) {
+    final delta = at - _at;
+    _at = at;
     final radius = widget.size / 2;
     if (_onBar) {
       final per = widget.masterSpan * 2 / widget.size;
@@ -237,10 +248,12 @@ class _GradeWheelState extends State<GradeWheel> {
     );
   }
 
-  /// The disc and the bar take the same gesture: a relative drag on one axis
-  /// pair, a double-click to reset. Vertical and horizontal recognisers
-  /// rather than a pan, so the panel's scroll does not win every upward
-  /// drag (the curve editor's reasoning).
+  /// The disc and the bar take the same gesture: a relative drag, a
+  /// double-click to reset. Vertical and horizontal recognisers rather than a
+  /// pan, so the panel's scroll does not win every upward drag (the curve
+  /// editor's reasoning). Each reports only its own axis in `delta`, so the
+  /// drag follows the pointer's position instead, and the disc moves both
+  /// ways at once.
   Widget _drag(
       {required bool bar,
       required VoidCallback onDouble,
@@ -250,12 +263,12 @@ class _GradeWheelState extends State<GradeWheel> {
       behavior: HitTestBehavior.opaque,
       dragStartBehavior: DragStartBehavior.down,
       onDoubleTap: onDouble,
-      onVerticalDragStart: (_) => _start(bar),
-      onVerticalDragUpdate: (d) => _move(d.delta),
+      onVerticalDragStart: (d) => _start(bar, d.localPosition),
+      onVerticalDragUpdate: (d) => _move(d.localPosition),
       onVerticalDragEnd: (_) => _end(),
       onVerticalDragCancel: _cancel,
-      onHorizontalDragStart: bar ? null : (_) => _start(bar),
-      onHorizontalDragUpdate: bar ? null : (d) => _move(d.delta),
+      onHorizontalDragStart: bar ? null : (d) => _start(bar, d.localPosition),
+      onHorizontalDragUpdate: bar ? null : (d) => _move(d.localPosition),
       onHorizontalDragEnd: bar ? null : (_) => _end(),
       onHorizontalDragCancel: bar ? null : _cancel,
       child: MouseRegion(cursor: SystemMouseCursors.precise, child: child),
