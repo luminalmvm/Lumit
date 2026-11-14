@@ -294,6 +294,16 @@ pub struct CompositeFlow {
     engine: Option<lumit_flow::FlowEngine>,
     /// The pictures made of neighbour frames, kept for the next frame.
     neighbours: neighbour_textures::NeighbourTextures,
+    /// The synthesis model a Precomp on Flow with RIFE paints with, opened
+    /// as the decode pool opens its own.
+    synthesis: Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
+    /// Whether a model that will not paint fails the frame, as an export's
+    /// does, and the sentence it failed with.
+    refuse: bool,
+    refused: Option<String>,
 }
 
 impl Realiser<'_> {
@@ -1821,50 +1831,6 @@ impl Realiser<'_> {
             neighbours.push((*offset, then));
         }
         (neighbours, fields)
-    }
-
-    /// A Precomp on Flow: the picture `phase` of the way from `a` to `b`,
-    /// measured on the card and painted by the synthesis footage on Flow is
-    /// painted by, in linear float so nothing above white is lost. Without a
-    /// flow engine, or if either step fails, the two are mixed.
-    ///
-    /// ponytail: both pictures come back off the card and the painting runs on
-    /// the processor, the float path footage takes too. A painting pass that
-    /// reads textures would keep it on the card.
-    fn flow_between(
-        &self,
-        a: &wgpu::Texture,
-        b: &wgpu::Texture,
-        phase: f32,
-        params: &lumit_core::retime::FlowParams,
-    ) -> wgpu::Texture {
-        let (w, h) = (a.width(), a.height());
-        let painted = || {
-            let set = crate::decode::flow_settings(params);
-            let mut held = self.flow?.borrow_mut();
-            let engine = held
-                .engine
-                .get_or_insert_with(|| lumit_flow::FlowEngine::with_context(&self.ctx));
-            // The solver and the reads run on encoders of their own.
-            self.ctx.flush();
-            let (fwd, bwd) = engine.flow_pair_textures(a, b, &set)?;
-            let (fwd, bwd) = (
-                lumit_flow::borrow_uncertain(&fwd, &bwd),
-                lumit_flow::borrow_uncertain(&bwd, &fwd),
-            );
-            let bytes = |t: &wgpu::Texture| {
-                let px = self.engine.readback_linear_f32(&self.ctx, t).ok()?;
-                Some(px.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>())
-            };
-            let (pa, pb) = (bytes(a)?, bytes(b)?);
-            let px =
-                engine.synthesize_at_f32(&pa, &pb, w as usize, h as usize, &fwd, &bwd, phase, &set);
-            Some(self.engine.upload_float_frame(&self.ctx, &px, w, h))
-        };
-        painted().unwrap_or_else(|| {
-            self.compositor
-                .accumulate(&self.ctx, w, h, &[(a, 1.0 - phase), (b, phase)])
-        })
     }
 
     /// One measurement, entirely on the card: two pictures in, the `rgba32float`

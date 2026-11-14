@@ -78,8 +78,7 @@ class FlowRowsFrb extends StatelessWidget {
       open: open,
       onToggle: onToggle,
       rows: [
-        // A Precomp's in-between is made by the built-in engine alone.
-        if (kind == BridgeLayerKind.footage) _engineRow(context, t, p, write),
+        _engineRow(context, t, p, write),
         _choice(
           context,
           t,

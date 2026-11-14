@@ -21677,9 +21677,9 @@
   "@flowEngineFailed": {
     "description": "Flow group, the line under the Engine row: the RIFE pack is installed and would not open or would not run."
   },
-  "flowEngineFloatSource": "RIFE cannot read scene-linear footage",
+  "flowEngineFloatSource": "RIFE cannot read values above white",
   "@flowEngineFloatSource": {
-    "description": "Flow group, the line under the Engine row: the layer's source is scene-linear float, which the model was not trained on."
+    "description": "Flow group, the line under the Engine row: the layer's picture holds values above white, such as scene-linear footage or a Precomp with a glow, which the model was not trained on."
   },
   "openAddons": "Open addons",
   "@openAddons": {

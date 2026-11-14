@@ -2791,10 +2791,7 @@ List<LayerFoldRow> layerFoldRows({
       depth: 1,
     ));
     if (flowOpen) {
-      final footage = info.kind == BridgeLayerKind.footage;
       for (final kind in FlowRowKind.values) {
-        // A Precomp's in-between is made by the built-in engine alone.
-        if (!footage && kind == FlowRowKind.engine) continue;
         rows.add(FoldFlowRow(
           kind,
           rate: kind == FlowRowKind.inputRate ? info.flowInputRate : null,

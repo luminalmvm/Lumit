@@ -825,7 +825,7 @@ fn effect_input(layer: &LayerReference, effect: Uuid, frame: u64) -> Option<(Vec
 /// The size of the picture `layer`'s effects run on: what the document holds
 /// for a solid, a precomp or a shape, and for footage the frame the renderer
 /// read when it opened the file.
-fn raster_size(
+pub(crate) fn raster_size(
     doc: &Document,
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
@@ -837,6 +837,30 @@ fn raster_size(
     }
     let (w, h) = lumit_core::fx::builtins::picture_size(doc, comp, layer);
     (w.round().max(1.0) as u32, h.round().max(1.0) as u32)
+}
+
+// The size a new effect on `layer` is seeded at: `raster_size`, and for a Text
+// layer the box its typed words are drawn into, along its path when it has one.
+pub(crate) fn seed_size(
+    doc: &Document,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+) -> (u32, u32) {
+    let lumit_core::model::LayerKind::Text { document } = &layer.kind else {
+        return raster_size(doc, comp, layer);
+    };
+    let path = (document.path)
+        .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, 0.0))
+        .filter(|p| !p.is_empty());
+    let (w, h) = match path {
+        Some(path) => lumit_text::path_box(&path, document.size as f32),
+        None => {
+            let laid =
+                lumit_text::layout(&lumit_text::TextBlock::of(document, &document.text), false);
+            (laid.width, laid.height)
+        }
+    };
+    (w.max(1), h.max(1))
 }
 
 /// The measured patch for the display: a crop of the picture round the

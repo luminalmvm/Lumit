@@ -1122,7 +1122,7 @@ fn machine_refusal() -> Option<SynthesisRefusal> {
 
 /// Record what happened to the last frame of `layer` that asked for a model: a
 /// refusal, or `None` when it painted.
-fn note_synthesis(layer: Uuid, what: Option<SynthesisRefusal>) {
+pub(crate) fn note_synthesis(layer: Uuid, what: Option<SynthesisRefusal>) {
     let Ok(mut held) = SYNTHESIS_REFUSAL.get_or_init(Default::default).lock() else {
         return;
     };
@@ -1234,12 +1234,12 @@ pub fn addon_needs(doc: &lumit_core::model::Document) -> Vec<Need> {
 /// abandoned. The same channel every other export failure comes back through,
 /// and the one place the reason has to be said in words rather than picked off
 /// an enum, because nothing is left on screen to hang the enum on.
-fn refusal_sentence(why: &SynthesisRefusal) -> String {
+pub(crate) fn refusal_sentence(why: &SynthesisRefusal) -> String {
     match why {
         SynthesisRefusal::RuntimeMissing => "the model runtime is not installed".into(),
         SynthesisRefusal::PackMissing => "the RIFE pack is not installed".into(),
         SynthesisRefusal::Failed(detail) => format!("RIFE would not run here: {detail}"),
-        SynthesisRefusal::FloatSource => "RIFE cannot read scene-linear footage".into(),
+        SynthesisRefusal::FloatSource => "RIFE cannot read values above white".into(),
     }
 }
 
@@ -1367,7 +1367,7 @@ fn combine_pair(
     // would be a field nothing reads, paid for again at every shutter moment
     // (docs/impl/addons.md §6.3).
     if params.engine == lumit_core::retime::FlowEngineChoice::Rife {
-        match synthesised(synthesis, &a, &b, fw, fh, w, float) {
+        match synthesised(synthesis, &a.rgba, &b.rgba, fw, fh, w, float) {
             Ok(painted) => {
                 note_synthesis(job.layer, None);
                 return Ok(Arc::new(painted));
@@ -1422,13 +1422,13 @@ fn combine_pair(
 /// with nothing installed does not try to open nothing sixty times a second.
 /// Installing one moves the addons folder's generation, and the next frame
 /// opens the pack that has just arrived.
-fn synthesised(
+pub(crate) fn synthesised(
     synthesis: &mut Option<(
         u64,
         Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
     )>,
-    a: &FramePixels,
-    b: &FramePixels,
+    a: &[u8],
+    b: &[u8],
     width: usize,
     height: usize,
     phi: f32,
@@ -1437,6 +1437,18 @@ fn synthesised(
     if float {
         return Err(SynthesisRefusal::FloatSource);
     }
+    opened(synthesis)?
+        .synthesise(a, b, width, height, phi)
+        .map_err(|why| synthesis_refusal_of(&why))
+}
+
+/// The model, opened now if it is not open yet, or why it will not open.
+pub(crate) fn opened(
+    synthesis: &mut Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
+) -> Result<&mut lumit_ml::synthesis::Synthesis, SynthesisRefusal> {
     // A pack installed since the door was opened is a different answer, and
     // one the user has just pressed a button to get.
     let now = lumit_ml::store::generation();
@@ -1444,10 +1456,7 @@ fn synthesised(
         *synthesis = Some((now, lumit_ml::synthesis::Synthesis::open()));
     }
     let (_, door) = synthesis.as_mut().ok_or(SynthesisRefusal::PackMissing)?;
-    let model = door.as_mut().map_err(|why| synthesis_refusal_of(why))?;
-    model
-        .synthesise(&a.rgba, &b.rgba, width, height, phi)
-        .map_err(|why| synthesis_refusal_of(&why))
+    door.as_mut().map_err(|why| synthesis_refusal_of(why))
 }
 
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it

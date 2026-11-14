@@ -13,6 +13,130 @@ impl Realiser<'_> {
         self.paint_over(nested, w, h, &n.paint, n.paint_time)
     }
 
+    /// A Precomp on Flow: the picture `phase` of the way from `a` to `b`,
+    /// measured on the card and painted by the synthesis footage on Flow is
+    /// painted by, in linear float so nothing above white is lost. Without a
+    /// flow engine, or if either step fails, the two are mixed. With RIFE the
+    /// model paints it where it can, and where it cannot preview says so on
+    /// `layer`'s row and an export fails the frame.
+    ///
+    /// ponytail: both pictures come back off the card and the painting runs on
+    /// the processor, the float path footage takes too. A painting pass that
+    /// reads textures would keep it on the card.
+    fn flow_between(
+        &self,
+        layer: uuid::Uuid,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        phase: f32,
+        params: &lumit_core::retime::FlowParams,
+    ) -> wgpu::Texture {
+        let (w, h) = (a.width(), a.height());
+        if let (lumit_core::retime::FlowEngineChoice::Rife, Some(held)) = (params.engine, self.flow)
+        {
+            match self.model_between(held, a, b, phase) {
+                Ok(painted) => {
+                    crate::decode::note_synthesis(layer, None);
+                    return painted;
+                }
+                Err(why) if held.borrow().refuse => {
+                    held.borrow_mut().refused = Some(crate::decode::refusal_sentence(&why));
+                }
+                Err(why) => crate::decode::note_synthesis(layer, Some(why)),
+            }
+        }
+        let painted = || {
+            let set = crate::decode::flow_settings(params);
+            let mut held = self.flow?.borrow_mut();
+            let engine = held
+                .engine
+                .get_or_insert_with(|| lumit_flow::FlowEngine::with_context(&self.ctx));
+            // The solver and the reads run on encoders of their own.
+            self.ctx.flush();
+            let (fwd, bwd) = engine.flow_pair_textures(a, b, &set)?;
+            let (fwd, bwd) = (
+                lumit_flow::borrow_uncertain(&fwd, &bwd),
+                lumit_flow::borrow_uncertain(&bwd, &fwd),
+            );
+            let bytes = |t: &wgpu::Texture| {
+                let px = self.engine.readback_linear_f32(&self.ctx, t).ok()?;
+                Some(px.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>())
+            };
+            let (pa, pb) = (bytes(a)?, bytes(b)?);
+            let px =
+                engine.synthesize_at_f32(&pa, &pb, w as usize, h as usize, &fwd, &bwd, phase, &set);
+            Some(self.engine.upload_float_frame(&self.ctx, &px, w, h))
+        };
+        painted().unwrap_or_else(|| {
+            self.compositor
+                .accumulate(&self.ctx, w, h, &[(a, 1.0 - phase), (b, phase)])
+        })
+    }
+
+    /// The picture between `a` and `b` as the model paints it, or why it did
+    /// not. The model reads eight-bit colour, so a picture with anything above
+    /// white is refused as a float source is. It has no alpha either, so a
+    /// picture with gaps in it has its coverage painted again as grey.
+    fn model_between(
+        &self,
+        held: &std::cell::RefCell<super::CompositeFlow>,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        phase: f32,
+    ) -> Result<wgpu::Texture, crate::decode::SynthesisRefusal> {
+        use lumit_core::pixels::{srgb_decode, srgb_encode};
+        let (w, h) = (a.width(), a.height());
+        // Asked first, so a machine with no pack reads nothing back.
+        crate::decode::opened(&mut held.borrow_mut().synthesis)?;
+        self.ctx.flush();
+        let read = |t: &wgpu::Texture| {
+            let px = self.engine.readback_linear_f32(&self.ctx, t);
+            px.map_err(|e| crate::decode::SynthesisRefusal::Failed(e.to_string()))
+        };
+        let (pa, pb) = (read(a)?, read(b)?);
+        let both = || pa.chunks_exact(4).chain(pb.chunks_exact(4));
+        if both().any(|p| p[..3].iter().any(|v| *v > 1.0)) {
+            return Err(crate::decode::SynthesisRefusal::FloatSource);
+        }
+        let colour = |px: &[f32]| -> Vec<u8> {
+            let rgb = |p: &[f32]| [srgb_encode(p[0]), srgb_encode(p[1]), srgb_encode(p[2]), 255];
+            px.chunks_exact(4).flat_map(rgb).collect()
+        };
+        let cover = |px: &[f32]| -> Vec<u8> {
+            let grey = |p: &[f32]| [(p[3].clamp(0.0, 1.0) * 255.0).round() as u8; 4];
+            px.chunks_exact(4).flat_map(grey).collect()
+        };
+        let (pw, ph) = (w as usize, h as usize);
+        let mut flow = held.borrow_mut();
+        let door = &mut flow.synthesis;
+        let paint = |x: &[u8], y: &[u8], door: &mut _| {
+            crate::decode::synthesised(door, x, y, pw, ph, phase, false)
+        };
+        let rgb = paint(&colour(&pa), &colour(&pb), door)?;
+        let opaque = both().all(|p| p[3] >= 1.0);
+        // An Add blend can leave colour above alpha, which is kept.
+        let bounded = both().all(|p| p[..3].iter().all(|v| *v <= p[3]));
+        let alpha = if opaque {
+            None
+        } else {
+            Some(paint(&cover(&pa), &cover(&pb), door)?)
+        };
+        let px: Vec<u8> = rgb
+            .chunks_exact(4)
+            .enumerate()
+            .flat_map(|(i, p)| {
+                let al = alpha
+                    .as_ref()
+                    .and_then(|m| m.get(i * 4))
+                    .map_or(1.0, |v| f32::from(*v) / 255.0);
+                let c = |v: u8| srgb_decode(v).min(if bounded { al } else { 1.0 });
+                [c(p[0]), c(p[1]), c(p[2]), al]
+            })
+            .flat_map(f32::to_le_bytes)
+            .collect();
+        Ok(self.engine.upload_float_frame(&self.ctx, &px, w, h))
+    }
+
     /// `l`'s picture before it is lit or placed, how much its effects grew
     /// it, and the depth the mesh pass drew beside it when it is a model,
     /// which takes `shadows` and the comp's environment. `fx_ms` gathers each effect's own time when the
@@ -78,7 +202,7 @@ impl Realiser<'_> {
                 // A Precomp on Flow: the frame after, and the picture between.
                 if let Some(f) = flow {
                     let then = self.realise(f.camera, *width, *height, *background, &f.draws);
-                    nested = self.flow_between(&nested, &then, f.phase, &f.params);
+                    nested = self.flow_between(l.layer, &nested, &then, f.phase, &f.params);
                 }
                 self.paint_over(
                     nested,
