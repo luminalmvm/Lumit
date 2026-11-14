@@ -1110,7 +1110,10 @@ class _ExportQueueState extends State<_ExportQueue> {
     comp.queueExport(
         spec: spec,
         path: exportFreePath(
-            path: item.path, codec: item.codec, captions: spec.captions),
+            path: item.path,
+            codec: item.codec,
+            captions: spec.captions,
+            also: spec.also),
         start: false);
   }
 
@@ -1124,7 +1127,10 @@ class _ExportQueueState extends State<_ExportQueue> {
         id: copy,
         spec: spec,
         path: exportFreePath(
-            path: item.path, codec: item.codec, captions: spec.captions));
+            path: item.path,
+            codec: item.codec,
+            captions: spec.captions,
+            also: spec.also));
   }
 
   /// A finished or failed row, queued again over its own file.

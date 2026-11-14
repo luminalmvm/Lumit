@@ -158,6 +158,7 @@ pub(super) fn export(
             &path.to_string_lossy(),
             &settings.codec,
             settings.captions,
+            &settings.also,
         ));
         // The row's version is made in this run's own copy of the project,
         // which is never saved.

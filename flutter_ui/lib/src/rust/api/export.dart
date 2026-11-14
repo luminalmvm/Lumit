@@ -11,7 +11,7 @@ import 'package:uuid/uuid.dart';
 part 'export.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// What one output format can and cannot carry. The dialogue asks this
 /// of every format key it offers and disables what the answer refuses.
@@ -169,13 +169,14 @@ void exportQueueUpdate(
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
 /// sequence the file asked about is frame one. The caption files `captions`
-/// writes beside it count too.
+/// writes beside it count too, and so do the files `also` writes.
 bool exportPathTaken(
         {required String path,
         required String codec,
-        required BridgeCaptionsOut captions}) =>
+        required BridgeCaptionsOut captions,
+        required List<BridgeExportAlso> also}) =>
     BridgeLib.instance.api.crateApiExportExportPathTaken(
-        path: path, codec: codec, captions: captions);
+        path: path, codec: codec, captions: captions, also: also);
 
 /// Queue an item that has run, or failed, again exactly as it was: the same
 /// snapshot, and for a row of a graphics template the same row. Answers the
@@ -187,9 +188,10 @@ int? exportQueueAgain({required int id}) =>
 String exportFreePath(
         {required String path,
         required String codec,
-        required BridgeCaptionsOut captions}) =>
+        required BridgeCaptionsOut captions,
+        required List<BridgeExportAlso> also}) =>
     BridgeLib.instance.api.crateApiExportExportFreePath(
-        path: path, codec: codec, captions: captions);
+        path: path, codec: codec, captions: captions, also: also);
 
 /// What an export does with the composition's own caption layers.
 enum BridgeCaptionsOut {
@@ -251,6 +253,29 @@ class BridgeCrop {
           right == other.right &&
           width == other.width &&
           height == other.height;
+}
+
+/// One more file an export writes beside its own: its format key, and what
+/// is added to the chosen file's name before its extension.
+class BridgeExportAlso {
+  final String codec;
+  final String suffix;
+
+  const BridgeExportAlso({
+    required this.codec,
+    required this.suffix,
+  });
+
+  @override
+  int get hashCode => codec.hashCode ^ suffix.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExportAlso &&
+          runtimeType == other.runtimeType &&
+          codec == other.codec &&
+          suffix == other.suffix;
 }
 
 /// What the export dialogue opens on when nothing else has been said —
@@ -443,6 +468,9 @@ class BridgeExportQueueItem {
   /// this computer's own. Its other details are in `remote_jobs`.
   final String job;
 
+  /// The files written beside `path`, in full.
+  final List<String> also;
+
   const BridgeExportQueueItem({
     required this.id,
     this.group,
@@ -456,6 +484,7 @@ class BridgeExportQueueItem {
     required this.rangeEndFrame,
     required this.state,
     required this.job,
+    required this.also,
   });
 
   @override
@@ -471,7 +500,8 @@ class BridgeExportQueueItem {
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
       state.hashCode ^
-      job.hashCode;
+      job.hashCode ^
+      also.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -489,7 +519,8 @@ class BridgeExportQueueItem {
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&
           state == other.state &&
-          job == other.job;
+          job == other.job &&
+          also == other.also;
 }
 
 @freezed
@@ -515,7 +546,7 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
     /// How long it took to export, in whole seconds.
     required int seconds,
 
-    /// The file's size, zero for an image sequence.
+    /// The size of the files written, an image sequence counting as none.
     required int bytes,
   }) = BridgeExportQueueState_Done;
   const factory BridgeExportQueueState.failed({
@@ -688,6 +719,10 @@ class BridgeExportSpec {
   /// Each top-level bus also written to a file of its own beside this one.
   final bool stems;
 
+  /// Other files written beside this one from the same frames, at most
+  /// three: each a video or still format and a suffix for its name.
+  final List<BridgeExportAlso> also;
+
   const BridgeExportSpec({
     required this.preset,
     required this.codec,
@@ -732,6 +767,7 @@ class BridgeExportSpec {
     this.captions = BridgeCaptionsOut.burn,
     this.loudness,
     this.stems = false,
+    this.also = const [],
   });
 
   /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
@@ -783,7 +819,8 @@ class BridgeExportSpec {
       gifPlays.hashCode ^
       captions.hashCode ^
       loudness.hashCode ^
-      stems.hashCode;
+      stems.hashCode ^
+      also.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -832,7 +869,8 @@ class BridgeExportSpec {
           gifPlays == other.gifPlays &&
           captions == other.captions &&
           loudness == other.loudness &&
-          stems == other.stems;
+          stems == other.stems &&
+          also == other.also;
 }
 
 @freezed

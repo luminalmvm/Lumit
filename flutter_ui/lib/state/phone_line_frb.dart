@@ -371,9 +371,15 @@ class PhoneLine extends ChangeNotifier {
         projectPath: project.path());
     if (path == null) return 'no_folder';
     if (exportPathTaken(
-        path: path, codec: stored.codec, captions: stored.captions)) {
+        path: path,
+        codec: stored.codec,
+        captions: stored.captions,
+        also: const [])) {
       path = exportFreePath(
-          path: path, codec: stored.codec, captions: stored.captions);
+          path: path,
+          codec: stored.codec,
+          captions: stored.captions,
+          also: const []);
     }
     final area = j['range'] == 'whole' ? null : workAreaFrames(comp);
     final start = area?.start ?? 0;

@@ -2988,7 +2988,11 @@ class _ExportDialogState extends State<_ExportDialog> {
     // A sequence's frames were never in the Save dialogue's question, so its
     // first frame is always asked about.
     if ((path != _picked || _images || _captionsBeside) &&
-        exportPathTaken(path: path, codec: _format.key, captions: _captions)) {
+        exportPathTaken(
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also)) {
       final keep = await askLumitChoice<bool>(
         context: context,
         title: l10n.exportOverwriteTitle,
@@ -3001,7 +3005,10 @@ class _ExportDialogState extends State<_ExportDialog> {
       if (keep == null || !mounted) return null;
       if (keep) {
         path = exportFreePath(
-            path: path, codec: _format.key, captions: _captions);
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also);
         setState(() => _path = path);
       }
     }
@@ -3259,7 +3266,11 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (path == null || id == null) return;
     if (path != _queuedPath &&
         (path != _picked || _images || _captionsBeside) &&
-        exportPathTaken(path: path, codec: _format.key, captions: _captions)) {
+        exportPathTaken(
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also)) {
       final keep = await askLumitChoice<bool>(
         context: context,
         title: l10n.exportOverwriteTitle,
@@ -3272,7 +3283,10 @@ class _ExportDialogState extends State<_ExportDialog> {
       if (keep == null || !mounted) return;
       if (keep) {
         path = exportFreePath(
-            path: path, codec: _format.key, captions: _captions);
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also);
       }
     }
     if (_failedItem) {

@@ -14661,12 +14661,15 @@ fn wire__crate__api__export__export_free_path_impl(
             let api_codec = <String>::sse_decode(&mut deserializer);
             let api_captions =
                 <crate::api::export::BridgeCaptionsOut>::sse_decode(&mut deserializer);
+            let api_also =
+                <Vec<crate::api::export::BridgeExportAlso>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Result::<_, ()>::Ok(crate::api::export::export_free_path(
                     api_path,
                     api_codec,
                     api_captions,
+                    api_also,
                 ))?;
                 Ok(output_ok)
             })())
@@ -14734,12 +14737,15 @@ fn wire__crate__api__export__export_path_taken_impl(
             let api_codec = <String>::sse_decode(&mut deserializer);
             let api_captions =
                 <crate::api::export::BridgeCaptionsOut>::sse_decode(&mut deserializer);
+            let api_also =
+                <Vec<crate::api::export::BridgeExportAlso>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Result::<_, ()>::Ok(crate::api::export::export_path_taken(
                     api_path,
                     api_codec,
                     api_captions,
+                    api_also,
                 ))?;
                 Ok(output_ok)
             })())
@@ -40063,6 +40069,18 @@ impl SseDecode for crate::api::effect::BridgeEnabledWhen {
     }
 }
 
+impl SseDecode for crate::api::export::BridgeExportAlso {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_codec = <String>::sse_decode(deserializer);
+        let mut var_suffix = <String>::sse_decode(deserializer);
+        return crate::api::export::BridgeExportAlso {
+            codec: var_codec,
+            suffix: var_suffix,
+        };
+    }
+}
+
 impl SseDecode for crate::api::export::BridgeExportDefaults {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -40176,6 +40194,7 @@ impl SseDecode for crate::api::export::BridgeExportQueueItem {
         let mut var_rangeEndFrame = <i64>::sse_decode(deserializer);
         let mut var_state = <crate::api::export::BridgeExportQueueState>::sse_decode(deserializer);
         let mut var_job = <String>::sse_decode(deserializer);
+        let mut var_also = <Vec<String>>::sse_decode(deserializer);
         return crate::api::export::BridgeExportQueueItem {
             id: var_id,
             group: var_group,
@@ -40189,6 +40208,7 @@ impl SseDecode for crate::api::export::BridgeExportQueueItem {
             range_end_frame: var_rangeEndFrame,
             state: var_state,
             job: var_job,
+            also: var_also,
         };
     }
 }
@@ -40280,6 +40300,7 @@ impl SseDecode for crate::api::export::BridgeExportSpec {
         let mut var_loudness =
             <Option<crate::api::export::BridgeExportLoudness>>::sse_decode(deserializer);
         let mut var_stems = <bool>::sse_decode(deserializer);
+        let mut var_also = <Vec<crate::api::export::BridgeExportAlso>>::sse_decode(deserializer);
         return crate::api::export::BridgeExportSpec {
             preset: var_preset,
             codec: var_codec,
@@ -40324,6 +40345,7 @@ impl SseDecode for crate::api::export::BridgeExportSpec {
             captions: var_captions,
             loudness: var_loudness,
             stems: var_stems,
+            also: var_also,
         };
     }
 }
@@ -48178,6 +48200,20 @@ impl SseDecode for Vec<crate::api::effect::BridgeEnabledWhen> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::effect::BridgeEnabledWhen>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::export::BridgeExportAlso> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::export::BridgeExportAlso>::sse_decode(
                 deserializer,
             ));
         }
@@ -56135,6 +56171,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeEnabledWhen>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeExportAlso {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.codec.into_into_dart().into_dart(),
+            self.suffix.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::export::BridgeExportAlso
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::export::BridgeExportAlso>
+    for crate::api::export::BridgeExportAlso
+{
+    fn into_into_dart(self) -> crate::api::export::BridgeExportAlso {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeExportDefaults {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -56291,6 +56348,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeExportQueueItem
             self.range_end_frame.into_into_dart().into_dart(),
             self.state.into_into_dart().into_dart(),
             self.job.into_into_dart().into_dart(),
+            self.also.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -56397,6 +56455,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::export::BridgeExportSpec {
             self.captions.into_into_dart().into_dart(),
             self.loudness.into_into_dart().into_dart(),
             self.stems.into_into_dart().into_dart(),
+            self.also.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -67651,6 +67710,14 @@ impl SseEncode for crate::api::effect::BridgeEnabledWhen {
     }
 }
 
+impl SseEncode for crate::api::export::BridgeExportAlso {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.codec, serializer);
+        <String>::sse_encode(self.suffix, serializer);
+    }
+}
+
 impl SseEncode for crate::api::export::BridgeExportDefaults {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -67737,6 +67804,7 @@ impl SseEncode for crate::api::export::BridgeExportQueueItem {
         <i64>::sse_encode(self.range_end_frame, serializer);
         <crate::api::export::BridgeExportQueueState>::sse_encode(self.state, serializer);
         <String>::sse_encode(self.job, serializer);
+        <Vec<String>>::sse_encode(self.also, serializer);
     }
 }
 
@@ -67821,6 +67889,7 @@ impl SseEncode for crate::api::export::BridgeExportSpec {
         <crate::api::export::BridgeCaptionsOut>::sse_encode(self.captions, serializer);
         <Option<crate::api::export::BridgeExportLoudness>>::sse_encode(self.loudness, serializer);
         <bool>::sse_encode(self.stems, serializer);
+        <Vec<crate::api::export::BridgeExportAlso>>::sse_encode(self.also, serializer);
     }
 }
 
@@ -73809,6 +73878,16 @@ impl SseEncode for Vec<crate::api::effect::BridgeEnabledWhen> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::effect::BridgeEnabledWhen>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::export::BridgeExportAlso> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::export::BridgeExportAlso>::sse_encode(item, serializer);
         }
     }
 }

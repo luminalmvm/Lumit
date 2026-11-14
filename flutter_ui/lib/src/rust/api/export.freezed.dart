@@ -374,7 +374,7 @@ class BridgeExportQueueState_Done extends BridgeExportQueueState {
   /// How long it took to export, in whole seconds.
   final int seconds;
 
-  /// The file's size, zero for an image sequence.
+  /// The size of the files written, an image sequence counting as none.
   final int bytes;
 
   /// Create a copy of BridgeExportQueueState

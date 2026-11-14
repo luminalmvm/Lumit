@@ -1894,14 +1894,16 @@ abstract class BridgeLibApi extends BaseApi {
   String crateApiExportExportFreePath(
       {required String path,
       required String codec,
-      required BridgeCaptionsOut captions});
+      required BridgeCaptionsOut captions,
+      required List<BridgeExportAlso> also});
 
   Stream<BridgeExportNews> crateApiRemoteExportNews();
 
   bool crateApiExportExportPathTaken(
       {required String path,
       required String codec,
-      required BridgeCaptionsOut captions});
+      required BridgeCaptionsOut captions,
+      required List<BridgeExportAlso> also});
 
   BridgeExportState crateApiExportExportPoll();
 
@@ -16275,13 +16277,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   String crateApiExportExportFreePath(
       {required String path,
       required String codec,
-      required BridgeCaptionsOut captions}) {
+      required BridgeCaptionsOut captions,
+      required List<BridgeExportAlso> also}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(path, serializer);
         sse_encode_String(codec, serializer);
         sse_encode_bridge_captions_out(captions, serializer);
+        sse_encode_list_bridge_export_also(also, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 389)!;
       },
       codec: SseCodec(
@@ -16289,7 +16293,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         decodeErrorData: null,
       ),
       constMeta: kCrateApiExportExportFreePathConstMeta,
-      argValues: [path, codec, captions],
+      argValues: [path, codec, captions, also],
       apiImpl: this,
     ));
   }
@@ -16297,7 +16301,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiExportExportFreePathConstMeta =>
       const TaskConstMeta(
         debugName: "export_free_path",
-        argNames: ["path", "codec", "captions"],
+        argNames: ["path", "codec", "captions", "also"],
       );
 
   @override
@@ -16331,13 +16335,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   bool crateApiExportExportPathTaken(
       {required String path,
       required String codec,
-      required BridgeCaptionsOut captions}) {
+      required BridgeCaptionsOut captions,
+      required List<BridgeExportAlso> also}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(path, serializer);
         sse_encode_String(codec, serializer);
         sse_encode_bridge_captions_out(captions, serializer);
+        sse_encode_list_bridge_export_also(also, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 391)!;
       },
       codec: SseCodec(
@@ -16345,7 +16351,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         decodeErrorData: null,
       ),
       constMeta: kCrateApiExportExportPathTakenConstMeta,
-      argValues: [path, codec, captions],
+      argValues: [path, codec, captions, also],
       apiImpl: this,
     ));
   }
@@ -16353,7 +16359,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiExportExportPathTakenConstMeta =>
       const TaskConstMeta(
         debugName: "export_path_taken",
-        argNames: ["path", "codec", "captions"],
+        argNames: ["path", "codec", "captions", "also"],
       );
 
   @override
@@ -37890,6 +37896,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeExportAlso dco_decode_bridge_export_also(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BridgeExportAlso(
+      codec: dco_decode_String(arr[0]),
+      suffix: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
   BridgeExportDefaults dco_decode_bridge_export_defaults(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -37970,8 +37988,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeExportQueueItem dco_decode_bridge_export_queue_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return BridgeExportQueueItem(
       id: dco_decode_u_32(arr[0]),
       group: dco_decode_opt_box_autoadd_u_32(arr[1]),
@@ -37985,6 +38003,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       rangeEndFrame: dco_decode_CastedPrimitive_i_64(arr[9]),
       state: dco_decode_bridge_export_queue_state(arr[10]),
       job: dco_decode_String(arr[11]),
+      also: dco_decode_list_String(arr[12]),
     );
   }
 
@@ -38019,8 +38038,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeExportSpec dco_decode_bridge_export_spec(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 43)
-      throw Exception('unexpected arr length: expect 43 but see ${arr.length}');
+    if (arr.length != 44)
+      throw Exception('unexpected arr length: expect 44 but see ${arr.length}');
     return BridgeExportSpec(
       preset: dco_decode_String(arr[0]),
       codec: dco_decode_String(arr[1]),
@@ -38065,6 +38084,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       captions: dco_decode_bridge_captions_out(arr[40]),
       loudness: dco_decode_opt_box_autoadd_bridge_export_loudness(arr[41]),
       stems: dco_decode_bool(arr[42]),
+      also: dco_decode_list_bridge_export_also(arr[43]),
     );
   }
 
@@ -43622,6 +43642,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeExportAlso> dco_decode_list_bridge_export_also(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_bridge_export_also).toList();
+  }
+
+  @protected
   List<BridgeExportPresetEntry> dco_decode_list_bridge_export_preset_entry(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -48386,6 +48412,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeExportAlso sse_decode_bridge_export_also(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_codec = sse_decode_String(deserializer);
+    var var_suffix = sse_decode_String(deserializer);
+    return BridgeExportAlso(codec: var_codec, suffix: var_suffix);
+  }
+
+  @protected
   BridgeExportDefaults sse_decode_bridge_export_defaults(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -48481,6 +48515,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_rangeEndFrame = sse_decode_CastedPrimitive_i_64(deserializer);
     var var_state = sse_decode_bridge_export_queue_state(deserializer);
     var var_job = sse_decode_String(deserializer);
+    var var_also = sse_decode_list_String(deserializer);
     return BridgeExportQueueItem(
         id: var_id,
         group: var_group,
@@ -48493,7 +48528,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         rangeStartFrame: var_rangeStartFrame,
         rangeEndFrame: var_rangeEndFrame,
         state: var_state,
-        job: var_job);
+        job: var_job,
+        also: var_also);
   }
 
   @protected
@@ -48575,6 +48611,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_loudness =
         sse_decode_opt_box_autoadd_bridge_export_loudness(deserializer);
     var var_stems = sse_decode_bool(deserializer);
+    var var_also = sse_decode_list_bridge_export_also(deserializer);
     return BridgeExportSpec(
         preset: var_preset,
         codec: var_codec,
@@ -48618,7 +48655,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         gifPlays: var_gifPlays,
         captions: var_captions,
         loudness: var_loudness,
-        stems: var_stems);
+        stems: var_stems,
+        also: var_also);
   }
 
   @protected
@@ -54798,6 +54836,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeExportAlso> sse_decode_list_bridge_export_also(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BridgeExportAlso>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_bridge_export_also(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<BridgeExportPresetEntry> sse_decode_list_bridge_export_preset_entry(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -60572,6 +60623,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_export_also(
+      BridgeExportAlso self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.codec, serializer);
+    sse_encode_String(self.suffix, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_export_defaults(
       BridgeExportDefaults self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -60645,6 +60704,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_CastedPrimitive_i_64(self.rangeEndFrame, serializer);
     sse_encode_bridge_export_queue_state(self.state, serializer);
     sse_encode_String(self.job, serializer);
+    sse_encode_list_String(self.also, serializer);
   }
 
   @protected
@@ -60726,6 +60786,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_box_autoadd_bridge_export_loudness(
         self.loudness, serializer);
     sse_encode_bool(self.stems, serializer);
+    sse_encode_list_bridge_export_also(self.also, serializer);
   }
 
   @protected
@@ -65391,6 +65452,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_bridge_enabled_when(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_bridge_export_also(
+      List<BridgeExportAlso> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_bridge_export_also(item, serializer);
     }
   }
 

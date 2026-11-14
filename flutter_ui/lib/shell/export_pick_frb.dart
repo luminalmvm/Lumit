@@ -392,7 +392,8 @@ class _ExportPickState extends State<_ExportPick> {
         if (exportPathTaken(
             path: r.file,
             codec: specs[r]?.codec ?? 'h264',
-            captions: specs[r]?.captions ?? BridgeCaptionsOut.burn))
+            captions: specs[r]?.captions ?? BridgeCaptionsOut.burn,
+            also: specs[r]?.also ?? const []))
           r
     ];
     var keepBoth = false;
@@ -423,9 +424,15 @@ class _ExportPickState extends State<_ExportPick> {
       var path = row.file;
       if ((keepBoth || queued.contains(path)) &&
           exportPathTaken(
-              path: path, codec: spec.codec, captions: spec.captions)) {
+              path: path,
+              codec: spec.codec,
+              captions: spec.captions,
+              also: spec.also)) {
         path = exportFreePath(
-            path: path, codec: spec.codec, captions: spec.captions);
+            path: path,
+            codec: spec.codec,
+            captions: spec.captions,
+            also: spec.also);
       }
       try {
         // Held until the last one is in, so the queue runs them in the

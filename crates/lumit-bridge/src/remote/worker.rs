@@ -106,6 +106,8 @@ impl Remote {
         else {
             return Err("bad_request");
         };
+        // Only the main file is written for another computer.
+        bridged.also.clear();
         if files::unhex(key).is_none_or(|k| k.len() != 32) {
             return Err("bad_request");
         }
@@ -720,6 +722,7 @@ impl Remote {
             return self.give_up(id, "failed");
         };
         spec.preset.clone_from(&job.preset);
+        spec.also.clear();
         let folder = job::folder(&self.root, id);
         let item = crate::export::queue_add_job(
             id,
@@ -879,8 +882,8 @@ fn kept_path(file: &str, codec: &str) -> String {
     let _ = std::fs::create_dir_all(&folder);
     let path = folder.join(file).to_string_lossy().into_owned();
     let burn = crate::api::export::BridgeCaptionsOut::Burn;
-    if crate::export::taken::path_taken(&path, codec, burn) {
-        crate::export::taken::free_path(&path, codec, burn)
+    if crate::export::taken::path_taken(&path, codec, burn, &[]) {
+        crate::export::taken::free_path(&path, codec, burn, &[])
     } else {
         path
     }

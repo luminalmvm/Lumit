@@ -186,6 +186,7 @@ impl CompositionReference {
                 &path.to_string_lossy(),
                 &spec.codec,
                 spec.captions,
+                &spec.also,
             );
             crate::export::queue_add_version(
                 doc.clone(),

@@ -162,6 +162,19 @@ pub struct BridgeExportSpec {
     /// Each top-level bus also written to a file of its own beside this one.
     #[frb(default = false)]
     pub stems: bool,
+    /// Other files written beside this one from the same frames, at most
+    /// three: each a video or still format and a suffix for its name.
+    #[frb(default = [])]
+    pub also: Vec<BridgeExportAlso>,
+}
+
+/// One more file an export writes beside its own: its format key, and what
+/// is added to the chosen file's name before its extension.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeExportAlso {
+    pub codec: String,
+    pub suffix: String,
 }
 
 /// The loudness an export is made to: the mix is measured, the master moved
@@ -247,6 +260,7 @@ impl Default for BridgeExportSpec {
             captions: BridgeCaptionsOut::Burn,
             loudness: None,
             stems: false,
+            also: Vec::new(),
         }
     }
 }
@@ -658,6 +672,8 @@ pub struct BridgeExportQueueItem {
     /// The remote export this item does for another computer, empty for one of
     /// this computer's own. Its other details are in `remote_jobs`.
     pub job: String,
+    /// The files written beside `path`, in full.
+    pub also: Vec<String>,
 }
 
 /// Where one queued item has got to.
@@ -678,7 +694,7 @@ pub enum BridgeExportQueueState {
     Done {
         /// How long it took to export, in whole seconds.
         seconds: u32,
-        /// The file's size, zero for an image sequence.
+        /// The size of the files written, an image sequence counting as none.
         bytes: u64,
     },
     Failed {
@@ -789,6 +805,7 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                 }
             },
             job: row.job.map(|job| job.to_string()).unwrap_or_default(),
+            also: row.also,
         })
         .collect()
 }
@@ -870,10 +887,15 @@ pub fn export_queue_update(
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
 /// sequence the file asked about is frame one. The caption files `captions`
-/// writes beside it count too.
+/// writes beside it count too, and so do the files `also` writes.
 #[frb(sync)]
-pub fn export_path_taken(path: String, codec: String, captions: BridgeCaptionsOut) -> bool {
-    crate::export::taken::path_taken(&path, &codec, captions)
+pub fn export_path_taken(
+    path: String,
+    codec: String,
+    captions: BridgeCaptionsOut,
+    also: Vec<BridgeExportAlso>,
+) -> bool {
+    crate::export::taken::path_taken(&path, &codec, captions, &also)
 }
 
 /// Queue an item that has run, or failed, again exactly as it was: the same
@@ -886,8 +908,13 @@ pub fn export_queue_again(id: u32) -> Option<u32> {
 
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
 #[frb(sync)]
-pub fn export_free_path(path: String, codec: String, captions: BridgeCaptionsOut) -> String {
-    crate::export::taken::free_path(&path, &codec, captions)
+pub fn export_free_path(
+    path: String,
+    codec: String,
+    captions: BridgeCaptionsOut,
+    also: Vec<BridgeExportAlso>,
+) -> String {
+    crate::export::taken::free_path(&path, &codec, captions, &also)
 }
 
 #[frb(ignore)]

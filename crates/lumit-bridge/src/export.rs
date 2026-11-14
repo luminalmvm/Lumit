@@ -36,6 +36,7 @@
 use crate::err_json;
 use serde_json::{json, Value};
 
+mod also;
 pub(crate) mod caps;
 mod names;
 pub(crate) mod taken;
@@ -513,7 +514,7 @@ pub(crate) fn to_export_spec(
                 true_peak_db: l.true_peak_db,
             }),
         stems: spec.stems,
-        also: Vec::new(),
+        also: also::to_engine(&spec.also)?,
     })
 }
 
@@ -625,6 +626,7 @@ pub(crate) fn from_export_spec(
                 true_peak_db: l.true_peak_db,
             }),
         stems: spec.stems,
+        also: also::from_engine(&spec.also),
     })
 }
 
@@ -713,6 +715,8 @@ pub(crate) struct QueueRow {
     pub state: QueueRowState,
     /// The remote export this item does for another computer, if it is one.
     pub job: Option<uuid::Uuid>,
+    /// The files written beside `out_path`.
+    pub also: Vec<String>,
 }
 
 /// Where one queued item has got to.
