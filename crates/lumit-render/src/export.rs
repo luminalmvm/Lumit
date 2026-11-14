@@ -280,8 +280,9 @@ pub enum AlphaMode {
 pub enum ColourSpace {
     /// sRGB — Rec.709 primaries with the sRGB transfer curve (IEC 61966-2-1).
     /// The Viewer's own encode, so this is a pass-through: the frame
-    /// arrives in it and is written untouched. The default, and what every
-    /// Lumit export before the family existed wrote.
+    /// arrives in it and is written untouched. The default. A video is tagged
+    /// Rec. 709, as other editors tag it, so players and upload sites show it
+    /// as the Viewer does.
     #[default]
     SrgbRec709,
     /// Rec.709 primaries, **no** transfer curve: the code values are linear
@@ -386,7 +387,7 @@ impl ColourSpace {
     pub fn tags(&self) -> lumit_media::encode::ColourTags {
         use lumit_media::encode::ColourTags;
         match self {
-            ColourSpace::SrgbRec709 => ColourTags::Srgb,
+            ColourSpace::SrgbRec709 => ColourTags::Bt709,
             ColourSpace::Linear => ColourTags::Linear,
             ColourSpace::Rec709 => ColourTags::Bt709,
             ColourSpace::Rec2020 => ColourTags::Bt2020,
@@ -3490,8 +3491,8 @@ mod tests {
         let (doc, comp) = solid_doc(32, 16);
         let dir = tempfile::tempdir().unwrap();
 
-        // The default space: sRGB — Rec.709 primaries (1), the IEC 61966-2-1
-        // curve (13), a Rec.709 matrix (1).
+        // The default space: Rec.709 primaries (1), transfer (1) and
+        // matrix (1).
         let plain = dir.path().join("srgb.mp4");
         let mut sp = spec(ExportFormat::Video(VideoCodec::H264), 32, 16);
         sp.range = Some((0, 5));
@@ -3502,9 +3503,11 @@ mod tests {
         let bytes = std::fs::read(&plain).unwrap();
         assert_eq!(
             nclx(&bytes),
-            Some((1, 13, 1)),
-            "an untagged-looking export still states sRGB"
+            Some((1, 1, 1)),
+            "the default export states Rec.709"
         );
+        let at = bytes.windows(4).position(|w| w == b"nclx").unwrap();
+        assert_eq!(bytes[at + 10] & 0x80, 0, "and limited range");
 
         // Rec.2020: primaries 9, the BT.2020 ten-bit curve 14, the
         // non-constant-luminance matrix 9.
@@ -3532,5 +3535,6 @@ mod tests {
         );
     }
 
+    mod default_tags;
     mod viewer_projection;
 }
