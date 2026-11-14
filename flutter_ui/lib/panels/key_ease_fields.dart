@@ -221,7 +221,7 @@ class _KeyEaseFieldsState extends State<KeyEaseFields> {
           // Never quite nothing: an influence of zero is a handle with no
           // reach at all, which the evaluator has no span to divide by.
           min: 0.1,
-          max: 100,
+          max: 1000,
           decimals: 1,
           suffix: l10n.unitSymbolPercent,
           labelWidth: _labelWidth,

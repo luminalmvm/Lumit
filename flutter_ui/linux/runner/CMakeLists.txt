@@ -9,7 +9,6 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME}
   "main.cc"
   "backdrop.cc"
-  "extension_views.cc"
   "gpu_offload.cc"
   "my_application.cc"
   "viewer_texture_bridge.cc"
@@ -40,9 +39,14 @@ pkg_check_modules(GLES REQUIRED IMPORTED_TARGET glesv2)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EGL PkgConfig::GLES)
 
 # An extension's panel is a web page (extension_views.cc), shown by WebKitGTK:
-# the GTK 3 build of it, since that is the GTK the Flutter embedder uses.
+# the GTK 3 build of it, since that is the GTK the Flutter embedder uses. It is
+# built as a library of its own and loaded when Lumit starts, so a machine
+# without WebKitGTK still runs Lumit and only the extension panels are off
+# (#693). The executable must never link it.
 pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET webkit2gtk-4.1)
-target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WEBKIT)
+add_library(lumit_extension_views SHARED "extension_views.cc")
+apply_standard_settings(lumit_extension_views)
+target_link_libraries(lumit_extension_views PRIVATE flutter PkgConfig::GTK PkgConfig::WEBKIT)
 
 # KWin's blur behind a see-through window, asked for over Wayland
 # (backdrop.cc).

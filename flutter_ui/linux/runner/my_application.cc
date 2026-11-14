@@ -1175,8 +1175,25 @@ static void my_application_activate(GApplication* application) {
   FlEngine* engine = fl_view_get_engine(view);
   viewer_texture_bridge_register(fl_engine_get_binary_messenger(engine),
                                  fl_engine_get_texture_registrar(engine));
-  extension_views_register(fl_engine_get_binary_messenger(engine),
-                           GTK_OVERLAY(overlay), view);
+  // WebKitGTK is the machine's own and only extension panels use it, so it is
+  // loaded and not linked. Without it a panel says it couldn't load and the
+  // rest of Lumit runs (#693). RTLD_NOW so a WebKitGTK that is too old fails
+  // here and not mid-call. Never closed, since GTypes can't be unregistered.
+  void* extension_views = dlopen("liblumit_extension_views.so",
+                                 RTLD_NOW | RTLD_LOCAL);
+  auto register_extension_views =
+      extension_views == nullptr
+          ? nullptr
+          : reinterpret_cast<decltype(&extension_views_register)>(
+                dlsym(extension_views, "extension_views_register"));
+  if (register_extension_views != nullptr) {
+    register_extension_views(fl_engine_get_binary_messenger(engine),
+                             GTK_OVERLAY(overlay), view);
+  } else {
+    const char* error = dlerror();
+    g_warning("Extension panels are off: %s",
+              error != nullptr ? error : "unknown error");
+  }
 
   // These live as long as the window, which is as long as the application.
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();

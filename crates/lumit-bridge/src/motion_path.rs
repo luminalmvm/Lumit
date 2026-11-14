@@ -13,7 +13,7 @@ pub(crate) fn motion_path_of(
     comp: &lumit_core::model::Composition,
     layer: &Layer,
 ) -> Option<BridgeMotionPath> {
-    use lumit_core::anim::{resolved_side, SideInterp};
+    use lumit_core::anim::{resolved_side, SideInterp, MAX_INFLUENCE, MIN_INFLUENCE};
 
     fn keys_of(property: &Property) -> Option<&[Keyframe]> {
         match &property.animation {
@@ -73,7 +73,7 @@ pub(crate) fn motion_path_of(
         let dt = (neighbour.time.to_f64() - key.time.to_f64()).abs();
         match resolved_side(keys, i, out) {
             SideInterp::Bezier { speed, influence } => {
-                let along = speed * influence.clamp(1e-3, 1.0) * dt;
+                let along = speed * influence.clamp(MIN_INFLUENCE, MAX_INFLUENCE) * dt;
                 Some(if out { along } else { -along })
             }
             SideInterp::Linear => Some((neighbour.value - key.value) / 3.0),

@@ -53,8 +53,8 @@ the repository from GitHub, build it, and run `packaging/linux/install.sh`.
 
 `flatpak uninstall io.github.luminalmvm.Lumit` removes the Flatpak.
 
-The `.AppImage` runs without installing. It needs glibc 2.35 or newer, and uses the
-system's own GTK and WebKitGTK:
+The `.AppImage` runs without installing. It needs glibc 2.35 or newer and uses the
+system's own GTK. Extension panels also need the system's WebKitGTK 4.1.
 
 ```bash
 chmod +x lumit-*.AppImage
@@ -163,8 +163,8 @@ Lumit opens on the welcome screen.
   browser. The installed version is beside them, with the update button while an update is
   waiting.
 
-`Esc` closes the screen with nothing opened. The Viewer then offers **Import footage** and
-**Open** until a composition is showing.
+`Esc` closes the screen with nothing opened. The Viewer then offers **Import footage**,
+**Open** and the five most recent projects until a composition is showing.
 
 The screen is not shown when Lumit was started by a project, an invite link, an extension
 package or a style, or with **Settings ▸ General ▸ Welcome screen on launch** off.

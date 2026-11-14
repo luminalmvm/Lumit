@@ -41,7 +41,8 @@ Once the brush has strokes, the effect's card reads **Base frame** and its numbe
 **Set to current frame** moves it to the frame at the playhead. A move sets the propagated
 matte aside, and Propagate starts again from the new frame.
 
-With no background stroke on the base frame, the frame's border counts as background.
+With no background stroke on the base frame, the frame's border counts as background. The
+first background stroke takes the border's place.
 
 ## Propagate
 
@@ -83,9 +84,11 @@ stroke, and strokes overrule the model.
 A click on any other frame is a stroke of one point. Moving the base frame drops the taps
 on the old one.
 
+With no tap on the base frame, the matte is cut from the strokes alone.
+
 The model is a **Segmentation** model pack, which needs the model runtime. Both are
-[addons](/use/addons/), installed from **Settings ▸ Addons**. Without them Propagate is
-refused, and the card offers **Open addons**.
+[addons](/use/addons/), installed from **Settings ▸ Addons**. Without them a Propagate with
+taps is refused, and the card offers **Open addons**.
 
 ## In a node graph
 
@@ -110,7 +113,7 @@ says why on the effect's card.
 | **This device has no optical flow to propagate with** | The graphics card cannot measure the shot's motion. |
 | **The media is offline**, **The media could not be read** | The footage file is missing, cannot be opened, or carries no video. |
 | **There are no frames to propagate through** | The footage has no frames. |
-| **The segmentation model is not installed**, **The segmentation model would not run here** | **Seed from** is **Segment** and the addon is missing or failed. |
+| **The segmentation model is not installed**, **The segmentation model would not run here** | **Seed from** is **Segment**, the base frame has taps, and the addon is missing or failed. |
 
 ## What is saved
 

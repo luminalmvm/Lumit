@@ -246,11 +246,11 @@ What the export dialogue opens on.
   which lowers the resolution to keep time. See [Preview and playback](/use/preview/).
   **Full resolution while dragging** draws a value drag at the Viewer's own resolution
   rather than a reduced one.
-- **Hardware video decoding**: on by default. The graphics card decodes video on Windows
-  and Linux, and macOS decodes on the processor. Linux uses NVDEC where NVIDIA's driver
-  has it, and otherwise VA-API. The card takes 4:2:0 footage, and 4:2:2 as well through
-  NVDEC. Video the card cannot take or fails on decodes on the processor. If importing
-  video freezes the computer, turn it off and open the project again.
+- **Hardware video decoding**: Windows and Linux only, on by default. The graphics card
+  decodes video. Linux uses NVDEC where NVIDIA's driver has it, and otherwise VA-API. The
+  card takes 4:2:0 footage, and 4:2:2 as well through NVDEC. Video the card cannot take or
+  fails on decodes on the processor. macOS decodes on the processor. If importing video
+  freezes the computer, turn it off and open the project again.
 - **Render plugins on the graphics card**: on by default. OFX plugins that support CUDA,
   OpenCL or Metal render on the graphics card.
 - **Largest picture**: the widest and tallest picture Lumit makes, 8192 px by default. The

@@ -344,7 +344,8 @@ BridgeSideInterp sideWithInfluence(
         List<BridgeKeyframe> keys, int index, bool isOut, double percent) =>
     BridgeSideInterp.bezier(BridgeBezierSide(
       speed: sideSpeedAtKey(keys, index, isOut: isOut),
-      influence: (percent / 100).clamp(1e-3, 1.0).toDouble(),
+      influence:
+          (percent / 100).clamp(minTangentReach, maxInfluence).toDouble(),
     ));
 
 /// Set one or both sides of every selected key to [side] — the F9 family and
@@ -523,7 +524,9 @@ void flattenHandlesOnSelection({
     var touched = false;
     BridgeSideInterp flat(BridgeSideInterp side) =>
         BridgeSideInterp.bezier(BridgeBezierSide(
-            speed: 0, influence: sideInfluence(side).clamp(1e-3, 1.0)));
+            speed: 0,
+            influence:
+                sideInfluence(side).clamp(minTangentReach, maxInfluence)));
     for (var i = 0; i < keys.length; i++) {
       if (!selectedKeys.contains('${channel.id}#$i')) continue;
       touched = true;
