@@ -154,10 +154,11 @@ pub(super) fn export(
             std::fs::create_dir_all(dir)
                 .map_err(|e| format!("{} could not be made: {e}.", dir.display()))?;
         }
-        let path = PathBuf::from(crate::export::untaken_path(
+        let path = PathBuf::from(crate::export::taken::untaken_path(
             &path.to_string_lossy(),
             &settings.codec,
             settings.captions,
+            &settings.also,
         ));
         // The row's version is made in this run's own copy of the project,
         // which is never saved.

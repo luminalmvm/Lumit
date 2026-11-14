@@ -1027,6 +1027,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeEnabledWhen dco_decode_bridge_enabled_when(dynamic raw);
 
   @protected
+  BridgeExportAlso dco_decode_bridge_export_also(dynamic raw);
+
+  @protected
   BridgeExportDefaults dco_decode_bridge_export_defaults(dynamic raw);
 
   @protected
@@ -2280,6 +2283,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeEnabledWhen> dco_decode_list_bridge_enabled_when(dynamic raw);
+
+  @protected
+  List<BridgeExportAlso> dco_decode_list_bridge_export_also(dynamic raw);
 
   @protected
   List<BridgeExportPresetEntry> dco_decode_list_bridge_export_preset_entry(
@@ -4200,6 +4206,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeExportAlso sse_decode_bridge_export_also(SseDeserializer deserializer);
+
+  @protected
   BridgeExportDefaults sse_decode_bridge_export_defaults(
       SseDeserializer deserializer);
 
@@ -5661,6 +5670,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeEnabledWhen> sse_decode_list_bridge_enabled_when(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeExportAlso> sse_decode_list_bridge_export_also(
       SseDeserializer deserializer);
 
   @protected
@@ -7801,6 +7814,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeEnabledWhen self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_export_also(
+      BridgeExportAlso self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_export_defaults(
       BridgeExportDefaults self, SseSerializer serializer);
 
@@ -9413,6 +9430,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_enabled_when(
       List<BridgeEnabledWhen> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_export_also(
+      List<BridgeExportAlso> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_export_preset_entry(

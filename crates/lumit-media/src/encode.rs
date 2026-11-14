@@ -122,7 +122,7 @@ pub enum ColourTags {
     Srgb,
     /// Rec.709 primaries, linear light — no transfer function at all.
     Linear,
-    /// Rec.709 throughout: primaries, transfer and matrix.
+    /// Rec.709 primaries, transfer and matrix. What the default video states.
     Bt709,
     /// Rec.2020 (non-constant luminance) throughout.
     Bt2020,

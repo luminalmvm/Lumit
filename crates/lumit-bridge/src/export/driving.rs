@@ -413,6 +413,10 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                 Source::Job { job, .. } => Some(*job),
                 Source::Document(_) => None,
             },
+            also: super::also::paths(&item.out_path, &item.spec.also)
+                .into_iter()
+                .map(|(path, _)| path)
+                .collect(),
         })
         .collect()
 }
@@ -786,11 +790,17 @@ fn drain(run: &mut Run) {
                 item.state = match &state {
                     State::Failed { error } => ItemState::Failed(error.clone()),
                     // A sequence's path names no one file, so it has no size.
+                    // The files written beside it count too.
                     _ => ItemState::Done {
                         seconds: item.started.map_or(0, |at| {
                             u32::try_from(at.elapsed().as_secs()).unwrap_or(u32::MAX)
                         }),
-                        bytes: std::fs::metadata(&item.out_path).map_or(0, |m| m.len()),
+                        bytes: super::also::paths(&item.out_path, &item.spec.also)
+                            .into_iter()
+                            .map(|(path, _)| path)
+                            .chain(std::iter::once(item.out_path.clone()))
+                            .map(|path| std::fs::metadata(path).map_or(0, |m| m.len()))
+                            .sum(),
                     },
                 };
                 // A remote export says how it ended through its own news,

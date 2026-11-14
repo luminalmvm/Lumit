@@ -470,9 +470,15 @@ class RemoteExports extends ChangeNotifier {
     // as with an export from a phone done here.
     if (lands == BridgeRemoteLands.sender &&
         exportPathTaken(
-            path: path, codec: stored.codec, captions: stored.captions)) {
+            path: path,
+            codec: stored.codec,
+            captions: stored.captions,
+            also: const [])) {
       path = exportFreePath(
-          path: path, codec: stored.codec, captions: stored.captions);
+          path: path,
+          codec: stored.codec,
+          captions: stored.captions,
+          also: const []);
     }
     final area = j['range'] == 'whole' ? null : workAreaFrames(comp);
     try {

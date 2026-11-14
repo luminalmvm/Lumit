@@ -9,7 +9,6 @@
 //! streams back; cancel is checked every frame.
 
 use crate::mix::jobs::AudioJob;
-use crate::mix::mixdown::audio_samples_through;
 use format::{AudioFormat, ExportFormat};
 use lumit_core::model::{Document, LayerKind, ProjectItem};
 use lumit_core::retime::Interpolation;
@@ -25,9 +24,11 @@ pub mod captions;
 pub mod format;
 mod frame;
 mod held;
+pub mod outputs;
 mod sound_only;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
+mod write;
 
 pub enum ExportEvent {
     /// Which encoder the ladder settled on ("NVENC", "software x264", …),
@@ -280,8 +281,9 @@ pub enum AlphaMode {
 pub enum ColourSpace {
     /// sRGB — Rec.709 primaries with the sRGB transfer curve (IEC 61966-2-1).
     /// The Viewer's own encode, so this is a pass-through: the frame
-    /// arrives in it and is written untouched. The default, and what every
-    /// Lumit export before the family existed wrote.
+    /// arrives in it and is written untouched. The default. A video is tagged
+    /// Rec. 709, as other editors tag it, so players and upload sites show it
+    /// as the Viewer does.
     #[default]
     SrgbRec709,
     /// Rec.709 primaries, **no** transfer curve: the code values are linear
@@ -386,7 +388,7 @@ impl ColourSpace {
     pub fn tags(&self) -> lumit_media::encode::ColourTags {
         use lumit_media::encode::ColourTags;
         match self {
-            ColourSpace::SrgbRec709 => ColourTags::Srgb,
+            ColourSpace::SrgbRec709 => ColourTags::Bt709,
             ColourSpace::Linear => ColourTags::Linear,
             ColourSpace::Rec709 => ColourTags::Bt709,
             ColourSpace::Rec2020 => ColourTags::Bt2020,
@@ -1361,6 +1363,9 @@ pub struct ExportSpec {
     pub loudness: Option<format::ExportLoudness>,
     /// Each top-level bus also written to a file of its own beside this one.
     pub stems: bool,
+    /// Other files written beside this one from the same frames, in other
+    /// formats ([`outputs`]).
+    pub also: Vec<outputs::AlsoWrite>,
 }
 
 impl Default for ExportSpec {
@@ -1391,6 +1396,7 @@ impl Default for ExportSpec {
             captions: captions::CaptionsOut::default(),
             loudness: None,
             stems: false,
+            also: Vec::new(),
         }
     }
 }
@@ -1477,7 +1483,8 @@ impl ExportSpec {
         if !caps.video && !caps.audio {
             return Err("this format can carry neither picture nor sound".to_owned());
         }
-        captions::check(self)
+        captions::check(self)?;
+        outputs::check(self)
     }
 
     /// The render settings this export actually runs with.
@@ -1582,13 +1589,26 @@ pub fn start(
         crate::model::stop_reads_with(Arc::clone(&flag));
         let opened = AtomicBool::new(false);
         let mut sidecars = Vec::new();
+        let mut beside = Vec::new();
         // The caption files go beside the file, and go first: one that
         // cannot be written stops the export before the picture starts, not
         // after it, when failing would take the finished file with it.
         let stop = || flag.load(Ordering::Relaxed);
         let result = captions::write_files(&doc, comp_id, &out_path, &spec, &stop)
             .map(|written| sidecars = written)
-            .and_then(|()| run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened))
+            .and_then(|()| {
+                run(
+                    &doc,
+                    comp_id,
+                    &audio,
+                    &out_path,
+                    &spec,
+                    &tx,
+                    &flag,
+                    &opened,
+                    &mut beside,
+                )
+            })
             .and_then(|()| sound_only::write_stems(&doc, comp_id, &audio, &out_path, &spec, &flag));
         // No half files, but only a file this export began. One that failed
         // before it opened anything has written nothing, and an image
@@ -1598,8 +1618,8 @@ pub fn start(
             if opened.load(Ordering::Relaxed) {
                 let _ = std::fs::remove_file(&out_path);
             }
-            for sidecar in &sidecars {
-                let _ = std::fs::remove_file(sidecar);
+            for file in sidecars.iter().chain(&beside) {
+                let _ = std::fs::remove_file(file);
             }
         };
         let _ = match result {
@@ -1629,13 +1649,25 @@ fn run(
     // Raised just before the output file is opened, which is the first moment
     // there is anything of this export's at `out_path`.
     opened: &AtomicBool,
+    // Given every file finished beside the chosen one, for the caller to
+    // remove if what comes after fails.
+    beside: &mut Vec<PathBuf>,
 ) -> Result<(), String> {
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
+    // Files beside this one are refused before anything is drawn.
+    outputs::check(spec)?;
     let overridden = apply_render_overrides(doc, &spec.render_options());
     let doc = overridden.as_ref().unwrap_or(doc);
-    let mut subtitles =
-        captions::Embedded::of(doc, comp_id, spec, &|| cancel.load(Ordering::Relaxed));
+    // The chosen file first, then each written beside it.
+    let specs: Vec<ExportSpec> = std::iter::once(spec.clone())
+        .chain(spec.also.iter().map(|also| outputs::spec_for(spec, also)))
+        .collect();
+    let stop = || cancel.load(Ordering::Relaxed);
+    let subtitles: Vec<_> = specs
+        .iter()
+        .map(|s| captions::Embedded::of(doc, comp_id, s, &stop))
+        .collect();
     let hidden = captions::leave_out(doc, comp_id, spec);
     let doc = hidden.as_ref().unwrap_or(doc);
     // A Stabilise drawn before its analysis lands would go out unsteadied.
@@ -1647,14 +1679,18 @@ fn run(
     let (out_fps, total) = (span.out_fps, span.total);
     let _ = tx.send(ExportEvent::Progress { frame: 0, total });
 
-    let rate = spec.audio_rate;
-    let chans = usize::from(spec.audio_layout.channels());
     // Sound alone counts its mixing runs as the export's progress, the
     // writing taking the last share.
     let alone = matches!(spec.format, ExportFormat::Audio(_));
     let runs = if spec.loudness.is_some() { 2 } else { 1 };
     let mixed = total * runs / (runs + 1);
-    let audio_mix = frame::sound(spec, doc, comp, audio_jobs, &span, cancel, &mut |f| {
+    // Mixed once, for the first file that carries sound: a still sequence
+    // carries none, so a video beside one still has its sound.
+    let sounding = specs
+        .iter()
+        .find(|s| frame::carries_sound(s))
+        .unwrap_or(spec);
+    let audio_mix = frame::sound(sounding, doc, comp, audio_jobs, &span, cancel, &mut |f| {
         if alone {
             let frame = (f * mixed as f64) as usize;
             let _ = tx.send(ExportEvent::Progress { frame, total });
@@ -1703,13 +1739,89 @@ fn run(
     // of one transform in the delivery path, which is the exact structure the
     // preview-equals-export promise forbids.
     renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
+    // Every file is opened before the first frame, so one that cannot be
+    // stops the export before anything is written. Only the chosen file
+    // reports its encoder and its progress.
+    let (quiet, _) = channel();
+    let begun: Vec<AtomicBool> = spec.also.iter().map(|_| AtomicBool::new(false)).collect();
+    let mut outs = Vec::with_capacity(specs.len());
+    let mut result = Ok(());
+    for (n, (out_spec, subtitles)) in specs.into_iter().zip(subtitles).enumerate() {
+        let (path, events, flag) = match n.checked_sub(1) {
+            None => (out_path.to_path_buf(), tx, opened),
+            Some(i) => (
+                outputs::path_for(out_path, &spec.also[i]),
+                &quiet,
+                &begun[i],
+            ),
+        };
+        let sound = audio_mix
+            .as_deref()
+            .filter(|_| frame::carries_sound(&out_spec));
+        match open_sink(
+            &out_spec, comp, &path, out_fps, sound, &subtitles, events, flag,
+        ) {
+            Ok(sink) => outs.push(write::Out::new(out_spec, path, subtitles, sink, comp)),
+            Err(e) => {
+                result = Err(e);
+                break;
+            }
+        }
+    }
+    if result.is_ok() {
+        result = write::frames(
+            &mut renderer,
+            doc,
+            comp_id,
+            &span,
+            &mut outs,
+            audio_mix.as_deref(),
+            tx,
+            cancel,
+        );
+    }
+    // The one way out of a run that did not finish: the stills removed, every
+    // file closed, then the files beside the chosen one removed. The chosen
+    // file and its caption files are the caller's to remove.
+    if result.is_err() || cancel.load(Ordering::Relaxed) {
+        for out in &outs {
+            out.sink.remove_written(&out.path);
+        }
+        drop(outs);
+        for (also, begun) in spec.also.iter().zip(&begun) {
+            if begun.load(Ordering::Relaxed) {
+                let _ = std::fs::remove_file(outputs::path_for(out_path, also));
+            }
+        }
+    } else {
+        for out in outs.iter().skip(1) {
+            beside.extend(out.sink.files(&out.path));
+        }
+    }
+    result
+}
+
+/// Open the file one export writes, ready for its first frame. `opened` is
+/// raised just before anything exists at `out_path`.
+#[allow(clippy::too_many_arguments)]
+fn open_sink(
+    spec: &ExportSpec,
+    comp: &lumit_core::model::Composition,
+    out_path: &std::path::Path,
+    out_fps: f64,
+    audio_mix: Option<&[f32]>,
+    subtitles: &captions::Embedded,
+    tx: &Sender<ExportEvent>,
+    opened: &AtomicBool,
+) -> Result<write::Sink, String> {
+    use write::Sink;
+    let rate = spec.audio_rate;
     let (out_num, out_den) = fps_rational(out_fps);
-    // One sink, two shapes: the mp4 muxer, or one image file per frame. The
-    // loop below is shared — a second frame loop would be a second chance to
-    // disagree about sampling, cancellation or progress.
-    let (crop_w, crop_h) = spec.crop.output_size(comp.width, comp.height);
+    // One sink, several shapes: the mp4 muxer, or one image file per frame.
+    // The loop in `write` is shared, as a second frame loop would be a second
+    // chance to disagree about sampling, cancellation or progress.
     let delivered = frame::delivered(spec, comp);
-    let mut sink = match spec.format {
+    let sink = match spec.format {
         ExportFormat::Video(codec) => {
             // Encoded frame dimensions must be even for 4:2:0 H.264/HEVC.
             let (tw, th) = (delivered.0 & !1, delivered.1 & !1);
@@ -1801,342 +1913,7 @@ fn run(
         // Handled above: sound with no picture never reaches the frame loop.
         ExportFormat::Audio(_) => return Err("audio-only export took the picture path".into()),
     };
-    let resize = sink.size() != (crop_w, crop_h);
-    let pack = frame::Pack::new(spec, comp, sink.size());
-
-    let (tw, th) = sink.size();
-    let audio_mix = audio_mix.as_deref();
-    // The file is written on a thread of its own, so one frame is encoded
-    // while the next is rendered. Only one finished frame waits between the
-    // two, so this holds a frame or two more than a loop that took turns.
-    let (rendered, written) = std::thread::scope(|s| {
-        let (frames, queued) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
-        let (sink, subtitles) = (&mut sink, &mut subtitles);
-        let writer = std::thread::Builder::new()
-            .name("lumit-export-writer".into())
-            .spawn_scoped(s, move || -> Result<usize, String> {
-                let mut audio_fed = 0usize;
-                for (frame_n, rgba) in queued.iter().enumerate() {
-                    sink.write_rgba(&rgba)?;
-                    // Interleave: after each picture frame, the samples that cover it,
-                    // so the muxer keeps sound and picture together in the file.
-                    if let (Some(mix), Sink::Video { encoder, .. }) = (audio_mix, &mut *sink) {
-                        let upto = audio_samples_through(frame_n + 1, out_fps, rate)
-                            .min(mix.len() / chans);
-                        if upto > audio_fed {
-                            encoder
-                                .write_audio(&mix[audio_fed * chans..upto * chans])
-                                .map_err(|e| e.to_string())?;
-                            audio_fed = upto;
-                        }
-                    }
-                    subtitles.feed(sink, (frame_n + 1) as f64 / out_fps)?;
-                    let _ = tx.send(ExportEvent::Progress {
-                        frame: frame_n + 1,
-                        total,
-                    });
-                }
-                Ok(audio_fed)
-            })
-            .map_err(|e| format!("export writer: {e}"))?;
-        // Crop in composition pixels first, then letterbox into the delivery
-        // frame when the size was changed, then pack to what the file carries.
-        // The two arms differ only in how wide a channel is: a sixteen-bit
-        // export reads the composite back at sixteen bits and stays there, so
-        // the extra width is the pipeline's own rather than a stretched byte.
-        let render = |renderer: &mut crate::headless::HeadlessRenderer,
-                      src: usize|
-         -> Result<Rendered, String> {
-            Ok(match spec.depth {
-                // Only started here: the bytes are collected by `finish`
-                // below once the next frame is on its way.
-                BitDepth::Eight => Rendered::Coming(renderer.start_preview(
-                    doc,
-                    comp_id,
-                    src as u64,
-                    spec.render.quality,
-                )?),
-                BitDepth::Sixteen => Rendered::Bytes({
-                    let (px, _, _) =
-                        renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
-                    pack.frame(px)
-                }),
-                // The float depths read the composite back as it stands: no
-                // display transform, no curve, no clamp (docs/06 §7.4a). The
-                // channel and alpha choices still apply — they are about what the
-                // file carries, not about how bright it is — and the resize runs
-                // on the floats so a delivered EXR is filtered rather than
-                // point-sampled.
-                BitDepth::Half | BitDepth::Float => Rendered::Bytes({
-                    let (px, _, _) = renderer.render_preview_linear(
-                        doc,
-                        comp_id,
-                        src as u64,
-                        spec.render.quality,
-                    )?;
-                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
-                    let px = if resize {
-                        letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
-                    } else {
-                        px
-                    };
-                    pack_frame_f32(&px, spec.channels, spec.alpha)
-                }),
-            })
-        };
-        let finish = |renderer: &mut crate::headless::HeadlessRenderer,
-                      frame: Rendered|
-         -> Result<Vec<u8>, String> {
-            let pending = match frame {
-                Rendered::Bytes(rgba) => return Ok(rgba),
-                Rendered::Coming(pending) => pending,
-            };
-            Ok(pack.frame(renderer.finish_preview(pending)?))
-        };
-        let src_of = |n: usize| span.source(n);
-        // The footage is decoded a couple of frames ahead, on the threads
-        // playback reads with, so one frame decodes while another renders.
-        // Only while that is safe: a few files a frame, frames small enough
-        // that the ones in flight fit in half the decode cache, and footage
-        // that turns up in time. Past any of those it stops for good, and
-        // each frame decodes its own footage as it always did.
-        const DECODE_AHEAD: usize = 2;
-        const MOST_WANTS: usize = 8;
-        const LONGEST_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
-        let quality = spec.render.quality;
-        let mut ahead = Some(crate::prefetch::Prefetcher::default());
-        // What was asked for each frame from this one on, in order.
-        let mut asked = std::collections::VecDeque::new();
-        let mut asked_to = 0usize;
-        let mut rendered = Ok(());
-        let mut waiting = None;
-        for frame_n in 0..total {
-            held::wait(cancel);
-            if cancel.load(Ordering::Relaxed) {
-                break;
-            }
-            let src = src_of(frame_n);
-            let mut stop = false;
-            if let Some(prefetch) = ahead.as_mut() {
-                // Only this frame's own at first, until its size is known.
-                let reach = if frame_n == 0 { 0 } else { DECODE_AHEAD };
-                while asked_to <= frame_n + reach && asked_to < total {
-                    // A layer of a layered file is left to the render: the
-                    // decode thread reads each one once and then skips it.
-                    let wants: Vec<_> = renderer
-                        .prefetch_wants(doc, comp_id, src_of(asked_to) as u64, quality)
-                        .into_iter()
-                        .filter(|w| !lumit_media::reads_own(&w.source))
-                        .collect();
-                    if wants.len() > MOST_WANTS {
-                        stop = true;
-                        break;
-                    }
-                    asked.push_back(
-                        wants
-                            .iter()
-                            .map(|w| (w.item, w.frame, w.target_width))
-                            .collect::<Vec<_>>(),
-                    );
-                    prefetch.request(wants);
-                    asked_to += 1;
-                }
-            }
-            let owed: Vec<_> = if frame_n < asked_to {
-                asked.pop_front().unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-            if let Some(prefetch) = ahead.as_ref() {
-                let since = web_time::Instant::now();
-                let mut bytes = 0usize;
-                let mut landed = prefetch.drain();
-                loop {
-                    for done in landed.drain(..) {
-                        bytes = bytes.saturating_add(done.decoded.rgba.len());
-                        renderer.preload_decoded(done);
-                    }
-                    if owed
-                        .iter()
-                        .all(|&(item, frame, width)| renderer.holds_decoded(item, frame, width))
-                        || cancel.load(Ordering::Relaxed)
-                    {
-                        break;
-                    }
-                    // A decode that failed or was dropped sends nothing, so
-                    // the wait is short, and a wait that runs out stops
-                    // decoding ahead. The render below decodes what is missing.
-                    if since.elapsed() > LONGEST_WAIT {
-                        stop = true;
-                        break;
-                    }
-                    landed.extend(prefetch.wait(std::time::Duration::from_millis(50)));
-                }
-                let in_flight = bytes.saturating_mul(DECODE_AHEAD + 1);
-                stop |= in_flight > crate::decode::DEFAULT_DECODE_CACHE_BYTES / 2;
-            }
-            if stop {
-                // Its threads end with it.
-                ahead = None;
-            }
-            // Footage a frame still to come asked for too is copied for this
-            // one, not handed over, or that frame would wait for it in vain.
-            for &(item, frame, width) in &owed {
-                if asked
-                    .iter()
-                    .flatten()
-                    .any(|&later| later == (item, frame, width))
-                {
-                    renderer.keep_decoded(item, frame, width);
-                }
-            }
-            let frame = match render(&mut renderer, src) {
-                Ok(frame) => frame,
-                Err(e) => {
-                    rendered = Err(e);
-                    break;
-                }
-            };
-            // An eight-bit frame waits a turn, so its read-back runs while
-            // the next one renders. Any other goes at once.
-            let ready = match frame {
-                Rendered::Coming(_) => waiting.replace(frame),
-                Rendered::Bytes(_) => Some(frame),
-            };
-            let Some(before) = ready else {
-                continue;
-            };
-            let rgba = match finish(&mut renderer, before) {
-                Ok(rgba) => rgba,
-                Err(e) => {
-                    rendered = Err(e);
-                    break;
-                }
-            };
-            // Refused only when the writer has stopped, and it says why below.
-            if frames.send(rgba).is_err() {
-                break;
-            }
-        }
-        // And the last, when nothing stopped the loop.
-        if let Some(last) = waiting.filter(|_| rendered.is_ok() && !cancel.load(Ordering::Relaxed))
-        {
-            match finish(&mut renderer, last) {
-                Ok(rgba) => {
-                    let _ = frames.send(rgba);
-                }
-                Err(e) => rendered = Err(e),
-            }
-        }
-        // Joined here rather than by the scope, so a writer that panicked
-        // is an error like any other.
-        drop(frames);
-        let written = writer
-            .join()
-            .unwrap_or_else(|_| Err("the export's writer stopped".into()));
-        Ok::<_, String>((rendered, written))
-    })?;
-    rendered?;
-    if cancel.load(Ordering::Relaxed) {
-        sink.remove_written(out_path);
-        return Ok(());
-    }
-    let audio_fed = match written {
-        Ok(fed) => fed,
-        Err(e) => {
-            // A folder of stills that failed half-way is tidied rather than
-            // left as a trap that looks like a finished export.
-            sink.remove_written(out_path);
-            return Err(e);
-        }
-    };
-    // Any samples the per-frame rounding left behind.
-    if let (Some(mix), Sink::Video { encoder, .. }) = (audio_mix, &mut sink) {
-        if mix.len() / chans > audio_fed {
-            encoder
-                .write_audio(&mix[audio_fed * chans..])
-                .map_err(|e| e.to_string())?;
-        }
-    }
-    subtitles.feed(&mut sink, f64::INFINITY)?;
-    sink.finish()
-}
-
-/// Where the rendered frames go: the mp4 muxer, a GIF, or the numbered stills. One
-/// type so the frame loop stays single.
-/// A frame on its way to the file: its bytes, or at eight bits its
-/// read-back still coming off the graphics card.
-enum Rendered {
-    Bytes(Vec<u8>),
-    Coming(lumit_gpu::PendingReadback),
-}
-
-enum Sink {
-    Video {
-        encoder: lumit_media::encode::Encoder,
-        size: (u32, u32),
-    },
-    Images {
-        encoder: lumit_media::encode::ImageSequenceEncoder,
-        size: (u32, u32),
-        /// Frames written so far — exactly the files a cancel removes.
-        written: usize,
-    },
-    Gif {
-        encoder: lumit_media::encode::gif::GifEncoder,
-        size: (u32, u32),
-    },
-    Webp {
-        encoder: lumit_media::encode::webp::WebpEncoder,
-        size: (u32, u32),
-    },
-}
-
-impl Sink {
-    fn size(&self) -> (u32, u32) {
-        match self {
-            Sink::Video { size, .. }
-            | Sink::Images { size, .. }
-            | Sink::Gif { size, .. }
-            | Sink::Webp { size, .. } => *size,
-        }
-    }
-
-    fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), String> {
-        match self {
-            Sink::Video { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
-            Sink::Gif { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
-            Sink::Webp { encoder, .. } => encoder.write_rgba(rgba).map_err(|e| e.to_string()),
-            Sink::Images {
-                encoder, written, ..
-            } => {
-                encoder.write_rgba(rgba).map_err(|e| e.to_string())?;
-                *written += 1;
-                Ok(())
-            }
-        }
-    }
-
-    fn finish(&mut self) -> Result<(), String> {
-        match self {
-            Sink::Video { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
-            Sink::Images { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
-            Sink::Gif { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
-            Sink::Webp { encoder, .. } => encoder.finish().map_err(|e| e.to_string()),
-        }
-    }
-
-    /// Remove what a cancelled or failed image export left behind. The mp4
-    /// path needs nothing here — its half file is removed by the caller, which
-    /// cannot know a sequence's file names; this does.
-    fn remove_written(&self, chosen_path: &std::path::Path) {
-        if let Sink::Images { written, .. } = self {
-            for n in 1..=*written {
-                let _ =
-                    std::fs::remove_file(lumit_media::encode::sequence_frame_path(chosen_path, n));
-            }
-        }
-    }
+    Ok(sink)
 }
 
 /// Coverage bytes → white RGBA whose alpha is the coverage (the layer-mask
@@ -2337,7 +2114,7 @@ mod tests {
         (Arc::new(doc), comp_id)
     }
 
-    fn spec(format: ExportFormat, w: u32, h: u32) -> ExportSpec {
+    pub(super) fn spec(format: ExportFormat, w: u32, h: u32) -> ExportSpec {
         ExportSpec {
             format,
             target: Some((w, h)),
@@ -2348,7 +2125,7 @@ mod tests {
 
     /// Run an export to completion on this thread, skipping (Ok(None)) on a
     /// machine with no GPU adapter — the lavapipe convention.
-    fn run_now(
+    pub(super) fn run_now(
         doc: &Arc<Document>,
         comp: Uuid,
         path: &std::path::Path,
@@ -2365,6 +2142,7 @@ mod tests {
             &tx,
             &cancel,
             &AtomicBool::new(false),
+            &mut Vec::new(),
         ) {
             Err(e) if e.starts_with("export renderer:") => {
                 lumit_gpu::no_adapter();
@@ -3329,6 +3107,7 @@ mod tests {
                             &tx,
                             &cancel,
                             &AtomicBool::new(false),
+                            &mut Vec::new(),
                         )
                         .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
 
@@ -3490,8 +3269,8 @@ mod tests {
         let (doc, comp) = solid_doc(32, 16);
         let dir = tempfile::tempdir().unwrap();
 
-        // The default space: sRGB — Rec.709 primaries (1), the IEC 61966-2-1
-        // curve (13), a Rec.709 matrix (1).
+        // The default space: Rec.709 primaries (1), transfer (1) and
+        // matrix (1).
         let plain = dir.path().join("srgb.mp4");
         let mut sp = spec(ExportFormat::Video(VideoCodec::H264), 32, 16);
         sp.range = Some((0, 5));
@@ -3502,9 +3281,11 @@ mod tests {
         let bytes = std::fs::read(&plain).unwrap();
         assert_eq!(
             nclx(&bytes),
-            Some((1, 13, 1)),
-            "an untagged-looking export still states sRGB"
+            Some((1, 1, 1)),
+            "the default export states Rec.709"
         );
+        let at = bytes.windows(4).position(|w| w == b"nclx").unwrap();
+        assert_eq!(bytes[at + 10] & 0x80, 0, "and limited range");
 
         // Rec.2020: primaries 9, the BT.2020 ten-bit curve 14, the
         // non-constant-luminance matrix 9.
@@ -3532,5 +3313,6 @@ mod tests {
         );
     }
 
+    mod default_tags;
     mod viewer_projection;
 }

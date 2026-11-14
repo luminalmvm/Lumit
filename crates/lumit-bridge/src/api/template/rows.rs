@@ -182,8 +182,12 @@ impl CompositionReference {
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir).map_err(|_| BridgeError::WriteFailed)?;
             }
-            let path =
-                crate::export::untaken_path(&path.to_string_lossy(), &spec.codec, spec.captions);
+            let path = crate::export::taken::untaken_path(
+                &path.to_string_lossy(),
+                &spec.codec,
+                spec.captions,
+                &spec.also,
+            );
             crate::export::queue_add_version(
                 doc.clone(),
                 made.comp,

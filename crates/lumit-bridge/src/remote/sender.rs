@@ -73,6 +73,8 @@ impl Remote {
         let found = doc.comp(comp.id).ok_or(BridgeError::InvalidComp)?;
         let mut engine = crate::export::to_export_spec(spec, found.width, found.height)
             .map_err(BridgeError::ExportFailed)?;
+        // Only the main file is written there, as only one file comes back.
+        engine.also.clear();
         // What happens when it lands is this computer's to do.
         engine.when_done = lumit_render::export::WhenDone::Nothing;
         let frames = if spec.range_end_frame > spec.range_start_frame && spec.range_start_frame >= 0
@@ -86,7 +88,8 @@ impl Remote {
         let other = self.choose(computer, comp.id, revision)?;
         let out = crate::export::with_format_extension(path, &spec.codec);
         // Only the file itself comes back, never captions beside it.
-        let overwrite = crate::export::path_taken(&out, &spec.codec, BridgeCaptionsOut::Burn);
+        let overwrite =
+            crate::export::taken::path_taken(&out, &spec.codec, BridgeCaptionsOut::Burn, &[]);
         let mut key = [0u8; 32];
         getrandom::fill(&mut key).map_err(|_| BridgeError::WriteFailed)?;
         let job = Job {
@@ -620,7 +623,7 @@ impl Remote {
         };
         // Never over a file that turned up meanwhile, unless it was said to.
         let to = if Path::new(&to).exists() && !job.overwrite {
-            crate::export::free_path(&to, "", BridgeCaptionsOut::Burn)
+            crate::export::taken::free_path(&to, "", BridgeCaptionsOut::Burn, &[])
         } else {
             to
         };
@@ -659,11 +662,15 @@ impl Remote {
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let base = if job.overwrite
-            || !crate::export::path_taken(&job.path, &job.codec, BridgeCaptionsOut::Burn)
-        {
+            || !crate::export::taken::path_taken(
+                &job.path,
+                &job.codec,
+                BridgeCaptionsOut::Burn,
+                &[],
+            ) {
             job.path.clone()
         } else {
-            crate::export::free_path(&job.path, &job.codec, BridgeCaptionsOut::Burn)
+            crate::export::taken::free_path(&job.path, &job.codec, BridgeCaptionsOut::Burn, &[])
         };
         let mut landing = Vec::new();
         for file in list
@@ -778,7 +785,8 @@ impl Remote {
             old.landed.first().cloned().unwrap_or_default()
         };
         // Over its own file, as an export queued again here goes.
-        let overwrite = crate::export::path_taken(&path, &old.codec, BridgeCaptionsOut::Burn);
+        let overwrite =
+            crate::export::taken::path_taken(&path, &old.codec, BridgeCaptionsOut::Burn, &[]);
         let job = Job {
             job: Uuid::now_v7(),
             account: self.account.lock().map(|a| a.clone()).unwrap_or_default(),
@@ -868,7 +876,8 @@ impl Remote {
             .file_name()
             .map_or_else(|| job.file.clone(), |n| n.to_string_lossy().into_owned());
         // The save dialogue asked about a file already there.
-        let overwrite = crate::export::path_taken(&path, &job.codec, BridgeCaptionsOut::Burn);
+        let overwrite =
+            crate::export::taken::path_taken(&path, &job.codec, BridgeCaptionsOut::Burn, &[]);
         self.update(id, |j| {
             j.file = file;
             j.path = path;

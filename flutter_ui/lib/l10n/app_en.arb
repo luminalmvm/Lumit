@@ -15916,6 +15916,35 @@
   "@exportStemsEach": {
     "description": "Export dialog, Stems row: the tick that writes, beside the main file, one sound file for each bus in the composition."
   },
+  "exportAlsoWrite": "Also write",
+  "@exportAlsoWrite": {
+    "description": "Export dialog, Output section: the label of the rows that write more files beside the chosen one, from the same frames, each in a format of its own."
+  },
+  "exportAlsoAdd": "Add a file",
+  "@exportAlsoAdd": {
+    "description": "Export dialog, Also write row: the button that adds one more file to write beside the chosen one."
+  },
+  "exportAlsoSuffix": "Suffix",
+  "@exportAlsoSuffix": {
+    "description": "Export dialog, Also write row: the placeholder in the field whose text is added to the chosen file's name, before its extension, to name the extra file."
+  },
+  "exportAlsoRemove": "Remove",
+  "@exportAlsoRemove": {
+    "description": "Export dialog, Also write row: the button that stops this extra file being written."
+  },
+  "tipExportAlsoRemote": "Another computer",
+  "@tipExportAlsoRemote": {
+    "description": "Export dialog: the hover reason on the Also write rows, which are off because another computer is chosen to do the export, and it writes only the main file. Two words at most."
+  },
+  "exportQueueAlsoMore": "+{count}",
+  "@exportQueueAlsoMore": {
+    "description": "Export queue: after a row's file name, how many more files the export writes beside it. Pointing at it lists them all.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "settingsAudioOffset": "Audio offset",
   "@settingsAudioOffset": {
     "description": "Settings window, Audio: the name of the row that sets how many milliseconds late the sound is heard on this setup, so playback can line the picture up with it. Above zero holds the picture back for late sound, such as through Bluetooth headphones; below zero holds the sound back."

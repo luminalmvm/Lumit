@@ -30,7 +30,7 @@ use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem};
 use lumit_core::time::Rational;
 use uuid::Uuid;
 
-use super::{apply_render_overrides, frame::Span, ExportSpec, Sink};
+use super::{apply_render_overrides, frame::Span, write::Sink, ExportSpec};
 
 /// What an export does with the comp's own caption layers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
