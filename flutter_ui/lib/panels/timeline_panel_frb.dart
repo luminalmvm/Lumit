@@ -4953,13 +4953,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             builder: (context, candidate, _) => Container(
               key: _dropArea,
               // A live outline while something is over it, so the drop is
-              // visibly going to land rather than being taken on faith.
-              foregroundDecoration: candidate.isEmpty
-                  ? null
-                  : BoxDecoration(
-                      border: Border.all(
-                          color: ThemeScope.of(context).theme.accent, width: 2),
-                    ),
+              // visibly going to land rather than being taken on faith. Always
+              // a decoration, only its border coming and going: a decoration
+              // that appears adds a box above the lanes, which rebuilds them
+              // and throws the scroll back to the start of the comp.
+              foregroundDecoration: BoxDecoration(
+                border: candidate.isEmpty
+                    ? null
+                    : Border.all(
+                        color: ThemeScope.of(context).theme.accent, width: 2),
+              ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // A panel narrower than the outline's columns shows a
