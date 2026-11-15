@@ -265,7 +265,7 @@ mixin _GradePrimaries on _GradeModel {
             onCancel: _touchCancel,
           ),
           const SizedBox(height: 4),
-          _wheelNumbers(t, id, rgb, enabled, keyed),
+          _liveNumbers(t, id, enabled, keyed),
         ],
       ),
     );
@@ -305,11 +305,20 @@ mixin _GradePrimaries on _GradeModel {
                 onCancel: _touchCancel,
               ),
               const SizedBox(height: 4),
-              _wheelNumbers(t, id, rgb, enabled, keyed),
+              _liveNumbers(t, id, enabled, keyed),
             ],
           ),
         );
       };
+
+  /// A wheel's numbers, counting with a drag of the wheel or its bars as
+  /// Adjust's do, rather than on release.
+  Widget _liveNumbers(LumitTheme t, String id, bool enabled, bool keyed) =>
+      ValueListenableBuilder(
+        valueListenable: EffectStackEditor.staging,
+        builder: (context, _, __) =>
+            _wheelNumbers(t, id, _colour(id), enabled, keyed),
+      );
 
   Widget _wheelNumbers(
       LumitTheme t, String id, List<double> rgb, bool enabled, bool keyed) {
