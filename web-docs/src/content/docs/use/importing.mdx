@@ -28,6 +28,32 @@ Everything picked at once is one undo step. While the files are read, a card sho
 the import has got, with **Cancel import**, which leaves the project as it was. One import
 runs at a time.
 
+## Paste a picture
+
+`Ctrl+V` imports a picture from the system clipboard: one copied in a browser, a screenshot
+tool or an image editor, or picture files copied in a file manager. Files are imported where
+they are. A picture copied as pixels is saved as `Pasted image 1.png`, then 2, and on, in a
+`Pasted images` folder beside the saved project, or in Lumit's settings folder while the
+project has no file.
+
+- With the [Project panel](/panels/project/) active, the picture is imported and selected.
+- With any other panel active and a composition open, each picture is also placed on a new
+  layer at the playhead, above the selected layer, and the layers are selected. A layer
+  ends where the composition does.
+- In the Cut timeline the picture is imported and not placed.
+
+PNG, JPEG, TIFF, OpenEXR, HDR, Targa, DPX, BMP, WebP, GIF and the Netpbm family are taken.
+Other files on the clipboard are left alone.
+
+A layer, effect or mask copied in Lumit pastes as it always has, until something else is
+copied.
+
+:::note[Not built yet]
+On Windows a picture copied as pixels arrives without its transparency. **Edit ▸ Paste**
+stays unavailable while only a picture is on the clipboard; the chord and the Paste on the
+Timeline's and the Viewer's menus work.
+:::
+
 ## What Lumit opens
 
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
