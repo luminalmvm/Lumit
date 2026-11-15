@@ -5,7 +5,8 @@
 // The crossings are fractions of the frame, row by row, each with its row and
 // column handle. Each cell is a bicubic Bezier patch, and every pixel solves it
 // backwards by Newton's method: from its own place first, then from the
-// crossing nearest it. Outside the bent grid is transparent.
+// crossing nearest it and the two beside that one. Outside the bent grid is
+// transparent.
 
 struct Params {
     rows: u32,
@@ -200,9 +201,22 @@ fn mesh_warp(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
         let per_row = i32(p.cols) + 1;
-        let start = vec2<f32>(f32(bi % per_row) / f32(p.cols), f32(bi / per_row) / f32(p.rows));
-        uv = solve(start, t);
-        found = lands(uv, t, fw, fh);
+        let c = bi % per_row;
+        let r = bi / per_row;
+        // Then from the crossing beside it toward the pixel, along its row
+        // and along its column, for a cell squeezed until it folds.
+        let q = pt(bi);
+        let sc = select(-1, 1, t.x > q.x);
+        let sr = select(-1, 1, t.y > q.y);
+        for (var k = 0; k < 3 && !found; k = k + 1) {
+            let dc = select(0, sc, k == 1);
+            let dr = select(0, sr, k == 2);
+            let start = vec2<f32>(
+                f32(clamp(c + dc, 0, i32(p.cols))) / f32(p.cols),
+                f32(clamp(r + dr, 0, i32(p.rows))) / f32(p.rows));
+            uv = solve(start, t);
+            found = lands(uv, t, fw, fh);
+        }
     }
     var v4 = vec4<f32>(0.0);
     if (found) {
