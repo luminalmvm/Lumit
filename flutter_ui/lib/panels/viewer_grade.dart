@@ -205,12 +205,17 @@ class _ReferencePicture {
 
 /// The reference drawn against the live picture: right after the picture in
 /// the stage, so a difference is taken against the picture alone and the
-/// marks over it stay on top.
+/// marks over it stay on top. A split is drawn over the marks instead, as a
+/// held snapshot is: its side shows another picture, and the live layer's
+/// box on it would cut across that one.
 class ViewerReferenceLayer extends StatelessWidget {
   final LumitUiState uiState;
   final CompositionReference comp;
   final int viewId;
   final Rect fitted;
+
+  /// The copy over the marks, which draws only a split.
+  final bool overMarks;
 
   const ViewerReferenceLayer({
     super.key,
@@ -218,6 +223,7 @@ class ViewerReferenceLayer extends StatelessWidget {
     required this.comp,
     required this.viewId,
     required this.fitted,
+    this.overMarks = false,
   });
 
   @override
@@ -243,6 +249,7 @@ class ViewerReferenceLayer extends StatelessWidget {
               !g.comparing.value ||
               image == null ||
               fitted.isEmpty ||
+              overMarks != (g.compareStyle.value == GradeCompare.split) ||
               viewId != uiState.activeViewId ||
               comp.internalid != uiState.selectedComp?.internalid) {
             return const SizedBox.shrink();
