@@ -10699,8 +10699,9 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
 }
 
 /// Mesh warp's kernel against its CPU oracle: a flat grid is the picture to
-/// the bit, a crossing pulled bends it, and one pulled far still finds its way
-/// from the nearest crossing.
+/// the bit, a crossing pulled bends it, one pulled far still finds its way
+/// from the nearest crossing, and one squeezed until it folds from the
+/// crossings beside it.
 #[test]
 fn wgsl_mesh_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mesh_warp::{mesh_warp, MeshWarpParams};
@@ -10719,6 +10720,9 @@ fn wgsl_mesh_warp_matches_the_cpu_oracle() {
     let mut far = flat(3, 3);
     // Far enough that its own place is no start, short of folding the grid.
     far.pts[5] = [0.5, 0.45];
+    // Pushed up until the cells above fold: some pixels start beside it.
+    let mut squeezed = flat(2, 2);
+    squeezed.pts[4] = [0.5, 0.02];
     let mut handled = flat(2, 2);
     handled.hs[4] = [0.12, 0.08];
     handled.vs[4] = [-0.05, 0.2];
@@ -10728,6 +10732,7 @@ fn wgsl_mesh_warp_matches_the_cpu_oracle() {
         ("identity", flat(4, 3)),
         ("pulled", pulled),
         ("far", far),
+        ("squeezed", squeezed),
         ("handled", handled),
         ("mixed", mixed),
     ] {

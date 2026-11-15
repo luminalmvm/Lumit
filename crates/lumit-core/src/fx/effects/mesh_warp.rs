@@ -30,7 +30,7 @@
 //! the curves the crossings and their handles draw, and its inside follows
 //! them. Rendering asks where each output pixel came from, so every pixel
 //! solves the mesh backwards by Newton's method, as Bezier warp does, from its
-//! own place first and from the nearest crossing when that fails.
+//! own place first, then from the nearest crossing and the two beside it.
 
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
@@ -475,10 +475,21 @@ pub fn source_of(p: &MeshWarpParams, tx: f32, ty: f32, fw: f32, fh: f32) -> Opti
         }
     }
     let per_row = p.columns as usize + 1;
-    let start_u = (best.1 % per_row) as f32 / p.columns as f32;
-    let start_v = (best.1 / per_row) as f32 / p.rows as f32;
-    let (u, v) = solve(p, start_u, start_v, tx, ty);
-    lands(p, u, v, tx, ty, fw, fh).then_some((u, v))
+    let (c, r) = ((best.1 % per_row) as i32, (best.1 / per_row) as i32);
+    // Then from the crossing beside it toward the pixel, along its row and
+    // along its column, for a cell squeezed until it folds.
+    let q = p.pts[best.1];
+    let sc = if tx > q[0] { 1 } else { -1 };
+    let sr = if ty > q[1] { 1 } else { -1 };
+    for (dc, dr) in [(0, 0), (sc, 0), (0, sr)] {
+        let start_u = (c + dc).clamp(0, p.columns as i32) as f32 / p.columns as f32;
+        let start_v = (r + dr).clamp(0, p.rows as i32) as f32 / p.rows as f32;
+        let (u, v) = solve(p, start_u, start_v, tx, ty);
+        if lands(p, u, v, tx, ty, fw, fh) {
+            return Some((u, v));
+        }
+    }
+    None
 }
 
 /// Mesh warp on the CPU: the reference the WGSL kernel mirrors op for op.
