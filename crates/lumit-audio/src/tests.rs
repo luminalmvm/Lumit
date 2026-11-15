@@ -121,6 +121,10 @@ fn a_scrub_burst_sounds_while_stopped_and_leaves_the_clock_alone() {
     fill(&shared, &mut scrub, &mut work, None, &mut out, 2);
     assert_eq!(out[0], 0.0, "the burst starts from nothing");
     assert!((out[255 * 2] - 0.5).abs() < 1e-6, "and reaches the mix");
+    assert!(
+        shared.meters.read(meter::MASTER).peak[0] > 0.4,
+        "and the meters"
+    );
     assert_eq!(scrub.now.at, 1256, "read from where it was asked for");
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 0);
     assert!(!shared.playing.load(Ordering::Relaxed));
@@ -138,6 +142,7 @@ fn a_scrub_burst_sounds_while_stopped_and_leaves_the_clock_alone() {
         fill(&shared, &mut scrub, &mut work, None, &mut out, 2);
     }
     assert!(out.iter().all(|s| *s == 0.0), "a burst is not a loop");
+    assert_eq!(shared.meters.read(meter::MASTER).peak[0], 0.0);
 
     // Pressing play drops a burst that was asked for and not yet heard.
     shared.scrub.store(pack_scrub(2000, 600), Ordering::Relaxed);

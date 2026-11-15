@@ -907,7 +907,7 @@ fn fill(
 /// The stopped transport's half of the callback: sound whatever scrub burst
 /// is in flight, and nothing otherwise. Under the same rules as [`fill`], and
 /// the clock is left where it is. Racks are heard dry: their streams run
-/// ahead of the playhead, not of a scrub.
+/// ahead of the playhead, not of a scrub. The meters read what it sounds.
 fn fill_scrub(
     shared: &Shared,
     scrub: &mut Scrub,
@@ -937,6 +937,7 @@ fn fill_scrub(
         return;
     };
     let mut scratch = [0.0f32; SCRATCH_FRAMES * 2];
+    let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
     let mut missed = 0usize;
     for chunk in out.chunks_mut(SCRATCH_FRAMES * channels) {
         // The burst being heard, then the one fading out under it, each mixed
@@ -949,7 +950,14 @@ fn fill_scrub(
                 .min(burst.left)
                 .min(plan.total_frames.saturating_sub(burst.at));
             let mixed = &mut scratch[..frames * 2];
-            missed += plan.mix_block(burst.at, mixed, work, &mut block::DrySource, None, None);
+            missed += plan.mix_block(
+                burst.at,
+                mixed,
+                work,
+                &mut block::DrySource,
+                Some(&mut acc),
+                None,
+            );
             for (frame, s) in chunk.chunks_exact_mut(channels).zip(mixed.chunks_exact(2)) {
                 put(frame, s[0], s[1], Some(burst.gain()));
                 burst.at += 1;
@@ -961,7 +969,8 @@ fn fill_scrub(
             }
         }
     }
-    missed += scrub.jog.fill(plan, target, work, out, channels);
+    missed += scrub.jog.fill(plan, target, work, &mut acc, out, channels);
+    shared.meters.publish(&acc, plan.nodes.len());
     if missed > 0 {
         shared.starved.fetch_add(missed as u64, Ordering::Relaxed);
     }

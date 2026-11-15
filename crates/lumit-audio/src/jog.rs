@@ -12,6 +12,7 @@
 //! [`MixWork`] made when the stream opened. The clock does not move.
 
 use crate::block::{DrySource, MixWork, SCRATCH_FRAMES};
+use crate::meter::MeterAccs;
 use crate::plan::MixPlan;
 use crate::{put, AudioEngine, Shared, SCRUB_FADE_FRAMES};
 use std::sync::atomic::Ordering;
@@ -84,13 +85,14 @@ impl Jog {
     }
 
     /// Add the jog's sound for the buffer into `out` (`channels` to a frame),
-    /// heading for `target`. Answers how many frames of some clip were due
-    /// and not in memory.
+    /// heading for `target`, metering what it mixes into `acc`. Answers how
+    /// many frames of some clip were due and not in memory.
     pub(crate) fn fill(
         &mut self,
         plan: &MixPlan,
         target: Option<f64>,
         work: &mut MixWork,
+        acc: &mut MeterAccs,
         out: &mut [f32],
         channels: usize,
     ) -> usize {
@@ -133,7 +135,7 @@ impl Jog {
             }
             let sounding = target.is_some() && self.still < quiet_after;
             if sounding || self.level > 0.0 {
-                missed += self.sound(plan, work, &mut buffer, chunk, channels, sounding);
+                missed += self.sound(plan, work, &mut buffer, acc, chunk, channels, sounding);
             }
             self.position = (self.position + frames * self.speed).clamp(0.0, total);
         }
@@ -147,11 +149,13 @@ impl Jog {
     /// Mix the stretch `chunk` crosses into `buffer` and add it into `chunk`
     /// read at the speed, rising toward full level while `sounding` and
     /// falling toward nothing otherwise.
+    #[allow(clippy::too_many_arguments)]
     fn sound(
         &mut self,
         plan: &MixPlan,
         work: &mut MixWork,
         buffer: &mut [f32],
+        acc: &mut MeterAccs,
         chunk: &mut [f32],
         channels: usize,
         sounding: bool,
@@ -164,7 +168,7 @@ impl Jog {
         let Some(mixed) = buffer.get_mut(..count * 2) else {
             return 0;
         };
-        let missed = plan.mix_block(first, mixed, work, &mut DrySource, None, None);
+        let missed = plan.mix_block(first, mixed, work, &mut DrySource, Some(acc), None);
         let step = 1.0 / SCRUB_FADE_FRAMES as f32;
         for (k, frame) in chunk.chunks_exact_mut(channels).enumerate() {
             self.level = if sounding {
