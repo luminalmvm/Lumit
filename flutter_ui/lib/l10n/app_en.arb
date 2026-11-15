@@ -32360,5 +32360,18 @@
   "gradeNodeThumbnails": "Node thumbnails",
   "@gradeNodeThumbnails": {
     "description": "Grade nodes panel header button tooltip: each node shows a small picture of what it puts out."
+  },
+  "pastedImageName": "Pasted image {number}",
+  "@pastedImageName": {
+    "description": "The name a picture gets in the Project panel, and as its file name, when it was on the system clipboard as pixels and Paste brought it in. {number} counts up from 1 so that no two are alike.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "pasteImageFailed": "Couldn't save the picture on the clipboard",
+  "@pasteImageFailed": {
+    "description": "Status-line error after Paste found a picture on the system clipboard and could not write it to disk, so nothing was imported."
   }
 }

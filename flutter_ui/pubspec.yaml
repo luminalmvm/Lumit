@@ -49,6 +49,10 @@ dependencies:
   # would write, through the player a Flutter app ships with
   # (widgets/lottie_player.dart). Pure Dart, MIT.
   lottie: ^3.8.2
+  # A picture, or files, on the system clipboard, for Paste
+  # (state/clipboard_image.dart). Flutter's own clipboard reads text only.
+  # Windows, macOS and Linux, Apache 2.0.
+  pasteboard: ^0.6.0
 
 dev_dependencies:
   flutter_test:
