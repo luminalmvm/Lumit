@@ -201,6 +201,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The layer's own twirl, by hand or by another reveal, so it stops
     // answering the last single `U`.
     _revealed.remove(path);
+    _cycleOpened.remove(path);
     _revealShut.removeWhere((p) => isUnderPath(path, p));
     if (open) {
       _open.add(path);
@@ -214,6 +215,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
     _revealed.remove(id);
+    _cycleOpened.remove(id);
     _revealShut.removeWhere((p) => isUnderPath(id, p));
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
@@ -3681,11 +3683,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// How long a second `U` still counts as the same gesture. Timed on `clock`,
   /// which a widget test drives, so a slow machine cannot split `UU` in two.
   /// Long enough to type deliberately, short enough that a `U` a moment later
-  /// starts again rather than collapsing what you just opened.
+  /// is a fresh press rather than the next step of the cycle.
   static const Duration _revealWindow = Duration(milliseconds: 500);
 
+  /// Layers the last `U` or `UU` opened. A fresh `U` on them shuts them again,
+  /// as in After Effects. A layer leaves the set when its own twirl turns or
+  /// another reveal opens it.
+  final Set<String> _cycleOpened = {};
+
   /// One press of the reveal key: `U` opens the **keyed rows**, `UU` opens
-  /// every modified property whole, `UUU` shuts the layer again.
+  /// every modified property whole, `UUU` shuts the layer again. A `U` after
+  /// the window shuts what the cycle opened, so a second press always closes
+  /// rather than depending on how quickly it came.
   ///
   /// The *counting* is ours, because a multi-tap is a gesture like a
   /// double-click and gestures are the frontend's. Which groups qualify is the
@@ -3722,6 +3731,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         ? _revealTaps + 1
         : 1;
     _lastReveal = now;
+    // A fresh `U` on layers the cycle has open, with nothing else open beside
+    // them and nothing folded inside them, shuts them: the key toggles, as `P`
+    // and the other reveal keys do.
+    final open = [
+      for (final l in layers)
+        if (_isOpen(l.internallayerId.toString()))
+          l.internallayerId.toString()
+    ];
+    if (_revealTaps == 1 &&
+        open.isNotEmpty &&
+        open.every((id) =>
+            _cycleOpened.contains(id) &&
+            !_revealShut.any((p) => isUnderPath(id, p)))) {
+      _revealTaps = 3;
+    }
 
     setState(() {
       // Every tap starts from the layers closed, so a reveal shows exactly
@@ -3732,7 +3756,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _dropSelectionUnder(id);
       }
       if (_revealTaps >= 3) {
-        // UUU: shut, and the next U starts the cycle over.
+        // UUU, or a fresh U on what the cycle opened: shut, and the next U
+        // starts the cycle over.
         _revealTaps = 0;
         _lastReveal = null;
         return;
@@ -3764,6 +3789,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           if (row.foldRows.isEmpty) continue;
           _setOpen(row.id, true);
           _revealed[row.id] = RevealFilter.keyframed;
+          _cycleOpened.add(row.id);
         }
         return;
       }
@@ -3774,6 +3800,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // a list of headings the reveal just said were empty.
         if (!groups.any) continue;
         _setOpen(id, true);
+        _cycleOpened.add(id);
         // `UU`: a heading opened by path shows everything under it.
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
