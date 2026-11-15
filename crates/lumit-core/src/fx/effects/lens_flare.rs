@@ -1086,19 +1086,15 @@ impl EffectDef for LensFlareDef {
         let read = crate::model::context_reader(&cx.context, t);
         let solves = crate::track::solve_store().map(|store| (&cx.context.document, store));
         let placed = owner.lights_at(t, &read, solves).into_iter();
+        let view = crate::fx::flare::view::View::at(&cx.context.document, owner, t);
         for resolved in placed.filter(|l| l.kind != crate::model::LightKind::Ambient) {
             let Some(&(geom, rgb)) = LensFlare::DERIVED_LIGHTS.get(count as usize) else {
                 break;
             };
-            push(
-                geom,
-                Value::Colour([
-                    resolved.position.0 as f32 * cx.px_scale,
-                    resolved.position.1 as f32 * cx.px_scale,
-                    resolved.half_size.0 as f32 * cx.px_scale,
-                    resolved.half_size.1 as f32 * cx.px_scale,
-                ]),
-            );
+            let Some(seen) = view.place(&resolved, cx.px_scale) else {
+                continue;
+            };
+            push(geom, Value::Colour(seen));
             push(
                 rgb,
                 Value::Colour([
