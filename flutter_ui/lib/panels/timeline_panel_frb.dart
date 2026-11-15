@@ -363,7 +363,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // draws with.
     final maxOffset = max(0.0, width - _laneViewport);
     final offset =
-        _hLane.hasClients ? _hLane.offset.clamp(0.0, maxOffset) : 0.0;
+        (positionOf(_hLane)?.pixels ?? 0.0).clamp(0.0, maxOffset);
     final secondsPerPixel = frames / fps / width;
     final viewStart = offset * secondsPerPixel;
     final viewEnd = (offset + _laneViewport) * secondsPerPixel;
