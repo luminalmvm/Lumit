@@ -2377,6 +2377,15 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
+  /// Whether something else has been copied since the tray was filled: the
+  /// text it mirrored to the system clipboard is no longer there. Ordinary
+  /// text, a picture and files all count.
+  Future<bool> systemClipboardMovedOn() async {
+    final text = await Clipboard.getData(Clipboard.kTextPlain)
+        .then((data) => data?.text, onError: (Object _) => null);
+    return text != clipboard.text;
+  }
+
   /// The part of a 3D model the Timeline has picked, by its layer and its rows'
   /// id, which the Viewer draws handles on.
   final ValueNotifier<({UuidValue layer, String part})?> pickedPart =

@@ -63,6 +63,7 @@ import '../panels/grade_clipboard.dart'
     show canCopyGrade, canPasteGrade, copyGrade, pasteGrade;
 import '../panels/layer_source_menu.dart';
 import '../panels/noise_actions.dart';
+import '../panels/paste_pictures_frb.dart' show pasteSystemPictures;
 import '../panels/normalise_commands.dart' show normaliseLayers;
 import '../panels/loudness_commands.dart';
 import '../panels/preset_save.dart'
@@ -3133,12 +3134,22 @@ Future<bool> pasteSelectionFrb(
   LayerReference? layer,
 ) async {
   if (ui.pasteClaim?.call() ?? false) return true;
+  // A picture the system clipboard holds is a last resort, except when the tray
+  // is no longer what was copied last: its mirror on the system clipboard has
+  // been replaced, and what replaced it may be a picture.
+  Future<bool> pictures() => pasteSystemPictures(app, ui, comp,
+      row: comp == null ? null : newLayerRow(ui, comp));
+  var triedPictures = false;
+  if (!ui.clipboard.isEmpty && await ui.systemClipboardMovedOn()) {
+    triedPictures = true;
+    if (await pictures()) return true;
+  }
   // Nothing in the tray: something may have been copied in another Lumit
   // window, or in this one before something else on the machine overwrote the
   // tray's mirror.
   if (ui.clipboard.isEmpty) await ui.adoptSystemClipboard();
   final paste = _pasteAction(app, ui, comp, layer);
-  if (paste == null) return false;
+  if (paste == null) return !triedPictures && await pictures();
   paste();
   return true;
 }
