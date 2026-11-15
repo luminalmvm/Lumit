@@ -1428,6 +1428,15 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
+            // A grade's reference split beside the picture, over the marks
+            // for the same reason.
+            if (showPicture)
+              ViewerReferenceLayer(
+                  uiState: uiState,
+                  comp: comp,
+                  viewId: viewId,
+                  fitted: fitted,
+                  overMarks: true),
             // The selection's name, over the stage's own corner. Last
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.

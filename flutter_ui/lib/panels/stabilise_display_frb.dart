@@ -26,7 +26,6 @@ import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart';
 import 'effect_param_row_frb.dart' show actionsResting;
 import 'fx_key_strip.dart';
-import 'fx_section.dart';
 import 'status_poller.dart';
 
 /// [scale] as a percentage with one decimal at most: 1.093 is "109.3", 1.5
@@ -106,6 +105,26 @@ String stabiliseStatusSentence(
                 ? l10n.stabiliseDone
                 : l10n.stabiliseScaled(stabiliseScalePercent(status.scale)),
   };
+}
+
+/// A command beside the line, framed as the Analyse button under it is.
+Widget _action(
+  BuildContext context, {
+  required String label,
+  required String tip,
+  required String keyName,
+  required VoidCallback onPressed,
+}) {
+  final t = ThemeScope.of(context).theme;
+  return LumitTooltip(
+    message: tip,
+    child: HouseButton(
+      key: ValueKey<String>(keyName),
+      small: true,
+      onPressed: onPressed,
+      child: Text(label, style: t.body),
+    ),
+  );
 }
 
 /// Whether a reading is still moving: an analysis queued or running, or a
@@ -358,7 +377,7 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
     // Reverse Stabilise, before an analysis, or a precomp inside a precomp.
     final actions = [
       if (status?.canPrecomp ?? false)
-        fxTextAction(
+        _action(
           context,
           label: l10n.stabiliseMakePrecomp,
           tip: l10n.tipStabiliseMakePrecomp,
@@ -366,7 +385,7 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
           onPressed: _makePrecomp,
         ),
       if (status?.canConvert ?? false)
-        fxTextAction(
+        _action(
           context,
           label: l10n.stabiliseConvertToKeyframes,
           tip: l10n.tipTrackConvert,
@@ -417,7 +436,7 @@ class _StabiliseDisplayFrbState extends State<StabiliseDisplayFrb>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                fxTextAction(
+                _action(
                   context,
                   label: l10n.stabiliseRestorePoints,
                   tip: l10n.tipStabiliseRestorePoints,
