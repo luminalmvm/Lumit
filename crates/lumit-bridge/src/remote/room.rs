@@ -145,6 +145,8 @@ impl Computer {
 #[derive(Debug, Default)]
 pub(super) struct Room {
     pub me: String,
+    /// This computer's own entry, so an old sign-in of it is passed over.
+    pub mine: Option<Computer>,
     pub computers: Vec<Computer>,
 }
 
@@ -155,7 +157,7 @@ impl Room {
 
     /// Whether `c` is worth listing at `now`: not away for a month, and not
     /// an old sign-in of a computer that has signed in again since, which
-    /// goes by the same name on the same system.
+    /// goes by the same name on the same system. This one included.
     fn listed(&self, c: &Computer, now: i64) -> bool {
         if c.online {
             return true;
@@ -163,7 +165,7 @@ impl Room {
         if c.seen > 0 && now - c.seen > AWAY_MOST {
             return false;
         }
-        !self.computers.iter().any(|newer| {
+        !self.computers.iter().chain(&self.mine).any(|newer| {
             newer.id != c.id
                 && newer.name == c.name
                 && newer.platform == c.platform
@@ -210,18 +212,19 @@ impl Remote {
         let Some(listed) = said.get("computers").and_then(Value::as_array) else {
             return;
         };
-        let mut me = String::new();
+        let mut mine = None;
         let mut computers = Vec::new();
         for entry in listed.iter().take(64) {
             let computer = Computer::of(entry);
             if entry.get("me").and_then(Value::as_bool) == Some(true) {
-                me = computer.id;
+                mine = Some(computer);
             } else if !computer.id.is_empty() {
                 computers.push(computer);
             }
         }
         if let Ok(mut room) = self.room.lock() {
-            room.me = me;
+            room.me = mine.as_ref().map(|c| c.id.clone()).unwrap_or_default();
+            room.mine = mine;
             room.computers = computers;
         }
     }
