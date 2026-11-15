@@ -295,8 +295,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// notifier, so watching the shell's state does not hear about it.
   ToolsState? _boundTools;
 
-  /// Escape's registration, and the claims this panel displaced while it holds
-  /// the keys - put back untouched the moment another panel takes them.
+  /// Escape's registration, the claims this panel chained onto at mount, and
+  /// the Easing apply it displaces while it holds the keys.
   VoidCallback? _escapeRelease;
   bool _claimed = false;
   bool Function()? _heldDelete;
@@ -323,6 +323,19 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // Kept rather than looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    // Chained once, as every other panel chains them. Taken and given back
+    // with the focus instead, a give-back found the slot taken by any panel
+    // mounted since, and this claim stayed in the chain answering no for every
+    // claim below it, Effect controls' Delete among them.
+    _heldDelete = _ui!.deleteClaim;
+    _heldCut = _ui!.cutClaim;
+    _heldCopy = _ui!.copyClaim;
+    _heldPaste = _ui!.pasteClaim;
+    _ui!
+      ..deleteClaim = _deleteClaim
+      ..cutClaim = _cutClaim
+      ..copyClaim = _copyClaim
+      ..pasteClaim = _pasteClaim;
     // The master's level is read here and on each document change, ahead of
     // the rebuild the same change brings, so the build reads a field.
     _ui!.model.addListener(_onModel);
@@ -357,6 +370,15 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     _ui?.activePane.removeListener(_onActivePanel);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _rename?.dispose();
+    // Only what is still ours: a panel that has taken a slot since asks this
+    // one, which passes the key on once unmounted.
+    final ui = _ui;
+    if (ui != null) {
+      if (ui.deleteClaim == _deleteClaim) ui.deleteClaim = _heldDelete;
+      if (ui.cutClaim == _cutClaim) ui.cutClaim = _heldCut;
+      if (ui.copyClaim == _copyClaim) ui.copyClaim = _heldCopy;
+      if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _heldPaste;
+    }
     _releaseKeys(closing: true);
     _zoomMotion.dispose();
     _vOutline.dispose();
@@ -578,14 +600,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   // ------------------------------------------------------------- the claims
 
-  /// Take the shell's single-slot key claims while this panel is the focused
-  /// one, and give them straight back when another panel takes the keys.
-  ///
-  /// The slots hold one callback each and are set by whichever panel mounted
-  /// last, so with both timelines on screen the second to mount silently won
-  /// every one of them. Following `activePanel` is the arbitration: what stood
-  /// before is held and put back untouched, so the layer Timeline needs no
-  /// change at all and gets its own keys back the moment it is clicked in.
+  /// Take the Easing panel's apply while this panel is the focused one, and
+  /// give it straight back when another panel takes the keys. The key claims
+  /// are chained once at mount and answer only while this panel is focused.
   void _onActivePanel() {
     if (_ui?.activePanel == Panel.audioTimeline) {
       _claimKeys();
@@ -598,15 +615,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final ui = _ui;
     if (ui == null || _claimed) return;
     _claimed = true;
-    _heldDelete = ui.deleteClaim;
-    _heldCut = ui.cutClaim;
-    _heldCopy = ui.copyClaim;
-    _heldPaste = ui.pasteClaim;
     _heldEasing = ui.easingApply.value;
-    ui.deleteClaim = _deleteClaim;
-    ui.cutClaim = _cutClaim;
-    ui.copyClaim = _copyClaim;
-    ui.pasteClaim = _pasteClaim;
     ui.easingApply.value = _applyEasing;
   }
 
@@ -614,12 +623,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final ui = _ui;
     if (ui == null || !_claimed) return;
     _claimed = false;
-    // Only what is still ours: a third panel that has taken a slot since keeps
-    // it, which is what makes this give-and-take rather than a scramble.
-    if (ui.deleteClaim == _deleteClaim) ui.deleteClaim = _heldDelete;
-    if (ui.cutClaim == _cutClaim) ui.cutClaim = _heldCut;
-    if (ui.copyClaim == _copyClaim) ui.copyClaim = _heldCopy;
-    if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _heldPaste;
     void ease() {
       if (ui.easingApply.value == _applyEasing) {
         ui.easingApply.value = _heldEasing;
@@ -633,8 +636,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         : ease();
   }
 
-  /// Whether the keys are this panel's to answer. The Timeline asks a claim it
-  /// took over before its own, so a claim held from before must stand down.
+  /// Whether the keys are this panel's to answer. When they are not, each
+  /// claim passes the key to the one it chained onto.
   bool get _keysAreOurs => _ui?.activePanel == Panel.audioTimeline;
 
   /// Whether the last pick was a track's head, the one time Delete may take
@@ -647,7 +650,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// by its head: a clip let go of must not turn Delete on its track.
   bool _deleteClaim() {
     final ui = _ui;
-    if (!mounted || ui == null || !_keysAreOurs) return false;
+    if (!mounted || ui == null || !_keysAreOurs) {
+      return _heldDelete?.call() ?? false;
+    }
     if (_laneKeys.value.isNotEmpty && _deleteKeys()) return true;
     if (_pickedClips.isEmpty) return !_headPicked;
     final picked = _pickedOnTracks();
@@ -765,7 +770,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// Cut: the picked clips copied and gone. Keys answer further down the shell's
   /// ladder, through Copy then Delete, so this only speaks for clips.
   bool _cutClaim() {
-    if (!mounted || !_keysAreOurs || _laneKeys.value.isNotEmpty) return false;
+    if (!mounted || !_keysAreOurs) return _heldCut?.call() ?? false;
+    if (_laneKeys.value.isNotEmpty) return false;
     if (!_copyClips()) return false;
     _deleteClips(_pickedOnTracks());
     return true;
@@ -813,7 +819,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   bool _copyClaim() {
     final ui = _ui;
     final comp = ui?.selectedComp;
-    if (!mounted || ui == null || comp == null || !_keysAreOurs) return false;
+    if (!mounted || ui == null || !_keysAreOurs) {
+      return _heldCopy?.call() ?? false;
+    }
+    if (comp == null) return false;
     if (_keysOnChannels(_keyChannels(ui)).isEmpty) return _copyClips();
     return _copyKeys(ui);
   }
@@ -837,7 +846,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// on, or the clips if clips were the last thing copied here.
   bool _pasteClaim() {
     final ui = _ui;
-    if (!mounted || ui == null || !_keysAreOurs) return false;
+    if (!mounted || ui == null || !_keysAreOurs) {
+      return _heldPaste?.call() ?? false;
+    }
     if (_copiedClips) return _pasteClips();
     return _pasteKeys(ui);
   }
