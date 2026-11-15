@@ -401,6 +401,10 @@ impl FxEngine {
                 field: [[0.0; 4]; 3],
             }),
         );
+        // The horizontal half is read by nothing after this: back to the
+        // frame's pool, so the next pass reuses it rather than the card
+        // holding one more frame-sized texture until the frame is done.
+        ctx.recycle(tmp);
         out
     }
 
@@ -593,6 +597,7 @@ impl FxEngine {
             let p = bytemuck::bytes_of(&p);
             self.dispatch_matted(ctx, &self.blur, from, src, None, to, w, h, p);
         }
+        ctx.recycle(tmp);
         out
     }
 
