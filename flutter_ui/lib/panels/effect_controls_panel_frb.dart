@@ -3428,13 +3428,13 @@ class _EffectSection extends StatelessWidget {
     if (compositing.isNotEmpty) {
       final path = _compositingPath;
       final open = isGroupOpen(path, true);
-      // Shut, what is off its default still shows, so a mix or a matte is never
-      // hidden. At its defaults, shut, the fold takes no room at all: the
-      // heading's menu opens it.
+      // Always there, shut or open, as the Timeline and a node box list it:
+      // an effect's Mix and Matte are found in the same place in all three.
+      // Shut, what is off its default is said beside the heading, so a mix or
+      // a matte is never hidden.
       final summary =
           open ? null : _compositingSummary(compositing, ridersFor, shown);
-      if (open || summary != null) {
-        rows.add(_ParamGroupSection(
+      rows.add(_ParamGroupSection(
           headerKey: ValueKey<String>(path),
           label: l10n.fxFoldCompositing,
           open: open,
@@ -3444,8 +3444,7 @@ class _EffectSection extends StatelessWidget {
           ]),
           summary: summary,
           rows: [for (final p in compositing) rowFor(p)],
-        ));
-      }
+      ));
     }
     return rows;
   }

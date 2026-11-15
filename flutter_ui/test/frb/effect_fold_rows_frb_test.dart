@@ -76,6 +76,11 @@ void main() {
     final (rows, path) = effectOf('glow');
     final shut = rows(const {});
     expect(ids(shut), contains('[Chromatic aberration]'));
+    // After the loose rows, as the panel tucks it, and before Compositing.
+    expect(
+        ids(shut),
+        containsAllInOrder(
+            ['rolloff', '[Chromatic aberration]', '[Compositing]']));
     expect(ids(shut), isNot(contains(hidden)));
 
     final open = rows({effectGroupPath(path, '$g')});

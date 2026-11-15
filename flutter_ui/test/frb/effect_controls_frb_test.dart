@@ -688,6 +688,11 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
+      // The fold's heading is there at its defaults, shut, where the Timeline
+      // and a node box list it too.
+      expect(find.byKey(ValueKey<String>('fx-compositing-$id')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('fx-layer-$id-matte')), findsNothing,
+          reason: 'shut until it is opened');
       await openCompositing(tester, id);
       final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
       final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));

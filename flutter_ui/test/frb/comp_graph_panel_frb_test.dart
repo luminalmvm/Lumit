@@ -66,6 +66,19 @@ void main() {
     // A shut box still shows nothing at the defaults.
     expect(box.telling, isEmpty);
 
+    // The panel's order: loose rows, the groups it folds shut, then Mix and
+    // Matte under the Compositing heading.
+    final glow = cachedListParameters('glow');
+    final lit = compBoxRows('glow', glow, {
+      for (final p in glow)
+        if (defaultEffectValue(p.kind) case final v?) p.id: v,
+    }, {});
+    expect(
+        [for (final p in lit.open) p.id],
+        containsAllInOrder(
+            ['rolloff', 'chromatic_angle', 'mix', 'blend', 'matte']));
+    expect(lit.kickers['mix'], 'Compositing');
+
     // A curve is a row like any other.
     final curves = cachedListParameters('curves');
     final shown = compBoxRows('curves', curves, {

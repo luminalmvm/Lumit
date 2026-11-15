@@ -2593,8 +2593,9 @@ String effectGroupPath(String effect, String group) => '$effect/group:$group';
 /// group of the schema a heading with its rows under it, and the Mix and Matte
 /// rows nearly every effect ends with in a **Compositing** fold at the foot.
 ///
-/// A group the schema folds shut starts shut, and so does Compositing, as in
-/// the panel; any other group starts open. An open set only ever names what
+/// A group the schema folds shut starts shut and comes after the effect's
+/// loose rows, and Compositing starts shut after those, as in the panel; any
+/// other group starts open, where the schema has it. An open set only ever names what
 /// somebody opened, so a group that starts open is named by the path that
 /// shuts it instead ([effectGroupPath] with `:shut` after it), and
 /// [everyFoldPath], which answers yes to everything, still reads as open.
@@ -2638,6 +2639,9 @@ List<LayerFoldRow> effectFoldRows(
   }
   final every = identical(open, everyFoldPath);
   final rows = <LayerFoldRow>[];
+  // The groups that start shut go after the loose rows, as in the panel, so
+  // what follows one never reads as what is inside it.
+  final tucked = <LayerFoldRow>[];
   final headed = <int, bool>{};
   for (final p in params) {
     if (inFold.contains(p.id)) continue;
@@ -2646,17 +2650,19 @@ List<LayerFoldRow> effectFoldRows(
       rows.add(row(p, depth));
       continue;
     }
+    final startsShut = groups[g].collapsed;
+    final into = startsShut ? tucked : rows;
     final groupOpen = headed.putIfAbsent(g, () {
-      final startsShut = groups[g].collapsed;
       final at = effectGroupPath(path, startsShut ? '$g' : '$g:shut');
       final isOpen =
           every || (startsShut ? open.contains(at) : !open.contains(at));
-      rows.add(FoldGroupRow(
+      into.add(FoldGroupRow(
           path: at, label: groups[g].label, open: isOpen, depth: depth));
       return isOpen;
     });
-    if (groupOpen) rows.add(row(p, depth + 1));
+    if (groupOpen) into.add(row(p, depth + 1));
   }
+  rows.addAll(tucked);
   if (inFold.isNotEmpty) {
     final at = effectGroupPath(path, 'compositing');
     final isOpen = open.contains(at);

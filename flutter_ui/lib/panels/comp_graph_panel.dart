@@ -234,9 +234,31 @@ CompBoxRows compBoxRows(
   List<BridgeParamInfo> withRiders(Iterable<BridgeParamInfo> hosts) => [
         for (final p in hosts) ...[p, ...?riders[p.id]],
       ];
-  final open = withRiders(rows);
+  // The order is the panel's: the loose rows, then the groups the schema
+  // folds shut, then the Mix and Matte rows of its Compositing fold, under
+  // that heading.
+  final tucked = {
+    for (final g in groups)
+      if (g.collapsed && g.label.isNotEmpty) ...g.params,
+  };
+  final grouped = {for (final g in groups) ...g.params};
+  bool compositing(BridgeParamInfo p) =>
+      !inView &&
+      !grouped.contains(p.id) &&
+      ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
+          (p.id == 'matte' && p.kind is BridgeParamKind_Layer));
+  final foot = [for (final p in rows) if (compositing(p)) p];
+  final open = withRiders([
+    for (final p in rows)
+      if (!tucked.contains(p.id) && !compositing(p)) p,
+    for (final p in rows)
+      if (tucked.contains(p.id)) p,
+    ...foot,
+  ]);
   final listed = {for (final p in open) p.id};
-  final kickers = <String, String>{};
+  final kickers = <String, String>{
+    if (foot.isNotEmpty) foot.first.id: l10n.fxFoldCompositing,
+  };
   for (final g in groups) {
     if (g.label.isEmpty) continue;
     final first = g.params.where(listed.contains).firstOrNull;
