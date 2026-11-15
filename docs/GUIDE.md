@@ -122,6 +122,8 @@ flutter analyze
 everything else. Bug fixes go to `main`, which merges itself into `nightly`. New features go to
 `nightly`, which merges into `main` for the next minor release.
 
+A change that only touches `web-docs/` skips CI.
+
 | Job | Checks |
 |---|---|
 | `check` (macOS) | fmt, clippy `-D warnings`, the tests, a release compile |
