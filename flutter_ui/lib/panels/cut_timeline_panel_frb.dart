@@ -5318,7 +5318,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               axis.xOf(span.end) - axis.xOf(span.start)),
                           top: 0,
                           bottom: 0,
-                          child: ColoredBox(color: t.selectionFill),
+                          // See-through, so the clips under it still show.
+                          child: ColoredBox(
+                              color: t.accent.withValues(alpha: 0.14)),
                         ),
                       ]),
               ),
