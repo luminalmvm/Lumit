@@ -56,6 +56,7 @@ import '../state/text_documents.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'transform_rows_frb.dart' show writeScalar;
 import 'viewer_gizmo.dart';
 import 'viewer_shape_layer.dart' show ShapeSpace;
 import 'viewer_tool_cursor.dart';
@@ -73,6 +74,29 @@ Offset textAnchor(BridgeTextDocument document) {
     return Offset(line.carets.first, line.baseline);
   }
   return Offset(block.width * 0.5, block.height * 0.5);
+}
+
+/// How far the engine moves the anchor when a line is retyped from [before]
+/// to [after]: point text lined up on the centre or the right keeps that side
+/// of its words where it is, so it grows from there. Nothing for anything
+/// else. The engine's own rule (`restyle_shift`), for a line not yet written.
+Offset typedAnchorShift(BridgeTextDocument before, BridgeTextDocument after) {
+  final align = after.paragraph.align;
+  if (before.text == after.text ||
+      (before.expression ?? '').trim().isNotEmpty ||
+      (after.expression ?? '').trim().isNotEmpty ||
+      align == BridgeTextAlign.left ||
+      (after.paragraph.boxWidth ?? 0) > 0 ||
+      before.path != null ||
+      after.path != null) {
+    return Offset.zero;
+  }
+  double side(BridgeTextBlock b) =>
+      align == BridgeTextAlign.centre ? (b.left + b.right) * 0.5 : b.right;
+  final was = measuredText(before);
+  final now = measuredText(after);
+  return Offset(side(now) - side(was),
+      now.lines.first.baseline - was.lines.first.baseline);
 }
 
 /// The gap on [line] nearest [x] (layer pixels), counted from the line's own
@@ -251,6 +275,9 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// Whether this tool made that layer, so an edit that ends with nothing typed
   /// can take it away again.
   bool _created = false;
+
+  /// Whether the Viewer's boxes are being shown a moved anchor for this edit.
+  bool _movedLive = false;
 
   /// The document the edit opened on, for the moment the layer can't be read.
   BridgeTextDocument? _held;
@@ -943,15 +970,45 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   void _publishLive(LayerReference layer) {
     final document = _document;
     if (document == null) return;
-    widget.uiState.liveText.value = {
-      layer.internallayerId: document.copyWith(text: _controller.text),
-    };
+    final typed = document.copyWith(text: _controller.text);
+    widget.uiState.liveText.value = {layer.internallayerId: typed};
+    // Centred or right-aligned point text grows from that side, so the
+    // preview moves its anchor, and the box and caret move with it.
+    final shift = typedAnchorShift(document, typed);
+    BridgeTransform? tf;
+    if (shift != Offset.zero) {
+      try {
+        tf = layer.getTransform();
+      } catch (_) {
+        // The layer was deleted while it was being typed into.
+      }
+    }
+    final x = tf == null ? null : staticValueOf(tf.anchorX);
+    final y = tf == null ? null : staticValueOf(tf.anchorY);
+    if (tf != null && x != null && y != null) {
+      final moved = writeScalar(
+          tf, BridgeTransformProp.anchorX, BridgeScalar.static_(x + shift.dx));
+      widget.uiState.liveTransforms.value = {
+        layer.internallayerId: writeScalar(moved, BridgeTransformProp.anchorY,
+            BridgeScalar.static_(y + shift.dy)),
+      };
+      _movedLive = true;
+    } else {
+      _clearMoved();
+    }
   }
 
   void _clearLive() {
     if (widget.uiState.liveText.value.isNotEmpty) {
       widget.uiState.liveText.value = const {};
     }
+    _clearMoved();
+  }
+
+  void _clearMoved() {
+    if (!_movedLive) return;
+    _movedLive = false;
+    widget.uiState.liveTransforms.value = const {};
   }
 
   /// Every keystroke: the picture keeps up through the preview path, and the
@@ -1072,10 +1129,13 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   ({Offset anchor, Offset position}) _recentredAnchor(
       LayerReference layer, BridgeTextDocument document) {
     final transform = layer.getTransform();
+    // From the anchor the preview showed the line at.
+    final written = layer.getText();
     final old = Offset(
-      staticValueOf(transform.anchorX) ?? 0,
-      staticValueOf(transform.anchorY) ?? 0,
-    );
+          staticValueOf(transform.anchorX) ?? 0,
+          staticValueOf(transform.anchorY) ?? 0,
+        ) +
+        (written == null ? Offset.zero : typedAnchorShift(written, document));
     final here = Offset(
       staticValueOf(transform.positionX) ?? 0,
       staticValueOf(transform.positionY) ?? 0,
