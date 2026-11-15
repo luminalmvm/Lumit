@@ -91,24 +91,19 @@ jobs:
   windows:
     name: tests (Windows, ${{ matrix.part }})
     runs-on: windows-latest
-    # Split across five runners. As one job it took an hour, most of it
+    # Split across two runners. As one job it took an hour, most of it
     # lumit-render's tests running one test program after another on WARP.
+    # Five runners made the wall clock shorter and the queue longer: each
+    # one compiled the engine again, which was most of its time, and a busy
+    # day of pull requests waited on them for hours.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - part: render unit tests
-            test: -p lumit-render --lib
-          - part: render smoke
-            test: -p lumit-render --test smoke_end_to_end
-          # Every other test file in lumit-render: the globs match all but
-          # smoke_end_to_end.
-          - part: render end to end
-            test: -p lumit-render --test '[!s]*' --test 's[!m]*'
-          - part: gpu and core
-            test: -p lumit-gpu -p lumit-core
+          - part: render
+            test: -p lumit-render
           - part: everything else
-            test: --workspace --exclude lumit-render --exclude lumit-gpu --exclude lumit-core
+            test: --workspace --exclude lumit-render
             clippy: true
     env:
       # BtbN "shared, GPL" build: GPL matches Lumit's licence, shared gives the

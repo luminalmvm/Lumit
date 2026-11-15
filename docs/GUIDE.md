@@ -125,7 +125,7 @@ everything else. Bug fixes go to `main`, which merges itself into `nightly`. New
 | Job | Checks |
 |---|---|
 | `check` (macOS) | fmt, clippy `-D warnings`, the tests, a release compile |
-| `windows` | clippy and the tests with media, GPU tests on WARP |
+| `windows` | clippy and the tests with media, GPU tests on WARP, in two parts |
 | `linux` | the same on lavapipe with `LUMIT_REQUIRE_GPU=1` |
 | `performance` | `lumit-bench` against the runner's baseline, fails at 1.6x worse |
 | `flutter-linux` | analyze, the whole Flutter suite, a release build |
