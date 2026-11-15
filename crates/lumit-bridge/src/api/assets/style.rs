@@ -19,11 +19,19 @@ pub(crate) fn restyle_shift(
     // A line on a path already has its room and its corner at the layer's
     // origin, so nothing there moves.
     let straight = before.path.is_none() && after.path.is_none();
-    // Retyping the words alone leaves the anchor where it is.
+    // Retyping the words alone leaves the anchor where it is, unless they are
+    // point text lined up on the centre or the right, which grows from there.
+    // Words an expression gives are not the ones typed, so they move nothing.
+    let retyped = before.text != after.text
+        && before.expression.is_none()
+        && after.expression.is_none()
+        && after.paragraph.align != lumit_core::text::TextAlign::Left
+        && after.paragraph.box_width <= 0.0;
     let restyled = before.size != after.size
         || before.style != after.style
         || before.paragraph != after.paragraph
-        || before.animators.is_empty() != after.animators.is_empty();
+        || before.animators.is_empty() != after.animators.is_empty()
+        || retyped;
     if !(straight && restyled) {
         return (0.0, 0.0);
     }

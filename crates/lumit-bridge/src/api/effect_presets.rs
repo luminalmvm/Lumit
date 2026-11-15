@@ -283,6 +283,7 @@ impl LayerReference {
                 &doc, &comp, &layer, effects,
             ));
         }
+        let keyed: Vec<_> = parts.transform.iter().map(|row| row.prop).collect();
         for row in parts.transform {
             ops.push(Op::SetTransformProperty {
                 comp: self.comp_id,
@@ -292,14 +293,40 @@ impl LayerReference {
             });
         }
         if !parts.animators.is_empty() {
-            if let LayerKind::Text { document } = &layer.kind {
-                let mut document = document.clone();
+            if let LayerKind::Text { document: before } = &layer.kind {
+                let mut document = before.clone();
                 document.animators.extend(parts.animators);
+                // The first animators grow the box the words are drawn in, so
+                // the anchor moves with them and the words stay put, as
+                // `set_text` does. An axis the preset keys keeps its keys.
+                let shift = crate::api::assets::style::restyle_shift(before, &document);
                 ops.push(Op::SetTextDocument {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     document,
                 });
+                for (prop, mut property, by) in [
+                    (
+                        lumit_core::model::TransformProp::AnchorX,
+                        layer.transform.anchor_x.clone(),
+                        shift.0,
+                    ),
+                    (
+                        lumit_core::model::TransformProp::AnchorY,
+                        layer.transform.anchor_y.clone(),
+                        shift.1,
+                    ),
+                ] {
+                    if by.abs() > 0.0 && !keyed.contains(&prop) {
+                        crate::api::assets::shift_property(&mut property, by);
+                        ops.push(Op::SetTransformProperty {
+                            comp: self.comp_id,
+                            layer: self.layer_id,
+                            prop,
+                            animation: property.animation,
+                        });
+                    }
+                }
             }
         }
         if ops.is_empty() {

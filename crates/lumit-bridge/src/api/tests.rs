@@ -4111,11 +4111,22 @@ fn a_restyle_moves_the_anchor_so_the_words_stay_put() {
     assert!(grown > 1.0, "tracking widened the line");
     assert!((anchor(&text).0 - held.0 - grown).abs() < 1e-6);
 
-    // Retyping the words alone moves nothing.
+    // Retyping right-aligned point text keeps its right edge, so it grows
+    // leftwards.
     let settled = anchor(&text);
-    let mut retyped = tracked;
+    let mut retyped = tracked.clone();
     retyped.text = "Other words".into();
-    text.set_text(retyped).expect("set");
+    text.set_text(retyped.clone()).expect("set");
+    let grown = layout(&retyped).right - layout(&tracked).right;
+    assert!((anchor(&text).0 - settled.0 - grown).abs() < 1e-6);
+
+    // Retyping left-aligned words moves nothing.
+    let mut left = retyped;
+    left.paragraph.align = BridgeTextAlign::Left;
+    text.set_text(left.clone()).expect("set");
+    let settled = anchor(&text);
+    left.text = "Words again".into();
+    text.set_text(left).expect("set");
     assert_eq!(anchor(&text), settled);
 }
 
