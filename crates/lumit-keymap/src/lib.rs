@@ -15,10 +15,11 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::str::FromStr;
 
 pub mod after_effects;
+mod chord;
 pub mod defaults;
+mod grade;
 
 /// Something a chord can be bound to, identified by a stable string (e.g.
 /// `"playback.toggle"`). A string — not a giant enum — so new commands never
@@ -67,6 +68,23 @@ impl ActionId {
         }
         if let Some(n) = self.0.strip_prefix("marker.goto.") {
             return format!("Go to marker {n}");
+        }
+        // The angles of a multicam clip, nine of each, described by shape as
+        // the markers are.
+        if let Some(n) = self.0.strip_prefix("multicam.cut.") {
+            return format!("Cut to angle {n}");
+        }
+        if let Some(n) = self.0.strip_prefix("multicam.switch.") {
+            return format!("Switch to angle {n}");
+        }
+        if let Some(n) = self.0.strip_prefix("grade.memory.apply.") {
+            return format!("Apply memory {n}");
+        }
+        if let Some(n) = self.0.strip_prefix("grade.memory.store.") {
+            return format!("Keep the grade in memory {n}");
+        }
+        if let Some(known) = grade::description(&self.0) {
+            return known.to_string();
         }
         let known = match self.0.as_str() {
             // Transport and navigation.
@@ -133,6 +151,17 @@ impl ActionId {
             "cut.nudge.up" => "Move clips up a track",
             "cut.nudge.down" => "Move clips down a track",
             "cut.select.at.playhead" => "Select the clip at the playhead",
+            "transcript.extract" => "Delete the selected words and close the gap",
+            "transcript.lift" => "Delete the selected words and leave a gap",
+            "transcript.restore" => "Put back the selected removed words",
+            "transcript.correct" => "Correct the selected words",
+            "transcript.insert" => "Insert the selected words at the playhead",
+            "transcript.overwrite" => "Overwrite with the selected words at the playhead",
+            "transcript.find.next" => "Next result",
+            "transcript.find.prev" => "Previous result",
+            "transcript.mark" => "Mark the selected words as the work area",
+            "transcript.fillers" => "Review filler words",
+            "transcript.pauses" => "Review pauses",
             "cut.snap.toggle" => "Turn snapping on or off",
             "cut.linked.toggle" => "Turn linked selection on or off",
             "cut.ripple.toggle" => "Turn auto ripple on or off",
@@ -143,6 +172,13 @@ impl ActionId {
             "cut.envelope.pan" => "Show or hide the pan envelope",
             "cut.take.next" => "Switch the picked clips to their next take",
             "cut.take.prev" => "Switch the picked clips to their previous take",
+            "multicam.angle.next" => "Switch to the next angle",
+            "multicam.angle.prev" => "Switch to the previous angle",
+            "multicam.mode.both" => "Switch picture and sound together",
+            "multicam.mode.picture" => "Switch the picture only",
+            "multicam.mode.sound" => "Switch the sound only",
+            "multicam.page.next" => "Show the next page of angles",
+            "multicam.page.prev" => "Show the previous page of angles",
             "cut.paste.attributes" => "Paste a clip's attributes onto the picked clips",
             "cut.tracks.minimise" => "Minimise every track, or restore them",
             "cut.group" => "Group the picked clips",
@@ -169,6 +205,7 @@ impl ActionId {
             "comp.settings" => "Composition settings",
             "comp.trim.workarea" => "Trim the composition to the work area",
             "export.queue.open" => "Open the export queue",
+            "library.open" => "Open the library",
             "help.open" => "Open Lumit help",
             "edit.undo" => "Undo",
             "edit.redo" => "Redo",
@@ -181,6 +218,8 @@ impl ActionId {
             "file.save.version" => "Save a version with a name",
             "file.import" => "Import footage",
             "file.export" => "Export the composition",
+            "file.export.vector" => "Export as Lottie or SVG",
+            "export.remote" => "Export on another computer",
             "comp.new" => "New composition",
             "app.settings" => "Open Settings",
             "project.settings" => "Open Project settings",
@@ -229,13 +268,19 @@ impl ActionId {
             "layer.trim.in" => "Trim the layer's in point to the playhead",
             "layer.trim.out" => "Trim the layer's out point to the playhead",
             "layer.split" => "Split the layer at the playhead",
+            "captions.split" => "Split the caption at the playhead",
+            "captions.merge" => "Join the selected captions",
+            "captions.add" => "Add a caption at the playhead",
+            "captions.prev" => "Go to the previous caption",
+            "captions.next" => "Go to the next caption",
             "layer.duplicate" => "Duplicate the layer",
             "effect.apply.last" => "Apply the last effect again",
             "effect.remove.all" => "Remove every effect from the selected layers",
-            "grade.copy" => "Copy the layer's grade",
-            "grade.paste" => "Paste the grade onto the selected layers",
+            "effect.learn" => "Learn the noise",
+            "effect.listen" => "Show only what the effect removes",
             "layer.precompose" => "Precompose the layer",
             "layer.group" => "Group the selected layers",
+            "layer.stabilise" => "Stabilise the selected layers",
             "layer.ungroup" => "Ungroup",
             "layer.retime.enable" => "Give the layer a Retime",
             "layer.retime.hold" => "Hold the frame at the playhead",
@@ -250,6 +295,18 @@ impl ActionId {
             "layer.project.from.camera" => "Project from camera",
             "layer.new.sequence" => "New Sequence layer",
             "layer.new.audio" => "New Audio layer",
+            "layer.new.bus" => "New bus",
+            "mixer.strip.prev" => "Previous strip",
+            "mixer.strip.next" => "Next strip",
+            "mixer.fader.up" => "Raise the fader by 0.5 dB",
+            "mixer.fader.down" => "Lower the fader by 0.5 dB",
+            "mixer.fader.up.fine" => "Raise the fader by 0.1 dB",
+            "mixer.fader.down.fine" => "Lower the fader by 0.1 dB",
+            "mixer.fader.reset" => "Return the fader to 0 dB",
+            "mixer.mute" => "Mute or unmute the strip",
+            "mixer.solo" => "Solo or unsolo the strip",
+            "mixer.solo.alone" => "Solo the strip alone",
+            "mixer.automation.next" => "Next automation mode",
             "layer.settings" => "Layer settings",
             "layer.blend.next" => "Next blend mode",
             "layer.blend.prev" => "Previous blend mode",
@@ -281,6 +338,7 @@ impl ActionId {
             "layer.rename" => "Rename the layer",
             "effect.rename" => "Rename the selected effect",
             "effect.duplicate" => "Duplicate the selected effects",
+            "template.controls.add" => "Add to controls",
             "layer.toggle.visible" => "Show or hide the layer",
             // Graph editor.
             "graph.ease" => "Easy ease",
@@ -353,6 +411,9 @@ impl ActionId {
             "panel.focus.next" => "Focus the next panel",
             "panel.focus.prev" => "Focus the previous panel",
             "panel.search.focus" => "Focus the panel's search box",
+            "panel.float" => "Move the panel to a new window",
+            "panel.dock" => "Move the panel to the main window",
+            "window.monitor" => "Show or hide the video monitor",
             _ => return self.0.clone(),
         };
         known.to_string()
@@ -379,12 +440,20 @@ pub enum KeyContext {
     /// The Cut workspace's timeline, where the editor's own letters shadow
     /// the app-wide ones.
     Cut,
+    /// The Captions panel's list.
+    Captions,
+    /// The Transcript panel, where keys act on the selected words.
+    Transcript,
+    /// The Colour workspace's panels: Grade, Grade nodes, Shots and Gallery.
+    Colour,
+    /// The Mixer, where keys act on the picked strips.
+    Mixer,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 10] = [
+    pub const ALL: [KeyContext; 14] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -395,6 +464,10 @@ impl KeyContext {
         KeyContext::Panels,
         KeyContext::Effects,
         KeyContext::Cut,
+        KeyContext::Captions,
+        KeyContext::Transcript,
+        KeyContext::Colour,
+        KeyContext::Mixer,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -414,6 +487,10 @@ impl KeyContext {
             KeyContext::Panels => "Panels",
             KeyContext::Effects => "Effect controls",
             KeyContext::Cut => "Cut timeline",
+            KeyContext::Captions => "Captions panel",
+            KeyContext::Transcript => "Transcript panel",
+            KeyContext::Colour => "Colour panels",
+            KeyContext::Mixer => "Mixer",
         }
     }
 }
@@ -460,77 +537,6 @@ impl fmt::Display for ChordError {
 }
 
 impl std::error::Error for ChordError {}
-
-/// Normalise a bare key token: single ASCII letters upper-case (so `d` == `D`),
-/// everything else (named keys, punctuation) kept verbatim after trimming.
-fn normalise_key(raw: &str) -> String {
-    let k = raw.trim();
-    if k.len() == 1 && k.chars().all(|c| c.is_ascii_alphabetic()) {
-        k.to_ascii_uppercase()
-    } else {
-        k.to_string()
-    }
-}
-
-impl FromStr for Chord {
-    type Err = ChordError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut mods = Modifiers::default();
-        // The final token is always the key, even if it spells a modifier
-        // word (so `Shift` alone is the Shift *key*). The plus key is written
-        // with the sign that joins the others, so `+` and `Shift++` are read
-        // for what they are before anything is split on it: otherwise the
-        // chord would not read back, and a stored keymap holding one would
-        // not load at all.
-        let (held, key) = match s.strip_suffix('+') {
-            Some(rest) if rest.is_empty() || rest.ends_with('+') => {
-                (rest.strip_suffix('+').unwrap_or(""), "+")
-            }
-            _ => s.rsplit_once('+').unwrap_or(("", s)),
-        };
-        for tok in held.split('+').filter(|_| !held.is_empty()) {
-            match tok.trim().to_ascii_lowercase().as_str() {
-                "mod" | "cmd" | "command" | "ctrl" | "control" | "primary" => mods.primary = true,
-                "shift" => mods.shift = true,
-                "alt" | "option" | "opt" => mods.alt = true,
-                other => return Err(ChordError::UnknownModifier(other.to_string())),
-            }
-        }
-        match normalise_key(key) {
-            k if !k.is_empty() => Ok(Chord { mods, key: k }),
-            _ => Err(ChordError::Empty),
-        }
-    }
-}
-
-impl fmt::Display for Chord {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.mods.primary {
-            f.write_str("Mod+")?;
-        }
-        if self.mods.alt {
-            f.write_str("Alt+")?;
-        }
-        if self.mods.shift {
-            f.write_str("Shift+")?;
-        }
-        f.write_str(&self.key)
-    }
-}
-
-impl From<Chord> for String {
-    fn from(c: Chord) -> Self {
-        c.to_string()
-    }
-}
-
-impl TryFrom<String> for Chord {
-    type Error = ChordError;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        s.parse()
-    }
-}
 
 /// One entry of a keymap: a chord, in a context, runs an action.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

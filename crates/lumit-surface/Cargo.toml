@@ -1,0 +1,21 @@
+[package]
+name = "lumit-surface"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+# The Tangent side needs nothing but the standard library: a socket to the
+# Hub on this machine and the files it reads.
+[dependencies]
+
+# MIDI input on each desktop: WinMM on Windows, CoreMIDI on macOS, ALSA on
+# Linux. Raw bytes in a callback and a port list, nothing more, which is all
+# this crate asks of it. The browser build has no MIDI ports to open.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+midir = "0.11"
+
+[lints]
+workspace = true

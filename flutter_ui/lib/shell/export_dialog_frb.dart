@@ -54,12 +54,16 @@ import 'dart:io' show Directory, File;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show BridgeLoudnessTarget;
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/remote.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
@@ -68,8 +72,11 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/loudness_commands.dart'
+    show loudnessPresets, loudnessTargetLabel, presetTruePeakDb;
 import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/file_dialogs.dart';
+import '../state/remote_exports_frb.dart' show remoteAwayWords;
 import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -79,7 +86,9 @@ import 'export_queue_frb.dart';
 import 'settings_window_frb.dart';
 import 'status_line_frb.dart';
 
+part 'export_rows.dart';
 part 'export_formats.dart';
+part 'export_also.dart';
 
 /// The frame the drawing gives this dialog.
 const double exportDialogWidth = 640;
@@ -177,6 +186,9 @@ const String exportTokenDate = '{date}';
 /// row beside the region tick and the final-size reading.
 const double exportCropWell = 40;
 
+/// The loudness and true peak wells.
+const double exportLoudnessWell = 76;
+
 /// The audio row's five faces, as the drawing measures them.
 const double exportAudioSourceWidth = 110;
 const double exportAudioRateWidth = 90;
@@ -209,6 +221,10 @@ final Set<ExportSection> exportOpenSections = {};
 
 /// How much of the composition to write.
 enum _Span { workArea, wholeComp, custom }
+
+/// The other computer last chosen to export on in this run of Lumit, which
+/// Export on another computer… opens on.
+String? exportLastComputer;
 
 /// One field written into the container, in the order the section lists them.
 /// The five classic fields are prefilled with their own names; a field of one's
@@ -268,6 +284,7 @@ Future<void> showExportDialogFrb({
   Future<String?> Function()? picker,
   List<double>? region,
   int? queued,
+  String? on,
 }) {
   // The Viewer's region of interest, read here rather than inside the dialog:
   // the modal is an overlay, and what is above it in the tree is not what is
@@ -299,6 +316,7 @@ Future<void> showExportDialogFrb({
       picker: picker,
       region: roi,
       queued: queued,
+      on: on,
       onClose: () => close(null),
     ),
   );
@@ -320,6 +338,10 @@ class _ExportDialog extends StatefulWidget {
   /// The queue item being changed, when the dialogue was opened from its row
   /// in the queue. It opens on that item's settings and saves back to it.
   final int? queued;
+
+  /// Where it opens set to export: another computer's id, or `*` for any
+  /// free one. Null for this computer.
+  final String? on;
   final VoidCallback onClose;
 
   const _ExportDialog({
@@ -329,6 +351,7 @@ class _ExportDialog extends StatefulWidget {
     required this.picker,
     required this.region,
     this.queued,
+    this.on,
     required this.onClose,
   });
 
@@ -376,6 +399,34 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// repeated here. Read once, because `build` crosses no bridge.
   List<int> _sampleRates = const [48000];
 
+  /// What the mix is brought to: null for off, [_targetPick] for the comp's
+  /// loudness target, [_customPick] for [_customLufs], or a preset in LUFS.
+  /// [_truePeakDb] is the ceiling it is held under.
+  Object? _loudnessPick;
+  double _customLufs = loudnessPresets.first;
+  double _truePeakDb = presetTruePeakDb;
+  static const Object _targetPick = #target;
+  static const Object _customPick = #custom;
+
+  /// A file of each bus's sound beside the main one.
+  bool _stems = false;
+
+  /// Other files written beside the main one from the same frames, the
+  /// formats the engine would write beside it, and while that is being
+  /// asked, the files asked about.
+  final List<_Also> _also = [];
+  List<String> _alsoOffered = const [];
+  List<BridgeExportAlso>? _alsoProbe;
+
+  /// The comp's loudness target and whether it has a bus, read once.
+  BridgeLoudnessTarget? _compTarget;
+  bool _hasBus = false;
+
+  /// The settings came from a preset of one's own or a queued export, so
+  /// their loudness, Off included, stands over the comp's target. A built-in
+  /// names no loudness, and the target stands.
+  bool _ownLoudness = false;
+
   String? _path;
 
   /// The path the system's Save dialogue handed back, which has already asked
@@ -403,6 +454,17 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// and this is what the footer says about it meanwhile.
   String? _waiting;
   Timer? _waitTimer;
+
+  /// The account's other computers, and how each stands for this export, as
+  /// last read. Empty without Lumit Pro, which leaves the Export on row out.
+  List<BridgeComputer> _computers = const [];
+  Map<String, BridgeRemoteFit> _fits = const {};
+
+  /// Where the export is done: here (empty), any free computer (`*`), or
+  /// another computer by its id. And whether its file stays there.
+  String _on = '';
+  bool _stays = false;
+  Timer? _computersTimer;
 
   /// Whether [_refused] is the addon one, which is the only refusal with
   /// somewhere to send the reader: the Addons page.
@@ -436,6 +498,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// proxy switched on to work with is not a picture anybody meant to ship.
   bool _useProxies = false;
   bool _renderGuides = false;
+  BridgeCaptionsOut _captions = BridgeCaptionsOut.burn;
+  bool _hasCaptions = false;
 
   /// The Time overrides. Motion blur has three answers — the composition's
   /// own, on for every checked layer, off for all of them — and Retime blend
@@ -511,6 +575,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       _compFps = settings.fpsNum / settings.fpsDen;
       _fps = _compFps;
       _compFrames = widget.comp.durationFrames();
+      _hasCaptions = widget.comp.hasCaptions();
       final area = widget.comp.getWorkArea();
       if (area != null) {
         _hasWorkArea = true;
@@ -525,6 +590,10 @@ class _ExportDialogState extends State<_ExportDialog> {
       }
       _rangeStart = _workStart;
       _rangeEnd = _workEnd;
+      _compTarget = widget.comp.loudnessTarget();
+      _hasBus = widget.comp
+          .getLayers()
+          .any((l) => l.getInfo().kind == BridgeLayerKind.bus);
     } catch (_) {
       // A comp that cannot be read leaves the placeholder defaults; the export
       // itself will refuse with the engine's own words.
@@ -570,6 +639,13 @@ class _ExportDialogState extends State<_ExportDialog> {
       final format = _formats.where((f) => f.key == defaults.codec).firstOrNull;
       if (format != null) _format = format;
     }
+    // A comp with a loudness target is exported to it unless the preset says
+    // otherwise.
+    if (_compTarget case final target?
+        when _loudnessPick == null && !_ownLoudness) {
+      _loudnessPick = _targetPick;
+      _truePeakDb = target.truePeakDb;
+    }
     _seedDestination(defaults);
     _recompute();
     try {
@@ -582,6 +658,21 @@ class _ExportDialogState extends State<_ExportDialog> {
     // least to send that still delivers at full quality.
     if (_lacking.isNotEmpty && _lacking.every((l) => l.holders.isNotEmpty)) {
       _footage = _footageFrames;
+    }
+    try {
+      if (widget.queued == null && context.read<LumitUiState>().account.pro) {
+        _readComputers();
+        final on = widget.on;
+        if ((on == '*' && _computers.length > 1) ||
+            _computers.any((c) => c.id == on)) {
+          _on = on!;
+        } else if (on != null && _computers.isNotEmpty) {
+          _on = _computers.length > 1 ? '*' : _computers.first.id;
+        }
+        _watchComputers();
+      }
+    } catch (_) {
+      // No account or no engine to ask, as in a widget test.
     }
     final queued = widget.queued;
     final spec = queued == null ? null : exportQueueSpec(id: queued);
@@ -599,7 +690,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// queued, so that group goes.
   void _reopen(BridgeExportSpec spec, String path) {
     _lacking = const [];
-    _takeSpec(spec);
+    _takeSpec(spec, exact: true);
     _edit(() {
       _ownRate = spec.fps > 0 && (spec.fps - _compFps).abs() > 0.0005;
       _fps = spec.fps > 0 ? spec.fps : _compFps;
@@ -637,10 +728,14 @@ class _ExportDialogState extends State<_ExportDialog> {
   @override
   void dispose() {
     _waitTimer?.cancel();
+    _computersTimer?.cancel();
     _scroll.dispose();
     _presetName.dispose();
     for (final field in _metadata) {
       field.dispose();
+    }
+    for (final also in _also) {
+      also.suffix.dispose();
     }
     super.dispose();
   }
@@ -677,13 +772,23 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  double get _rate => _fps <= 0 ? _compFps : _fps;
+  /// The rate the file is written at: the one chosen, held to the fastest the
+  /// format plays.
+  double get _rate {
+    final rate = _fps <= 0 ? _compFps : _fps;
+    final most = _caps.maxFps;
+    return most > 0 && rate > most ? most.toDouble() : rate;
+  }
 
   /// The footer's line: what pressing the button would produce.
   String get _summary {
     final (start, end) = _range;
-    final frames = (end - start).clamp(0, 1 << 30);
-    final seconds = _rate <= 0 ? 0.0 : frames / _rate;
+    final span = (end - start).clamp(0, 1 << 30);
+    final seconds = _compFps <= 0 ? 0.0 : span / _compFps;
+    // The span's own frames at the rate the file is written, counted as the
+    // engine counts them.
+    final frames =
+        _rate == _compFps ? span : (seconds * _rate).round().clamp(1, 1 << 30);
     final (width, height) = _outputSize;
     final line = l10n.exportSummary(
       '$frames',
@@ -707,6 +812,21 @@ class _ExportDialogState extends State<_ExportDialog> {
         ? l10n.exportSummarySize((megabytes / 1000).toStringAsFixed(1))
         : l10n.exportSummarySizeMb('${megabytes.round()}');
     return '$line · $size';
+  }
+
+  /// The loudness the dialogue asks for, null for none.
+  BridgeExportLoudness? get _loudness {
+    final pick = _loudnessPick;
+    final lufs = pick is double
+        ? pick
+        : pick == _targetPick
+            ? _compTarget?.lufs
+            : pick == _customPick
+                ? _customLufs
+                : null;
+    return lufs == null
+        ? null
+        : BridgeExportLoudness(lufs: lufs, truePeakDb: _truePeakDb);
   }
 
   BridgeExportSpec get _spec {
@@ -739,6 +859,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       colourSpace: _colourSpace,
       resample: _resample,
       renderGuides: _renderGuides,
+      captions: _captions,
       motionBlur: _motionBlur,
       retimeBlend: _retimeBlend,
       useProxies: _useProxies,
@@ -764,6 +885,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       gifDither: _gifDither,
       gifPalettePerFrame: _gifPalettePerFrame,
       gifPlays: _gifPlays,
+      loudness: _loudness,
+      stems: _stems,
+      also: _alsoProbe ?? _alsoSpec,
     );
   }
 
@@ -794,6 +918,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     // Asked of the composition, not free-standing: whether a colour space can
     // be delivered is a question about this project's colour config.
     _check = widget.comp.exportSpecCheck(spec: spec);
+    _recomputeAlso();
   }
 
   // ---- the frame -----------------------------------------------------------
@@ -842,8 +967,12 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
         dialogFooter(
           t,
-          summary:
-              _waiting ?? _refused ?? (_check.isNotEmpty ? _check : _summary),
+          summary: _waiting ??
+              _refused ??
+              (_check.isNotEmpty ? _check : _remoteSummary ?? _summary),
+          leading: _waiting == null && _refused == null && _check.isEmpty
+              ? _lacksLine(t)
+              : null,
           keyPrefix: 'export',
           actions: [
             // While footage is on its way there is one thing to press.
@@ -876,12 +1005,15 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: Text(_failedItem ? l10n.exportQueueAgain : l10n.save),
               )
             else ...[
-              HouseButton(
-                key: const ValueKey('export-add-to-queue'),
-                onPressed: _canQueue ? () => _queue(start: false) : null,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(l10n.exportAddToQueue),
-              ),
+              // Another computer's queue is its own, so there is nothing to
+              // add to here.
+              if (_on.isEmpty)
+                HouseButton(
+                  key: const ValueKey('export-add-to-queue'),
+                  onPressed: _canQueue ? () => _queue(start: false) : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(l10n.exportAddToQueue),
+                ),
               HouseButton(
                 key: const ValueKey('export-start'),
                 // The window's default action: Enter exports unless a field is
@@ -889,7 +1021,11 @@ class _ExportDialogState extends State<_ExportDialog> {
                 primary: true,
                 autofocus: true,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                onPressed: _canQueue ? () => _queue(start: true) : null,
+                onPressed: !_canQueue
+                    ? null
+                    : _on.isEmpty
+                        ? () => _queue(start: true)
+                        : _send,
                 child: Text(l10n.exportAction),
               ),
             ],
@@ -921,7 +1057,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             _Span.custom => l10n.custom,
           },
           '${_formatRate(_rate)} ${l10n.unitFps}',
-          _timecode(end - start, _rate),
+          _timecode(end - start, _compFps),
         ],
       ExportSection.picture => [
           _alphaChannel ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
@@ -936,6 +1072,8 @@ class _ExportDialogState extends State<_ExportDialog> {
               _audioChannels == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
               if (_caps.audioBitRate)
                 l10n.exportReadingAudioRate('${_audioRate ~/ 1000}'),
+              if (_loudness case final loudness?)
+                loudnessTargetLabel(loudness.lufs),
             ]
           : [l10n.off],
       // Nothing to say until somebody has written something in it.
@@ -1039,24 +1177,33 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ),
               ]),
             ),
+            if (_computers.isNotEmpty) ..._remoteRows(t),
             _row(
               t,
               l10n.exportWriteTo,
               Row(children: [
                 Expanded(
                   child: GestureDetector(
-                    onSecondaryTapDown: (d) => _pathMenu(d.globalPosition),
-                    child: _well(
-                      t,
-                      _path == null ? l10n.exportNotChosen : _leaf(_path!),
-                      key: const ValueKey('export-path'),
-                      tone: t.textMuted,
-                      tip: _path,
-                    ),
+                    onSecondaryTapDown: _remoteStays
+                        ? null
+                        : (d) => _pathMenu(d.globalPosition),
+                    child: _remoteStays
+                        // Only the name: the folder is the other computer's.
+                        ? _well(t, _stayingName,
+                            key: const ValueKey('export-path'),
+                            tone: t.textMuted,
+                            lead: _computerName(_on))
+                        : _well(
+                            t,
+                            _path == null ? l10n.exportNotChosen : _leaf(_path!),
+                            key: const ValueKey('export-path'),
+                            tone: t.textMuted,
+                            tip: _path,
+                          ),
                   ),
                 ),
                 // A page has no folders: the browser asks where as it starts.
-                if (!kIsWeb) ...[
+                if (!kIsWeb && !_remoteStays) ...[
                   const SizedBox(width: 6),
                   // A floor rather than a width: a longer word for Browse grows
                   // the button instead of wrapping.
@@ -1074,6 +1221,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ],
               ]),
             ),
+            ..._alsoRows(t),
             // *When done* is two independent answers: a long export left
             // running wants the sound and the folder both.
             _row(
@@ -1363,6 +1511,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             dimmed: dim,
           ),
         ),
+        if (_hasCaptions) _captionsRow(t, dim),
       ],
       dimmed: dim,
     );
@@ -1435,15 +1584,15 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: _ownRate
                     ? DragValueField(
                         key: const ValueKey('export-fps'),
-                        value: _fps,
+                        value: _rate,
                         min: 1,
-                        max: 240,
+                        max: _caps.maxFps > 0 ? _caps.maxFps.toDouble() : 240,
                         decimals: 2,
                         resetTo: _compFps,
                         fill: t.surface0,
                         onChanged: (v) => _edit(() => _fps = v.toDouble()),
                       )
-                    : _well(t, _formatRate(_compFps),
+                    : _well(t, _formatRate(_rate),
                         key: const ValueKey('export-fps'),
                         tone: t.textDisabled),
               ),
@@ -1533,9 +1682,9 @@ class _ExportDialogState extends State<_ExportDialog> {
         _reading(
           t,
           l10n.exportTimeReading(
-            _timecode(start, _rate),
-            _timecode(end, _rate),
-            _timecode(end - start, _rate),
+            _timecode(start, _compFps),
+            _timecode(end, _compFps),
+            _timecode(end - start, _compFps),
           ),
           key: const ValueKey('export-time-reading'),
         ),
@@ -1945,6 +2094,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     final dim = !_caps.audio;
     // Why the settings after the first list are dead while it reads Off.
     final off = _audio ? null : l10n.tipExportAudioOff;
+    final live = _caps.audio && _audio;
     return _group(
       t,
       ExportSection.audio,
@@ -2045,10 +2195,123 @@ class _ExportDialogState extends State<_ExportDialog> {
           ]),
           dimmed: dim,
         ),
+        _columns(
+          _row(
+            t,
+            l10n.exportLoudness,
+            Row(children: [
+              Expanded(
+                child: SizedBox(
+                  height: dialogControlHeight,
+                  child: _why(
+                    off,
+                    BareDropdown<Object?>(
+                      key: const ValueKey('export-loudness'),
+                      value: _loudnessPick,
+                      options: [
+                        null,
+                        if (_compTarget != null) _targetPick,
+                        ...loudnessPresets,
+                        _customPick,
+                      ],
+                      label: _loudnessLabel,
+                      onChanged: live ? _pickLoudness : null,
+                    ),
+                  ),
+                ),
+              ),
+              if (_loudnessPick == _customPick) ...[
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: exportLoudnessWell,
+                  height: dialogControlHeight,
+                  child: live
+                      ? DragValueField(
+                          key: const ValueKey('export-loudness-lufs'),
+                          value: _customLufs,
+                          min: -40,
+                          max: -5,
+                          decimals: 1,
+                          fill: t.surface0,
+                          onChanged: (v) =>
+                              _edit(() => _customLufs = v.toDouble()),
+                        )
+                      : _well(t, _customLufs.toStringAsFixed(1),
+                          key: const ValueKey('export-loudness-lufs'),
+                          tone: t.textDisabled),
+                ),
+              ],
+            ]),
+            dimmed: dim,
+          ),
+          _loudness == null
+              ? null
+              : _row(
+                  t,
+                  l10n.exportTruePeak,
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: SizedBox(
+                      width: exportLoudnessWell,
+                      height: dialogControlHeight,
+                      child: live
+                          ? DragValueField(
+                              key: const ValueKey('export-true-peak'),
+                              value: _truePeakDb,
+                              min: -9,
+                              max: 0,
+                              decimals: 1,
+                              suffix: ' ${l10n.unitSymbolDbtp}',
+                              resetTo: presetTruePeakDb,
+                              fill: t.surface0,
+                              onChanged: (v) =>
+                                  _edit(() => _truePeakDb = v.toDouble()),
+                            )
+                          : _well(
+                              t,
+                              '${_truePeakDb.toStringAsFixed(1)} '
+                              '${l10n.unitSymbolDbtp}',
+                              key: const ValueKey('export-true-peak'),
+                              tone: t.textDisabled),
+                    ),
+                  ),
+                  labelColumn: exportLabelColumnPaired,
+                  dimmed: dim,
+                ),
+        ),
+        if (_hasBus)
+          _row(
+            t,
+            l10n.exportStems,
+            _why(
+              off,
+              _tick(t, 'export-stems', l10n.exportStemsEach, _stems,
+                  live ? (on) => _edit(() => _stems = on) : null),
+            ),
+            dimmed: dim,
+          ),
       ],
       dimmed: dim,
     );
   }
+
+  /// A loudness choice as the list reads it.
+  String _loudnessLabel(Object? pick) => switch (pick) {
+        final double lufs => loudnessTargetLabel(lufs),
+        _targetPick => l10n.exportLoudnessTarget(
+            loudnessTargetLabel(_compTarget?.lufs ?? 0)),
+        _customPick => l10n.custom,
+        _ => l10n.off,
+      };
+
+  /// A loudness picked off the list. The comp's target brings its own true
+  /// peak with it.
+  void _pickLoudness(Object? pick) => _edit(() {
+        _loudnessPick = pick;
+        if (_compTarget case final target? when pick == _targetPick) {
+          _truePeakDb = target.truePeakDb;
+        }
+      });
 
   /// Metadata: an ordered key/value set, because the order lands in the file
   /// and an export is deterministic. The five classic fields lead, named; a
@@ -2243,91 +2506,6 @@ class _ExportDialogState extends State<_ExportDialog> {
       ? control
       : LumitTooltip(message: reason, child: control);
 
-  /// Dither, palette and plays, live only for a GIF.
-  List<Widget> _gifRows(LumitTheme t, bool dim) {
-    final why = _caps.gif ? null : l10n.tipExportFormatLimit;
-    final forever = _gifPlays == 0;
-    return [
-      _columns(
-        _row(
-          t,
-          l10n.exportGifDither,
-          _why(
-            why,
-            dialogDropdown<int>(
-              t,
-              id: 'export-gif-dither',
-              value: _gifDither,
-              options: const [0, 1, 2],
-              label: (d) => switch (d) {
-                1 => l10n.exportGifDitherPattern,
-                2 => l10n.exportGifDitherNone,
-                _ => l10n.exportGifDitherDiffusion,
-              },
-              onChanged: _caps.gif ? (d) => _edit(() => _gifDither = d) : null,
-            ),
-          ),
-          dimmed: dim,
-        ),
-        _row(
-          t,
-          l10n.exportGifPalette,
-          _why(
-            why,
-            dialogDropdown<bool>(
-              t,
-              id: 'export-gif-palette',
-              value: _gifPalettePerFrame,
-              options: const [false, true],
-              label: (perFrame) => perFrame
-                  ? l10n.exportGifPalettePerFrame
-                  : l10n.exportGifPaletteShared,
-              onChanged: _caps.gif
-                  ? (p) => _edit(() => _gifPalettePerFrame = p)
-                  : null,
-            ),
-          ),
-          labelColumn: exportLabelColumnPaired,
-          dimmed: dim,
-        ),
-      ),
-      _row(
-        t,
-        l10n.exportGifPlays,
-        Row(children: [
-          _why(
-            why,
-            _tick(
-              t,
-              'export-gif-forever',
-              l10n.exportGifForever,
-              forever,
-              _caps.gif ? (on) => _edit(() => _gifPlays = on ? 0 : 1) : null,
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: exportSizeWell,
-            height: dialogControlHeight,
-            child: forever || !_caps.gif
-                ? _well(t, forever ? '—' : '$_gifPlays',
-                    key: const ValueKey('export-gif-plays'),
-                    tone: t.textDisabled)
-                : DragValueField(
-                    key: const ValueKey('export-gif-plays'),
-                    value: _gifPlays,
-                    min: 1,
-                    max: 1000,
-                    fill: t.surface0,
-                    onChanged: (v) => _edit(() => _gifPlays = v.toInt()),
-                  ),
-          ),
-        ]),
-        dimmed: dim,
-      ),
-    ];
-  }
-
   /// The colour depth, offered only where the format carries more than one.
   Widget _depthDropdown(LumitTheme t, String id) => _why(
         _caps.depths.length > 1 ? null : l10n.tipExportFormatLimit,
@@ -2384,24 +2562,33 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// A recessed box holding something the user did not type — a chosen path,
   /// or a number this row is not offering to change.
+  /// [lead] is a quiet word before [text], where a path's folder would be.
   Widget _well(LumitTheme t, String text,
-          {Key? key, Color? tone, String? tip}) =>
-      Container(
-        key: key,
-        height: dialogControlHeight,
-        alignment: AlignmentDirectional.centerStart,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: t.surface0,
-          border: Border.all(color: t.hairline),
-          borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
-        ),
-        child: MiddleEllipsis(
-          text,
-          style: t.mono.copyWith(fontSize: 11, color: tone ?? t.textPrimary),
-          tip: tip,
-        ),
-      );
+      {Key? key, Color? tone, String? tip, String? lead}) {
+    final words = MiddleEllipsis(
+      text,
+      style: t.mono.copyWith(fontSize: 11, color: tone ?? t.textPrimary),
+      tip: tip,
+    );
+    return Container(
+      key: key,
+      height: dialogControlHeight,
+      alignment: AlignmentDirectional.centerStart,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: t.surface0,
+        border: Border.all(color: t.hairline),
+        borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+      ),
+      child: lead == null
+          ? words
+          : Row(children: [
+              Text(lead, style: t.small.copyWith(color: t.textMuted)),
+              const SizedBox(width: 8),
+              Expanded(child: words),
+            ]),
+    );
+  }
 
   /// What to do about footage this computer has no original of: the choices
   /// that can be had, the least to send first.
@@ -2629,7 +2816,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 
   /// Fill every field a preset carries from [stored], its name included.
-  void _takeSpec(BridgeExportSpec stored) {
+  /// [exact] for a queued export's own settings, which name their loudness.
+  void _takeSpec(BridgeExportSpec stored, {bool exact = false}) {
     _edit(() {
       _preset = stored.preset;
       _format = _formats.firstWhere(
@@ -2656,9 +2844,34 @@ class _ExportDialogState extends State<_ExportDialog> {
       _audioSampleRate = stored.audioRate == 0 ? 48000 : stored.audioRate;
       _audioDepth = stored.audioDepth >= 24 ? 24 : 16;
       _audioChannels = stored.audioChannels == 1 ? 1 : 2;
+      final loudness = stored.loudness;
+      _ownLoudness = exact ||
+          _presets.any((p) => p.name == stored.preset && !p.readOnly);
+      final target = _compTarget;
+      _loudnessPick = switch (loudness?.lufs) {
+        null when target != null && !_ownLoudness => _targetPick,
+        null => null,
+        final lufs when lufs == _compTarget?.lufs => _targetPick,
+        final lufs when loudnessPresets.contains(lufs) => lufs,
+        _ => _customPick,
+      };
+      if (loudness != null) {
+        _truePeakDb = loudness.truePeakDb;
+        if (_loudnessPick == _customPick) _customLufs = loudness.lufs;
+      } else if (target != null && _loudnessPick == _targetPick) {
+        _truePeakDb = target.truePeakDb;
+      }
+      _stems = stored.stems;
+      for (final also in _also) {
+        also.suffix.dispose();
+      }
+      _also
+        ..clear()
+        ..addAll([for (final a in stored.also) _Also(a.codec, a.suffix)]);
       _colourSpace = stored.colourSpace;
       _resample = stored.resample;
       _renderGuides = stored.renderGuides;
+      _captions = stored.captions;
       _motionBlur = stored.motionBlur;
       _retimeBlend = stored.retimeBlend;
       _useProxies = stored.useProxies;
@@ -2809,29 +3022,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// not take — is shown in the footer where the summary was, rather than
   /// swallowed.
   Future<void> _queue({required bool start}) async {
-    if (_path == null) await _choose();
-    if (!mounted) return;
-    var path = _path;
-    if (path == null) return;
-    // A sequence's frames were never in the Save dialogue's question, so its
-    // first frame is always asked about.
-    if ((path != _picked || _images) &&
-        exportPathTaken(path: path, codec: _format.key)) {
-      final keep = await askLumitChoice<bool>(
-        context: context,
-        title: l10n.exportOverwriteTitle,
-        question: l10n.exportOverwriteQuestion(_leaf(path)),
-        answers: [
-          (l10n.exportOverwrite, false),
-          (l10n.exportKeepBoth, true),
-        ],
-      );
-      if (keep == null || !mounted) return;
-      if (keep) {
-        path = exportFreePath(path: path, codec: _format.key);
-        setState(() => _path = path);
-      }
-    }
+    final path = await _where();
+    if (path == null || !mounted) return;
     setState(() {
       _refused = null;
       _refusedForAddon = false;
@@ -2866,6 +3058,290 @@ class _ExportDialogState extends State<_ExportDialog> {
     widget.onClose();
   }
 
+  /// Where the file goes, asked for when nothing is chosen yet. A file it would
+  /// write over is asked about first. Null for none.
+  Future<String?> _where() async {
+    if (_path == null) await _choose();
+    if (!mounted) return null;
+    var path = _path;
+    if (path == null) return null;
+    // A sequence's frames were never in the Save dialogue's question, so its
+    // first frame is always asked about.
+    if ((path != _picked ||
+            _images ||
+            _captionsBeside ||
+            _also.isNotEmpty) &&
+        exportPathTaken(
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also)) {
+      final keep = await askLumitChoice<bool>(
+        context: context,
+        title: l10n.exportOverwriteTitle,
+        question: l10n.exportOverwriteQuestion(_leaf(path)),
+        answers: [
+          (l10n.exportOverwrite, false),
+          (l10n.exportKeepBoth, true),
+        ],
+      );
+      if (keep == null || !mounted) return null;
+      if (keep) {
+        path = exportFreePath(
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also);
+        setState(() => _path = path);
+      }
+    }
+    return path;
+  }
+
+  /// Send the export to the computer chosen, and show the queue, where it
+  /// sits under that computer's name. A file that comes back is asked for
+  /// here first, as one exported here is.
+  Future<void> _send() async {
+    final path = _stays ? _stayingName : await _where();
+    if (path == null || !mounted) return;
+    try {
+      widget.comp.remoteSend(
+          computer: _on == '*' ? '' : _on,
+          spec: _spec,
+          path: path,
+          lands: _stays ? BridgeRemoteLands.worker : BridgeRemoteLands.sender);
+    } catch (_) {
+      // A `BridgeError` has nothing readable on it, and the one refusal a
+      // send has of its own is that no computer can take it.
+      setState(() => _refused = l10n.remoteNoComputer);
+      return;
+    }
+    exportLastComputer = _on;
+    // Wake the status line, which follows a sent export as it does one here.
+    statusLineExportStarted.value++;
+    showExportQueueFrb(context: context);
+    widget.onClose();
+  }
+
+  // ---- another computer ----------------------------------------------------
+
+  /// The account's other computers, and how each stands for this export,
+  /// read off the engine. Asking how one stands asks it, when it hasn't been
+  /// since the project changed, so it is asked as the dialogue opens and has
+  /// its answer by the time the list is.
+  void _readComputers() {
+    _computers = remoteComputers();
+    _fits = {
+      for (final c in _computers)
+        if (c.online && c.takes) c.id: widget.comp.remoteFit(computer: c.id),
+    };
+    // One that has gone from the list can't be exported on.
+    if ((_on == '*' && _computers.length < 2) ||
+        (_on.isNotEmpty &&
+            _on != '*' &&
+            !_computers.any((c) => c.id == _on))) {
+      _on = '';
+      _stays = false;
+    }
+  }
+
+  /// Read again each second while another computer is chosen, so the footer
+  /// follows it: checked, away, back.
+  void _watchComputers() {
+    _computersTimer?.cancel();
+    _computersTimer = _on.isEmpty
+        ? null
+        : Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted) setState(_readComputers);
+          });
+  }
+
+  void _setOn(String on) {
+    setState(() {
+      _on = on;
+      if (on.isEmpty) _stays = false;
+      _recompute();
+    });
+    _watchComputers();
+  }
+
+  bool get _remoteStays => _on.isNotEmpty && _stays;
+
+  /// The name the file is written under on the other computer.
+  String get _stayingName =>
+      _path != null ? _leaf(_path!) : '$_compName.${_format.extension}';
+
+  String _computerName(String id) => id == '*'
+      ? l10n.remoteThatComputer
+      : _computers.where((c) => c.id == id).firstOrNull?.name ?? '';
+
+  /// What a computer lacks for this export, as a count of each kind.
+  static String _lacks(BridgeRemoteFit_Lacks lacks) => l10n.remoteLacks([
+        if (lacks.plugins.isNotEmpty) l10n.remotePlugins(lacks.plugins.length),
+        if (lacks.fonts.isNotEmpty) l10n.remoteFonts(lacks.fonts.length),
+        if (lacks.models.isNotEmpty) l10n.remoteModels(lacks.models.length),
+      ].join(', '));
+
+  /// Why a computer can't be picked, or null when it can.
+  String? _cannot(String id) {
+    final computer = _computers.where((c) => c.id == id).firstOrNull;
+    if (computer == null) return null;
+    if (!computer.takes) return l10n.remoteNotTaking;
+    if (_fits[id] case BridgeRemoteFit_TooOld(:final needs)) {
+      return l10n.remoteNeedsVersion(needs);
+    }
+    return null;
+  }
+
+  /// The graphics card a computer exports on, and its memory as the card is
+  /// sold by, on hover in the list. Null while it hasn't said.
+  String? _card(String id) {
+    final computer = _computers.where((c) => c.id == id).firstOrNull;
+    if (computer == null || computer.gpu.isEmpty) return null;
+    final memory = (computer.gpuMemory / (1 << 30)).round();
+    return memory > 0
+        ? '${computer.gpu} · $memory ${l10n.unitGb}'
+        : computer.gpu;
+  }
+
+  /// How a computer stands, in a few words beside its name.
+  String? _standing(String id) {
+    final computer = _computers.where((c) => c.id == id).firstOrNull;
+    if (computer == null) return null;
+    if (_cannot(id) case final why?) return why;
+    if (!computer.online) return remoteAwayWords(computer.seen);
+    final fit = _fits[id];
+    if (fit is BridgeRemoteFit_Checking) return l10n.remoteChecking;
+    if (fit is BridgeRemoteFit_Lacks) return _lacks(fit);
+    if (computer.exporting) return l10n.remoteExporting;
+    if (computer.queued > 0) return l10n.remoteQueued(computer.queued);
+    return fit is BridgeRemoteFit_Ready ? l10n.remoteReady : null;
+  }
+
+  /// Export on, and with another computer chosen, where its file goes.
+  List<Widget> _remoteRows(LumitTheme t) => [
+        _row(
+          t,
+          l10n.remoteExportOn,
+          SizedBox(
+            height: dialogControlHeight,
+            // Read again as the list is reached for, by pointer or by Tab,
+            // so it opens on how each computer stands now.
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onFocusChange: (on) {
+                if (on) setState(_readComputers);
+              },
+              child: Listener(
+                onPointerDown: (_) => setState(_readComputers),
+                child: BareDropdown<String>(
+                  key: const ValueKey('export-on'),
+                  value: _on,
+                  options: [
+                    '',
+                    if (_computers.length > 1) '*',
+                    for (final c in _computers) c.id,
+                  ],
+                  label: (id) => switch (id) {
+                    '' => l10n.deviceThisComputer,
+                    '*' => l10n.remoteAnyComputer,
+                    _ => _computerName(id),
+                  },
+                  aside: _standing,
+                  note: _card,
+                  disabledReason: _cannot,
+                  onChanged: _setOn,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_on.isNotEmpty)
+          _row(
+            t,
+            l10n.remoteFileGoesTo,
+            Row(children: [
+              _landsChip(t, false, l10n.deviceThisComputer),
+              _landsChip(t, true, _computerName(_on)),
+            ]),
+          ),
+      ];
+
+  /// One of the two places the file can go, as Format's chips are drawn.
+  /// Tab reaches each, ringed in the accent while it has the focus, and
+  /// Enter or Space picks it.
+  Widget _landsChip(LumitTheme t, bool stays, String label) {
+    final on = _stays == stays;
+    return FocusableActionDetector(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+      },
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+          setState(() => _stays = stays);
+          return null;
+        }),
+      },
+      child: HoverMark(
+      builder: (context, lit) => GestureDetector(
+        key: ValueKey<String>('export-lands-${stays ? 'there' : 'here'}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _stays = stays),
+        child: Container(
+          margin: const EdgeInsetsDirectional.only(end: dialogTabGap),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+            border: Border.all(
+                color: Focus.of(context).hasFocus
+                    ? t.accent
+                    : on
+                        ? t.hairlineStrong
+                        : const Color(0x00000000)),
+          ),
+          child: Text(
+            t.kickerCase(label),
+            style: on
+                ? t.kickerOn
+                : t.kicker.copyWith(
+                    color: Color.lerp(t.kicker.color, t.textPrimary, lit)),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  /// The footer's line for a computer that is away, or null for the usual.
+  String? get _remoteSummary {
+    if (_on.isEmpty || _on == '*') return null;
+    final computer = _computers.where((c) => c.id == _on).firstOrNull;
+    if (computer == null || computer.online) return null;
+    return l10n.remoteWaitsFor(computer.name);
+  }
+
+  /// The footer's line for a computer that lacks what the export uses, in
+  /// the warning colour, with their names on hover. Null for the usual.
+  Widget? _lacksLine(LumitTheme t) {
+    if (_on.isEmpty || _on == '*') return null;
+    final fit = _fits[_on];
+    if (fit is! BridgeRemoteFit_Lacks) return null;
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: LumitTooltip(
+        message: [...fit.plugins, ...fit.fonts, ...fit.models].join(', '),
+        child: Text(
+          _lacks(fit),
+          key: const ValueKey('export-summary'),
+          style: dialogMono(t).copyWith(color: t.warning),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   /// Give the queued item these settings. A file it would newly write over is
   /// asked about first, as when it was queued.
   Future<void> _saveQueued() async {
@@ -2873,8 +3349,15 @@ class _ExportDialogState extends State<_ExportDialog> {
     final id = widget.queued;
     if (path == null || id == null) return;
     if (path != _queuedPath &&
-        (path != _picked || _images) &&
-        exportPathTaken(path: path, codec: _format.key)) {
+        (path != _picked ||
+            _images ||
+            _captionsBeside ||
+            _also.isNotEmpty) &&
+        exportPathTaken(
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also)) {
       final keep = await askLumitChoice<bool>(
         context: context,
         title: l10n.exportOverwriteTitle,
@@ -2885,7 +3368,13 @@ class _ExportDialogState extends State<_ExportDialog> {
         ],
       );
       if (keep == null || !mounted) return;
-      if (keep) path = exportFreePath(path: path, codec: _format.key);
+      if (keep) {
+        path = exportFreePath(
+            path: path,
+            codec: _format.key,
+            captions: _captions,
+            also: _spec.also);
+      }
     }
     if (_failedItem) {
       try {

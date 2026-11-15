@@ -34,6 +34,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import 'audio_timeline_rows_frb.dart';
+import 'audio_timeline_zoom.dart' show waveBandsResolve, waveBuckets;
 import 'clip_fades.dart';
 import 'graph_maths.dart' show rationalSeconds;
 import 'spectral_lane_frb.dart';
@@ -164,13 +165,16 @@ bool audioBelowTracks(List<AudioTrackRow> tracks, double y) =>
 String clipGainWords(double gainDb) =>
     '${gainDb > 0 ? '+' : ''}${gainDb.toStringAsFixed(1)} ${l10n.unitSymbolDb}';
 
-/// Where a clip's gain line lies, in the strip's own pixels: 0 dB at the top of
-/// the box, silence at its foot, on the Volume band's own floor and its linear
+/// The loudest a clip's own gain goes, in dB.
+const double clipGainTopDb = 24;
+
+/// Where a clip's gain line lies, in the strip's own pixels: [clipGainTopDb] at
+/// the top of the box, silence at its foot, on the Volume band's own floor and its linear
 /// shape (docs/impl/audio-timeline.md §5). A box is inset two pixels top and
 /// bottom, which is the four this takes off [stripHeight] and the two it puts
 /// back.
 double audioClipGainY(double gainDb, double stripHeight) =>
-    volumeBandY(gainDb, math.max(3.0, stripHeight - 4), topDb: 0) + 2;
+    volumeBandY(gainDb, math.max(3.0, stripHeight - 4), topDb: clipGainTopDb) + 2;
 
 /// How tall the line's hit band is, and how thick the line drawn down the
 /// middle of it. A few pixels either side is enough to take hold of, and every
@@ -291,6 +295,10 @@ class AudioClipStrip extends StatefulWidget {
   final void Function(BridgeClip clip, BuildContext at)? onAddEffect;
   final void Function(BridgeClip clip, BuildContext at)? onToggleOpen;
 
+  /// Where each clip's wave is handed on as it lands, by clip id, so the
+  /// track's lanes can draw it faint behind their curves.
+  final ValueNotifier<Map<String, BridgeAudioPeaks>>? waves;
+
   const AudioClipStrip({
     super.key,
     required this.track,
@@ -316,6 +324,7 @@ class AudioClipStrip extends StatefulWidget {
     this.onToggleFx,
     this.onAddEffect,
     this.onToggleOpen,
+    this.waves,
   });
 
   @override
@@ -590,15 +599,16 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     _escape.begin(() => setState(() => _gain = null));
   }
 
-  /// The band's own arithmetic read from 0 dB down: the dB the drag took hold
-  /// of, less its travel over the height of the box.
+  /// The band's own arithmetic read from [clipGainTopDb] down: the dB the drag
+  /// took hold of, less its travel over the height of the box.
   void _gainMove(double dy) {
     final held = _gain;
     if (held == null || !_escape.running) return;
     final travelled = held.travelled + dy;
     final height = math.max(3.0, widget.height - 4);
-    final db = (held.grabbedAt - travelled / (height - 2) * -volumeBandFloorDb)
-        .clamp(volumeBandFloorDb, 0.0);
+    final db = (held.grabbedAt -
+            travelled / (height - 2) * (clipGainTopDb - volumeBandFloorDb))
+        .clamp(volumeBandFloorDb, clipGainTopDb);
     setState(() => _gain = (
           clip: held.clip,
           db: db,
@@ -689,8 +699,10 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     if (request == null) return;
     // The trim and the map are part of the key: both change which source
     // moments the buckets stand for, and neither moves the clip's box.
+    // Close in the bands are the filtered signal, so the full wave is asked.
+    final bands = widget.style.needsBands && waveBandsResolve(secondsPerPixel);
     final key = '${widget.mode.name}|${request.key}|${clip.startFrame}'
-        '|${clip.endFrame}|${clip.retimed}|${widget.style.needsBands}';
+        '|${clip.endFrame}|${clip.retimed}|$bands';
     if (_keys[id] == key) return;
     _keys[id] = key;
     final layer = widget.track.entry.layer;
@@ -715,13 +727,17 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       clip: clip.id,
       startSeconds: request.startSeconds,
       endSeconds: request.endSeconds,
-      buckets: request.buckets,
-      multiwave: widget.style.needsBands,
+      buckets: waveBuckets(request),
+      multiwave: bands,
       stereo: true,
     )
+        .then((peaks) => withSamples(peaks, secondsPerPixel, request,
+            (a, b) => layer.clipAudioSamples(
+                clip: clip.id, startSeconds: a, endSeconds: b, stereo: true)))
         .then((peaks) {
       if (!mounted || _keys[id] != key) return;
       setState(() => _peaks[id] = peaks);
+      widget.waves?.value = Map.of(_peaks);
     });
   }
 
@@ -1040,6 +1056,9 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                   colours: clipWaveColours(label, t.textPrimary),
                   style: widget.style,
                   height: height,
+                  gainDb:
+                      clip.gainDb + widget.track.entry.info.audioGainDb,
+                  full: t.error,
                 ),
               ),
       ),

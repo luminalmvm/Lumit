@@ -16,9 +16,10 @@
 //!
 //! [`lex`] and [`parse`] turn the text into a tree, [`interp`] walks it, and
 //! [`ae`] is what After Effects adds: the comp, the layers, their effects, and
-//! the helpers.
+//! the helpers. [`essential`] reads a copy's value for a template's control.
 
 mod ae;
+mod essential;
 pub(crate) mod interp;
 mod lex;
 pub(crate) mod parse;

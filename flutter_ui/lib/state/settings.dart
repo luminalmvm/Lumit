@@ -279,6 +279,18 @@ enum StreamsArrival {
   split,
 }
 
+/// How a waveform's height follows its level.
+enum WaveformScale {
+  /// The level straight through.
+  linear,
+
+  /// The square root of the level, which lifts the quiet end.
+  squareRoot,
+
+  /// The level in decibels, from -60 dB at silence to 0 dB at the edge.
+  logarithmic,
+}
+
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
   /// The style's own room, which is the night room for every scheme. A dark
@@ -393,6 +405,39 @@ class InterfaceSettings {
   double cutFreezeSeconds;
   double retimeHoldSeconds;
 
+  /// The Transcript panel's look: a silence shorter than this many
+  /// milliseconds is part of the words round it, not a pause of its own.
+  int transcriptPauseMs;
+
+  /// Whether the Transcript panel keeps the word being played in view.
+  bool transcriptFollow;
+
+  /// Whether the Transcript panel shows the words that were cut out,
+  /// struck through, and the pauses as chips.
+  bool transcriptShowRemoved;
+  bool transcriptShowPauses;
+
+  /// The Transcript panel's reading size, in points.
+  double transcriptTextSize;
+
+  /// Which kinds of filler the Transcript panel's review lists, and whether
+  /// it leaves out the ones too tight to the words round them to cut
+  /// cleanly.
+  bool transcriptHesitations;
+  bool transcriptPhrases;
+  bool transcriptRepeats;
+  bool transcriptRetakes;
+  bool transcriptSkipTight;
+
+  /// The Transcript panel's pauses review: the pauses it lists, and what
+  /// Shorten leaves of each, in milliseconds.
+  int transcriptLongerThanMs;
+  int transcriptShortenToMs;
+
+  /// Whether the Transcript panel's reviews lift what they delete, leaving
+  /// the gap, rather than extracting it and closing it.
+  bool transcriptLift;
+
   /// What the last Ramp… asked for: the speed in per cent, the length in
   /// frames, whether the length reads in seconds, and the ease by name.
   double retimeRampTo;
@@ -476,6 +521,9 @@ class InterfaceSettings {
   /// whole row's height on the half that carries the information. Applies to
   /// the single wave and the stack alike.
   bool waveformsFromBottom;
+
+  /// How a waveform's height follows its level. Square root by default.
+  WaveformScale waveformScale;
 
   /// Whether the Viewer bar carries its tone map button.
   ///
@@ -653,6 +701,19 @@ class InterfaceSettings {
     this.cutDefaultTransition,
     this.cutFreezeSeconds = 2,
     this.retimeHoldSeconds = 1,
+    this.transcriptPauseMs = 500,
+    this.transcriptFollow = true,
+    this.transcriptShowRemoved = false,
+    this.transcriptShowPauses = true,
+    this.transcriptTextSize = 13,
+    this.transcriptHesitations = true,
+    this.transcriptPhrases = false,
+    this.transcriptRepeats = true,
+    this.transcriptRetakes = false,
+    this.transcriptSkipTight = true,
+    this.transcriptLongerThanMs = 1000,
+    this.transcriptShortenToMs = 300,
+    this.transcriptLift = false,
     this.retimeRampTo = 20,
     this.retimeRampFrames = 12,
     this.retimeRampInSeconds = false,
@@ -670,6 +731,7 @@ class InterfaceSettings {
     this.multiwaveWaveforms = true,
     this.reduceTransparency = false,
     this.waveformsFromBottom = false,
+    this.waveformScale = WaveformScale.squareRoot,
     this.showToneMap = false,
     this.viewerGuidesLocked = false,
     this.alignToFirstPicked = false,
@@ -713,6 +775,19 @@ class InterfaceSettings {
         'cut_default_transition': cutDefaultTransition,
         'cut_freeze_seconds': cutFreezeSeconds,
         'retime_hold_seconds': retimeHoldSeconds,
+        'transcript_pause_ms': transcriptPauseMs,
+        'transcript_follow': transcriptFollow,
+        'transcript_show_removed': transcriptShowRemoved,
+        'transcript_show_pauses': transcriptShowPauses,
+        'transcript_text_size': transcriptTextSize,
+        'transcript_hesitations': transcriptHesitations,
+        'transcript_phrases': transcriptPhrases,
+        'transcript_repeats': transcriptRepeats,
+        'transcript_retakes': transcriptRetakes,
+        'transcript_skip_tight': transcriptSkipTight,
+        'transcript_longer_than_ms': transcriptLongerThanMs,
+        'transcript_shorten_to_ms': transcriptShortenToMs,
+        'transcript_lift': transcriptLift,
         'retime_ramp_to': retimeRampTo,
         'retime_ramp_frames': retimeRampFrames,
         'retime_ramp_in_seconds': retimeRampInSeconds,
@@ -730,6 +805,7 @@ class InterfaceSettings {
         'multiwave_waveforms': multiwaveWaveforms,
         'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
+        'waveform_scale': waveformScale.name,
         'show_tone_map': showToneMap,
         'viewer_guides_locked': viewerGuidesLocked,
         'align_to_first_picked': alignToFirstPicked,
@@ -794,6 +870,22 @@ class InterfaceSettings {
         cutDefaultTransition: j['cut_default_transition'] as String?,
         cutFreezeSeconds: (j['cut_freeze_seconds'] as num?)?.toDouble() ?? 2,
         retimeHoldSeconds: (j['retime_hold_seconds'] as num?)?.toDouble() ?? 1,
+        transcriptPauseMs: (j['transcript_pause_ms'] as num?)?.toInt() ?? 500,
+        transcriptFollow: j['transcript_follow'] as bool? ?? true,
+        transcriptShowRemoved: j['transcript_show_removed'] as bool? ?? false,
+        transcriptShowPauses: j['transcript_show_pauses'] as bool? ?? true,
+        transcriptTextSize:
+            (j['transcript_text_size'] as num?)?.toDouble() ?? 13,
+        transcriptHesitations: j['transcript_hesitations'] as bool? ?? true,
+        transcriptPhrases: j['transcript_phrases'] as bool? ?? false,
+        transcriptRepeats: j['transcript_repeats'] as bool? ?? true,
+        transcriptRetakes: j['transcript_retakes'] as bool? ?? false,
+        transcriptSkipTight: j['transcript_skip_tight'] as bool? ?? true,
+        transcriptLongerThanMs:
+            (j['transcript_longer_than_ms'] as num?)?.toInt() ?? 1000,
+        transcriptShortenToMs:
+            (j['transcript_shorten_to_ms'] as num?)?.toInt() ?? 300,
+        transcriptLift: j['transcript_lift'] as bool? ?? false,
         retimeRampTo: (j['retime_ramp_to'] as num?)?.toDouble() ?? 20,
         retimeRampFrames: (j['retime_ramp_frames'] as num?)?.toInt() ?? 12,
         retimeRampInSeconds: j['retime_ramp_in_seconds'] as bool? ?? false,
@@ -831,6 +923,9 @@ class InterfaceSettings {
         // Absent means off: centred is what a settings file written before
         // this field existed was already drawing.
         waveformsFromBottom: j['waveforms_from_bottom'] as bool? ?? false,
+        waveformScale: WaveformScale.values.firstWhere(
+            (s) => s.name == j['waveform_scale'],
+            orElse: () => WaveformScale.squareRoot),
         // Absent means off: hidden is the new default, and a settings file
         // written before this field existed adopts it — a comp that stored an
         // engaged tone map is disengaged with it rather than left stranded.

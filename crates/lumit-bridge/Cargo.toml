@@ -62,6 +62,9 @@ lumit-text = { path = "../lumit-text" }
 # alone, so the docs/05 layering is unbroken.
 lumit-import = { path = "../lumit-import" }
 lumit-keymap = { path = "../lumit-keymap" }
+lumit-lottie = { path = "../lumit-lottie" }
+# Tangent panels and MIDI controllers, for grading by hand.
+lumit-surface = { path = "../lumit-surface" }
 # The addons folder and the model runtime (docs/impl/addons.md §5). The bridge
 # is the composition root for these too: the Addons page is the one place that
 # knows what the user asked for and what the folder holds at once.
@@ -100,6 +103,9 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+# The working space's matrix, for a vector export's colours. Already in the
+# build graph through lumit-render.
+lumit-colour = { path = "../lumit-colour" }
 lumit-scene = { path = "../lumit-scene" }
 # The device the renderer opened, and what it says about the card.
 lumit-gpu = { path = "../lumit-gpu" }
@@ -112,10 +118,22 @@ lumit-track = { path = "../lumit-track" }
 # A comp frame saved for a script or an MCP client, with the version
 # lumit-render already brings in.
 png = "0.18"
+# The strip of frames a graphics template's tile scrubs, kept small. The
+# version and feature lumit-lottie already brings in.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# A remote export names each file by the hash of what is in it, as the
+# shared-project crates already do with this one.
+blake3 = "1"
+# The key that opens a remote export's link, at the version lumit-share uses.
+getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v5", "v7", "serde"] }
 flutter_rust_bridge = { version = "=2.12.0", features = ["uuid"] }
+# A transcript exported as a Word document is a zip of three XML parts.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+# The dialogue of a Final Draft script.
+roxmltree = "0.21"
 
 # What the machine has, for the cache budgets that spend it:
 # `GlobalMemoryStatusEx` for installed RAM and the first DXGI adapter's
@@ -145,6 +163,7 @@ features = [
     "Win32_Media",
     # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
     "Win32_Storage_FileSystem",
+    # `PowerSetRequest`, so the computer stays awake while an export runs, and
     # `GetSystemPowerStatus`, so the status line can say the laptop is on
     # battery or saving power (`power_saving`).
     "Win32_System_Power",

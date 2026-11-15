@@ -63,11 +63,19 @@ use super::effects::{
             vibrato::{AudioVibrato, AudioVibratoDef},
             wah::{AudioWah, AudioWahDef},
         },
+        repair::{
+            declick::{AudioDeclick, AudioDeclickDef},
+            deess::{AudioDeess, AudioDeessDef},
+            dehum::{AudioDehum, AudioDehumDef},
+            denoise::{AudioDenoise, AudioDenoiseDef},
+            dereverb::{AudioDereverb, AudioDereverbDef},
+        },
         space::{
             delay::{AudioDelay, AudioDelayDef},
             distortion::{AudioDistortion, AudioDistortionDef},
             reverb::{AudioReverb, AudioReverbDef},
         },
+        voice::{AudioVoice, AudioVoiceDef},
     },
     audio_spectrum::{AudioSpectrum, AudioSpectrumDef},
     bake_points::{BakePoints, BakePointsDef},
@@ -80,6 +88,7 @@ use super::effects::{
     broadcast_safe::{BroadcastSafe, BroadcastSafeDef},
     camera_track::{CameraTrack, CameraTrackDef},
     card_wipe::{CardWipe, CardWipeDef},
+    cdl::{Cdl, CdlDef},
     channel_blur::{ChannelBlur, ChannelBlurDef},
     checkbox_control::{CheckboxControl, CheckboxControlDef},
     chromatic_aberration::{ChromaticAberration, ChromaticAberrationDef},
@@ -87,16 +96,19 @@ use super::effects::{
     clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
+    colour_warper::{ColourWarper, ColourWarperDef},
     combine_channels::{CombineChannels, CombineChannelsDef},
     connect_points::{ConnectPoints, ConnectPointsDef},
     contour_points::{ContourPoints, ContourPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
+    correction::{Correction, CorrectionDef},
     crop::{Crop, CropDef},
     curves::{Curves, CurvesDef},
     custom_controls::{CustomControls, CustomControlsDef},
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
+    denoise::{Denoise, DenoiseDef},
     depth::{Depth, DepthDef},
     depth_points::{DepthPoints, DepthPointsDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
@@ -118,6 +130,7 @@ use super::effects::{
     fractal_noise::{FractalNoise, FractalNoiseDef},
     gamma::{Gamma, GammaDef},
     glow::{Glow, GlowDef},
+    grade_group::{GradeGroup, GradeGroupDef},
     gradient::{Gradient, GradientDef},
     grid::{Grid, GridDef},
     hue_saturation::{HueSaturation, HueSaturationDef},
@@ -131,6 +144,7 @@ use super::effects::{
     lens_distort::{LensDistort, LensDistortDef},
     lens_flare::{LensFlare, LensFlareDef},
     levels::{Levels, LevelsDef},
+    light_leak::{LightLeak, LightLeakDef},
     light_wrap::{LightWrap, LightWrapDef},
     lightning::{Lightning, LightningDef},
     linear_wipe::{LinearWipe, LinearWipeDef},
@@ -146,6 +160,7 @@ use super::effects::{
     mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
     motion_blur::{MotionBlur, MotionBlurDef},
+    move_transition::{MoveTransition, MoveTransitionDef},
     node_graph::{NodeGraph, NodeGraphDef},
     noise::{Noise, NoiseDef},
     ocio::{
@@ -185,6 +200,7 @@ use super::effects::{
     shake::{Shake, ShakeDef},
     sharpen::{Sharpen, SharpenDef},
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
+    slices::{Slices, SlicesDef},
     slider_control::{SliderControl, SliderControlDef},
     smoke::{Smoke, SmokeDef},
     sort_points::{SortPoints, SortPointsDef},
@@ -192,9 +208,11 @@ use super::effects::{
     split_channels::{SplitChannels, SplitChannelsDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
     srgb_curve::{SrgbCurve, SrgbCurveDef},
+    stabilise::{Stabilise, StabiliseDef},
     stroke::{Stroke, StrokeDef},
     switch::{Switch, SwitchDef},
     temperature::{Temperature, TemperatureDef},
+    template::{TemplateValues, TemplateValuesDef},
     text_to_points::{TextToPoints, TextToPointsDef},
     texturize::{Texturize, TexturizeDef},
     threshold::{Threshold, ThresholdDef},
@@ -227,6 +245,8 @@ crate::catalogue![
     RadialBlurDef => RadialBlur,
     SharpenDef => Sharpen,
     SharpenSimpleDef => SharpenSimple,
+    // Noise measured and taken out, over the frames either side.
+    DenoiseDef => Denoise,
     SpriteFlareDef => SpriteFlare,
     LightWrapDef => LightWrap,
     RgbSplitDef => RgbSplit,
@@ -256,6 +276,7 @@ crate::catalogue![
     // Crop, beside Transform: the two halves of Vegas's Pan/Crop.
     CropDef => Crop,
     GlowDef => Glow,
+    LightLeakDef => LightLeak,
     ShakeDef => Shake,
     JoltDef => Jolt,
     BlockGlitchDef => BlockGlitch,
@@ -282,6 +303,9 @@ crate::catalogue![
     BezierWarpDef => BezierWarp,
     WarpDef => Warp,
     MeshWarpDef => MeshWarp,
+    // Stabilise, at the Distortion family's end: it moves the picture, as
+    // Corner pin does, only by a measured amount.
+    StabiliseDef => Stabilise,
     // The Generate family, in docs/08 §3.34–§3.37 order.
     FillDef => Fill,
     GradientDef => Gradient,
@@ -394,6 +418,10 @@ crate::catalogue![
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,
+    // A whole grade node, beside the colour effects it gathers up.
+    CorrectionDef => Correction,
+    CdlDef => Cdl,
+    ColourWarperDef => ColourWarper,
     LevelsDef => Levels,
     BrightnessDef => Brightness,
     HueSaturationDef => HueSaturation,
@@ -406,6 +434,8 @@ crate::catalogue![
     PhotoFilterDef => PhotoFilter,
     BlackAndWhiteDef => BlackAndWhite,
     ShadowHighlightDef => ShadowHighlight,
+    // A grade group's place in a member's stack, at the Colour family's end.
+    GradeGroupDef => GradeGroup,
     LensFlareDef => LensFlare,
     LensDirtDef => LensDirt,
     FilmDef => Film,
@@ -439,6 +469,8 @@ crate::catalogue![
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
     LumaFadeDef => LumaFade,
+    MoveTransitionDef => MoveTransition,
+    SlicesDef => Slices,
     // The one effect whose program the user writes, appended at the
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.
@@ -469,6 +501,14 @@ crate::catalogue![
     AudioTremoloDef => AudioTremolo,
     AudioVibratoDef => AudioVibrato,
     AudioWahDef => AudioWah,
+    // Repair, last: what takes damage out of a recording rather than adding
+    // anything to it.
+    AudioDenoiseDef => AudioDenoise,
+    AudioDehumDef => AudioDehum,
+    AudioDeclickDef => AudioDeclick,
+    AudioDeessDef => AudioDeess,
+    AudioDereverbDef => AudioDereverb,
+    AudioVoiceDef => AudioVoice,
     // The other effect whose arithmetic came from somewhere else: a whole node
     // graph composition applied to this layer, with the graph's Inputs as its
     // rows (docs/impl/node-graph-comp.md §1.3). Beside the Custom shader,
@@ -500,6 +540,9 @@ crate::catalogue![
     ColourControlDef => ColourControl,
     PointControlDef => PointControl,
     CustomControlsDef => CustomControls,
+    // What a placed copy of a graphics template keeps: its own values for
+    // the template's controls. Never in the Add-effect menu.
+    TemplateValuesDef => TemplateValues,
     // The Drivers family, last of all: a driver is added from the Graph
     // panel's own search rather than from the Add-effect menu, and its entries
     // declare a data signature instead of an image kernel. The order inside it

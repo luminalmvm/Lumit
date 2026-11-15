@@ -64,9 +64,16 @@ fn every_wgsl_kernel_parses_and_validates() {
             || name == "light_core.wgsl"
             || name == "shadow_core.wgsl"
             || name == "environment_core.wgsl"
+            || name == "fx_denoise_common.wgsl"
         {
             continue;
         }
+        // Denoise's three modules each start with its common part.
+        let source = if name.starts_with("fx_denoise") {
+            format!("{}{source}", include_str!("../src/fx_denoise_common.wgsl"))
+        } else {
+            source
+        };
         // Appended to Particulate's kernel, as the engine compiles it.
         let source = if name == "fx_particulate_scene.wgsl" || name == "fx_particulate_sim.wgsl" {
             format!("{}{source}", include_str!("../src/fx_particulate.wgsl"))

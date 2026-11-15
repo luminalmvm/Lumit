@@ -284,8 +284,7 @@ void main() {
           'settings-disk-clear',
         ],
         'shortcuts': [
-          'keymap-preset-lumit',
-          'keymap-preset-ae',
+          'keymap-preset',
           'keymap-import',
           'keymap-export',
         ],
@@ -1125,6 +1124,7 @@ void main() {
                 const BridgeExportQueueState.waiting()}) =>
         BridgeExportQueueItem(
           id: id,
+          groupName: '',
           comp: UuidValue.fromString('00000000-0000-0000-0000-000000000000'),
           compName: name,
           path: 'C:/exports/$name.mp4',
@@ -1133,6 +1133,8 @@ void main() {
           rangeStartFrame: -1,
           rangeEndFrame: -1,
           state: state,
+          job: '',
+          also: const [],
         );
 
     /// Drag one row by [dy], in steps rather than one jump: a lift needs a

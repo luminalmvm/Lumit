@@ -71,6 +71,7 @@ use syn::{
         clip,
         mask_path,
         curve,
+        shape,
         action
     )
 )]
@@ -505,6 +506,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "clip",
         "mask_path",
         "curve",
+        "shape",
         "action",
     ];
     let attr = field
@@ -516,7 +518,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 field.span(),
                 "every field is a parameter and needs one of #[slider] #[bounded] #[counter] \
                  #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[text] #[layer] #[clip] \
-                 #[mask_path] #[curve] #[action]",
+                 #[mask_path] #[curve] #[shape] #[action]",
             )
         })?;
 
@@ -774,6 +776,11 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.curve(#idc) },
             )
         }
+        // An outline inside a box. No arguments: a fresh row has no points.
+        "shape" => (
+            quote! { ::lumit_core::fx::schema::ParamKind::Shape },
+            quote! { p.shape(#idc) },
+        ),
         // A button. It carries no value, so the field it declares is
         // the unit type and `read` fills it with `()`: there is nothing in the
         // bag to read back, and there never will be — an Action crosses the

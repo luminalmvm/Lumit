@@ -3,7 +3,7 @@
 
 use super::*;
 use lumit_core::model::EffectInstance;
-use lumit_core::sequence::transition::KINDS;
+use lumit_core::sequence::transition;
 
 /// A Sequence layer's clips as the document holds them, for comparing with what
 /// an edit is about to write.
@@ -240,25 +240,29 @@ impl Edit<'_> {
         self.commit()
     }
 
-    /// A fresh instance of the kind named, sized for `clip`'s row, or `None`
-    /// for the dissolve. `Limit` for a name that isn't a kind.
-    fn fresh_kind(&self, row: Uuid, clip: Uuid, kind: Option<&str>) -> Cut<Option<EffectInstance>> {
+    /// A fresh instance of the kind named at `look`, its first with `None`,
+    /// sized for `clip`'s row, or `None` for the dissolve. `Limit` for a name
+    /// that isn't a kind or a look it hasn't got.
+    fn fresh_kind(
+        &self,
+        row: Uuid,
+        clip: Uuid,
+        kind: Option<&str>,
+        look: Option<u32>,
+    ) -> Cut<Option<EffectInstance>> {
         let Some(kind) = kind else {
             return Ok(None);
         };
-        if !KINDS.contains(&kind) {
-            return Err(BridgeCutResult::Limit.into());
-        }
         let layer = LayerReference::new(self.of.project_id(), self.comp.id, row);
         let (width, height) = layer.clip_picture_size(clip)?;
-        Ok(lumit_core::fx::builtins::instantiate_for_raster(
-            kind, width, height,
-        ))
+        let look = look.map(|l| l as usize);
+        let fresh = transition::fresh(kind, look, width, height);
+        Ok(Some(fresh.ok_or(BridgeCutResult::Limit)?))
     }
 
-    /// Give the overlap at this edge of `clip` the kind named, and with
-    /// `linked` the clips linked to it the same on their own picture rows. An
-    /// edit point that only meets gets an overlap of `frames` first, and a
+    /// Give the overlap at this edge of `clip` the kind named at `look`, and
+    /// with `linked` the clips linked to it the same on their own picture rows.
+    /// An edit point that only meets gets an overlap of `frames` first, and a
     /// sound row takes its crossfade and no kind.
     pub(super) fn set_transition(
         mut self,
@@ -266,6 +270,7 @@ impl Edit<'_> {
         end_edge: bool,
         frames: i64,
         kind: Option<&str>,
+        look: Option<u32>,
         linked: bool,
     ) -> Cut {
         let frames = frames.max(0);
@@ -330,15 +335,16 @@ impl Edit<'_> {
                 continue;
             }
             let row = self.rows[r].id;
-            let fresh = self.fresh_kind(row, incoming, kind)?;
+            let fresh = self.fresh_kind(row, incoming, kind, look)?;
             for clip in self.rows[r].clips.iter_mut().filter(|c| c.id == incoming) {
-                // Asked for what it already is, it keeps the rows it was given.
+                // Asked for what it already is with no look, it keeps the rows
+                // it was given.
                 let same = clip
                     .transition
                     .as_ref()
                     .map(|t| t.effect.match_name.as_str())
                     == kind;
-                if !same {
+                if look.is_some() || !same {
                     clip.transition = fresh.clone();
                 }
                 clip.fade_in.shape = FadeShape::Linear;
@@ -380,7 +386,7 @@ impl Edit<'_> {
                 if before.is_some_and(|b| b.id == other.id) {
                     continue;
                 }
-                kinds.push((at, self.fresh_kind(row, clip.id, kind.as_deref())?));
+                kinds.push((at, self.fresh_kind(row, clip.id, kind.as_deref(), None)?));
             }
             for (at, kind) in kinds {
                 let clip = &mut self.rows[r].clips[at];
@@ -402,9 +408,10 @@ pub(crate) fn set_kind(
     end_edge: bool,
     frames: i64,
     kind: Option<&str>,
+    look: Option<u32>,
     linked: bool,
 ) -> Result<BridgeCutResult, BridgeError> {
     cut(of, |edit| {
-        edit.set_transition(clip, end_edge, frames, kind, linked)
+        edit.set_transition(clip, end_edge, frames, kind, look, linked)
     })
 }

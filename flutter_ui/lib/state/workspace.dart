@@ -14,11 +14,12 @@ import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeExpressionLanguage;
+import 'package:lumit_flutter/src/rust/api/library.dart' show libraryUseHome;
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
-import '../theme/theme_file.dart' show readThemeFile;
+import '../theme/theme_file.dart';
 import 'window_backdrop.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
@@ -166,6 +167,12 @@ class SavedSession {
   /// [PanelFolds.toJson]. Raw JSON for [dock]'s reason.
   final Map<String, dynamic>? folds;
 
+  /// The arrangement this project had with each set of displays it has been
+  /// open with, by [displaySetupOf]: a laptop alone and a laptop with a second
+  /// screen each bring back their own. This machine's record only: the copy
+  /// that travels in the `.lum` has none.
+  final Map<String, Map<String, dynamic>> setupDocks;
+
   /// How tall each row of the Cut timeline stands where it has been dragged
   /// off the usual height, by composition id and then row id. Session state
   /// for the reason the looks are: a way of working on the cut, not an edit
@@ -188,6 +195,7 @@ class SavedSession {
     this.viewerLayout,
     this.folds,
     this.cutTrackHeights = const {},
+    this.setupDocks = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -200,6 +208,7 @@ class SavedSession {
         'viewer_layout': viewerLayout,
         'folds': folds,
         'cut_track_heights': cutTrackHeights,
+        if (setupDocks.isNotEmpty) 'setup_docks': setupDocks,
         'viewer_looks': {
           for (final e in viewerLooks.entries)
             e.key: {'stops': e.value.stops, 'tone_map': e.value.toneMap},
@@ -293,6 +302,7 @@ class SavedSession {
             ? (j['folds'] as Map).cast<String, dynamic>()
             : null,
         cutTrackHeights: _heightsFromJson(j['cut_track_heights']),
+        setupDocks: setupDocksFromJson(j['setup_docks']),
       );
 
   /// The Cut timeline's row heights out of a session's JSON, dropping what is
@@ -317,6 +327,7 @@ class SavedSession {
   String get _foldsKey => folds == null ? '' : jsonEncode(folds);
   String get _heightsKey =>
       cutTrackHeights.isEmpty ? '' : jsonEncode(cutTrackHeights);
+  String get _setupsKey => setupDocks.isEmpty ? '' : jsonEncode(setupDocks);
 
   @override
   bool operator ==(Object other) =>
@@ -327,6 +338,7 @@ class SavedSession {
       other._dockKey == _dockKey &&
       other._foldsKey == _foldsKey &&
       other._heightsKey == _heightsKey &&
+      other._setupsKey == _setupsKey &&
       mapEquals(other.viewerLooks, viewerLooks) &&
       mapEquals(other.previewResolutions, previewResolutions) &&
       mapEquals(other.viewerOverlays, viewerOverlays) &&
@@ -342,6 +354,7 @@ class SavedSession {
         selectedLayer,
         _dockKey,
         _foldsKey,
+        _setupsKey,
         Object.hashAll(openComps),
         Object.hashAll([
           for (final e in viewerLooks.entries) Object.hash(e.key, e.value),
@@ -534,6 +547,56 @@ class UserWorkspace {
   }
 }
 
+/// Write [text] to [file] whole or not at all: into a file beside it, which
+/// then takes its place. Writing straight into it empties it first, so a full
+/// disk or a crash part of the way through left no settings at all.
+void writeWhole(File file, String text) {
+  final next = File('${file.path}.next');
+  next.writeAsStringSync(text);
+  try {
+    next.renameSync(file.path);
+  } on FileSystemException {
+    // Something has the file open and will not let it be replaced: written
+    // straight into it, as it was before, rather than not at all.
+    file.writeAsStringSync(text);
+    next.deleteSync();
+  }
+}
+
+/// How many sets of displays an arrangement is remembered for. A machine meets
+/// a handful (the laptop alone, at the desk, at the office), so the oldest of
+/// more than this many is forgotten.
+const int maxRememberedSetups = 8;
+
+/// Arrangements by display setup out of a settings file or a project's own
+/// record: only
+/// entries that are a map under a string, the most recent last.
+Map<String, Map<String, dynamic>> setupDocksFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+  return {
+    for (final e in raw.entries)
+      if (e.key is String && e.value is Map)
+        e.key as String: (e.value as Map).cast<String, dynamic>(),
+  };
+}
+
+/// [docks] with [setup]'s arrangement now [dock], moved to the end as the most
+/// recent, and the oldest dropped past [maxRememberedSetups].
+Map<String, Map<String, dynamic>> rememberSetupDock(
+    Map<String, Map<String, dynamic>> docks,
+    String setup,
+    Map<String, dynamic> dock) {
+  final out = {
+    for (final e in docks.entries)
+      if (e.key != setup) e.key: e.value,
+    setup: dock,
+  };
+  while (out.length > maxRememberedSetups) {
+    out.remove(out.keys.first);
+  }
+  return out;
+}
+
 /// Where a floating window was left: how far it was dragged from the centre of
 /// the app window, and how big it was made when it is one of the resizable
 /// ones. Stored as an offset from centre rather than as a corner position so a
@@ -572,6 +635,18 @@ class WindowPlacement {
 
 class Workspace extends ChangeNotifier {
   DockSplit dock = defaultLayout();
+
+  /// The arrangement last used with each set of displays, by
+  /// [displaySetupOf], most recent last: a laptop alone and a laptop with a
+  /// second screen each bring back their own. [dock] is the one in use, and
+  /// [dockSetup] the set of displays it was last used with.
+  Map<String, Map<String, dynamic>> setupDocks = {};
+  String? dockSetup;
+
+  /// The display the video monitor was on with each set of displays, as
+  /// `[x, y, width, height]`, by [displaySetupOf]. A setup it was off with is
+  /// absent.
+  Map<String, List<double>> videoMonitors = {};
   LumitColorScheme colorScheme = LumitColorScheme.dark;
   ThemeShape themeShape = ThemeShape.studio;
 
@@ -583,12 +658,46 @@ class Workspace extends ChangeNotifier {
   /// changes, so a saved edit shows straight away.
   List<StyleSheet> styles = const [];
   StreamSubscription<FileSystemEvent>? _stylesWatch;
+  String? _stylesWatched;
   Timer? _stylesSoon;
   bool _stylesRead = false;
 
+  /// The folder the profile in use keeps its library in, or null for the one
+  /// beside the settings (profiles.dart).
+  static String? libraryHome;
+
   /// The folder a person's own styles are read from.
-  static String stylesFolder() =>
-      '${storeFile().parent.path}${Platform.pathSeparator}styles';
+  static String stylesFolder() => _libraryFolder('styles');
+
+  /// The folder a person's own themes are kept in, a file each.
+  static String themesFolder() => _libraryFolder('themes');
+
+  /// The folder saved shortcut sets are kept in, a file each.
+  static String shortcutsFolder() => _libraryFolder('shortcuts');
+
+  static String _libraryFolder(String kind) =>
+      '${libraryHome ?? storeFile().parent.path}${Platform.pathSeparator}$kind';
+
+  /// The current profile's library home as profiles.dart last wrote it, so
+  /// the folders are right before anything reads one.
+  static String? _homeOnFile() {
+    try {
+      final j = jsonDecode(File('${storeFile().parent.path}'
+              '${Platform.pathSeparator}profiles.json')
+          .readAsStringSync());
+      if (j case {'current': final String id, 'profiles': final List<dynamic> all}) {
+        for (final p in all) {
+          if (p case {'id': final String at, 'library_home': final String home}
+              when at == id) {
+            return home;
+          }
+        }
+      }
+    } catch (_) {
+      // No profiles yet: the folders beside the settings.
+    }
+    return null;
+  }
 
   /// The style in use, or null.
   StyleSheet? get activeStyle {
@@ -626,15 +735,17 @@ class Workspace extends ChangeNotifier {
       // A read-only settings folder still opens Lumit, with no styles.
     }
     styles = StyleSheet.readFolder(folder);
-    if (_stylesWatch == null && Directory(folder).existsSync()) {
-      // One read for a burst of events, as a save is often several. A watch
-      // that fails or ends, as when the folder goes, is dropped, and the next
-      // resume arms a new one.
-      void drop() {
-        _stylesWatch?.cancel();
-        _stylesWatch = null;
-      }
+    // One read for a burst of events, as a save is often several. A watch
+    // that fails or ends, as when the folder goes, is dropped, and the next
+    // resume arms a new one. So is one on another profile's folder.
+    void drop() {
+      _stylesWatch?.cancel();
+      _stylesWatch = null;
+    }
 
+    if (_stylesWatched != folder) drop();
+    if (_stylesWatch == null && Directory(folder).existsSync()) {
+      _stylesWatched = folder;
       _stylesWatch = Directory(folder).watch(recursive: true).listen(
         (_) {
           _stylesSoon?.cancel();
@@ -686,8 +797,95 @@ class Workspace extends ChangeNotifier {
   Color? accentOverride;
   AnimationLevel animationLevel = AnimationLevel.all;
 
-  /// The themes the user has made, in the order they were saved.
+  /// The themes the user has made, read from [themesFolder].
   List<CustomTheme> customThemes = [];
+
+  /// Each of [customThemes]' file, by the theme's name.
+  final Map<String, File> _themeFiles = {};
+
+  /// Read the themes folder again, after something else changed it. A theme
+  /// in use that has gone falls back as a deleted one does.
+  void reloadThemes() {
+    _readThemes();
+    if (customThemeName != null && activeCustomTheme == null) {
+      customThemeName = null;
+      save();
+    }
+    recompose();
+  }
+
+  /// Every theme file in the folder. The name inside wins over the file's,
+  /// and a second file with a name already read is left out.
+  void _readThemes() {
+    customThemes = [];
+    _themeFiles.clear();
+    if (_keepingThemes) {
+      for (final entry in _themesKept!) {
+        if (entry is! Map) continue;
+        final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (theme != null) customThemes.add(theme);
+      }
+      return;
+    }
+    final List<File> files;
+    try {
+      files = Directory(themesFolder())
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.$themeFileExtension'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+    } on FileSystemException {
+      return;
+    }
+    for (final file in files) {
+      try {
+        final stem = file.path.split(RegExp(r'[\\/]')).last;
+        final theme = readThemeFile(file.readAsStringSync(),
+                name: stem.substring(0, stem.lastIndexOf('.')))
+            .theme;
+        if (theme == null || _themeFiles.containsKey(theme.name)) continue;
+        customThemes.add(theme);
+        _themeFiles[theme.name] = file;
+      } catch (_) {
+        // A file that will not read is not a theme.
+      }
+    }
+  }
+
+  /// Write [theme] to its own file, a new one when it has none yet.
+  void _writeTheme(CustomTheme theme) {
+    if (_keepingThemes) {
+      _keepThemes();
+      return;
+    }
+    try {
+      final file = _themeFiles[theme.name];
+      if (file == null) {
+        _themeFiles[theme.name] = writeThemeFileInto(themesFolder(), theme);
+      } else {
+        file.writeAsStringSync(encodeThemeFile(theme));
+      }
+    } on FileSystemException {
+      // Kept until Lumit closes, as a save that fails is.
+    }
+  }
+
+  void _keepThemes() {
+    _themesKept = [for (final t in customThemes) t.toJson()];
+  }
+
+  void _dropThemeFile(String name) {
+    if (_keepingThemes) {
+      _keepThemes();
+      return;
+    }
+    try {
+      _themeFiles.remove(name)?.deleteSync();
+    } on FileSystemException {
+      // Already gone.
+    }
+  }
 
   /// The custom theme in use, by name, or null for the built-in
   /// [colorScheme]. Two fields rather than one because a built-in scheme is
@@ -714,6 +912,19 @@ class Workspace extends ChangeNotifier {
   /// reasoning that keeps the Viewer surround neutral
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
+
+  /// How each Scopes panel is set up, by the panel's instance number: its
+  /// layout, each slot's instrument and options, and the trace brightness.
+  /// Opaque to this file, so the panel decides what it keeps. A panel never
+  /// opened has no entry.
+  final Map<int, Map<String, dynamic>> scopeSetups = {};
+
+  /// Keep a Scopes panel's setup. Saved without notifying: only that panel
+  /// reads it, and it already holds the same values.
+  void setScopeSetup(int instance, Map<String, dynamic> setup) {
+    scopeSetups[instance] = setup;
+    save();
+  }
 
   /// Whether the start-up splash lights its card with the theme's accent
   /// rather than Lumit's own green and blue. Off by default, so the splash
@@ -898,6 +1109,12 @@ class Workspace extends ChangeNotifier {
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
+  /// The Create captions dialogue's last answers, as it wrote them.
+  Map<String, dynamic> captionSettings = {};
+
+  /// Caption looks kept with Save style, in the order they were kept.
+  List<Map<String, dynamic>> captionStyles = [];
+
   /// The Stagger panel's frames between layers, and the order its button and
   /// a stagger drag take the layers in.
   int staggerStep = 1;
@@ -942,6 +1159,15 @@ class Workspace extends ChangeNotifier {
   /// live endpoint. Off until the person turns it on.
   bool liveEndpoint = false;
 
+  /// Whether Lumit talks to Tangent panels through Tangent's Hub.
+  bool tangentPanels = false;
+
+  /// The MIDI input ports kept open, by the names the system gives them.
+  List<String> midiInputs = [];
+
+  /// The learned MIDI controls, as `control_surfaces.dart` writes them.
+  List<Map<String, dynamic>> midiMappings = [];
+
   /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
@@ -952,6 +1178,10 @@ class Workspace extends ChangeNotifier {
 
   /// The `.lum` a new project starts as a copy of, or empty for none.
   String projectTemplate = '';
+
+  /// The graphics template Insert title places in the Cut timeline, as its
+  /// file in the library, or empty for a plain Text layer.
+  String titleTemplate = '';
 
   /// The folder File > Scripts lists, or empty for Lumit's own.
   String scriptsFolder = '';
@@ -1023,11 +1253,16 @@ class Workspace extends ChangeNotifier {
   /// default rather than a copy of them written out at first launch.
   String? keymapJson;
 
+  /// Where [keymapJson] was last taken from whole: a shipped preset's name,
+  /// or a saved set's file name. Null once a binding has changed since.
+  String? keymapSet;
+
   /// Store the engine's keymap text and write the file. Called after every
   /// binding change, which is rare and cheap — the file is a few kilobytes and
   /// a keymap edit is a deliberate act, not something that happens per frame.
-  void setKeymapJson(String json) {
+  void setKeymapJson(String json, {String? set}) {
     keymapJson = json;
+    keymapSet = set;
     save();
   }
 
@@ -1089,6 +1324,23 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// How long a control let go in Touch takes to glide back to its keys, in
+  /// milliseconds.
+  int touchReturnMs = 250;
+
+  void setTouchReturnMs(int ms) {
+    touchReturnMs = ms;
+    save();
+  }
+
+  /// Whether a plain drag on a ruler sounds the comp, as a `Ctrl` drag does.
+  bool scrubOnDrag = false;
+
+  void setScrubOnDrag(bool on) {
+    scrubOnDrag = on;
+    save();
+  }
+
   /// What the others in a shared project see this person called, or null
   /// until one has been typed. The person's, not the work's, so it lives here.
   String? shareName;
@@ -1127,6 +1379,22 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether the account's other computers may send exports here, and the
+  /// folders looked in for footage one of them sends, so what is already
+  /// here is not sent again. This machine's own, so in no profile group.
+  bool remoteTakes = true;
+  List<String> remoteFolders = const [];
+
+  void setRemoteTakes(bool on) {
+    remoteTakes = on;
+    save();
+  }
+
+  void setRemoteFolders(List<String> folders) {
+    remoteFolders = List.unmodifiable(folders);
+    save();
+  }
+
   /// Whether closing the window leaves Lumit running in the tray, so the
   /// phones still see this computer. This machine's own, so in no profile
   /// group, as is [openAtSignIn].
@@ -1144,6 +1412,15 @@ class Workspace extends ChangeNotifier {
 
   void setOpenAtSignIn(bool on) {
     openAtSignIn = on && keepRunning;
+    save();
+  }
+
+  /// Whether the system shows a notification when an export ends while
+  /// Lumit isn't in front. This machine's own, so in no profile group.
+  bool notifyExports = true;
+
+  void setNotifyExports(bool on) {
+    notifyExports = on;
     save();
   }
 
@@ -1499,6 +1776,7 @@ class Workspace extends ChangeNotifier {
     } else {
       customThemes.add(theme);
     }
+    _writeTheme(theme);
     customThemeName = theme.name;
     recompose();
     save();
@@ -1571,6 +1849,8 @@ class Workspace extends ChangeNotifier {
     if (wanted.isEmpty || wanted == from) return from;
     final name = availableThemeName(wanted);
     customThemes[at] = customThemes[at].renamed(name);
+    _dropThemeFile(from);
+    _writeTheme(customThemes[at]);
     if (customThemeName == from) customThemeName = name;
     recompose();
     save();
@@ -1581,6 +1861,7 @@ class Workspace extends ChangeNotifier {
   /// session using it falls back to its built-in scheme.
   void deleteCustomTheme(String name) {
     customThemes.removeWhere((t) => t.name == name);
+    _dropThemeFile(name);
     if (customThemeName == name) customThemeName = null;
     recompose();
     save();
@@ -1614,9 +1895,30 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setTangentPanels(bool on) {
+    tangentPanels = on;
+    settingsChanged();
+  }
+
+  void setMidiInputs(List<String> names) {
+    midiInputs = names;
+    settingsChanged();
+  }
+
+  void setMidiMappings(List<Map<String, dynamic>> mappings) {
+    midiMappings = mappings;
+    settingsChanged();
+  }
+
   /// Choose the project every new one starts as a copy of, or none.
   void setProjectTemplate(String path) {
     projectTemplate = path;
+    settingsChanged();
+  }
+
+  /// Choose the graphics template Insert title places, or none.
+  void setTitleTemplate(String path) {
+    titleTemplate = path;
     settingsChanged();
   }
 
@@ -1716,6 +2018,16 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = moveAttributes;
     precomposeAdjustDuration = adjustDuration;
     precomposeOpenNewComp = openNewComp;
+    settingsChanged();
+  }
+
+  void setCaptionSettings(Map<String, dynamic> settings) {
+    captionSettings = settings;
+    settingsChanged();
+  }
+
+  void setCaptionStyles(List<Map<String, dynamic>> styles) {
+    captionStyles = styles;
     settingsChanged();
   }
 
@@ -1884,7 +2196,7 @@ class Workspace extends ChangeNotifier {
     try {
       final f = userWorkspaceFile(w.name);
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(w.encode());
+      writeWhole(f, w.encode());
     } catch (_) {}
   }
 
@@ -2200,8 +2512,12 @@ class Workspace extends ChangeNotifier {
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
         'live_endpoint': liveEndpoint,
+        'tangent_panels': tangentPanels,
+        'midi_inputs': midiInputs,
+        'midi_mappings': midiMappings,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
+        'title_template': titleTemplate,
         'scripts_folder': scriptsFolder,
         'blender_path': blenderPath,
         'event_scripts': {
@@ -2210,15 +2526,21 @@ class Workspace extends ChangeNotifier {
         },
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
+        'keymap_set': keymapSet,
         'audio_device': audioDevice,
         'audio_offset_ms': audioOffsetMs,
+        'touch_return_ms': touchReturnMs,
+        'scrub_on_drag': scrubOnDrag,
         'share_name': shareName,
         'share_router': shareOutside,
         'share_relay': shareRelay,
         'share_cloud': shareCloud,
         'phones_export': phonesExport,
+        'remote_takes': remoteTakes,
+        'remote_folders': remoteFolders,
         'keep_running': keepRunning,
         'open_at_sign_in': openAtSignIn,
+        'notify_exports': notifyExports,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -2233,9 +2555,12 @@ class Workspace extends ChangeNotifier {
         'share_moved': shareMoved,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
-        'custom_themes': [for (final t in customThemes) t.toJson()],
+        if (_themesKept != null) 'custom_themes': _themesKept,
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'scope_setups': {
+          for (final e in scopeSetups.entries) '${e.key}': e.value,
+        },
         'themed_splash': themedSplash,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
@@ -2256,6 +2581,8 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'caption_settings': captionSettings,
+        'caption_styles': captionStyles,
         'stagger_step': staggerStep,
         'stagger_order': staggerOrder.name,
         'stagger_overlap': staggerOverlap,
@@ -2271,6 +2598,9 @@ class Workspace extends ChangeNotifier {
         'windows': {
           for (final e in windowPlacements.entries) e.key: e.value.toJson(),
         },
+        if (setupDocks.isNotEmpty) 'setup_docks': setupDocks,
+        if (dockSetup != null) 'dock_setup': dockSetup,
+        if (videoMonitors.isNotEmpty) 'video_monitors': videoMonitors,
       };
 
   void applyJson(Map<String, dynamic> j) {
@@ -2331,10 +2661,22 @@ class Workspace extends ChangeNotifier {
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;
     liveEndpoint = j['live_endpoint'] as bool? ?? false;
+    tangentPanels = j['tangent_panels'] as bool? ?? false;
+    midiInputs = [
+      if (j['midi_inputs'] case final List<dynamic> names)
+        for (final name in names)
+          if (name is String) name,
+    ];
+    midiMappings = [
+      if (j['midi_mappings'] case final List<dynamic> mappings)
+        for (final mapping in mappings)
+          if (mapping is Map<String, dynamic>) mapping,
+    ];
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     projectTemplate = j['project_template'] as String? ?? '';
+    titleTemplate = j['title_template'] as String? ?? '';
     scriptsFolder = j['scripts_folder'] as String? ?? '';
     blenderPath = j['blender_path'] as String? ?? '';
     eventScripts.clear();
@@ -2346,12 +2688,15 @@ class Workspace extends ChangeNotifier {
     }
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
+    keymapSet = j['keymap_set'] is String ? j['keymap_set'] as String : null;
     // Absent, or empty from a hand-edited file, means follow the machine —
     // which is what every settings file written before this field existed was
     // already doing.
     final device = j['audio_device'];
     audioDevice = device is String && device.isNotEmpty ? device : null;
     audioOffsetMs = j['audio_offset_ms'] as int? ?? 0;
+    touchReturnMs = (j['touch_return_ms'] as int? ?? 250).clamp(0, 2000);
+    scrubOnDrag = j['scrub_on_drag'] == true;
     final sharedAs = j['share_name'];
     shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
     // Under a new name: the old one was written as off for everybody, back
@@ -2362,8 +2707,13 @@ class Workspace extends ChangeNotifier {
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
     phonesExport = j['phones_export'] is! bool || j['phones_export'] as bool;
+    remoteTakes = j['remote_takes'] is! bool || j['remote_takes'] as bool;
+    final folders = j['remote_folders'];
+    remoteFolders = List.unmodifiable(
+        [if (folders is List) ...folders.whereType<String>()]);
     keepRunning = j['keep_running'] == true;
     openAtSignIn = keepRunning && j['open_at_sign_in'] == true;
+    notifyExports = j['notify_exports'] is! bool || j['notify_exports'] as bool;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;
@@ -2423,19 +2773,18 @@ class Workspace extends ChangeNotifier {
     // there is no sense in which it could mean anything else.
     autosaveMinutes = (j['autosave_minutes'] as int? ?? 5).clamp(0, 240);
     autosaveKeep = (j['autosave_keep'] as int? ?? 5).clamp(1, 50);
-    customThemes = [];
-    final rawThemes = j['custom_themes'];
-    if (rawThemes is List) {
-      for (final entry in rawThemes) {
-        if (entry is Map) {
-          final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
-          if (theme != null) customThemes.add(theme);
-        }
-      }
-    }
+    _readThemes();
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    scopeSetups
+      ..clear()
+      ..addAll({
+        if (j['scope_setups'] case final Map<dynamic, dynamic> setups)
+          for (final MapEntry(:key, :value) in setups.entries)
+            if (int.tryParse('$key') case final int n when value is Map)
+              n: value.cast<String, dynamic>(),
+      });
     themedSplash = j['themed_splash'] == true;
     favouriteEffects
       ..clear()
@@ -2485,6 +2834,13 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    captionSettings = j['caption_settings'] is Map<String, dynamic>
+        ? j['caption_settings'] as Map<String, dynamic>
+        : {};
+    captionStyles = [
+      if (j['caption_styles'] case final List<dynamic> styles)
+        ...styles.whereType<Map<String, dynamic>>(),
+    ];
     staggerStep = (j['stagger_step'] as num?)?.toInt() ?? 1;
     staggerOrder = LayerStaggerOrder.values.asNameMap()[j['stagger_order']] ??
         LayerStaggerOrder.topDown;
@@ -2528,6 +2884,19 @@ class Workspace extends ChangeNotifier {
         }
       });
     }
+    setupDocks = {...setupDocksFromJson(j['setup_docks'])};
+    dockSetup = j['dock_setup'] is String ? j['dock_setup'] as String : null;
+    videoMonitors = {
+      if (j['video_monitors'] case final Map monitors)
+        for (final e in monitors.entries)
+          if (e.key is String &&
+              e.value is List &&
+              (e.value as List).length == 4 &&
+              (e.value as List).every((n) => n is num))
+            e.key as String: [
+              for (final n in e.value as List) (n as num).toDouble()
+            ],
+    };
     windowPlacements.clear();
     final rawWindows = j['windows'];
     if (rawWindows is Map) {
@@ -2544,9 +2913,17 @@ class Workspace extends ChangeNotifier {
   }
 
   void load() {
-    // The user's own workspaces are their own files beside the settings, so
-    // they are read whether or not there is a settings file to read.
+    // The profile in use's library, known before anything reads from it.
+    libraryHome = _homeOnFile();
+    try {
+      libraryUseHome(home: libraryHome);
+    } catch (_) {
+      // No engine to tell, as in a test.
+    }
+    // The user's own workspaces and themes are their own files, so they are
+    // read whether or not there is a settings file to read.
     loadUserWorkspaces();
+    _readThemes();
     try {
       final f = storeFile();
       if (!f.existsSync()) {
@@ -2559,17 +2936,95 @@ class Workspace extends ChangeNotifier {
         return;
       }
       final j = jsonDecode(f.readAsStringSync());
-      if (j is Map<String, dynamic>) applyJson(j);
+      if (j is Map<String, dynamic>) {
+        final moved = _writeOutThemes(j['custom_themes']);
+        applyJson(j);
+        // The settings stop holding them, so this happens once.
+        if (moved) save();
+      }
     } catch (_) {
       // A corrupt store falls back to defaults — never a crash.
     }
   }
 
+  /// Themes kept in the settings, from before each was a file, written out
+  /// the first time there is no themes folder. A name already taken by a
+  /// file is numbered, never written over. True when there were any.
+  bool _writeOutThemes(Object? kept) {
+    _themesKept = null;
+    final folder = themesFolder();
+    if (kept is! List || kept.isEmpty) return false;
+    if (Directory(folder).existsSync()) return _joinThemes(kept, folder);
+    // Written beside the folder and moved in whole, so a failure leaves no
+    // folder and the next start tries again.
+    final half = Directory('$folder.moving');
+    try {
+      if (half.existsSync()) half.deleteSync(recursive: true);
+      half.createSync(recursive: true);
+      for (final entry in kept) {
+        if (entry is! Map) continue;
+        final theme = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (theme != null) writeThemeFileInto(half.path, theme);
+      }
+      half.renameSync(folder);
+      return true;
+    } on FileSystemException {
+      try {
+        half.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Left for the next try to clear.
+      }
+      _themesKept = kept;
+      _themesKeptFor = folder;
+      return false;
+    }
+  }
+
+  /// Themes kept in the settings when a themes folder is there already, as
+  /// when the library brought one from another computer before these were
+  /// moved: each joins it, an identical one is skipped and a name already
+  /// taken is numbered, so none is written over or lost.
+  bool _joinThemes(List<dynamic> kept, String folder) {
+    final there = {for (final t in customThemes) t.name: t};
+    try {
+      for (final entry in kept) {
+        if (entry is! Map) continue;
+        final read = CustomTheme.fromJson(entry.cast<String, dynamic>());
+        if (read == null) continue;
+        var theme = read;
+        final same = there[read.name];
+        if (same != null) {
+          if (jsonEncode(same.toJson()) == jsonEncode(read.toJson())) continue;
+          var n = 2;
+          while (there.containsKey('${read.name} $n')) {
+            n++;
+          }
+          theme = read.renamed('${read.name} $n');
+        }
+        writeThemeFileInto(folder, theme);
+        there[theme.name] = theme;
+      }
+      return true;
+    } on FileSystemException {
+      _themesKept = kept;
+      _themesKeptFor = folder;
+      return false;
+    }
+  }
+
+  /// Themes still kept in the settings, because writing them out failed,
+  /// and the themes folder they are for. Read and written back there until
+  /// a later start moves them all.
+  List<dynamic>? _themesKept;
+  String? _themesKeptFor;
+  bool get _keepingThemes =>
+      _themesKept != null && _themesKeptFor == themesFolder();
+
   void save() {
     try {
       final f = storeFile();
       f.parent.createSync(recursive: true);
-      f.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(toJson()));
+      writeWhole(f, const JsonEncoder.withIndent('  ').convert(toJson()));
     } catch (_) {
       // Persistence is best-effort; the session keeps working without it.
     }

@@ -28,6 +28,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show TimelineAxis;
+import 'timeline_metrics_frb.dart' show positionOf;
 import 'waveform_frb.dart';
 
 /// How tall the row stands, in lane rows: two, the height a waveform lane
@@ -239,8 +240,10 @@ class SoundMixLane extends StatelessWidget {
               painter: WaveformPainter(
                 peaks: peaks,
                 // Comp time 0 sits a padding's width into the lanes, and this
-                // row's canvas starts wherever the lanes are scrolled to.
-                originSeconds: ((hScroll.hasClients ? hScroll.offset : 0.0) -
+                // row's canvas starts wherever the lanes are scrolled to. Not
+                // `offset`: a drop target lighting up attaches a second view
+                // for a frame, and `offset` throws on two.
+                originSeconds: ((positionOf(hScroll)?.pixels ?? 0.0) -
                         TimelineAxis.padFor(t)) *
                     secondsPerPixel,
                 secondsPerPixel: secondsPerPixel,
@@ -250,7 +253,10 @@ class SoundMixLane extends StatelessWidget {
                 // The mix has one band: the stack's filters want the samples,
                 // and a mix keeps none. Where the wave sits follows Settings.
                 style: WaveformStyle(
-                    multiwave: false, fromBottom: style.fromBottom),
+                    multiwave: false,
+                    fromBottom: style.fromBottom,
+                    scale: style.scale),
+                full: t.error,
               ),
               size: Size(box.maxWidth, t.density.laneRow * soundMixRows),
             ),

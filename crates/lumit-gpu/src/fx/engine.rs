@@ -391,6 +391,7 @@ impl FxEngine {
         let mirror_mod = module(include_str!("../fx_mirror.wgsl"), "fx-mirror");
         let lens_distort_mod = module(include_str!("../fx_lensdistort.wgsl"), "fx-lens-distort");
         let corner_pin_mod = module(include_str!("../fx_cornerpin.wgsl"), "fx-corner-pin");
+        let stabilise_mod = module(include_str!("../fx_stabilise.wgsl"), "fx-stabilise");
         let dispmap_mod = module(include_str!("../fx_dispmap.wgsl"), "fx-displacement-map");
         let polar_mod = module(include_str!("../fx_polar.wgsl"), "fx-polar-coordinates");
         let twirl_mod = module(include_str!("../fx_twirl.wgsl"), "fx-twirl");
@@ -433,7 +434,10 @@ impl FxEngine {
             "fx-venetian-blinds",
         );
         let iris_wipe_mod = module(include_str!("../fx_iriswipe.wgsl"), "fx-iris-wipe");
-        let luma_fade_mod = module(include_str!("../fx_lumafade.wgsl"), "fx-luma-fade");
+        let luma_fade_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_lumafade.wgsl")),
+            "fx-luma-fade",
+        );
         let srgb_curve_mod = module(include_str!("../fx_srgbcurve.wgsl"), "fx-srgb-curve");
         // The per-card shuffle is the shared hash, so the noise core is
         // prepended exactly as Fractal noise's and Roughen edges' are.
@@ -444,6 +448,14 @@ impl FxEngine {
         let transform_mod = module(include_str!("../fx_transform.wgsl"), "fx-transform");
         let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
         let jolt_mod = module(include_str!("../fx_jolt.wgsl"), "fx-jolt");
+        let light_leak_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_light_leak.wgsl")),
+            "fx-light-leak",
+        );
+        let slices_mod = module(
+            &format!("{noise_core}{}", include_str!("../fx_slices.wgsl")),
+            "fx-slices",
+        );
         let glow_mod = module(include_str!("../fx_glow.wgsl"), "fx-glow");
         let glow_exp_mod = module(include_str!("../fx_glow_exp.wgsl"), "fx-glow-exp");
         let block_glitch_mod = module(include_str!("../fx_block_glitch.wgsl"), "fx-block-glitch");
@@ -550,6 +562,8 @@ impl FxEngine {
         let mirror = pipeline(&mirror_mod, "fx-mirror", "mirror");
         let lens_distort = pipeline(&lens_distort_mod, "fx-lens-distort", "lens_distort");
         let corner_pin = pipeline(&corner_pin_mod, "fx-corner-pin", "corner_pin");
+        let stabilise = pipeline(&stabilise_mod, "fx-stabilise", "stabilise");
+        let stabilise_fill = pipeline(&stabilise_mod, "fx-stabilise-fill", "stabilise_fill");
         let displacement_map = pipeline(&dispmap_mod, "fx-displacement-map", "displacement_map");
         let polar_coordinates = pipeline(&polar_mod, "fx-polar-coordinates", "polar_coordinates");
         let twirl = pipeline(&twirl_mod, "fx-twirl", "twirl");
@@ -587,6 +601,8 @@ impl FxEngine {
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
         let jolt = pipeline(&jolt_mod, "fx-jolt", "jolt");
+        let light_leak = pipeline(&light_leak_mod, "fx-light-leak", "light_leak");
+        let slices = pipeline(&slices_mod, "fx-slices", "slices");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
         let glow_exp_down = pipeline(&glow_exp_mod, "fx-glow-exp-down", "glow_exp_down");
@@ -713,6 +729,8 @@ impl FxEngine {
             mirror: mirror.wait(),
             lens_distort: lens_distort.wait(),
             corner_pin: corner_pin.wait(),
+            stabilise: stabilise.wait(),
+            stabilise_fill: stabilise_fill.wait(),
             displacement_map: displacement_map.wait(),
             polar_coordinates: polar_coordinates.wait(),
             twirl: twirl.wait(),
@@ -746,6 +764,8 @@ impl FxEngine {
             transform: transform.wait(),
             shake_mb: shake_mb.wait(),
             jolt: jolt.wait(),
+            light_leak: light_leak.wait(),
+            slices: slices.wait(),
             glow_bright: glow_bright.wait(),
             glow_combine: glow_combine.wait(),
             glow_exp_down: glow_exp_down.wait(),
@@ -771,6 +791,8 @@ impl FxEngine {
             lens_blur: Default::default(),
             lens_dirt: Default::default(),
             film: Default::default(),
+            grade: Default::default(),
+            correction: Default::default(),
             particulate_scene: Default::default(),
             particulate_sim: Default::default(),
             smoke: Default::default(),

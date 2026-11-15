@@ -64,11 +64,14 @@ pub fn apply_over(
     at: Rational,
     fresh: &EffectInstance,
 ) {
+    // A transition's look leaves which clip it is on as it was.
+    let kept = crate::sequence::transition::kept_rows(&inst.effect.match_name);
     let keeps = |id: &str, v: &EffectValue| {
         matches!(v, EffectValue::Layer(_) | EffectValue::Seed(_))
             || id.ends_with("_placement")
             || id == crate::fx::schema::MATTE_INVERT_PARAM
             || id == crate::fx::schema::MATTE_CHANNEL_PARAM
+            || kept.contains(&id)
     };
     for p in &mut inst.params {
         if keeps(&p.id, &p.value) {
@@ -143,9 +146,15 @@ mod tests {
     #[test]
     fn every_preset_sets_rows_its_effect_has() {
         let materials = crate::model_material::MATERIAL_DEFS.builtins();
-        for def in crate::fx::catalogue::BUILTIN_DEFS.iter().chain(materials) {
+        // And every look a transition kind offers.
+        let looks = crate::sequence::transition::TABLE.iter().filter_map(|k| {
+            let def = crate::fx::catalogue::BUILTIN_DEFS.get(k.name)?;
+            Some((def, k.looks))
+        });
+        let defs = crate::fx::catalogue::BUILTIN_DEFS.iter().chain(materials);
+        for (def, presets) in defs.map(|d| (d, d.presets())).chain(looks) {
             let schema = def.schema();
-            for preset in def.presets() {
+            for preset in presets {
                 for (id, value) in preset.values {
                     let row = schema.params.iter().find(|p| p.id == *id);
                     let fits = match (row.map(|r| &r.kind), value) {

@@ -157,6 +157,52 @@ pub struct BridgeExportSpec {
     /// How many times a GIF plays, `0` for forever.
     #[frb(default = 0)]
     pub gif_plays: u32,
+    /// What happens to the composition's own caption layers.
+    #[frb(default = "BridgeCaptionsOut.burn")]
+    pub captions: BridgeCaptionsOut,
+    /// The loudness the sound is made to, or none for the mix as it stands.
+    pub loudness: Option<BridgeExportLoudness>,
+    /// Each top-level bus also written to a file of its own beside this one.
+    #[frb(default = false)]
+    pub stems: bool,
+    /// Other files written beside this one from the same frames, at most
+    /// three: each a video or still format and a suffix for its name.
+    #[frb(default = [])]
+    pub also: Vec<BridgeExportAlso>,
+}
+
+/// One more file an export writes beside its own: its format key, and what
+/// is added to the chosen file's name before its extension.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeExportAlso {
+    pub codec: String,
+    pub suffix: String,
+}
+
+/// The loudness an export is made to: the mix is measured, the master moved
+/// to it, and the limiter holds the true peak.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeExportLoudness {
+    /// Integrated loudness, in LUFS.
+    pub lufs: f64,
+    /// The highest true peak, in dBTP.
+    pub true_peak_db: f64,
+}
+
+/// What an export does with the composition's own caption layers.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeCaptionsOut {
+    /// Drawn into the picture.
+    Burn,
+    /// Left out of the picture and written beside the file as SubRip.
+    Srt,
+    /// Left out of the picture and written beside the file as WebVTT.
+    Vtt,
+    /// Left out of the picture and carried inside the file as subtitles.
+    Embed,
 }
 
 /// One key/value pair written into the container.
@@ -215,6 +261,10 @@ impl Default for BridgeExportSpec {
             gif_dither: 0,
             gif_palette_per_frame: false,
             gif_plays: 0,
+            captions: BridgeCaptionsOut::Burn,
+            loudness: None,
+            stems: false,
+            also: Vec::new(),
         }
     }
 }
@@ -273,6 +323,13 @@ pub struct BridgeFormatCaps {
     /// arrived, exactly as a codec name is.
     #[frb(default = [])]
     pub colour_spaces: Vec<String>,
+    /// The fastest the file plays, frames a second: 50 for a GIF, whose
+    /// frames count in hundredths of a second. Zero is no limit.
+    #[frb(default = 0)]
+    pub max_fps: u32,
+    /// Can carry captions inside the file as subtitles.
+    #[frb(default = false)]
+    pub subtitles: bool,
 }
 
 /// The crop an export actually applies, and the frame it leaves — the answer
@@ -370,7 +427,7 @@ impl CompositionReference {
 /// of every format key it offers and disables what the answer refuses.
 #[frb(sync)]
 pub fn export_format_caps(codec: String) -> BridgeFormatCaps {
-    crate::export::format_caps(&codec)
+    crate::export::caps::format_caps(&codec)
 }
 
 /// Every sample rate an export can write sound at, in hertz and in the order
@@ -402,6 +459,19 @@ impl CompositionReference {
         let state = self.project()?;
         let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
         crate::api::colour::with_colour(&state, |colour| crate::export::spec_check(&spec, colour))
+    }
+
+    /// Whether this composition has a caption layer of its own, which is
+    /// when the export dialogue asks what to do with captions.
+    #[frb(sync)]
+    pub fn has_captions(&self) -> Result<bool, BridgeError> {
+        let state = self.project()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state
+            .store
+            .snapshot()
+            .comp(self.id)
+            .is_some_and(lumit_render::export::captions::has_caption_layer))
     }
 }
 
@@ -584,6 +654,10 @@ pub fn export_cancel() {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeExportQueueItem {
     pub id: u32,
+    /// The run of a graphics template's rows this item was queued with, and
+    /// the template's name. The queue folds a run under one heading.
+    pub group: Option<u32>,
+    pub group_name: String,
     /// The composition it was made from. It may have been deleted since.
     pub comp: uuid::Uuid,
     pub comp_name: String,
@@ -599,6 +673,11 @@ pub struct BridgeExportQueueItem {
     pub range_start_frame: i64,
     pub range_end_frame: i64,
     pub state: BridgeExportQueueState,
+    /// The remote export this item does for another computer, empty for one of
+    /// this computer's own. Its other details are in `remote_jobs`.
+    pub job: String,
+    /// The files written beside `path`, in full.
+    pub also: Vec<String>,
 }
 
 /// Where one queued item has got to.
@@ -613,11 +692,13 @@ pub enum BridgeExportQueueState {
         total: u64,
         /// The encoder actually chosen, which may not be the one asked for.
         encoder: String,
+        /// Held by someone between two frames. It goes on from the next frame.
+        paused: bool,
     },
     Done {
         /// How long it took to export, in whole seconds.
         seconds: u32,
-        /// The file's size, zero for an image sequence.
+        /// The size of the files written, an image sequence counting as none.
         bytes: u64,
     },
     Failed {
@@ -698,6 +779,8 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
         .into_iter()
         .map(|row| BridgeExportQueueItem {
             id: row.id,
+            group: row.group,
+            group_name: row.group_name,
             comp: row.comp,
             comp_name: row.comp_name,
             path: row.out_path,
@@ -711,10 +794,12 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                     frame,
                     total,
                     encoder,
+                    paused,
                 } => BridgeExportQueueState::Running {
                     frame,
                     total,
                     encoder,
+                    paused,
                 },
                 crate::export::QueueRowState::Done { seconds, bytes } => {
                     BridgeExportQueueState::Done { seconds, bytes }
@@ -723,6 +808,8 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                     BridgeExportQueueState::Failed { error }
                 }
             },
+            job: row.job.map(|job| job.to_string()).unwrap_or_default(),
+            also: row.also,
         })
         .collect()
 }
@@ -757,6 +844,13 @@ pub fn export_queue_cancel(id: u32) {
 #[frb(sync)]
 pub fn export_queue_remove(id: u32) {
     crate::export::queue_remove(id);
+}
+
+/// Hold the running or waiting item `id` between two frames, or let it go
+/// on. A waiting item that is held is passed over until it is let go.
+#[frb(sync)]
+pub fn export_queue_pause(id: u32, paused: bool) {
+    crate::export::queue_pause(id, paused);
 }
 
 /// Move one waiting item to `index` in the queue — the drag the queue window's
@@ -796,16 +890,35 @@ pub fn export_queue_update(
 
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
-/// sequence the file asked about is frame one.
+/// sequence the file asked about is frame one. The caption files `captions`
+/// writes beside it count too, and so do the files `also` writes.
 #[frb(sync)]
-pub fn export_path_taken(path: String, codec: String) -> bool {
-    crate::export::path_taken(&path, &codec)
+pub fn export_path_taken(
+    path: String,
+    codec: String,
+    captions: BridgeCaptionsOut,
+    also: Vec<BridgeExportAlso>,
+) -> bool {
+    crate::export::taken::path_taken(&path, &codec, captions, &also)
+}
+
+/// Queue an item that has run, or failed, again exactly as it was: the same
+/// snapshot, and for a row of a graphics template the same row. Answers the
+/// new item's id, or `None` once the item has gone.
+#[frb(sync)]
+pub fn export_queue_again(id: u32) -> Option<u32> {
+    crate::export::queue_again(id)
 }
 
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
 #[frb(sync)]
-pub fn export_free_path(path: String, codec: String) -> String {
-    crate::export::free_path(&path, &codec)
+pub fn export_free_path(
+    path: String,
+    codec: String,
+    captions: BridgeCaptionsOut,
+    also: Vec<BridgeExportAlso>,
+) -> String {
+    crate::export::taken::free_path(&path, &codec, captions, &also)
 }
 
 #[frb(ignore)]

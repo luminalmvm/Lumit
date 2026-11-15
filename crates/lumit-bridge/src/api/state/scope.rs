@@ -26,6 +26,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetItemComment { .. }
         // The marks are organisation like a colour tag: no picture changes.
         | Op::SetFootageTrim { .. }
+        | Op::SetFootageMarkers { .. }
         | Op::SetMediaRef { .. }
         // A run of stills read at another rate is another picture at every
         // frame that reads it, and the panel's rate column says so, so the
@@ -76,6 +77,11 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         // so they report the widest scope the settings do.
         Op::SetCompSettings { comp, .. }
         | Op::SetCompStart { comp, .. }
+        // The Project panel's row wears the multicam mark.
+        | Op::SetCompMulticam { comp, .. }
+        // And the template mark, with its update chip.
+        | Op::SetCompTemplate { comp, .. }
+        | Op::SetCompTemplateData { comp, .. }
         | Op::TrimCompToWorkArea { comp }
         | Op::CropCompToRegion { comp, .. } => (Some(*comp), None, true),
 
@@ -87,6 +93,9 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetCompLighting { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
+        | Op::SetMasterAutomation { comp, .. }
+        | Op::SetMasterAutomationMode { comp, .. }
+        | Op::SetLoudnessTarget { comp, .. }
         // The layer Timeline's Sound mix row stands or falls on the mark, so
         // the whole outline rebuilds and no one layer changed.
         | Op::SetSoundMix { comp, .. }
@@ -128,6 +137,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerStyles { comp, layer, .. }
         | Op::SetLayerGraphInputs { comp, layer, .. }
+        | Op::SetLayerGradeVersions { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
@@ -160,12 +170,24 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
         | Op::SetLayerRoutes { comp, layer, .. }
+        | Op::SetLayerAudioGain { comp, layer, .. }
+        | Op::SetLayerAutomation { comp, layer, .. }
+        | Op::SetLayerSoloSafe { comp, layer, .. }
+        | Op::SetLayerDuck { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
-        | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
+        | Op::SetRetimeProperty { comp, layer, .. }
+        | Op::EditCaptions { comp, layer, .. } => (Some(*comp), Some(*layer), false),
 
         // The Notes panel rereads on this. No item or layer changed.
         Op::SetNotes { .. } => (None, None, false),
+        // A transcript is named by its footage item, which the change carries
+        // on its own (see `handle_change_callback`). The item list is as it was.
+        Op::EditTranscript { .. } => (None, None, false),
+        // Any comp's members may draw a group, so no one subtree is the scope.
+        Op::SetGradeGroups { .. } => (None, None, false),
+        // Memories change no picture.
+        Op::SetGradeMemories { .. } => (None, None, false),
 
         // A batch is as broad as its members: the item flag is the union, and
         // the reference scope widens to "no one subtree" rather than picking a

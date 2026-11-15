@@ -19,11 +19,16 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/name_direction.dart';
+import 'automation_lane.dart';
+import 'automation_mode_chip.dart';
+import 'graph_maths.dart' show rationalSeconds;
 import 'layer_fold_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_metrics_frb.dart';
-import 'timeline_extras_frb.dart' show rowSelectionFill;
+import 'timeline_extras_frb.dart'
+    show TimelineAxis, iconForKind, rowSelectionFill;
 import 'timeline_outline_row_frb.dart' show RowRenameField;
+import 'volume_band_frb.dart' show volumeBandFloorDb;
 
 /// The cell at a track head's right end: the lane picture's switch, or Detach
 /// audio on a faded picture row.
@@ -35,6 +40,14 @@ const double audioTrackChipWidth = 22;
 /// (docs/impl/audio-timeline.md §5).
 const int audioTrackMinRows = 2;
 const int audioTrackMaxRows = 8;
+
+/// How far in a lane's name starts: where a fold row's does, one step in
+/// from the twirl.
+const double audioLaneIndent = outlineGap +
+    switchCellWidth * 3 +
+    automationChipWidth +
+    outlineGap +
+    8;
 
 /// One track of the Audio timeline: a layer that can make a sound, the rows
 /// its twirl shows, and how tall the pair makes it.
@@ -56,10 +69,14 @@ class AudioTrackRow {
   /// ([audioTimelineDims]).
   final bool dimmed;
 
-  /// The rows this track's own twirl shows: Volume, the Effects heading, and
-  /// the rack under it. Held whether the twirl is open or shut, because a
-  /// keyframe is somewhere in time whether or not its row is on screen and a
-  /// drag can still land on it.
+  /// The lanes this track's twirl opens, before its rows: Volume, Pan and one
+  /// per send. Held whether the twirl is open or shut, as [foldRows] are.
+  final List<AutomationLane> lanes;
+
+  /// The rows this track's own twirl shows: the Effects heading and the rack
+  /// under it. Held whether the twirl is open or shut, because a keyframe is
+  /// somewhere in time whether or not its row is on screen and a drag can
+  /// still land on it.
   final List<LayerFoldRow> foldRows;
 
   /// The rows the clips on this track show, in track order - nothing for a
@@ -81,6 +98,7 @@ class AudioTrackRow {
     required this.open,
     required this.dimmed,
     required this.foldRows,
+    this.lanes = const [],
     this.clipRows = const [],
     required this.rowHeight,
     this.rows = audioTrackMinRows,
@@ -94,29 +112,34 @@ class AudioTrackRow {
   List<LayerFoldRow> get drawnRows =>
       open ? [...foldRows, ...clipRows] : clipRows;
 
+  /// The lanes on show: the twirl's, while it is open.
+  List<AutomationLane> get drawnLanes => open ? lanes : const [];
+
   /// The track's own band: the room its wave, its clips and their gain lines
-  /// have, and where the rows its twirl opened begin.
+  /// have, and where the lanes its twirl opened begin.
   double get laneHeight => rowHeight * rows;
 
-  /// The band, then one lane row for each row the twirl opened.
-  double get height => laneHeight + rowHeight * drawnRows.length;
+  /// What the open lanes stand on, between the band and the rows.
+  double get lanesHeight =>
+      drawnLanes.fold<double>(0, (sum, lane) => sum + lane.height);
+
+  /// The band, the lanes, then one lane row for each row the twirl opened.
+  double get height =>
+      laneHeight + lanesHeight + rowHeight * drawnRows.length;
 }
 
-/// The rows under a track: **Volume**, then the **Effects** heading, its rows
-/// while the track carries an audio effect, and the rows of whichever clips on
-/// it are twirled open, in track order.
+/// The rows under a track's lanes: the **Effects** heading, its rows while the
+/// track carries an audio effect, and the rows of whichever clips on it are
+/// twirled open, in track order. Volume, Pan and the sends are lanes
+/// ([automationLanesOf]), not rows.
 ///
 /// Built from [layerFoldRows] and filtered, rather than written out again, so
 /// the two panels cannot drift on what a parameter row is. There is no Audio
-/// heading and no Waveform twirl here - the wave is on the lane - but the
-/// Volume row keeps the path it has in the layer Timeline
-/// (`<layer>/audio/volume`), so a fold path means the same thing in both. The
-/// heading's own path is held open on the way in for exactly that reason.
+/// heading and no Waveform twirl here - the wave is on the lane. The heading's
+/// own path is held open on the way in so the rack's rows come through.
 List<LayerFoldRow> audioTimelineFoldRows({
   required BridgeLayerEntry entry,
   required Set<String> open,
-  BridgeScalar? volumeDb,
-  Map<String, String> busNames = const {},
 }) {
   final id = entry.layer.internallayerId.toString();
   final audio = {
@@ -127,9 +150,7 @@ List<LayerFoldRow> audioTimelineFoldRows({
     entry: entry,
     open: {...open, audioPath(id)},
     hasAudio: true,
-    volumeDb: volumeDb,
   );
-  final volume = <LayerFoldRow>[];
   // The Effects heading, one step in from the twirl now that no Audio heading
   // stands over it. It stands whether or not the track holds a plugin yet,
   // because the glyph that fills the rack is on it: a heading that appeared
@@ -146,8 +167,6 @@ List<LayerFoldRow> audioTimelineFoldRows({
   ];
   for (final row in built) {
     switch (row) {
-      case FoldVolumeRow(:final scalar):
-        volume.add(FoldVolumeRow(scalar: scalar, depth: 1));
       case FoldGroupRow(
             :final path,
             :final label,
@@ -166,29 +185,14 @@ List<LayerFoldRow> audioTimelineFoldRows({
           when audio.contains(info.id.toString()):
         effects.add(
             FoldEffectParamRow(info, param, value, depth: 3, driven: driven));
-      // A picture group - Transform, Masks, Styles, the Waveform twirl - has
-      // nothing to say about a track.
+      // A picture group - Transform, Masks, Styles, the Waveform twirl - and
+      // the Volume row, which is a lane here, have nothing to say about a
+      // track.
       default:
         break;
     }
   }
-  // The Sends heading, while the track sends anywhere: one row a bus.
-  final sends = entry.info.sends;
-  final sendsOpen = open.contains(sendsPath(id));
-  return [
-    ...volume,
-    ...effects,
-    if (sends.isNotEmpty)
-      FoldGroupRow(
-        path: sendsPath(id),
-        label: l10n.audioSends,
-        open: sendsOpen,
-        depth: 1,
-      ),
-    if (sendsOpen)
-      for (final send in sends)
-        FoldSendRow(send, bus: busNames[send.bus.toString()] ?? '', depth: 2),
-  ];
+  return effects;
 }
 
 /// The rows the clips on a track show, in track order.
@@ -209,14 +213,15 @@ List<LayerFoldRow> audioTimelineClipRows({
 /// Every track the Audio timeline draws, in stack order.
 ///
 /// [layers] and [dimmed] come from `timelineViewLayers(audioTimeline: true)`,
-/// which is the rule for which layers are tracks at all.
+/// which is the rule for which layers are tracks at all. [trackRows] holds
+/// how tall each track and each lane has been dragged, by track id and by
+/// lane id.
 List<AudioTrackRow> audioTimelineTracks({
   required List<BridgeLayerEntry> layers,
   required Set<String> dimmed,
   required Set<String> open,
   required double rowHeight,
   Map<String, int> trackRows = const {},
-  Map<String, BridgeScalar> volumeDb = const {},
   Map<String, String> busNames = const {},
 }) {
   final out = <AudioTrackRow>[];
@@ -227,8 +232,12 @@ List<AudioTrackRow> audioTimelineTracks({
       id: id,
       open: open.contains(id),
       dimmed: dimmed.contains(id),
-      foldRows: audioTimelineFoldRows(
-          entry: entry, open: open, volumeDb: volumeDb[id], busNames: busNames),
+      foldRows: audioTimelineFoldRows(entry: entry, open: open),
+      lanes: automationLanesOf(
+          entry: entry,
+          rowHeight: rowHeight,
+          rows: trackRows,
+          busNames: busNames),
       clipRows: audioTimelineClipRows(entry: entry, open: open),
       rowHeight: rowHeight,
       rows: trackRows[id] ?? audioTrackMinRows,
@@ -237,9 +246,10 @@ List<AudioTrackRow> audioTimelineTracks({
   return out;
 }
 
-/// The head of one track in the outline: mute, solo, the fx switch, the twirl,
-/// the number, the name, and at the right edge the lane picture's switch, or
-/// on a faded picture row *Detach audio*.
+/// The head of one track in the outline: mute, solo, the fx switch, the
+/// automation mode, the twirl, the number, the name (a bus's after the bus
+/// glyph), and at the right edge the lane picture's switch, or on a faded
+/// picture row *Detach audio*.
 ///
 /// As tall as its track's own band, which is the height before the twirl adds
 /// anything and what the drag on the row's bottom edge sets.
@@ -416,34 +426,13 @@ class AudioTrackOutlineRow extends StatelessWidget {
           ),
         )),
         // The row's bottom edge, dragged to set how many lane rows the track
-        // stands on. Four pixels: wide enough to catch, narrow enough that a
-        // press meant for the row lands on the row.
+        // stands on.
         if (onResize != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 4,
-            // Lit under the pointer, as the Cut timeline's edge is, so the
-            // four pixels say they can be taken hold of. A double-click puts
-            // the track back to its usual height.
-            child: HoverMark(
-              cursor: SystemMouseCursors.resizeUpDown,
-              builder: (context, lit) => GestureDetector(
-                onDoubleTap: onResizeReset,
-                child: Listener(
-                  key: ValueKey<String>('atl-resize-${track.id}'),
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (_) => onResizeStart?.call(),
-                  onPointerMove: (event) => onResize!(event.delta.dy),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                        height: 2, color: t.accent.withValues(alpha: lit)),
-                  ),
-                ),
-              ),
-            ),
+          RowResizeEdge(
+            key: ValueKey<String>('atl-resize-${track.id}'),
+            onResize: onResize!,
+            onResizeStart: onResizeStart,
+            onResizeReset: onResizeReset,
           ),
       ]),
       ),
@@ -467,6 +456,18 @@ class AudioTrackOutlineRow extends StatelessWidget {
             tip: switches.fx
                 ? l10n.switchEffectsOn
                 : l10n.switchEffectsBypassed),
+        AutomationModeChip(
+          id: track.id,
+          mode: info.automationMode,
+          keyed: track.lanes.any((lane) => lane.keys.isNotEmpty),
+          onPick: (mode) {
+            // A locked layer refuses, and quietly.
+            try {
+              track.entry.layer.setAutomationMode(mode: mode);
+            } catch (_) {}
+            onChanged();
+          },
+        ),
         const SizedBox(width: outlineGap),
         // The twirl has its own gesture, so opening a track does not also
         // pick it.
@@ -506,6 +507,12 @@ class AudioTrackOutlineRow extends StatelessWidget {
               overflow: TextOverflow.visible),
         ),
         const SizedBox(width: identityGap),
+        if (info.kind == BridgeLayerKind.bus)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 4),
+            child: lumitIcon(iconForKind(BridgeLayerKind.bus),
+                size: iconSize, color: t.textMuted),
+          ),
         // The name, or the field Enter turns it into. The picked track's name
         // is the one thing on its row read at full strength, which is how the
         // layer Timeline marks its own.
@@ -657,9 +664,10 @@ class AudioTrackHeaderRow extends StatelessWidget {
           const EdgeInsets.only(left: outlineGap, right: outlineRowTrailing),
       child: Row(
         children: [
-          // The three switch cells, the gap, the twirl and its gap: blank, as
-          // the row's own controls say what they are.
-          const SizedBox(width: switchCellWidth * 3 + outlineGap + 16),
+          // The three switch cells, the mode, the gap, the twirl and its gap:
+          // blank, as the row's own controls say what they are.
+          const SizedBox(
+              width: switchCellWidth * 3 + automationChipWidth + outlineGap + 16),
           const SizedBox(width: identityGap),
           SizedBox(width: numberCellWidth, child: kicker(l10n.columnNumber)),
           const SizedBox(width: identityGap + 6 + identityGap),
@@ -719,3 +727,25 @@ class _AudioRowGroundState extends State<AudioRowGround> {
     );
   }
 }
+
+/// Where a track's wave is read from: the source's own clock at canvas x 0,
+/// and how fast it runs. Canvas x 0 is the axis's left padding, comp time 0
+/// sits a padding's width in, and the source's own clock runs from there
+/// less wherever the layer starts it.
+(double, double) audioWaveClock(
+    AudioTrackRow track, TimelineAxis axis, double fps) {
+  final startOffset = rationalSeconds(track.entry.info.span.startOffset);
+  final secondsPerPixel =
+      axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
+  return (-startOffset - TimelineAxis.pad * secondsPerPixel, secondsPerPixel);
+}
+
+/// A track's level as a readout, or null while it is keyed. Unity says
+/// nothing, so it is left off the lane.
+String? audioLevelReading(BridgeScalar scalar) => switch (scalar) {
+      BridgeScalar_Static(:final field0) when field0.abs() < 0.05 => null,
+      BridgeScalar_Static(:final field0) => field0 <= volumeBandFloorDb
+          ? l10n.volumeNegInf
+          : '${field0.toStringAsFixed(1)} dB',
+      _ => null,
+    };

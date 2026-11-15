@@ -356,7 +356,8 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// datamosh) can read its neighbours.
 ///
 /// `frame` is the layer's local time in **frames of the comp**, the unit a
-/// plugin is asked in and one a built-in never reads.
+/// plugin is asked in, and `fps` the comp's rate, which a window set in
+/// seconds reads.
 ///
 /// **Per instance, not only per effect**. A built-in's window is a fact
 /// about the effect and comes off its declaration, exactly as it always did. A
@@ -366,14 +367,23 @@ fn is_catalogued(e: &EffectInstance) -> bool {
 /// answers for itself, falling back to the declaration when it has nothing more
 /// specific to say. The frames it names are then in the frame key and in the
 /// prefetch, which is what keeps a cached frame from outliving what it sampled.
-pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, frame: f64) -> Vec<i32> {
+pub fn stack_temporal_window(
+    effects: &[EffectInstance],
+    fx_on: bool,
+    frame: f64,
+    fps: f64,
+) -> Vec<i32> {
     let mut offsets = vec![0i32];
     if fx_on {
-        for e in effects.iter().filter(|e| e.enabled && is_catalogued(e)) {
+        let live = effects
+            .iter()
+            .enumerate()
+            .filter(|(i, e)| e.enabled && is_catalogued(e) && reads_neighbours(effects, *i));
+        for (_, e) in live {
             let Some(def) = super::catalogue::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
             };
-            match def.frames_needed(e, frame) {
+            match def.frames_needed_at(e, frame, fps) {
                 Some(own) => offsets.extend_from_slice(&own),
                 None => offsets.extend_from_slice(def.schema().traits.temporal),
             }
@@ -419,7 +429,7 @@ pub fn input_times(inst: &EffectInstance, t: f64, dt: f64) -> Vec<f64> {
     if inst.effect.match_name == TIME_OFFSET {
         return vec![t + inst.float_at("offset", t).unwrap_or(0.0)];
     }
-    let window = match def.frames_needed(inst, t) {
+    let window = match def.frames_needed_at(inst, t, 1.0 / dt) {
         Some(own) => own,
         None => def.schema().traits.temporal.to_vec(),
     };
@@ -455,7 +465,7 @@ pub fn layer_temporal_window(
     lt: f64,
     dt: f64,
 ) -> Vec<i32> {
-    let mut offsets = stack_temporal_window(&layer.effects, layer.switches.fx, lt);
+    let mut offsets = stack_temporal_window(&layer.effects, layer.switches.fx, lt, 1.0 / dt);
     if layer.switches.fx && dt > 0.0 {
         for inst in layer
             .effects
@@ -593,18 +603,89 @@ pub fn stack_extracted_channels(
 }
 
 pub fn stack_flow_neighbours(effects: &[EffectInstance], fx_on: bool) -> Vec<i32> {
-    let mut offsets: Vec<i32> = if fx_on {
-        effects
-            .iter()
-            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-            .filter_map(|e| effect_flow_neighbour(&e.effect.match_name))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    offsets.sort_unstable();
-    offsets.dedup();
-    offsets
+    stack_flow_wants(effects, fx_on)
+        .into_iter()
+        .map(|(o, _)| o)
+        .collect()
+}
+
+/// How a consumer wants the motion to one neighbour handed over. Ordered by
+/// how much work it asks for, so two consumers of one offset get the larger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FlowWant {
+    /// Nothing measured: a field of no motion at full confidence, which only
+    /// says the neighbour is a usable frame of the same shot (Denoise with
+    /// Follow motion off).
+    Still,
+    /// Measured, and handed over at the size it was measured at (Denoise).
+    Measured,
+    /// Measured, and brought up to the frame's own size (Motion blur and
+    /// Datamosh).
+    Full,
+}
+
+impl FlowWant {
+    /// What a frame's name folds in for a field wanted this way. A field at
+    /// its measured size, or one of no motion, is not the same data as one at
+    /// the frame's size, which keeps the name it always had.
+    #[must_use]
+    pub fn name_tag(self) -> &'static [u8] {
+        match self {
+            Self::Still => b"still",
+            Self::Measured => b"measured",
+            Self::Full => b"",
+        }
+    }
+}
+
+/// Every offset **one instance** wants motion measured against, and how.
+/// Motion blur and Datamosh want one each, at the frame's size
+/// ([`effect_flow_neighbour`]); Denoise wants every frame it reads.
+#[must_use]
+pub fn effect_flow_neighbours(e: &EffectInstance) -> Vec<(i32, FlowWant)> {
+    if e.effect.match_name == "denoise" {
+        return super::effects::denoise::Denoise::flow_wants(e);
+    }
+    effect_flow_neighbour(&e.effect.match_name)
+        .map(|o| (o, FlowWant::Full))
+        .into_iter()
+        .collect()
+}
+
+/// Whether the effect at `i` in `effects` reads the frames either side. Every
+/// temporal effect does, except a Denoise that is not the first enabled
+/// effect: its neighbours are the raw frames, so an effect ahead of it runs on
+/// this frame and not on them, and averaging them in would undo it. Such a
+/// Denoise reads no neighbours, gets no field, and works as at Frames 0.
+fn reads_neighbours(effects: &[EffectInstance], i: usize) -> bool {
+    effects
+        .get(i)
+        .is_none_or(|e| e.effect.match_name != "denoise")
+        || effects.iter().position(|e| e.enabled) == Some(i)
+}
+
+/// [`stack_flow_neighbours`] with how each offset is wanted: the most any
+/// consumer of it asks for. Sorted by offset. A Denoise that is not first
+/// wants nothing ([`reads_neighbours`]).
+#[must_use]
+pub fn stack_flow_wants(effects: &[EffectInstance], fx_on: bool) -> Vec<(i32, FlowWant)> {
+    let mut wants: Vec<(i32, FlowWant)> = Vec::new();
+    if fx_on {
+        for (_, e) in effects.iter().enumerate().filter(|(i, e)| {
+            e.enabled
+                && e.effect.namespace == EffectNamespace::Builtin
+                && reads_neighbours(effects, *i)
+        }) {
+            for (o, want) in effect_flow_neighbours(e) {
+                match wants.iter_mut().find(|(w, _)| *w == o) {
+                    Some(slot) => slot.1 = slot.1.max(want),
+                    None => wants.push((o, want)),
+                }
+            }
+        }
+    }
+    wants.sort_unstable_by_key(|(o, _)| *o);
+    wants
 }
 
 /// Where each flow consumer in the stack measures its motion, as the offset
@@ -612,15 +693,66 @@ pub fn stack_flow_neighbours(effects: &[EffectInstance], fx_on: bool) -> Vec<i32
 /// asked for, unless `crosses` says a cut lies that way: then the other side,
 /// and the field is turned round. With a cut both ways there is no field, and
 /// the effect passes the picture through.
+///
+/// Denoise's offsets are never turned round: a neighbour across a cut is
+/// another shot, so it gets no field and is left out.
 pub fn stack_flow_sides(
     effects: &[EffectInstance],
     fx_on: bool,
     crosses: impl Fn(i32) -> bool,
 ) -> Vec<(i32, i32)> {
-    stack_flow_neighbours(effects, fx_on)
+    stack_flow_sides_wanted(effects, fx_on, crosses)
         .into_iter()
-        .filter_map(|o| [o, -o].into_iter().find(|&s| !crosses(s)).map(|s| (o, s)))
+        .map(|(o, side, _)| (o, side))
         .collect()
+}
+
+/// [`stack_flow_sides`] with how each offset is wanted.
+pub fn stack_flow_sides_wanted(
+    effects: &[EffectInstance],
+    fx_on: bool,
+    crosses: impl Fn(i32) -> bool,
+) -> Vec<(i32, i32, FlowWant)> {
+    stack_flow_wants(effects, fx_on)
+        .into_iter()
+        .filter_map(|(o, want)| {
+            let sides: &[i32] = if want == FlowWant::Full {
+                &[o, -o]
+            } else {
+                &[o]
+            };
+            sides.iter().find(|&&s| !crosses(s)).map(|&s| (o, s, want))
+        })
+        .collect()
+}
+
+/// Takes the field off every neighbour Denoise would read that is the same
+/// picture as this frame or as a nearer neighbour, by `name` of each offset
+/// (offset 0 is the frame itself, and `None` is a picture with no name, which
+/// is kept). A held frame, a still or slower footage shows the same picture
+/// again, and the same noise twice is not two measurements of it. `offsets`
+/// is what a rebuilt layer's neighbours are measured by: the picture's offset
+/// and, when measured, the offset its field is filed under and how.
+pub fn leave_out_repeats(
+    offsets: &mut [(i32, Option<(i32, FlowWant)>)],
+    name: impl Fn(i32) -> Option<u128>,
+) {
+    let mut order: Vec<usize> = (0..offsets.len()).collect();
+    order.sort_by_key(|&i| offsets.get(i).map(|(o, _)| (o.abs(), *o)));
+    let mut seen: Vec<u128> = name(0).into_iter().collect();
+    for i in order {
+        let Some((o, measure)) = offsets.get_mut(i) else {
+            continue;
+        };
+        let Some(n) = name(*o) else { continue };
+        if seen.contains(&n) {
+            if matches!(measure, Some((_, w)) if *w != FlowWant::Full) {
+                *measure = None;
+            }
+        } else {
+            seen.push(n);
+        }
+    }
 }
 
 /// Whether `layers` show another shot at comp time `b` than at `a`: a layer
@@ -642,6 +774,22 @@ pub fn cut_between(layers: &[Layer], a: f64, b: f64) -> bool {
             };
             live(a) != live(b) || clip(a) != clip(b)
         })
+}
+
+/// Whether a Sequence layer of `clips` shows another clip at layer time `b`
+/// than at `a`, for a stack whose flow `wants` include Denoise's. Denoise
+/// averages only the clip's own frames: another clip, even of the same
+/// footage, is another shot, as [`cut_between`] has it. Motion blur and
+/// Datamosh read across as they always have.
+#[must_use]
+pub fn denoise_cut(
+    wants: &[(i32, FlowWant)],
+    clips: &[crate::sequence::Clip],
+    a: f64,
+    b: f64,
+) -> bool {
+    let clip = |t| crate::sequence::active_clip(clips, t).map(|c| c.id);
+    wants.iter().any(|(_, w)| *w != FlowWant::Full) && clip(a) != clip(b)
 }
 
 #[cfg(test)]

@@ -212,13 +212,15 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-roto` | The roto brush's maths |
 | `lumit-ml` | Installed addons: model packs and the model runtime |
 | `lumit-import` | After Effects import |
+| `lumit-lottie` | Vector export: Lottie, dotLottie and animated SVG, the check of what won't come across, and Lottie import |
 | `lumit-keymap` | Shortcuts |
+| `lumit-surface` | Control surfaces: Tangent panels through Tangent's Hub, and MIDI controllers through MIDI learn |
 | `lumit-script` | Commands: the named edits scripts, the command line and MCP make, all through one `dispatch`, the JavaScript script runner with After Effects' scripting objects (`ae.js`), and the live endpoint other programs drive the open Lumit through (`live.rs`) |
 | `lumit-cli` | The command line's launcher, `lumit-cli`: loads the bridge library from beside it and runs the command line in it. Ships beside the bridge, in `lib\` on Windows |
 | `lumit-scene` | A 3D model read from a file (glTF, FBX, OBJ, or anything else the user's Blender turns into glTF) as plain data |
 | `lumit-ingress` | Limits for reading untrusted input |
 | `lumit-peer` | Authenticating the plugin broker pipes and the live endpoint |
-| `lumit-share` | Shared projects: the host's end, a guest's end, the encrypted channel between them, and a member's end of a project kept online (`online.rs`). Lumit's own relay and its server are each dialled through a door the interface keeps (`state/relay_door.dart`, `state/online_door.dart`) |
+| `lumit-share` | Shared projects: the host's end, a guest's end, the encrypted channel between them, a member's end of a project kept online (`online.rs`), and the link a remote export's files cross (`remote.rs`). Lumit's own relay and its server are each dialled through a door the interface keeps (`state/relay_door.dart`, `state/online_door.dart`) |
 | `lumit-relay` | The relay a shared project can meet at, and what both ends say to one. Also a program, `lumit-relay`, with nothing but std in it |
 | `lumit-extensions` | Installed extensions: reading an `extension.json` and the LFX effects it lists, `.lfx` packages, and the folders they live in |
 | `lumit-fx-macros` | `#[derive(Effect)]` |

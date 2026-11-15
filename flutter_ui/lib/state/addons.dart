@@ -146,7 +146,8 @@ class Addon {
   /// What the whole addon weighs, for the size on the row.
   final int sizeBytes;
 
-  /// What a model pack does: `depth`, `matte`, `segmentation` or `synthesis`.
+  /// What a model pack does: `depth`, `matte`, `segmentation`, `synthesis`
+  /// or `voice`.
   /// Empty for the runtime.
   final String task;
 
@@ -204,6 +205,9 @@ class Addon {
 /// The engine's scan of the addons folder.
 typedef AddonLister = List<Addon> Function();
 
+/// Whether the engine would take this manifest, given as JSON text.
+typedef AddonAcceptor = bool Function(String manifest);
+
 /// Handing the engine a manifest and the files it names, for it to unpack and
 /// put in place. Throws when the engine refuses.
 typedef AddonInstaller = Future<void> Function(
@@ -225,6 +229,7 @@ typedef AddonsFolder = String? Function();
 /// page and anything that links to it are two views of the same answer.
 class AddonService extends ChangeNotifier {
   final AddonLister _list;
+  final AddonAcceptor _accepts;
   final AddonInstaller _install;
   final AddonRemover _remove;
   final RuntimeReader _readRuntime;
@@ -242,10 +247,12 @@ class AddonService extends ChangeNotifier {
     required AddonRemover remove,
     required RuntimeReader runtime,
     required AddonsFolder folder,
+    AddonAcceptor? accepts,
     TextFetcher? fetch,
     AssetDownloader? download,
     String? platformKey,
   })  : _list = list,
+        _accepts = accepts ?? ((_) => true),
         _install = install,
         _remove = remove,
         _readRuntime = runtime,
@@ -374,7 +381,7 @@ class AddonService extends ChangeNotifier {
     List<Addon>? found;
     try {
       found = parseCatalogue(await _fetch(Uri.parse(addonCatalogueUrl)),
-          platformKey: platformKey);
+          platformKey: platformKey, accepts: _accepts);
     } catch (_) {
       _fail(AddonFailure.network);
       return;
@@ -676,7 +683,11 @@ String defaultPlatformKey() {
 /// Null when it is not that shape at all, which the page reports as a
 /// catalogue this build cannot read. Entries with nothing for [platformKey] are
 /// left out rather than listed with a button that could not work.
-List<Addon>? parseCatalogue(String text, {required String platformKey}) {
+List<Addon>? parseCatalogue(
+  String text, {
+  required String platformKey,
+  AddonAcceptor? accepts,
+}) {
   Object? json;
   try {
     json = jsonDecode(text);
@@ -692,6 +703,7 @@ List<Addon>? parseCatalogue(String text, {required String platformKey}) {
     if (addon == null) continue;
     final downloads = downloadsFor(addon.manifest!, platformKey);
     if (downloads == null || downloads.isEmpty) continue;
+    if (accepts != null && !accepts(jsonEncode(addon.manifest))) continue;
     out.add(addon);
   }
   return out;
@@ -714,7 +726,7 @@ List<Map<String, dynamic>>? downloadsFor(
 }
 
 /// The files a manifest puts in the addon's folder: every download's `dest`,
-/// and every name a zip download takes out of its archive.
+/// and every name a zip or tar.gz download takes out of its archive.
 List<String> packFileNames(Map<String, dynamic> manifest, String platformKey) {
   final out = <String>[];
   for (final download in downloadsFor(manifest, platformKey) ?? const []) {

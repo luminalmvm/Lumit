@@ -59,6 +59,7 @@ void main() {
       multiwaveWaveforms: false,
       reduceTransparency: true,
       waveformsFromBottom: true,
+      waveformScale: WaveformScale.logarithmic,
       showToneMap: true,
       invertOrbitAcross: true,
       invertOrbitUpDown: true,
@@ -95,6 +96,19 @@ void main() {
       viewerGuidesLocked: true,
       viewerRulerPercent: true,
       alignToFirstPicked: true,
+      transcriptPauseMs: 800,
+      transcriptFollow: false,
+      transcriptShowRemoved: true,
+      transcriptShowPauses: false,
+      transcriptTextSize: 16,
+      transcriptHesitations: false,
+      transcriptPhrases: true,
+      transcriptRepeats: false,
+      transcriptRetakes: true,
+      transcriptSkipTight: false,
+      transcriptLongerThanMs: 1500,
+      transcriptShortenToMs: 400,
+      transcriptLift: true,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -112,6 +126,7 @@ void main() {
     expect(back.multiwaveWaveforms, isFalse);
     expect(back.reduceTransparency, isTrue);
     expect(back.waveformsFromBottom, isTrue);
+    expect(back.waveformScale, WaveformScale.logarithmic);
     expect(back.showToneMap, isTrue);
     expect(back.invertOrbitAcross, isTrue);
     expect(back.invertOrbitUpDown, isTrue);
@@ -148,9 +163,22 @@ void main() {
     expect(back.viewerGuidesLocked, isTrue);
     expect(back.viewerRulerPercent, isTrue);
     expect(back.alignToFirstPicked, isTrue);
+    expect(back.transcriptPauseMs, 800);
+    expect(back.transcriptFollow, isFalse);
+    expect(back.transcriptShowRemoved, isTrue);
+    expect(back.transcriptShowPauses, isFalse);
+    expect(back.transcriptTextSize, 16);
+    expect(back.transcriptHesitations, isFalse);
+    expect(back.transcriptPhrases, isTrue);
+    expect(back.transcriptRepeats, isFalse);
+    expect(back.transcriptRetakes, isTrue);
+    expect(back.transcriptSkipTight, isFalse);
+    expect(back.transcriptLongerThanMs, 1500);
+    expect(back.transcriptShortenToMs, 400);
+    expect(back.transcriptLift, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 54);
+    expect(all.toJson().keys.length, 68);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

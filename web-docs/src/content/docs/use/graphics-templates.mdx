@@ -1,0 +1,190 @@
+---
+title: Graphics templates
+description: A composition with controls, placed as many times as you like, each copy with its own words, colours and pictures.
+sidebar:
+  order: 9.6
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **graphics template** is a composition with **controls**: rows from inside it that every
+Precomp layer or clip placing it can set for itself. Each placing is a **copy**. A lower third
+made once is placed twenty times, each copy with its own name, and a change to the design
+reaches all twenty.
+
+<Shot file="graphics-templates.png" caption="A copy's controls in Effect controls, and the Graphics template panel beside them." eager/>
+
+## Making one
+
+Open the composition. Right-click a row and choose **Add to controls**, or select rows in the
+Timeline and press `Ctrl`+`Alt`+`A`. A row that is a control wears the **Expose** mark, and its
+menu offers **Remove from controls**.
+
+| Rows that can be a control | Where |
+| --- | --- |
+| Transform rows | The Timeline and Effect controls. A point is one control |
+| Effect and layer style rows | The Timeline and Effect controls |
+| Whether an effect is on | The effect's heading menu |
+| A Text layer's font, size, tracking, fill, stroke and Background colour | The [Text panel](/use/text/) |
+| A Text layer's words, a layer's footage, its visibility | **Add to controls ▸** on the layer's menu |
+| A shape's fill, stroke, stroke width, opacity, size, roundness and rotation | The Timeline |
+| A mask's opacity, feather and expansion | The Timeline |
+| Volume | The Timeline |
+| A control of a graphics template placed inside this one | Its row under the Precomp layer |
+
+Rows inside a node graph, on a clip's own effects, and on a layer group's header take no
+**Add to controls**.
+
+## The Graphics template panel
+
+**Window ▸ Graphics template** shows the front composition's controls as a copy shows them.
+A value set here is the template's own.
+
+- Double-click a name, or press `F2`, to rename it. A copy keeps what it set through a
+  rename.
+- Drag to reorder, and into or out of a group. **Move to group ▸** on a control's menu makes a
+  group or leaves one.
+- **Range…** on a number sets the range a copy stays inside.
+- **Font, size and colour ▸** on a text control lets a copy change those too.
+- **Reveal row** opens the Timeline at the row the control sets.
+- `Delete` removes the selected controls.
+
+A control whose row is keyed or runs an expression shows its value and is not edited here. A
+control whose row was deleted shows the **Missing** mark.
+
+| At the panel's foot | What it does |
+| --- | --- |
+| **Poster** | The frame the library shows. |
+| **Intro**, **Outro** | Where the intro ends and the outro starts. A copy longer or shorter than the template plays both at their own speed and stretches what is between them. |
+| **Data…** | Opens the [Data window](#data). |
+| **Save graphics template…** | Saves it to the library. |
+
+### Menus that set several rows
+
+**+ ▸ Menu** in the panel's header adds a menu control, with a Custom controls effect on a
+Null layer called **Controls** to hold it. Its options are edited under it.
+
+**Record** on an option picks it. Every row changed until **Stop** becomes what the option
+sets: a plate's colour, the text's colour, which logo shows. Picking the option on a copy then
+sets those rows. `Escape` stops without keeping. **Clear what it sets** on an option's menu
+empties it.
+
+## Placing a copy
+
+- Drag the composition from the [Project panel](/panels/project/), or a tile from the library,
+  onto the Timeline for a Precomp layer, or onto a track in the [Cut timeline](/use/cutting/)
+  for a clip.
+- A copy is called by its first text control until it is renamed.
+
+## Editing a copy
+
+Select it. Its controls head [Effect controls](/panels/effect-controls/), under the
+template's name. Every row keys, takes an expression and resets as any effect's row does, on
+the copy's own clock.
+
+- A row the copy has not set follows the template, drawn in the quieter ink. Setting it makes
+  it the copy's own. Its reset arrow makes it follow again.
+- **Set as default** on a row's menu writes the copy's value into the template, for every copy
+  that has not set its own.
+- **Reset** on the card's heading lets every row follow again. **Open** opens the template.
+- A footage control takes a footage item or a composition dropped on its well, with **Fill**,
+  **Fit** or **Stretch** into the frame of the picture it replaces.
+- **Intro** and **Outro** ticks at the card's foot leave either end out.
+- `Tab` moves between a copy's text boxes. Double-clicking a copy in the Viewer or the Cut
+  timeline puts the cursor in its first text box.
+- With several copies of one template selected, an edit reaches all of them. A value that
+  differs between them shows as a dash.
+
+The Timeline folds a copy's controls under **Controls**.
+
+## The library
+
+A graphics template is saved as a `.lumt` file, with its footage, and its fonts when **Pack
+fonts** is ticked. Opening a `.lumt`, or dropping one on Lumit, adds it to the library.
+
+The **Graphics templates** group in [Effects & presets](/panels/effects-presets/) shows the
+library as tiles. Moving the pointer across a tile plays it. A tile naming a font this machine
+has not got wears the **Missing** mark.
+
+| On a tile's menu | What it does |
+| --- | --- |
+| **Place** | At the playhead. Double-click and `Enter` do the same. |
+| **Favourite** | Stars it. |
+| **Use for Insert title** | `Ctrl`+`T` in the Cut timeline places it. |
+| **Open** | Brings it into the project and opens it. Saving it under its own name makes the library's next version. |
+| **Rename…**, **Move to ▸**, **Show in folder**, **Delete** | As for presets. |
+
+A template placed in a project comes into a **Graphics templates** folder once, and every copy
+shares it. When the library has a newer version, the composition wears an **Update** badge in
+the Project panel and the copy's card shows **Update**. Updating keeps every copy's values by
+control. A duplicated template is a template of its own.
+
+:::note[Not built]
+- Several layouts for different frame shapes in one template. A vertical version is a template
+  of its own.
+:::
+
+## Data
+
+The **Data** window links a CSV, TSV or JSON file to a template, and shows its rows.
+**Save a starting file…** writes a CSV with a column for each control and the template's own
+values as its first row.
+
+A column feeds the control of its name. Its header's menu feeds another control, a text
+control's font, size or colour, **Length** in seconds, **File name**, or nothing.
+
+| A cell holding | Is read as |
+| --- | --- |
+| Words | Text |
+| `1.5` or `1,5`, with or without a unit | A number |
+| `#RGB`, `#RRGGBB` or `#RRGGBBAA` | A colour |
+| yes, no, true, false, on, off, 1, 0 | A tick |
+| An option's name, or its number from 1 | A menu's option |
+| `960, 540` | A point |
+| A file's path, whole or beside the data file | Footage, brought into a **Data** folder |
+
+An empty cell keeps the template's own value. A cell that cannot be read is underlined, and
+the template's own value stands there. The project keeps the rows, so it opens and exports the
+same without the file. **Reload** reads it again.
+
+- Selecting a row shows it in the Viewer, on the selected copy or on the template.
+- **Follow row** has the selected copy take its controls from the row, except the ones it sets
+  itself. The card's **Row** does the same.
+- **Place rows** places a copy for each selected row, one after another from the playhead.
+
+### Export rows
+
+**Export rows…** exports a file for each selected row, or each row.
+
+| Setting | What it does |
+| --- | --- |
+| **Composition** | The template on its own, or the composition the selected copy sits in with that copy following each row. |
+| **File name** | Takes `{Column}`, `{row}`, `{comp}` and `{date}`, and may hold folders. |
+| **Preset** | An export preset, or **Still (PNG)** at the poster frame. |
+
+Rows with a cell that cannot be read are counted before anything is queued, and left out or
+exported with the template's own values there. The [export queue](/use/export/) folds the rows
+under one heading.
+
+On the [command line](/use/command-line/): `lumit-cli export <project or .lumt> --comp
+<template> --data rows.csv --rows 1-20 --out "{Name}.mp4"`.
+
+## Expressions
+
+An expression inside a template reads a copy's values, so a rig built on Custom controls
+works per copy. `layer("Lower third").essentialProperty("Name")` reads a copy's control, as
+After Effects writes it.
+
+## From After Effects
+
+An imported After Effects project brings its Essential Graphics across: a composition's
+controllers become its controls, and a precomp layer's Essential Properties its copy's
+values, keys included. A Dropdown Menu Control comes in as a Custom controls menu. What does
+not come across is listed in the import report.
+
+## Related
+
+- [Compositions](/use/compositions/)
+- [Effect presets](/use/presets/)
+- [Text](/use/text/)
+- [Export](/use/export/)

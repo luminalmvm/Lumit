@@ -1,0 +1,86 @@
+---
+title: Slices
+description: "Cuts the picture into strips that slide out one after another."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Slices is a **Transition** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Slices" category="transition" slug="slices" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Cuts the picture into strips that slide out of the frame as **Completion** rises, one
+after another from the top or the left. A transition runs one Slices on each of its two
+pictures, the incoming picture's strips sliding in behind the outgoing ones, and sets
+**Completion** and **Side** itself.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Completion** | Slider | 0 to 100 | 50 | Per cent |
+| **Side** | Dropdown | Outgoing · Incoming | Outgoing | - |
+| **Count** | Slider, whole numbers | 2 to 64 | 8 | - |
+| **Across** | Dropdown | Horizontal · Vertical | Horizontal | - |
+| **Alternate** | Checkbox | On or off | On | - |
+| **Stagger** | Slider | 0 to 100 | 40 | Per cent |
+| **Random order** | Checkbox | On or off | Off | - |
+| **Ease** | Dropdown | Linear · Smooth · Sharp | Smooth | - |
+| **Smear** | Slider | 0 to 100 | 3 | Per cent |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Completion** is how far through the move the strips are.
+- **Side** says which picture this is. Outgoing strips leave as Completion rises, and
+  Incoming ones arrive.
+- **Count** is how many strips there are.
+- **Across** sets which way the strips lie. Horizontal strips travel sideways, and Vertical
+  ones up and down.
+- **Alternate** sends every other strip the other way.
+- **Stagger** is how far apart the strips set off, as a share of the whole move.
+- **Random order** has the strips set off in a seeded order.
+- **Ease** is how each strip gathers speed: Linear, Smooth, or Sharp, which is slow at both
+  ends and fast in the middle.
+- **Smear** is how much of each strip's move is smeared into each frame.
+- **Seed** chooses the order Random order takes.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Presets
+
+On the effect's menu, under **Presets**. The same names are the looks of **Slices ▸** in
+the **Moves** group of the [Transition menus](/use/cutting/#fades-and-dissolves).
+
+- **Slices** is the effect as it starts.
+- **Slice glitch** is 24 strips in a random order on the Sharp ease, with **Stagger** at 80
+  and **Smear** at 30.
+
+## Related
+
+- [Move](/effects/transition/move/)
+- [Venetian blinds](/effects/transition/venetian-blinds/)
+- [Cutting](/use/cutting/#fades-and-dissolves)
+- [Transition](/effects/#transition)
+- [Effects](/use/effects/)

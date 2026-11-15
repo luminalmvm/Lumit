@@ -17,6 +17,11 @@ use crate::api::{
     state::{LumitBridgeState, PROJECTS},
     BridgeError,
 };
+use map_ends::{map_end_value, map_start_value};
+
+pub mod clip_peaks;
+mod map_ends;
+mod puppet;
 
 /// The layer-styles seam's own tests. Its own file beside the module
 /// rather than a corner of `api/tests.rs`, because what it exercises is one
@@ -40,8 +45,12 @@ pub(crate) enum InstanceHome {
     /// The Transition effect on the overlap at a clip's start, a list of one.
     ClipTransition(Uuid),
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
-    /// instance rather than a list, held in `Layer::graph_inputs`.
+    /// instance rather than a list, held in `Layer::graph_inputs`. Also what
+    /// a Precomp layer that is a copy of a graphics template has set.
     GraphInputs,
+    /// What one clip that is a copy of a graphics template has set: one
+    /// instance, held in the clip's `inputs`, named by the clip's id.
+    ClipInputs(Uuid),
     /// The drivers on this layer's graph (`Layer::graph.nodes`), so a
     /// driver's keys move, and its rows write, from the Timeline as an
     /// effect's do.
@@ -50,6 +59,8 @@ pub(crate) enum InstanceHome {
     Materials,
     /// A Model layer's playback and part rows.
     ModelRows,
+    /// One of a grade group's two grades, which the document holds.
+    GradeGroup(Uuid, lumit_core::fx::effects::grade_group::Part),
 }
 
 /// The node graph `layer` places, when it places one.
@@ -82,9 +93,13 @@ pub(crate) fn is_graph_inputs(
 ) -> bool {
     match &layer.graph_inputs {
         Some(current) => current.id == instance.id,
-        None => placed_graph_of(doc, layer).is_some_and(|comp| {
-            lumit_core::fx::effects::node_graph::comp_of(instance) == Some(comp)
-        }),
+        None => {
+            placed_graph_of(doc, layer).is_some_and(|comp| {
+                lumit_core::fx::effects::node_graph::comp_of(instance) == Some(comp)
+            }) || crate::api::template::copy::placed_template_of(doc, layer).is_some_and(|comp| {
+                lumit_core::fx::effects::template::comp_of(instance) == Some(comp)
+            })
+        }
     }
 }
 
@@ -727,135 +742,6 @@ pub struct BridgePuppetGhost {
     /// Pins whose rest position falls outside the mesh: kept, drawn hollow,
     /// contributing nothing until the mesh grows back (§6).
     pub inert: Vec<Uuid>,
-}
-
-impl BridgePuppetPinKind {
-    #[frb(ignore)]
-    fn read(kind: lumit_core::puppet::PuppetPinKind) -> Self {
-        use lumit_core::puppet::PuppetPinKind as K;
-        match kind {
-            K::Position => Self::Position,
-            K::Starch => Self::Starch,
-            K::Overlap => Self::Overlap,
-            K::Bend => Self::Bend,
-        }
-    }
-
-    #[frb(ignore)]
-    fn write(self) -> lumit_core::puppet::PuppetPinKind {
-        use lumit_core::puppet::PuppetPinKind as K;
-        match self {
-            Self::Position => K::Position,
-            Self::Starch => K::Starch,
-            Self::Overlap => K::Overlap,
-            Self::Bend => K::Bend,
-        }
-    }
-}
-
-impl BridgePuppetPin {
-    #[frb(ignore)]
-    fn read_at(pin: &lumit_core::puppet::PuppetPin, offset: Rational) -> Self {
-        Self {
-            id: pin.id,
-            name: pin.name.clone(),
-            kind: BridgePuppetPinKind::read(pin.kind),
-            x: BridgeScalar::read_at(&pin.x, offset),
-            y: BridgeScalar::read_at(&pin.y, offset),
-            rotation: BridgeScalar::read_at(&pin.rotation, offset),
-            scale: BridgeScalar::read_at(&pin.scale, offset),
-            amount: BridgeScalar::read_at(&pin.amount, offset),
-            extent: pin.extent,
-        }
-    }
-
-    /// The engine's pin this describes. Every channel is converted before any
-    /// of them is assigned, so a bad fifth channel cannot leave a pin half
-    /// written; the extent is clamped rather than trusted, because a negative
-    /// or infinite radius would reach nothing for ever after.
-    #[frb(ignore)]
-    fn write_at(&self, offset: Rational) -> Result<lumit_core::puppet::PuppetPin, BridgeError> {
-        let x = self.x.animation_at(offset)?;
-        let y = self.y.animation_at(offset)?;
-        let rotation = self.rotation.animation_at(offset)?;
-        let scale = self.scale.animation_at(offset)?;
-        let amount = self.amount.animation_at(offset)?;
-        let property = |animation| Property {
-            animation,
-            extra: serde_json::Map::new(),
-        };
-        Ok(lumit_core::puppet::PuppetPin {
-            id: self.id,
-            name: self.name.clone(),
-            kind: self.kind.write(),
-            x: property(x),
-            y: property(y),
-            rotation: property(rotation),
-            scale: property(scale),
-            amount: property(amount),
-            extent: if self.extent.is_finite() {
-                self.extent.clamp(1.0, 10_000.0)
-            } else {
-                lumit_core::puppet::DEFAULT_EXTENT
-            },
-            extra: serde_json::Map::new(),
-        })
-    }
-}
-
-impl BridgePuppet {
-    #[frb(ignore)]
-    fn read_at(block: &lumit_core::puppet::PuppetBlock, offset: Rational) -> Self {
-        let reference = block
-            .reference_time
-            .checked_add(offset)
-            .unwrap_or(block.reference_time);
-        Self {
-            reference_time: BridgeRational {
-                num: reference.num(),
-                den: reference.den(),
-            },
-            density: block.density,
-            expansion: block.expansion,
-            pins: block
-                .pins
-                .iter()
-                .map(|p| BridgePuppetPin::read_at(p, offset))
-                .collect(),
-        }
-    }
-
-    /// The engine's block this describes, on the layer's own clock.
-    ///
-    /// Density and expansion are clamped, not trusted: a density of zero or a
-    /// negative expansion is a mesh that refuses to build, and a refusal the
-    /// user could not act on is worse than a number quietly kept sane.
-    #[frb(ignore)]
-    fn write_at(&self, offset: Rational) -> Result<lumit_core::puppet::PuppetBlock, BridgeError> {
-        let reference_time = Rational::new(self.reference_time.num, self.reference_time.den)
-            .map_err(|_| BridgeError::InvalidTime)?
-            .checked_sub(offset)
-            .map_err(|_| BridgeError::InvalidTime)?;
-        let mut pins = Vec::with_capacity(self.pins.len());
-        for pin in &self.pins {
-            pins.push(pin.write_at(offset)?);
-        }
-        Ok(lumit_core::puppet::PuppetBlock {
-            reference_time,
-            density: if self.density.is_finite() {
-                self.density.clamp(2.0, 500.0)
-            } else {
-                lumit_core::puppet::DEFAULT_DENSITY
-            },
-            expansion: if self.expansion.is_finite() {
-                self.expansion.clamp(0.0, 100.0)
-            } else {
-                lumit_core::puppet::DEFAULT_EXPANSION
-            },
-            pins,
-            extra: serde_json::Map::new(),
-        })
-    }
 }
 
 impl BridgeStroke {
@@ -1573,6 +1459,11 @@ pub struct BridgeClip {
     /// may sit between two frames, and this is where it is drawn.
     pub start_exact: f64,
     pub end_exact: f64,
+    /// The angle a multicam clip plays, or `None` on any other clip.
+    pub angle: Option<crate::api::multicam::BridgeClipAngle>,
+    /// The graphics template this clip is a copy of, and what the copy has
+    /// set. `None` on every other clip.
+    pub copy: Option<crate::api::template::copy::BridgeCopy>,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1711,6 +1602,10 @@ fn bridge_clip(
         group: clip.group,
         start_exact: exact(clip.place_start),
         end_exact: exact(clip.place_end()),
+        angle: crate::api::multicam::clip_angle(doc, clip),
+        copy: crate::api::template::copy::clip_template_of(doc, clip).and_then(|comp| {
+            crate::api::template::copy::bridge_copy(doc, comp, clip.inputs.as_ref())
+        }),
     }
 }
 
@@ -1776,6 +1671,10 @@ pub struct BridgeLayerInfo {
     /// file or an import. `LayerReference::get_graph_inputs` offers such a layer a
     /// fresh one, which the user's next edit adopts.
     pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// The graphics template this Precomp layer is a copy of, and what the
+    /// copy has set. Its rows are in `graph_inputs`. `None` on every other
+    /// layer.
+    pub copy: Option<crate::api::template::copy::BridgeCopy>,
     /// A Model layer's material rows, `None` while its file is being read.
     pub materials: Option<Vec<crate::api::effect::BridgeEffectInstanceInfo>>,
     /// A Model layer's Animation and parts' rows, `None` while its file is
@@ -1803,6 +1702,13 @@ pub struct BridgeLayerInfo {
     /// The Bus layer this layer's sound goes to, or `None` for the master.
     pub output: Option<Uuid>,
     pub sends: Vec<crate::api::routes::BridgeSend>,
+    /// The layer's own level before its rack and Volume, in dB.
+    pub audio_gain_db: f64,
+    pub automation_mode: crate::api::mixer::BridgeAutomationMode,
+    /// Keeps sounding while another layer is soloed.
+    pub solo_safe: bool,
+    /// What this layer lowers behind, if anything.
+    pub duck: Option<crate::api::mixer::BridgeDuck>,
     /// The layer's masks, bottom of the stack first. Carried in the
     /// read model for the same reason the effects are: the Timeline's
     /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -2042,12 +1948,29 @@ pub(crate) fn read_layer_info(
                     .get_info()
             })
             .collect(),
-        graph_inputs: layer.graph_inputs.as_ref().map(|inputs| {
-            crate::api::effect::read_instance_info(
-                &crate::api::effect::with_live_inputs(inputs, doc),
-                layer.start_offset.0,
-                !layer.is_adjustment(),
-            )
+        graph_inputs: match crate::api::template::copy::placed_template_of(doc, layer) {
+            // A copy of a graphics template shows a row for every control,
+            // set or not.
+            Some(comp) => {
+                crate::api::template::copy::shown(doc, comp, layer.graph_inputs.as_ref(), layer.id)
+                    .map(|inst| {
+                        crate::api::effect::read_instance_info(
+                            &inst,
+                            layer.start_offset.0,
+                            !layer.is_adjustment(),
+                        )
+                    })
+            }
+            None => layer.graph_inputs.as_ref().map(|inputs| {
+                crate::api::effect::read_instance_info(
+                    &crate::api::effect::with_live_inputs(inputs, doc),
+                    layer.start_offset.0,
+                    !layer.is_adjustment(),
+                )
+            }),
+        },
+        copy: crate::api::template::copy::placed_template_of(doc, layer).and_then(|comp| {
+            crate::api::template::copy::bridge_copy(doc, comp, layer.graph_inputs.as_ref())
         }),
         materials: lumit_render::model_material::rows(doc, layer).map(|rows| {
             let read = |r| crate::api::effect::read_instance_info(r, layer.start_offset.0, true);
@@ -2073,6 +1996,10 @@ pub(crate) fn read_layer_info(
         pitch_follows_speed: layer.pitch_follows_speed,
         output: layer.audio_routes.output,
         sends: crate::api::routes::bridge_sends(layer),
+        audio_gain_db: layer.audio_gain_db,
+        automation_mode: crate::api::mixer::BridgeAutomationMode::of(layer.automation),
+        solo_safe: layer.switches.solo_safe,
+        duck: layer.duck.as_ref().map(crate::api::mixer::BridgeDuck::of),
         masks: layer
             .masks
             .iter()
@@ -3388,7 +3315,7 @@ impl LayerReference {
     pub fn copy_effects(&self, effects: Vec<Uuid>) -> Result<String, BridgeError> {
         let layer = self.leaving()?;
         let graph = layer.graph;
-        let stack = layer.effects;
+        let stack = crate::api::grade_shots::stack_holding(layer.effects, layer.kind, &effects);
         let full = stack.clone();
         let taken: Vec<_> = if effects.is_empty() {
             stack
@@ -4999,12 +4926,18 @@ impl LayerReference {
     ) -> Result<Option<crate::api::state::BridgeRenderedFrame>, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
         let clip = &clips[index];
-        let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-            return Ok(None);
-        };
         // The clip's own source moment, through whatever map it plays by —
-        // which is the identity when it has none of its own.
-        let opens_at = clip.source_time(clip.place_start.to_f64() + along.unwrap_or(0.0));
+        // which is the identity when it has none of its own. A multicam clip
+        // shows its angle's footage there.
+        let lt = clip.place_start.to_f64() + along.unwrap_or(0.0);
+        let (item, opens_at) = match clip.source {
+            lumit_core::sequence::ClipSource::Footage(item) => (item, clip.source_time(lt)),
+            // The head of a clip is the first picture it has.
+            _ => match crate::api::multicam::wave::shown(self, clip, lt, along.is_none())? {
+                Some(shown) => shown,
+                None => return Ok(None),
+            },
+        };
 
         #[cfg(feature = "media")]
         {
@@ -5274,6 +5207,7 @@ impl LayerReference {
         for effect in &mut tail.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut tail.grade_versions);
         tail.in_point = t;
         lumit_render::passes::follow_copy(&*self.document()?, &layer, &mut tail);
 
@@ -5332,22 +5266,14 @@ impl LayerReference {
     /// so converting one would take its sound away.
     #[frb(sync)]
     pub fn convert_to_sequenced(&self) -> Result<(), BridgeError> {
-        use lumit_core::model::LayerKind;
-
         let layer = self.item()?;
-        let LayerKind::Footage { item } = &layer.kind else {
-            return Err(BridgeError::NotFootage);
-        };
-        if layer.retime.is_some() {
-            return Err(BridgeError::RetimedLayer);
-        }
         let comp = self.composition()?;
         let index = comp
             .layers
             .iter()
             .position(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
-        let converted = crate::api::cut::razor::sequenced(&layer, *item);
+        let converted = sequenced(&layer)?;
 
         self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
@@ -5913,6 +5839,7 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut copy.grade_versions);
         // It isn't pointed *at* as its original was, but keeps what that points at.
         let new_id = copy.id;
         lumit_render::passes::follow_copy(&*self.document()?, &self.item()?, &mut copy);
@@ -6340,93 +6267,12 @@ impl LayerReference {
         let Some(clip) = clips.get(index) else {
             return Ok(BridgeAudioPeaks::empty());
         };
-        let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-            return Ok(BridgeAudioPeaks::empty());
-        };
-
-        #[cfg(feature = "media")]
-        {
-            let path = {
-                let proj = self.project()?;
-                let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-                let snapshot = proj.store.snapshot();
-                let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item)
-                else {
-                    return Ok(BridgeAudioPeaks::empty());
-                };
-                crate::api::footage::FootageReference::resolve_path(&proj, footage)
-            };
-            let Some(path) = path else {
-                return Ok(BridgeAudioPeaks::empty());
-            };
-            // The streams this clip sounds are the ones its wave is of.
-            let sound =
-                lumit_media::audio::SoundSource::streams_of(path, clip.audio_streams.places());
-            let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
-                return Ok(BridgeAudioPeaks::empty());
-            };
-
-            let buckets = buckets.clamp(1, MAX_PEAK_BUCKETS) as usize;
-            let clip_start = clip.place_start.to_f64();
-            let clip_end = clip_start + clip.place_duration.to_f64();
-            let (start, end) = if end_seconds > start_seconds {
-                (
-                    start_seconds.max(clip_start).min(clip_end),
-                    end_seconds.max(clip_start).min(clip_end),
-                )
-            } else {
-                (clip_start, clip_end)
-            };
-            if end <= start {
-                return Ok(BridgeAudioPeaks::empty());
-            }
-            let step = (end - start) / buckets as f64;
-            // Where each bucket's edge lands in the source, through the clip's
-            // map. One more edge than buckets, so neighbouring buckets share
-            // theirs and no sliver of source falls between two columns.
-            let edges: Vec<f64> = (0..=buckets)
-                .map(|i| clip.source_time(start + step * i as f64))
-                .collect();
-            let bands = BridgeAudioPeaks::bands_of(multiwave);
-            // Left over right where asked and the sound has two channels.
-            let sides = if stereo {
-                crate::peaks::channel_pyramids_for(&sound)
-            } else {
-                None
-            };
-            let summaries: Vec<&lumit_audio::peaks::PeakPyramid> = match &sides {
-                Some(both) => both.iter().collect(),
-                None => vec![&pyramid],
-            };
-            let mut values = Vec::with_capacity(summaries.len() * bands.len() * buckets * 3);
-            for summary in &summaries {
-                for band in &bands {
-                    for i in 0..buckets {
-                        let (Some(&a), Some(&b)) = (edges.get(i), edges.get(i + 1)) else {
-                            values.extend_from_slice(&[0.0, 0.0, 0.0]);
-                            continue;
-                        };
-                        let block = summary.window(*band, a, b);
-                        values.extend_from_slice(&[block.min, block.max, block.rms]);
-                    }
-                }
-            }
-            Ok(BridgeAudioPeaks {
-                duration_seconds: pyramid.duration_seconds(),
-                start_seconds: start,
-                end_seconds: end,
-                bands: bands.len() as u32,
-                buckets: buckets as u32,
-                values,
-                channels: summaries.len() as u32,
-            })
+        // A multicam clip's wave is its angle's files', one after another.
+        if let (lumit_core::sequence::ClipSource::Comp(_), Some(_)) = (clip.source, clip.angle) {
+            let (a, b) = (start_seconds, end_seconds);
+            return crate::api::multicam::wave::of(self, clip, a, b, buckets, multiwave, stereo);
         }
-
-        #[cfg(not(feature = "media"))]
-        {
-            let _ = (item, start_seconds, end_seconds, buckets, multiwave, stereo);
-            Ok(BridgeAudioPeaks::empty())
-        }
+        self.footage_peaks(clip, start_seconds, end_seconds, buckets, multiwave, stereo)
     }
 
     /// One Sequence clip's audio as a **spectrogram** - the twin of
@@ -7354,10 +7200,16 @@ impl LayerReference {
             if let Some(clip) = clips.iter().find(overlap) {
                 return Ok(InstanceHome::ClipTransition(clip.id));
             }
+            if let Some(clip) = crate::api::template::copy::clip_of_inputs(&layer, instance) {
+                return Ok(InstanceHome::ClipInputs(clip));
+            }
         }
         let doc = self.document()?;
         if is_graph_inputs(&doc, &layer, instance) {
             return Ok(InstanceHome::GraphInputs);
+        }
+        if let Some((group, part)) = lumit_core::grade::groups::home_of(&doc, id) {
+            return Ok(InstanceHome::GradeGroup(group, part));
         }
         let comp = self.composition()?;
         Ok(comp
@@ -7370,10 +7222,11 @@ impl LayerReference {
     /// Append the built-in effect named `name` to this layer's stack — or, when
     /// `name` is a **driver**, to this layer's graph.
     ///
-    /// Seeded at composition size, because a few effects' defaults are positions
-    /// (a transform's anchor and position start at the centre of the frame), and
-    /// a fresh effect should look like identity rather than dragging the picture
-    /// to a corner. An unknown name is refused; nothing partial is committed.
+    /// Seeded at the size of the picture the stack runs on, because a few
+    /// effects' defaults are positions (a transform's anchor and position start
+    /// at the centre of the layer), and a fresh effect should look like identity
+    /// rather than dragging the picture to a corner. An unknown name is refused;
+    /// nothing partial is committed.
     ///
     /// **The fork is here rather than in each caller.** A driver is browsed as
     /// one more Controls entry, so the console, the Effect menu, the palette and
@@ -7392,16 +7245,16 @@ impl LayerReference {
         if lumit_core::fx::builtins::def(&name).is_some_and(|def| {
             def.schema().category == lumit_core::fx::schema::FxCategory::Compositing
         }) || name == lumit_core::comp_graph::NODE_GRAPH
+            || name == lumit_core::fx::effects::template::MATCH_NAME
+            || name == lumit_core::fx::effects::grade_group::GRADE_GROUP
         {
             return Err(BridgeError::NotAStackEffect);
         }
-        let comp = self.composition()?;
-        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
-            &name,
-            f64::from(comp.width),
-            f64::from(comp.height),
-        )
-        .ok_or(BridgeError::UnknownEffectName)?;
+        let (w, h) =
+            crate::api::denoise::seed_size(&*self.document()?, &self.composition()?, &self.item()?);
+        let mut instance =
+            lumit_core::fx::builtins::instantiate_for_raster(&name, f64::from(w), f64::from(h))
+                .ok_or(BridgeError::UnknownEffectName)?;
         // A `self_default` layer reference starts pointed at the layer the
         // effect is landing on (docs/impl/layer-input.md): the Lens
         // flare's Matte source, whose natural reading is "the lights in this
@@ -7712,7 +7565,10 @@ impl LayerReference {
                 // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
                 // one instance where the document had none. Everywhere else a
                 // staged list must still name what the document names.
-                let adopting = home == InstanceHome::GraphInputs && current.is_empty();
+                let adopting = matches!(
+                    home,
+                    InstanceHome::GraphInputs | InstanceHome::ClipInputs(_)
+                ) && current.is_empty();
                 let same_stack = adopting
                     || (current.len() == staged.len()
                         && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
@@ -7773,6 +7629,7 @@ impl LayerReference {
         if lumit_core::fx::catalogue::BUILTIN_DEFS
             .get(&name)
             .is_some_and(|def| def.schema().category.is_driver())
+            || name == lumit_core::fx::effects::grade_group::GRADE_GROUP
         {
             return Err(BridgeError::UnknownEffectName);
         }
@@ -7866,6 +7723,17 @@ impl LayerReference {
     pub fn get_graph_inputs(&self) -> Result<Option<BridgeEffectInstance>, BridgeError> {
         let layer = self.item()?;
         let doc = self.document()?;
+        // A copy of a graphics template: what it has set, with the template's
+        // own values in every row it has not.
+        if let Some(comp) = crate::api::template::copy::placed_template_of(&doc, &layer) {
+            return Ok(crate::api::template::copy::shown(
+                &doc,
+                comp,
+                layer.graph_inputs.as_ref(),
+                layer.id,
+            )
+            .map(|inst| BridgeEffectInstance::new(inst, layer.start_offset.0)));
+        }
         if let Some(inputs) = &layer.graph_inputs {
             return Ok(Some(BridgeEffectInstance::new(
                 crate::api::effect::with_live_inputs(inputs, &doc).into_owned(),
@@ -8242,11 +8110,8 @@ impl LayerReference {
                 .zip(&document.animators)
                 .filter(|(_, a)| {
                     kind == BridgeRevealKind::Modified
-                        || [&a.selector.start, &a.selector.end, &a.selector.offset]
+                        || lumit_core::preset_parts::animator_values(a)
                             .into_iter()
-                            .chain([&a.position_x, &a.position_y, &a.rotation, &a.scale_x])
-                            .chain([&a.position_z, &a.rotation_x, &a.rotation_y])
-                            .chain([&a.scale_y, &a.opacity, &a.fill_r, &a.fill_g, &a.fill_b])
                             .any(animated)
                 })
                 .map(|(i, _)| i)
@@ -8319,6 +8184,68 @@ pub struct BridgeRevealGroups {
     pub any: bool,
 }
 
+/// A Footage layer as the Sequence layer [`LayerReference::convert_to_sequenced`]
+/// makes of it: the same id, holding one clip of what the layer is showing.
+///
+/// The clip is placed at the layer's own in point with its trim the same
+/// distance into the source, so a layer that has been trimmed or slid converts
+/// to the same seconds of the same file at the same moment on the comp's clock
+/// and the mixer builds the job it built before. A **retimed** layer is refused
+/// ([`BridgeError::RetimedLayer`]): a retimed clip is silent (docs/09 §7), so
+/// converting one would take its sound away.
+#[frb(ignore)]
+pub(crate) fn sequenced(layer: &Layer) -> Result<Layer, BridgeError> {
+    use lumit_core::model::LayerKind;
+    use lumit_core::sequence::{Clip, ClipSource};
+
+    let LayerKind::Footage { item } = &layer.kind else {
+        return Err(BridgeError::NotFootage);
+    };
+    if layer.retime.is_some() {
+        return Err(BridgeError::RetimedLayer);
+    }
+    // The layer's own span length is the fallback when the media has not
+    // probed; a quarter-second floor keeps a clip from being unclickable.
+    let span = (layer.out_point.0.to_f64() - layer.in_point.0.to_f64()).max(0.04);
+    let duration =
+        Rational::from_f64_on_grid(span, Rational::FLICK_DEN).unwrap_or(layer.out_point.0);
+
+    // Where the layer starts showing, on its own clock. A footage layer
+    // shows the source moment that far past its zero, so the clip is
+    // placed there and trimmed there and the two read the same source at
+    // the same moment. Never negative: a clip's place cannot be.
+    let local = layer
+        .in_point
+        .0
+        .checked_sub(layer.start_offset.0)
+        .unwrap_or(Rational::ZERO);
+    let local = if local.is_negative() {
+        Rational::ZERO
+    } else {
+        local
+    };
+    let source_out = local.checked_add(duration).unwrap_or(duration);
+
+    // Not retimed by construction: a retimed layer is refused above, and
+    // `convert_from_sequenced` still brings a clip's own map back the other
+    // way.
+    let mut clip = Clip::new(
+        ClipSource::Footage(*item),
+        local,
+        source_out,
+        local,
+        duration,
+    );
+    clip.interpolation = layer.interpolation.clone();
+    // The choice of audio streams moves onto the clip, which is where a
+    // Sequence layer keeps one.
+    clip.audio_streams = layer.audio_streams.clone();
+    let mut converted = layer.clone();
+    converted.audio_streams = Default::default();
+    converted.kind = LayerKind::Sequence { clips: vec![clip] };
+    Ok(converted)
+}
+
 /// The row after a clip has been put down on it.
 ///
 /// With `overlap` the neighbours stay where they are and the intersection is
@@ -8361,31 +8288,6 @@ pub(crate) fn trimmed(
         next = next.extend_start(start)?;
     }
     Some(next)
-}
-
-/// The last source position a map reaches — what the clip asks of its source.
-#[frb(ignore)]
-fn map_start_value(
-    map: &lumit_core::anim::Property,
-    now: lumit_core::time::Rational,
-) -> Option<lumit_core::time::Rational> {
-    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
-        return None;
-    };
-    let first = keys.first()?.value;
-    if (first - now.to_f64()).abs() < 1e-9 {
-        return None;
-    }
-    lumit_core::time::Rational::from_f64_on_grid(first, lumit_core::time::Rational::FLICK_DEN).ok()
-}
-
-fn map_end_value(map: &lumit_core::anim::Property) -> Option<lumit_core::time::Rational> {
-    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
-        return None;
-    };
-    let last = keys.last()?;
-    lumit_core::time::Rational::from_f64_on_grid(last.value, lumit_core::time::Rational::FLICK_DEN)
-        .ok()
 }
 
 /// Stand the puppet mesh preview down (see

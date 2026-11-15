@@ -1,0 +1,75 @@
+---
+title: Light leak
+description: "Lays a band of warm, drifting light over the picture."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Light leak is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Light leak" category="stylise" slug="light-leak" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Lays a soft band of light through the middle of the picture, broken up by noise that drifts
+with time. The light is screened on, and nothing is added where the layer is transparent.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 100; up to 400 | 70 | Per cent |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 0.45, 0.12, 1 | - |
+| **Edge colour** | Colour | Each channel 0 to 4, scene-linear | 1, 0.08, 0.03, 1 | - |
+| **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 20° | Degrees |
+| **Size** | Slider | 10 to 200; down to 1 and up to 1000 | 60 | Per cent |
+| **Drift** | Slider | 0 to 4; higher | 1 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** is how strong the light is.
+- **Colour** is the light at the heart of the band.
+- **Edge colour** is the light at the band's fringe.
+- **Angle** sets which way the band lies. At 0° it is upright.
+- **Size** is how wide the band is, as a percentage of the picture's height.
+- **Drift** is how fast the light changes.
+- **Seed** chooses which pattern of light is drawn.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Presets
+
+On the effect's menu, under **Presets**. The same names are the looks of **Light leak ▸**
+in the **Hits** group of the [Transition menus](/use/cutting/#fades-and-dissolves).
+
+- **Light leak** is the effect as it starts.
+- **Film burn** sets **Amount** to 200, **Size** to 110 and **Drift** to 2.5.
+
+## Related
+
+- [Flash](/effects/stylise/flash/)
+- [Glow](/effects/stylise/glow/)
+- [Film](/effects/stylise/film/)
+- [Cutting](/use/cutting/#fades-and-dissolves)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

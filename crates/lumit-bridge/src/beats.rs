@@ -189,21 +189,27 @@ fn analyse(
     // layer, so its own audible switch and a solo elsewhere are both stepped
     // over. Soloing a precomp and then detecting beats on the music used to
     // find silence.
-    let jobs = match uuid::Uuid::parse_str(&options.source_layer) {
-        Ok(layer) => builder.layer_audio_jobs(document, composition, layer),
-        Err(_) => builder.audio_jobs(document, composition),
+    let listen = uuid::Uuid::parse_str(&options.source_layer).ok();
+    let jobs = match listen {
+        Some(layer) => builder.layer_audio_jobs(document, composition, layer),
+        None => builder.audio_jobs(document, composition),
     };
     if jobs.is_empty() {
         return Err(BridgeError::NoAudio);
     }
 
-    // The mixdown, counting the sources off: the engine decides the fraction,
-    // and one source decoded out of however many is what it can honestly see.
-    let sources = jobs.len() as f64;
-    let samples =
-        lumit_render::export::mixdown_counting(&jobs, RATE, duration_seconds, 1.0, &mut |done| {
-            on_progress(MIX_SHARE * done as f64 / sources);
-        });
+    // The mix before the master, with the row asked for heard as if soloed:
+    // the engine decides how far through it is.
+    let samples = lumit_render::mix::mixdown::mixdown(
+        document,
+        composition,
+        jobs,
+        RATE,
+        duration_seconds,
+        false,
+        listen,
+        &mut |done| on_progress(MIX_SHARE * done),
+    );
     let delta =
         lumit_audio::beat::delta_from_sensitivity(options.sensitivity_percent.clamp(0, 100) as u8);
     let analysis = lumit_audio::beat::analyse_stereo(&samples, RATE, delta);

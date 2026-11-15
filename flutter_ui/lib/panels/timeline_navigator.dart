@@ -405,6 +405,7 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
                   [widget.zoom, widget.hScroll, widget.playhead]),
               builder: (context, _) {
                 final window = _window;
+                _settle(window);
                 return CustomPaint(
                   size: Size.infinite,
                   painter: _NavigatorPainter(
@@ -432,6 +433,23 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           ),
         ),
       );
+
+  /// Read the window again once the lanes have been laid out.
+  ///
+  /// A zoom or a fit moves the lanes' extent in layout, which comes after this
+  /// strip is built and never tells the scroll position. The window drawn on
+  /// the frame the zoom lands is the one from the extent before it, and nothing
+  /// asks for another paint until the pointer comes over the strip.
+  void _settle(({double start, double end}) painted) {
+    if (_settling) return;
+    _settling = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _settling = false;
+      if (mounted && _window != painted) setState(() {});
+    });
+  }
+
+  bool _settling = false;
 
   void _end() {
     if (_grab != null) setState(() => _grab = null);

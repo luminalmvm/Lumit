@@ -19,8 +19,11 @@ String _scratchStore(String name) =>
     '${Directory.systemTemp.path}${Platform.pathSeparator}'
     'lumit-test-$name${Platform.pathSeparator}workspace.json';
 
-/// A workspace writing somewhere harmless, torn down after the test.
+/// A workspace writing somewhere harmless, emptied first, as each theme is a
+/// file there, and torn down after the test.
 Workspace _workspace(String name) {
+  final dir = File(_scratchStore(name)).parent;
+  if (dir.existsSync()) dir.deleteSync(recursive: true);
   Workspace.storeOverride = _scratchStore(name);
   addTearDown(() => Workspace.storeOverride = null);
   return Workspace();
@@ -81,7 +84,7 @@ void main() {
       expect(ws.theme.mode, ThemeMode2.light);
     });
 
-    test('an imported theme survives the workspace file', () {
+    test('an imported theme survives a restart', () {
       final ws = _workspace('theme-import-persist');
       final read = readThemeFile(
           encodeThemeFile(CustomTheme.from('Ocean', LumitTheme.gruvboxDark())));

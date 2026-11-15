@@ -22,4 +22,6 @@ pub mod envelope;
 pub mod lfo;
 pub mod oversample;
 pub mod smoother;
+pub mod spectral;
+pub mod stft;
 pub mod svf;

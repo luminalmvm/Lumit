@@ -13,9 +13,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod axis_modes;
+mod blend_mode;
 mod light;
 mod light_file;
 mod material;
+mod parent_placement;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -500,6 +502,17 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// The master fader's keys, in comp time. When there are some they decide
+    /// the master, and [`Self::master_volume_db`] stays the level an older
+    /// Lumit reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master_keys: Option<crate::anim::Animation>,
+    /// How a move of the master fader writes [`Self::master_keys`].
+    #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
+    pub master_automation: crate::mixer::AutomationMode,
+    /// The loudness the comp's mix is made for. `None` is no target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness_target: Option<crate::mixer::LoudnessTarget>,
     /// How the comp's lights fall on its layers. Lumit's own adds the light to
     /// the picture; After Effects' lights a layer from black.
     #[serde(default, skip_serializing_if = "CompLighting::is_default")]
@@ -1710,6 +1723,10 @@ pub enum EffectValue {
     ///
     /// Also what a text row holds: the text as typed.
     Text(String),
+    /// A Shape row's points, in order round the outline, each in `-1..1` of
+    /// the box the rows beside it place. Static, and straightened on read
+    /// ([`crate::fx::shape_points::ShapePoints::sanitised`]) as a curve is.
+    Shape(Vec<[f32; 2]>),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case
@@ -2076,6 +2093,9 @@ pub struct Switches {
     /// montage work pays nothing for the default.
     #[serde(default = "default_true")]
     pub accepts_lights: bool,
+    /// Solo safe: the layer keeps sounding while another layer is soloed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub solo_safe: bool,
 }
 
 impl Layer {
@@ -2251,6 +2271,7 @@ impl Default for Switches {
             shy: false,
             guide: false,
             accepts_lights: true,
+            solo_safe: false,
         }
     }
 }
@@ -2269,10 +2290,23 @@ impl Default for Switches {
 /// nothing past the nested duration.
 #[must_use]
 pub fn nested_source_time(layer: &Layer, nested: &Composition, lt: f64) -> f64 {
-    if layer.retime.is_none() {
-        return lt;
-    }
     let last = (nested.duration.0.to_f64() - 1.0 / nested.frame_rate.fps().max(1.0)).max(0.0);
+    if layer.retime.is_none() {
+        // A template with an intro or an outro fits the layer's span: its
+        // ends keep their speed and the stretch between them takes what is
+        // left. Retime on the layer is the more exact instruction, and
+        // turns this off.
+        let Some(timing) = nested.template_timing() else {
+            return lt;
+        };
+        let ends = layer.graph_inputs.as_ref().map_or(
+            crate::template::time::Ends::BOTH,
+            crate::fx::effects::template::ends,
+        );
+        let start = layer.in_point.0.to_f64() - layer.start_offset.0.to_f64();
+        let length = layer.out_point.0.to_f64() - layer.in_point.0.to_f64();
+        return crate::template::time::copy_time(timing, ends, length, lt - start).clamp(0.0, last);
+    }
     layer.source_time_at(lt).clamp(0.0, last)
 }
 
@@ -2351,6 +2385,9 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
     }
 }
 
+// ponytail: Text is the widest kind by far. Boxing its document is the
+// upgrade if a layer's size ever matters.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LayerKind {
     /// One footage item as the layer's source. Retiming lives on the layer
@@ -2822,6 +2859,7 @@ impl Composition {
                 .chain(&layer.graph_inputs)
                 .chain(&layer.graph.nodes)
                 .chain(clips.iter().flat_map(|clip| &clip.effects))
+                .chain(clips.iter().flat_map(|clip| &clip.inputs))
         });
         boxes.chain(headers).chain(layers)
     }
@@ -2843,7 +2881,11 @@ impl Composition {
                 .chain(&mut layer.styles)
                 .chain(&mut layer.graph_inputs)
                 .chain(&mut layer.graph.nodes)
-                .chain(clips.iter_mut().flat_map(|clip| &mut clip.effects))
+                .chain(
+                    clips
+                        .iter_mut()
+                        .flat_map(|clip| clip.effects.iter_mut().chain(&mut clip.inputs)),
+                )
         });
         boxes.chain(headers).chain(layers)
     }
@@ -3016,6 +3058,10 @@ pub struct TextDocument {
         skip_serializing_if = "crate::text::ParagraphStyle::is_default"
     )]
     pub paragraph: crate::text::ParagraphStyle,
+    /// Timed captions, on a caption layer. Only [`crate::ops::Op::EditCaptions`]
+    /// changes them ([`crate::captions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captions: Option<Arc<crate::captions::Captions>>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -3032,6 +3078,9 @@ impl TextDocument {
     /// rasteriser and the cache key can never disagree about what the layer
     /// says — a disagreement that would serve a cached frame of the old words.
     pub fn resolved_text(&self, context: Arc<ExpressionContext>) -> std::borrow::Cow<'_, str> {
+        if let Some(captions) = &self.captions {
+            return std::borrow::Cow::Owned(crate::captions::show::at(captions, &context).text);
+        }
         match &self.expression {
             None => std::borrow::Cow::Borrowed(&self.text),
             Some(e) => std::borrow::Cow::Owned(crate::expression::evaluate_text(e, Some(context))),
@@ -3080,107 +3129,6 @@ pub enum BlendMode {
     Saturation,
     Colour,
     Luminosity,
-}
-
-impl BlendMode {
-    /// Every blend mode in After Effects' menu order, grouped
-    /// darken → lighten → contrast → comparative → component. The
-    /// single source of truth for the layer dropdown and the effect Mode
-    /// param (T21), so the two never drift.
-    pub const ALL: &'static [BlendMode] = &[
-        BlendMode::Normal,
-        BlendMode::Darken,
-        BlendMode::Multiply,
-        BlendMode::ColourBurn,
-        BlendMode::LinearBurn,
-        BlendMode::DarkerColour,
-        BlendMode::Add,
-        BlendMode::Lighten,
-        BlendMode::Screen,
-        BlendMode::ColourDodge,
-        BlendMode::LighterColour,
-        BlendMode::Overlay,
-        BlendMode::SoftLight,
-        BlendMode::HardLight,
-        BlendMode::LinearLight,
-        BlendMode::VividLight,
-        BlendMode::PinLight,
-        BlendMode::HardMix,
-        BlendMode::Difference,
-        BlendMode::Exclusion,
-        BlendMode::Subtract,
-        BlendMode::Divide,
-        BlendMode::Hue,
-        BlendMode::Saturation,
-        BlendMode::Colour,
-        BlendMode::Luminosity,
-    ];
-
-    /// Every mode's display name, in [`Self::ALL`]'s order — the same words
-    /// [`Self::name`] returns, as one `'static` list so a schema's Choice
-    /// parameter can offer the layer modes verbatim (the injected effect
-    /// Blend row). `blend_mode_all_is_complete_and_named` holds the two
-    /// in step.
-    pub const NAMES: &'static [&'static str] = &[
-        "Normal",
-        "Darken",
-        "Multiply",
-        "Colour burn",
-        "Linear burn",
-        "Darker colour",
-        "Add",
-        "Lighten",
-        "Screen",
-        "Colour dodge",
-        "Lighter colour",
-        "Overlay",
-        "Soft light",
-        "Hard light",
-        "Linear light",
-        "Vivid light",
-        "Pin light",
-        "Hard mix",
-        "Difference",
-        "Exclusion",
-        "Subtract",
-        "Divide",
-        "Hue",
-        "Saturation",
-        "Colour",
-        "Luminosity",
-    ];
-
-    /// The mode's display name (British English, sentence case — docs/15).
-    pub fn name(self) -> &'static str {
-        match self {
-            BlendMode::Normal => "Normal",
-            BlendMode::Darken => "Darken",
-            BlendMode::Multiply => "Multiply",
-            BlendMode::ColourBurn => "Colour burn",
-            BlendMode::LinearBurn => "Linear burn",
-            BlendMode::DarkerColour => "Darker colour",
-            BlendMode::Add => "Add",
-            BlendMode::Lighten => "Lighten",
-            BlendMode::Screen => "Screen",
-            BlendMode::ColourDodge => "Colour dodge",
-            BlendMode::LighterColour => "Lighter colour",
-            BlendMode::Overlay => "Overlay",
-            BlendMode::SoftLight => "Soft light",
-            BlendMode::HardLight => "Hard light",
-            BlendMode::LinearLight => "Linear light",
-            BlendMode::VividLight => "Vivid light",
-            BlendMode::PinLight => "Pin light",
-            BlendMode::HardMix => "Hard mix",
-            BlendMode::Difference => "Difference",
-            BlendMode::Exclusion => "Exclusion",
-            BlendMode::Subtract => "Subtract",
-            BlendMode::Divide => "Divide",
-            BlendMode::Hue => "Hue",
-            BlendMode::Saturation => "Saturation",
-            BlendMode::Colour => "Colour",
-            BlendMode::Luminosity => "Luminosity",
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -3303,6 +3251,17 @@ pub struct Layer {
     /// Where the layer's sound goes: a bus instead of the master, and its sends.
     #[serde(default, skip_serializing_if = "crate::routes::AudioRoutes::is_master")]
     pub audio_routes: crate::routes::AudioRoutes,
+    /// The layer's own sound in dB before its rack and Volume: its **Gain**,
+    /// set by hand or by Normalise. Volume is the fader.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub audio_gain_db: f64,
+    /// How a fader move writes the Volume, Pan and send keys while the comp
+    /// plays.
+    #[serde(default, skip_serializing_if = "crate::mixer::AutomationMode::is_read")]
+    pub automation: crate::mixer::AutomationMode,
+    /// **Lower behind**: the layer drops while another layer or a bus sounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duck: Option<crate::mixer::Duck>,
     /// Retime: layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -3379,6 +3338,9 @@ pub struct Layer {
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
+    /// The other versions of the layer's grade ([`crate::grade::versions`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grade_versions: Option<crate::grade::versions::GradeVersions>,
     /// The layer's **style stack** (docs/impl/layer-styles.md §1): the
     /// shadow, glow, overlay and stroke a layer wears rather than the effects it
     /// carries.
@@ -3712,33 +3674,13 @@ pub fn parent_placements(
         .rev()
         .filter_map(|id| comp.layers.iter().find(|l| l.id == *id));
     ancestors
-        .map(|a| (a.id, parent_placement(comp, a, t, read, solves)))
+        .map(|a| {
+            (
+                a.id,
+                parent_placement::parent_placement(comp, a, t, read, solves),
+            )
+        })
         .collect()
-}
-
-/// `layer`'s placement as a parent: a solved camera is placed by its solve.
-fn parent_placement(
-    comp: &Composition,
-    layer: &Layer,
-    t: f64,
-    read: &Read<'_>,
-    solves: Solves<'_>,
-) -> Placement {
-    let mut p = crate::orient::placed_in(comp, layer, t, read, solves);
-    let solved = matches!(
-        layer.kind,
-        LayerKind::Camera {
-            solve_link: Some(_),
-            ..
-        }
-    );
-    if let Some((doc, store)) = solves.filter(|_| solved) {
-        if let Some(own) = crate::track::own_camera_pose_of(doc, comp, layer, t, store) {
-            p.position = own.pose.position;
-            p.rotation_deg = own.pose.rotation_deg;
-        }
-    }
-    p
 }
 
 /// The space `layer`'s parents put it in at comp time `t`. `None` with no
@@ -3810,7 +3752,7 @@ pub fn layer_space(
     read: &Read<'_>,
     solves: Solves<'_>,
 ) -> crate::camera::Place {
-    let own = parent_placement(comp, layer, t, read, solves).place();
+    let own = parent_placement::parent_placement(comp, layer, t, read, solves).place();
     parent_space(comp, layer, t, read, solves).map_or(own, |outer| own.within(&outer))
 }
 
@@ -4066,6 +4008,9 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
     }
 }
 
+// A comp is the large one, and boxing it would touch every place an item is
+// built or matched for a few bytes per item.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ProjectItem {
     Footage(FootageItem),
@@ -4173,6 +4118,15 @@ pub struct Document {
     /// beside the items for the reason `proxies` above is one.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub footage_trims: std::collections::BTreeMap<Uuid, FootageTrim>,
+    /// Footage items' transcripts, by item id. Each behind an `Arc`, so the
+    /// copy every edit makes copies a pointer ([`crate::transcript`]).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub transcripts: std::collections::BTreeMap<Uuid, Arc<crate::transcript::Transcript>>,
+    /// Footage items' markers, by item id, in seconds of the item's own time.
+    /// What a multicam comp can be synced by. A map beside the items for the
+    /// reason `proxies` is one.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub footage_markers: std::collections::BTreeMap<Uuid, Vec<crate::markers::Marker>>,
     /// The project-wide *use proxies* master switch (docs/03 §3a).
     ///
     /// On — the default, and what a file written before proxies existed loads
@@ -4275,6 +4229,12 @@ pub struct Document {
     /// project. Nothing draws from it. Absent from the file when empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub notes: String,
+    /// The grade groups ([`crate::grade::groups`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grade_groups: Vec<crate::grade::groups::GradeGroup>,
+    /// The grade memories ([`crate::grade::memories`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grade_memories: Vec<crate::grade::memories::GradeMemory>,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
     /// (docs/10-FILE-FORMAT.md §1.2).
@@ -4613,6 +4573,8 @@ impl Document {
             item_comments: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
             footage_trims: std::collections::BTreeMap::new(),
+            transcripts: std::collections::BTreeMap::new(),
+            footage_markers: std::collections::BTreeMap::new(),
             use_proxies: true,
             packed: std::collections::BTreeMap::new(),
             auto_pack: false,
@@ -4623,6 +4585,8 @@ impl Document {
             colour: ColourManagement::default(),
             swatches: Vec::new(),
             notes: String::new(),
+            grade_groups: Vec::new(),
+            grade_memories: Vec::new(),
             ui_state: None,
             extra: serde_json::Map::new(),
         }
@@ -4918,6 +4882,8 @@ mod tests {
     use super::*;
     use crate::time::{CompTime, Rational};
 
+    mod separate_axes;
+
     fn secs(s: i64) -> CompTime {
         CompTime(Rational::new(s, 1).unwrap())
     }
@@ -5008,9 +4974,13 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5345,6 +5315,9 @@ mod tests {
         let mut comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -5390,9 +5363,13 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5515,6 +5492,7 @@ mod tests {
                 animators: Vec::new(),
                 style: Default::default(),
                 paragraph: Default::default(),
+                captions: None,
                 extra: serde_json::Map::new(),
             },
         };
@@ -5668,6 +5646,9 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -5709,9 +5690,13 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: BlendMode::Normal,
             masks: Vec::new(),
@@ -5879,63 +5864,6 @@ mod tests {
         }
     }
 
-    /// The `in use` badge: footage, a solid and a nested composition all count
-    /// as used the moment a layer names them, and an item nothing names does
-    /// not — whatever else the project holds.
-    #[test]
-    fn an_item_is_used_when_some_comps_layer_names_it() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let used_footage = footage.id;
-        let idle_footage = bare_footage("b.mp4", "b.mp4", "");
-        let idle_id = idle_footage.id;
-
-        let solid = SolidDef {
-            id: Uuid::now_v7(),
-            name: "White".into(),
-            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            width: 64,
-            height: 64,
-            extra: serde_json::Map::new(),
-        };
-        let solid_id = solid.id;
-
-        let mut inner = bare_comp("Inner");
-        let inner_id = inner.id;
-        inner
-            .layers
-            .push(bare_layer(LayerKind::Footage { item: used_footage }));
-
-        let mut outer = bare_comp("Outer");
-        outer
-            .layers
-            .push(bare_layer(LayerKind::Precomp { comp: inner_id }));
-        outer
-            .layers
-            .push(bare_layer(LayerKind::Solid { def: solid_id }));
-        // A drawn layer names no project item at all.
-        outer.layers.push(bare_layer(LayerKind::Adjustment));
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Footage(idle_footage));
-        doc.items.push(ProjectItem::Solid(solid));
-        doc.items.push(ProjectItem::Composition(inner));
-        doc.items.push(ProjectItem::Composition(outer));
-
-        assert!(doc.item_is_used(used_footage));
-        assert!(doc.item_is_used(solid_id));
-        assert!(
-            doc.item_is_used(inner_id),
-            "a comp placed as a layer is used"
-        );
-        assert!(!doc.item_is_used(idle_id), "nothing places this footage");
-        assert!(
-            !doc.item_is_used(doc.items[4].id()),
-            "the outer comp is in nothing, however much is in it"
-        );
-        assert!(!doc.item_is_used(Uuid::now_v7()), "an id nobody knows");
-    }
-
     /// The flowchart's question: one step each way from a comp, each
     /// neighbour once, with a mark where the nesting carries on.
     #[test]
@@ -6043,108 +5971,6 @@ mod tests {
         );
     }
 
-    /// **Old projects load unchanged**. A transform written before
-    /// separate axes existed carries no `axis_modes` at all, and reads as the
-    /// default: both pairs combined, Scale linked.
-    #[test]
-    fn a_transform_without_axis_modes_reads_as_the_default() {
-        let json = r#"{
-            "anchor_x": {"animation": {"Static": 0.0}},
-            "anchor_y": {"animation": {"Static": 0.0}},
-            "position_x": {"animation": {"Static": 0.0}},
-            "position_y": {"animation": {"Static": 0.0}},
-            "scale_x": {"animation": {"Static": 100.0}},
-            "scale_y": {"animation": {"Static": 100.0}},
-            "rotation": {"animation": {"Static": 0.0}},
-            "opacity": {"animation": {"Static": 100.0}}
-        }"#;
-        let group: TransformGroup = serde_json::from_str(json).unwrap();
-        assert_eq!(group.axis_modes, AxisModes::default());
-        assert_eq!(group.axis_modes.get(TransformPair::Scale), AxisMode::Linked);
-        assert_eq!(
-            group.axis_modes.get(TransformPair::Position),
-            AxisMode::Combined
-        );
-    }
-
-    /// An unknown key from a newer build survives a load and save beside the
-    /// new field (docs/03 §12's forward-compatibility rule).
-    #[test]
-    fn an_unknown_transform_field_survives_beside_the_axis_modes() {
-        let mut group = TransformGroup::default();
-        group
-            .axis_modes
-            .set(TransformPair::Anchor, AxisMode::Separated);
-        let mut value: serde_json::Value =
-            serde_json::from_str(&serde_json::to_string(&group).unwrap()).unwrap();
-        value["some_future_field"] = serde_json::json!(7);
-        let back: TransformGroup = serde_json::from_value(value).unwrap();
-        assert_eq!(back.axis_modes.anchor, AxisMode::Separated);
-        assert_eq!(
-            back.extra.get("some_future_field"),
-            Some(&serde_json::json!(7))
-        );
-    }
-
-    /// **Coming back together does not move the picture**. Two axes
-    /// keyed at different times gain each other's key times, and every axis
-    /// reads exactly what it read before at every moment.
-    #[test]
-    fn recombining_unions_the_key_times_without_changing_a_value() {
-        use crate::anim::{Animation, Keyframe, SideInterp};
-        let key = |t: i64, v: f64| Keyframe {
-            time: Rational::new(t, 1).unwrap(),
-            value: v,
-            interp_in: SideInterp::Bezier {
-                speed: 0.0,
-                influence: 1.0 / 3.0,
-            },
-            interp_out: SideInterp::Bezier {
-                speed: 0.0,
-                influence: 1.0 / 3.0,
-            },
-        };
-        let mut group = TransformGroup::default();
-        group.position_x.animation = Animation::Keyframed(vec![key(0, 0.0), key(4, 100.0)]);
-        group.position_y.animation = Animation::Keyframed(vec![key(1, 10.0), key(3, 50.0)]);
-
-        let before: Vec<[f64; 2]> = (0..=40)
-            .map(|i| {
-                let t = f64::from(i) / 10.0;
-                [group.position_x.value_at(t), group.position_y.value_at(t)]
-            })
-            .collect();
-
-        let unified = group.unified_axes(TransformPair::Position);
-        assert_eq!(unified.len(), 2, "both axes gained the other's times");
-        for (prop, animation) in unified {
-            group.get_mut(prop).unwrap().animation = animation;
-        }
-
-        let times = |a: &Animation| match a {
-            Animation::Keyframed(keys) => keys.iter().map(|k| k.time.to_f64()).collect::<Vec<_>>(),
-            _ => Vec::new(),
-        };
-        assert_eq!(times(&group.position_x.animation), vec![0.0, 1.0, 3.0, 4.0]);
-        assert_eq!(times(&group.position_y.animation), vec![0.0, 1.0, 3.0, 4.0]);
-
-        for (i, expected) in before.iter().enumerate() {
-            let t = f64::from(i as i32) / 10.0;
-            let x = group.position_x.value_at(t);
-            let y = group.position_y.value_at(t);
-            assert!(
-                (x - expected[0]).abs() < 1e-9,
-                "x at {t}: {x} vs {}",
-                expected[0]
-            );
-            assert!(
-                (y - expected[1]).abs() < 1e-9,
-                "y at {t}: {y} vs {}",
-                expected[1]
-            );
-        }
-    }
-
     /// The anti-aliasing budget bites only above 4K, and only as far as it
     /// must: 4K keeps 8×, 8K gets 2× (its attachment then costs what 4K's
     /// does), and a setting that asked for less is never raised.
@@ -6161,4 +5987,6 @@ mod tests {
         assert_eq!(Off.samples_for(7680, 4320), 1);
         assert_eq!(X8.samples_for(0, 0), 8, "an empty comp is left alone");
     }
+
+    mod item_in_use;
 }

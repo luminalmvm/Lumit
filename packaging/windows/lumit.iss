@@ -6,8 +6,8 @@
 ; Registers the .lum, .lumfx and .lumtheme associations with their document icons
 ; (assets/brand) and an open command; Lumit itself reads the document
 ; path from the command line (projectPathFromArgs in flutter_ui/lib/main.dart).
-; .lfx extension packages open the same way, with no icon of their own yet,
-; and .lumstyle styles with the theme's icon.
+; .lfx extension packages and .lumt graphics templates open the same way, with
+; no icon of their own yet, and .lumstyle styles with the theme's icon.
 
 ; Keep in step with flutter_ui/pubspec.yaml `version:` when cutting a release.
 ; The release workflow overrides this from the tag (iscc /DMyAppVersion=...).
@@ -147,6 +147,13 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme"; ValueType: string; \
 Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string; \
   ValueData: "{app}\icons\lumit-theme.ico"
 Root: HKA; Subkey: "Software\Classes\Lumit.Theme\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; .lumt: graphics templates. Opening one adds it to the library.
+Root: HKA; Subkey: "Software\Classes\.lumt"; ValueType: string; \
+  ValueData: "Lumit.GraphicsTemplate"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Lumit.GraphicsTemplate"; ValueType: string; \
+  ValueData: "Lumit graphics template"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Lumit.GraphicsTemplate\shell\open\command"; ValueType: string; \
   ValueData: """{app}\{#MyAppExe}"" ""%1"""
 
 [Run]

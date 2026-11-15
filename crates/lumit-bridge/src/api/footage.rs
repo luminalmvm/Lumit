@@ -364,10 +364,21 @@ impl FootageReference {
                 });
                 // The file it already names, unchanged, is only read again.
                 if !same_file || media.fingerprint != other.media.fingerprint {
+                    // Another file's words are not this one's.
+                    let (now, was) = (&media.fingerprint, &other.media.fingerprint);
+                    let changed = now.as_ref().zip(was.as_ref());
+                    let changed =
+                        changed.is_some_and(|(a, b)| a.head_tail_hash != b.head_tail_hash);
                     ops.push(lumit_core::ops::Op::SetMediaRef {
                         id: other.id,
                         media: Box::new(media),
                     });
+                    if changed && doc.transcripts.contains_key(&other.id) {
+                        ops.push(lumit_core::ops::Op::EditTranscript {
+                            item: other.id,
+                            edit: Box::new(lumit_core::transcript::TranscriptEdit::Set(None)),
+                        });
+                    }
                 }
             }
             ops
@@ -689,7 +700,7 @@ impl FootageReference {
         // The lock goes before the decode does: `preview` spawns and returns,
         // so nothing slow happens under the project guard (docs/14 §1).
         drop(proj);
-        crate::audio::preview(self.id, sound, start_seconds);
+        crate::audio::preview::preview(self.id, sound, start_seconds);
         Ok(true)
     }
 

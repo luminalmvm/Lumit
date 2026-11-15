@@ -223,6 +223,7 @@ fn a_text_draws_and_an_empty_one_is_nothing() {
         animators: Vec::new(),
         style: Box::default(),
         paragraph: Default::default(),
+        captions: None,
         extra: serde_json::Map::new(),
     };
     for (text, shows) in [("Ae", true), ("", false)] {
@@ -308,6 +309,7 @@ fn an_animated_title_stays_put_when_it_gains_depth() {
             }],
             style: Box::default(),
             paragraph: Default::default(),
+            captions: None,
             extra: serde_json::Map::new(),
         },
     };

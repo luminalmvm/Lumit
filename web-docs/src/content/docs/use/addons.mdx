@@ -1,6 +1,6 @@
 ---
 title: Addons and models
-description: The optional models behind Flow, Depth, Remove background and the Roto brush, and how to install them.
+description: The optional models behind Flow, Depth, Remove background, the Roto brush, captions and Voice isolation, and how to install them.
 sidebar:
   order: 9.9
 ---
@@ -8,10 +8,10 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 import Clip from "../../../components/Clip.astro";
 
-An **addon** is an optional download: the model runtime, or a model pack. Each pack is one
-trained model that reads your footage and hands back one thing: an in-between frame, a
-depth map, a matte, or the outline of what you clicked. They run on your own graphics card.
-Lumit works without any of them.
+An **addon** is an optional download: the model runtime, or a model pack. Each pack reads
+your footage and hands back one thing: an in-between frame, a depth map, a matte, the outline
+of what you clicked, the words said, or the voice in a recording. They run on your own
+machine. Lumit works without any of them.
 
 <Shot file="models-installed.png" caption="Settings ▸ Addons with the runtime and all five packs installed." eager/>
 
@@ -25,6 +25,9 @@ Lumit works without any of them.
 | **Robust Video Matting** | 14 MB | A matte for a person, carried frame to frame. | [Remove background](#remove-background) |
 | **BiRefNet Lite** | 214 MB | A matte for the main subject of a frame. | [Remove background](#remove-background) |
 | **SAM 2.1 Hiera Tiny** | 111 MB | The outline of the thing you click on. | [Roto brush](#roto-brush) |
+| **Whisper large-v3 turbo** | 1.1 GB | The words said, when, and who says them. | [Captions](#captions-whisper) |
+| **Whisper small** | 280 MB | The same from a smaller model, which can also write it in English. | [Captions](#captions-whisper) |
+| **DeepFilterNet3** | 8 MB | The speech in a recording, apart from everything else. | [Voice isolation](#voice-isolation) |
 
 Every addon is an analysis model. Nothing generative is listed.
 
@@ -34,7 +37,8 @@ Every addon is an analysis model. Nothing generative is listed.
 
 **2. Press Check for addons.** Lumit fetches the catalogue. This button is the only time it
 looks. Each pack lists its licence and size, and reads **Needs the runtime** until the
-runtime is in.
+runtime is in. A pack made for a newer Lumit than yours is left out of the list. Update
+Lumit and check again.
 
 <Shot file="models-catalogue.png" caption="The catalogue, before the runtime is installed."/>
 
@@ -51,13 +55,14 @@ the graphics provider it is running on and its version, or reads **Installed. Wo
 load.** with the reason.
 
 An installed pack's row gives its licence, its size and its job: **Depth**, **Matte**,
-**Segmentation** or **Frame synthesis**.
+**Segmentation**, **Frame synthesis**, **Speech** or **Voice isolation**.
 
 **Install from file** installs a pack from an `addon.json` with its files beside it, for a
 machine with no network. **Where they are kept ▸ Show** opens the folder. **Remove** on a
 row deletes that addon. **Licence** opens its licence in the browser.
 
-An install that fails says why under the **Catalogue** row:
+An install or a removal takes effect at once. An install that fails says why under the
+**Catalogue** row:
 
 | Line | Means |
 | --- | --- |
@@ -74,7 +79,7 @@ An install that fails says why under the **Catalogue** row:
 ## Without a pack
 
 - An effect that needs a pack wears **This effect needs an addon that is not installed**,
-  names the pack beneath, and passes its picture through unchanged.
+  names the pack beneath, and passes its picture, or its sound, through unchanged.
 - The Flow group, the Roto brush and the export dialogue show **Open addons**, which opens
   the Addons page.
 - An installed addon whose files are gone or the wrong size reads **Files are missing** and
@@ -84,9 +89,9 @@ An install that fails says why under the **Catalogue** row:
 
 ### Flow: RIFE
 
-[Flow](/use/retime/#frames-in-between) makes the frames between real ones when a layer is
-slowed down. Turn it on with the **Flow** switch in the layer's **Modes** column, or
-**Layer ▸ Flow**, then set **Engine** in its **Flow** group to **RIFE**.
+[Flow](/use/retime/#frames-in-between) makes the frames between real ones when a footage or
+Precomp layer is slowed down. Turn it on with the **Flow** switch in the layer's **Modes**
+column, or **Layer ▸ Flow**, then set **Engine** in its **Flow** group to **RIFE**.
 
 <Clip name="addons-rife" caption="Engine set to RIFE on a shot slowed to 25%, then played through."/>
 
@@ -94,7 +99,8 @@ The Flow group is in the layer's rows in the Timeline, and in Effect controls wh
 **Settings ▸ Timeline ▸ Transform in Effect controls** is on.
 
 A machine without RIFE previews the layer with the built-in engine and says so on the row.
-An export of that layer is **refused**.
+An export of that layer is **refused**. A Precomp does the same on frames with values above
+white.
 
 ### Depth
 
@@ -129,6 +135,19 @@ the outline, and `Alt`-click marks what is not the subject. Then press **Propaga
 <Shot file="models-roto.jpg" caption="Three clicks on the runner, propagated through the shot. View is Boundary."/>
 
 Without SAM 2.1, a propagation seeded by **Segment** is **refused**.
+
+### Captions: Whisper
+
+[Create captions](/use/captions/#make-captions) hears speech with a Whisper pack. Both packs
+hear about a hundred languages, tell voices apart and find where speech starts and stops.
+With both installed, **Whisper large-v3 turbo** is used, and **Whisper small** for **Into
+English**.
+
+### Voice isolation
+
+**Effect ▸ Audio ▸ [Voice isolation](/effects/audio/voice-isolation/)** keeps the speech in
+a layer's sound and turns everything else down. The model runs on the processor. Without
+DeepFilterNet3 the sound plays untouched, in an export too.
 
 ## Licences
 

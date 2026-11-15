@@ -10,8 +10,13 @@
 //!
 //! The playhead stays in the mix's own frames, so the clock reads comp time
 //! and only runs slower.
+//!
+//! Runs on the audio callback. The grains read the mix out of order, so the
+//! master goes through a plain clamp here rather than the limiter, which
+//! looks ahead.
 
-use crate::{meter, mix::MixPlan, nanos, AudioEngine, Scrub, Shared};
+use crate::block::{MixWork, RingSource};
+use crate::{meter, nanos, plan::MixPlan, put, AudioEngine, Scrub, Shared};
 use std::sync::atomic::Ordering;
 
 /// The slowest the sound is played at: an eighth of its speed.
@@ -96,6 +101,7 @@ impl Stretch {
         &mut self,
         shared: &Shared,
         scrub: &mut Scrub,
+        work: &mut MixWork,
         out: &mut [f32],
         channels: usize,
     ) -> bool {
@@ -106,6 +112,7 @@ impl Stretch {
         }
         out.fill(0.0);
         shared.scrub.store(0, Ordering::Relaxed);
+        shared.jog.store(crate::jog::NO_JOG, Ordering::Relaxed);
         *scrub = Scrub::default();
         let Some(guard) = shared.plan.try_read() else {
             return true;
@@ -123,7 +130,9 @@ impl Stretch {
             self.joined = false;
             self.tail.fill(0.0);
         }
+        work.set_limiter(false);
         let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+        let mut rings = RingSource::default();
         let mut missed = 0usize;
         for frame in out.chunks_exact_mut(channels) {
             let at = self.at();
@@ -132,12 +141,10 @@ impl Stretch {
                 break;
             }
             if self.given >= self.hop {
-                missed += self.lay(plan, at, &mut acc);
+                missed += self.lay(plan, at, work, &mut rings, &mut acc);
             }
             let i = self.given * 2;
-            for (sample, s) in frame.iter_mut().zip(&self.ready[i..i + 2]) {
-                *sample = *s;
-            }
+            put(frame, self.ready[i], self.ready[i + 1], None);
             self.given += 1;
             self.heard += 1;
         }
@@ -152,7 +159,8 @@ impl Stretch {
             shared.step.store(playhead - began, Ordering::Relaxed);
             shared.stepped_at.store(nanos(), Ordering::Relaxed);
         }
-        shared.meters.publish(&acc);
+        shared.meters.publish(&acc, plan.nodes.len());
+        missed += rings.missed;
         if missed > 0 {
             shared.starved.fetch_add(missed as u64, Ordering::Relaxed);
         }
@@ -174,10 +182,12 @@ impl Stretch {
         &mut self,
         plan: &MixPlan,
         want: usize,
-        acc: &mut [meter::MeterAcc; meter::SLOTS],
+        work: &mut MixWork,
+        rings: &mut RingSource,
+        acc: &mut meter::MeterAccs,
     ) -> usize {
         let lo = want.saturating_sub(self.seek);
-        let missed = plan.mix_into(lo, &mut self.span, Some(acc));
+        let missed = plan.mix_block(lo, &mut self.span, work, rings, Some(acc), None);
         let hop = self.hop;
         let span = &self.span;
         let mono = |i: usize| span[i * 2] + span[i * 2 + 1];
@@ -255,10 +265,11 @@ mod tests {
             shared.playing.store(true, Ordering::Relaxed);
             shared.slow.store(slow, Ordering::Relaxed);
             let (mut stretch, mut scrub) = (Stretch::new(rate), Scrub::default());
+            let mut work = MixWork::new(rate);
             let mut out = vec![0.0f32; 480 * 2];
             let mut left = Vec::new();
             for _ in 0..100 {
-                assert!(stretch.fill(&shared, &mut scrub, &mut out, 2));
+                assert!(stretch.fill(&shared, &mut scrub, &mut work, &mut out, 2));
                 left.extend(out.chunks_exact(2).map(|f| f[0]));
             }
             let moved = shared.playhead.load(Ordering::Relaxed);

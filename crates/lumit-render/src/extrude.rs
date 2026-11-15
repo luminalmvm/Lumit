@@ -28,7 +28,7 @@ use crate::model_material::Look;
 const MESH_BYTES: usize = 256 << 20;
 const SCENE_BYTES: usize = 128 << 20;
 
-struct Kept<T>(Arc<T>);
+pub(crate) struct Kept<T>(pub(crate) Arc<T>);
 
 impl ByteSized for Kept<Mesh> {
     fn byte_size(&self) -> usize {
@@ -42,7 +42,7 @@ impl ByteSized for Kept<ModelScene> {
     }
 }
 
-type Shelf<T> = Mutex<Option<ByteLru<u128, Kept<T>>>>;
+pub(crate) type Shelf<T> = Mutex<Option<ByteLru<u128, Kept<T>>>>;
 
 static MESHES: Shelf<Mesh> = Mutex::new(None);
 static SCENES: Shelf<ModelScene> = Mutex::new(None);
@@ -52,7 +52,7 @@ static LAST: Mutex<Option<HashMap<Uuid, Weak<ModelScene>>>> = Mutex::new(None);
 
 /// What's on `shelf` under `key`, made and put there if it isn't. The lock is
 /// never held while it's made.
-fn kept<T>(shelf: &Shelf<T>, bytes: usize, key: u128, make: impl FnOnce() -> T) -> Arc<T>
+pub(crate) fn kept<T>(shelf: &Shelf<T>, bytes: usize, key: u128, make: impl FnOnce() -> T) -> Arc<T>
 where
     Kept<T>: ByteSized,
 {
@@ -91,6 +91,8 @@ pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
     }
     set(&MESHES, MESH_BYTES, ledger);
     set(&SCENES, SCENE_BYTES, ledger);
+    use crate::build::kept_raster::{RASTERS, RASTER_BYTES};
+    set(&RASTERS, RASTER_BYTES, ledger);
 }
 
 /// One letter, or one run of a shape's art at one of its copies.
@@ -115,7 +117,8 @@ struct Piece {
 fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece> {
     match &layer.kind {
         LayerKind::Text { document } => {
-            let line = document.resolved_text(context.clone());
+            let (line, spoken, moved) =
+                lumit_core::captions::show::spoken(document, context.clone());
             let spine = document
                 .path
                 .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
@@ -124,15 +127,16 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
             let block = lumit_text::TextBlock::of(document, &line);
             let entries = lumit_text::shape_items(&block, spine.as_ref(), offset);
             let xforms = match context.comp.and_then(|c| context.document.comp(c)) {
-                Some(comp) => lumit_core::text::layer_glyph_xforms(
+                Some(comp) => lumit_core::text::ports::layer_glyph_xforms(
                     &context.document,
                     comp,
                     layer,
                     document,
                     &line,
                     context.comp_time,
+                    &spoken,
                 ),
-                None => lumit_core::text::glyph_xforms(&document.animators, &line, lt),
+                None => lumit_core::text::glyph_xforms(&document.animators, &line, lt, &spoken),
             };
             // A straight line with animators is drawn flat with room round it,
             // which moves its letters in, so it keeps its place here too.
@@ -154,7 +158,8 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                     line.carets.get(k - line.start)?,
                     line.carets.get(k + 1 - line.start)?,
                 );
-                Some([(a + b) / 2.0, line.baseline])
+                let [x, y] = moved.map(|m| m as f32);
+                Some([(a + b) / 2.0 + x, line.baseline + y])
             };
             let chars: Vec<char> = line.chars().collect();
             let [fill, edge] = text_colours(document);
@@ -177,8 +182,12 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                 let items = lumit_core::shape::modifier::items(&group.entries);
                 let filled = items.iter().filter(|i| i.fill.is_some());
                 let filled: Vec<_> = filled.collect();
+                // The outline's width as the letters were set, which Shrink to
+                // fit narrows along with them.
+                let stroke = items.iter().find(|i| i.stroke.is_some());
+                let stroke = stroke.map_or(style.stroke_width, |i| i.stroke_width.value_at(lt));
                 let mut contours: Vec<Vec<[f64; 2]>> = if filled.is_empty() {
-                    let width = style.stroke_width;
+                    let width = stroke;
                     (items.iter())
                         .flat_map(|i| {
                             lumit_core::shape::solid::outline_of(
@@ -191,15 +200,12 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                     let flat = filled
                         .iter()
                         .map(|i| lumit_core::extrude::flattened(&i.path));
-                    let outline = if style.stroke_on {
-                        style.stroke_width
-                    } else {
-                        0.0
-                    };
+                    let outline = if style.stroke_on { stroke } else { 0.0 };
                     lumit_core::shape::solid::with_stroke(&flat.collect::<Vec<_>>(), outline)
                 };
+                // A caption moved off its place takes its solid letters along.
                 for p in contours.iter_mut().flatten() {
-                    (p[0], p[1]) = (p[0] + room[0], p[1] + room[1]);
+                    (p[0], p[1]) = (p[0] + room[0] + moved[0], p[1] + room[1] + moved[1]);
                 }
                 let added = |c: [f32; 4]| {
                     [
@@ -327,7 +333,7 @@ fn mesh_key(contours: &[Vec<[f64; 2]>], profile: &Profile) -> u128 {
     name_of(&h)
 }
 
-fn name_of(h: &blake3::Hasher) -> u128 {
+pub(crate) fn name_of(h: &blake3::Hasher) -> u128 {
     let mut k = [0u8; 16];
     k.copy_from_slice(&h.finalize().as_bytes()[..16]);
     u128::from_le_bytes(k)
@@ -551,7 +557,9 @@ pub(crate) fn may_change(layer: &Layer, lt: f64, context: &Arc<ExpressionContext
     keyed
         || match &layer.kind {
             LayerKind::Text { document } => {
-                !document.animators.is_empty() || document.expression.is_some()
+                !document.animators.is_empty()
+                    || document.expression.is_some()
+                    || document.captions.is_some()
             }
             LayerKind::Shape { contents } => matches!(
                 lumit_core::shape::contents_at(contents, lt, context),

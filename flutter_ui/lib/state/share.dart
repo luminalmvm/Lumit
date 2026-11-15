@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart' show lumitVersion;
+import 'package:lumit_flutter/shell/status_line_frb.dart'
+    show statusLineExportStarted;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -361,7 +363,11 @@ class ShareState extends ChangeNotifier {
       _project?.shareAnswerExport(job: job, yes: yes);
     } catch (_) {
       // The project closed between the question and the answer.
+      return;
     }
+    // Saying yes queues it here, so the status line follows it as it does
+    // an export started from the dialogue.
+    if (yes) statusLineExportStarted.value++;
   }
 
   ProjectReference? _project;

@@ -219,6 +219,15 @@ impl EffectDef for RgbSplitDef {
         &<RgbSplit as EffectMetadata>::SCHEMA
     }
 
+    /// A hit that lands on the playhead.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        use crate::fx::presets::PresetValue::Keys;
+        &[crate::fx::presets::EffectPreset {
+            name: "Hit",
+            values: &[("amount", Keys(&[(0.0, 0.0), (0.08, 60.0), (0.3, 0.0)]))],
+        }]
+    }
+
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         match RgbSplit::read(p).packed() {
             Split::Classic {

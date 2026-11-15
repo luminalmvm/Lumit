@@ -1,7 +1,8 @@
 // The Animators section: a Text layer's letters moved one at a time.
 //
 // An animator names a set of per-letter offsets — a push, a turn, a size, a
-// fade, a tint — and a **range selector** saying which letters they reach. The
+// fade, a tint, a box — and a **range selector** saying which letters they
+// reach, or the spoken words when a caption hands them in. The
 // selector hands every letter a weight and the offsets are applied times that
 // weight, so keying the selector's Offset sweeps the range across the words and
 // every letter is moved in its turn. That is the cascade, and nothing in this
@@ -42,7 +43,7 @@ import 'timeline_mask_rows_frb.dart' show RowButton;
 const double _cellWidth = 78;
 
 /// The Animators section for [layer], or nothing when it is not a Text layer.
-class TextAnimatorRowsFrb extends StatelessWidget {
+class TextAnimatorRowsFrb extends StatefulWidget {
   final LayerReference layer;
   final VoidCallback onChanged;
 
@@ -73,22 +74,76 @@ class TextAnimatorRowsFrb extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<int>(
-        // The font's axes come in from the engine a moment after the first
-        // draw, and name the axis rows.
-        valueListenable: fontAxesArrived,
-        builder: (context, _, __) => _section(context),
-      );
+  State<TextAnimatorRowsFrb> createState() => _TextAnimatorRowsFrbState();
+}
 
-  Widget _section(BuildContext context) {
-    final document = layer.getText();
-    if (document == null) return const SizedBox.shrink();
+class _TextAnimatorRowsFrbState extends State<TextAnimatorRowsFrb> {
+  /// The animators from the last read model that held the layer, null when it
+  /// is not a Text layer. A layer of a comp no longer in front is not in the
+  /// model, and keeps what was last read, as the panel's other sections do.
+  List<BridgeTextAnimator>? _held;
 
+  /// The layer's style, which names the font axes its animators move. Read
+  /// once for each new set of animators with an axis on it, not on every draw.
+  BridgeTextStyle? _style;
+  List<BridgeTextAnimator>? _styleFor;
+
+  @override
+  Widget build(BuildContext context) {
+    // Drawn from the read model. Only the style is asked of the engine.
+    final entry = Provider.of<LumitUiState>(context, listen: false)
+        .model
+        .byId(widget.layer.internallayerId);
+    if (entry != null) {
+      _held = entry.info.kind == BridgeLayerKind.text
+          ? entry.info.textAnimators
+          : null;
+    }
+    final animators = _held;
+    if (animators == null) return const SizedBox.shrink();
+    if (!identical(animators, _styleFor) &&
+        animators.any((a) => a.axes.isNotEmpty)) {
+      _styleFor = animators;
+      _style = widget.layer.getText()?.style;
+    }
+    return ValueListenableBuilder<int>(
+      // The font's axes come in from the engine a moment after the first
+      // draw, and name the axis rows.
+      valueListenable: fontAxesArrived,
+      builder: (context, _, __) =>
+          _AnimatorSection(of: widget, animators: animators, style: _style),
+    );
+  }
+}
+
+/// The section itself, for the animators [TextAnimatorRowsFrb] holds.
+class _AnimatorSection extends StatelessWidget {
+  final TextAnimatorRowsFrb of;
+  final List<BridgeTextAnimator> animators;
+  final BridgeTextStyle? style;
+
+  const _AnimatorSection(
+      {required this.of, required this.animators, required this.style});
+
+  LayerReference get layer => of.layer;
+  VoidCallback get onChanged => of.onChanged;
+  CompositionReference get comp => of.comp;
+  int get playheadFrame => of.playheadFrame;
+  ValueChanged<int> get onSeek => of.onSeek;
+  bool get open => of.open;
+  VoidCallback get onToggle => of.onToggle;
+  bool get solid => of.solid;
+
+  @override
+  Widget build(BuildContext context) {
     // One write path: read the document, change the animator list, write it
     // whole. The engine takes the whole document as one op — and when the list
     // crosses empty ↔ not-empty it moves the layer's anchor by the margin the
-    // animated raster adds, in the same op, so the words do not jump.
+    // animated raster adds, in the same op, so the words do not jump. Read
+    // when the edit is made, never while drawing.
     void write(List<BridgeTextAnimator> animators) {
+      final document = layer.getText();
+      if (document == null) return;
       layer.setText(
         document: BridgeTextDocument(
           text: document.text,
@@ -106,13 +161,13 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     }
 
     final rows = <Widget>[];
-    for (var i = 0; i < document.animators.length; i++) {
+    for (var i = 0; i < animators.length; i++) {
       rows.addAll(_animatorRows(
         context,
-        document.animators,
+        animators,
         i,
         write,
-        document.style,
+        style,
       ));
     }
     return FxSection(
@@ -163,7 +218,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     List<BridgeTextAnimator> animators,
     int index,
     ValueChanged<List<BridgeTextAnimator>> write,
-    BridgeTextStyle style,
+    BridgeTextStyle? style,
   ) {
     final t = ThemeScope.of(context).theme;
     final a = animators[index];
@@ -239,150 +294,188 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           ],
         ),
       ),
-      // Range picks letters by where they come in the words; Proximity by how
-      // near they are to another layer, so dragging a null across the words
-      // sweeps the change through them.
       _plainRow(
         context,
-        l10n.textAnimatorSelector,
-        BareDropdown<BridgeSelectorKind>(
-          key: ValueKey<String>('text-animator-kind-$index'),
-          value: a.selector.kind,
-          options: BridgeSelectorKind.values,
-          label: (k) => switch (k) {
-            BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
-            BridgeSelectorKind.proximity => l10n.textAnimatorSelectorProximity,
-            BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
+        l10n.textAnimatorFollows,
+        BareDropdown<BridgeSelectorMode>(
+          key: ValueKey<String>('text-animator-mode-$index'),
+          value: a.selector.mode,
+          options: BridgeSelectorMode.values,
+          label: (m) => switch (m) {
+            BridgeSelectorMode.range => l10n.textAnimatorFollowsRange,
+            BridgeSelectorMode.current => l10n.textAnimatorFollowsCurrent,
+            BridgeSelectorMode.said => l10n.textAnimatorFollowsSaid,
+            BridgeSelectorMode.unsaid => l10n.textAnimatorFollowsUnsaid,
+            BridgeSelectorMode.emphasis => l10n.textAnimatorFollowsEmphasis,
           },
-          onChanged: (k) => put(animatorWithSelectorKind(a, k)),
+          onChanged: (m) => putSelector(selectorWith(a.selector, mode: m)),
         ),
       ),
-      if (a.selector.kind == BridgeSelectorKind.wiggly) ...[
-        _numberRow(
-            context,
-            l10n.textAnimatorMaxAmount,
-            'wiggly-max-$index',
-            [a.selector.maxAmount],
-            -100,
-            100,
-            100,
-            (s) => putSelector(selectorWith(a.selector, maxAmount: s.first))),
-        _numberRow(
-            context,
-            l10n.textAnimatorMinAmount,
-            'wiggly-min-$index',
-            [a.selector.minAmount],
-            -100,
-            100,
-            0,
-            (s) => putSelector(selectorWith(a.selector, minAmount: s.first))),
-        _numberRow(
-            context,
-            l10n.textAnimatorWiggles,
-            'wiggly-rate-$index',
-            [a.selector.wiggles],
-            0,
-            1000,
-            2,
-            (s) => putSelector(selectorWith(a.selector, wiggles: s.first))),
-        _numberRow(
-            context,
-            l10n.textAnimatorCorrelation,
-            'wiggly-correlation-$index',
-            [a.selector.correlation],
-            0,
-            100,
-            50,
-            (s) => putSelector(selectorWith(a.selector, correlation: s.first))),
+      // Spoken words pick the letters themselves, and take an ease instead.
+      if (a.selector.mode == BridgeSelectorMode.range) ...[
+        // Range picks letters by where they come in the words; Proximity by
+        // how near they are to another layer, so dragging a null across the
+        // words sweeps the change through them.
         _plainRow(
           context,
-          l10n.textAnimatorSeed,
-          DragValueField(
-            key: ValueKey<String>('wiggly-seed-$index'),
-            value: a.selector.seed,
-            min: 0,
-            max: 99999,
-            resetTo: 0,
-            decimals: 0,
-            onChanged: (v) => putSelector(selectorWith(a.selector,
-                seed: v.round().clamp(0, 99999).toInt())),
+          l10n.textAnimatorSelector,
+          BareDropdown<BridgeSelectorKind>(
+            key: ValueKey<String>('text-animator-kind-$index'),
+            value: a.selector.kind,
+            options: BridgeSelectorKind.values,
+            label: (k) => switch (k) {
+              BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
+              BridgeSelectorKind.proximity =>
+                l10n.textAnimatorSelectorProximity,
+              BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
+            },
+            onChanged: (k) => put(animatorWithSelectorKind(a, k)),
           ),
         ),
-      ],
-      if (a.selector.kind == BridgeSelectorKind.proximity) ...[
-        _plainRow(
-          context,
-          l10n.textAnimatorTarget,
-          LayerPicker(
-            key: ValueKey<String>('text-animator-target-$index'),
-            layers: _layers(context),
-            value: a.selector.target,
-            empty: l10n.none,
-            missing: l10n.missingLayer,
-            // Any layer but the words themselves: what is measured is its
-            // anchor, so a null, a light or a camera serves as well as a
-            // picture.
-            offered: (l) => l.layer.internallayerId != layer.internallayerId,
-            onChanged: (picked) => putSelector(picked == null
-                ? selectorWith(a.selector, clearTarget: true)
-                : selectorWith(a.selector, target: picked)),
-          ),
-        ),
-        _numberRow(
+        if (a.selector.kind == BridgeSelectorKind.wiggly) ...[
+          _numberRow(
+              context,
+              l10n.textAnimatorMaxAmount,
+              'wiggly-max-$index',
+              [a.selector.maxAmount],
+              -100,
+              100,
+              100,
+              (s) => putSelector(selectorWith(a.selector, maxAmount: s.first))),
+          _numberRow(
+              context,
+              l10n.textAnimatorMinAmount,
+              'wiggly-min-$index',
+              [a.selector.minAmount],
+              -100,
+              100,
+              0,
+              (s) => putSelector(selectorWith(a.selector, minAmount: s.first))),
+          _numberRow(
+              context,
+              l10n.textAnimatorWiggles,
+              'wiggly-rate-$index',
+              [a.selector.wiggles],
+              0,
+              1000,
+              2,
+              (s) => putSelector(selectorWith(a.selector, wiggles: s.first))),
+          _numberRow(
+              context,
+              l10n.textAnimatorCorrelation,
+              'wiggly-correlation-$index',
+              [a.selector.correlation],
+              0,
+              100,
+              50,
+              (s) => putSelector(
+                  selectorWith(a.selector, correlation: s.first))),
+          _plainRow(
             context,
-            l10n.textAnimatorRadius,
-            'range-radius-$index',
-            [a.selector.radius],
-            0,
-            100000,
-            200,
-            (s) => putSelector(selectorWith(a.selector, radius: s.first))),
-        _plainRow(
-          context,
-          l10n.textAnimatorInvert,
-          Align(
-            alignment: Alignment.centerLeft,
-            child: HouseCheckbox(
-              key: ValueKey<String>('text-animator-invert-$index'),
-              value: a.selector.invert,
-              onChanged: (on) =>
-                  putSelector(selectorWith(a.selector, invert: on)),
+            l10n.textAnimatorSeed,
+            DragValueField(
+              key: ValueKey<String>('wiggly-seed-$index'),
+              value: a.selector.seed,
+              min: 0,
+              max: 99999,
+              resetTo: 0,
+              decimals: 0,
+              onChanged: (v) => putSelector(selectorWith(a.selector,
+                  seed: v.round().clamp(0, 99999).toInt())),
             ),
           ),
+        ],
+        if (a.selector.kind == BridgeSelectorKind.proximity) ...[
+          _plainRow(
+            context,
+            l10n.textAnimatorTarget,
+            LayerPicker(
+              key: ValueKey<String>('text-animator-target-$index'),
+              layers: _layers(context),
+              value: a.selector.target,
+              empty: l10n.none,
+              missing: l10n.missingLayer,
+              // Any layer but the words themselves: what is measured is its
+              // anchor, so a null, a light or a camera serves as well as a
+              // picture.
+              offered: (l) => l.layer.internallayerId != layer.internallayerId,
+              onChanged: (picked) => putSelector(picked == null
+                  ? selectorWith(a.selector, clearTarget: true)
+                  : selectorWith(a.selector, target: picked)),
+            ),
+          ),
+          _numberRow(
+              context,
+              l10n.textAnimatorRadius,
+              'range-radius-$index',
+              [a.selector.radius],
+              0,
+              100000,
+              200,
+              (s) => putSelector(selectorWith(a.selector, radius: s.first))),
+          _plainRow(
+            context,
+            l10n.textAnimatorInvert,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: HouseCheckbox(
+                key: ValueKey<String>('text-animator-invert-$index'),
+                value: a.selector.invert,
+                onChanged: (on) =>
+                    putSelector(selectorWith(a.selector, invert: on)),
+              ),
+            ),
+          ),
+        ],
+        // The range: which letters this animator reaches, in per cent of the
+        // words. Offset is the one a cascade is keyed on, which is why it is a
+        // number of its own rather than something the two ends share.
+        if (a.selector.kind == BridgeSelectorKind.range) ...[
+          _numberRow(
+              context,
+              l10n.textAnimatorRangeStart,
+              'range-start-$index',
+              [a.selector.start],
+              -1000,
+              1000,
+              0,
+              (s) => putSelector(selectorWith(a.selector, start: s.first))),
+          _numberRow(
+              context,
+              l10n.textAnimatorRangeEnd,
+              'range-end-$index',
+              [a.selector.end],
+              -1000,
+              1000,
+              100,
+              (s) => putSelector(selectorWith(a.selector, end: s.first))),
+          _numberRow(
+              context,
+              l10n.textAnimatorRangeOffset,
+              'range-offset-$index',
+              [a.selector.offset],
+              -1000,
+              1000,
+              0,
+              (s) => putSelector(selectorWith(a.selector, offset: s.first))),
+        ],
+      ] else if (a.selector.mode != BridgeSelectorMode.emphasis)
+        _plainRow(
+          context,
+          l10n.textAnimatorEase,
+          DragValueField(
+            key: ValueKey<String>('text-animator-ease-$index'),
+            value: a.selector.ease,
+            min: 0,
+            max: 10,
+            decimals: 2,
+            speed: 0.01,
+            suffix: ' s',
+            resetTo: 0,
+            onChanged: (v) => putSelector(
+                selectorWith(a.selector, ease: v.toDouble())),
+          ),
         ),
-      ],
-      // The range: which letters this animator reaches, in per cent of the
-      // words. Offset is the one a cascade is keyed on, which is why it is a
-      // number of its own rather than something the two ends share.
-      if (a.selector.kind == BridgeSelectorKind.range) ...[
-        _numberRow(
-            context,
-            l10n.textAnimatorRangeStart,
-            'range-start-$index',
-            [a.selector.start],
-            -1000,
-            1000,
-            0,
-            (s) => putSelector(selectorWith(a.selector, start: s.first))),
-        _numberRow(
-            context,
-            l10n.textAnimatorRangeEnd,
-            'range-end-$index',
-            [a.selector.end],
-            -1000,
-            1000,
-            100,
-            (s) => putSelector(selectorWith(a.selector, end: s.first))),
-        _numberRow(
-            context,
-            l10n.textAnimatorRangeOffset,
-            'range-offset-$index',
-            [a.selector.offset],
-            -1000,
-            1000,
-            0,
-            (s) => putSelector(selectorWith(a.selector, offset: s.first))),
-      ],
       _plainRow(
         context,
         l10n.textAnimatorBasis,
@@ -408,6 +501,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
             BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
             BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
             BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
+            BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
           },
           onChanged: (s) => putSelector(selectorWith(a.selector, shape: s)),
         ),
@@ -498,6 +592,28 @@ class TextAnimatorRowsFrb extends StatelessWidget {
             10,
             0,
             (s) => put(animatorWith(a, fillR: s[0], fillG: s[1], fillB: s[2]))),
+      // A box behind the letters reached, in a colour of its own rather than
+      // an offset, since there is no box underneath to offset.
+      if (animatorShowsProperty(a, AnimatorProperty.box)) ...[
+        _numberRow(
+            context,
+            l10n.textAnimatorBoxColour,
+            'anim-box-$index',
+            [a.boxR, a.boxG, a.boxB],
+            0,
+            10,
+            0,
+            (s) => put(animatorWith(a, boxR: s[0], boxG: s[1], boxB: s[2]))),
+        _numberRow(
+            context,
+            l10n.textAnimatorBoxOpacity,
+            'anim-box-opacity-$index',
+            [a.boxOpacity],
+            0,
+            100,
+            0,
+            (s) => put(animatorWith(a, boxOpacity: s.first))),
+      ],
       // Variable font axes: where a reached letter is set on the font's own
       // axes, a place rather than an amount, so 900 is the heaviest weight
       // whatever the layer is set at.
@@ -518,12 +634,12 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     int index,
     int k,
     ValueChanged<BridgeTextAnimator> put,
-    BridgeTextStyle style,
+    BridgeTextStyle? style,
   ) {
     final a = animators[index];
     final axis = a.axes[k];
-    final family = style.family;
-    final face = style.face;
+    final family = style?.family ?? '';
+    final face = style?.face ?? '';
     final (lo, hi) = fontAxisRange(family, face, axis.tag);
     void putAxes(List<BridgeAnimatorAxis> axes) =>
         put(animatorWith(a, axes: axes));
@@ -720,6 +836,8 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
         offset: BridgeScalar.static_(0),
         basis: BridgeSelectorBasis.characters,
         shape: BridgeSelectorShape.square,
+        mode: BridgeSelectorMode.range,
+        ease: 0,
         kind: BridgeSelectorKind.range,
         radius: BridgeScalar.static_(200),
         invert: false,
@@ -741,6 +859,10 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       fillR: const BridgeScalar.static_(0),
       fillG: const BridgeScalar.static_(0),
       fillB: const BridgeScalar.static_(0),
+      boxOpacity: const BridgeScalar.static_(0),
+      boxR: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxR)),
+      boxG: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxG)),
+      boxB: BridgeScalar.static_(textAnimatorDefault(TextAnimatorValue.boxB)),
       axes: const [],
       // Nothing listed yet: Add ▸ Property builds it up, as After Effects'
       // blank animator.
@@ -764,6 +886,10 @@ bool animatorHasKeys(BridgeTextAnimator a) => [
       a.fillR,
       a.fillG,
       a.fillB,
+      a.boxOpacity,
+      a.boxR,
+      a.boxG,
+      a.boxB,
       a.selector.radius,
       a.selector.minAmount,
       a.selector.maxAmount,
@@ -791,6 +917,10 @@ BridgeTextAnimator animatorWith(
   BridgeScalar? fillR,
   BridgeScalar? fillG,
   BridgeScalar? fillB,
+  BridgeScalar? boxOpacity,
+  BridgeScalar? boxR,
+  BridgeScalar? boxG,
+  BridgeScalar? boxB,
   List<BridgeAnimatorAxis>? axes,
   List<String>? properties,
 }) =>
@@ -809,6 +939,10 @@ BridgeTextAnimator animatorWith(
       fillR: fillR ?? a.fillR,
       fillG: fillG ?? a.fillG,
       fillB: fillB ?? a.fillB,
+      boxOpacity: boxOpacity ?? a.boxOpacity,
+      boxR: boxR ?? a.boxR,
+      boxG: boxG ?? a.boxG,
+      boxB: boxB ?? a.boxB,
       axes: axes ?? a.axes,
       properties: properties ?? a.properties,
     );
@@ -834,6 +968,10 @@ enum TextAnimatorValue {
   fillR,
   fillG,
   fillB,
+  boxOpacity,
+  boxR,
+  boxG,
+  boxB,
   // A Proximity selector's reach, a Wiggly selector's four, then the font
   // axes in the animator's order.
   radius,
@@ -907,6 +1045,7 @@ enum AnimatorProperty {
   scale('scale'),
   opacity('opacity'),
   fill('fill'),
+  box('box'),
   positionZ('position_z'),
   rotationX('rotation_x'),
   rotationY('rotation_y');
@@ -933,6 +1072,12 @@ enum AnimatorProperty {
             TextAnimatorValue.fillG,
             TextAnimatorValue.fillB
           ],
+        box => const [
+            TextAnimatorValue.boxOpacity,
+            TextAnimatorValue.boxR,
+            TextAnimatorValue.boxG,
+            TextAnimatorValue.boxB
+          ],
         positionZ => const [TextAnimatorValue.positionZ],
         rotationX => const [TextAnimatorValue.rotationX],
         rotationY => const [TextAnimatorValue.rotationY],
@@ -945,6 +1090,7 @@ enum AnimatorProperty {
         scale => l10n.transformScale,
         opacity => l10n.transformOpacity,
         fill => l10n.textAnimatorFillOffset,
+        box => l10n.textAnimatorBox,
         positionZ => '${l10n.transformPosition} z',
         rotationX => '${l10n.transformRotation} x',
         rotationY => '${l10n.transformRotation} y',
@@ -1029,6 +1175,10 @@ String textAnimatorValueLabel(TextAnimatorValue value,
       TextAnimatorValue.fillR => '${l10n.textAnimatorFillOffset} r',
       TextAnimatorValue.fillG => '${l10n.textAnimatorFillOffset} g',
       TextAnimatorValue.fillB => '${l10n.textAnimatorFillOffset} b',
+      TextAnimatorValue.boxOpacity => l10n.textAnimatorBoxOpacity,
+      TextAnimatorValue.boxR => '${l10n.textAnimatorBoxColour} r',
+      TextAnimatorValue.boxG => '${l10n.textAnimatorBoxColour} g',
+      TextAnimatorValue.boxB => '${l10n.textAnimatorBoxColour} b',
       _ => value.name,
     };
 
@@ -1050,6 +1200,10 @@ double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.scaleY ||
       TextAnimatorValue.opacity =>
         100,
+      // The engine's soft yellow.
+      TextAnimatorValue.boxR => 1,
+      TextAnimatorValue.boxG => 0.75,
+      TextAnimatorValue.boxB => 0.15,
       _ => 0,
     };
 
@@ -1072,6 +1226,10 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.fillR => a.fillR,
       TextAnimatorValue.fillG => a.fillG,
       TextAnimatorValue.fillB => a.fillB,
+      TextAnimatorValue.boxOpacity => a.boxOpacity,
+      TextAnimatorValue.boxR => a.boxR,
+      TextAnimatorValue.boxG => a.boxG,
+      TextAnimatorValue.boxB => a.boxB,
       TextAnimatorValue.radius => a.selector.radius,
       TextAnimatorValue.minAmount => a.selector.minAmount,
       TextAnimatorValue.maxAmount => a.selector.maxAmount,
@@ -1105,6 +1263,10 @@ BridgeTextAnimator animatorWithScalar(
       TextAnimatorValue.fillR => animatorWith(a, fillR: to),
       TextAnimatorValue.fillG => animatorWith(a, fillG: to),
       TextAnimatorValue.fillB => animatorWith(a, fillB: to),
+      TextAnimatorValue.boxOpacity => animatorWith(a, boxOpacity: to),
+      TextAnimatorValue.boxR => animatorWith(a, boxR: to),
+      TextAnimatorValue.boxG => animatorWith(a, boxG: to),
+      TextAnimatorValue.boxB => animatorWith(a, boxB: to),
       TextAnimatorValue.radius =>
         animatorWith(a, selector: selectorWith(a.selector, radius: to)),
       TextAnimatorValue.minAmount =>
@@ -1170,6 +1332,8 @@ BridgeRangeSelector selectorWith(
   BridgeScalar? offset,
   BridgeSelectorBasis? basis,
   BridgeSelectorShape? shape,
+  BridgeSelectorMode? mode,
+  double? ease,
   BridgeSelectorKind? kind,
   UuidValue? target,
   bool clearTarget = false,
@@ -1192,6 +1356,8 @@ BridgeRangeSelector selectorWith(
       offset: offset ?? s.offset,
       basis: basis ?? s.basis,
       shape: shape ?? s.shape,
+      mode: mode ?? s.mode,
+      ease: ease ?? s.ease,
       kind: kind ?? s.kind,
       target: clearTarget ? null : (target ?? s.target),
       radius: radius ?? s.radius,

@@ -14,6 +14,7 @@ import 'addons.dart';
 /// engine. A test builds an [AddonService] directly instead.
 AddonService createAddonService() => AddonService(
       list: _list,
+      accepts: (manifest) => addonAccepts(manifest: manifest),
       install: _install,
       remove: _remove,
       runtime: _runtime,

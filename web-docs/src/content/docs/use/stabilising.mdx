@@ -1,0 +1,150 @@
+---
+title: Stabilising
+description: Take the shake out of a shot, work on the steady picture, and put the shake back.
+sidebar:
+  order: 14.6
+---
+
+[Stabilise](/effects/distortion/stabilise/) analyses how the picture moves through a shot
+and moves each frame to steady it. It is an effect, applied to the footage layer or
+Precomp layer holding the shot.
+
+## Stabilise a shot
+
+1. Select the layer and choose **Animation ▸ Stabilise**, or apply **Effect ▸ Distortion ▸
+   Stabilise**.
+2. The analysis starts by itself and runs while you carry on editing. The effect's status
+   line counts the frames, and the Viewer's transport shows the same progress. **Cancel**
+   stops it.
+3. When it finishes, the picture steadies.
+
+**Feature density**, **Use masks**, **Frames** and the layer's masks change what is
+analysed, and the shot is analysed again by itself when one of them changes. Every other
+row reworks the result from the analysis already made.
+
+The analysis of footage is kept in Lumit's cache and read back when the project is
+reopened. A Precomp layer is analysed again each time the project is opened.
+
+An export waits for an analysis that is still running.
+
+## Smooth motion and no motion
+
+**Result** chooses between the two.
+
+| Result | What it does | Rows it reads |
+| --- | --- | --- |
+| **Smooth motion** | keeps the camera's own movement and takes out the shake | **Smoothness** |
+| **No motion** | holds the shot still on one frame | **Reference**, **Use this frame** |
+
+**Smoothness** can be keyframed. So can **Amount**: keyed to 0 on a frame, it leaves that
+frame where it was shot.
+
+A cut inside the footage starts the path again.
+
+Where the camera moved too fast to be followed, the frames round it are steadied less.
+
+## The edges
+
+Moving a frame leaves part of the composition empty. **Edges** says what goes there.
+
+| Edges | What it does | Rows it reads |
+| --- | --- | --- |
+| **Show** | leaves the edges empty | |
+| **Crop** | cuts the picture to the part that is always covered | **Steady crop** |
+| **Crop and scale** | scales the picture up until the edges are out of frame | **Maximum scale**, **Safe margin**, **Steady crop** |
+| **Fill** | fills the edges from the frames before and after | **Fill from**, **Fill feather**, the **Trim** rows |
+
+**Fill** uses the picture's own movement to place the neighbouring frames. Anything that
+moves by itself near an edge is not followed, and where no neighbouring frame covers an
+edge it stays empty.
+
+## Reading the status
+
+| Status | What it means |
+| --- | --- |
+| *Not analysed yet* | no analysis has been made |
+| *Waiting to start* | another analysis is running first |
+| *Analysing 98 of 303* | the analysis is running |
+| *Stabilising* | the analysis is being finished |
+| *Stabilised* | the shot is steady |
+| *Stabilised at 109.3%* | the shot is steady, scaled up by that much to hide its edges |
+| *Needs 162%, over the maximum* | hiding the edges needs more than **Maximum scale** allows, and some edges show |
+| *Stabilised 180 of 303 frames* | the shot stopped being followable part-way, and later frames keep the last correction |
+| *Analysis stopped* | **Cancel** was pressed |
+| *Analysis out of date* | a row that changes what is analysed moved, and the new analysis was stopped or failed; the picture keeps the last one |
+| *The media could not be read* | the footage is offline or would not open |
+| *There are no frames to analyse* | the layer or the span in **Frames** is empty |
+| *Too little in the shot stayed still enough to follow* | nothing could be followed |
+| *Needs footage or a precomp* | the layer is neither |
+
+A thin bar above the line shows the analysed span against the frames asked for.
+
+## The points
+
+With **Show points** on, the points the analysis followed draw over the picture. The ones
+that moved with the picture are filled, and the ones set aside are hollow.
+
+With the layer selected:
+
+- Click a point to pick it, `Shift`-click to add or remove one, or drag a box round several.
+- `Delete` or `Backspace` drops the picked points. Every point moving with them through the
+  shot is dropped too, and the result is reworked without them.
+- `Esc` clears the pick.
+- **Restore points**, beside the count of dropped points, brings them all back.
+
+With **Use masks** on, what is inside the layer's masks is left out of the analysis.
+
+## Working on a steady picture
+
+**Make stabilised precomp**, beside the status line, sets this up:
+
+- A composition named after the layer holds a copy of it, steadied, with **Edges** on
+  *Show*. The copy is a [guide layer](/use/layers/#guide-layers).
+- A Precomp layer of that composition sits above the original and carries a Stabilise in
+  **Reverse**.
+- The original gives up its Stabilise and plays as shot.
+
+Whatever is added inside the precomp sits on a steady picture there, and moves with the
+shot outside it.
+
+### Reverse on any layer
+
+A Stabilise with **Mode** on *Reverse* moves its own layer with the shake of the layer
+named in **Stabilised layer**. That layer needs a Stabilise of its own, switched on.
+
+| Status | What it means |
+| --- | --- |
+| *Follows* and the layer's name | the shake is being put back |
+| *Waiting for* and the layer's name | that layer's analysis is not finished |
+| *Nothing stabilised to follow* | the named layer has no Stabilise switched on |
+
+Where that layer's analysis is missing, stopped or failed, the line shows the layer's name
+and its own status.
+
+## Keyframes instead of an effect
+
+**Convert to keyframes** writes the result onto the layer's own Anchor point, Scale and
+Rotation, one keyframe per frame, and switches the effect off. Values those properties
+already had are kept in the result.
+
+A transform cannot crop, fill or correct a rolling shutter, and *Perspective* is written as
+the nearest position, scale and rotation. A **Reverse** naming the layer stops following
+it.
+
+## From After Effects
+
+A Warp Stabilizer in an imported After Effects project becomes a Stabilise with its
+settings. *Subspace Warp* arrives as *Perspective*, and the shot is analysed again.
+
+:::note[Limitations]
+There is no mesh warp method, and camera gyro data is not read. A Precomp layer's analysis
+is not redone when the composition inside it changes: press **Analyse**.
+:::
+
+## Related
+
+- [Stabilise](/effects/distortion/stabilise/)
+- [Steadying a handheld shot](/tutorials/stabilise-a-shot/)
+- [Tracking](/use/tracking/)
+- [Masks](/use/masks/)
+- [Compositions](/use/compositions/#nest-one-composition-in-another)

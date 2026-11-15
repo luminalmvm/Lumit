@@ -84,6 +84,14 @@ pub(super) fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block
             }
         }
         spacing @ (AxisSpacing::Adaptive | AxisSpacing::Default) => {
+            // Each letter's middle before the push and what it gained, line
+            // by line, so the carets can follow the letters.
+            let mut middles: Vec<Vec<(f32, f32)>> = vec![Vec::new(); laid.lines.len()];
+            for (glyph, gain) in laid.glyphs.iter().zip(&gains) {
+                if let Some(line) = middles.get_mut(glyph.line) {
+                    line.push((glyph.x + glyph.advance * 0.5, *gain));
+                }
+            }
             // Line by line, every letter is pushed on by what the letters
             // before it on the line gained.
             let mut pushed = vec![0.0f32; laid.lines.len().max(1)];
@@ -96,16 +104,32 @@ pub(super) fn respace(laid: &mut Laid, face: &Face, xforms: &[GlyphXform], block
                 *push += gain;
             }
             // Adaptive lines each line up again by what it gained in all.
-            if spacing == AxisSpacing::Adaptive {
-                let share = match block.paragraph.align {
-                    TextAlign::Left => 0.0,
-                    TextAlign::Centre => 0.5,
-                    TextAlign::Right => 1.0,
-                };
-                for glyph in &mut laid.glyphs {
-                    if let Some(gain) = pushed.get(glyph.line) {
-                        glyph.x -= gain * share;
-                    }
+            let share = match (spacing, block.paragraph.align) {
+                (AxisSpacing::Adaptive, TextAlign::Centre) => 0.5,
+                (AxisSpacing::Adaptive, TextAlign::Right) => 1.0,
+                _ => 0.0,
+            };
+            for glyph in &mut laid.glyphs {
+                if let Some(gain) = pushed.get(glyph.line) {
+                    glyph.x -= gain * share;
+                }
+            }
+            // A caret moves by what the letters left of it gained, so the
+            // plates drawn from the carets fit the letters.
+            for ((line, mut letters), total) in laid.lines.iter_mut().zip(middles).zip(&pushed) {
+                letters.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let mut sum = 0.0;
+                for letter in &mut letters {
+                    sum += letter.1;
+                    letter.1 = sum;
+                }
+                for caret in &mut line.carets {
+                    let n = letters.partition_point(|l| l.0 < *caret);
+                    let gained = n
+                        .checked_sub(1)
+                        .and_then(|i| letters.get(i))
+                        .map_or(0.0, |l| l.1);
+                    *caret += gained - total * share;
                 }
             }
         }

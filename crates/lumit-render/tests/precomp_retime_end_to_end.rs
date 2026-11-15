@@ -67,9 +67,13 @@ fn layer(name: &str, kind: LayerKind, out_s: i64) -> Layer {
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -86,6 +90,9 @@ fn comp_of(name: &str, layers: Vec<Layer>, duration_s: i64) -> Composition {
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -341,4 +348,37 @@ fn flow_on_a_slowed_precomp_makes_the_frame_between() {
         lit_between * 10 >= lit_before * 8,
         "and is whole, not a crossfade: {lit_between} of {lit_before} fully lit"
     );
+
+    // RIFE on a machine with no pack: preview paints the same frame with the
+    // built-in engine, and an export refuses it rather than write it.
+    let empty = tempfile::tempdir().unwrap();
+    lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
+    let mut doc = Arc::unwrap_or_clone(doc);
+    for item in &mut doc.items {
+        let ProjectItem::Composition(c) = item else {
+            continue;
+        };
+        for l in &mut c.layers {
+            if let lumit_core::retime::Interpolation::Flow(p) = &mut l.interpolation {
+                p.engine = lumit_core::retime::FlowEngineChoice::Rife;
+            }
+        }
+    }
+    let doc = Arc::new(doc);
+    let rgba = r.render_rgba(&doc, comp, 3, 1.0).expect("the preview").0;
+    let (mut sum, mut n) = (0.0, 0.0);
+    for (i, px) in rgba.chunks_exact(4).enumerate() {
+        sum += (i % w as usize) as f64 * f64::from(px[0]);
+        n += f64::from(px[0]);
+    }
+    assert!(
+        (sum / n.max(1.0) - between).abs() < 1.0,
+        "a missing pack previews with the built-in engine"
+    );
+    r.refuse_substitution();
+    assert!(
+        r.render_rgba(&doc, comp, 3, 1.0).is_err(),
+        "an export never writes the substitution"
+    );
+    lumit_ml::store::with_dir(None);
 }

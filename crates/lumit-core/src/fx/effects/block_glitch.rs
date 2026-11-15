@@ -162,6 +162,15 @@ impl EffectDef for BlockGlitchDef {
         &<BlockGlitch as EffectMetadata>::SCHEMA
     }
 
+    /// A hit that lands on the playhead.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        use crate::fx::presets::PresetValue::Keys;
+        &[crate::fx::presets::EffectPreset {
+            name: "Hit",
+            values: &[("intensity", Keys(&[(0.0, 0.0), (0.1, 1.0), (0.35, 0.0)]))],
+        }]
+    }
+
     /// The discretised tick — the whole of what the old resolve arm did beyond
     /// reading its rows, moved unchanged. `floor` in `f64` and only then
     /// narrowed, exactly as the arm ordered it, so the frame a tick changes on is

@@ -557,6 +557,7 @@ impl LayerReference {
             for effect in &mut copy.effects {
                 effect.id = Uuid::now_v7();
             }
+            lumit_core::grade::versions::respawn(&mut copy.grade_versions);
             // The new layer's picture is its own art's box, so its position
             // follows that box's corner from the one the art was drawn in.
             if let (Some((x0, y0, _, _)), Some((x1, y1, _, _))) = (

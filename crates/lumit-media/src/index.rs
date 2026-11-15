@@ -382,6 +382,11 @@ pub mod tests_support {
 
     /// 2 s of 60 fps test pattern, H.264, GOP 30 → 120 frames, keys at 0/30/60/90.
     pub fn fixture(dir: &Path) -> Option<PathBuf> {
+        fixture_as(dir, "yuv420p")
+    }
+
+    /// [`fixture`] in another pixel format, such as `yuv422p10le`.
+    pub fn fixture_as(dir: &Path, pix_fmt: &str) -> Option<PathBuf> {
         let bin = ffmpeg_bin()?;
         let out = dir.join("fixture.mp4");
         let status = Command::new(bin)
@@ -398,7 +403,7 @@ pub mod tests_support {
                 "-g",
                 "30",
                 "-pix_fmt",
-                "yuv420p",
+                pix_fmt,
             ])
             .arg(&out)
             .status()

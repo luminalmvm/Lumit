@@ -198,6 +198,18 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         Some(out)
     }
 
+    /// The library's LUT a row is read from when its own file is missing, so
+    /// the frame is named by the file it was drawn with.
+    fn file_on_this_machine(&self, path: &str) -> Option<String> {
+        crate::library_luts::found(path)
+    }
+
+    /// What a library font's files hold, for a Text layer drawn with one, so
+    /// the frames drawn before it arrived or after it left are not served.
+    fn font_identity(&self, family: &str) -> Option<[u8; 32]> {
+        lumit_text::fonts::library_identity(family)
+    }
+
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
         self.stamp_with(item, lt, native, None)
     }
@@ -361,8 +373,17 @@ pub fn frame_key_at(
 /// layer time, the same whichever parent asks for it. `None` when the frame
 /// must not be cached — some footage unprobed, or a draft render, whose
 /// decode is narrower than the settled name would claim.
+///
+/// `doc` is the document the comp is read from: the project, or for a copy of
+/// a graphics template the document its values make. The name is made from
+/// it, so two copies with two values are two names.
 pub trait NestedKeyer {
-    fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128>;
+    fn nested_key(
+        &self,
+        doc: &std::sync::Arc<Document>,
+        nested: &Composition,
+        lt: f64,
+    ) -> Option<u128>;
 
     /// The same name, with a placed node graph's own Input values folded in
     /// (docs/impl/node-graph-comp.md §5.3): a graph placed twice with two sets
@@ -374,48 +395,53 @@ pub trait NestedKeyer {
     /// pictures alike.
     fn nested_key_with(
         &self,
+        doc: &std::sync::Arc<Document>,
         nested: &Composition,
         lt: f64,
         inputs: Option<&lumit_core::model::EffectInstance>,
     ) -> Option<u128> {
         match inputs {
-            None => self.nested_key(nested, lt),
+            None => self.nested_key(doc, nested, lt),
             Some(_) => None,
         }
     }
 }
 
-/// The renderer's [`NestedKeyer`]: the document, the probes a render already
-/// gathered, and the quality it renders at.
+/// The renderer's [`NestedKeyer`]: the probes a render already gathered, and
+/// the quality it renders at.
 pub struct NestedKeys<'a> {
-    pub doc: &'a std::sync::Arc<Document>,
     pub probes: &'a dyn SourceProbes,
     pub quality: Quality,
 }
 
 impl NestedKeyer for NestedKeys<'_> {
-    fn nested_key(&self, nested: &Composition, lt: f64) -> Option<u128> {
+    fn nested_key(
+        &self,
+        doc: &std::sync::Arc<Document>,
+        nested: &Composition,
+        lt: f64,
+    ) -> Option<u128> {
         if self.quality.draft {
             return None;
         }
         // Named the way this thread shows models, as the frame around it is.
-        frame_key_at(self.doc, nested, lt, self.quality, self.probes)
-            .map(crate::model::named_as_shown)
+        frame_key_at(doc, nested, lt, self.quality, self.probes).map(crate::model::named_as_shown)
     }
 
     fn nested_key_with(
         &self,
+        doc: &std::sync::Arc<Document>,
         nested: &Composition,
         lt: f64,
         inputs: Option<&lumit_core::model::EffectInstance>,
     ) -> Option<u128> {
-        let base = self.nested_key(nested, lt)?;
+        let base = self.nested_key(doc, nested, lt)?;
         let Some(inst) = inputs else {
             return Some(base);
         };
-        let stamper = Stamper::new(self.doc, self.probes, self.quality);
+        let stamper = Stamper::new(doc, self.probes, self.quality);
         let extra = lumit_eval::instance_key(
-            self.doc,
+            doc,
             nested,
             inst,
             lt,
@@ -539,6 +565,9 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -571,9 +600,13 @@ mod tests {
                 adjustment: false,
                 pitch_follows_speed: false,
                 audio_routes: Default::default(),
+                audio_gain_db: 0.0,
+                automation: Default::default(),
+                duck: None,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),

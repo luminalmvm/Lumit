@@ -81,6 +81,10 @@ fn animator_rows(animator: &mut TextAnimator) -> Vec<&mut Property> {
         fill_r,
         fill_g,
         fill_b,
+        box_opacity,
+        box_r,
+        box_g,
+        box_b,
         axes,
         ..
     } = animator;
@@ -105,8 +109,45 @@ fn animator_rows(animator: &mut TextAnimator) -> Vec<&mut Property> {
         fill_r,
         fill_g,
         fill_b,
+        box_opacity,
+        box_r,
+        box_g,
+        box_b,
     ];
     rows.extend(axes.iter_mut().map(|a| &mut a.value));
+    rows
+}
+
+/// The same numbers, to read.
+#[must_use]
+pub fn animator_values(a: &TextAnimator) -> Vec<&Property> {
+    let mut rows = vec![
+        &a.selector.start,
+        &a.selector.end,
+        &a.selector.offset,
+        &a.selector.radius,
+        &a.selector.min_amount,
+        &a.selector.max_amount,
+        &a.selector.wiggles,
+        &a.selector.correlation,
+        &a.position_x,
+        &a.position_y,
+        &a.rotation,
+        &a.position_z,
+        &a.rotation_x,
+        &a.rotation_y,
+        &a.scale_x,
+        &a.scale_y,
+        &a.opacity,
+        &a.fill_r,
+        &a.fill_g,
+        &a.fill_b,
+        &a.box_opacity,
+        &a.box_r,
+        &a.box_g,
+        &a.box_b,
+    ];
+    rows.extend(a.axes.iter().map(|a| &a.value));
     rows
 }
 

@@ -578,7 +578,8 @@ void main() {
     await tester.pump();
 
     // The layer Timeline mounted last and took the slot; the Audio timeline
-    // takes it while it is the focused panel and gives it straight back.
+    // sits under it in the chain and answers only while it is the focused
+    // panel.
     p.ui.activePane.value = Panel.timeline.pane();
     await tester.pump();
     expect(p.ui.deleteClaim?.call() ?? false, isFalse,

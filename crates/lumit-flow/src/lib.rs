@@ -20,7 +20,9 @@
 //! synthesis step falls back to a plain crossfade wherever both frames lost
 //! sight of a pixel (the documented graceful degradation).
 
+pub mod chain;
 pub mod gpu;
+mod rows;
 pub mod synth;
 
 /// Patch side in pixels (impl note §1: 8×8 patches).
@@ -271,15 +273,7 @@ pub fn to_gray(rgba: &[u8], w: usize, h: usize) -> Gray {
 /// frame is scene-linear and may run above white, and the HUD guard's own
 /// gradient measure works on differences, so nothing is clamped on the way in.
 pub fn to_gray_as<T: Texel>(rgba: &[u8], w: usize, h: usize) -> Gray {
-    let mut data = vec![0f32; w * h];
-    let scale = if T::BYTES == 4 { 1.0 / 255.0 } else { 1.0 };
-    for (i, px) in data.iter_mut().enumerate() {
-        let r = T::get(rgba, i, 0);
-        let g = T::get(rgba, i, 1);
-        let b = T::get(rgba, i, 2);
-        *px = (0.2126 * r + 0.7152 * g + 0.0722 * b) * scale;
-    }
-    Gray { w, h, data }
+    rows::to_gray_as::<T>(rgba, w, h)
 }
 
 fn sample_scalar(data: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
@@ -301,19 +295,7 @@ fn sample_scalar(data: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
 
 /// Box-downsample by 2 (the pyramid step; mirrored exactly in WGSL).
 pub(crate) fn downsample(g: &Gray) -> Gray {
-    let w = (g.w / 2).max(1);
-    let h = (g.h / 2).max(1);
-    let mut data = vec![0f32; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let x0 = (2 * x).min(g.w - 1);
-            let y0 = (2 * y).min(g.h - 1);
-            let x1 = (2 * x + 1).min(g.w - 1);
-            let y1 = (2 * y + 1).min(g.h - 1);
-            data[y * w + x] = 0.25 * (g.at(x0, y0) + g.at(x1, y0) + g.at(x0, y1) + g.at(x1, y1));
-        }
-    }
-    Gray { w, h, data }
+    rows::downsample(g)
 }
 
 /// Sobel gradients of `g`, normalised to intensity-per-pixel (÷8), clamped
@@ -1029,27 +1011,7 @@ fn occlusion_raw(f: &FlowField, g: &FlowField) -> Vec<u8> {
 /// mismatched-size `g` returns all-1 (claim nothing suspect — degrade to the
 /// plain smear, never a fault).
 pub fn confidence(f: &FlowField, g: &FlowField) -> Vec<f32> {
-    let (w, h) = (f.w, f.h);
-    let raw = agreement(f, g);
-    let n = raw.len();
-    // 3×3 box blur: ramp the confidence over a pixel so the streak-length taper
-    // has no visible seam.
-    let mut out = vec![0f32; n];
-    for y in 0..h {
-        for x in 0..w {
-            let (mut acc, mut cnt) = (0f32, 0f32);
-            for oy in -1i32..=1 {
-                for ox in -1i32..=1 {
-                    let qx = (x as i32 + ox).clamp(0, w as i32 - 1) as usize;
-                    let qy = (y as i32 + oy).clamp(0, h as i32 - 1) as usize;
-                    acc += raw[qy * w + qx];
-                    cnt += 1.0;
-                }
-            }
-            out[y * w + x] = acc / cnt;
-        }
-    }
-    out
+    rows::blur3(&agreement(f, g), f.w, f.h)
 }
 
 /// [`confidence`] before its blur: each pixel's own agreement between the two
@@ -1059,34 +1021,7 @@ pub fn confidence(f: &FlowField, g: &FlowField) -> Vec<f32> {
 /// vector while gaining the trust. [`borrow_uncertain`] reads this one.
 #[must_use]
 pub fn agreement(f: &FlowField, g: &FlowField) -> Vec<f32> {
-    let (w, h) = (f.w, f.h);
-    let n = w * h;
-    if g.w != w || g.h != h || f.u.len() != n || g.u.len() != n {
-        return vec![1.0; n];
-    }
-    let mut raw = vec![0f32; n];
-    for y in 0..h {
-        for x in 0..w {
-            let i = y * w + x;
-            let (fu, fv) = (f.u[i], f.v[i]);
-            let gu = sample_scalar(&g.u, w, h, x as f32 + fu, y as f32 + fv);
-            let gv = sample_scalar(&g.v, w, h, x as f32 + fu, y as f32 + fv);
-            let cn = ((fu + gu) * (fu + gu) + (fv + gv) * (fv + gv)).sqrt();
-            let fn_ = (fu * fu + fv * fv).sqrt();
-            let gn = (gu * gu + gv * gv).sqrt();
-            // Same rel/abs scale the occlusion cut-off uses (§2): cn == 0 → 1,
-            // cn == thr → 0, linear and clamped between. Smooth, no step.
-            let thr = (OCC_REL * (fn_ + gn)).max(OCC_ABS);
-            let agree = (1.0 - cn / thr).clamp(0.0, 1.0);
-            // Validity *dims* confidence rather than extinguishing it. FX-19's
-            // whole point was that a hard cut-off shows as a hard edge between
-            // blurred and unblurred; a binary term inside a smooth measure is
-            // that cut-off wearing a disguise. An unexplained pixel whose two
-            // directions still agree has a vector worth some of its streak.
-            raw[i] = agree * if f.valid[i] == 0 { VALID_DIM } else { 1.0 };
-        }
-    }
-    raw
+    rows::agreement(f, g)
 }
 
 /// `f` with every uncertain vector replaced by the motion of the nearest

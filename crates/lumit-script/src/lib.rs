@@ -71,6 +71,119 @@ pub trait Host {
     /// Stop export `job`. Stopping one that has finished does nothing.
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError>;
 
+    /// Start exporting `comp` to `out` from the project with `ops` made to
+    /// it, as one row's version of a graphics template is. The project
+    /// itself is left as it is. Exports wait their turn, so many can be
+    /// started. Answers a number to ask after it with and the file it
+    /// writes, which is never one already there. A host that does not say
+    /// otherwise exports nothing.
+    fn export_version(
+        &self,
+        comp: Uuid,
+        ops: Vec<Op>,
+        out: &Path,
+    ) -> Result<(u64, PathBuf), ScriptError> {
+        let _ = (comp, ops, out);
+        Err(ScriptError::Failed("Rows cannot be exported here.".into()))
+    }
+
+    /// Every graphics template in the library, by name. A host with no
+    /// library has none.
+    fn template_library(&self) -> Vec<LibraryTemplate> {
+        Vec::new()
+    }
+
+    /// Bring the graphics template in the `.lumt` file at `path` into the
+    /// project, as one step. Answers its comp, which is the one the project
+    /// has when it already holds that version. A host that does not say
+    /// otherwise brings nothing.
+    fn template_bring(&self, path: &Path) -> Result<Uuid, ScriptError> {
+        let _ = path;
+        Err(ScriptError::Failed(
+            "Graphics templates cannot be brought in here.".into(),
+        ))
+    }
+
+    /// Save `comp` to the library as `name` in `group`, with the font files
+    /// its text names when `pack_fonts` is on, and mark the comp as that
+    /// save. Answers the file. A host that does not say otherwise saves
+    /// nothing.
+    fn template_save(
+        &self,
+        comp: Uuid,
+        name: &str,
+        group: &str,
+        pack_fonts: bool,
+    ) -> Result<PathBuf, ScriptError> {
+        let _ = (comp, name, group, pack_fonts);
+        Err(ScriptError::Failed(
+            "Graphics templates cannot be saved here.".into(),
+        ))
+    }
+
+    /// Bring the Lottie at `path` (a `.json` or a `.lottie`) in as comps, as
+    /// one step: its precomps go in a folder named after the file, and its
+    /// pictures are written beside it. Answers the main comp and what didn't
+    /// come across, a line each.
+    fn import_lottie(&self, path: &Path) -> Result<(Uuid, Vec<String>), ScriptError> {
+        let bytes = lumit_ingress::read_capped(path, lumit_lottie::import::LIMITS.bytes)
+            .map_err(|e| match e {
+                lumit_ingress::IngressError::Io { .. } => format!("{e}."),
+                e => lumit_lottie::LottieError::from(e).to_string(),
+            })
+            .map_err(ScriptError::Failed)?;
+        let imported = lumit_lottie::import::import(&bytes, path)
+            .map_err(|e| ScriptError::Failed(e.to_string()))?;
+        for (file, data) in &imported.files {
+            // The same picture from an earlier import of the same file is
+            // left as it is.
+            if lumit_ingress::files::read(file).is_ok_and(|old| old == *data) {
+                continue;
+            }
+            let written = file
+                .parent()
+                .map_or(Ok(()), lumit_ingress::files::create_dir_all)
+                .and_then(|()| lumit_ingress::files::write(file, data));
+            written.map_err(|e| {
+                ScriptError::Failed(format!("{} could not be written: {e}.", file.display()))
+            })?;
+        }
+        let base = self.store().snapshot().items.len();
+        let ops = imported
+            .items
+            .into_iter()
+            .enumerate()
+            .map(|(n, item)| Op::AddItem {
+                index: base + n,
+                item: Box::new(item),
+            })
+            .collect();
+        self.store()
+            .commit(Op::Batch { ops })
+            .map_err(|e| ScriptError::Failed(e.to_string()))?;
+        let lines = imported
+            .report
+            .iter()
+            .map(|row| format!("{}: {}", row.path, row.reason))
+            .collect();
+        Ok((imported.main, lines))
+    }
+
+    /// Write `comp` to `out` as a Lottie, a dotLottie or an animated SVG.
+    /// Answers what won't come across, a line each. A host that does not say
+    /// otherwise writes nothing.
+    fn export_vector(
+        &self,
+        comp: Uuid,
+        out: &Path,
+        settings: &lumit_lottie::settings::Settings,
+    ) -> Result<Vec<String>, ScriptError> {
+        let _ = (comp, out, settings);
+        Err(ScriptError::Failed(
+            "Lottie and SVG files cannot be written here.".into(),
+        ))
+    }
+
     /// Render frame `frame` of `comp` at `scale` of its size to a new PNG at
     /// `out`, never over a file. Answers the picture's width and height. A
     /// host that does not say otherwise renders nothing.
@@ -145,6 +258,27 @@ pub struct FootageInfo {
     pub frame_rate: Option<FrameRate>,
     /// How long it runs. `None` for a still.
     pub duration: Option<Duration>,
+}
+
+/// One graphics template in the library, as `template.list` answers it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LibraryTemplate {
+    pub name: String,
+    /// The folder it is in under the templates folder, parted by `/`. Empty
+    /// at the top.
+    pub group: String,
+    /// The `.lumt` file.
+    pub path: PathBuf,
+    /// The same through every version of one template.
+    pub id: Uuid,
+    pub version: u32,
+    pub width: u32,
+    pub height: u32,
+    pub seconds: f64,
+    /// Its controls' names.
+    pub controls: Vec<String>,
+    /// The fonts it names that are neither on this machine nor in the file.
+    pub missing_fonts: Vec<String>,
 }
 
 /// Where an export has got to.

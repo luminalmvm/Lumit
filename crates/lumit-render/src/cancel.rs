@@ -53,6 +53,17 @@ impl Drop for Scope {
     }
 }
 
+/// `error` with `what` in front of it, unless it is a stop: that is passed on
+/// as itself, so the worker can still tell it from a fault.
+#[must_use]
+pub fn or_fault(error: String, what: &str) -> String {
+    if error == CANCELLED {
+        error
+    } else {
+        format!("{what}: {error}")
+    }
+}
+
 /// True when the render on this thread has been asked to stop.
 #[must_use]
 pub fn requested() -> bool {

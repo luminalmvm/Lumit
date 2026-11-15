@@ -1,0 +1,74 @@
+---
+title: Putting a transition on a cut
+description: Put a whip pan on a cut, tune it, add a flash, and key the same move between two layers.
+sidebar:
+  order: 12
+---
+
+A [transition](/use/cutting/#fades-and-dissolves) runs across the overlap of two clips in the
+Cut timeline. The same ones can be keyed between two layers.
+
+**1. Open the edit.** Switch to the **Cut** workspace on the strip at the right of the
+toolbar, and open the composition.
+
+**2. Put a whip pan on a cut.** Right-click a picture clip near the end that meets the next
+clip and choose **Transition ▸ Moves ▸ Move ▸ Whip left**. The two clips overlap by a second,
+and the transition's rows open in [Effect controls](/panels/effect-controls/), marked
+**Transition**. With no spare media at the cut it is refused.
+
+**3. Set its length.** Right-click the overlap, choose **Length…** and type the length in
+frames.
+
+**4. Tune the smear.** In Effect controls, lower **Smear** from 60 for a cleaner pan, or
+raise it for a longer streak.
+
+**5. Tune the ease.** Set **Ease** to **Smooth** for an even pan. **Sharp**, which the whip
+starts on, is slow at both ends and fast in the middle.
+
+**6. Play it.** Put the playhead before the cut and press `Space`.
+
+**7. Put a flash on another cut.** Right-click a clip at the next cut and choose
+**Transition ▸ Hits ▸ Flash ▸ Flash**. The flash peaks in the middle of the overlap, where
+one clip gives way to the other.
+
+**8. Set how strong it is.** In Effect controls, **Intensity** is the flash at the middle of
+the overlap, and **Colour** is what it flashes to.
+
+## Between two layers
+
+**1. Overlap two layers.** In the **Edit** workspace, drag one layer's bar in the Timeline
+until it starts before the other ends.
+
+**2. Select both.** Click one layer's row and `Ctrl`+click the other.
+
+**3. Choose Layer ▸ Transition ▸ Moves ▸ Move ▸ Whip left.** A Move is added to each layer
+and keyed across the overlap. The upper layer's **Opacity** is keyed across the crossfade.
+
+**4. Tune both layers.** Select one layer and change **Smear** and **Ease** on its Move in
+Effect controls. Do the same on the other.
+
+## Save the look
+
+**1. Save the outgoing side.** Select the layer that starts first, right-click the **Move**
+heading in Effect controls and choose **Save preset…**. Name it. The bottom strip reads
+**Preset saved**.
+
+**2. Save the incoming side.** Do the same on the other layer, under another name. Each
+preset holds its layer's **Side** and keys.
+
+**3. Use them on another pair.** Put any Move between the two layers with
+**Layer ▸ Transition**, and move the playhead to where the later layer starts. On each
+layer's Move heading choose **Presets ▸** and that side's preset. The keys start at the
+playhead and keep the length they were saved with.
+
+:::note[Not built]
+Saving a look from an overlap in the Cut timeline, or applying a saved one to it.
+:::
+
+## Related
+
+- [Cutting](/use/cutting/#fades-and-dissolves)
+- [Layers](/use/layers/#transition-between-two-layers)
+- [Move](/effects/transition/move/)
+- [Flash](/effects/stylise/flash/)
+- [Effect presets](/use/presets/)

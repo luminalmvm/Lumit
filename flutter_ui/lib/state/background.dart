@@ -23,6 +23,19 @@ const MethodChannel _channel = MethodChannel('lumit/window');
 /// follows the pointer there, not Flutter (lib/shell/window_frame.dart).
 final ValueNotifier<bool> maximiseHovered = ValueNotifier<bool>(false);
 
+/// The floating window whose maximise button the pointer is on, by its
+/// native handle, or null for none.
+final ValueNotifier<int?> floatingMaximiseHovered = ValueNotifier<int?>(null);
+
+/// Told what else the runner says about windows (lib/shell/pop_out.dart).
+void Function(String method, Object? arguments)? onWindowEvent;
+
+/// The floating window a runner message names, or null for the main one.
+int? _windowNamed(Object? arguments) {
+  final window = arguments is Map ? arguments['window'] : null;
+  return window is int ? window : null;
+}
+
 /// Tell the runner whether closing the window keeps Lumit running, and
 /// whether Lumit starts in the tray at sign-in. The runner writes or removes
 /// that entry each time, so it follows the copy of Lumit that last started.
@@ -49,6 +62,25 @@ Future<void> showWindow() async {
   }
 }
 
+/// Show [title] and [body] as the system's own notification. A click on it
+/// brings the window back.
+Future<void> notifyDesktop(String title, String body) async {
+  try {
+    await _channel.invokeMethod<void>('notify', {'title': title, 'body': body});
+  } catch (_) {
+    // No runner listening.
+  }
+}
+
+/// Close the window, which with Keep running on leaves Lumit in the tray.
+Future<void> closeWindow() async {
+  try {
+    await _channel.invokeMethod<void>('close');
+  } catch (_) {
+    // No runner listening.
+  }
+}
+
 /// Answer the runner. [hidden] runs when the window has been closed into the
 /// tray. Quit in the tray is an ordinary quit, so the unsaved work question
 /// is asked the way closing the window asks it.
@@ -63,9 +95,21 @@ void listenToRunner({required VoidCallback hidden}) {
       case 'backdrop':
         WindowBackdrop.refresh();
       case 'maximiseHover':
-        maximiseHovered.value = true;
+        final window = _windowNamed(call.arguments);
+        if (window == null) {
+          maximiseHovered.value = true;
+        } else {
+          floatingMaximiseHovered.value = window;
+        }
       case 'maximiseLeave':
-        maximiseHovered.value = false;
+        final window = _windowNamed(call.arguments);
+        if (window == null) {
+          maximiseHovered.value = false;
+        } else if (floatingMaximiseHovered.value == window) {
+          floatingMaximiseHovered.value = null;
+        }
+      default:
+        onWindowEvent?.call(call.method, call.arguments);
     }
   });
 }

@@ -26,7 +26,10 @@ macro_rules! out {
 
 mod host;
 mod interrupt;
+mod job;
 mod relay;
+mod rows;
+mod vector;
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -40,14 +43,16 @@ use lumit_render::export::ExportSpec;
 use lumit_script::{script::Limits, script::RunOptions, ExportState, Host};
 use uuid::Uuid;
 
-use crate::api::export::BridgeExportSpec;
+use crate::api::export::{BridgeCaptionsOut, BridgeExportSpec};
 
 const HELP: &str = "\
 Lumit on the command line.
 
 Usage:
-  lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>]
-                   [--range <in>-<out>] [--out <file>]
+  lumit-cli export <project.lum|template.lumt> [--comp <name>]... [--all-comps]
+                   [--preset <name>] [--range <in>-<out>] [--captions <how>]
+                   [--out <file>] [--format lottie|dotlottie|svg] [--text shapes|text]
+                   [--minify] [--data <file>] [--rows <first>-<last>]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
   lumit-cli mcp [--project <project.lum>]
@@ -55,15 +60,31 @@ Usage:
   lumit-cli --version
 
 export     Export comps of a project, by default as an H.264 mp4 with sound.
+           The project may be a graphics template's .lumt file instead, and
+           its own comp is then the one exported.
   --comp       The comp, by name or id. Needed when the project has more than one.
                Repeat it for more comps, each to its own file.
   --all-comps  Every comp in the project.
   --preset     A saved export preset, by the name Lumit's Export window shows.
   --range      The frames to export, first and last, such as 0-119. Without it,
                the work area, or the whole comp when there is none.
+  --captions   What happens to caption layers: burn draws them into the picture,
+               srt or vtt writes them in a file beside it, and embed carries
+               them inside an mp4 or mov. Without it, the preset's choice.
   --out        The file to write. With several comps, the folder they go in.
                Without it, beside the project, named as Lumit's Export window
                names them, never over a file.
+  --format     Write a Lottie (.json), a dotLottie (.lottie) or an animated SVG
+               instead of a video. An --out ending in one of those does the same.
+               What won't come across is listed on standard error.
+  --text       How a Lottie writes text: as outlines (shapes, the default) or
+               as text naming its font.
+  --minify     The smallest Lottie or SVG: no names, fewer decimals.
+  --data       A CSV, TSV or JSON file of rows for a graphics template: one
+               export for each row, its controls set from the columns of their
+               names. --comp names the template. --out is then the files' name,
+               which may hold {Column}, {row}, {comp} and {date}.
+  --rows       With --data, the rows to export, first and last, counting from 1.
 
 run        Run a JavaScript or After Effects (.jsx) script on a project, or on a
            new empty one.
@@ -101,6 +122,10 @@ enum Command {
         /// `None` for the project open in Lumit.
         project: Option<PathBuf>,
     },
+    /// A remote export another computer sent, which Lumit starts this for.
+    ExportJob {
+        folder: PathBuf,
+    },
 }
 
 /// Which comps `export` writes, and how.
@@ -114,6 +139,17 @@ struct Export {
     range: Option<(u64, u64)>,
     /// The file, or with several comps the folder.
     out: Option<PathBuf>,
+    /// A vector format key (`lottie`, `dotlottie`, `svg`) in place of a video.
+    format: Option<String>,
+    /// Text as text naming its font rather than as outlines.
+    text_as_text: bool,
+    minify: bool,
+    /// What happens to caption layers, when not the preset's choice.
+    captions: Option<BridgeCaptionsOut>,
+    /// A file of rows to export a graphics template once for each of.
+    data: Option<PathBuf>,
+    /// With `data`, the first and last row, counting from 1.
+    rows: Option<(u32, u32)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -163,6 +199,7 @@ fn main() -> i32 {
         Command::Mcp {
             project: Some(project),
         } => mcp(&project),
+        Command::ExportJob { folder } => job::export_job(&folder),
     };
     match done {
         Ok(()) => 0,
@@ -272,6 +309,49 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 how.range = Some(frames);
             }
             ("export", "--out") => how.out = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("export", "--data") => how.data = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("export", "--rows") => {
+                let range = text(wants(&flag, rest.pop())?)?;
+                let rows = range
+                    .split_once('-')
+                    .and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)))
+                    .or_else(|| range.trim().parse().ok().map(|one| (one, one)))
+                    .filter(|(a, b)| *a >= 1 && a <= b)
+                    .ok_or_else(|| {
+                        format!("--rows takes a first and last row, such as 1-20, not {range}.")
+                    })?;
+                how.rows = Some(rows);
+            }
+            ("export", "--format") => {
+                let key = text(wants(&flag, rest.pop())?)?;
+                if lumit_lottie::settings::Format::from_key(&key).is_none() {
+                    return Err(format!(
+                        "--format takes lottie, dotlottie or svg, not {key}."
+                    ));
+                }
+                how.format = Some(key);
+            }
+            ("export", "--text") => {
+                how.text_as_text = match text(wants(&flag, rest.pop())?)?.as_str() {
+                    "shapes" => false,
+                    "text" => true,
+                    other => return Err(format!("--text takes shapes or text, not {other}.")),
+                }
+            }
+            ("export", "--minify") => how.minify = true,
+            ("export", "--captions") => {
+                how.captions = Some(match text(wants(&flag, rest.pop())?)?.as_str() {
+                    "burn" => BridgeCaptionsOut::Burn,
+                    "srt" => BridgeCaptionsOut::Srt,
+                    "vtt" => BridgeCaptionsOut::Vtt,
+                    "embed" => BridgeCaptionsOut::Embed,
+                    other => {
+                        return Err(format!(
+                            "--captions takes burn, srt, vtt or embed, not {other}."
+                        ))
+                    }
+                })
+            }
             ("run" | "mcp", "--project") => {
                 project = Some(PathBuf::from(wants(&flag, rest.pop())?))
             }
@@ -304,6 +384,12 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
             if how.all && !how.comps.is_empty() {
                 return Err("--all-comps and --comp go one at a time.".into());
             }
+            if how.rows.is_some() && how.data.is_none() {
+                return Err("--rows needs --data.".into());
+            }
+            if how.data.is_some() && how.all {
+                return Err("--data takes one comp, so not --all-comps.".into());
+            }
             Ok(Command::Export {
                 project: one("a project")?,
                 how,
@@ -320,6 +406,9 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 args: script_args,
             })
         }
+        "export-job" => Ok(Command::ExportJob {
+            folder: one("a job folder")?,
+        }),
         "mcp" => {
             if !positional.is_empty() {
                 return Err("mcp takes the project with --project.".into());
@@ -367,9 +456,12 @@ fn note_unreadable_frames() {
 }
 
 fn export(project: &Path, how: Export) -> Result<(), String> {
+    if let Some(format) = vector::format_of(&how) {
+        return vector::export(project, &how, format);
+    }
     let stop = interrupt::stop_flag();
     // The preset first, so a misspelt name is heard before the project opens.
-    let settings = match &how.preset {
+    let mut settings = match &how.preset {
         Some(name) => crate::export::preset_get(name).ok_or_else(|| {
             let names: Vec<String> = crate::export::preset_list()
                 .into_iter()
@@ -383,25 +475,19 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
         None => crate::export::from_export_spec(&ExportSpec::default())
             .ok_or("This build of Lumit cannot export.")?,
     };
+    settings.captions = how.captions.unwrap_or(settings.captions);
+    if let Some(data) = &how.data {
+        return rows::export(project, &how, data, &settings);
+    }
     let host = open(project)?;
     // Extension effects draw in an export as they do in Lumit.
     crate::api::extensions::register_effects();
-    let comps = if how.all {
-        host.comps()
-    } else if how.comps.is_empty() {
-        vec![host.find_comp(None)?]
-    } else {
-        how.comps
-            .iter()
-            .map(|key| host.find_comp(Some(key)))
-            .collect::<Result<_, _>>()?
-    };
-    if comps.is_empty() {
-        return Err("The project has no comp.".into());
-    }
+    let comps = chosen_comps(&host, &how)?;
+    // Beside the project, or beside the template file it was opened from.
     let beside = host
         .path()
         .and_then(|p| p.parent().map(Path::to_path_buf))
+        .or_else(|| project.parent().map(Path::to_path_buf))
         .unwrap_or_default();
     // With several comps, --out is where they all go.
     let folder = match &how.out {
@@ -448,6 +534,24 @@ fn export(project: &Path, how: Export) -> Result<(), String> {
     }
 }
 
+/// The comps `how` names, or the project's only one.
+fn chosen_comps(host: &Headless, how: &Export) -> Result<Vec<(Uuid, String)>, String> {
+    let comps = if how.all {
+        host.comps()
+    } else if how.comps.is_empty() {
+        vec![host.find_comp(None)?]
+    } else {
+        how.comps
+            .iter()
+            .map(|key| host.find_comp(Some(key)))
+            .collect::<Result<_, _>>()?
+    };
+    if comps.is_empty() {
+        return Err("The project has no comp.".into());
+    }
+    Ok(comps)
+}
+
 /// Where comp `name` exports to in `dir` when nobody says: named as the
 /// Export window names it, from the file name set in Settings > Export or
 /// else the comp's name, and never over a file already there.
@@ -463,8 +567,13 @@ fn export_name(dir: &Path, settings: &BridgeExportSpec, name: &str) -> PathBuf {
     let stem = file.strip_suffix(".mp4").unwrap_or(&file);
     let path = dir.join(stem).to_string_lossy().into_owned();
     let path = crate::export::with_format_extension(&path, &settings.codec);
-    if crate::export::path_taken(&path, &settings.codec) {
-        PathBuf::from(crate::export::free_path(&path, &settings.codec))
+    if crate::export::taken::path_taken(&path, &settings.codec, settings.captions, &settings.also) {
+        PathBuf::from(crate::export::taken::free_path(
+            &path,
+            &settings.codec,
+            settings.captions,
+            &settings.also,
+        ))
     } else {
         PathBuf::from(path)
     }

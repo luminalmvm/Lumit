@@ -14,11 +14,13 @@ void main() {
     BridgeAudioMeter meter(String layer, double peak, {bool clipped = false}) =>
         BridgeAudioMeter(
           layer: layer,
+          kind: layer.isEmpty ? BridgeMeterKind.master : BridgeMeterKind.strip,
           peakLeft: peak,
           peakRight: peak,
           rmsLeft: peak * 0.7,
           rmsRight: peak * 0.7,
           clipped: clipped,
+          gainReductionDb: 0,
         );
 
     test('the hold rides the loudest peak and lets go after the hold time',

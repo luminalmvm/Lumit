@@ -8,22 +8,33 @@ import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
 import 'beats.dart';
+import 'captions.dart';
 import 'comp_graph.dart';
 import 'cut.dart';
+import 'cut/multicam.dart';
+import 'cut/transcript.dart';
 import 'effect.dart';
 import 'export.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'grade_lut.dart';
+import 'grade_matte.dart';
+import 'grade_shots.dart';
+import 'grade_solve.dart';
 import 'graph.dart';
 import 'graph_looks.dart';
+import 'import.dart';
 import 'layer.dart';
+import 'mixer.dart';
 import 'model.dart';
 import 'model_rows.dart';
+import 'multicam.dart';
 import 'orient.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'planes.dart';
 import 'project_item.dart';
+import 'remote.dart';
 import 'roto.dart';
 import 'routes.dart';
 import 'shape.dart';
@@ -31,11 +42,18 @@ import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'state/prefix.dart';
+import 'stills.dart';
 import 'streams.dart';
+import 'template.dart';
+import 'template/copy.dart';
+import 'template/data.dart';
+import 'template/library.dart';
+import 'template/rows.dart';
+import 'vector.dart';
 import 'wire_tie.dart';
 import 'wireframes.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -602,6 +620,13 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddCardLayer(
               that: this, row: row, frame: frame);
 
+  /// **Add to controls**: make a control for each of `rows` that is not one
+  /// already, after the controls there are. Answers the new controls' ids.
+  /// A row no control can set is passed over.
+  List<String> addControls({required List<BridgeRowRef> rows}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAddControls(
+          that: this, rows: rows);
+
   /// Add an empty Audio layer: a row for sound clips with nothing on it yet,
   /// so there is somewhere to put them. One undo step.
   LayerReference addEmptyAudioLayer({int? row}) => BridgeLib.instance.api
@@ -713,6 +738,17 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddLightLayer(
               that: this, kind: kind, row: row);
+
+  /// Make a menu control: a Menu row in a Custom controls effect, on the
+  /// layer that already carries one or on a new Null layer called
+  /// `layer_name`, and a control for it. Answers the control's id.
+  String addMenuControl(
+          {required String label,
+          required List<String> options,
+          required String layerName}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddMenuControl(
+              that: this, label: label, options: options, layerName: layerName);
 
   /// Add 3D shape `entry` of the menu (cube, sphere, cylinder, cone, torus,
   /// plane, then pyramid) at comp point `at`, or the comp's centre. In a
@@ -844,6 +880,20 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAnimatedMaskPathsAt(
               that: this, frame: frame);
 
+  /// Hear the mix toward `frame` (fractional) at the speed of the drag,
+  /// the pitch following: call it on every move of a dragged playhead. The
+  /// transport stays stopped and the clock does not move. Before the mix
+  /// is loaded it asks for it and is silent until it lands.
+  void audioJog({required double frame}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioJog(
+          that: this, frame: frame);
+
+  /// The drag is over: the jog fades out.
+  void audioJogEnd() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioJogEnd(
+        that: this,
+      );
+
   /// This comp's **mix** summarised over `[start_seconds, end_seconds)` of
   /// comp time, in `buckets` buckets - what the Timeline's Sound mix row
   /// draws: every layer through its fader, the master and the limiter, the
@@ -860,17 +910,23 @@ class CompositionReference {
   /// shortly. One band, like a plain wave: the stack's filters want the
   /// samples, and a mix keeps none.
   ///
+  /// With `bus`, a Bus layer's lane instead: what is routed to it through
+  /// each source's fader and send level, before its own rack and fader.
+  /// Empty when that bus is not in the mix.
+  ///
   /// Not `#[frb(sync)]`: a wide window walks a fair stretch of the plan.
   Future<BridgeAudioPeaks> audioMixPeaks(
           {required double startSeconds,
           required double endSeconds,
-          required int buckets}) =>
+          required int buckets,
+          UuidValue? bus}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAudioMixPeaks(
               that: this,
               startSeconds: startSeconds,
               endSeconds: endSeconds,
-              buckets: buckets);
+              buckets: buckets,
+              bus: bus);
 
   /// Start playing this comp's audio from `start` seconds.
   void audioPlay({required double start}) =>
@@ -900,6 +956,35 @@ class CompositionReference {
   void audioScrub({required int frame}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceAudioScrub(
           that: this, frame: frame);
+
+  /// Temperature, Tint, Lift and Gain that take the cast out of shot
+  /// `layer`/`clip` at `frame` and set its black and white points, read off
+  /// the picture coming into Correction `node`.
+  Future<List<BridgeSolvedRow>> autoBalance(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceAutoBalance(
+          that: this, layer: layer, clip: clip, frame: frame, node: node);
+
+  /// The points written so far this pass, for drawing the line being
+  /// written. Empty when nothing records. Copies the whole pass:
+  /// [`Self::automation_pass_since`] is the form to poll.
+  List<BridgeAutomationLine> automationPass() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAutomationPass(
+        that: this,
+      );
+
+  /// The points the pass has drawn since point `from` of pass `pass`, to
+  /// poll every frame: the caller keeps the pass and the `next` it was
+  /// last given. A new pass answers from its own start, under its own
+  /// number. Copies only what is new and waits on no edit.
+  BridgeAutomationPassSince automationPassSince(
+          {required int pass, required int from}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAutomationPassSince(
+              that: this, pass: pass, from: from);
 
   /// This composition's background colour, scene-linear RGBA (docs/07 §2.2
   /// item 10). What the composite is drawn onto where nothing covers it, and
@@ -954,6 +1039,26 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCachedFrames(
               that: this, frames: frames, scale: scale);
 
+  /// The composition's caption layers, top first.
+  List<LayerReference> captionLayers() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCaptionLayers(
+        that: this,
+      );
+
+  /// The usual caption limits for `language`, for a dialog to start from.
+  BridgeCaptionLimits captionLimitsFor({required String language}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCaptionLimitsFor(
+              that: this, language: language);
+
+  /// Look at `rows` before exporting them: which have a fault, and the file
+  /// each would be written as under `pattern`.
+  BridgeRowsCheck checkDataRows(
+          {required List<int> rows, required String pattern}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCheckDataRows(
+              that: this, rows: rows, pattern: pattern);
+
   /// Remove every detected beat marker, keeping the ones a person made —
   /// and the confirmed grid with them, since it described the set that went.
   ///
@@ -963,6 +1068,22 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceClearBeatMarkers(
         that: this,
       );
+
+  /// Take away what option `option` of menu `id` sets.
+  void clearLook({required String id, required int option}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceClearLook(
+          that: this, id: id, option: option);
+
+  /// A caption layer showing what `source` says, at the top of the stack,
+  /// styled as `look`. The source's footage must be transcribed first. One
+  /// undo step.
+  LayerReference createCaptions(
+          {required LayerReference source,
+          required BridgeCaptionOptions options,
+          required BridgeTextDocument look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCreateCaptions(
+              that: this, source: source, options: options, look: look);
 
   /// **Crop comp to region of interest**: the comp's frame becomes
   /// `region`, and every unparented layer moves back by its corner so the
@@ -1110,6 +1231,13 @@ class CompositionReference {
               withPicture: withPicture,
               arrival: arrival);
 
+  /// **Flatten**: each named multicam clip, and with `linked` its other
+  /// half, becomes the footage clips its angle plays across its span.
+  BridgeCutResult cutFlatten(
+          {required List<UuidValue> clips, required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutFlatten(
+          that: this, clips: clips, linked: linked);
+
   /// **Freeze frame** on a clip: hold the frame it shows at `at_frame` for
   /// `hold_frames`, as a clip of its own between its two halves, with what
   /// follows moved later on every unlocked Sequence layer. With `linked` the
@@ -1127,12 +1255,34 @@ class CompositionReference {
           holdFrames: holdFrames,
           linked: linked);
 
+  /// **Hear an angle as well**: a sound clip of `angle` under the multicam
+  /// clip `clip`, linked to it, which switching leaves on its angle; with
+  /// `on` off, the one added goes. `Nothing` where it is already heard, or
+  /// was never added.
+  BridgeCutResult cutHearAngle(
+          {required UuidValue clip,
+          required UuidValue angle,
+          required bool on_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutHearAngle(
+              that: this, clip: clip, angle: angle, on_: on_);
+
+  /// **Join**: wherever two named clips meet and the later carries
+  /// straight on from the earlier, they become one clip, as before a cut
+  /// that changed nothing. A multicam clip takes the earlier piece's angle.
+  /// With `linked` their linked clips join too. `Nothing` where none can.
+  BridgeCutResult cutJoin(
+          {required List<UuidValue> clips, required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutJoin(
+          that: this, clips: clips, linked: linked);
+
   /// Match frame: the footage item and the moment of it that the clip
   /// under `frame` is showing, read through the clip's Retime.
   ///
   /// The clip is the one on `layer`, or without one on the top-most
-  /// unlocked picture Sequence layer that has a clip there. `None` over a
-  /// gap, and for a clip that plays a composition.
+  /// unlocked picture Sequence layer that has a clip there. A multicam
+  /// clip answers for its angle's footage. `None` over a gap, and for a
+  /// clip that plays any other composition.
   BridgeMatchFrame? cutMatchFrame(
           {required int frame, LayerReference? layer}) =>
       BridgeLib.instance.api
@@ -1178,6 +1328,36 @@ class CompositionReference {
           {required List<UuidValue> clips, required bool back}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutNextTake(
           that: this, clips: clips, back: back);
+
+  /// **Overwrite in step**: `angle` of the multicam comp holding the footage
+  /// under `at_frame`, in step with it, on the picture row above, from
+  /// there to `to_frame`, or to the end of the footage's clip when
+  /// `to_frame` is not after `at_frame`. `Nothing` where no footage a
+  /// multicam comp holds is, or for a sound angle.
+  BridgeCutResult cutOverwriteAngle(
+          {required int atFrame,
+          required int toFrame,
+          required UuidValue angle}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutOverwriteAngle(
+              that: this, atFrame: atFrame, toFrame: toFrame, angle: angle);
+
+  /// Show `angle` from `from_frame` to `to_frame` on the multicam clip
+  /// there: a cut at each end and the stretch between switched.
+  BridgeCutResult cutPaintAngle(
+          {required int fromFrame,
+          required int toFrame,
+          required UuidValue angle,
+          required BridgeAngleSwitch switch_,
+          required bool linked}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPaintAngle(
+              that: this,
+              fromFrame: fromFrame,
+              toFrame: toFrame,
+              angle: angle,
+              switch_: switch_,
+              linked: linked);
 
   /// Paste the copied clips with the earliest of them at `at_frame`,
   /// overwriting what they land on. They arrive as clips of their own,
@@ -1268,6 +1448,45 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutPlaceComp(
               that: this, target: target, comp: comp, atFrame: atFrame);
 
+  /// Put a multicam comp's stretch from `source_in` to `source_out` down at
+  /// `at_frame`, overwriting or with `insert` moving everything after it
+  /// later: its picture on `target` or a new picture row, its sound on a
+  /// sound row, linked. `picture` and `sound` are the angles they start on,
+  /// unset for the ones the comp names.
+  BridgeCutResult cutPlaceMulticam(
+          {LayerReference? target,
+          required CompositionReference comp,
+          required BridgeRational sourceIn,
+          required BridgeRational sourceOut,
+          required int atFrame,
+          required bool insert,
+          required bool withPicture,
+          UuidValue? picture,
+          UuidValue? sound}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceMulticam(
+              that: this,
+              target: target,
+              comp: comp,
+              sourceIn: sourceIn,
+              sourceOut: sourceOut,
+              atFrame: atFrame,
+              insert: insert,
+              withPicture: withPicture,
+              picture: picture,
+              sound: sound);
+
+  /// **Place rows** in Cut: one clip of the graphics template `template`
+  /// for each of `rows` of its data, one after another from `at_frame` on a
+  /// new track, each following its row and as long as its row says.
+  BridgeCutResult cutPlaceRows(
+          {required CompositionReference template,
+          required List<int> rows,
+          required int atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceRows(
+              that: this, template: template, rows: rows, atFrame: atFrame);
+
   /// Put a solid down at `at_frame` as one clip, as long as a still, on
   /// `target` or a new picture Sequence layer at the top.
   BridgeCutResult cutPlaceSolid(
@@ -1277,6 +1496,30 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutPlaceSolid(
               that: this, target: target, solid: solid, atFrame: atFrame);
+
+  /// The rough cut from a source's words: each of `spans` of `footage` put
+  /// down one after another from `at_frame`, as [`Self::cut_place`] puts
+  /// one, in one undo step. `end_frame` is where the last ends.
+  BridgeCutPaste cutPlaceWords(
+          {LayerReference? target,
+          required FootageReference footage,
+          required List<BridgeSourceSpan> spans,
+          required int atFrame,
+          required bool insert,
+          required bool linked,
+          required bool withPicture,
+          BridgeStreamsArrival? arrival}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutPlaceWords(
+              that: this,
+              target: target,
+              footage: footage,
+              spans: spans,
+              atFrame: atFrame,
+              insert: insert,
+              linked: linked,
+              withPicture: withPicture,
+              arrival: arrival);
 
   /// Razor: cut every clip under `at_frame` on `layers`, or on every
   /// unlocked Sequence layer when the list is empty. With `linked` a clip
@@ -1357,14 +1600,16 @@ class CompositionReference {
           that: this, clip: clip, take: take);
 
   /// Make the overlap at this edge of `clip` the kind named by its match
-  /// name, or the dissolve with `None`. An edit point that only meets gets an
-  /// overlap of `frames` first. Asked for the kind it already is, an overlap
-  /// keeps the rows it was given.
+  /// name at `look`, by its place among the kind's looks, or the dissolve
+  /// with `None`. An edit point that only meets gets an overlap of `frames`
+  /// first. Asked for the kind it already is with no look, an overlap keeps
+  /// the rows it was given.
   BridgeCutResult cutSetTransition(
           {required UuidValue clip,
           required bool endEdge,
           required int frames,
           String? kind,
+          int? look,
           required bool linked}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutSetTransition(
@@ -1373,7 +1618,26 @@ class CompositionReference {
               endEdge: endEdge,
               frames: frames,
               kind: kind,
+              look: look,
               linked: linked);
+
+  /// Shorten every pause longer than `longer_than_ms` to `keep_ms`, or only
+  /// the pauses whose stretches lie in `only`, by taking out the middle of
+  /// each, latest first, in one undo step. With `ripple` the cut closes up.
+  BridgeCutResult cutShortenPauses(
+          {required BridgeSpokenLook look,
+          required int longerThanMs,
+          required int keepMs,
+          List<BridgeFrameSpan>? only,
+          required bool ripple}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutShortenPauses(
+              that: this,
+              look: look,
+              longerThanMs: longerThanMs,
+              keepMs: keepMs,
+              only: only,
+              ripple: ripple);
 
   /// Slide a clip between its neighbours by `by_frames`: it keeps its
   /// length and its frames, and the clips either side trim and extend to
@@ -1405,6 +1669,16 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutSplitAudioStreams(
               that: this, clips: clips);
 
+  /// Switch the multicam clip under `at_frame` to the next angle, or the
+  /// one before with `forward` off, round the comp's angles. No cut.
+  BridgeCutResult cutStepAngle(
+          {required int atFrame,
+          required bool forward,
+          required BridgeAngleSwitch switch_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutStepAngle(
+              that: this, atFrame: atFrame, forward: forward, switch_: switch_);
+
   /// Stretch a clip so its edges land on `start_frame` and `end_frame`: it
   /// plays the same stretch of source at whatever speed that takes. With
   /// `ripple` everything after it follows its change of length, and with
@@ -1423,6 +1697,127 @@ class CompositionReference {
           endFrame: endFrame,
           ripple: ripple,
           linked: linked);
+
+  /// **Switch angle**: the named multicam clips switch to `angle` whole, or
+  /// with none named the one under `at_frame`. No cut.
+  BridgeCutResult cutSwitchAngle(
+          {required List<UuidValue> clips,
+          required int atFrame,
+          required UuidValue angle,
+          required BridgeAngleSwitch switch_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutSwitchAngle(
+              that: this,
+              clips: clips,
+              atFrame: atFrame,
+              angle: angle,
+              switch_: switch_);
+
+  /// **Cut to an angle**: cut the multicam clip under `at_frame` there, with
+  /// its linked halves, and switch the piece after the cut to `angle`. The
+  /// clip is the one on `row` when given, else on the top picture row with
+  /// one. At a clip's own start nothing is cut and the whole clip switches.
+  /// `Nothing` where no multicam clip is, or the angle already shows.
+  BridgeCutResult cutToAngle(
+          {required int atFrame,
+          required UuidValue angle,
+          required BridgeAngleSwitch switch_,
+          LayerReference? row,
+          required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutToAngle(
+          that: this,
+          atFrame: atFrame,
+          angle: angle,
+          switch_: switch_,
+          row: row,
+          linked: linked);
+
+  /// What this composition says, laid out for the Transcript panel: every
+  /// heard word, with the pauses and breaks between them, tiled on this
+  /// composition's frames. Not sync: it reads a snapshot off the UI
+  /// thread.
+  Future<BridgeCutTranscript> cutTranscript({required BridgeSpokenLook look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscript(
+              that: this, look: look);
+
+  /// Copy what every layer holds under `spans` for a paste, here or in the
+  /// Cut timeline: the stretches one after another from nought. The
+  /// document is not touched.
+  BridgeCutResult cutTranscriptCopy({required List<BridgeFrameSpan> spans}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptCopy(
+              that: this, spans: spans);
+
+  /// Write the words of the frames `how` names to `path`, in the format it
+  /// names. Removed words are never written. Not sync: it writes a file.
+  Future<void> cutTranscriptExport(
+          {required String path,
+          required BridgeSpokenLook look,
+          required BridgeTranscriptExport how}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptExport(
+              that: this, path: path, look: look, how: how);
+
+  /// Make `span` the work area, as one undo step.
+  void cutTranscriptMark({required BridgeFrameSpan span}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptMark(
+              that: this, span: span);
+
+  /// A drag of words: what lies under `spans` inserted at `to_frame`. With
+  /// `copy` the spans stay where they are. Without, they are taken out and
+  /// the rest closes up first. `Nothing` when `to_frame` is inside a span,
+  /// or without `copy` on the edge of the only one.
+  BridgeCutPaste cutTranscriptMove(
+          {required List<BridgeFrameSpan> spans,
+          required int toFrame,
+          required bool copy}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptMove(
+              that: this, spans: spans, toFrame: toFrame, copy: copy);
+
+  /// Insert what was copied at `at_frame`, a word's edge: every unlocked
+  /// layer is cut there and opened by the copy's length, and each piece
+  /// lands on the layer it came from, counted among layers of its kind.
+  /// `end_frame` is where the copy ends.
+  BridgeCutPaste cutTranscriptPaste({required int atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptPaste(
+              that: this, atFrame: atFrame);
+
+  /// Extract or lift the frames under `spans`: with `ripple` every unlocked
+  /// layer closes up and other layers are carried as a Cut ripple carries
+  /// them, without it the gaps stay. A transcribed Footage layer whose bar
+  /// meets a span is made a Sequence layer first, in the same undo step. A sound clip's edge
+  /// this makes gets a 2 ms fade where it has none, so the cut does not
+  /// click.
+  BridgeCutResult cutTranscriptRemove(
+          {required List<BridgeFrameSpan> spans, required bool ripple}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptRemove(
+              that: this, spans: spans, ripple: ripple);
+
+  /// Put each run of removed words back after its clip, the clip before
+  /// their edit point: a copy of it, and of the clips linked to it there,
+  /// trimmed to the words, from halfway into the silence before the first
+  /// to halfway into the silence after the last. Inserted with a ripple, or
+  /// where they were in the gap a lift left when there is room. Every run
+  /// in one undo step.
+  BridgeCutResult cutTranscriptRestore(
+          {required List<BridgeRemovedRun> runs}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptRestore(
+              that: this, runs: runs);
+
+  /// The words under `spans` as plain text, a blank line between
+  /// paragraphs: Copy as text. Not sync: it lays out every word.
+  Future<String> cutTranscriptText(
+          {required BridgeSpokenLook look,
+          required List<BridgeFrameSpan> spans}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutTranscriptText(
+              that: this, look: look, spans: spans);
 
   /// Put a transition of `frames` on one edge of a clip: its end when
   /// `end_edge` is set, and its start otherwise.
@@ -1534,6 +1929,76 @@ class CompositionReference {
         that: this,
       );
 
+  /// Write effect `node` of shot `layer`/`clip`, its rows read at comp
+  /// `frame`, to `path` as a CDL: a decision list when `path` ends `.cdl`,
+  /// one ColorCorrection otherwise. A CDL node writes its own numbers. A
+  /// Correction writes its grade as one: exactly when only its wheels and
+  /// saturation have moved, otherwise a least-squares fit, both in the
+  /// node's grading space and as if its key took the whole picture. Answers
+  /// whether the numbers are exact. Any other effect is refused.
+  Future<bool> exportCdl(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required String path}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceExportCdl(
+          that: this,
+          layer: layer,
+          clip: clip,
+          frame: frame,
+          node: node,
+          path: path);
+
+  /// **Export rows** as stills: one PNG for each of `rows` at the
+  /// template's poster frame, written into `folder` under `pattern`, never
+  /// over a file that is there. Answers how many were written. Stops after
+  /// the one in hand when [`cancel_data_stills`] is called.
+  Future<int> exportDataStills(
+          {required List<int> rows,
+          required String pattern,
+          required String folder,
+          required bool skipFaulty,
+          LayerReference? host,
+          UuidValue? hostClip,
+          required int frame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceExportDataStills(
+              that: this,
+              rows: rows,
+              pattern: pattern,
+              folder: folder,
+              skipFaulty: skipFaulty,
+              host: host,
+              hostClip: hostClip,
+              frame: frame);
+
+  /// Write one shot's grade to `path` as a `.cube` of `size` points a side
+  /// (17, 33 or 65), read at comp `frame`, which is moved inside the shot.
+  ///
+  /// The grade is the shot's Colour effects that are switched on, in order,
+  /// with anything that depends on where a pixel is left out, since a LUT
+  /// can't hold it. The file is written beside its name first and moved
+  /// over it at the end, so one stopped half way leaves no half a LUT.
+  /// Async: a 65-point cube runs a quarter of a million colours through
+  /// the grade.
+  Future<void> exportGradeLut(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required String path,
+          required int size,
+          required BridgeLutSpace space}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceExportGradeLut(
+              that: this,
+              layer: layer,
+              clip: clip,
+              frame: frame,
+              path: path,
+              size: size,
+              space: space);
+
   /// Refuse a spec the chosen format cannot honour, in the dialogue's own
   /// words — empty when the spec is exportable.
   ///
@@ -1549,6 +2014,24 @@ class CompositionReference {
       .instance.api
       .crateApiCompositionCompositionReferenceExportSpecCheck(
           that: this, spec: spec);
+
+  /// Write the grade kept with the still at `still`, called `name`, to
+  /// `path` as a `.cube`, as [`Self::export_grade_lut`] writes a shot's. Its
+  /// keys are read at their start.
+  Future<void> exportStillLut(
+          {required String still,
+          required String name,
+          required String path,
+          required int size,
+          required BridgeLutSpace space}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceExportStillLut(
+              that: this,
+              still: still,
+              name: name,
+              path: path,
+              size: size,
+              space: space);
 
   /// Slide each of the given layers by its own number of frames, as one
   /// batch: what releasing a Ctrl+Alt drag on a selection's bar commits,
@@ -1600,6 +2083,12 @@ class CompositionReference {
   /// with a tempo has run — what the beat band numbers bars from.
   BridgeBeatGrid? getBeatGrid() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetBeatGrid(
+        that: this,
+      );
+
+  /// This template's data, or `None` when none is linked.
+  BridgeData? getData() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetData(
         that: this,
       );
 
@@ -1723,12 +2212,40 @@ class CompositionReference {
         that: this,
       );
 
+  /// This composition's graphics template: its controls with what each row
+  /// holds, or `None` for a composition with no controls.
+  BridgeTemplate? getTemplate() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetTemplate(
+        that: this,
+      );
+
   /// The comp's work area — the span the Viewer previews and the export
   /// writes — or `None` for the whole comp.
   BridgeSpan? getWorkArea() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetWorkArea(
         that: this,
       );
+
+  /// Keep comp `frame` as a still named `name` in `album`: the shot's grade
+  /// and where it came from, and the frame at the comp's size seen through
+  /// `colour_view` (`[display, view]`, as the Viewer's first view is). An
+  /// empty name takes the shot's. The album is made if it is not there,
+  /// and a name already taken in it gets " 2", " 3" after it.
+  Future<BridgeStill> grabStill(
+          {required int frame,
+          required UuidValue layer,
+          UuidValue? clip,
+          required String album,
+          required String name,
+          List<String>? colourView}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceGrabStill(
+          that: this,
+          frame: frame,
+          layer: layer,
+          clip: clip,
+          album: album,
+          name: name,
+          colourView: colourView);
 
   /// Which frame of its file box `effect` is showing at composition frame
   /// `frame`, and that file's picture size: `roto_source_frame` for a box.
@@ -1827,6 +2344,13 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGroupLayers(
           that: this, layerIds: layerIds, name: name);
 
+  /// Whether this composition has a caption layer of its own, which is
+  /// when the export dialogue asks what to do with captions.
+  bool hasCaptions() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceHasCaptions(
+        that: this,
+      );
+
   /// Whether this comp nests another composition, which is when Duplicate
   /// asks whether the copy shares it or gets its own.
   bool hasNestedComps() => BridgeLib.instance.api
@@ -1839,6 +2363,16 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceHoldsModels(
         that: this,
       );
+
+  /// A caption layer from an `.srt` or `.vtt` file, styled as `look`. One
+  /// undo step.
+  LayerReference importCaptions(
+          {required String path,
+          required String name,
+          required BridgeTextDocument look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceImportCaptions(
+              that: this, path: path, name: name, look: look);
 
   /// Insert a saved graph group at canvas point `(x, y)`: **one commit**, so
   /// one undo step however many boxes and wires it carries.
@@ -1854,10 +2388,41 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceInsertGraphGroup(
               that: this, text: text, x: x, y: y);
 
+  /// Whether this is a multicam comp: what the Project panel marks it by.
+  bool isMulticam() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceIsMulticam(
+        that: this,
+      );
+
   /// Whether the comp's lights fall as After Effects' do, lighting a layer
   /// from black, rather than adding to the picture.
   bool lightingLikeAfterEffects() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceLightingLikeAfterEffects(
+        that: this,
+      );
+
+  /// **Open file**: link the CSV, TSV or JSON file at `path` to this
+  /// template. Its rows are kept in the project. Each column feeds the
+  /// control of its name unless it fed something before under that name.
+  /// Footage the rows name is brought into a folder called `folder`.
+  Future<void> linkData({required String path, required String folder}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceLinkData(
+          that: this, path: path, folder: folder);
+
+  BridgeLoudnessTarget? loudnessTarget() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceLoudnessTarget(
+        that: this,
+      );
+
+  BridgeAutomationMode masterAutomationMode() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMasterAutomationMode(
+        that: this,
+      );
+
+  /// The master fader: its keys when it has them, in comp time, else its
+  /// static level in dB.
+  BridgeScalar masterVolume() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMasterVolume(
         that: this,
       );
 
@@ -1867,6 +2432,122 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceMasterVolumeDb(
         that: this,
       );
+
+  /// The Space, mixer and Exposure rows that take a ColorChecker Classic
+  /// in the picture coming into `node` to its published colours.
+  /// `corners` are the chart's top left, top right, bottom right and
+  /// bottom left as eight numbers, x then y, comp pixels, dark skin at the
+  /// top left.
+  Future<BridgeChartMatch> matchChart(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required List<double> corners}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMatchChart(
+          that: this,
+          layer: layer,
+          clip: clip,
+          frame: frame,
+          node: node,
+          corners: corners);
+
+  /// Lift, Gamma, Gain and Saturation that make the shot at `frame`, coming
+  /// into `node`, match shot `ref_layer`/`ref_clip` at `ref_frame` as it
+  /// looks, its whole grade on.
+  Future<List<BridgeSolvedRow>> matchShot(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required UuidValue refLayer,
+          UuidValue? refClip,
+          required int refFrame}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMatchShot(
+          that: this,
+          layer: layer,
+          clip: clip,
+          frame: frame,
+          node: node,
+          refLayer: refLayer,
+          refClip: refClip,
+          refFrame: refFrame);
+
+  /// As [`Self::match_shot`], against a still: the `.lumstill` at `still`,
+  /// whose picture is display sRGB.
+  Future<List<BridgeSolvedRow>> matchStill(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required String still}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMatchStill(
+          that: this,
+          layer: layer,
+          clip: clip,
+          frame: frame,
+          node: node,
+          still: still);
+
+  /// Play this comp's whole mix offline, as an export does, and measure it.
+  /// Stopped by [`cancel_measure_mix`]. A silent mix is refused.
+  Future<BridgeMixLoudness> measureMix({RustStreamSink<double>? progress}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMeasureMix(
+          that: this, progress: progress);
+
+  /// The pointer has left `target`. Stopped, or in Read, the value is
+  /// written as one undo step: a key at the playhead when the property is
+  /// keyed, else its value. In Touch and Trim the control glides back to
+  /// its keys over the touch return; in Latch and Write it holds until
+  /// playback stops.
+  ///
+  /// `playhead_seconds` is where the playhead stands, for that key; without
+  /// it the sound's own clock is taken.
+  void mixerRelease(
+          {required BridgeMixTarget target, double? playheadSeconds}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMixerRelease(
+              that: this, target: target, playheadSeconds: playheadSeconds);
+
+  /// The pointer is on `target` at `value` (dB, or -100 to 100 for a Pan):
+  /// call it on every move while held. Heard at once. While the comp plays
+  /// and the strip (or the master) is in Touch, Latch, Write or Trim, the
+  /// moves are written as keys when playback stops.
+  void mixerTouch({required BridgeMixTarget target, required double value}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMixerTouch(
+          that: this, target: target, value: value);
+
+  /// Move controls to sit before the control `before`, or last with `None`,
+  /// keeping their own order, and into `group` (`None` is no group).
+  void moveControls(
+          {required List<String> ids, String? before, String? group}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMoveControls(
+              that: this, ids: ids, before: before, group: group);
+
+  /// This comp's angles, when it is a multicam comp.
+  BridgeMulticam? multicam() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMulticam(
+        that: this,
+      );
+
+  /// The multicam clip under `frame` of this comp: on the top picture row
+  /// with one, else on the top sound row with one, else footage a multicam
+  /// comp's angle holds. `None` where there is none, which is what the angle
+  /// viewer stands still for. With `timecodes` each angle's timecode comes
+  /// too.
+  BridgeMulticamAt? multicamAt({required int frame, required bool timecodes}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceMulticamAt(
+          that: this, frame: frame, timecodes: timecodes);
+
+  /// **Sync to angle**: line `layer`'s files up again by their sound
+  /// against `to`'s, inside this multicam comp. It runs as the job
+  /// [`ProjectReference::multicam_poll`] reports on, and moves `layer`'s
+  /// clips in one undo step when it lands.
+  void multicamSyncAngle({required UuidValue layer, required UuidValue to}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMulticamSyncAngle(
+              that: this, layer: layer, to: to);
 
   /// The frame **nearest** `time` — the same inverse as
   /// [`Self::frame_at_time`], rounded instead of floored.
@@ -1899,6 +2580,17 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceNewGraphInstance(
               that: this, name: name, graph: graph);
+
+  /// Measure the mix as playback hears it, through the limiter, then move
+  /// the master by what takes it to `target_lufs`: its value, or every key
+  /// by the same amount. Measured again after the move, and moved once
+  /// more where the limiter kept it over half a unit off. One undo step.
+  /// Answers the mix's loudness as measured after it.
+  Future<double> normaliseMix(
+          {required double targetLufs, RustStreamSink<double>? progress}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceNormaliseMix(
+              that: this, targetLufs: targetLufs, progress: progress);
 
   /// Paste boxes copied with [`Self::save_graph_group`] at `(x, y)`, the
   /// canvas's Ctrl+V. The same insert as a saved group but with no group
@@ -1935,6 +2627,90 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePasteLayer(
           that: this, text: text, atFrame: atFrame);
 
+  /// Where the circle at (`x`, `y`) with `radius`, comp pixels, sits on
+  /// hue curve `curve` (its row id) of `node`, for the curve editor to put
+  /// three points on.
+  Future<BridgeCurvePick> pickHueCurve(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required double x,
+          required double y,
+          required double radius,
+          required String curve}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePickHueCurve(
+              that: this,
+              layer: layer,
+              clip: clip,
+              frame: frame,
+              node: node,
+              x: x,
+              y: y,
+              radius: radius,
+              curve: curve);
+
+  /// The qualifier rows that key what lies under the circle at (`x`, `y`)
+  /// with `radius`, comp pixels, on the picture coming into `node`, by the
+  /// node's qualifier mode (Off reads as HSL and turns it on; 3D adds the
+  /// circle's average as one sample).
+  Future<List<BridgeSolvedRow>> pickQualifier(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required double x,
+          required double y,
+          required double radius,
+          required BridgePickMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePickQualifier(
+              that: this,
+              layer: layer,
+              clip: clip,
+              frame: frame,
+              node: node,
+              x: x,
+              y: y,
+              radius: radius,
+              mode: mode);
+
+  /// The 3D qualifier rows after a stroke through `points` (x then y, comp
+  /// pixels) with `radius`, read off the picture coming into `node`: Set
+  /// keeps only what the stroke crosses, Add keeps it too, Subtract drops
+  /// it. A node not yet in 3D is switched to it.
+  Future<List<BridgeSolvedRow>> pickQualifier3D(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required UuidValue node,
+          required List<double> points,
+          required double radius,
+          required BridgePickMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePickQualifier3D(
+              that: this,
+              layer: layer,
+              clip: clip,
+              frame: frame,
+              node: node,
+              points: points,
+              radius: radius,
+              mode: mode);
+
+  /// **Place rows**: one copy of template `template` for each of `rows` in
+  /// this composition's Timeline, as Precomp layers one after another from
+  /// `at_frame`, each following its row and as long as its row says. One
+  /// undo step.
+  void placeDataRows(
+          {required CompositionReference template,
+          required List<int> rows,
+          required int atFrame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePlaceDataRows(
+              that: this, template: template, rows: rows, atFrame: atFrame);
+
   /// Play from `from` at this comp's own rate, with sound.
   ///
   /// The frontend calls this and then paints whatever frames arrive: each one
@@ -1961,7 +2737,7 @@ class CompositionReference {
   ///
   /// `speed` is how many times the comp's rate the leg runs at, 1 for
   /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
-  /// keeps time by skipping frames, in either direction, and is silent.
+  /// keeps time by skipping frames, either way, heard through the jog.
   ///
   /// `slow` is how many times slower than the comp's rate the leg plays,
   /// 1 for its own: the Viewer's playback speed. Every frame is shown, and
@@ -2106,6 +2882,35 @@ class CompositionReference {
           .crateApiCompositionCompositionReferencePrecomposeSplitsLinks(
               that: this, layerIds: layerIds, leaveAttributes: leaveAttributes);
 
+  /// **Export rows**: queue one export for each of `rows`, written into
+  /// `folder` under `pattern`, folded under one heading in the queue. With
+  /// `host` the composition that copy sits in is exported with the copy
+  /// following each row in turn; without, the template on its own.
+  ///
+  /// A row with a fault is left out when `skip_faulty` is on, and otherwise
+  /// exported with the template's own value where the fault is. A name two
+  /// rows share is numbered. Answers how many were queued.
+  int queueDataRows(
+          {required BridgeExportSpec spec,
+          required List<int> rows,
+          required String pattern,
+          required String folder,
+          required bool skipFaulty,
+          LayerReference? host,
+          UuidValue? hostClip,
+          required bool start}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceQueueDataRows(
+              that: this,
+              spec: spec,
+              rows: rows,
+              pattern: pattern,
+              folder: folder,
+              skipFaulty: skipFaulty,
+              host: host,
+              hostClip: hostClip,
+              start: start);
+
   /// Add this composition to the export queue, and start the queue when
   /// `start` is set.
   ///
@@ -2122,6 +2927,67 @@ class CompositionReference {
           required bool start}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceQueueExport(
           that: this, spec: spec, path: path, start: start);
+
+  /// **Reload**: read the linked file again.
+  Future<void> reloadData({required String folder}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceReloadData(
+          that: this, folder: folder);
+
+  /// Whether `computer` can do this composition's export as the project now
+  /// stands, asking it when it hasn't been asked since the project changed.
+  BridgeRemoteFit remoteFit({required String computer}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceRemoteFit(
+          that: this, computer: computer);
+
+  /// Send this composition's export by `spec` to `computer`, or with an empty
+  /// one to whichever of the account's computers can do it soonest. With
+  /// `lands` `Sender` the file comes back to `path`. With `Worker` it stays
+  /// there, named as `path` names it. Answers the job.
+  String remoteSend(
+          {required String computer,
+          required BridgeExportSpec spec,
+          required String path,
+          required BridgeRemoteLands lands}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceRemoteSend(
+          that: this, computer: computer, spec: spec, path: path, lands: lands);
+
+  /// Take controls away. Copies keep what they had set for them, unread, so
+  /// undoing this brings every value back.
+  void removeControls({required List<String> ids}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceRemoveControls(
+          that: this, ids: ids);
+
+  /// Rename a control. Its id, and so every copy's value, stays.
+  void renameControl({required String id, required String label}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenameControl(
+              that: this, id: id, label: label);
+
+  /// Rename a group of controls.
+  void renameControlGroup({required String group, required String name}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenameControlGroup(
+              that: this, group: group, name: name);
+
+  /// Ask for the angle viewer's picture: page `page` of this multicam
+  /// comp's angles at its `frame`, drawn `width` by `height` at `scale` for
+  /// `view`. It arrives down the same transport as every other picture.
+  void renderAngles(
+          {required int frame,
+          required int page,
+          required double scale,
+          required int width,
+          required int height,
+          required int view}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderAngles(
+              that: this,
+              frame: frame,
+              page: page,
+              scale: scale,
+              width: width,
+              height: height,
+              view: view);
 
   /// Ask for `frame` at `scale` — 1.0 meaning "shown at comp resolution".
   /// Below 1.0 the engine decodes and composites smaller, which is how a
@@ -2374,26 +3240,31 @@ class CompositionReference {
               layer: layer,
               transform: transform);
 
-  /// Ask the worker for a scope trace of `frame`.
-  ///
-  /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
-  /// `colours` is background, trace, then the R, G and B tints, each as
-  /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-  /// know what a Lumit surface looks like. `view` is the Viewer view whose
-  /// picture is read.
+  /// Ask for up to eight scope traces of `frame`, all from the one picture and
+  /// each its own reply: 0 luma waveform, 1 RGB waveform, 2 vectorscope, 3 RGB
+  /// histogram, 4 parade, 5 luma histogram, 6 CIE xy, 7 vectorscope at 2x.
+  /// `colours` is background, trace, then the R, G and B tints, each `[r, g,
+  /// b]`. `view` is the Viewer view whose picture is read.
   void renderScope(
           {required int frame,
           required double scale,
-          required int kind,
+          required List<int> kinds,
           required List<Uint8List> colours,
           required int view}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderScope(
           that: this,
           frame: frame,
           scale: scale,
-          kind: kind,
+          kinds: kinds,
           colours: colours,
           view: view);
+
+  /// Whether `layer` may send or output to `bus` without the sound going
+  /// round in a circle, for a menu to ask before it offers the bus.
+  bool routeAllowed({required UuidValue layer, required UuidValue bus}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRouteAllowed(
+              that: this, layer: layer, bus: bus);
 
   /// Ask the worker for the pixels under the dropper: a `window × window`
   /// square of `frame` centred on the point `(u, v)` of the picture, each a
@@ -2458,6 +3329,29 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceSaveGraphGroup(
               that: this, name: name, colour: colour, nodes: nodes);
 
+  /// **Save a starting file**: a CSV with a column for each control and the
+  /// template's own values as its first row, so the names always match.
+  Future<void> saveStartingData({required String path}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSaveStartingData(
+              that: this, path: path);
+
+  /// **Save graphics template**: write this composition to the library as
+  /// `name` in `group`, with its footage and, with `pack_fonts`, the font
+  /// files its text names. Answers the file.
+  ///
+  /// Saved over the library's own copy of this template it is that
+  /// template's next version, which other projects are then offered.
+  /// Anywhere else it is a new template, and this composition is tied to
+  /// that one from here.
+  Future<String> saveTemplate(
+          {required String name,
+          required String group,
+          required bool packFonts}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSaveTemplate(
+              that: this, name: name, group: group, packFonts: packFonts);
+
   /// Set this composition's background colour — one op, one undo step. A
   /// document edit that reaches the export, unlike the Viewer's preview-only
   /// grid.
@@ -2500,6 +3394,43 @@ class CompositionReference {
               canvas: canvas,
               look: look);
 
+  /// Set a number control's range, which a copy stays inside, or take it
+  /// away with `ranged` off.
+  void setControlRange(
+          {required String id,
+          required bool ranged,
+          required double min,
+          required double max}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetControlRange(
+              that: this, id: id, ranged: ranged, min: min, max: max);
+
+  /// Say whether a copy may also change a text control's font, size and
+  /// colour.
+  void setControlTextRows(
+          {required String id,
+          required bool font,
+          required bool size,
+          required bool colour}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetControlTextRows(
+              that: this, id: id, font: font, size: size, colour: colour);
+
+  /// Set what a control's row holds in the template itself, fixed. Picking
+  /// a menu's option also sets every row that option's look names. One undo
+  /// step.
+  void setControlValue(
+          {required String id, required BridgeControlValue value}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetControlValue(
+              that: this, id: id, value: value);
+
+  /// Say what column `column` feeds.
+  void setDataFeed(
+          {required int column, required BridgeFeeds feeds, String? control}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetDataFeed(
+          that: this, column: column, feeds: feeds, control: control);
+
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetGroupLabel(
@@ -2534,11 +3465,27 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceSetLightingLikeAfterEffects(
               that: this, on_: on_);
 
+  void setLoudnessTarget({BridgeLoudnessTarget? target}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetLoudnessTarget(
+              that: this, target: target);
+
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
   void setMarkers({required List<BridgeMarker> markers}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetMarkers(
           that: this, markers: markers);
+
+  void setMasterAutomationMode({required BridgeAutomationMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetMasterAutomationMode(
+              that: this, mode: mode);
+
+  /// Set the master fader, as one undoable step. A static level clears any
+  /// keys; keys leave the static level as it is, for an older Lumit to read.
+  void setMasterVolume({required BridgeScalar value}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetMasterVolume(
+          that: this, value: value);
 
   /// Move the master fader, as one undoable step.
   ///
@@ -2551,12 +3498,55 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceSetMasterVolumeDb(
           that: this, db: db);
 
+  /// Show the key of the Correction `effect` in Viewer view `view`: the
+  /// shot (`layer`, or with `clip` one clip on it) drawn alone, its stack
+  /// stopping at that node, Highlight over `backdrop`. Drag previews show
+  /// it too, and an export never does. The frontend asks for the frame under the playhead after a
+  /// change, as it does after a look.
+  void setMatteView(
+          {required int view,
+          required BridgeMatteView mode,
+          required UuidValue layer,
+          UuidValue? clip,
+          required UuidValue effect,
+          required BridgeMatteBackdrop backdrop}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetMatteView(
+              that: this,
+              view: view,
+              mode: mode,
+              layer: layer,
+              clip: clip,
+              effect: effect,
+              backdrop: backdrop);
+
+  /// Change a menu control's options: their names, in order. An option
+  /// taken off the end takes its look with it. Only for a menu made by
+  /// [`Self::add_menu_control`], whose row lists the control's own words.
+  void setMenuOptions({required String id, required List<String> options}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetMenuOptions(
+              that: this, id: id, options: options);
+
   /// Turn the comp's master motion-blur shutter on or off, keeping
   /// the shutter's angle, phase and sample count as they are. One op, one
   /// undo step — the Timeline's master button.
   void setMotionBlurEnabled({required bool on_}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceSetMotionBlurEnabled(
           that: this, on_: on_);
+
+  /// Make this comp a multicam comp, its Sequence layers its angles, or an
+  /// ordinary comp again. One undo step.
+  void setMulticam({required bool on_}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetMulticam(that: this, on_: on_);
+
+  /// The angles a new clip of this multicam comp starts on, one undo step.
+  /// An unset picture is the first angle with one, and an unset sound
+  /// follows the picture.
+  void setMulticamStarts({UuidValue? picture, UuidValue? sound}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetMulticamStarts(
+              that: this, picture: picture, sound: sound);
 
   /// Commit a whole graph: the staged Fx boxes and the edited wiring, as one
   /// [`lumit_core::ops::Op::SetCompGraph`].
@@ -2657,6 +3647,13 @@ class CompositionReference {
               switch_: switch_,
               on_: on_);
 
+  /// Set the frame the library shows for the template, where its intro ends
+  /// and where its outro starts. `None` clears one.
+  void setTemplateMarks({int? poster, int? intro, int? outro}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetTemplateMarks(
+              that: this, poster: poster, intro: intro, outro: outro);
+
   /// Set what the Viewer looks *through*, whole: `stops` of exposure and
   /// whether the tone map is engaged (docs/07 §2.2 items 12-13), and
   /// whether the comp's background colour is left out of the composite so
@@ -2755,6 +3752,76 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceShiftGroup(
           that: this, group: group, delta: delta);
 
+  /// [`Self::shot_thumbnail`] with the shot's stack stopping after grade
+  /// node `node`: what that node puts out. A node in a group's grade or a
+  /// shared node is cut in that list. Nothing is written.
+  Future<BridgeRenderedFrame?> shotNodeThumbnail(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required UuidValue node,
+          required int frame,
+          required int maxEdge}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceShotNodeThumbnail(
+              that: this,
+              layer: layer,
+              clip: clip,
+              node: node,
+              frame: frame,
+              maxEdge: maxEdge);
+
+  /// A small still of one shot on its own at `frame`, its longest edge
+  /// `max_edge` pixels: only that layer drawn, and for a clip only that
+  /// clip, with its grade. A frame outside the shot is moved into it.
+  ///
+  /// Made the way [`Self::thumbnail`] is, by the same renderer, and `None`
+  /// where that one is.
+  Future<BridgeRenderedFrame?> shotThumbnail(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required int frame,
+          required int maxEdge}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceShotThumbnail(
+              that: this,
+              layer: layer,
+              clip: clip,
+              frame: frame,
+              maxEdge: maxEdge);
+
+  /// [`Self::shot_thumbnail`] with the shot's grade version `version` in
+  /// place of the one it shows. Nothing is written.
+  Future<BridgeRenderedFrame?> shotVersionThumbnail(
+          {required UuidValue layer,
+          UuidValue? clip,
+          required UuidValue version,
+          required int frame,
+          required int maxEdge}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceShotVersionThumbnail(
+              that: this,
+              layer: layer,
+              clip: clip,
+              version: version,
+              frame: frame,
+              maxEdge: maxEdge);
+
+  /// Every shot in this comp, in time order, the top row first where two
+  /// start together. Read on every edit, so it reads the snapshot once and
+  /// copies nothing but the list.
+  List<BridgeShot> shots() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceShots(
+        that: this,
+      );
+
+  /// Show row `row` of this template's data in the Viewer without changing
+  /// the project: on the copy `host` when one is given, else on the
+  /// template itself. `None` shows the project as it is again. The caller
+  /// asks the Viewer for its frame afresh.
+  void showDataRow({int? row, LayerReference? host, UuidValue? hostClip}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceShowDataRow(
+          that: this, row: row, host: host, hostClip: hostClip);
+
   /// Slide the given layers along the timeline by `delta` frames, as one
   /// `Op::Batch` — what releasing a move drag on a multi-selection's
   /// bar commits. The same arithmetic and the same wall as a group's
@@ -2805,6 +3872,14 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceStartExport(
           that: this, spec: spec, path: path);
 
+  /// Start recording what option `option` of menu `id` sets: the option is
+  /// picked, so the composition shows its look, and every row changed from
+  /// here until [`Self::stop_recording`] becomes part of it.
+  void startRecording({required String id, required int option}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceStartRecording(
+              that: this, id: id, option: option);
+
   /// A still of this composition at `frame`, its longest edge `max_edge`
   /// pixels, with effect `effect` switched off wherever it sits: the Flare
   /// window's Frame background, which the flare preview is then added over.
@@ -2825,6 +3900,19 @@ class CompositionReference {
   /// Stop playing, and silence the sound. Harmless when nothing is playing.
   void stopPlayback() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceStopPlayback(
+        that: this,
+      );
+
+  /// Stop recording, keeping what was changed as the option's look, or
+  /// with `keep` off dropping it. The rows stay as they were left.
+  void stopRecording({required bool keep}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceStopRecording(
+          that: this, keep: keep);
+
+  /// The fonts this composition's text uses, and the text of every
+  /// composition it places, for the Save dialogue's **Pack fonts**.
+  List<BridgeFontUse> templateFonts() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceTemplateFonts(
         that: this,
       );
 
@@ -2891,6 +3979,23 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceTimesOfFrames(
               that: this, first: first, count: count);
 
+  /// Put a transition between two layers that overlap in time, as one undo
+  /// step: the kind `kind` at `look`, its first with none. False when they
+  /// don't overlap by two frames, when one sits inside the other, or when
+  /// either has no picture or is locked. One put there before is replaced.
+  ///
+  /// The layer that starts first is going. A wipe runs on the upper layer
+  /// only, and the rest on both. Where the two pictures cross, the upper
+  /// layer's Opacity is keyed, unless it is already keyed.
+  bool transitionBetween(
+          {required UuidValue first,
+          required UuidValue second,
+          required String kind,
+          int? look}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceTransitionBetween(
+              that: this, first: first, second: second, kind: kind, look: look);
+
   /// **Trim comp to work area**: the comp becomes as long as its work
   /// area, and everything on the timeline slides back with it.
   ///
@@ -2917,12 +4022,52 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceUngroupSelection(
               that: this, layerIds: layerIds);
 
+  /// Take this template's data away. Copies that followed a row keep what
+  /// they set themselves and follow the template in the rest.
+  void unlinkData() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceUnlinkData(
+        that: this,
+      );
+
   /// The names of the 3D models this comp draws, precomps included, that
   /// can't be read right now. An export leaves them out, or draws the last
   /// version read. Reads any not read yet beside the caller, so never from a
   /// build.
   List<String> unreadModels() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceUnreadModels(
+        that: this,
+      );
+
+  /// Write this comp to `path` as `settings` ask, with any pictures set to
+  /// go beside it, and remember both for the next time. Answers the files
+  /// written.
+  Future<List<String>> vectorExport(
+          {required BridgeVectorSettings settings, required String path}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceVectorExport(
+              that: this, settings: settings, path: path);
+
+  /// Where this comp's `format` file goes unless somebody says otherwise:
+  /// where it went last time, with the format's extension; else where the
+  /// export defaults put a file, named after the comp. `None` when the
+  /// defaults ask every time.
+  String? vectorPath({required String format}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceVectorPath(
+          that: this, format: format);
+
+  /// This comp exported in memory as `settings` ask. `epoch` names this
+  /// request: a newer one stops it, and the window drops any answer older
+  /// than the newest it asked for.
+  Future<BridgeVectorPreview> vectorPreview(
+          {required BridgeVectorSettings settings, required int epoch}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceVectorPreview(
+              that: this, settings: settings, epoch: epoch);
+
+  /// The settings this comp was last exported with, or the window's own
+  /// defaults when it never has been.
+  BridgeVectorSettings vectorSettings() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceVectorSettings(
         that: this,
       );
 

@@ -120,6 +120,30 @@ pub trait AudioProcessor: Send + Sync {
         0
     }
 
+    /// Whether this effect has to hear its whole input before its first
+    /// block: one that learns from all of the sound it is given, such as a
+    /// noise floor found over the whole clip. A rack holding one is baked
+    /// whole from its first sample rather than streamed from the playhead,
+    /// so the preview hears what the export writes.
+    fn bakes_whole(&self) -> bool {
+        false
+    }
+
+    /// The whole of this link's input, once, before its first block.
+    ///
+    /// `input` is exactly what the blocks are about to be handed, end to end:
+    /// interleaved stereo as it stands after the links ahead of this one, run
+    /// on through the latency and tail frames. `values` is the same per-block
+    /// list the blocks read, so `values[b]` belongs to block `b` and the last
+    /// entry holds past the end.
+    ///
+    /// This is what lets a repair effect learn from all of its sound, a noise
+    /// floor or a hum's drift or a room's decay, and still be deterministic:
+    /// a chain always runs from its own first sample, so the same input is
+    /// looked at the same way every time. Nothing to do for everything that
+    /// answers in the moment, which is most things.
+    fn look(&self, _input: &[f32], _values: &[Vec<(ParamId, f64)>]) {}
+
     /// The sentence the most recent refused block carried, where the host kept
     /// one — what the calm badge shows underneath its reason (AP5,
     /// docs/12 §2.3). `None` for a processor that has never refused a block,
@@ -170,6 +194,25 @@ pub struct ChainOutput {
 /// existed.
 #[must_use]
 pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
+    let never = std::sync::atomic::AtomicBool::new(false);
+    run_chain_until(chain, input, &never).unwrap_or_else(|| ChainOutput {
+        samples: input.to_vec(),
+        dry_blocks: 0,
+        dry_by_link: vec![0; chain.len()],
+        latency: 0,
+        tail: 0,
+    })
+}
+
+/// [`run_chain`], given up between blocks once `stop` is raised: `None` then,
+/// and nothing of the run is kept. A long bake a newer edit has made stale
+/// stops within a block of being asked.
+#[must_use]
+pub fn run_chain_until(
+    chain: &[ChainLink],
+    input: &[f32],
+    stop: &std::sync::atomic::AtomicBool,
+) -> Option<ChainOutput> {
     let frames = input.len() / AUDIO_CHANNELS;
     let latency: u32 = chain
         .iter()
@@ -181,13 +224,13 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
         .map(|link| link.processor.tail())
         .fold(0u32, u32::saturating_add);
     if chain.is_empty() || frames == 0 {
-        return ChainOutput {
+        return Some(ChainOutput {
             samples: input.to_vec(),
             dry_blocks: 0,
             dry_by_link: vec![0; chain.len()],
             latency: 0,
             tail: 0,
-        };
+        });
     }
 
     // Denormals off for the whole loop, restored on the way out. A reverb
@@ -214,7 +257,19 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
     let mut dry_by_link = vec![0usize; chain.len()];
 
     for (li, link) in chain.iter().enumerate() {
+        // A sample that is not a number, from a float file or a plugin
+        // ahead, would stay in an effect's running state for the rest of the
+        // run, so each link reads it as nought.
+        for s in &mut src {
+            if !s.is_finite() {
+                *s = 0.0;
+            }
+        }
+        link.processor.look(&src, &link.values);
         for (b, flag) in wet.iter_mut().enumerate() {
+            if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
             let at = b * AUDIO_BLOCK_SAMPLES;
             let end = at + AUDIO_BLOCK_SAMPLES;
             let values = link
@@ -237,13 +292,13 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
     }
 
     src.truncate(wanted * AUDIO_CHANNELS);
-    ChainOutput {
+    Some(ChainOutput {
         samples: src,
         dry_blocks,
         dry_by_link,
         latency,
         tail,
-    }
+    })
 }
 
 /// Crossfade the wet signal to and from the dry one across every edge of a dry
@@ -578,6 +633,63 @@ mod tests {
         assert!(
             (out.samples[AUDIO_BLOCK_SAMPLES] - 0.5).abs() < 1e-6,
             "the echo lands in the block the tail bought"
+        );
+    }
+
+    /// **A look sees what the blocks get.** The second link records what its
+    /// look was shown and what its blocks were handed, and the two must be the
+    /// same samples: the input after the first link's doubling, run on through
+    /// the latency the chain asked for.
+    #[test]
+    fn a_look_is_shown_exactly_what_the_blocks_are_handed() {
+        #[derive(Default)]
+        struct Recorder {
+            looked: Mutex<(Vec<f32>, usize)>,
+            handed: Mutex<Vec<f32>>,
+        }
+        impl AudioProcessor for Recorder {
+            fn process(
+                &self,
+                input: &[f32],
+                output: &mut [f32],
+                _values: &[(ParamId, f64)],
+                _steady: i64,
+            ) -> bool {
+                self.handed.lock().unwrap().extend_from_slice(input);
+                output.copy_from_slice(input);
+                true
+            }
+            fn look(&self, input: &[f32], values: &[Vec<(ParamId, f64)>]) {
+                *self.looked.lock().unwrap() = (input.to_vec(), values.len());
+            }
+        }
+
+        let frames = AUDIO_BLOCK_FRAMES * 3 + 100;
+        let input: Vec<f32> = (0..frames * AUDIO_CHANNELS)
+            .map(|i| (i as f32 * 0.01).sin())
+            .collect();
+        let mut doubler = Gain::new(None);
+        doubler.latency = 700;
+        let recorder = Arc::new(Recorder::default());
+        let values = vec![vec![(ParamId::new("p1"), 1.0)]; 2];
+        let _ = run_chain(
+            &[
+                link(doubler, vec![vec![(ParamId::new("p1"), 2.0)]]),
+                ChainLink {
+                    processor: Arc::clone(&recorder) as Arc<dyn AudioProcessor>,
+                    values,
+                },
+            ],
+            &input,
+        );
+        let (looked, rows) = recorder.looked.lock().unwrap().clone();
+        let handed = recorder.handed.lock().unwrap().clone();
+        assert_eq!(rows, 2, "the look is handed the per-block values");
+        assert!(!looked.is_empty());
+        assert_eq!(looked, handed, "the look saw other samples than the blocks");
+        assert!(
+            (looked[10] - input[10] * 2.0).abs() < 1e-6,
+            "after the doubling"
         );
     }
 }

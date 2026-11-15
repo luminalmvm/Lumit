@@ -112,7 +112,9 @@ fn rust_sources(dir: &Path) -> Vec<PathBuf> {
             .to_string_lossy()
             .to_string();
         if path.is_dir() {
-            if name != "bin" {
+            // A `tests` folder holds a test module's children: test code, as
+            // a `tests.rs` is.
+            if name != "bin" && name != "tests" {
                 found.extend(rust_sources(&path));
             }
         } else if name.ends_with(".rs") && name != "tests.rs" {

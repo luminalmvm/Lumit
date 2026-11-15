@@ -54,6 +54,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/folder.dart' show FolderReference;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/styles.dart';
@@ -63,13 +64,17 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart' show BridgeFootageHere;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../shell/interpret_footage_frb.dart';
+import '../shell/lottie_import_frb.dart';
 import '../shell/menu_bar_frb.dart' show importFootageFrb;
 import '../shell/run_script_frb.dart' show isScriptFile, runDroppedScripts;
+import '../state/drag_payloads.dart' show TemplateDragData;
 import '../state/file_dialogs.dart';
+import '../state/template_library.dart';
 import '../state/timecode.dart';
 import '../state/workspace.dart' show Workspace;
 import '../theme/theme.dart';
@@ -79,6 +84,7 @@ import 'project_chrome_frb.dart';
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'project_row_frb.dart';
+import 'template_place.dart' show bringTemplate;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 export 'project_chrome_frb.dart';
@@ -158,10 +164,12 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
       case 'aep':
       case 'zip':
         isAe = true;
-      // An extension package, which the window offers to install, and a
-      // style, which it takes in.
+      // An extension package, which the window offers to install, a style,
+      // which it takes in, and a graphics template, which it adds to the
+      // library.
       case 'lfx':
       case 'lumstyle':
+      case 'lumt':
         break;
       default:
         media.add(path);
@@ -270,6 +278,43 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       ..copyClaim = _copyClaim
       ..cutClaim = _cutClaim
       ..pasteClaim = _pasteClaim;
+    // The graphics templates the library has a newer version of, which wear
+    // an Update badge.
+    _updates = TemplateUpdates.of(state, _boundUi!)
+      ..addListener(_updatesChanged);
+  }
+
+  late final TemplateUpdates _updates;
+
+  void _updatesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Bring in the library's newer version of the templates in [comps].
+  Future<void> _updateTemplates(Iterable<UuidValue> comps) async {
+    await _updates.update(comps);
+    if (mounted) _documentChanged();
+  }
+
+  /// The compositions inside [folder], all the way down, that the library
+  /// has a newer version of. Read when its menu opens.
+  List<UuidValue> _updatesIn(FolderReference folder) {
+    final found = <UuidValue>[];
+    void walk(ItemReference item) {
+      switch (item) {
+        case ItemReference_Composition(:final field0)
+            when _updates.forComp(field0.internalid) != null:
+          found.add(field0.internalid);
+        case ItemReference_Folder(:final field0):
+          try {
+            field0.getChildren().forEach(walk);
+          } catch (_) {}
+        default:
+      }
+    }
+
+    walk(ItemReference.folder(folder));
+    return found;
   }
 
   bool Function()? _priorDelete, _priorCopy, _priorCut, _priorPaste;
@@ -404,6 +449,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
     _boundUi?.projectPickRequest.removeListener(_onPickRequested);
+    _updates.removeListener(_updatesChanged);
     final ui = _boundUi;
     if (ui != null) {
       if (ui.deleteClaim == _deleteClaim) ui.deleteClaim = _priorDelete;
@@ -613,6 +659,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// the rows are rebuilt on every hover.
   final Map<String, bool> _nodeGraphs = {};
 
+  /// Which comps are multicam comps, for the row's glyph. Cached as
+  /// [_nodeGraphs] is, for the same reason.
+  final Map<String, bool> _multicams = {};
+
   /// A rebuild is already booked for the end of this frame.
   ///
   /// The three probes this panel fires - the poster frame, the container's
@@ -813,6 +863,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     final ui = Provider.of<LumitUiState>(context, listen: false);
     ui.selectedProjectItem.value =
         _selectedIds.contains(_anchorId) ? _itemById[_anchorId] : null;
+    ui.selectedProjectItems.value = _picked;
   }
 
   /// The row being renamed in place, by id.
@@ -1074,8 +1125,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       // Painted over the panel rather than behind it, for the reason the row
       // target gives: the panel draws its own fill, and a drop with no
       // feedback is indistinguishable from one that did nothing.
-      child: Container(
-        foregroundDecoration: !_dropHover
+      // A graphics template from Effects & presets is brought in, and
+      // placed nowhere.
+      child: DragTarget<TemplateDragData>(
+        onAcceptWithDetails: (d) => _bringTemplate(d.data.path),
+        builder: (context, templates, _) => Container(
+        foregroundDecoration: !_dropHover && templates.isEmpty
             ? null
             : BoxDecoration(
                 border: Border.all(color: t.accent, width: 1.5),
@@ -1085,12 +1140,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
           builder: (context, box) => _build(context, box.maxWidth, box.maxHeight),
         ),
       ),
+      ),
     );
+  }
+
+  Future<void> _bringTemplate(String path) async {
+    final state = Provider.of<LumitState>(context, listen: false);
+    if (await bringTemplate(state, path) != null) _documentChanged();
   }
 
   Future<void> _dropped(List<String> paths) async {
     final state = Provider.of<LumitState>(context, listen: false);
-    final footage = paths.where((path) => !isScriptFile(path)).toList();
+    // A Lottie makes a composition of its own, and the rest are footage.
+    final rest = await importLottieFrb(context, state, paths);
+    if (!mounted) return;
+    final footage = rest.where((path) => !isScriptFile(path)).toList();
     if (await importDroppedPaths(state, footage)) _documentChanged();
     if (mounted) await runDroppedScripts(context, paths);
   }
@@ -1391,6 +1455,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
         nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        multicam: _multicams[id] ??= _isMulticam(item),
         model: _models[id] ??= _isModel(item),
         inUse: _used[id] ??= _isUsed(item),
         proxy: _proxies.putIfAbsent(
@@ -1428,6 +1493,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
             ? (dropped) => _fileInto(item, dropped)
             : null,
         relinkPicker: widget.relinkPicker,
+        onUpdate: switch (item) {
+          ItemReference_Composition(:final field0)
+              when _updates.forComp(field0.internalid) != null =>
+            () => _updateTemplates([field0.internalid]),
+          _ => null,
+        },
       ),
     );
     // A composition row shows who has it open, and in a shared project any
@@ -1541,6 +1612,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
               }),
       onNewFolder: _newFolder,
       onNewComposition: _newComposition,
+      onUpdateTemplate: switch (item) {
+        ItemReference_Composition(:final field0)
+            when _updates.forComp(field0.internalid) != null =>
+          () => _updateTemplates([field0.internalid]),
+        _ => null,
+      },
+      onUpdateAll: switch (item) {
+        ItemReference_Folder(:final field0)
+            when (_names[id] ?? _nameOf(item)) == l10n.templatesFolder =>
+          switch (_updatesIn(field0)) {
+            final comps when comps.isNotEmpty => () => _updateTemplates(comps),
+            _ => null,
+          },
+        _ => null,
+      },
     );
   }
 
@@ -2005,6 +2091,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
     return false;
   }
 
+  bool _isMulticam(ItemReference item) {
+    if (item case ItemReference_Composition(:final field0)) {
+      try {
+        return field0.isMulticam();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   /// What a row menu's command acts on: the whole selection when the row is
   /// part of it, and that row alone when it is not. The menu is about what is
   /// picked, and a right-click on an unpicked row is about that row.
@@ -2154,6 +2251,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       _labels.clear();
       _names.clear();
       _nodeGraphs.clear();
+      _multicams.clear();
       _proxies.clear();
       _models.clear();
       _useProxies = null;

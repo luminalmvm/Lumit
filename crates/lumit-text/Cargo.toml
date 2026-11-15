@@ -26,6 +26,9 @@ harfrust = "0.14"
 skrifa = "0.48"
 zeno = "0.3"
 thiserror = "2"
+# What a library font file holds, for the frame key of a text layer drawn
+# with it. Already in the workspace through lumit-eval.
+blake3 = "1"
 
 [lints]
 workspace = true

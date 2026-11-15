@@ -1,0 +1,61 @@
+---
+title: Voice isolation
+description: "Keeps speech and turns everything else down, using a trained model."
+---
+
+Voice isolation is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+A trained model hears the whole of the layer's sound and finds the speech in it. The speech
+and everything else each get a level of their own.
+
+The model is an **addon**, **DeepFilterNet3**, installed from **Settings ▸ Addons** with the
+**Model runtime**. Without them the effect wears a badge naming what to install and leaves
+the sound alone, in an export too. Installing them takes effect at once, sound already
+loaded included.
+
+More than an hour of stereo sound at 48 kHz, or as many samples at another rate, is
+refused. The sound plays unchanged, and the badge reads **Too long for Voice isolation.
+Split the layer.**
+
+Moving a control does not run the model again.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Voice** | Slider | -24 to 12 | 0 | - |
+| **Background** | Slider | -60 to 0 | -60 | - |
+| **Wet** | Slider | 0 to 100 | 80 | Per cent |
+| **Background only** | Checkbox | On or off | Off | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Voice**: the level of the speech, in dB.
+- **Background**: the level of everything else, in dB. At -60 it is taken out altogether.
+- **Wet**: how much of the result is in the output. Below 100 the untouched sound is mixed
+  in beside it.
+- **Background only**: plays what is taken away.
+
+**Effect ▸ Only what is removed** (`Alt+N`) switches **Background only**.
+
+## Related
+
+- [Addons and models](/use/addons/#voice-isolation)
+- [Cleaning up a noisy shot and its sound](/tutorials/clean-up-a-noisy-shot/)
+- [Noise reduction](/effects/audio/noise-reduction/)
+- [Reverb reduction](/effects/audio/reverb-reduction/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

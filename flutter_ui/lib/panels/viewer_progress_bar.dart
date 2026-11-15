@@ -27,10 +27,14 @@
 // "stuck" at a glance. The sheen is a loop, so it runs at Full only, and the
 // fill moves as a state mark does, so at None the bar simply sits at its
 // reported fraction.
+//
+// **Analyses too.** A Stabilise analysing its shot says so in the same slot,
+// with the same bar, whenever no preview frame has anything to say.
 
 import 'package:flutter/widgets.dart';
 
 import '../state/preview_progress.dart';
+import '../state/stabilise_progress.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -60,7 +64,10 @@ const double _clearOfTransport = 12;
 class ViewerProgressBar extends StatefulWidget {
   final PreviewProgressTracker tracker;
 
-  const ViewerProgressBar({super.key, required this.tracker});
+  /// The comp's running analyses, shown while the preview frame is quiet.
+  final StabiliseProgress? analysis;
+
+  const ViewerProgressBar({super.key, required this.tracker, this.analysis});
 
   @override
   State<ViewerProgressBar> createState() => _ViewerProgressBarState();
@@ -78,6 +85,7 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     super.initState();
     _sheen = AnimationController(vsync: this, duration: _sheenPeriod);
     widget.tracker.addListener(_onProgress);
+    widget.analysis?.addListener(_onProgress);
   }
 
   @override
@@ -93,11 +101,16 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
       old.tracker.removeListener(_onProgress);
       widget.tracker.addListener(_onProgress);
     }
+    if (old.analysis != widget.analysis) {
+      old.analysis?.removeListener(_onProgress);
+      widget.analysis?.addListener(_onProgress);
+    }
   }
 
   @override
   void dispose() {
     widget.tracker.removeListener(_onProgress);
+    widget.analysis?.removeListener(_onProgress);
     _sheen.dispose();
     super.dispose();
   }
@@ -114,7 +127,7 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
   /// it also stops the interface ever settling, which hangs every widget test
   /// that waits for it to.
   void _runSheen() {
-    final loops = widget.tracker.visible &&
+    final loops = _showing() != null &&
         (context.getInheritedWidgetOfExactType<ThemeScope>()?.motion.carries ??
             false);
     if (loops && !_sheen.isAnimating) {
@@ -124,14 +137,28 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     }
   }
 
+  /// What the slot says: the preview frame's progress while it has something
+  /// to say, else an analysis's, else nothing.
+  ({String label, double fraction})? _showing() {
+    final tracker = widget.tracker;
+    if (tracker.visible) {
+      return (label: tracker.label, fraction: tracker.fraction);
+    }
+    final analysis = widget.analysis;
+    if (analysis != null && analysis.visible) {
+      return (label: analysis.label, fraction: analysis.fraction);
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    final tracker = widget.tracker;
+    final tracker = _showing();
     // Nothing to say: an empty box rather than a transparent bar, so the
     // Viewer's own hit testing is untouched while no frame is being waited on.
-    if (!tracker.visible) return const SizedBox.shrink();
+    if (tracker == null) return const SizedBox.shrink();
     final motion = scope.motion;
     final figure = monoSlotWidth(t.small, 4);
     final track = _trackWidth + 6 + figure + 12;
@@ -170,8 +197,10 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
                     height: _trackHeight,
                     child: Stack(
                       children: [
+                        // The span bar's empty part, so the track reads on
+                        // the transport before anything has filled it.
                         Positioned.fill(
-                          child: ColoredBox(color: t.surface2),
+                          child: ColoredBox(color: t.surface3),
                         ),
                         Positioned.fill(
                           child: Align(

@@ -16,8 +16,11 @@ pub fn list_preset_groups() -> Vec<String> {
     let Some(library) = lumit_project::presets_dir() else {
         return Vec::new();
     };
+    // The stills' albums share the library and are no group of presets.
+    let stills = library.join(crate::api::stills::STILLS_FOLDER);
     let mut groups: Vec<String> = folders_under(&library)
         .iter()
+        .filter(|folder| !folder.starts_with(&stills))
         .filter_map(|folder| group_of(&library, folder))
         .filter(|group| !group.is_empty())
         .collect();

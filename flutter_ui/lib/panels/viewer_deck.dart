@@ -249,6 +249,8 @@ class ViewerDeck extends StatelessWidget {
                   ViewerProgressBar(
                     tracker: Provider.of<LumitUiState>(context, listen: false)
                         .previewProgress,
+                    analysis: Provider.of<LumitUiState>(context, listen: false)
+                        .stabiliseProgress,
                   ),
                 ]);
             return loose
