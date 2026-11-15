@@ -168,15 +168,16 @@ typedef CompBoxRows = ({
 ///
 /// [params] is the schema's list with the instance's derived rows after it, and
 /// [values], [hidden] and [greyed] are the instance's. Out go the rows a
-/// plugin is hiding, the members of a group whose `visible_when` is unmet, the
-/// riders that belong beside their host, and a curve, whose editor is no 24px
-/// row. The rows a plugin has greyed are drawn disabled.
+/// plugin is hiding, the members of a group whose `visible_when` is unmet and
+/// the riders that belong beside their host. A curve is a row like any other:
+/// the row draws it one lane tall, as the Timeline does. The rows a plugin has
+/// greyed are drawn disabled.
 ///
 /// A **shut** box keeps the rows that tell something: a parameter a wire is
 /// on ([wired] names the sockets), and one that is keyed or off its default.
-/// An **open** box lists every row under its group's heading, except that a
-/// group the schema folds shut shows its first row, and the rest only once
-/// that row tells something (each row that tells something shows regardless).
+/// An **open** box lists every row the Effect controls panel lists, each
+/// group under its heading, a group the schema folds shut included: the box
+/// has no twirl of its own to open it with.
 /// [owner] is the layer the effect sits on, where a layer-valued row starts.
 CompBoxRows compBoxRows(
   String effect,
@@ -212,8 +213,7 @@ CompBoxRows compBoxRows(
     for (final p in shown)
       if (!gated.contains(p.id) &&
           !folded.contains(p.id) &&
-          !(inView && p.id == 'matte') &&
-          p.kind is! BridgeParamKind_Curve)
+          !(inView && p.id == 'matte'))
         p,
   ];
   bool offDefault(BridgeParamInfo p) {
@@ -229,27 +229,12 @@ CompBoxRows compBoxRows(
       wired.contains(p.id) ||
       (inView && compositingRowIds.contains(p.id)) ||
       [p, ...?riders[p.id]].any(offDefault);
-  // A group the schema folds shut keeps its lead row on view, under its
-  // heading, so its switch (Clone to points' Time offset) is in reach from
-  // the box itself; once that row tells something, the whole group opens.
-  final listedIds = {for (final p in rows) p.id};
-  final byId = {for (final p in rows) p.id: p};
-  final shut = <String>{};
-  for (final g in groups) {
-    if (!g.collapsed || g.label.isEmpty) continue;
-    final lead = g.params.where(listedIds.contains).firstOrNull;
-    if (lead != null && tells(byId[lead]!)) continue;
-    shut.addAll(g.params.where((id) => id != lead));
-  }
   // A rider rides beside its host in the panel; the box has no room for
   // that, so it takes the row after its host.
   List<BridgeParamInfo> withRiders(Iterable<BridgeParamInfo> hosts) => [
         for (final p in hosts) ...[p, ...?riders[p.id]],
       ];
-  final open = withRiders([
-    for (final p in rows)
-      if (!shut.contains(p.id) || tells(p)) p,
-  ]);
+  final open = withRiders(rows);
   final listed = {for (final p in open) p.id};
   final kickers = <String, String>{};
   for (final g in groups) {
