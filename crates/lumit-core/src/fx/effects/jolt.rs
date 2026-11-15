@@ -639,7 +639,7 @@ impl EffectDef for JoltDef {
 
     /// Only while its time hits are on: otherwise a Timewarp below it in the
     /// stack keeps the moments.
-    fn wants_own_moments(&self, e: &EffectInstance) -> bool {
+    fn wants_own_moments(&self, e: &EffectInstance, _owner: uuid::Uuid) -> bool {
         e.bool_of("time_on").unwrap_or(false)
     }
 

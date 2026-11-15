@@ -562,6 +562,11 @@ fn sync_caches(state: &mut WorkerState) {
     // The decoded-frame pool's share of the memory report. Published on
     // the same turn as the rest, so the numbers a report adds up were all read
     // at one moment rather than across a second of drift.
+    // Short of memory: give back the colder half of the memory cache before
+    // the machine starts paging (checked at most once a second).
+    // The idle fill is not woken for it: refilling what was just given back
+    // is the opposite of the point.
+    let _ = crate::framecache::trim_if_memory_low();
     let (decoded_bytes, decoders) = state.renderer.decode_memory();
     crate::framecache::decode::publish(decoded_bytes as u64, decoders as u64);
     crate::framecache::disk::publish_pending_parks(state.disk.pending_parks() as u64);
@@ -3076,7 +3081,7 @@ fn build_viewer_renderer(
             renderer.unified_memory(),
         );
         renderer.set_memory_budgets(vram, ram);
-        crate::framecache::size_to_machine(vram, ram);
+        crate::framecache::size_to_machine(vram, ram, crate::api::system::free_memory_bytes());
     }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens
@@ -3214,6 +3219,7 @@ fn worker_loop(
     );
     let mut stream = stream;
     crate::turns::raise_timer_resolution();
+    crate::turns::opt_out_of_power_throttling();
 
     // Made before the renderer, because the two profiler sinks it installs
     // read it from inside a render.
@@ -3388,7 +3394,10 @@ fn one_turn(
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
         crate::turns::playback_priority(state.prioritised);
+        crate::turns::playing(state.prioritised);
     }
+    // An export that ended behind other windows lets Windows save power again.
+    crate::turns::follow_power();
     sync_caches(state);
     #[cfg(target_arch = "wasm32")]
     web::finish(state, stream);
@@ -4581,15 +4590,24 @@ fn profile_of(
 /// The closing report is sent whatever happened inside, including a frame that
 /// faulted or one served straight from the cache with no report at all: a bar
 /// that was started must always be ended.
+///
+/// `measure` is false for a live drag's frame. Measuring waits for the card
+/// at every layer and every effect, which on a slow card is most of a drag
+/// tick, and a drag frame is provisional anyway: the release commits and the
+/// committed frame comes back through here measured, so the Time column
+/// reads the frame that stays rather than one that was already replaced.
 #[frb(ignore)]
 fn watched<R>(
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
     frame: u64,
+    measure: bool,
     render: impl FnOnce(&mut WorkerState, &mut WorkerResponseStream) -> R,
 ) -> R {
     state.renderer.watch_frames(true);
-    state.renderer.measure_frames(crate::profiling::wanted());
+    state
+        .renderer
+        .measure_frames(measure && crate::profiling::wanted());
     let out = render(state, stream);
     state.renderer.watch_frames(false);
     state.renderer.measure_frames(false);
@@ -4640,7 +4658,7 @@ fn render_comp(
     // Not a 3D viewport's draft, which is never banked, so it never pushes
     // the Viewer's own frames out.
     let cacheable = !view.is_some_and(|v| v.draft);
-    watched(state, stream, req.frame, |state, stream| {
+    watched(state, stream, req.frame, true, |state, stream| {
         publish_frame(
             state,
             req.comp.id,
@@ -4972,6 +4990,15 @@ fn publish_preview(
     asked: f32,
     mut document: lumit_core::model::Document,
 ) -> Result<(), BridgeError> {
+    // Live Update off: a drag draws nothing, and the Viewer keeps the last
+    // frame until the release commits and draws the real one.
+    if !crate::realtime::live_update() {
+        return Ok(());
+    }
+    let wireframe = crate::realtime::wireframe_drags();
+    if wireframe {
+        crate::realtime::wireframe_document(&mut document);
+    }
     crate::realtime::draft_flares(&mut document);
     let (comp_width, comp_height) = document
         .comp(comp.id)
@@ -4984,7 +5011,9 @@ fn publish_preview(
         std::sync::Arc::new(document),
     );
     let scale = crate::realtime::drag_scale(comp_width, comp_height, asked);
-    watched(state, stream, frame, |state, stream| {
+    let started = web_time::Instant::now();
+    lumit_render::build::set_outlines_only(wireframe);
+    watched(state, stream, frame, false, |state, stream| {
         publish_frame(
             state,
             comp.id,
@@ -4996,6 +5025,13 @@ fn publish_preview(
             false,
         );
     });
+    lumit_render::build::set_outlines_only(false);
+    // What the drag frame cost, so the next is drawn coarser while drags are
+    // slow (the adaptive resolution limit). A wireframe frame is not a
+    // measure of the picture, so it teaches nothing.
+    if !wireframe {
+        crate::realtime::observe_drag(started.elapsed().as_secs_f64());
+    }
     Ok(())
 }
 

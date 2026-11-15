@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 mod float_plate;
+mod follow;
 mod proximity;
 
 // Regression: under auto res a footage layer decodes at a reduced size that
@@ -942,7 +943,13 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     let map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
     let mut visited = vec![comp.id];
     let draws = build_comp_draws(&std::sync::Arc::new(doc), &comp, 0.0, &map, &mut visited);
-    let drawn = draws.first().expect("one layer, one draw");
+    let held = draws.first().expect("one layer, one draw");
+    // The Posterize time holds the whole layer, so the layer is drawn,
+    // effects and all, inside the held picture.
+    let DrawSource::Nested { draws: inside, .. } = &held.source else {
+        panic!("a held layer is drawn as a picture");
+    };
+    let drawn = inside.first().expect("the layer, inside");
     // The consumption side's own rule, spelled here: `run_ops` advances its
     // matte counter for exactly the ops whose role names a parameter.
     let want = drawn

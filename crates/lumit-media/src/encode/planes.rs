@@ -36,8 +36,17 @@ pub(super) fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFra
         }
         return Ok(frame);
     }
+    // Packed ARGB, QuickTime Animation's: one plane, clear black.
+    if pix_fmt == ffi::AV_PIX_FMT_ARGB {
+        fill_plane(frame.data[0], frame.linesize[0], rows, 0)?;
+        return Ok(frame);
+    }
     // Y = 16, chroma = 128 is video-range black for both layouts we feed.
     fill_plane(frame.data[0], frame.linesize[0], rows, 16)?;
+    // VP9's alpha plane, full height: opaque.
+    if pix_fmt == ffi::AV_PIX_FMT_YUVA420P {
+        fill_plane(frame.data[3], frame.linesize[3], rows, 255)?;
+    }
     match pix_fmt {
         ffi::AV_PIX_FMT_NV12 => {
             fill_plane(frame.data[1], frame.linesize[1], chroma_rows, 128)?;

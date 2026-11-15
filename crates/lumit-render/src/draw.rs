@@ -187,6 +187,11 @@ pub struct DofInputDraw {
     /// with a layer's own. Empty unless its stack is folded in and applies a
     /// graph.
     pub graph_fx: Vec<GraphDraw>,
+    /// The birth schedules of the referenced layer's own points effects, 1:1
+    /// with them as [`CompLayerDraw::points_schedules`] is with a layer's own,
+    /// so a Particulate in a stack drawn at another moment, or for another
+    /// layer, draws its particles. Empty unless its stack is folded in.
+    pub points_schedules: Vec<lumit_core::fx::points::PointsSchedule>,
 }
 
 /// A layer picture read as a map, set down on the consuming layer rather than

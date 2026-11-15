@@ -23,6 +23,7 @@ fn clip(path: &Path, frames: u32, seed: u32) {
         fps_den: 1,
         bit_rate: None,
         max_rate: None,
+        cbr: false,
         colour: ColourTags::default(),
         depth: lumit_media::encode::BitDepth::Eight,
     };

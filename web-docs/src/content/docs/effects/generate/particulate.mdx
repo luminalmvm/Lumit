@@ -114,6 +114,7 @@ A particle system.
 | **Particle blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Max particles** | Slider, whole numbers | 1 to 200000; up to 1000000 | 20000 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Composite on original** | Checkbox | On or off | On | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -391,6 +392,8 @@ The **Render** group, how they are drawn:
 The remaining properties:
 
 - **Seed**: changes the randomness.
+- **Composite on original**: on, the particles are drawn over the layer's own picture. Off,
+  the layer is clear wherever no particle is.
 - **Mix**: how much of the result replaces the picture underneath.
 - **Blend**: how the particles composite with the layer they are drawn over.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.

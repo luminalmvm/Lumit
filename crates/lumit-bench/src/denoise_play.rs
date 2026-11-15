@@ -75,6 +75,7 @@ pub fn budgets(
         auto_res: false,
         display_scale: 1.0,
         divisor: 1,
+        shown_size: false,
     };
     // Far from the frames played, so nothing it decodes or measures is reused.
     r.render_prepared(&doc, comp_id, 400, full, false, true)?;

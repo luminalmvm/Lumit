@@ -765,6 +765,19 @@ pub enum Bitrate {
     },
 }
 
+/// How the video bitrate is spent (docs/06 §7.5): varying with the picture
+/// up to a peak, or held constant throughout, as a stream or a broadcast
+/// wants.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum RateControl {
+    /// Variable: the target on average, more where the picture is busy, up to
+    /// the peak.
+    #[default]
+    Vbr,
+    /// Constant: the target throughout.
+    Cbr,
+}
+
 /// Bits per pixel per second a codec needs for a delivery-quality picture —
 /// the constants behind [`Bitrate::Auto`]. Taken from the preset table
 /// (docs/06 §7.5): 1920×1080 at 60 wants 16 Mbps of H.264, which is 0.13 bits
@@ -793,6 +806,7 @@ pub fn auto_bitrate(
     let bits_per_px = match codec {
         lumit_media::encode::VideoCodec::H264 => H264_BITS_PER_PIXEL,
         lumit_media::encode::VideoCodec::Hevc => HEVC_BITS_PER_PIXEL,
+        lumit_media::encode::VideoCodec::Vp9 => HEVC_BITS_PER_PIXEL,
         // ProRes has no bitrate to choose, so this is never asked.
         _ => H264_BITS_PER_PIXEL,
     };
@@ -1319,6 +1333,9 @@ pub struct ExportSpec {
     /// The video bitrate: worked out from the size and rate, or the number
     /// that was typed. Meaningless — and unread — for the lossless formats.
     pub bitrate: Bitrate,
+    /// Whether that bitrate is held constant or allowed to vary up to its
+    /// peak.
+    pub rate_control: RateControl,
     /// Output frame rate; None = the composition's own. A different
     /// rate resamples by nearest comp frame — the honest thing without optical
     /// flow in the export path — and the file is stamped with the chosen rate.
@@ -1376,6 +1393,7 @@ impl Default for ExportSpec {
             format: ExportFormat::Video(lumit_media::encode::VideoCodec::H264),
             target: None,
             bitrate: Bitrate::default(),
+            rate_control: RateControl::default(),
             fps: None,
             range: None,
             include_audio: true,
@@ -1849,6 +1867,7 @@ fn open_sink(
                     fps_den: out_den,
                     bit_rate,
                     max_rate,
+                    cbr: spec.rate_control == RateControl::Cbr,
                     colour: spec.colour_space.tags(),
                     depth: spec.depth,
                 }),

@@ -27,6 +27,28 @@ fn oversize_footage_decodes_within_the_texture_limit() {
     );
 }
 
+#[test]
+fn a_layer_shown_smaller_decodes_no_larger_than_it_is_shown() {
+    let on = Quality {
+        shown_size: true,
+        ..Quality::default()
+    };
+    assert_eq!(on.target_width_shown(3840, Some(0.5)), Some(1920));
+    assert_eq!(on.target_width_shown(3840, None), None, "not a candidate");
+    let half = Quality { divisor: 2, ..on };
+    assert_eq!(
+        half.target_width_shown(3840, Some(0.5)),
+        Some(960),
+        "Half of the shown size"
+    );
+    let off = Quality::default();
+    assert_eq!(
+        off.target_width_shown(3840, Some(0.5)),
+        None,
+        "the setting off, or export, decodes as before"
+    );
+}
+
 /// Full quality decodes at native width; a divisor and Auto both shrink it,
 /// and draft caps on top without ever raising the specified width. This is
 /// the policy both the decode request and the cache key read, so a bug here

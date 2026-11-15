@@ -830,6 +830,14 @@ void showViewerPictureMenu({
             id: 'viewer-menu-zoom'),
         viewerSub(l10n.menuResolution, close,
             (dismiss) => viewerResolutionRows(ui, dismiss, viewId: host.viewId)),
+        // After Effects' Live Update switch and its Caps Lock: a drag with no
+        // frame until the release, and a Viewer that keeps its picture.
+        viewerRow(l10n.viewerMenuLiveUpdate,
+            () => ui.setLiveUpdate(!ui.liveUpdate.value), close,
+            id: 'viewer-menu-live-update', ticked: ui.liveUpdate.value),
+        viewerRow(l10n.viewerMenuSuspendUpdates,
+            () => ui.setViewerSuspended(!ui.viewerSuspended.value), close,
+            id: 'viewer-menu-suspend', ticked: ui.viewerSuspended.value),
         viewerSub(l10n.tipViewerChannel, close,
             (dismiss) => viewerChannelRows(host, dismiss),
             id: 'viewer-menu-channel'),

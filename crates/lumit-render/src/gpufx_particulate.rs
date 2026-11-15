@@ -267,6 +267,17 @@ impl GpuEffect for Particulate {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
+        // Composite on original off: every road below draws over a clear
+        // picture instead of the layer's, so the layer is clear where no
+        // particle is.
+        let clear;
+        let tex =
+            if lumit_core::fx::effects::particulate::Particulate::read(p).composite_on_original {
+                tex
+            } else {
+                clear = fx.particulate_clear(ctx, w, h);
+                &clear
+            };
         if let Some(trails) = aux.schedule().and_then(|s| s.trails.as_ref()) {
             return crate::trails::draw(fx, ctx, tex, w, h, p, aux, trails);
         }

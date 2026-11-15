@@ -520,6 +520,22 @@ pub(super) fn resolve_into_arena(
     // [`ResolvedStack::rescale_spatial`] can move the spatial ones too.
     let derived = def.derived(e);
     bags.set_derived(derived);
+    // An instance with many rows (a Mesh warp's grid holds thousands) reads
+    // them through an index built once, rather than a scan of its list per
+    // row, which would be millions of comparisons a frame. Every other
+    // instance reads its few rows as it always did.
+    let index: Option<std::collections::HashMap<&str, &EffectValue>> =
+        (e.params.len() > 64).then(|| e.params.iter().map(|p| (p.id.as_str(), &p.value)).collect());
+    let float_of = |id: &str, context: Arc<ExpressionContext>| -> Option<f64> {
+        let value = match &index {
+            Some(index) => index.get(id).copied(),
+            None => e.param(id),
+        };
+        match value? {
+            EffectValue::Float(p) => Some(p.value_at_with_context(lt, context)),
+            _ => None,
+        }
+    };
     let mut wired: Vec<(&str, f64)> = Vec::new();
     for p in def.schema().params.iter().chain(derived) {
         let driven = if drivers.is_empty() {
@@ -582,12 +598,12 @@ pub(super) fn resolve_into_arena(
             | ParamKind::Slider { default, .. }
             | ParamKind::Angle { default, .. } => Value::Float(spatial(
                 driven_num
-                    .or_else(|| e.float_at_with_context(p.id, lt, context.clone()))
+                    .or_else(|| float_of(p.id, context.clone()))
                     .unwrap_or(default),
             )),
             ParamKind::Int { default, .. } => Value::Int(
                 driven_num
-                    .or_else(|| e.float_at_with_context(p.id, lt, context.clone()))
+                    .or_else(|| float_of(p.id, context.clone()))
                     .map_or(default as i32, |v| v.round() as i32),
             ),
             ParamKind::Bool { default } => Value::Bool(e.bool_of(p.id).unwrap_or(default)),

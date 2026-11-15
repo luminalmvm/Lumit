@@ -557,6 +557,7 @@ pub(crate) fn draw(
             weights,
             mode: 1,
             mix: style.mix,
+            start: 1.0,
         },
     );
     if !held {

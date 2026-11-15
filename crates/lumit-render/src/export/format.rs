@@ -134,6 +134,8 @@ const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
 const EXR_DEPTHS: &[BitDepth] = &[BitDepth::Half, BitDepth::Float];
 /// AAC has no sample width of its own; only the delivery default stands.
 const AAC_DEPTH: &[AudioDepth] = &[AudioDepth::Sixteen];
+/// Opus runs at 48 kHz, the one rate the export offers it.
+const OPUS_RATES: &[u32] = &[48_000];
 /// Uncompressed PCM in a `.wav` carries either width.
 const PCM_DEPTHS: &[AudioDepth] = &[AudioDepth::Sixteen, AudioDepth::TwentyFour];
 /// What a still sequence can state. PNG carries cICP and TIFF carries nothing,
@@ -146,6 +148,40 @@ impl ExportFormat {
     /// This format's capability row.
     pub fn caps(self) -> FormatCaps {
         match self {
+            // QuickTime Animation in mov: lossless eight-bit RGB with alpha, PCM
+            // sound, no bitrate to choose.
+            ExportFormat::Video(lumit_media::encode::VideoCodec::QtAnimation) => FormatCaps {
+                video: true,
+                audio: true,
+                alpha: true,
+                alpha_mode: true,
+                gif: false,
+                depths: EIGHT_ONLY,
+                audio_rates: EXPORT_AUDIO_RATES,
+                audio_depths: PCM_DEPTHS,
+                bit_rate: false,
+                metadata: true,
+                colour_spaces: BUILT_IN_COLOUR_SPACES,
+                max_fps: None,
+                subtitles: true,
+            },
+            // VP9 in webm: eight bits, alpha, Opus sound at 48 kHz, and a bitrate
+            // to choose.
+            ExportFormat::Video(lumit_media::encode::VideoCodec::Vp9) => FormatCaps {
+                video: true,
+                audio: true,
+                alpha: true,
+                alpha_mode: true,
+                gif: false,
+                depths: EIGHT_ONLY,
+                audio_rates: OPUS_RATES,
+                audio_depths: AAC_DEPTH,
+                bit_rate: true,
+                metadata: true,
+                colour_spaces: BUILT_IN_COLOUR_SPACES,
+                max_fps: None,
+                subtitles: false,
+            },
             // ProRes in mov: no bitrate to choose, PCM sound, and the 4444 kinds
             // hold alpha.
             ExportFormat::Video(c) if c.is_prores() => FormatCaps {
@@ -262,7 +298,10 @@ impl ExportFormat {
     /// an editor expects of a master, and AAC beside H.264 and HEVC.
     pub fn audio_codec(self, depth: AudioDepth) -> lumit_media::encode::AudioCodec {
         match self {
-            ExportFormat::Video(c) if c.is_prores() => AudioFormat::Wav.codec(depth),
+            ExportFormat::Video(lumit_media::encode::VideoCodec::Vp9) => {
+                lumit_media::encode::AudioCodec::Opus
+            }
+            ExportFormat::Video(c) if c.intra() => AudioFormat::Wav.codec(depth),
             ExportFormat::Audio(f) => f.codec(depth),
             _ => lumit_media::encode::AudioCodec::Aac,
         }

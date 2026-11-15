@@ -93,6 +93,9 @@ While nothing is playing, Lumit goes on rendering the work area into the cache, 
 at the playhead. It does not do this while the Viewer's exposure is off zero or tone
 mapping is on, or while a [3D viewport](/use/camera/#3d-viewport) is the active view.
 
+When the computer runs short of memory, Lumit gives back the least recently used half of
+the RAM tier. The budget stays as it is set.
+
 The [status line](/use/workspaces/#the-status-line) shows how full each tier is, and the
 Viewer's [deck](/panels/viewer/#the-deck) shows how much of the work area is cached.
 
@@ -146,6 +149,42 @@ quarter resolution that has no more pixels than 640×360, and at quarter where n
 Lens flares draw at **Draft** quality. The picture is rendered at the Viewer's own
 resolution again on release. **Edit ▸ Settings ▸ Preview and cache ▸ Full resolution while
 dragging** renders a drag at the Viewer's own resolution.
+
+A drag whose frames take longer than 50 milliseconds is rendered coarser again, and finer
+once they are quick.
+
+- **Adaptive resolution limit**: how coarse a slow drag may go. **Auto** stops at an
+  eighth, and **1/2**, **1/4**, **1/8** and **1/16** stop there.
+- **Wireframe while dragging**: a drag draws each layer as the outline of its rectangle,
+  with no effects, layer styles, mattes or motion blur. Off by default.
+- **Live update**: on by default. Off, a drag draws no frame and the Viewer keeps the last
+  one until the release. It is not saved.
+
+The first two are in **Edit ▸ Settings ▸ Preview and cache** and on the Viewer's
+[deck](/panels/viewer/#the-deck). **Live update** is in the picture's
+[right-click menu](/panels/viewer/#the-right-click-menu).
+
+## Suspend updates
+
+**Suspend updates**, in the picture's right-click menu, keeps the Viewer on the picture it
+has while edits go on. A red bar along the bottom of the picture reads **Viewer updates
+suspended**. Choosing it again draws the frame at the playhead.
+
+`Caps Lock` does the same: on, updates are suspended, and off, they resume. **Edit ▸
+Settings ▸ Preview and cache ▸ Caps Lock suspends Viewer updates** turns that off. The eye
+mark on the Viewer's deck is the same switch, and is red and shut while updates are
+suspended.
+
+## Footage at shown size
+
+A footage layer shown smaller than its own size is decoded for the preview no larger than
+it is shown. An export decodes at full size. The layer is decoded at its own size while it
+has a parent, is 3D or an adjustment layer, has masks, paint, a puppet, layer styles, a
+node graph or effects, has an expression on its Scale, or sits in a composition whose
+Precomp layer has [Collapse](/use/layers/#collapse-transformations) on.
+
+**Edit ▸ Settings ▸ Preview and cache ▸ Decode footage at shown size** turns it off. It is
+on by default, and the **Shown size** mark on the Viewer's deck is the same switch.
 
 ## The region of interest
 
