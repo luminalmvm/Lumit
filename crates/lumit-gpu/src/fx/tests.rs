@@ -124,6 +124,76 @@ fn wgsl_blur_matches_the_cpu_oracle() {
     }
 }
 
+/// **A wide blur on its grid agrees with its CPU twin, and with the gaussian
+/// it stands in for** (docs/08 §3.8, §1.6). Two claims: the WGSL passes and
+/// `cpu::blur_gaussian_wide` are the same arithmetic, per edge policy and Mix;
+/// and the grid picture is the full-resolution gaussian's within a few
+/// thousandths, so a radius past the threshold looks the same as before.
+#[test]
+fn wgsl_wide_blur_matches_the_cpu_oracle_and_the_full_gaussian() {
+    use lumit_core::fx::cpu;
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (200u32, 150u32);
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let g = (x + y) as f32 / (w + h) as f32;
+            let a = if x < w / 2 { 1.0 } else { 0.0 };
+            img[i..i + 4].copy_from_slice(&[g * a, (1.0 - g) * a, 0.25 * a, a]);
+        }
+    }
+    let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    for edge in [0u32, 1] {
+        for (radius, mix) in [(96.0f32, 1.0f32), (150.0, 0.6)] {
+            let step = cpu::blur_grid_step(radius);
+            assert!(step > 1.0, "radius {radius} is past the threshold");
+            let mut cpu_wide = quantised.clone();
+            cpu::blur_gaussian_wide(&mut cpu_wide, w, h, radius, edge, mix);
+
+            let tex = upload_linear_f32(&ctx, &img, w, h);
+            let op = BlurOp {
+                radius_px: radius,
+                edge,
+                mix,
+            };
+            let out = fx.blur_wide(&ctx, &tex, w, h, &op, step);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+            let worst = cpu_wide
+                .iter()
+                .zip(&gpu)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            assert!(
+                worst < 5e-3,
+                "edge {edge} radius {radius} mix {mix}: GPU vs CPU {worst}"
+            );
+
+            let mut full = quantised.clone();
+            cpu::blur_gaussian(&mut full, w, h, radius, edge, mix);
+            let off = cpu_wide
+                .iter()
+                .zip(&full)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            assert!(
+                off < 1e-2,
+                "edge {edge} radius {radius} mix {mix}: grid vs full {off}"
+            );
+        }
+    }
+    // Below the threshold the wide blur is the ordinary one, to the bit.
+    let mut a = quantised.clone();
+    let mut b = quantised;
+    cpu::blur_gaussian_wide(&mut a, w, h, 40.0, 1, 1.0);
+    cpu::blur_gaussian(&mut b, w, h, 40.0, 1, 1.0);
+    assert_eq!(a, b);
+}
+
 /// **The Matte-driven blur agrees op-for-op, and genuinely varies in width**
 /// (docs/08 §2.6, §1.6).
 ///
