@@ -35,7 +35,7 @@ struct Params {
     gamma: f32,
     /// @slider(-200, 200) @default(0) Displacement offset (%)
     offset: f32,
-    /// @choice("Linear", "Ease in", "Ease out", "Ease in and out") @default("Linear") Displacement easing
+    /// @choice("None", "Ease in", "Ease out", "Ease in and out") @default("None") Displacement easing
     easing: u32,
     /// @slider(-2000, 2000) @default(0) @unit(px) Translate X
     translate_x: f32,
@@ -75,7 +75,7 @@ struct Params {
     green: f32,
     /// @slider(-5, 5) @default(1) Blue
     blue: f32,
-    /// @choice("Transparent", "Clamp", "Repeat", "Mirror") @default("Transparent") Edge behaviour
+    /// @choice("None", "Edge repeat", "Repeat", "Mirror repeat") @default("None") Edge behaviour
     edge: u32,
     /// @slider(0, 2000) @default(0) @unit(px) Left
     left: f32,
@@ -85,7 +85,7 @@ struct Params {
     right: f32,
     /// @slider(0, 2000) @default(0) @unit(px) Bottom
     bottom: f32,
-    /// @choice("Off", "2x", "4x") @default("Off") Anti-aliasing
+    /// @choice("None", "2x", "4x", "8x") @default("None") Anti-aliasing
     antialias: u32,
     /// @choice("Result", "Map") @default("Result") View
     view: u32,
@@ -346,6 +346,8 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         grid = 2;
     } else if (p.antialias == 2u) {
         grid = 4;
+    } else if (p.antialias == 3u) {
+        grid = 8;
     }
     let frame = dx_frame();
     // One raster pixel, in comp pixels.
