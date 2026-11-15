@@ -69,7 +69,7 @@ pub(super) fn render_item(
     // Not `last_shown`: the fill, the cache bar and the drags follow the
     // active composition view, and this item's scratch comp is none of those.
     let comp = req.of.comp_id();
-    watched(state, stream, req.frame, |state, stream| {
+    watched(state, stream, req.frame, true, |state, stream| {
         publish_frame(
             state,
             comp,

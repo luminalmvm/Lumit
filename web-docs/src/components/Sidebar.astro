@@ -9,6 +9,21 @@ import MobileMenuFooter from "virtual:starlight/components/MobileMenuFooter";
 
 const { topics } = Astro.locals.starlightSidebarTopics;
 const lists = Astro.locals.fullSidebar.filter((entry) => entry.type === "group");
+
+// The Guides list keeps its two top groups open and closes the groups inside
+// them. Done here, not with `collapsed` in astro.config.mjs, because the home
+// page reads that flag to lay a group out as tiles. A group that holds the
+// current page still opens itself.
+type Entries = typeof lists;
+const closeInner = (entries: Entries): Entries =>
+  entries.map((top) =>
+    top.type === "group"
+      ? {
+          ...top,
+          entries: top.entries.map((e) => (e.type === "group" ? { ...e, collapsed: true } : e)),
+        }
+      : top,
+  );
 ---
 
 <Topics />
@@ -16,7 +31,7 @@ const lists = Astro.locals.fullSidebar.filter((entry) => entry.type === "group")
   {
     lists.map((list, i) => (
       <div data-topic-list hidden={!topics[i]?.isCurrent}>
-        <SidebarSublist sublist={list.entries} />
+        <SidebarSublist sublist={topics[i]?.label === "Guides" ? closeInner(list.entries) : list.entries} />
       </div>
     ))
   }

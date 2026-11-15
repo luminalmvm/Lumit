@@ -245,6 +245,11 @@ pub(crate) fn scan_options(
 ) -> lumit_ofx::discover::ScanOptions {
     lumit_ofx::gpu::set_enabled(!prefs.plugins_on_cpu);
     lumit_ofx::gpu::set_adapter(lumit_gpu::adapter_summary());
+    // The bundles that held nothing this host can drive, so the next start
+    // does not start a broker for each of them again.
+    if let Some(dir) = lumit_project::cache_dir() {
+        lumit_ofx::discover::remember_empty_bundles_in(dir.join("ofx-empty-bundles.json"));
+    }
     let mut options = lumit_ofx::discover::ScanOptions::standard();
     let installed = lumit_extensions::scan();
     options

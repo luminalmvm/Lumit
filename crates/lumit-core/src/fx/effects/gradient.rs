@@ -143,6 +143,14 @@ pub struct Gradient {
     )]
     pub position_4: f32,
 
+    /// Where the ramp is painted, as the Siceliot gradients say it. Inside
+    /// layer: only where the layer has pixels, at their coverage, so a clear
+    /// part stays clear whatever the Blend (the Gradient overlay style's
+    /// clipping). Whole frame, the default and the picture this effect always
+    /// drew: the ramp fills the layer and makes it opaque.
+    #[choice(label = "Paint", options = ["Inside layer", "Whole frame"], default = 1)]
+    pub paint: u32,
+
     /// Per cent: how far a pixel's position along the ramp may be dithered. A
     /// few per cent breaks banding without softening the ramp's ends.
     #[slider(
@@ -204,10 +212,10 @@ impl Gradient {
             scatter: (self.scatter / 100.0).clamp(0.0, 1.0),
             seed: self.seed,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
-            // A generator floods the frame (§2.2's opaque write); clipping the
-            // ramp to the layer's coverage is the Gradient overlay *style*'s,
-            // and false here is the picture this effect always drew.
-            clip_to_alpha: false,
+            // Whole frame floods the frame (§2.2's opaque write), the picture
+            // this effect always drew; Inside layer clips the ramp to the
+            // layer's coverage, as the Gradient overlay style does.
+            clip_to_alpha: self.paint == 0,
             mids: self.colours.min(3),
             mid: self.mids(),
         }

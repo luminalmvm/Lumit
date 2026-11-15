@@ -369,6 +369,7 @@ mod tests {
             fps_den: 1,
             bit_rate: None,
             max_rate: None,
+            cbr: false,
             colour: super::super::ColourTags::Srgb,
             depth: super::super::BitDepth::Eight,
         };

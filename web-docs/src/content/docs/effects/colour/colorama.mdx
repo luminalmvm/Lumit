@@ -1,0 +1,81 @@
+---
+title: Colorama
+description: "Repaints each pixel from a wheel of colours, by one of its channels."
+---
+
+Colorama is a **Colour** effect.
+
+## What it does
+
+Reads a phase from one channel of each pixel and looks it up on a wheel of colours, as
+After Effects' Colorama does. A phase of zero is the top of the wheel, and a rising phase
+runs round it anticlockwise. The colour found replaces what **Modify** names.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Add phase** | Layer | Any layer in the composition | None | - |
+| **Get phase from** | Dropdown | Intensity · Red · Green · Blue · Hue · Lightness · Saturation · Value · Alpha · Zero | Intensity | - |
+| **Add phase from** | Dropdown | Intensity · Red · Green · Blue · Hue · Lightness · Saturation · Value · Alpha · Zero | Intensity | - |
+| **Add mode** | Dropdown | Wrap · Clamp · Average · Screen | Wrap | - |
+| **Phase shift** | Dial | Any angle | 0° | Degrees |
+| **Use preset palette** | Dropdown | None · Alpha ramp · Hue cycle · Negative · Ramp red · RGB · Saturation ramp · Solarize red · Caribbean · Clay · Copper · Deep ocean · Earthenware · Fire · Golden 1 | None | - |
+| **Stops** | Slider, whole numbers | 2 to 8 | 6 | - |
+| **Colour 1** to **Colour 8** | Colour | Each channel 0 to 1 | Red, yellow, green, cyan, blue, magenta, white, black | - |
+| **Position 1** to **Position 8** | Slider | 0 to 100 | 0, 16.667, 33.333, 50, 66.667, 83.333, 90, 95 | - |
+| **Cycle repetitions** | Slider | 0 to 10; any value by typing | 1 | - |
+| **Interpolate palette** | Checkbox | On or off | On | - |
+| **Modify** | Dropdown | All · Hue · Lightness · Saturation · Hue and lightness · Hue and saturation · Lightness and saturation · Red · Green · Blue · None | All | - |
+| **Modify alpha** | Checkbox | On or off | On | - |
+| **Change empty pixels** | Checkbox | On or off | Off | - |
+| **Matching colour** | Colour | Each channel 0 to 1 | Red | - |
+| **Matching tolerance** | Slider | 0 to 100 | 50 | - |
+| **Matching softness** | Slider | 0 to 100 | 0 | - |
+| **Matching mode** | Dropdown | Off · RGB · Hue · Chroma | Off | - |
+| **Composite over layer** | Checkbox | On or off | On | - |
+
+In the Effect Controls panel:
+
+- **Add phase from** and **Add mode** are editable while **Add phase** names a layer.
+- **Stops** and the **Colour** and **Position** rows are editable while **Use preset
+  palette** is set to None.
+- **Matching colour**, **Matching tolerance** and **Matching softness** are editable while
+  **Matching mode** is anything but Off.
+
+## What each control does
+
+- **Add phase**: a layer whose phase is combined with this layer's.
+- **Get phase from**: the channel of the layer the phase is read from. **Zero** reads 0.
+- **Add phase from**: the channel read from the Add phase layer.
+- **Add mode**: how the two phases combine. **Wrap** adds them and carries on round the
+  wheel, **Clamp** adds them and stops at the end, **Average** takes their mean and
+  **Screen** screens them.
+- **Phase shift**: turns every phase round the wheel.
+- **Use preset palette**: a ready-made wheel. **None** uses the Colour and Position rows.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 8** and **Position 1** to **Position 8**: each colour, and where
+  it sits on the wheel, in per cent clockwise from the top. Stops are sorted by Position.
+- **Cycle repetitions**: how many times the phase runs round the wheel.
+- **Interpolate palette**: on, each colour blends into the next. Off, each holds until the
+  next.
+- **Modify**: what of the pixel the colour found replaces.
+- **Modify alpha**: multiplies the pixel's alpha by the alpha of the colour found.
+- **Change empty pixels**: on, clear pixels are repainted too.
+- **Matching mode**: limits the change to pixels near **Matching colour**, compared by
+  **RGB**, **Hue** or **Chroma**.
+- **Matching colour**: the colour pixels are compared with.
+- **Matching tolerance**: how far from Matching colour a pixel may be and change in full.
+- **Matching softness**: how far past the tolerance the change fades out.
+- **Composite over layer**: lays the result over the layer as it was.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Gradient map](/effects/colour/gradient-map/)
+- [Tritone](/effects/colour/tritone/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

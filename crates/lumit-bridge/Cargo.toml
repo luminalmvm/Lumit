@@ -163,7 +163,9 @@ features = [
     "Win32_Media",
     # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
     "Win32_Storage_FileSystem",
-    # `PowerSetRequest`, so the computer stays awake while an export runs.
+    # `PowerSetRequest`, so the computer stays awake while an export runs, and
+    # `GetSystemPowerStatus`, so the status line can say the laptop is on
+    # battery or saving power (`power_saving`).
     "Win32_System_Power",
 ]
 

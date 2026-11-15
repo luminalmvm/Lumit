@@ -155,6 +155,7 @@ use super::effects::{
     median::{Median, MedianDef},
     merge::{Merge, MergeDef},
     merge_points::{MergePoints, MergePointsDef},
+    mesh_warp::{MeshWarp, MeshWarpDef},
     mirror::{Mirror, MirrorDef},
     mood_lighting::{MoodLighting, MoodLightingDef},
     mosaic::{Mosaic, MosaicDef},
@@ -301,6 +302,7 @@ crate::catalogue![
     WaveWarpDef => WaveWarp,
     BezierWarpDef => BezierWarp,
     WarpDef => Warp,
+    MeshWarpDef => MeshWarp,
     // Stabilise, at the Distortion family's end: it moves the picture, as
     // Corner pin does, only by a measured amount.
     StabiliseDef => Stabilise,

@@ -15,6 +15,9 @@ Cached items are unique and match to the hash key calculated when rendering the 
 If a frame's hash matches a cache entry this can be sent to the GPU to be displayed,
 preventing the need to re-render a frame.
 
+The picture a text or shape layer is drawn as is kept too. Moving, turning or fading the
+layer reuses it, and a change of scale draws it again.
+
 ## Cache tiers
 
 There are three tiers to the cache. The cache works on a first in, first out approach.

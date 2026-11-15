@@ -2,7 +2,7 @@
   "format": 1,
   "id": "siceliot",
   "name": "Siceliot",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "summary": "Cavalry-style, non-destructive falloffs, gradients, patterns, filters and warps.",
   "author": "andrea68git",
   "requires": "0.10.0",
@@ -27,6 +27,11 @@
     { "id": "bilateral-blur", "name": "Bilateral blur", "category": "Blur & sharpen", "version": 1, "api": 1, "shader": "bilateral-blur.wgsl",
       "passes": [{ "name": "across" }, { "name": "down" }] },
     { "id": "bend", "name": "Bend", "category": "Distortion", "version": 1, "api": 1, "shader": "bend.wgsl" },
-    { "id": "four-point-warp", "name": "Four point warp", "category": "Distortion", "version": 1, "api": 1, "shader": "four-point-warp.wgsl" }
+    { "id": "four-point-warp", "name": "Four point warp", "category": "Distortion", "version": 1, "api": 1, "shader": "four-point-warp.wgsl" },
+    { "id": "displacex", "name": "DisplaceX", "category": "Distortion", "version": 1, "api": 1, "shader": "displacex.wgsl",
+      "passes": [{ "name": "map_h", "scale": 0.5 }, { "name": "map_v", "scale": 0.5 }, { "name": "shade" }],
+      "input": { "label": "Map layer", "kind": "image" } },
+    { "id": "colorama", "name": "Colorama", "category": "Colour", "version": 1, "api": 1, "shader": "colorama.wgsl",
+      "input": { "label": "Add phase", "kind": "image" } }
   ]
 }

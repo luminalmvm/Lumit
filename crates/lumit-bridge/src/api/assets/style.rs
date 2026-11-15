@@ -24,13 +24,21 @@ pub(crate) fn restyle_shift(
             .iter()
             .any(lumit_core::text::TextAnimator::has_box)
     };
-    // Retyping the words alone leaves the anchor where it is. A box an
-    // animator adds pads the block, so it moves the words too.
+    // Retyping the words alone leaves the anchor where it is, unless they are
+    // point text lined up on the centre or the right, which grows from there.
+    // Words an expression gives are not the ones typed, so they move nothing.
+    // A box an animator adds pads the block, so it moves the words too.
+    let retyped = before.text != after.text
+        && before.expression.is_none()
+        && after.expression.is_none()
+        && after.paragraph.align != lumit_core::text::TextAlign::Left
+        && after.paragraph.box_width <= 0.0;
     let restyled = before.size != after.size
         || before.style != after.style
         || before.paragraph != after.paragraph
         || before.animators.is_empty() != after.animators.is_empty()
-        || boxed(before) != boxed(after);
+        || boxed(before) != boxed(after)
+        || retyped;
     if !(straight && restyled) {
         return (0.0, 0.0);
     }

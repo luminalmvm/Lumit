@@ -17,6 +17,9 @@ pub struct EchoOp {
     pub mode: u32,
     /// 0..1, blended against the leading (current) frame.
     pub mix: f32,
+    /// The frame itself's intensity, After Effects' Starting Intensity: 1
+    /// leaves it as it is.
+    pub start: f32,
 }
 
 #[repr(C)]
@@ -149,18 +152,33 @@ impl FxEngine {
             matte_on: f32::from(matted),
             tap,
         };
-        // acc := current (weight 0 add = a + n*0 = a).
+        // acc := current (weight 0 add = a + n*0 = a), or current scaled by
+        // the starting intensity, added onto a clear picture.
         let mut acc = work_texture(ctx, w, h, "fx-echo-acc");
-        self.dispatch(
-            ctx,
-            &self.echo_accumulate,
-            current,
-            current,
-            &acc,
-            w,
-            h,
-            bytemuck::bytes_of(&params(0.0, 0, 0, false)),
-        );
+        if (op.start - 1.0).abs() < 1e-6 {
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                current,
+                current,
+                &acc,
+                w,
+                h,
+                bytemuck::bytes_of(&params(0.0, 0, 0, false)),
+            );
+        } else {
+            let clear = work_texture(ctx, w, h, "fx-echo-clear");
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                &clear,
+                current,
+                &acc,
+                w,
+                h,
+                bytemuck::bytes_of(&params(op.start.max(0.0), 2, 0, false)),
+            );
+        }
         for (i, &weight) in op.weights.iter().enumerate() {
             if weight <= 0.0 {
                 continue;
@@ -198,8 +216,8 @@ impl FxEngine {
     }
 
     /// Lay a looped picture over `current` (Time loop): `now`, faded with
-    /// `next` by `next_share` while a crossfade runs, laid in front, then
-    /// mixed back toward `current` by `mix`. Echo's own two kernels, so the
+    /// `next` by `next_share` while a crossfade runs, laid in front (or with
+    /// `replace` put in its place), then mixed back toward `current` by `mix`. Echo's own two kernels, so the
     /// blend is the one its In front mode draws.
     #[allow(clippy::too_many_arguments)]
     pub fn time_loop(
@@ -209,6 +227,7 @@ impl FxEngine {
         now: &wgpu::Texture,
         next: Option<&wgpu::Texture>,
         next_share: f32,
+        replace: bool,
         w: u32,
         h: u32,
         mix: f32,
@@ -237,17 +256,23 @@ impl FxEngine {
             }
             _ => now.clone(),
         };
-        let over = work_texture(ctx, w, h, "fx-time-loop-over");
-        self.dispatch(
-            ctx,
-            &self.echo_accumulate,
-            current,
-            &looped,
-            &over,
-            w,
-            h,
-            bytemuck::bytes_of(&params(1.0, 1)),
-        );
+        // The layer looping itself takes its picture's place.
+        let over = if replace {
+            looped
+        } else {
+            let over = work_texture(ctx, w, h, "fx-time-loop-over");
+            self.dispatch(
+                ctx,
+                &self.echo_accumulate,
+                current,
+                &looped,
+                &over,
+                w,
+                h,
+                bytemuck::bytes_of(&params(1.0, 1)),
+            );
+            over
+        };
         let out = work_texture(ctx, w, h, "fx-time-loop-out");
         self.dispatch(
             ctx,

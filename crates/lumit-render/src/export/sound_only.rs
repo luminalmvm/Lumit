@@ -168,7 +168,7 @@ pub(super) fn write_stems(
 fn stem_format(format: ExportFormat) -> AudioFormat {
     match format {
         ExportFormat::Audio(f) => f,
-        ExportFormat::Video(c) if c.is_prores() => AudioFormat::Wav,
+        ExportFormat::Video(c) if c.intra() => AudioFormat::Wav,
         _ => AudioFormat::M4a,
     }
 }

@@ -2432,6 +2432,14 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     painter: _RulerTicksPainter(
                       axis: axis,
                       fps: widget.fps,
+                      // The clock's own start: the labels read the time the
+                      // comp's clock shows, as its Start timecode sets it.
+                      start: widget.fps <= 0
+                          ? 0
+                          : Provider.of<LumitUiState>(context, listen: false)
+                                  .model
+                                  .startFrame /
+                              widget.fps,
                       style: style,
                       tick: t.hairlineStrong,
                       minorTick: t.hairline,
@@ -4621,9 +4629,15 @@ class _RulerTicksPainter extends CustomPainter {
   /// millions wide.
   final ScrollPosition? scroll;
 
+  /// The time the comp's clock reads at its first frame, in seconds: its
+  /// Start timecode. The labels read the clock's time, and the ticks fall
+  /// on its whole steps.
+  final double start;
+
   const _RulerTicksPainter({
     required this.axis,
     required this.fps,
+    this.start = 0,
     required this.tick,
     required this.minorTick,
     required this.label,
@@ -4651,6 +4665,13 @@ class _RulerTicksPainter extends CustomPainter {
   static final Map<String, TextPainter> _laidOut = {};
   static TextStyle? _laidOutIn;
 
+  /// The first whole multiple of `step` the clock reads at or after `from`
+  /// seconds into the comp.
+  double _first(double step, double from) {
+    final at = start + from;
+    return step <= 0 ? at : (at / step - 1e-9).ceilToDouble() * step;
+  }
+
   TextPainter _labelAt(double seconds) {
     if (_laidOutIn != label || _laidOut.length > 2000) {
       for (final text in _laidOut.values) {
@@ -4677,23 +4698,27 @@ class _RulerTicksPainter extends CustomPainter {
     final fourFrames = 4 / fps;
     final finest = engravedTickSeconds(pixelsPerSecond: pxPerSec, fps: fps);
     if (finest <= fourFrames && fourFrames < 1) {
-      for (var s = (from / fourFrames).floor() * fourFrames;
-          s <= to;
-          s += fourFrames) {
-        final x = axis.xOf(s * fps);
+      for (var d = _first(fourFrames, from);
+          d <= start + to + 1e-9;
+          d += fourFrames) {
+        final x = axis.xOf((d - start) * fps);
         canvas.drawLine(Offset(x, mid - 4), Offset(x, mid), quiet);
       }
     }
     if (finest <= 1 && step > 1) {
-      for (var s = from.floorToDouble(); s <= to; s += 1) {
-        final x = axis.xOf(s * fps);
+      for (var d = _first(1, from);
+          d <= start + to + 1e-9;
+          d += 1) {
+        final x = axis.xOf((d - start) * fps);
         canvas.drawLine(Offset(x, mid - 8), Offset(x, mid), quiet);
       }
     }
-    for (var s = (from / step).floor() * step; s <= to; s += step) {
-      final x = axis.xOf(s * fps);
+    for (var d = _first(step, from);
+        d <= start + to + 1e-9;
+        d += step) {
+      final x = axis.xOf((d - start) * fps);
       canvas.drawLine(Offset(x, mid - 14), Offset(x, mid), paint);
-      _labelAt(s).paint(canvas, Offset(x + 4, 4));
+      _labelAt(d).paint(canvas, Offset(x + 4, 4));
     }
   }
 
@@ -4725,15 +4750,19 @@ class _RulerTicksPainter extends CustomPainter {
         pixelsPerSecond: pxPerSec, labelStep: step, fps: fps);
     final (from, to) = _span(seconds);
     if (minor < step) {
-      for (var s = (from / minor).floor() * minor; s <= to; s += minor) {
-        final x = axis.xOf(s * fps);
+      for (var d = _first(minor, from);
+          d <= start + to + 1e-9;
+          d += minor) {
+        final x = axis.xOf((d - start) * fps);
         canvas.drawLine(
             Offset(x, mid - minorTickLength), Offset(x, mid), quiet);
       }
     }
 
-    for (var s = (from / step).floor() * step; s <= to; s += step) {
-      final x = axis.xOf(s * fps);
+    for (var d = _first(step, from);
+        d <= start + to + 1e-9;
+        d += step) {
+      final x = axis.xOf((d - start) * fps);
       // Seven pixels of labelled tick against the minor ticks' four — the
       // mockup's own pair — drawn **through** the waist and the same
       // distance again below it, so the ruler reads as one band.
@@ -4742,7 +4771,7 @@ class _RulerTicksPainter extends CustomPainter {
       // Labels sit just right of their tick, at the top of the upper half; the
       // last one may clip out at the comp's end rather than jumping inside,
       // which would misplace it.
-      _labelAt(s).paint(canvas, Offset(x + 4, 4));
+      _labelAt(d).paint(canvas, Offset(x + 4, 4));
     }
   }
 
@@ -4750,6 +4779,7 @@ class _RulerTicksPainter extends CustomPainter {
   bool shouldRepaint(_RulerTicksPainter old) =>
       old.fps != fps ||
       old.style != style ||
+      old.start != start ||
       old.tick != tick ||
       old.minorTick != minorTick ||
       old.axis.frames != axis.frames ||

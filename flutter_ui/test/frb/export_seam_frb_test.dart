@@ -36,6 +36,7 @@ BridgeExportSpec plainSpec({
       bitrateMbps: 0,
       peakMbps: 0,
       bitrateAuto: true,
+      constantBitrate: false,
       fps: 0,
       rangeStartFrame: -1,
       rangeEndFrame: -1,

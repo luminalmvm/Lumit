@@ -1,0 +1,110 @@
+---
+title: DisplaceX
+description: "Moves, turns and scales each pixel by a map: the layer itself, another layer or a ramp."
+---
+
+DisplaceX is a **Distortion** effect.
+
+## What it does
+
+Applies a move, a turn and a scale to the layer, and lets a map say how much of them each
+pixel takes. The map is the layer itself, the layer picked in **Map layer**, or a ramp the
+effect draws. With the defaults it changes nothing.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Map layer** | Layer | Any layer in the composition | None | - |
+| **Map** | Dropdown | Layer itself · Map layer · Gradient ramp | Layer itself | - |
+| **Channel** | Dropdown | Luminance · Red · Green · Blue · Alpha · Hue · Saturation · Lightness | Luminance | - |
+| **Ramp shape** | Dropdown | Radial · Linear | Radial | - |
+| **Ramp origin X (%)**, **Ramp origin Y (%)** | Slider | -50 to 150 | 50 | - |
+| **Ramp scale** | Slider | 1 to 4000; any value by typing | 500 | Pixels at composition size |
+| **Ramp angle** | Dial | Any angle | 0° | Degrees |
+| **Map interpretation** | Dropdown | Standard · Legacy | Standard | - |
+| **Invert map** | Checkbox | On or off | Off | - |
+| **Map mix input** | Slider | 0 to 100 | 0 | - |
+| **Map softness** | Slider | 0 to 200; any value by typing | 0 | Pixels at composition size |
+| **Map gamma** | Slider | 0.1 to 10 | 1 | - |
+| **Displacement offset (%)** | Slider | -200 to 200; any value by typing | 0 | - |
+| **Displacement easing** | Dropdown | Linear · Ease in · Ease out · Ease in and out | Linear | - |
+| **Translate X**, **Translate Y** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Rotate** | Dial | Any angle | 0° | Degrees |
+| **Uniform scale** | Checkbox | On or off | On | - |
+| **Scale (%)** | Slider | -400 to 400; any value by typing | 100 | - |
+| **Scale X (%)**, **Scale Y (%)** | Slider | -400 to 400; any value by typing | 100 | - |
+| **Link anchor to origin** | Checkbox | On or off | Off | - |
+| **Anchor X (%)**, **Anchor Y (%)** | Slider | -50 to 150 | 50 | - |
+| **Clamp negative scale** | Checkbox | On or off | Off | - |
+| **Translate multiplier**, **Rotate multiplier**, **Scale multiplier** | Slider | -10 to 10; any value by typing | 1 | - |
+| **Iterations** | Slider, whole numbers | 1 to 32 | 1 | - |
+| **Shutter duration (%)** | Slider | 0 to 100 | 50 | - |
+| **Red**, **Green**, **Blue** | Slider | -5 to 5; any value by typing | 1 | - |
+| **Edge behaviour** | Dropdown | Transparent · Clamp · Repeat · Mirror | Transparent | - |
+| **Left**, **Top**, **Right**, **Bottom** | Slider | 0 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Anti-aliasing** | Dropdown | Off · 2x · 4x | Off | - |
+| **View** | Dropdown | Result · Map | Result | - |
+
+In the Effect Controls panel:
+
+- **Channel** is editable while **Map** is anything but Gradient ramp.
+- **Map mix input** is editable while **Map** is anything but Layer itself.
+- **Ramp shape**, **Ramp origin X (%)**, **Ramp origin Y (%)**, **Ramp scale** and **Link
+  anchor to origin** are editable while **Map** is set to Gradient ramp.
+- **Ramp angle** is editable while **Map** is set to Gradient ramp and **Ramp shape** to
+  Linear.
+- **Scale (%)** is editable while **Uniform scale** is on, and **Scale X (%)** and **Scale Y
+  (%)** while it is off.
+
+## What each control does
+
+- **Map layer**: the layer read as the map while **Map** is set to Map layer. With none
+  picked, the layer itself is read.
+- **Map**: where the map comes from. **Gradient ramp** draws one from the Ramp rows.
+- **Channel**: what of the map's picture is read.
+- **Ramp shape**: **Radial** runs the ramp outward from its origin, and **Linear** along
+  **Ramp angle**.
+- **Ramp origin X (%)** and **Ramp origin Y (%)**: where the ramp starts, as a share of the
+  layer.
+- **Ramp scale**: how far the ramp runs from black to white.
+- **Ramp angle**: the direction a Linear ramp runs.
+- **Map interpretation**: **Standard** reads grey as none of the transform, white as all of
+  it and black as all of it backwards. **Legacy** reads black as none and white as all.
+- **Invert map**: reads the map inverted.
+- **Map mix input**: how much of the layer's own picture is mixed into the Map layer's.
+- **Map softness**: blurs the map before it is read.
+- **Map gamma**: a gamma curve on the map.
+- **Displacement offset (%)**: an amount added to what the map gives, at every pixel.
+- **Displacement easing**: a curve on the map's value from black to white.
+- **Translate X** and **Translate Y**: how far a pixel that takes all of the transform
+  moves.
+- **Rotate**: how far it turns round the anchor.
+- **Uniform scale**: on, **Scale (%)** scales both ways. Off, **Scale X (%)** and **Scale Y
+  (%)** scale each way.
+- **Link anchor to origin**: puts the anchor on the ramp's origin.
+- **Anchor X (%)** and **Anchor Y (%)**: the point the turn and the scale are made round,
+  as a share of the layer.
+- **Clamp negative scale**: leaves a pixel clear where its scale would fall to 0 or below.
+- **Translate multiplier**, **Rotate multiplier** and **Scale multiplier**: multiply each
+  part of the transform.
+- **Iterations**: how many copies are averaged, from the full amount back toward none.
+- **Shutter duration (%)**: how far back toward none the iterations reach.
+- **Red**, **Green** and **Blue**: each colour channel's share of the transform.
+- **Edge behaviour**: what is read past the picture's edges. **Transparent** reads nothing,
+  **Clamp** holds the edge pixels, **Repeat** starts the picture again and **Mirror** runs
+  it back.
+- **Left**, **Top**, **Right** and **Bottom**: move each of those edges in.
+- **Anti-aliasing**: **2x** and **4x** read each pixel at 4 or 16 places and average them.
+- **View**: **Map** shows the map after softness, gamma and easing, in grey.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**, beside Matte: the channel of the Matte layer that is read.
+
+## Related
+
+- [Displacement map](/effects/distortion/displacement-map/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

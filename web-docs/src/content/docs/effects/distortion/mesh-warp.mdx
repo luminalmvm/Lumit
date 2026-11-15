@@ -1,0 +1,82 @@
+---
+title: Mesh warp
+description: "Bends the picture with a grid of points that drag in the Viewer."
+---
+
+Mesh warp is a **Distortion** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Lays a grid over the layer, **Rows** by **Columns** cells, and bends the picture as the
+grid's points are moved. Each point has two handles, one along its row and one along its
+column, that curve the picture between it and its neighbours. It works on any kind of
+layer.
+
+A new effect starts with a flat grid and changes nothing.
+
+## In the Viewer
+
+With the effect selected in [Effect controls](/panels/effect-controls/), the grid is drawn
+over the layer. **Guides ▸ Layer controls** hides it.
+
+- Only the Selection tool drags the grid.
+- **Drag** a point to move it. Its handles move with it.
+- **Click** a point to show its handles, then drag the end of one. The handle on the
+  other side of the point mirrors it.
+- **Shift** keeps a drag to one axis.
+- A drag is one undo step.
+
+The points' own rows are not listed in Effect controls or the Timeline.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Rows** | Slider, whole numbers | 1 to 31 | 7 | - |
+| **Columns** | Slider, whole numbers | 1 to 31 | 7 | - |
+| **Quality** | Slider, whole numbers | 1 to 12 | 8 | - |
+| **Animate mesh** | Checkbox | On or off | Off | - |
+| **Reset mesh** | Button | - | - | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Rows**: how many cells the grid has down the layer.
+- **Columns**: how many cells it has across. A change to Rows or Columns starts a flat
+  grid. The points of the grid before are kept, and come back when its Rows and Columns do.
+- **Quality**: how many steps each pixel takes to find where it came from.
+- **Animate mesh**: on, a drag in the Viewer sets a keyframe on every point and handle at
+  the playhead. Off, a drag sets a keyframe only on what it moved, and only where that is
+  keyframed already.
+- **Reset mesh**: puts every point and handle of the grid back where a flat grid has it,
+  and removes their keyframes. It is one undo step.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Warping a picture with Mesh warp](/tutorials/mesh-warp/)
+- [Bezier warp](/effects/distortion/bezier-warp/)
+- [Corner pin](/effects/distortion/corner-pin/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

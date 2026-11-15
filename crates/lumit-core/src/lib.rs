@@ -65,6 +65,7 @@ pub mod sequence;
 pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.
 pub mod shared;
+pub mod shown_size;
 /// Stabilise: the path, the edges and the plan a frame is drawn with.
 pub mod stabilise;
 pub mod store;
