@@ -825,10 +825,17 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// no bridge calls however deep the stack — it used to ask `getText()` of
   /// every layer under the pointer. The one read the edit needs is asked of
   /// the layer chosen, in [_begin].
+  ///
+  /// Only a layer on screen at the playhead counts. One before its in point or
+  /// past its out has no words in the picture to click, and opening it took
+  /// the click a new layer should have had.
   ({LayerBox box, LayerReference layer})? _textLayerAt(Offset at) {
+    final frame = widget.uiState.playheadFrame.value;
     final textIds = {
       for (final entry in widget.uiState.model.heldLayers)
-        if (entry.info.kind == BridgeLayerKind.text)
+        if (entry.info.kind == BridgeLayerKind.text &&
+            frame >= entry.info.inFrame &&
+            frame < entry.info.outFrame)
           entry.layer.internallayerId,
     };
     for (final box in widget.boxes) {
