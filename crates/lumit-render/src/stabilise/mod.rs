@@ -30,6 +30,7 @@ use lumit_core::fx::effects::stabilise::{MATCH_NAME, MODE_REVERSE};
 use lumit_core::model::{
     Document, EffectInstance, EffectValue, Fingerprint, Layer, LayerKind, ProjectItem,
 };
+use lumit_core::sequence::ClipSource;
 use lumit_core::stabilise::analysis::{self, Analysis};
 use lumit_core::stabilise::resolve::{forward, reversed};
 use lumit_core::stabilise::rows::choice;
@@ -427,10 +428,10 @@ fn wanted(effect: Uuid, doc: &Arc<Document>, comp: Uuid, layer: Uuid) {
 }
 
 /// The Stabilise layers an export of `comp` draws, as `(comp, layer)` ids:
-/// those on the layers it shows, through every Precomp it shows, on every
-/// layer one of those reads as a track matte or through an effect's layer
-/// row, hidden or not, and the stabilised layer each Reverse among them
-/// reads, which may be a guide or hidden. `None` is every Stabilise in `doc`.
+/// those on the layers it shows, through every Precomp it shows and every comp
+/// a Sequence layer's clips play, on every layer one of those reads as a track
+/// matte or through an effect's layer row, hidden or not, and the stabilised
+/// layer each Reverse among them reads, which may be a guide or hidden. `None` is every Stabilise in `doc`.
 fn drawn(doc: &Document, comp: Option<Uuid>) -> Vec<(Uuid, Uuid)> {
     let Some(top) = comp else {
         return doc
@@ -481,8 +482,15 @@ fn drawn(doc: &Document, comp: Option<Uuid>) -> Vec<(Uuid, Uuid)> {
         let Some(l) = c.layers.iter().find(|l| l.id == lid) else {
             continue;
         };
-        if let LayerKind::Precomp { comp: nested } = l.kind {
-            comps.push(nested);
+        match &l.kind {
+            LayerKind::Precomp { comp: nested } => comps.push(*nested),
+            LayerKind::Sequence { clips } => {
+                comps.extend(clips.iter().filter_map(|c| match c.source {
+                    ClipSource::Comp(nested) => Some(nested),
+                    _ => None,
+                }))
+            }
+            _ => {}
         }
         if forward(l).is_some() {
             out.push((cid, lid));
