@@ -2600,9 +2600,8 @@ String effectGroupPath(String effect, String group) => '$effect/group:$group';
 /// shuts it instead ([effectGroupPath] with `:shut` after it), and
 /// [everyFoldPath], which answers yes to everything, still reads as open.
 ///
-/// A rider (Blend, Invert, Channel) has no room beside its host on one lane,
-/// so it is the row after it. A gradient's compositing rows stay rows of the
-/// effect's own, as in the panel ([blendInView]).
+/// Blend, Invert and Channel are rows of their own in the fold, after the Mix
+/// and the Matte they go with, as in the panel ([compositingRowsOf]).
 List<LayerFoldRow> effectFoldRows(
   BridgeEffectInstanceInfo fx,
   Map<String, BridgeEffectValue> values, {
@@ -2621,22 +2620,10 @@ List<LayerFoldRow> effectFoldRows(
   final grouped = {
     for (final g in groups) ...g.params,
   };
-  // The Compositing fold's rows, by the panel's own rule: a Mix slider and a
-  // Matte picker no group holds, and the riders beside each.
-  final inFold = <String>{};
-  if (!blendInView(fx.name)) {
-    for (final p in params) {
-      if (grouped.contains(p.id)) continue;
-      if ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
-          (p.id == 'matte' && p.kind is BridgeParamKind_Layer)) {
-        inFold
-          ..add(p.id)
-          ..addAll([
-            for (final r in paramRidersFor(params, p, effect: fx.name)) r.id,
-          ]);
-      }
-    }
-  }
+  // The Compositing fold's rows, by the panel's own rule.
+  final inFold = {
+    for (final p in compositingRowsOf(params, grouped)) p.id,
+  };
   final every = identical(open, everyFoldPath);
   final rows = <LayerFoldRow>[];
   // The groups that start shut go after the loose rows, as in the panel, so

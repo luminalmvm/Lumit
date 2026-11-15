@@ -881,7 +881,9 @@ class _OutlineRowState extends State<OutlineRow> {
             all: widget.stack,
             width: matteWidth,
             toggleRoom: widget.matteToggles,
-            resting: _resting,
+            // Always drawn in full: a layer with no matte still shows the
+            // picker, as its Blend and Parent do.
+            resting: false,
             onChanged: widget.onChanged,
           ),
         ),
@@ -907,7 +909,7 @@ class _OutlineRowState extends State<OutlineRow> {
           info: info,
           all: widget.stack,
           width: width,
-          resting: _resting,
+          resting: false,
           onChanged: widget.onChanged,
         ),
       );
@@ -1280,7 +1282,8 @@ class _OutlineRowState extends State<OutlineRow> {
         },
       ),
     );
-    return restingPicker(resting: _resting && value == 0, picker: picker);
+    // Always drawn in full, Normal included.
+    return picker;
   }
 
   /// The layer menu, shared with every other place a layer is shown. This

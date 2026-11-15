@@ -59,8 +59,7 @@ import '../widgets/marquee.dart';
 import 'node_menus.dart';
 import 'effect_param_row_frb.dart'
     show
-        blendInView,
-        compositingRowIds,
+        compositingRowsOf,
         cachedListParameterGroups,
         instanceParameters,
         defaultEffectValue,
@@ -206,14 +205,10 @@ CompBoxRows compBoxRows(
     for (final beside in riders.values)
       for (final p in beside) p.id,
   };
-  // A gradient's Matte is the socket on the box, and its Invert and Channel
-  // are rows of their own under it.
-  final inView = blendInView(effect);
   final rows = [
     for (final p in shown)
       if (!gated.contains(p.id) &&
-          !folded.contains(p.id) &&
-          !(inView && p.id == 'matte'))
+          !folded.contains(p.id))
         p,
   ];
   bool offDefault(BridgeParamInfo p) {
@@ -224,10 +219,8 @@ CompBoxRows compBoxRows(
         !isDefaultEffectValue(value, fallback, owner: owner);
   }
 
-  // A gradient's compositing rows, which a shut box keeps in reach.
   bool tells(BridgeParamInfo p) =>
       wired.contains(p.id) ||
-      (inView && compositingRowIds.contains(p.id)) ||
       [p, ...?riders[p.id]].any(offDefault);
   // A rider rides beside its host in the panel; the box has no room for
   // that, so it takes the row after its host.
@@ -241,13 +234,9 @@ CompBoxRows compBoxRows(
     for (final g in groups)
       if (g.collapsed && g.label.isNotEmpty) ...g.params,
   };
-  final grouped = {for (final g in groups) ...g.params};
-  bool compositing(BridgeParamInfo p) =>
-      !inView &&
-      !grouped.contains(p.id) &&
-      ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
-          (p.id == 'matte' && p.kind is BridgeParamKind_Layer));
-  final foot = [for (final p in rows) if (compositing(p)) p];
+  final foot = compositingRowsOf(rows, {for (final g in groups) ...g.params});
+  final atFoot = {for (final p in foot) p.id};
+  bool compositing(BridgeParamInfo p) => atFoot.contains(p.id);
   final open = withRiders([
     for (final p in rows)
       if (!tucked.contains(p.id) && !compositing(p)) p,

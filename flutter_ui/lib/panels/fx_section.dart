@@ -1057,12 +1057,14 @@ Widget fxGroupHeaderRow(
       final ink = open
           ? t.textPrimary
           : Color.lerp(t.textMuted, t.textPrimary, lit)!;
+      // Written as the Timeline writes the same heading: a property's name,
+      // never a container label in capitals.
       final name = Text(
-        t.kickerCase(label),
-        style: open
-            ? t.kickerOn
-            : t.kicker.copyWith(
-                color: Color.lerp(t.kicker.color, t.kickerOn.color, lit)),
+        t.propertyCase(label),
+        style: t.body.copyWith(
+            color: open
+                ? t.textPrimary
+                : Color.lerp(t.body.color, t.textPrimary, lit)),
         overflow: TextOverflow.ellipsis,
       );
       // The keyframe strip's column is kept clear here too, so the rows

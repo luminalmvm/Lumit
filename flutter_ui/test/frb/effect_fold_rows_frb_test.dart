@@ -122,10 +122,9 @@ void main() {
     expect(shut.length, lessThan(open.length));
   });
 
-  testWidgets('a gradient keeps its compositing rows as rows of its own',
-      (tester) async {
+  testWidgets('a gradient has the Compositing fold too', (tester) async {
     final rows = effectOf('gradient').$1(const {});
-    expect(ids(rows), isNot(contains('[Compositing]')));
-    expect(ids(rows), containsAll(['mix', 'blend', 'matte']));
+    expect(ids(rows).last, '[Compositing]');
+    expect(ids(rows), isNot(contains('mix')));
   });
 }
