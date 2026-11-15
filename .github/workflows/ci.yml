@@ -49,6 +49,10 @@ env:
 jobs:
   check:
     name: fmt + clippy + tests (macOS)
+    # Pull requests into nightly skip this: the Linux and Windows jobs run the
+    # same tests, and a push to nightly or main, or a pull request into main,
+    # still runs it. Only the macOS-specific part waits for the merge.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -259,6 +263,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # GPU crates included: the tests share one device under a lock (see the
       # `windows` job), so a software rasteriser neither races nor thrashes.
@@ -299,6 +304,10 @@ jobs:
   # mesa-vulkan-drivers for the Vulkan adapter.
   performance:
     name: performance gates (ratio vs baseline)
+    # Pull requests into nightly skip this: the ratio gate is noisy on a shared
+    # runner and a regression is as visible on the push after the merge. A push
+    # to nightly or main, or a pull request into main, still runs it.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     # Lavapipe is a software rasteriser, so the span-scaled scenarios measure a
     # tenth of the work area (BENCH_SPAN_FRACTION below): the first full-span
@@ -413,6 +422,9 @@ jobs:
   # bridge needs FFmpeg and libclang), plus Xvfb and Mesa's software GL.
   ui-budget:
     name: UI budgets B1 and B2 (real window, record only)
+    # Not run for pull requests into nightly: it gates nothing there, and a
+    # push to nightly or main, or a pull request into main, still runs it.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     # Held on 24.04 with the flutter job: on 26.04 its package install often
     # crawls past the hour, and the engine shares that job's Mesa crash.
     runs-on: ubuntu-24.04
@@ -1042,6 +1054,9 @@ jobs:
   # about how the bench reaches CI, answered by evidence rather than by hope.
   ofx-conformance:
     name: OFX conformance bench (openfx-misc, ntsc-rs)
+    # Not run for pull requests into nightly: it gates nothing there, and a
+    # push to nightly or main, or a pull request into main, still runs it.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1

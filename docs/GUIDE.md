@@ -122,13 +122,14 @@ flutter analyze
 everything else. Bug fixes go to `main`, which merges itself into `nightly`. New features go to
 `nightly`, which merges into `main` for the next minor release.
 
-A change that only touches `web-docs/` skips CI.
+A pull request into `nightly` skips `check` (macOS), `performance`, `ui-budget` and `ofx-conformance`.
+They run on every push and on pull requests into `main`. A change that only touches `web-docs/` skips CI.
 
 | Job | Checks |
 |---|---|
 | `check` (macOS) | fmt, clippy `-D warnings`, the tests, a release compile |
 | `windows` | clippy and the tests with media, GPU tests on WARP, in two parts |
-| `linux` | the same on lavapipe with `LUMIT_REQUIRE_GPU=1` |
+| `linux` | fmt, then the same on lavapipe with `LUMIT_REQUIRE_GPU=1` |
 | `performance` | `lumit-bench` against the runner's baseline, fails at 1.6x worse |
 | `flutter-linux` | analyze, the whole Flutter suite, a release build |
 | `flutter-macos` | a release build |
