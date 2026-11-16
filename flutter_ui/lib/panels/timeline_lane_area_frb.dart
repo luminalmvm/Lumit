@@ -1400,6 +1400,26 @@ class LayerArea extends StatelessWidget {
         ),
       );
     }
+    // The line under a keyed row with an expression over its keys: the text,
+    // pressed to open it, as a row with no keys shows it in its own lane.
+    if (row case FoldExpressionRow(:final parent)) {
+      final channels =
+          graphChannels(layers: [entry], selected: [foldRowPath(id, parent)]);
+      final driven = [
+        for (final channel in channels)
+          if (channel.scalar is BridgeScalar_Expression) channel,
+      ];
+      if (driven.isEmpty) return null;
+      return ExpressionLane(
+        key: ValueKey<String>('tl-expression-lane-${foldRowPath(id, row)}'),
+        channels: driven,
+        named: channels.length > 1,
+        comp: comp,
+        hScroll: hScroll,
+        locked: entry.info.switches.locked,
+        onChanged: onChanged,
+      );
+    }
     final rowKeys = laneKeysOf(row);
     final rowId = foldRowPath(id, row);
     if (rowKeys.isEmpty) {

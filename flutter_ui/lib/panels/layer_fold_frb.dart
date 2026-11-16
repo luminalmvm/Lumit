@@ -913,6 +913,15 @@ final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
 
+/// The expression on [parent], on a line of its own under a row whose keys it
+/// is written over: the lane shows the text, and pressing it opens it.
+final class FoldExpressionRow extends LayerFoldRow {
+  const FoldExpressionRow(this.parent, {required int depth}) : super(depth);
+
+  /// The row the expression is on.
+  final LayerFoldRow parent;
+}
+
 /// The channel a multi-channel effect value is read by: the first keyed one,
 /// else the first with an expression, else the first.
 BridgeScalar leadScalar(List<BridgeScalar> channels) =>
@@ -1277,7 +1286,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       FoldShapeGroupRow() ||
       FoldShapePaintRow() =>
         true,
-      FoldWaveformRow() || FoldSettingRow() => false,
+      FoldWaveformRow() || FoldSettingRow() || FoldExpressionRow() => false,
     };
 
 /// Whether [scalar] reads other than [fresh], the value it is made with. A
@@ -2468,6 +2477,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
+      FoldExpressionRow(:final parent) =>
+        '${foldRowPath(layerId, parent)}/expression',
       FoldSettingRow(:final setting) =>
         '${transformPath(layerId)}/${setting.name}',
       FoldAnimatorSettingRow(:final index, :final setting) =>
@@ -3442,5 +3453,15 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
-  return rows;
+  // A row with keys under its expression shows the expression on a line of
+  // its own beneath it, as After Effects does: the lane above draws the
+  // keys, and this one the text, pressed to open it.
+  return [
+    for (final row in rows) ...[
+      row,
+      if (foldRowScalar(row) is BridgeScalar_Expression &&
+          laneKeysOf(row).isNotEmpty)
+        FoldExpressionRow(row, depth: row.depth + 1),
+    ],
+  ];
 }
