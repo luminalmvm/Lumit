@@ -414,6 +414,13 @@ impl<'a> Ae<'a> {
     /// A property's numbers at comp time `t`.
     fn read(&self, prop: &PropRef, t: f64) -> Res<Vec<f64>> {
         if matches!(prop, PropRef::Own) {
+            // Keys under the expression say what the property is at `t`.
+            if let Some(kept) = super::own_keys() {
+                if let Some(v) = crate::anim::evaluate(&kept.keys, t - kept.offset) {
+                    let slot = self.slot.with_own(v);
+                    return Ok(slot.values().to_vec());
+                }
+            }
             let own = self.slot.values();
             if own.is_empty() {
                 return fail("this property's own value is not known here");
@@ -447,6 +454,12 @@ impl<'a> Ae<'a> {
 
     /// When a property's keyframes fall, in comp time.
     fn keys(&self, prop: &PropRef) -> Vec<f64> {
+        // The property this expression is written on: the keys kept under it.
+        if matches!(prop, PropRef::Own) {
+            return super::own_keys().map_or_else(Vec::new, |own| {
+                own.keys.iter().map(|k| k.time.to_f64() + own.offset).collect()
+            });
+        }
         let Some((_, layer, parts)) = self.parts(prop) else {
             return Vec::new();
         };

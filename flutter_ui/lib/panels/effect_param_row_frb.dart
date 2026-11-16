@@ -421,6 +421,11 @@ class EffectParamRowFrb extends StatelessWidget {
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: fixed,
                 navigatorApart: valueColumn != null,
+                // Alt+click: the row's expression, as its menu opens it.
+                onExpression: () {
+                  final menu = _menu(context, null);
+                  (menu.editExpression ?? menu.setExpression)?.call();
+                },
                 onWrite: (next) => _set(next.length == 4
                     ? BridgeEffectValue.colour(BridgeColour(
                         r: next[0], g: next[1], b: next[2], a: next[3]))

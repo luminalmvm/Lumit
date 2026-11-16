@@ -815,8 +815,14 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         : group.axes;
     // One stopwatch, every axis in the row — and one undo step, because
     // `setTransforms` commits them as a batch.
-    final keyframes = KeyframeControlsFrb(
+    late final KeyframeControlsFrb keyframes;
+    keyframes = KeyframeControlsFrb(
       scalars: [for (final axis in group.axes) read(transform, axis.prop)],
+      // Alt+click: the row's expression, as its menu opens it.
+      onExpression: () {
+        final menu = _menu(group, keyframes, cells, transform);
+        (menu.editExpression ?? menu.setExpression)?.call();
+      },
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',

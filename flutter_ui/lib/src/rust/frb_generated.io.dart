@@ -3089,6 +3089,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeFrameSpan>? dco_decode_opt_list_bridge_frame_span(dynamic raw);
 
   @protected
+  List<BridgeKeyframe>? dco_decode_opt_list_bridge_keyframe(dynamic raw);
+
+  @protected
   List<BridgeScenePart>? dco_decode_opt_list_bridge_scene_part(dynamic raw);
 
   @protected
@@ -6641,6 +6644,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFrameSpan>? sse_decode_opt_list_bridge_frame_span(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeKeyframe>? sse_decode_opt_list_bridge_keyframe(
       SseDeserializer deserializer);
 
   @protected
@@ -10407,6 +10414,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_list_bridge_frame_span(
       List<BridgeFrameSpan>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_bridge_keyframe(
+      List<BridgeKeyframe>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_bridge_scene_part(

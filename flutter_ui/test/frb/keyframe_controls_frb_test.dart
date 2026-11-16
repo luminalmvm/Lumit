@@ -8,6 +8,7 @@
 // that the frb API deliberately does not have (a whole `BridgeScalar` goes
 // across instead), so there is nothing here to translate.
 
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -144,6 +145,45 @@ void main() {
       keys = (opacityOf(p.layer) as BridgeScalar_Keyframed).field0;
       expect(keys, hasLength(1));
       expect(p.comp.frameAtTime(time: keys.single.time), 0);
+    });
+
+    testWidgets(
+        'keys under an expression: the stopwatch lights, the diamond keeps the '
+        'expression, Alt+click opens it', (tester) async {
+      final p = withLayer();
+      p.uiState.playheadFrame.value = 0;
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
+      await tester.pump();
+      p.uiState.playheadFrame.value = 60;
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-opacity')));
+      await tester.pump();
+
+      p.layer.setTransform(
+          prop: BridgeTransformProp.opacity,
+          value: BridgeScalar.expression(
+              'loopOut("cycle")', BridgeExpressionLanguage.javaScript));
+      p.uiState.model.refresh();
+      await tester.pump();
+      var held = opacityOf(p.layer);
+      expect(held, isA<BridgeScalar_Expression>());
+      expect((held as BridgeScalar_Expression).field2, hasLength(2),
+          reason: 'the keys stay under the expression');
+
+      // The diamond on the key at 60 takes it away, and the expression stays.
+      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-opacity')));
+      await tester.pump();
+      held = opacityOf(p.layer);
+      expect(held, isA<BridgeScalar_Expression>());
+      expect((held as BridgeScalar_Expression).field2, hasLength(1));
+
+      // Alt+click opens the expression rather than stopping the animation.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      expect(opacityOf(p.layer), held, reason: 'nothing written');
     });
 
     testWidgets('the arrows jump the playhead to the neighbouring keys',

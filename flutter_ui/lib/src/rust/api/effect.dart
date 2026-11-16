@@ -1790,11 +1790,16 @@ sealed class BridgeScalar with _$BridgeScalar {
     List<BridgeKeyframe> field0,
   ) = BridgeScalar_Keyframed;
 
-  /// The text, and the language it is written in.
+  /// The text, the language it is written in, and the keys kept under it
+  /// (`value` reads them, `loopOut` repeats them). Read, the keys are always
+  /// there, empty for none. Written, `None` leaves whatever keys the property
+  /// has, so a caller that only changes the text need not carry them, and a
+  /// list replaces them.
   const factory BridgeScalar.expression(
     String field0,
-    BridgeExpressionLanguage field1,
-  ) = BridgeScalar_Expression;
+    BridgeExpressionLanguage field1, [
+    List<BridgeKeyframe>? field2,
+  ]) = BridgeScalar_Expression;
 }
 
 /// How far the plugin scan has got, so the splash can say what it is waiting on.
