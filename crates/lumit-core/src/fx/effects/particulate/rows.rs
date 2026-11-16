@@ -134,6 +134,8 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         &[
             "mode",
             "feather",
+            "sprite_shape",
+            "sprite_star_points",
             "sprite_layer",
             "streak_length",
             "particle_blend",
@@ -160,6 +162,28 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "sprite_layer",
         on: "mode",
         cond: EnabledCond::ChoiceIs(1),
+    },
+    // The Sprite layer is read only when Sprite shape is Layer, and Star
+    // points only when it is Star.
+    EnabledWhen {
+        param: "sprite_layer",
+        on: "sprite_shape",
+        cond: EnabledCond::ChoiceIs(0),
+    },
+    EnabledWhen {
+        param: "sprite_shape",
+        on: "mode",
+        cond: EnabledCond::ChoiceIs(1),
+    },
+    EnabledWhen {
+        param: "sprite_star_points",
+        on: "mode",
+        cond: EnabledCond::ChoiceIs(1),
+    },
+    EnabledWhen {
+        param: "sprite_star_points",
+        on: "sprite_shape",
+        cond: EnabledCond::ChoiceIs(4),
     },
     EnabledWhen {
         param: "streak_length",

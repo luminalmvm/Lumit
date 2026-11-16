@@ -701,6 +701,23 @@ pub struct Particulate {
     )]
     pub feather: f32,
 
+    /// What Sprite mode stamps: the Sprite layer's picture, or a ready-made
+    /// shape tinted by the particle's colour ([`points::sprite_shape`]).
+    #[choice(label = "Sprite shape", options = *points::sprite_shape::SpriteShape::OPTIONS, default = 0)]
+    pub sprite_shape: u32,
+
+    /// How many points a Star sprite has.
+    #[counter(
+        label = "Star points",
+        min = 4,
+        max = 8,
+        default = 5,
+        hard_min = 4,
+        hard_max = 8,
+        unit = Raw
+    )]
+    pub sprite_star_points: i32,
+
     /// The layer drawn per particle in Sprite mode. **Unset
     /// draws discs** — a render mode must always draw something, which is this
     /// effect's documented deviation from the unset-is-identity convention.
@@ -856,6 +873,19 @@ impl Particulate {
             // The picture's size is the caller's to say, as the camera is.
             frame: [0.0; 2],
         }
+    }
+
+    /// The ready-made picture Sprite mode stamps, or `None` when it stamps the
+    /// Sprite layer (or is not in Sprite mode).
+    #[must_use]
+    pub fn sprite_picture(self) -> Option<std::sync::Arc<Vec<f32>>> {
+        if points::RenderMode::from_code(self.mode) != points::RenderMode::Sprite {
+            return None;
+        }
+        points::sprite_shape::picture(
+            points::sprite_shape::SpriteShape::from_code(self.sprite_shape),
+            self.sprite_star_points.clamp(4, 8) as u32,
+        )
     }
 
     /// How the stream is drawn — the Render group, reduced.

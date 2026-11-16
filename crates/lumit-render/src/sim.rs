@@ -748,7 +748,7 @@ pub(crate) fn draw(
     let Some(work) = work else {
         return input.clone();
     };
-    crate::gpufx_particulate::Particulate::with_op(p, aux, |op, sprite| {
+    crate::gpufx_particulate::Particulate::with_op(Some(ctx), p, aux, |op, sprite| {
         let op = ParticulateOp {
             sim: Some(view(&work, p)),
             ..*op

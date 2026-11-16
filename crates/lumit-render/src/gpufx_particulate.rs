@@ -135,9 +135,22 @@ pub(crate) fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule)
 /// turn it on.
 pub(crate) struct Particulate;
 impl Particulate {
+    /// The ready-made Sprite shape this Particulate stamps, uploaded, and
+    /// whether it stamps one at all (then the Sprite layer is unread).
+    pub(crate) fn preset_sprite(ctx: &GpuContext, p: Params<'_>) -> (Option<Tex>, bool) {
+        let px = lumit_core::fx::effects::particulate::Particulate::read(p).sprite_picture();
+        let side = lumit_core::fx::points::sprite_shape::SIZE;
+        let wanted = px.is_some();
+        (
+            px.map(|px| lumit_gpu::fx::common::upload_linear_f32(ctx, &px, side, side)),
+            wanted,
+        )
+    }
+
     /// The GPU op this frame's Particulate draws, handed to `f` with the
     /// sprite it stamps, if any.
     pub(crate) fn with_op<R>(
+        ctx: Option<&GpuContext>,
         p: Params<'_>,
         aux: AuxSlot<'_>,
         f: impl FnOnce(&lumit_gpu::fx::particulate::ParticulateOp<'_>, Option<&Tex>) -> R,
@@ -155,7 +168,19 @@ impl Particulate {
                 .position(|row| row == id)?;
             aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
         };
-        let sprite = picture("sprite_layer");
+        // A ready-made Sprite shape is drawn on the host and stamped as the
+        // layer's picture would be; with one chosen the Sprite layer is unread.
+        // Without a context to upload into (the stream read back), none is made.
+        let preset = ctx.and_then(|ctx| {
+            let px = inst.sprite_picture()?;
+            let side = lumit_core::fx::points::sprite_shape::SIZE;
+            Some(lumit_gpu::fx::common::upload_linear_f32(ctx, &px, side, side))
+        });
+        let sprite = match (&preset, inst.sprite_picture().is_some()) {
+            (Some(t), _) => Some(t),
+            (None, true) => None,
+            (None, false) => picture("sprite_layer"),
+        };
         let mode = match style.mode {
             RenderMode::Disc => 0,
             // Unset draws discs — the documented deviation from
@@ -222,6 +247,7 @@ impl Particulate {
         use lumit_core::fx::effects::particulate::Particulate as P;
         let inst = P::read(p);
         let style = inst.draw_style();
+        let (preset, ready_made) = Self::preset_sprite(ctx, p);
         let px_scale = P::px_scale_of(p);
         let points = stream_points(&stream.rescaled(px_scale), style.streak_seconds);
         let sprite = <P as EffectMetadata>::SCHEMA
@@ -229,6 +255,7 @@ impl Particulate {
             .position(|row| row == "sprite_layer")
             .and_then(|at| aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex))
             .filter(|_| style.mode == lumit_core::fx::points::RenderMode::Sprite);
+        let sprite = if ready_made { preset.as_ref() } else { sprite };
         let projection = aux
             .schedule()
             .and_then(|sched| sched.projection)
@@ -284,7 +311,7 @@ impl GpuEffect for Particulate {
         if let Some(stream) = aux.schedule().and_then(|s| s.stepped.as_ref()) {
             return Particulate::stepped(fx, ctx, tex, w, h, p, aux, stream);
         }
-        Particulate::with_op(p, aux, |op, sprite| {
+        Particulate::with_op(Some(ctx), p, aux, |op, sprite| {
             crate::realise::scene::draw(fx, ctx, tex, (w, h), sprite, op, p)
                 .unwrap_or_else(|| fx.particulate(ctx, tex, w, h, sprite, op))
         })
@@ -314,7 +341,7 @@ impl GpuEffect for Particulate {
             return None;
         }
         let px_scale = P::px_scale_of(p);
-        let (count, words, projection) = Particulate::with_op(p, aux, |op, _| {
+        let (count, words, projection) = Particulate::with_op(None, p, aux, |op, _| {
             let sim = walked.as_ref().map(|w| crate::sim::view(w, p));
             let op = &lumit_gpu::fx::particulate::ParticulateOp { sim, ..*op };
             sim.is_some().then_some(()).or(op.density.map(|_| ()))?;
