@@ -43,6 +43,7 @@ import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
+import 'keyframe_controls_frb.dart' show asKeyed, keysOfScalar, withKeys;
 
 /// One row of a layer's fold-out.
 sealed class LayerFoldRow {
@@ -924,13 +925,10 @@ BridgeScalar leadScalar(List<BridgeScalar> channels) =>
 /// empty for rows with nothing keyed. A multi-axis transform row has one key
 /// for each time any of its axes does ([rowKeysOf]).
 List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
-      FoldTransformRow(:final group, :final transform) =>
-        rowKeysOf([for (final axis in group.axes) read(transform, axis.prop)]),
-      FoldRetimeRow(:final scalar) => switch (scalar) {
-          BridgeScalar_Keyframed(:final field0) => field0,
-          BridgeScalar_Static() => const [],
-          BridgeScalar_Expression() => const [],
-        },
+      // Keys kept under an expression are drawn as any others.
+      FoldTransformRow(:final group, :final transform) => rowKeysOf(
+          [for (final axis in group.axes) asKeyed(read(transform, axis.prop))]),
+      FoldRetimeRow(:final scalar) => keysOfScalar(scalar) ?? const [],
       // The Volume's keys are lane diamonds like any other property's:
       // the rubber band draws them on the wave, and the
       // Volume row's own lane drags them.
@@ -951,16 +949,14 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           _ => const [],
         },
       FoldEffectParamRow(:final value) => switch (value) {
-          BridgeEffectValue_Float(
-            field0: BridgeScalar_Keyframed(:final field0)
-          ) =>
-            field0,
+          BridgeEffectValue_Float(:final field0) =>
+            keysOfScalar(field0) ?? const [],
           // A Colour's and a Point's channels key together, from one
           // stopwatch, so the first keyed channel's times are the row's.
           BridgeEffectValue_Colour(:final field0) =>
-            rowKeysOf([field0.r, field0.g, field0.b, field0.a]),
+            rowKeysOf([field0.r, field0.g, field0.b, field0.a].map(asKeyed)),
           BridgeEffectValue_Point(:final field0) =>
-            rowKeysOf([field0.x, field0.y]),
+            rowKeysOf([field0.x, field0.y].map(asKeyed)),
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
@@ -2183,8 +2179,9 @@ bool moveLaneKeys({
       for (final axis in group.axes) {
         final scalar = read(transform, axis.prop);
         // An axis with no keys, or none at these times, has nothing to move.
-        if (scalar is! BridgeScalar_Keyframed) continue;
-        final keys = scalar.field0;
+        // Keys under an expression move, and the expression stays.
+        final keys = keysOfScalar(scalar);
+        if (keys == null) continue;
         final own = {
           for (final MapEntry(key: i, value: time) in times.entries)
             if (axisKeyIndex(rowKeys, i, keys) case final j?) j: time,
@@ -2195,7 +2192,7 @@ bool moveLaneKeys({
         // sat together.
         if (next == null) return false;
         props.add(axis.prop);
-        values.add(BridgeScalar.keyframed(next));
+        values.add(withKeys(scalar, next, 0));
       }
       if (props.isEmpty) return false;
       entry.layer.setTransforms(props: props, values: values);
@@ -2237,14 +2234,15 @@ bool moveLaneKeys({
       // its own key by time: the Graph can key one channel alone.
       final rowKeys = laneKeysOf(row);
       BridgeScalar? movedChannel(BridgeScalar s) {
-        if (s is! BridgeScalar_Keyframed) return s;
+        final keys = keysOfScalar(s);
+        if (keys == null) return s;
         final own = {
           for (final MapEntry(key: i, value: time) in times.entries)
-            if (axisKeyIndex(rowKeys, i, s.field0) case final j?) j: time,
+            if (axisKeyIndex(rowKeys, i, keys) case final j?) j: time,
         };
         if (own.isEmpty) return s;
-        final next = movedBy(own, s.field0);
-        return next == null ? null : BridgeScalar.keyframed(next);
+        final next = movedBy(own, keys);
+        return next == null ? null : withKeys(s, next, 0);
       }
 
       for (final instance in stack) {
@@ -2273,12 +2271,13 @@ bool moveLaneKeys({
         }
         if (value is! BridgeEffectValue_Float) return false;
         final scalar = value.field0;
-        if (scalar is! BridgeScalar_Keyframed) return false;
-        final next = moved(scalar.field0);
+        final keys = keysOfScalar(scalar);
+        if (keys == null) return false;
+        final next = moved(keys);
         if (next == null) return false;
         instance.setValue(
           id: param.id,
-          value: BridgeEffectValue.float(BridgeScalar.keyframed(next)),
+          value: BridgeEffectValue.float(withKeys(scalar, next, 0)),
         );
         entry.layer.setEffects(effects: stack);
         return true;
@@ -2286,10 +2285,11 @@ bool moveLaneKeys({
       return false;
 
     case FoldRetimeRow(:final scalar):
-      if (scalar is! BridgeScalar_Keyframed) return false;
-      final next = moved(scalar.field0);
+      final keys = keysOfScalar(scalar);
+      if (keys == null) return false;
+      final next = moved(keys);
       if (next == null) return false;
-      entry.layer.setRetimeProperty(value: BridgeScalar.keyframed(next));
+      entry.layer.setRetimeProperty(value: withKeys(scalar, next, 0));
       return true;
 
     case FoldVolumeRow(:final scalar):

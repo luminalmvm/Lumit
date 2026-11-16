@@ -607,6 +607,28 @@ pub fn evaluate_with(
     }
 }
 
+/// [`evaluate_with`] for an expression with keys under it, given rather than
+/// looked up: `value` reads them at `t` and `loopOut` repeats them. `t` and
+/// the keys share a timebase; the context's `comp_time` is `time`. What the
+/// panels sample a row with, when the row carries its keys.
+pub fn evaluate_with_keys(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    slot: Slot,
+    keys: Vec<crate::anim::Keyframe>,
+    t: f64,
+) -> f64 {
+    if language != Language::JavaScript || keys.is_empty() {
+        return evaluate_with(language, expression, context, slot);
+    }
+    let slot = crate::anim::evaluate(&keys, t).map_or(slot, |v| slot.with_own(v));
+    let offset = context.as_deref().map_or(0.0, |c| c.comp_time - t);
+    script::with_own_keys(Some(script::OwnKeys { keys, offset }), || {
+        javascript_number(expression, context.as_deref(), slot)
+    })
+}
+
 /// [`evaluate`] for a property that is in hand, whose `extra` says which
 /// language its expression is in and what the expression may know about the
 /// property: its value before the expression, and which number of a point it

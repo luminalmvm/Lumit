@@ -905,6 +905,21 @@ fn seconds_of(time: BridgeRational) -> f64 {
     }
 }
 
+/// The keys an expression carries, on the comp's clock as they crossed, or
+/// `None` for none.
+fn keys_of(keys: Option<&[BridgeKeyframe]>) -> Option<Vec<Keyframe>> {
+    let keys: Vec<Keyframe> = keys?
+        .iter()
+        .map(|k| Keyframe {
+            time: Rational::new(k.time.num, k.time.den).unwrap_or(Rational::ZERO),
+            value: k.value,
+            interp_in: k.interp_in.write(),
+            interp_out: k.interp_out.write(),
+        })
+        .collect();
+    (!keys.is_empty()).then_some(keys)
+}
+
 /// The shared body of the two samplers above: what one scalar reads at
 /// `seconds`, with no expression context.
 fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
@@ -922,7 +937,28 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr, language, _) => {
+        BridgeScalar::Expression(expr, language, keys) => {
+            // With its keys in hand it reads them as a render does, at this
+            // time: a looped Retime shows the moment it is showing.
+            if let Some(keys) = keys_of(keys.as_deref()) {
+                let mut at = ExpressionContext::detached();
+                at.comp_time = seconds;
+                let slot = lumit_core::expression::script::Slot::default()
+                    .in_language(language.read());
+                return lumit_core::expression::within_steps(
+                    lumit_core::expression::INTERFACE_STEPS,
+                    || {
+                        lumit_core::expression::evaluate_with_keys(
+                            language.read(),
+                            &expr,
+                            Some(Arc::new(at)),
+                            slot,
+                            keys,
+                            seconds,
+                        )
+                    },
+                );
+            }
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
                 lumit_core::expression::evaluate_in(language.read(), &expr, None)
             })
@@ -1023,7 +1059,7 @@ pub fn sample_scalar_with_context(
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr, language, _) => {
+        BridgeScalar::Expression(expr, language, keys) => {
             let Some(doc) = document_for(&layer) else {
                 return 0.0;
             };
@@ -1041,7 +1077,22 @@ pub fn sample_scalar_with_context(
             let slot = own_slot(&context, &expr, held, seconds, row.as_ref());
             // This runs on the interface's thread, for every row on screen.
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
-                lumit_core::expression::evaluate_with(language.read(), &expr, Some(context), slot)
+                match keys_of(keys.as_deref()) {
+                    Some(keys) => lumit_core::expression::evaluate_with_keys(
+                        language.read(),
+                        &expr,
+                        Some(context),
+                        slot,
+                        keys,
+                        seconds,
+                    ),
+                    None => lumit_core::expression::evaluate_with(
+                        language.read(),
+                        &expr,
+                        Some(context),
+                        slot,
+                    ),
+                }
             })
         }
     }

@@ -952,3 +952,19 @@ BridgeScalar withKeys(BridgeScalar was, List<BridgeKeyframe> keys, double value)
         BridgeScalar.expression(field0, field1, keys),
       _ => keys.isEmpty ? BridgeScalar.static_(value) : BridgeScalar.keyframed(keys),
     };
+
+/// The keys of [scalar]: its curve's, or those kept under its expression.
+/// Null when it has none.
+List<BridgeKeyframe>? keysOfScalar(BridgeScalar scalar) => switch (scalar) {
+      BridgeScalar_Keyframed(:final field0) => field0,
+      BridgeScalar_Expression(:final field2?) when field2.isNotEmpty => field2,
+      _ => null,
+    };
+
+/// [scalar] as the curve its keys draw: an expression with keys under it
+/// reads as those keys, for the lanes that draw diamonds.
+BridgeScalar asKeyed(BridgeScalar scalar) => switch (keysOfScalar(scalar)) {
+      final keys? when scalar is BridgeScalar_Expression =>
+        BridgeScalar.keyframed(keys),
+      _ => scalar,
+    };
