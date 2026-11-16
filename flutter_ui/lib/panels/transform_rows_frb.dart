@@ -52,6 +52,7 @@ import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show transformGroupPath;
 import 'light_rows_frb.dart';
 import 'param_row_menu.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 import '../state/expression_language.dart' show PropertyRef;
 import 'expression_editor.dart' show expressionAsKeys, showExpressionEditor;
@@ -815,14 +816,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         : group.axes;
     // One stopwatch, every axis in the row — and one undo step, because
     // `setTransforms` commits them as a batch.
-    late final KeyframeControlsFrb keyframes;
-    keyframes = KeyframeControlsFrb(
+    final keyframes = KeyframeControlsFrb(
       scalars: [for (final axis in group.axes) read(transform, axis.prop)],
-      // Alt+click: the row's expression, as its menu opens it.
-      onExpression: () {
-        final menu = _menu(group, keyframes, cells, transform);
-        (menu.editExpression ?? menu.setExpression)?.call();
-      },
+      // Alt+click: the expression editor, on a picked axis where several.
+      onExpression: () => _altExpression(group, cells, transform),
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
@@ -1704,6 +1701,66 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         setState(() => _staged = null);
         widget.onChanged();
       },
+    );
+  }
+
+  /// Alt+click on the stopwatch: the expression editor, on the row's one
+  /// axis or on the axis picked from a small menu. Nothing is written until
+  /// the editor is closed with a change; a new expression opens holding the
+  /// number showing, its keys kept under it.
+  void _altExpression(TransformGroup group, List<TransformAxis> cells,
+      BridgeTransform transform) {
+    if (group.colour) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached) return;
+    final over = box.localToGlobal(Offset.zero) & box.size;
+    void open(TransformAxis axis) {
+      final prop = axis.prop;
+      final held = read(transform, prop);
+      final fresh = held is! BridgeScalar_Expression;
+      showExpressionEditor(
+        context: context,
+        over: over,
+        value: held is BridgeScalar_Expression
+            ? held
+            : BridgeScalar_Expression(
+                sampledScalar(
+                        held, timeOfFrame(widget.comp, _ui.playheadFrame.value))
+                    .toString(),
+                newExpressionLanguage(context)),
+        fresh: fresh,
+        held: held,
+        comp: widget.comp,
+        layer: widget.layer,
+        row: BridgeExpressionRow.transform(prop),
+        decimals: axis.decimals,
+        // A new one is not previewed: a cancel would write it back.
+        onLive: fresh ? null : (draft) => _liveExpression(prop, draft),
+        onCommit: (next) => next is BridgeScalar_Static
+            ? _commit(prop, next.field0)
+            : _commitExpression(prop, next),
+      );
+    }
+
+    if (cells.length == 1) {
+      open(cells.single);
+      return;
+    }
+    showMenuAt<void>(
+      context: context,
+      position: over.topLeft,
+      width: 110,
+      rows: (close) => [
+        for (final (i, axis) in cells.indexed)
+          MenuRow(
+            key: ValueKey<String>('alt-expression-$i'),
+            onPressed: () {
+              close(null);
+              open(axis);
+            },
+            child: MenuLabel(axisName(i)),
+          ),
+      ],
     );
   }
 

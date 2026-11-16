@@ -186,6 +186,33 @@ void main() {
       expect(opacityOf(p.layer), held, reason: 'nothing written');
     });
 
+    testWidgets(
+        'Alt+click opens the editor and writes nothing; Position asks the axis',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+      final before = opacityOf(p.layer);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('expression-editor-text')),
+          findsOneWidget);
+      expect(opacityOf(p.layer), before, reason: 'nothing written yet');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(opacityOf(p.layer), before);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-positionX')));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('alt-expression-1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('expression-editor-text')),
+          findsOneWidget);
+    });
+
     testWidgets('the arrows jump the playhead to the neighbouring keys',
         (tester) async {
       final p = withLayer();
