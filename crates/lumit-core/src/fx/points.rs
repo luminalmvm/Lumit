@@ -58,7 +58,6 @@ use crate::mask::MaskPolyline;
 use emitter::{birth_point, outline_polyline, Emitter};
 
 pub mod emitter;
-pub mod sprite_shape;
 pub mod stepped;
 pub mod trails;
 

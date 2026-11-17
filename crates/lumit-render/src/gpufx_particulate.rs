@@ -139,7 +139,7 @@ impl Particulate {
     /// whether it stamps one at all (then the Sprite layer is unread).
     pub(crate) fn preset_sprite(ctx: &GpuContext, p: Params<'_>) -> (Option<Tex>, bool) {
         let px = lumit_core::fx::effects::particulate::Particulate::read(p).sprite_picture();
-        let side = lumit_core::fx::points::sprite_shape::SIZE;
+        let side = lumit_core::fx::effects::particulate::sprite_shape::SIZE;
         let wanted = px.is_some();
         (
             px.map(|px| lumit_gpu::fx::common::upload_linear_f32(ctx, &px, side, side)),
@@ -173,7 +173,7 @@ impl Particulate {
         // Without a context to upload into (the stream read back), none is made.
         let preset = ctx.and_then(|ctx| {
             let px = inst.sprite_picture()?;
-            let side = lumit_core::fx::points::sprite_shape::SIZE;
+            let side = lumit_core::fx::effects::particulate::sprite_shape::SIZE;
             Some(lumit_gpu::fx::common::upload_linear_f32(
                 ctx, &px, side, side,
             ))

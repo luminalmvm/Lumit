@@ -38,6 +38,7 @@ use crate::fx::{
 use lumit_fx_macros::Effect;
 
 pub mod rows;
+pub mod sprite_shape;
 
 /// Particulate's declared **data** output: the same particles it
 /// draws, offered as a stream. Teal, like every geometry socket, and drawn from
@@ -702,8 +703,8 @@ pub struct Particulate {
     pub feather: f32,
 
     /// What Sprite mode stamps: the Sprite layer's picture, or a ready-made
-    /// shape tinted by the particle's colour ([`points::sprite_shape`]).
-    #[choice(label = "Sprite shape", options = *points::sprite_shape::SpriteShape::OPTIONS, default = 0)]
+    /// shape tinted by the particle's colour ([`sprite_shape`]).
+    #[choice(label = "Sprite shape", options = *sprite_shape::SpriteShape::OPTIONS, default = 0)]
     pub sprite_shape: u32,
 
     /// How many points a Star sprite has.
@@ -882,8 +883,8 @@ impl Particulate {
         if points::RenderMode::from_code(self.mode) != points::RenderMode::Sprite {
             return None;
         }
-        points::sprite_shape::picture(
-            points::sprite_shape::SpriteShape::from_code(self.sprite_shape),
+        sprite_shape::picture(
+            sprite_shape::SpriteShape::from_code(self.sprite_shape),
             self.sprite_star_points.clamp(4, 8) as u32,
         )
     }
