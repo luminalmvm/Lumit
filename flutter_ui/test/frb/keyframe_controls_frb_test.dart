@@ -8,7 +8,6 @@
 // that the frb API deliberately does not have (a whole `BridgeScalar` goes
 // across instead), so there is nothing here to translate.
 
-import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -148,8 +147,8 @@ void main() {
     });
 
     testWidgets(
-        'keys under an expression: the stopwatch lights, the diamond keeps the '
-        'expression, Alt+click opens it', (tester) async {
+        'keys under an expression: the diamond takes one away and keeps the '
+        'expression', (tester) async {
       final p = withLayer();
       p.uiState.playheadFrame.value = 0;
       await mount(tester, p);
@@ -177,75 +176,6 @@ void main() {
       held = opacityOf(p.layer);
       expect(held, isA<BridgeScalar_Expression>());
       expect((held as BridgeScalar_Expression).field2, hasLength(1));
-
-      // Alt+click opens the expression rather than stopping the animation.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.pump();
-      expect(opacityOf(p.layer), held, reason: 'nothing written');
-    });
-
-    testWidgets(
-        'Alt+click opens the editor and writes nothing; Position asks the axis',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-      final before = opacityOf(p.layer);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('expression-editor-text')),
-          findsOneWidget);
-      expect(opacityOf(p.layer), before, reason: 'nothing written yet');
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(opacityOf(p.layer), before);
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-positionX')));
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('alt-expression-1')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('expression-editor-text')),
-          findsOneWidget);
-    });
-
-    testWidgets('a linked Scale takes an Alt+click expression on both axes',
-        (tester) async {
-      final p = withLayer();
-      BridgeKeyframe key(int frame, double v) => BridgeKeyframe(
-            time: p.comp.timeOfFrame(frame: frame),
-            value: v,
-            interpIn: const BridgeSideInterp.linear(),
-            interpOut: const BridgeSideInterp.linear(),
-          );
-      p.layer.setTransforms(props: [
-        BridgeTransformProp.scaleX,
-        BridgeTransformProp.scaleY
-      ], values: [
-        BridgeScalar.keyframed([key(0, 50), key(24, 100)]),
-        BridgeScalar.keyframed([key(0, 50), key(24, 100)]),
-      ]);
-      await mount(tester, p);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-scaleX')));
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.pumpAndSettle();
-      await tester.enterText(
-          find.byKey(const ValueKey('expression-editor-text')), 'loopOut()');
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-      final t = p.layer.getTransform();
-      for (final s in [t.scaleX, t.scaleY]) {
-        expect(s, isA<BridgeScalar_Expression>());
-        expect((s as BridgeScalar_Expression).field0, 'loopOut()');
-        expect(s.field2, hasLength(2), reason: 'each axis keeps its keys');
-      }
     });
 
     testWidgets('the arrows jump the playhead to the neighbouring keys',

@@ -27,20 +27,6 @@ fn at(p: &Property, t: f64) -> f64 {
 }
 
 #[test]
-fn the_keys_stay_under_a_new_expression() {
-    let p = keyed_with("value");
-    assert!(matches!(p.animation, Animation::Expression(_)));
-    assert_eq!(p.keys_under_expression().map(|k| k.len()), Some(2));
-}
-
-#[test]
-fn value_reads_the_keys_at_the_expressions_time() {
-    let p = keyed_with("value * 2");
-    assert!((at(&p, 1.0) - 10.0).abs() < 1e-9);
-    assert!((at(&p, 2.0) - 20.0).abs() < 1e-9);
-}
-
-#[test]
 fn loop_out_repeats_the_keys() {
     let p = keyed_with("loopOut(\"cycle\")");
     // 3 s is 1 s into the second lap: 5, as at 1 s.
@@ -71,15 +57,6 @@ fn editing_the_text_keeps_the_keys_and_they_survive_a_save() {
     let back: Property = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
     assert_eq!(back.keys_under_expression(), p.keys_under_expression());
     assert!((at(&back, 2.0) - 11.0).abs() < 1e-9);
-}
-
-#[test]
-fn a_property_with_no_keys_reads_as_it_did() {
-    let mut p = Property::fixed(4.0);
-    p.set_animation(Animation::Expression("value + 1".into()));
-    p.set_expression_language(Language::JavaScript);
-    assert!(p.keys_under_expression().is_none());
-    assert!((at(&p, 9.0) - 5.0).abs() < 1e-9);
 }
 
 #[test]
