@@ -313,7 +313,8 @@ fn javascript_number(expression: &str, context: Option<&ExpressionContext>, slot
 /// came off: the panels, which sample a row to show its number and its curve.
 /// A point's two rows carry the same text, and the first is the one found.
 pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
-    carrier(context, expression).map_or_else(Slot::default, |(_, property)| Slot::read(&property.extra))
+    carrier(context, expression)
+        .map_or_else(Slot::default, |(_, property)| Slot::read(&property.extra))
 }
 
 /// The keys kept under the expression `expression` on the context's layer,

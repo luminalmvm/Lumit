@@ -3012,38 +3012,61 @@ impl BridgeTransform {
         target: &mut lumit_core::model::TransformGroup,
         offset: Rational,
     ) -> Result<(), BridgeError> {
-        self.anchor_x
-            .put(&mut target.anchor_x, self.anchor_x.animation_at(offset)?, offset);
-        self.anchor_y
-            .put(&mut target.anchor_y, self.anchor_y.animation_at(offset)?, offset);
+        self.anchor_x.put(
+            &mut target.anchor_x,
+            self.anchor_x.animation_at(offset)?,
+            offset,
+        );
+        self.anchor_y.put(
+            &mut target.anchor_y,
+            self.anchor_y.animation_at(offset)?,
+            offset,
+        );
         self.position_x.put(
             &mut target.position_x,
-            self.position_x.animation_at(offset)?, offset,
+            self.position_x.animation_at(offset)?,
+            offset,
         );
         self.position_y.put(
             &mut target.position_y,
-            self.position_y.animation_at(offset)?, offset,
+            self.position_y.animation_at(offset)?,
+            offset,
         );
         self.position_z.put(
             &mut target.position_z,
-            self.position_z.animation_at(offset)?, offset,
+            self.position_z.animation_at(offset)?,
+            offset,
         );
-        self.scale_x
-            .put(&mut target.scale_x, self.scale_x.animation_at(offset)?, offset);
-        self.scale_y
-            .put(&mut target.scale_y, self.scale_y.animation_at(offset)?, offset);
-        self.rotation
-            .put(&mut target.rotation, self.rotation.animation_at(offset)?, offset);
+        self.scale_x.put(
+            &mut target.scale_x,
+            self.scale_x.animation_at(offset)?,
+            offset,
+        );
+        self.scale_y.put(
+            &mut target.scale_y,
+            self.scale_y.animation_at(offset)?,
+            offset,
+        );
+        self.rotation.put(
+            &mut target.rotation,
+            self.rotation.animation_at(offset)?,
+            offset,
+        );
         self.rotation_x.put(
             &mut target.rotation_x,
-            self.rotation_x.animation_at(offset)?, offset,
+            self.rotation_x.animation_at(offset)?,
+            offset,
         );
         self.rotation_y.put(
             &mut target.rotation_y,
-            self.rotation_y.animation_at(offset)?, offset,
+            self.rotation_y.animation_at(offset)?,
+            offset,
         );
-        self.opacity
-            .put(&mut target.opacity, self.opacity.animation_at(offset)?, offset);
+        self.opacity.put(
+            &mut target.opacity,
+            self.opacity.animation_at(offset)?,
+            offset,
+        );
         if let Some(d) = &self.depth {
             use lumit_core::model::TransformProp as P;
             // A keyed Orientation previews with all three angles keyed

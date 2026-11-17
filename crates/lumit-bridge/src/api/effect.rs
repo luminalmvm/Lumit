@@ -943,8 +943,8 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
             if let Some(keys) = keys_of(keys.as_deref()) {
                 let mut at = ExpressionContext::detached();
                 at.comp_time = seconds;
-                let slot = lumit_core::expression::script::Slot::default()
-                    .in_language(language.read());
+                let slot =
+                    lumit_core::expression::script::Slot::default().in_language(language.read());
                 return lumit_core::expression::within_steps(
                     lumit_core::expression::INTERFACE_STEPS,
                     || {
@@ -1994,7 +1994,11 @@ pub enum BridgeScalar {
     /// Written, `None` leaves whatever keys the property
     /// has, so a caller that only changes the text need not carry them, and a
     /// list replaces them.
-    Expression(String, BridgeExpressionLanguage, Option<Vec<BridgeKeyframe>>),
+    Expression(
+        String,
+        BridgeExpressionLanguage,
+        Option<Vec<BridgeKeyframe>>,
+    ),
 }
 
 impl BridgeScalar {
@@ -2022,9 +2026,11 @@ impl BridgeScalar {
             Animation::Expression(expr) => BridgeScalar::Expression(
                 expr.clone(),
                 BridgeExpressionLanguage::of(property.expression_language()),
-                property
-                    .keys_under_expression()
-                    .map(|keys| keys.iter().map(|k| BridgeKeyframe::read_at(k, offset)).collect()),
+                property.keys_under_expression().map(|keys| {
+                    keys.iter()
+                        .map(|k| BridgeKeyframe::read_at(k, offset))
+                        .collect()
+                }),
             ),
         }
     }
@@ -2058,8 +2064,11 @@ impl BridgeScalar {
         let BridgeScalar::Expression(_, _, Some(keys)) = self else {
             return None;
         };
-        let keys: Vec<Keyframe> =
-            keys.iter().map(|k| k.write_at(offset)).collect::<Result<_, _>>().ok()?;
+        let keys: Vec<Keyframe> = keys
+            .iter()
+            .map(|k| k.write_at(offset))
+            .collect::<Result<_, _>>()
+            .ok()?;
         if keys.is_empty() {
             return Some(keys);
         }

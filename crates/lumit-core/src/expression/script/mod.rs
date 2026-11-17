@@ -145,7 +145,11 @@ impl Slot {
         if self.len == 0 {
             self.len = 1;
         }
-        let at = if self.len == 1 { 0 } else { usize::from(self.axis) };
+        let at = if self.len == 1 {
+            0
+        } else {
+            usize::from(self.axis)
+        };
         if let Some(to) = self.value.get_mut(at) {
             *to = own;
         }

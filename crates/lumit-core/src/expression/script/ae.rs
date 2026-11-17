@@ -457,7 +457,10 @@ impl<'a> Ae<'a> {
         // The property this expression is written on: the keys kept under it.
         if matches!(prop, PropRef::Own) {
             return super::own_keys().map_or_else(Vec::new, |own| {
-                own.keys.iter().map(|k| k.time.to_f64() + own.offset).collect()
+                own.keys
+                    .iter()
+                    .map(|k| k.time.to_f64() + own.offset)
+                    .collect()
             });
         }
         let Some((_, layer, parts)) = self.parts(prop) else {

@@ -1293,8 +1293,7 @@ pub fn transform_ops_with_keys(
     use lumit_core::expression::script::SLOT_KEY;
 
     let next = layer.prop(prop).map(|held| {
-        let was_expression =
-            matches!(held.animation, lumit_core::anim::Animation::Expression(_));
+        let was_expression = matches!(held.animation, lumit_core::anim::Animation::Expression(_));
         let mut next = held.clone();
         next.set_animation(animation.clone());
         if let Some(language) = language {
