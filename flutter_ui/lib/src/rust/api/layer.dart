@@ -5242,6 +5242,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
           that: this, id: id, keys: keys);
 
+  /// Change this solid layer's colour and size. With `all_layers`, or when
+  /// no other layer uses the solid, the solid itself is edited. Otherwise
+  /// the layer gets a solid of its own with the new settings and the others
+  /// keep theirs. On a shared solid the name stays the layer's own and never
+  /// renames it. One undo step.
+  void setSolidSettings(
+          {required BridgeSolidDef definition, required bool allLayers}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetSolidSettings(
+          that: this, definition: definition, allLayers: allLayers);
+
   /// A solo safe layer keeps sounding while another layer is soloed.
   void setSoloSafe({required bool enabled}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetSoloSafe(that: this, enabled: enabled);
@@ -5393,6 +5403,14 @@ class LayerReference {
           toFrame: toFrame,
           overlap: overlap,
           nudgeTicks: nudgeTicks);
+
+  /// How many layers draw this layer's solid, this one included. Zero for a
+  /// layer that is not a solid. A duplicated layer shares its original's
+  /// solid, as a solid dragged in from the Project panel does.
+  int solidLayerCount() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSolidLayerCount(
+        that: this,
+      );
 
   /// Razor: split this layer in two at `frame` (docs/07 §4.4).
   ///

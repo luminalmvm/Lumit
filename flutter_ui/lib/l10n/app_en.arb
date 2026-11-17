@@ -8505,6 +8505,10 @@
   "@layerSettingsTitle": {
     "description": "Title of the Layer settings window."
   },
+  "layerSettingsAllLayers": "Change every layer using this solid",
+  "@layerSettingsAllLayers": {
+    "description": "Checkbox in Layer settings on a solid that other layers share. Off, only the selected layer changes."
+  },
   "newSolidTitle": "New solid",
   "@newSolidTitle": {
     "description": "Title of the window that asks for a new solid's name, size and colour."

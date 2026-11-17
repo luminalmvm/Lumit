@@ -69,6 +69,12 @@ soloed while another Audio layer is.
 Solid layer it also holds **Solid size**, from 1 to 16384 pixels each way, and **Solid
 colour**. The solid's item in the Project panel takes the same name.
 
+A duplicated layer, and a solid dragged in from the Project panel, share one solid item. When
+other layers use the layer's solid, the window adds **Change every layer using this solid**.
+Off, the size and colour change this layer alone, and it gets a solid item of its own. On, they
+change the shared item, and every layer using it. The name stays the layer's own and never
+renames a shared solid.
+
 On a Camera, a Light or a Model layer the command opens that layer's own window:
 [Camera settings](/use/camera/#camera-settings), [Light settings](#light-layers) or
 [Model settings](/use/importing/#3d-models).
