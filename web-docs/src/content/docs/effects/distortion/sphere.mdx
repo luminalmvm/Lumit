@@ -1,0 +1,74 @@
+---
+title: Sphere
+description: "Wraps the layer round a ball, turns it and lights it."
+---
+
+Sphere is a **Distortion** effect.
+
+## What it does
+
+Wraps the layer round a ball and lights it with one light, as After Effects' CC Sphere
+does. The layer runs left to right round the ball and top to bottom from pole to pole.
+Outside the ball the result is clear.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Reflection map** | Layer | Any layer in the composition | None | - |
+| **Rotation X**, **Rotation Y**, **Rotation Z** | Dial | Any angle | 0° | Degrees |
+| **Rotation order** | Dropdown | XYZ · XZY · YXZ · YZX · ZXY · ZYX | XYZ | - |
+| **Radius** | Slider | 0 to 4000; any value by typing | 200 | Pixels at composition size |
+| **Offset X (%)**, **Offset Y (%)** | Slider | -50 to 150 | 50 | - |
+| **Render** | Dropdown | Full · Outside · Inside | Full | - |
+| **Light intensity** | Slider | 0 to 400; any value by typing | 100 | - |
+| **Light colour** | Colour | Each channel 0 to 1 | White | - |
+| **Light height** | Slider | -100 to 100; any value by typing | 35 | - |
+| **Light direction** | Dial | Any angle | -60° | Degrees |
+| **Ambient** | Slider | 0 to 100 | 25 | - |
+| **Diffuse** | Slider | 0 to 100 | 75 | - |
+| **Specular** | Slider | 0 to 100 | 30 | - |
+| **Roughness** | Slider | 1 to 100 | 20 | - |
+| **Metal** | Slider | 0 to 100 | 100 | - |
+| **Reflective** | Slider | 0 to 100 | 0 | - |
+| **Internal shadows** | Checkbox | On or off | Off | - |
+| **Transparency falloff** | Checkbox | On or off | Off | - |
+
+## What each control does
+
+- **Reflection map**: the layer mirrored in the ball's surface while **Reflective** is
+  above 0. With none picked, the layer itself is mirrored.
+- **Rotation X**, **Rotation Y** and **Rotation Z**: turn the ball about each axis.
+- **Rotation order**: the order the three turns are made in.
+- **Radius**: the ball's size.
+- **Offset X (%)** and **Offset Y (%)**: where the ball's centre sits, as a share of the
+  layer.
+- **Render**: **Outside** shows the near side of the ball and **Inside** the far side, seen
+  from within. **Full** shows both, the inside through the clear parts of the outside.
+- **Light intensity**: how bright the light is.
+- **Light colour**: the colour of the light.
+- **Light height**: how far the light is lifted towards the viewer. At 0 it shines from the
+  side, at 100 from straight in front and below 0 from behind.
+- **Light direction**: the side the light shines from, as a turn clockwise from straight
+  up.
+- **Ambient**: an even light on the whole ball.
+- **Diffuse**: how much the light brightens the surface that faces it.
+- **Specular**: how strong the highlight is.
+- **Roughness**: how wide the highlight spreads.
+- **Metal**: how much of the layer's own colour the highlight takes. At 0 it is the colour
+  of the light.
+- **Reflective**: how much of the Reflection map is mirrored in the surface.
+- **Internal shadows**: on, the opaque parts of the ball the light passes through shade
+  the inside.
+- **Transparency falloff**: on, the outside fades towards the ball's rim.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Spherize](/effects/distortion/spherize/)
+- [Lighting](/effects/stylise/lighting/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)
