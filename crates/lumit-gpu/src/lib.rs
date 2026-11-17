@@ -370,15 +370,6 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
-/// Which adapter was picked, as one line, published the first time a context
-/// opens one.
-///
-/// The same "first context wins" shape as [`ADAPTER_SAMPLE_FLAGS`], and
-/// legitimate for the same reason: the backend is pinned and the adapter is
-/// chosen deterministically, so every context in a process opens the same card.
-/// It exists so the bridge can write the line into the diagnostics file a bug
-/// report is written from, which this crate can't reach and shouldn't: a
-/// graphics context has no business knowing where Lumit keeps its files.
 /// Where the device's own reports are written: its errors and its loss. The
 /// bridge sets it, so they reach the diagnostics file a bug report is asked
 /// for; the console [`note!`] writes to does not exist in a windowed build.
@@ -414,6 +405,15 @@ fn error_chain(error: &dyn std::error::Error) -> String {
     said
 }
 
+/// Which adapter was picked, as one line, published the first time a context
+/// opens one.
+///
+/// The same "first context wins" shape as [`ADAPTER_SAMPLE_FLAGS`], and
+/// legitimate for the same reason: the backend is pinned and the adapter is
+/// chosen deterministically, so every context in a process opens the same card.
+/// It exists so the bridge can write the line into the diagnostics file a bug
+/// report is written from, which this crate can't reach and shouldn't: a
+/// graphics context has no business knowing where Lumit keeps its files.
 static ADAPTER_SUMMARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// The adapter the first context opened, in the words of the
