@@ -1,5 +1,6 @@
 //! Particulate's GPU pass, kept beside the dispatch table rather than in it.
 
+use lumit_core::fx::effects::particulate::sprite_shape::{self, SpriteShape};
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_gpu::fx::FxEngine;
@@ -134,23 +135,73 @@ pub(crate) fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule)
 /// rung is never on the export path — there is nothing on this path that could
 /// turn it on.
 pub(crate) struct Particulate;
+
+/// The ready-made Sprite shapes uploaded on one device, by shape and Star
+/// points. Kept with that device's effect engine, so a lost device takes them
+/// with it. At most nine (four shapes and five stars), half a megabyte each.
+#[derive(Default)]
+struct SpriteShapes(Vec<((SpriteShape, u32), Tex)>);
+
+/// `rgba`, `side` px square, as a half-float texture to sample. Not a working
+/// texture: a sprite is only read, so it keeps one format at every colour depth.
+fn upload_sprite(ctx: &GpuContext, rgba: &[f32], side: u32) -> Tex {
+    use wgpu::util::DeviceExt;
+    let halfs: Vec<u8> = rgba
+        .iter()
+        .flat_map(|v| lumit_gpu::fx::common::f16_bits(*v).to_le_bytes())
+        .collect();
+    ctx.device.create_texture_with_data(
+        &ctx.queue,
+        &wgpu::TextureDescriptor {
+            label: Some("particulate-sprite-shape"),
+            size: wgpu::Extent3d {
+                width: side,
+                height: side,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        },
+        wgpu::util::TextureDataOrder::LayerMajor,
+        &halfs,
+    )
+}
+
 impl Particulate {
-    /// The ready-made Sprite shape this Particulate stamps, uploaded, and
-    /// whether it stamps one at all (then the Sprite layer is unread).
-    pub(crate) fn preset_sprite(ctx: &GpuContext, p: Params<'_>) -> (Option<Tex>, bool) {
-        let px = lumit_core::fx::effects::particulate::Particulate::read(p).sprite_picture();
-        let side = lumit_core::fx::effects::particulate::sprite_shape::SIZE;
-        let wanted = px.is_some();
-        (
-            px.map(|px| lumit_gpu::fx::common::upload_linear_f32(ctx, &px, side, side)),
-            wanted,
-        )
+    /// The ready-made Sprite shape this Particulate stamps, uploaded the first
+    /// time this device draws it and kept, and whether it stamps one at all
+    /// (then the Sprite layer is unread).
+    pub(crate) fn preset_sprite(
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        p: Params<'_>,
+    ) -> (Option<Tex>, bool) {
+        let Some(key) =
+            lumit_core::fx::effects::particulate::Particulate::read(p).sprite_shape_key()
+        else {
+            return (None, false);
+        };
+        let mut kept = fx.take_kept::<SpriteShapes>().unwrap_or_default();
+        let tex = match kept.0.iter().find(|(k, _)| *k == key) {
+            Some((_, tex)) => tex.clone(),
+            None => {
+                let tex = upload_sprite(ctx, &sprite_shape::picture(key), sprite_shape::SIZE);
+                kept.0.push((key, tex.clone()));
+                tex
+            }
+        };
+        fx.keep(kept);
+        (Some(tex), true)
     }
 
     /// The GPU op this frame's Particulate draws, handed to `f` with the
     /// sprite it stamps, if any.
     pub(crate) fn with_op<R>(
-        ctx: Option<&GpuContext>,
+        gpu: Option<(&FxEngine, &GpuContext)>,
         p: Params<'_>,
         aux: AuxSlot<'_>,
         f: impl FnOnce(&lumit_gpu::fx::particulate::ParticulateOp<'_>, Option<&Tex>) -> R,
@@ -168,20 +219,17 @@ impl Particulate {
                 .position(|row| row == id)?;
             aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
         };
-        // A ready-made Sprite shape is drawn on the host and stamped as the
-        // layer's picture would be; with one chosen the Sprite layer is unread.
-        // Without a context to upload into (the stream read back), none is made.
-        let preset = ctx.and_then(|ctx| {
-            let px = inst.sprite_picture()?;
-            let side = lumit_core::fx::effects::particulate::sprite_shape::SIZE;
-            Some(lumit_gpu::fx::common::upload_linear_f32(
-                ctx, &px, side, side,
-            ))
-        });
-        let sprite = match (&preset, inst.sprite_picture().is_some()) {
-            (Some(t), _) => Some(t),
-            (None, true) => None,
-            (None, false) => picture("sprite_layer"),
+        // A ready-made Sprite shape is stamped as the layer's picture would be;
+        // with one chosen the Sprite layer is unread. Without a device to keep
+        // it on (the stream read back), none is drawn.
+        let (preset, ready_made) = gpu
+            .map_or((None, inst.sprite_shape_key().is_some()), |(fx, ctx)| {
+                Self::preset_sprite(fx, ctx, p)
+            });
+        let sprite = if ready_made {
+            preset.as_ref()
+        } else {
+            picture("sprite_layer")
         };
         let mode = match style.mode {
             RenderMode::Disc => 0,
@@ -249,7 +297,7 @@ impl Particulate {
         use lumit_core::fx::effects::particulate::Particulate as P;
         let inst = P::read(p);
         let style = inst.draw_style();
-        let (preset, ready_made) = Self::preset_sprite(ctx, p);
+        let (preset, ready_made) = Self::preset_sprite(fx, ctx, p);
         let px_scale = P::px_scale_of(p);
         let points = stream_points(&stream.rescaled(px_scale), style.streak_seconds);
         let sprite = <P as EffectMetadata>::SCHEMA
@@ -313,7 +361,7 @@ impl GpuEffect for Particulate {
         if let Some(stream) = aux.schedule().and_then(|s| s.stepped.as_ref()) {
             return Particulate::stepped(fx, ctx, tex, w, h, p, aux, stream);
         }
-        Particulate::with_op(Some(ctx), p, aux, |op, sprite| {
+        Particulate::with_op(Some((fx, ctx)), p, aux, |op, sprite| {
             crate::realise::scene::draw(fx, ctx, tex, (w, h), sprite, op, p)
                 .unwrap_or_else(|| fx.particulate(ctx, tex, w, h, sprite, op))
         })

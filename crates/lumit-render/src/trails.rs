@@ -426,7 +426,7 @@ pub(crate) fn draw(
         .filter(|_| style.mode == RenderMode::Sprite);
     // A ready-made Sprite shape stands in for the layer, and names the walk by
     // which shape it is.
-    let (preset, ready_made) = crate::gpufx_particulate::Particulate::preset_sprite(ctx, p);
+    let (preset, ready_made) = crate::gpufx_particulate::Particulate::preset_sprite(fx, ctx, p);
     let sprite = if ready_made { preset.as_ref() } else { sprite };
     let preset_name = ready_made.then_some([inst.sprite_shape, inst.sprite_star_points as u32]);
     // A walk that started late is not the walk from the in point. Every frame

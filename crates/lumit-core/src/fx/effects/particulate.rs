@@ -876,14 +876,14 @@ impl Particulate {
         }
     }
 
-    /// The ready-made picture Sprite mode stamps, or `None` when it stamps the
-    /// Sprite layer (or is not in Sprite mode).
+    /// The ready-made shape Sprite mode stamps, as a [`sprite_shape::key`], or
+    /// `None` when it stamps the Sprite layer (or is not in Sprite mode).
     #[must_use]
-    pub fn sprite_picture(self) -> Option<std::sync::Arc<Vec<f32>>> {
+    pub fn sprite_shape_key(self) -> Option<(sprite_shape::SpriteShape, u32)> {
         if points::RenderMode::from_code(self.mode) != points::RenderMode::Sprite {
             return None;
         }
-        sprite_shape::picture(
+        sprite_shape::key(
             sprite_shape::SpriteShape::from_code(self.sprite_shape),
             self.sprite_star_points.clamp(4, 8) as u32,
         )

@@ -1,14 +1,11 @@
 //! The ready-made pictures Particulate can stamp in Sprite mode instead of a
 //! layer's: a circle, a square, a triangle, a star and a cloud.
 //!
-//! Each is drawn once, white with its coverage in alpha (white times alpha is
-//! the same picture premultiplied or not), and the particle's own colour tints
-//! it exactly as it tints a layer's picture. The pictures are made here, on the
-//! host, and handed to both render paths as a sprite, so the CPU reference and
-//! the card stamp the very same pixels.
-
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+//! Each is drawn on the host, white with its coverage in alpha (white times
+//! alpha is the same picture premultiplied or not), and the particle's own
+//! colour tints it exactly as it tints a layer's picture. The renderer uploads
+//! each once a device, keeps it, and hands it to both render paths as a
+//! sprite, so the CPU reference and the card stamp the very same pixels.
 
 /// What Sprite mode stamps: the Sprite layer's picture, or one of these.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,34 +53,21 @@ const STAR_INNER: f32 = 0.45;
 /// Samples a side per pixel for the hard-edged shapes' antialiasing.
 const SS: u32 = 4;
 
-/// The pictures made so far, by shape and Star points.
-type Made = Mutex<HashMap<(SpriteShape, u32), Arc<Vec<f32>>>>;
-
-/// The picture for `shape` (RGBA, [`SIZE`] × [`SIZE`]), or `None` for Layer.
-/// `star_points` is read only by Star. Each picture is made once and kept.
+/// What a picture is made by: the shape and, for a Star only, its points.
+/// `None` for Layer, which has no picture of its own.
 #[must_use]
-pub fn picture(shape: SpriteShape, star_points: u32) -> Option<Arc<Vec<f32>>> {
-    if shape == SpriteShape::Layer {
-        return None;
+pub fn key(shape: SpriteShape, star_points: u32) -> Option<(SpriteShape, u32)> {
+    match shape {
+        SpriteShape::Layer => None,
+        SpriteShape::Star => Some((shape, star_points.clamp(STAR_POINTS_MIN, STAR_POINTS_MAX))),
+        _ => Some((shape, 0)),
     }
-    let n = if shape == SpriteShape::Star {
-        star_points.clamp(STAR_POINTS_MIN, STAR_POINTS_MAX)
-    } else {
-        0
-    };
-    static MADE: OnceLock<Made> = OnceLock::new();
-    let made = MADE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut made = made
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    Some(
-        made.entry((shape, n))
-            .or_insert_with(|| Arc::new(draw(shape, n)))
-            .clone(),
-    )
 }
 
-fn draw(shape: SpriteShape, n: u32) -> Vec<f32> {
+/// The picture for a [`key`] (RGBA, [`SIZE`] × [`SIZE`]), drawn afresh on
+/// every call, so the caller keeps what it uploads.
+#[must_use]
+pub fn picture((shape, n): (SpriteShape, u32)) -> Vec<f32> {
     let star = star_corners(n);
     let mut out = vec![0.0f32; (SIZE * SIZE * 4) as usize];
     for y in 0..SIZE {
