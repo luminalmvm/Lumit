@@ -76,6 +76,11 @@ final class FoldGroupRow extends LayerFoldRow {
   /// Whether the Audio heading's waveform lane is open, for the tick on its
   /// menu. Null on every other heading.
   final bool? waveform;
+
+  /// The rows a shut group of an effect's rows holds, so its lane can draw
+  /// their keys as a shut layer's bar does ([keysOfRows]). Empty everywhere
+  /// else.
+  final List<LayerFoldRow> inside;
   const FoldGroupRow({
     required this.path,
     required this.label,
@@ -85,6 +90,7 @@ final class FoldGroupRow extends LayerFoldRow {
     this.named = false,
     this.shown,
     this.waveform,
+    this.inside = const [],
   }) : super(depth);
 }
 
@@ -1540,16 +1546,20 @@ List<BridgeKeyframe> layerKeys({
   required BridgeLayerEntry entry,
   BridgeFlowParams? flowParams,
   BridgeScalar? volumeDb,
-}) {
-  final seen = <double>{};
-  return [
-    for (final row in layerFoldRows(
+}) =>
+    keysOfRows(layerFoldRows(
       entry: entry,
       open: everyFoldPath,
       hasAudio: volumeDb != null,
       flowParams: flowParams,
       volumeDb: volumeDb,
-    ))
+    ));
+
+/// Every key on [rows], one for each instant, for a summary of them.
+List<BridgeKeyframe> keysOfRows(Iterable<LayerFoldRow> rows) {
+  final seen = <double>{};
+  return [
+    for (final row in rows)
       for (final key in laneKeysOf(row))
         // By seconds rather than by the rational itself: one instant can arrive
         // as 1/25 from one property and 2/50 from another, and both land on the
@@ -2644,7 +2654,17 @@ List<LayerFoldRow> effectFoldRows(
       final isOpen =
           every || (startsShut ? open.contains(at) : !open.contains(at));
       into.add(FoldGroupRow(
-          path: at, label: groups[g].label, open: isOpen, depth: depth));
+          path: at,
+          label: groups[g].label,
+          open: isOpen,
+          depth: depth,
+          inside: isOpen
+              ? const []
+              : [
+                  for (final q in params)
+                    if (groupOf[q.id] == g && !inFold.contains(q.id))
+                      row(q, depth + 1),
+                ]));
       return isOpen;
     });
     if (groupOpen) into.add(row(p, depth + 1));
@@ -2653,17 +2673,17 @@ List<LayerFoldRow> effectFoldRows(
   if (inFold.isNotEmpty) {
     final at = effectGroupPath(path, 'compositing');
     final isOpen = open.contains(at);
+    final inside = [
+      for (final p in params)
+        if (inFold.contains(p.id)) row(p, depth + 1),
+    ];
     rows.add(FoldGroupRow(
         path: at,
         label: l10n.fxFoldCompositing,
         open: isOpen,
-        depth: depth));
-    if (isOpen) {
-      rows.addAll([
-        for (final p in params)
-          if (inFold.contains(p.id)) row(p, depth + 1),
-      ]);
-    }
+        depth: depth,
+        inside: isOpen ? const [] : inside));
+    if (isOpen) rows.addAll(inside);
   }
   return rows;
 }

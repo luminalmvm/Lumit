@@ -81,7 +81,7 @@ import '../widgets/share_marks.dart';
 import 'normalise_commands.dart';
 import 'placeholder.dart';
 import 'spectral_lane_frb.dart';
-import 'timeline_bar_frb.dart' show BarGrab;
+import 'timeline_bar_frb.dart' show BarGrab, KeySummary;
 import 'timeline_extras_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_lane_area_frb.dart' show SelectedKey, commitKeyGesture;
@@ -3687,6 +3687,18 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     required int fpsNum,
     required int fpsDen,
   }) {
+    // A shut heading among an effect's rows draws the keys of what it holds,
+    // as a shut layer's bar does.
+    if (row is FoldGroupRow) {
+      final keys = keysOfRows(row.inside);
+      if (keys.isEmpty) return const SizedBox.shrink();
+      return KeySummary(
+        keys: keys,
+        fps: fps,
+        shift: _clipShiftOf(track, row.inside.first),
+        axis: axis,
+      );
+    }
     final keys = laneKeysOf(row);
     if (keys.isEmpty) return const SizedBox.shrink();
     final rowId = foldRowPath(track.id, row);
