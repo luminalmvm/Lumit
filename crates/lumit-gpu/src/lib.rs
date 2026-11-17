@@ -203,6 +203,11 @@ pub struct GpuContext {
     /// tag, so a lost device can be blamed on what was running. Shared with
     /// every handle, as `lost` is.
     in_flight: InFlight,
+    /// The batches handed to the card within a frame by [`Self::flush_paced`]
+    /// and not yet waited for, oldest first. Shared with every handle, as
+    /// `in_flight` is: a nested comp is drawn through a handle of its own, and
+    /// it is the one card that falls behind.
+    batches_in_flight: BatchesInFlight,
     /// Tags noted on this handle whose work is not submitted yet. They join
     /// `in_flight` at [`Self::submit`], so another handle seeing the queue
     /// empty before then can't clear them.
@@ -627,6 +632,13 @@ pub fn hardware_adapter_ready() -> bool {
     })
 }
 
+type BatchesInFlight =
+    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
+
+/// How many batches inside one frame a device is left with before
+/// [`GpuContext::flush_paced`] waits for the oldest.
+const BATCHES_IN_FLIGHT: usize = 2;
+
 impl GpuContext {
     /// Wrap an existing device/queue (eframe's render state — wgpu handles
     /// are internally reference-counted, so cloning shares the one device).
@@ -662,6 +674,7 @@ impl GpuContext {
             // device goes, and never claims to.
             lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             in_flight: InFlight::default(),
+            batches_in_flight: BatchesInFlight::default(),
             noted: std::cell::RefCell::new(Vec::new()),
         }
     }
@@ -765,6 +778,7 @@ impl GpuContext {
             submits: std::sync::Arc::clone(&self.submits),
             lost: std::sync::Arc::clone(&self.lost),
             in_flight: std::sync::Arc::clone(&self.in_flight),
+            batches_in_flight: std::sync::Arc::clone(&self.batches_in_flight),
             noted: std::cell::RefCell::new(Vec::new()),
         }
     }
@@ -1141,6 +1155,10 @@ impl GpuContext {
         if depth == 0 {
             self.flush();
             self.release_frame_memory();
+            // The frame's last submission comes after every batch it paced.
+            if let Ok(mut batches) = self.batches_in_flight.lock() {
+                batches.clear();
+            }
         }
     }
 
@@ -1206,6 +1224,44 @@ impl GpuContext {
         let held = self.frame.borrow_mut().take();
         if let Some(enc) = held {
             self.submit([enc.finish()]);
+        }
+    }
+
+    /// Submit whatever the batch holds, as [`Self::flush`] does, and keep the
+    /// card no more than [`BATCHES_IN_FLIGHT`] batches behind.
+    ///
+    /// **Why the wait.** A texture dropped while a frame is recorded is freed
+    /// only once the card has run the commands that use it. Handing a batch
+    /// over is not running it: a frame of heavy Precomps recorded each
+    /// Precomp, handed it over and went on to the next while the card was
+    /// still on the first, so every one of their working pictures was alive at
+    /// once. One frame of a test project reached 10 GB on a 12 GB card, and
+    /// the card ran out. Waiting for the oldest batch here holds at most a few
+    /// Precomps' worth; a card that keeps up never waits.
+    pub fn flush_paced(&self) {
+        let held = self.frame.borrow_mut().take();
+        let Some(enc) = held else {
+            return;
+        };
+        let index = self.submit([enc.finish()]);
+        let oldest = {
+            let Ok(mut batches) = self.batches_in_flight.lock() else {
+                return;
+            };
+            batches.push_back(index);
+            if batches.len() <= BATCHES_IN_FLIGHT {
+                return;
+            }
+            batches.pop_front()
+        };
+        if let Some(oldest) = oldest {
+            if self.device_lost() {
+                return;
+            }
+            let done = self
+                .device
+                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
+            self.forget_finished(done);
         }
     }
 
@@ -1439,6 +1495,7 @@ impl GpuContext {
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
             in_flight: InFlight::default(),
+            batches_in_flight: BatchesInFlight::default(),
             noted: std::cell::RefCell::new(Vec::new()),
         })
     }
