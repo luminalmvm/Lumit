@@ -69,7 +69,11 @@ impl LayerReference {
         graph.prune_rows(&stack);
         self.commit(lumit_core::ops::Op::Batch {
             ops: vec![
-                lumit_core::fx::effects::particulate::set_effects(self.comp_id, &layer, stack),
+                lumit_core::fx::effects::particulate::rows::set_effects(
+                    self.comp_id,
+                    &layer,
+                    stack,
+                ),
                 lumit_core::ops::Op::SetLayerGraph {
                     comp: self.comp_id,
                     layer: self.layer_id,

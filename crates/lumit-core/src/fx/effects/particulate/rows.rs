@@ -520,6 +520,46 @@ pub fn is_scene(e: &crate::model::EffectInstance) -> bool {
                 ))
 }
 
+/// The op that gives `layer` in `comp` the effect stack `effects`. An effect
+/// arriving that draws in the scene, by any route, puts a 2D layer in 3D in the
+/// same step, so its switch, gizmo and views agree with where it draws.
+#[must_use]
+pub fn set_effects(
+    comp: uuid::Uuid,
+    layer: &crate::model::Layer,
+    effects: Vec<crate::model::EffectInstance>,
+) -> crate::ops::Op {
+    use crate::ops::Op;
+    let before: Vec<_> = layer
+        .effects
+        .iter()
+        .filter(|e| is_scene(e))
+        .map(|e| e.id)
+        .collect();
+    let into_3d = !layer.switches.three_d
+        && effects.iter().any(|e| {
+            (is_scene(e) && !before.contains(&e.id))
+                || (crate::fx::effects::smoke::is_smoke(e)
+                    && !layer.effects.iter().any(|b| b.id == e.id))
+        });
+    let set = Op::SetLayerEffects {
+        comp,
+        layer: layer.id,
+        effects,
+    };
+    if !into_3d {
+        return set;
+    }
+    let three_d = Op::SetLayerThreeD {
+        comp,
+        layer: layer.id,
+        three_d: true,
+    };
+    Op::Batch {
+        ops: vec![set, three_d],
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -538,14 +578,12 @@ mod tests {
         let mut fx = crate::fx::builtins::instantiate("particulate").unwrap();
         let comp = uuid::Uuid::now_v7();
         assert!(matches!(
-            crate::fx::effects::particulate::set_effects(comp, &layer, vec![fx.clone()]),
+            super::set_effects(comp, &layer, vec![fx.clone()]),
             Op::SetLayerEffects { .. }
         ));
         let on = fx.params.iter_mut().find(|p| p.id == "in_scene").unwrap();
         on.value = EffectValue::Bool(true);
-        let Op::Batch { ops } =
-            crate::fx::effects::particulate::set_effects(comp, &layer, vec![fx.clone()])
-        else {
+        let Op::Batch { ops } = super::set_effects(comp, &layer, vec![fx.clone()]) else {
             panic!("a 2D layer was left flat");
         };
         assert!(matches!(ops[1], Op::SetLayerThreeD { three_d: true, .. }));
@@ -553,7 +591,7 @@ mod tests {
         let mut had = layer.clone();
         had.effects = vec![fx.clone()];
         assert!(matches!(
-            crate::fx::effects::particulate::set_effects(comp, &had, vec![fx]),
+            super::set_effects(comp, &had, vec![fx]),
             Op::SetLayerEffects { .. }
         ));
     }

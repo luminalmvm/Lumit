@@ -220,7 +220,7 @@ pub(super) fn add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     effects.push(instance);
     commit(
         store,
-        vec![fx::effects::particulate::set_effects(
+        vec![fx::effects::particulate::rows::set_effects(
             comp.id, layer, effects,
         )],
     )?;
@@ -320,7 +320,7 @@ pub(super) fn set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
     let id = e.id;
     commit(
         store,
-        vec![fx::effects::particulate::set_effects(
+        vec![fx::effects::particulate::rows::set_effects(
             comp.id, layer, effects,
         )],
     )?;
