@@ -3178,19 +3178,15 @@ bool paramGroupVisible(
   };
 }
 
-/// **The uniform Matte row** and **the Mix row**: which of [params] ride beside
-/// [host] rather than taking a row of their own.
+/// Which of [params] ride beside [host] rather than taking a row of their own.
 ///
 /// A Layer picker carries its Channel choice and Invert switch beside it on one
-/// row, a Mix slider its Blend choice. A rider is found by id convention among
-/// the parameters the schema places RIGHT AFTER its host - `matte` +
-/// `matte_invert` + `matte_channel`, Depth of field's older `depth` +
-/// `depth_invert`, whose stored ids are kept, and `mix` + `blend` - so the
-/// injected rows and the effects that predate them fold the same way without a
-/// table here naming them, and a channel an effect declares elsewhere for
-/// itself (Depth of field's `depth_channel`, three twirls down) stays the row
-/// it always was, as does the Lens flare's own `blend`, which sits BEFORE its
-/// Mix. Choices come before switches so the row reads picker, Channel, Invert.
+/// row, and a Bake button its Cancel. A rider is found by id convention among
+/// the parameters the schema places RIGHT AFTER its host (Depth of field's
+/// older `depth` + `depth_invert`, whose stored ids are kept), so no table here
+/// names them, and a channel an effect declares elsewhere for itself (Depth of
+/// field's `depth_channel`, three twirls down) stays the row it always was.
+/// Choices come before switches so the row reads picker, Channel, Invert.
 ///
 /// The Mix and the Matte carry nothing beside them: their Blend, Invert and
 /// Channel are rows of their own in the Compositing fold
@@ -3200,9 +3196,8 @@ bool paramGroupVisible(
 /// read.
 List<BridgeParamInfo> paramRidersFor(
   List<BridgeParamInfo> params,
-  BridgeParamInfo host, {
-  String? effect,
-}) {
+  BridgeParamInfo host,
+) {
   final names = switch (host.kind) {
     BridgeParamKind_Layer() when host.id != 'matte' => {
         '${host.id}_invert',

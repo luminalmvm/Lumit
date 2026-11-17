@@ -3189,12 +3189,12 @@ class _EffectSection extends StatelessWidget {
     };
     final whyDisabled = disabledReasons(info.name, shown);
 
-    // The uniform Matte row and the Mix row: a Layer picker carries its Channel
-    // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
-    // its own. [paramRidersFor] holds the rule, so the box on the node graph
-    // canvas folds by the same one.
+    // A Layer picker carries its Channel and Invert beside it, and no rider
+    // gets a row of its own. The Mix and the Matte carry nothing: their rows
+    // are in the Compositing fold. [paramRidersFor] holds the rule, so the box
+    // on the node graph canvas folds by the same one.
     List<BridgeParamInfo> ridersFor(BridgeParamInfo p) =>
-        paramRidersFor(params, p, effect: info.name);
+        paramRidersFor(params, p);
 
     final compositing = _compositingRows;
 

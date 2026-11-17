@@ -198,7 +198,7 @@ CompBoxRows compBoxRows(
   };
   final riders = <String, List<BridgeParamInfo>>{};
   for (final p in shown) {
-    final beside = paramRidersFor(shown, p, effect: effect);
+    final beside = paramRidersFor(shown, p);
     if (beside.isNotEmpty) riders[p.id] = beside;
   }
   final folded = {
