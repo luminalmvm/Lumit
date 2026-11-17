@@ -328,6 +328,18 @@ fn own_on_layer(context: &ExpressionContext, expression: &str) -> Option<script:
     })
 }
 
+/// [`own_on_layer`] for the row `row`, found by the row and not its text: a
+/// linked point's rows can carry the same text over different keys.
+fn own_of_row(context: &ExpressionContext, row: Row<'_>) -> Option<script::OwnKeys> {
+    let comp = context.document.comp(context.comp?)?;
+    let layer = comp.layers.iter().find(|l| Some(l.id) == context.layer)?;
+    let (props, axis) = point_row::point_of_row(layer, row)?;
+    Some(script::OwnKeys {
+        keys: crate::anim::keys_kept_in(&props.get(axis)?.extra)?,
+        offset: layer.start_offset.0.to_f64(),
+    })
+}
+
 /// A JavaScript expression's number with the keys under it in reach, and its
 /// `value` read off them at the context's time.
 fn javascript_owned(
@@ -701,8 +713,9 @@ pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) 
 /// of zeroes: the graph has nothing truthful to draw for a line that is still
 /// being typed, and a flat curve at zero would read as a real answer.
 ///
-/// `slot` is what the row the curve is drawn for knows about its property
-/// ([`slot_of_row`]), and the one carrying the text is found when it is left out.
+/// `row` is the row the curve is drawn for, whose slot ([`slot_of_row`]) and
+/// keys the expression reads. The one carrying the text is found when it is
+/// left out.
 pub fn evaluate_range(
     language: Language,
     expression: &str,
@@ -710,7 +723,7 @@ pub fn evaluate_range(
     start: f64,
     end: f64,
     samples: i64,
-    slot: Option<Slot>,
+    row: Option<Row<'_>>,
 ) -> Vec<f64> {
     // A curve is a few hundred samples. More than a screen is wide draws
     // nothing new, and the number comes from outside.
@@ -719,10 +732,14 @@ pub fn evaluate_range(
         if program_for(expression).is_err() {
             return Vec::new();
         }
-        let slot = slot.unwrap_or_else(|| {
-            context.map_or_else(Slot::default, |context| slot_on_layer(context, expression))
+        let slot = context.map_or_else(Slot::default, |c| match row {
+            Some(row) => slot_of_row(c, row, None),
+            None => slot_on_layer(c, expression),
         });
-        let own = context.and_then(|c| own_on_layer(c, expression));
+        let own = context.and_then(|c| match row {
+            Some(row) => own_of_row(c, row),
+            None => own_on_layer(c, expression),
+        });
         let delta = (end - start) / (samples as f64);
         return (0..samples)
             .map(|i| {

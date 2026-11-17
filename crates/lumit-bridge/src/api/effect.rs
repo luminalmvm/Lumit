@@ -1200,9 +1200,6 @@ pub fn sample_scalar_range_with_context(
                 current_depth: 0,
                 inputs: None,
             };
-            let slot = row
-                .as_ref()
-                .map(|row| lumit_core::expression::slot_of_row(&context, row.core(), None));
             // The whole curve shares what one frame of a render may spend, so
             // a loop that never ends costs one repaint a fixed amount.
             lumit_core::expression::within_steps(
@@ -1215,7 +1212,7 @@ pub fn sample_scalar_range_with_context(
                         start,
                         end,
                         samples,
-                        slot,
+                        row.as_ref().map(BridgeExpressionRow::core),
                     )
                 },
             )
