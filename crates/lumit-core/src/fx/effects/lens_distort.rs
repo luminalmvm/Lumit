@@ -79,7 +79,7 @@ pub struct LensDistort {
     pub centre_y: f32,
 
     /// The reusable Edges control (P3): what a sample that lands outside
-    /// the frame reads. Transparent by default — a bend that reaches past the
+    /// the frame reads. None by default — a bend that reaches past the
     /// border has genuinely nothing there, and repeating the border pixel into a
     /// fan reads as a fault.
     #[choice(

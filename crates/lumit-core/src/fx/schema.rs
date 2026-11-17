@@ -525,8 +525,8 @@ impl ParamKind {
 /// How a transform- or displacement-domain effect treats the border pixels
 /// its warp reveals (P3): the one reusable Edges control, shared by
 /// the blur family (docs/08 §3.8) and Shake (§3.4). The `u32` codes are the
-/// wire form the resolved ops and every WGSL kernel read — 0 Transparent,
-/// 1 Repeat, 2 Mirror — so the enum only names those numbers, it never
+/// wire form the resolved ops and every WGSL kernel read — 0 None,
+/// 1 Edge repeat, 2 Mirror repeat — so the enum only names those numbers, it never
 /// changes them. Any effect whose resample can pull in area outside the
 /// frame reuses this rather than re-deciding what an edge means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -544,7 +544,7 @@ impl EdgesMode {
     /// parameter declares `options: EdgesMode::OPTIONS` (aliased as the shared
     /// [`EDGE_OPTIONS`](crate::fx::builtins::EDGE_OPTIONS) const the blur family already
     /// uses).
-    pub const OPTIONS: &'static [&'static str] = &["Transparent", "Repeat", "Mirror"];
+    pub const OPTIONS: &'static [&'static str] = &["None", "Edge repeat", "Mirror repeat"];
 
     /// The wire code the resolved ops and the WGSL kernels read.
     pub const fn code(self) -> u32 {
@@ -556,7 +556,7 @@ impl EdgesMode {
     }
 
     /// The mode for a stored Choice index, or `None` for an unknown code (a
-    /// caller supplies its own default). 0 Transparent, 1 Repeat, 2 Mirror.
+    /// caller supplies its own default). 0 None, 1 Edge repeat, 2 Mirror repeat.
     pub const fn from_code(code: u32) -> Option<Self> {
         match code {
             0 => Some(EdgesMode::Transparent),
