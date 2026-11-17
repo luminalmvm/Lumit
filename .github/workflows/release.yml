@@ -448,6 +448,8 @@ jobs:
       matrix:
         runner: [macos-latest, macos-15-intel]
     runs-on: ${{ matrix.runner }}
+    # The Apple Developer ID secrets live in this environment.
+    environment: release
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       # A step's `if` cannot read the `secrets` context, only `env`, so the
@@ -490,6 +492,14 @@ jobs:
             echo "::error::Xcode $ver cannot compile assets/brand/lumit-icon.icon (needs 26+)"
             exit 1
           }
+      # A run that publishes from this repository must be Developer ID
+      # signed. Without the secrets, say outside the release environment, the
+      # steps below would sign ad hoc and say nothing.
+      - name: Refuse to publish unsigned
+        if: env.MACOS_SIGN_IDENTITY == '' && github.repository == 'luminalmvm/Lumit' && (github.ref_type == 'tag' || inputs.publish || github.event_name == 'schedule')
+        run: |
+          echo "::error::The Apple signing secrets are missing, so this build would be signed ad hoc"
+          exit 1
       - name: Import the Developer ID certificate
         if: env.MACOS_SIGN_IDENTITY != ''
         env:
