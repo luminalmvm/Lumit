@@ -87,47 +87,167 @@ fn edge_idx(i: i32, len: i32) -> i32 {
     return -1;
 }
 
-@compute @workgroup_size(8, 8)
-fn blur_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let size = vec2<i32>(textureDimensions(src));
-    let xy = vec2<i32>(gid.xy);
-    if (xy.x >= size.x || xy.y >= size.y) {
+// A workgroup's tile: TILE pixels along the pass, one a thread, on each of
+// LINES neighbouring rows (or columns), every thread taking all of them. CHUNK
+// is how much of the window sits in workgroup memory at once: 12 KiB of
+// texels and 1.25 KiB of weights, inside the 16 KiB every device gives.
+const TILE: i32 = 128;
+const LINES: i32 = 4;
+const CHUNK: i32 = 192;
+
+var<workgroup> line: array<vec4<f32>, 768>; // LINES · CHUNK
+// The offsets one chunk can hand the tile's pixels: CHUNK + TILE − 1.
+var<workgroup> weight: array<f32, 319>;
+
+// One pixel's blur, blended against the unprocessed input. A radius under
+// zero is a pixel past the frame's edge.
+fn finish(xy: vec2<i32>, r: i32, acc: vec4<f32>, wsum: f32) {
+    if (r < 0) {
         return;
     }
-    var rad = p.radius;
-    var sig = p.sigma;
-    if (p.matte_on > 1.5) {
-        rad = dof_radius(xy);
-        sig = max(rad * 0.5, 1e-3);
-    } else if (p.matte_on != 0.0) {
-        rad = p.radius * matte_k(xy);
-        sig = max(rad * 0.5, 1e-3);
-    }
-    let r = i32(ceil(rad));
-    var acc = vec4<f32>(0.0);
+    var v = acc / wsum;
     if (r == 0) {
-        acc = textureLoad(src, xy, 0);
-    } else {
-        let axis_len = select(size.y, size.x, p.dir.x > 0.5);
-        let along = select(xy.y, xy.x, p.dir.x > 0.5);
-        var wsum = 0.0;
-        for (var i = -r; i <= r; i++) {
-            let d = f32(i) / max(sig, 1e-3);
-            let wt = exp(-0.5 * d * d);
-            wsum += wt;
-            let q = edge_idx(along + i, axis_len);
-            if (q >= 0) {
-                var tap = xy;
-                if (p.dir.x > 0.5) {
-                    tap.x = q;
-                } else {
-                    tap.y = q;
+        v = textureLoad(src, xy, 0);
+    }
+    textureStore(dst, xy, mix(textureLoad(orig, xy, 0), v, p.mix_amt));
+}
+
+// **Each texel fetched once a tile, not once a tap.** The tile's pixels read
+// TILE + 2·reach texels a line between them, where reach is the uniform's
+// radius: the matte and the camera only ever narrow it. That window goes
+// through workgroup memory a chunk at a time, each texel resolved under the
+// edge policy and fetched by one thread, and every pixel sums its own taps
+// out of it. A radius of 470 read 941 texels a pixel a pass; now it reads
+// about eight. On the vertical pass the four lines make each fetch and store
+// four texels side by side, which is what the memory hands over in one go,
+// and on both one weight serves four pixels. Each pixel's taps are still
+// summed −r … +r with the same weights, so the picture is the one the direct
+// loop made. Every slot of workgroup memory is written before it is read.
+//
+// The host dispatches (ceil(w / TILE), ceil(h / LINES)) for the horizontal
+// pass and (ceil(w / LINES), ceil(h / TILE)) for the vertical one.
+@compute @workgroup_size(128) // TILE
+fn blur_pass(
+    @builtin(workgroup_id) wg: vec3<u32>,
+    @builtin(local_invocation_index) lid: u32,
+) {
+    let size = vec2<i32>(textureDimensions(src));
+    let across_x = p.dir.x > 0.5;
+    let axis_len = select(size.y, size.x, across_x);
+    let t = i32(lid);
+    let first = i32(select(wg.y, wg.x, across_x)) * TILE;
+    let line0 = i32(select(wg.x, wg.y, across_x)) * LINES;
+    // This thread's pixel on the first line, and the step to the next line.
+    var xy0 = vec2<i32>(line0, first + t);
+    var next = vec2<i32>(1, 0);
+    if (across_x) {
+        xy0 = vec2<i32>(first + t, line0);
+        next = vec2<i32>(0, 1);
+    }
+
+    var r = vec4<i32>(-1);
+    var sig = vec4<f32>(p.sigma);
+    for (var l = 0; l < LINES; l++) {
+        let xy = xy0 + next * l;
+        if (xy.x < size.x && xy.y < size.y) {
+            var rad = p.radius;
+            if (p.matte_on > 1.5) {
+                rad = dof_radius(xy);
+                sig[l] = max(rad * 0.5, 1e-3);
+            } else if (p.matte_on != 0.0) {
+                rad = p.radius * matte_k(xy);
+                sig[l] = max(rad * 0.5, 1e-3);
+            }
+            r[l] = i32(ceil(rad));
+        }
+    }
+    let r_most = max(max(r.x, r.y), max(r.z, r.w));
+
+    // The same for the whole workgroup, so every thread meets every barrier.
+    let reach = i32(ceil(p.radius));
+    let span = TILE + 2 * reach;
+    let fixed = p.matte_on == 0.0;
+    var acc0 = vec4<f32>(0.0);
+    var acc1 = vec4<f32>(0.0);
+    var acc2 = vec4<f32>(0.0);
+    var acc3 = vec4<f32>(0.0);
+    var wsum = vec4<f32>(0.0);
+    for (var c = 0; c < span; c += CHUNK) {
+        let start = first - reach + c;
+        for (var k = t; k < min(CHUNK, span - c); k += TILE) {
+            let q = edge_idx(start + k, axis_len);
+            for (var l = 0; l < LINES; l++) {
+                var tap = vec2<i32>(line0 + l, q);
+                if (across_x) {
+                    tap = vec2<i32>(q, line0 + l);
                 }
-                acc += textureLoad(src, tap, 0) * wt;
+                var v = vec4<f32>(0.0);
+                if (q >= 0 && tap.x < size.x && tap.y < size.y) {
+                    v = textureLoad(src, tap, 0);
+                }
+                line[l * CHUNK + k] = v;
             }
         }
-        acc /= wsum;
+        // Without a matte every pixel takes the same weight at the same
+        // offset, so each is worked out once: `weight[u]` is the offset
+        // c − reach − (TILE − 1) + u, for the offsets a kernel can reach.
+        if (fixed) {
+            for (var u = t; u < CHUNK + TILE - 1; u += TILE) {
+                let i = c - reach - (TILE - 1) + u;
+                if (abs(i) <= reach) {
+                    let d = f32(i) / max(p.sigma, 1e-3);
+                    weight[u] = exp(-0.5 * d * d);
+                }
+            }
+        }
+        workgroupBarrier();
+        // The taps inside the chunk: line[j] is offset j + c − reach − t.
+        if (fixed) {
+            let lo = max(0, t - c);
+            let hi = min(CHUNK - 1, t + 2 * reach - c);
+            for (var j = lo; j <= hi; j++) {
+                let wt = weight[j - t + TILE - 1];
+                wsum.x += wt;
+                acc0 += line[j] * wt;
+                acc1 += line[CHUNK + j] * wt;
+                acc2 += line[2 * CHUNK + j] * wt;
+                acc3 += line[3 * CHUNK + j] * wt;
+            }
+        } else {
+            let lo = max(0, t + reach - c - r_most);
+            let hi = min(CHUNK - 1, t + reach - c + r_most);
+            let inv_sig = 1.0 / max(sig, vec4<f32>(1e-3));
+            for (var j = lo; j <= hi; j++) {
+                let i = j + c - reach - t;
+                let d = vec4<f32>(f32(i)) * inv_sig;
+                let wt = exp(-0.5 * d * d);
+                let take = vec4<i32>(abs(i)) <= r;
+                if (take.x) {
+                    wsum.x += wt.x;
+                    acc0 += line[j] * wt.x;
+                }
+                if (take.y) {
+                    wsum.y += wt.y;
+                    acc1 += line[CHUNK + j] * wt.y;
+                }
+                if (take.z) {
+                    wsum.z += wt.z;
+                    acc2 += line[2 * CHUNK + j] * wt.z;
+                }
+                if (take.w) {
+                    wsum.w += wt.w;
+                    acc3 += line[3 * CHUNK + j] * wt.w;
+                }
+            }
+        }
+        workgroupBarrier();
     }
-    let o = textureLoad(orig, xy, 0);
-    textureStore(dst, xy, mix(o, acc, p.mix_amt));
+    // Without a matte the four lines share one sum of weights.
+    if (fixed) {
+        wsum = vec4<f32>(wsum.x);
+    }
+    finish(xy0, r.x, acc0, wsum.x);
+    finish(xy0 + next, r.y, acc1, wsum.y);
+    finish(xy0 + next * 2, r.z, acc2, wsum.z);
+    finish(xy0 + next * 3, r.w, acc3, wsum.w);
 }
