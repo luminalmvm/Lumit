@@ -22,12 +22,12 @@ use views::{close_view, ground_of, set_view, viewed_kept, viewed_through, Viewed
 #[cfg(target_arch = "wasm32")]
 use web::{sample_pixels, trace_scope};
 
-#[cfg(windows)]
-mod resolve;
 mod cut;
 mod dropper;
 mod item;
 mod panics;
+#[cfg(windows)]
+mod resolve;
 mod scope;
 mod shuttle;
 mod views;
