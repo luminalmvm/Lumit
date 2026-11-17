@@ -16,7 +16,7 @@ import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
-import 'keyframe_controls_frb.dart' show keysOfScalar;
+import 'keyframe_controls_frb.dart' show asKeyed, keysOfScalar;
 
 /// A value drag in flight **in the layer area**, published for the graph pane to
 /// draw.
@@ -345,8 +345,10 @@ List<GraphChannel> graphChannels({
         // is drawn and edited; the partner follows every write at the ratio
         // the pair holds ([withLinkedPartners]).
         final axes = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
-        final rowKeys = rowKeysOf(
-            [for (final axis in group.axes) read(entry.info.transform, axis.prop)]);
+        final rowKeys = rowKeysOf([
+          for (final axis in group.axes)
+            asKeyed(read(entry.info.transform, axis.prop))
+        ]);
         for (final axis in axes) {
           out.add(GraphChannel(
             path: path,
@@ -482,7 +484,7 @@ List<GraphChannel> graphChannels({
                 colourIndex: out.length,
                 scalar: parts[i],
                 entry: entry,
-                rowKeys: rowKeysOf(parts),
+                rowKeys: rowKeysOf(parts.map(asKeyed)),
                 effect: fx,
                 param: param,
                 component: i,

@@ -78,6 +78,8 @@ void main() {
     final channels = graphChannels(
         layers: p.uiState.model.layers, selected: ['$id/transform/opacity']);
     expect(channels.single.keys, hasLength(2));
+    expect(channels.single.ownKeyIndex(0), 0,
+        reason: 'a diamond picked on the layer lane finds its key');
     applyInterpToSelection(
       channels: channels,
       selectedKeys: {'${channels.single.id}#0'},
