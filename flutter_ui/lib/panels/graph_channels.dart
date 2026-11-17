@@ -16,6 +16,7 @@ import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
+import 'keyframe_controls_frb.dart' show keysOfScalar;
 
 /// A value drag in flight **in the layer area**, published for the graph pane to
 /// draw.
@@ -261,7 +262,9 @@ class GraphChannel {
   double drawnValueAt(List<BridgeKeyframe> keys, double t) =>
       clampToBounds(evaluateKeys(keys, t));
 
-  List<BridgeKeyframe> get keys => keysOf(scalar);
+  /// Its keys: the curve's, or those kept under its expression, which every
+  /// key command edits as it does a curve's ([keptUnderExpression]).
+  List<BridgeKeyframe> get keys => keysOfScalar(scalar) ?? const [];
   bool get isStatic => scalar is BridgeScalar_Static;
   double get staticValue => switch (scalar) {
         BridgeScalar_Static(:final field0) => field0,

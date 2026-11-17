@@ -12,7 +12,7 @@ import 'effect_param_row_frb.dart' show graphInputsOf;
 import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
-import 'keyframe_controls_frb.dart' show scaledScalar;
+import 'keyframe_controls_frb.dart' show asKeyed, scaledScalar;
 import 'layer_fold_frb.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
@@ -38,8 +38,8 @@ Map<GraphChannel, BridgeScalar> withLinkedPartners(
         }
       }
       if (was == null ||
-          channel.scalar is BridgeScalar_Expression ||
-          was is BridgeScalar_Expression ||
+          asKeyed(channel.scalar) is BridgeScalar_Expression ||
+          asKeyed(was) is BridgeScalar_Expression ||
           next is BridgeScalar_Expression) {
         return;
       }
@@ -52,14 +52,14 @@ Map<GraphChannel, BridgeScalar> withLinkedPartners(
         entry: channel.entry,
         effect: channel.effect,
         param: half,
-      )] = linkedPartnerScalar(channel.scalar, was, next);
+      )] = linkedPartnerScalar(asKeyed(channel.scalar), asKeyed(was), next);
       return;
     }
     final partner = channel.linkedPartner;
     if (partner == null) return;
     final was = read(channel.entry.info.transform, partner);
-    if (channel.scalar is BridgeScalar_Expression ||
-        was is BridgeScalar_Expression ||
+    if (asKeyed(channel.scalar) is BridgeScalar_Expression ||
+        asKeyed(was) is BridgeScalar_Expression ||
         next is BridgeScalar_Expression) {
       return;
     }
@@ -71,7 +71,7 @@ Map<GraphChannel, BridgeScalar> withLinkedPartners(
       scalar: was,
       entry: channel.entry,
       prop: partner,
-    )] = linkedPartnerScalar(channel.scalar, was, next);
+    )] = linkedPartnerScalar(asKeyed(channel.scalar), asKeyed(was), next);
   });
   return out;
 }
@@ -129,6 +129,24 @@ void setChannelValue(
   if (next != null) instance.setValue(id: id, value: next);
 }
 
+/// What [was] holds once a key command has written [next] over it: an
+/// expression keeps itself and takes [next]'s keys under it (none, when the
+/// command left a still value); anything else simply becomes [next].
+BridgeScalar keptUnderExpression(BridgeScalar was, BridgeScalar next) =>
+    switch ((was, next)) {
+      (
+        BridgeScalar_Expression(:final field0, :final field1),
+        BridgeScalar_Keyframed(field0: final keys)
+      ) =>
+        BridgeScalar.expression(field0, field1, keys),
+      (
+        BridgeScalar_Expression(:final field0, :final field1),
+        BridgeScalar_Static()
+      ) =>
+        BridgeScalar.expression(field0, field1, const []),
+      _ => next,
+    };
+
 void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   // Transform channels, grouped by layer.
   final transforms = <String,
@@ -139,7 +157,8 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   // one layer go in the one write.
   final shapes = <String,
       (LayerReference, List<(String, ShapeValue, int, BridgeScalar)>)>{};
-  withLinkedPartners(edits).forEach((channel, next) {
+  withLinkedPartners(edits).forEach((channel, edited) {
+    final next = keptUnderExpression(channel.scalar, edited);
     final layerId = channel.entry.layer.internallayerId.toString();
     if (channel.prop != null) {
       final slot = transforms[layerId] ??= (channel.entry.layer, [], []);
