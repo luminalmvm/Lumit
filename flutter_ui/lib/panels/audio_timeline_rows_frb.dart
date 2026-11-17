@@ -157,6 +157,12 @@ List<LayerFoldRow> audioTimelineFoldRows({
           when audio.contains(effectIdOfPath(path)):
         effects.add(FoldGroupRow(
             path: path, label: label, open: isOpen, depth: 2, named: named));
+      // A group of an audio effect's rows, and its Compositing fold, as the
+      // layer Timeline lists them.
+      case FoldGroupRow(:final path)
+          when audio.any((fx) =>
+              path.startsWith(effectGroupPath(effectPath(id, fx), ''))):
+        effects.add(row);
       case FoldEffectParamRow(
             :final info,
             :final param,
@@ -165,7 +171,8 @@ List<LayerFoldRow> audioTimelineFoldRows({
           )
           when audio.contains(info.id.toString()):
         effects.add(
-            FoldEffectParamRow(info, param, value, depth: 3, driven: driven));
+            FoldEffectParamRow(info, param, value,
+                depth: row.depth, driven: driven));
       // A picture group - Transform, Masks, Styles, the Waveform twirl - has
       // nothing to say about a track.
       default:
