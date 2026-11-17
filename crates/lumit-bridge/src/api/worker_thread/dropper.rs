@@ -105,9 +105,13 @@ pub(super) fn soloed(
 
     // Seen through the view's own 3D view, so the read lands where the
     // pointer is.
+    // Never through the matte view: a pick reads the picture itself.
     Some(viewed_through(
         None,
-        state.camera_views.get(&req.view).copied(),
+        state
+            .camera_views
+            .get(&req.view)
+            .map(|v| super::ViewLatch { matte: None, ..*v }),
         std::sync::Arc::new(patched),
     ))
 }

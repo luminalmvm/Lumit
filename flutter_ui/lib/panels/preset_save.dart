@@ -100,25 +100,42 @@ Future<void> renamePreset(
   final from = File(preset.path);
   // The name can hold what a file's name can't.
   final stem = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
-  final to = File('${from.parent.path}${Platform.pathSeparator}$stem.lumfx');
-  try {
-    if (to.existsSync()) throw const FileSystemException();
-    final document =
-        jsonDecode(await from.readAsString()) as Map<String, dynamic>;
-    document['name'] = name;
-    await to
-        .writeAsString(const JsonEncoder.withIndent('  ').convert(document));
-    await from.delete();
-  } catch (_) {
-    // A name already taken, or a file that has gone: nothing changes.
-    ui.presetsChanged.value++;
-    return;
-  }
-  if (ui.workspace.isFavouriteEffect('preset:${preset.name}')) {
-    ui.workspace.toggleFavouriteEffect('preset:${preset.name}');
-    ui.workspace.toggleFavouriteEffect('preset:$name');
-  }
+  await renamePresetFile(ui.workspace, preset.path,
+      '${from.parent.path}${Platform.pathSeparator}$stem.lumfx',
+      from: preset.name, to: name);
   ui.presetsChanged.value++;
+}
+
+/// Move the preset file at [path] to [target] and call it [to] inside, with
+/// its favourite star following it. False when [target] is taken or the file
+/// will not read, and nothing changes.
+Future<bool> renamePresetFile(Workspace workspace, String path, String target,
+    {required String from, required String to}) async {
+  // A change of case only names the same file on Windows and macOS.
+  final sameFile = target != path && target.toLowerCase() == path.toLowerCase();
+  try {
+    if (!sameFile && File(target).existsSync()) {
+      throw const FileSystemException();
+    }
+    final document =
+        jsonDecode(await File(path).readAsString()) as Map<String, dynamic>;
+    document['name'] = to;
+    final text = const JsonEncoder.withIndent('  ').convert(document);
+    if (sameFile) {
+      await File(path).writeAsString(text);
+      await File(path).rename(target);
+    } else {
+      await File(target).writeAsString(text);
+      await File(path).delete();
+    }
+  } catch (_) {
+    return false;
+  }
+  if (workspace.isFavouriteEffect('preset:$from')) {
+    workspace.toggleFavouriteEffect('preset:$from');
+    workspace.toggleFavouriteEffect('preset:$to');
+  }
+  return true;
 }
 
 /// Delete a saved preset's file, asking first as it can't be undone.

@@ -7,13 +7,17 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/remote.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
-import '../state/background.dart' show showWindow;
+import '../state/background.dart'
+    show applyBackground, closeWindow, showWindow;
+import '../state/remote_exports_frb.dart' show remoteEnded;
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
+import 'question_window.dart';
 import 'recovery_dialog_frb.dart';
 import 'settings_account.dart' show askBefore;
 import 'tour_frb.dart' show onlyTourDemo;
@@ -31,6 +35,37 @@ void installUnsavedQuestion(BuildContext context) {
   // Quitting stops an export, so closing in the middle of one asks first.
   // Quit in the tray can come with no window up, so it is shown first.
   app.askQuitExporting = () async {
+    // Another computer is waiting on an export done here, so staying in the
+    // tray is offered first, and it is the only question.
+    final job = remoteJobs()
+        .where((j) => !j.sent && !remoteEnded(j.stage))
+        .firstOrNull;
+    if (job != null) {
+      if (ui.workspace.keepRunning) await showWindow();
+      if (!context.mounted) return true;
+      final keep = await showLumitModal<bool>(
+        context: context,
+        builder: (close) => QuestionWindow(
+          title: l10n.remoteNewsArrived(job.compName, job.otherName),
+          keyPrefix: 'quit-remote',
+          onClose: () => close(null),
+          actions: [
+            questionPlain('quit-remote-quit', l10n.exportQuit,
+                () => close(false)),
+            questionFilled('quit-remote-keep', l10n.remoteKeepRunning,
+                () => close(true)),
+          ],
+        ),
+      );
+      if (keep == null) return false;
+      if (!keep) return true;
+      // As Settings' Keep running does: closing the window from now on
+      // leaves Lumit in the tray.
+      ui.workspace.setKeepRunning(true);
+      await applyBackground(ui.workspace);
+      await closeWindow();
+      return false;
+    }
     if (exportPoll() is! BridgeExportState_Running) return true;
     if (ui.workspace.keepRunning) await showWindow();
     if (!context.mounted) return true;

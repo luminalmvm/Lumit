@@ -1,11 +1,11 @@
-//! A text style read from the model and written back, and where a restyle
-//! leaves the anchor.
+//! A text layer's style and paragraph on their way between the document and
+//! the panel, and where a restyle leaves the anchor.
 
 use flutter_rust_bridge::frb;
 
 use super::{
     colour_of, linear_of, BridgeAxisSpacing, BridgeCaps, BridgeFontAxisValue, BridgeKerning,
-    BridgeParagraphStyle, BridgeScript, BridgeTextAlign, BridgeTextStyle,
+    BridgeParagraphStyle, BridgeScript, BridgeTextAlign, BridgeTextStyle, BridgeVerticalAlign,
 };
 
 /// How far the anchor has to move for `after` to sit where `before` sat. The
@@ -19,9 +19,15 @@ pub(crate) fn restyle_shift(
     // A line on a path already has its room and its corner at the layer's
     // origin, so nothing there moves.
     let straight = before.path.is_none() && after.path.is_none();
+    let boxed = |d: &lumit_core::model::TextDocument| {
+        d.animators
+            .iter()
+            .any(lumit_core::text::TextAnimator::has_box)
+    };
     // Retyping the words alone leaves the anchor where it is, unless they are
     // point text lined up on the centre or the right, which grows from there.
     // Words an expression gives are not the ones typed, so they move nothing.
+    // A box an animator adds pads the block, so it moves the words too.
     let retyped = before.text != after.text
         && before.expression.is_none()
         && after.expression.is_none()
@@ -31,6 +37,7 @@ pub(crate) fn restyle_shift(
         || before.style != after.style
         || before.paragraph != after.paragraph
         || before.animators.is_empty() != after.animators.is_empty()
+        || boxed(before) != boxed(after)
         || retyped;
     if !(straight && restyled) {
         return (0.0, 0.0);
@@ -56,6 +63,7 @@ fn reference_point(document: &lumit_core::model::TextDocument) -> (f64, f64) {
     (f64::from(x), f64::from(y))
 }
 
+#[frb(ignore)]
 pub(super) fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle {
     use lumit_core::text::{Caps, Kerning, Script};
     BridgeTextStyle {
@@ -102,11 +110,18 @@ pub(super) fn read_style(style: &lumit_core::text::TextStyle) -> BridgeTextStyle
         stroke_width: style.stroke_width,
         stroke_over: style.stroke_over,
         strokes_together: style.strokes_together,
+        plate_on: style.plate_on,
+        plate: colour_of(style.plate),
+        plate_padding: style.plate_padding,
+        plate_radius: style.plate_radius,
+        plate_lines: style.plate_lines,
     }
 }
 
+#[frb(ignore)]
 pub(super) fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
     use lumit_core::text::{Caps, Kerning, Script};
+    let px = |v: f64| if v.is_finite() { v.max(0.0) } else { 0.0 };
     lumit_core::text::TextStyle {
         family: style.family,
         face: style.face,
@@ -152,12 +167,18 @@ pub(super) fn style_of(style: BridgeTextStyle) -> lumit_core::text::TextStyle {
         stroke_width: style.stroke_width,
         stroke_over: style.stroke_over,
         strokes_together: style.strokes_together,
+        plate_on: style.plate_on,
+        plate: linear_of(style.plate),
+        plate_padding: px(style.plate_padding),
+        plate_radius: px(style.plate_radius),
+        plate_lines: style.plate_lines,
         extra: serde_json::Map::new(),
     }
 }
 
+#[frb(ignore)]
 pub(super) fn read_paragraph(paragraph: &lumit_core::text::ParagraphStyle) -> BridgeParagraphStyle {
-    use lumit_core::text::TextAlign;
+    use lumit_core::text::{TextAlign, VerticalAlign};
     BridgeParagraphStyle {
         align: match paragraph.align {
             TextAlign::Left => BridgeTextAlign::Left,
@@ -166,32 +187,46 @@ pub(super) fn read_paragraph(paragraph: &lumit_core::text::ParagraphStyle) -> Br
         },
         box_width: Some(paragraph.box_width).filter(|w| *w > 0.0),
         justify: paragraph.justify,
+        shrink: paragraph.shrink,
         indent_left: paragraph.indent_left,
         indent_right: paragraph.indent_right,
         indent_first: paragraph.indent_first,
         space_before: paragraph.space_before,
         space_after: paragraph.space_after,
+        box_height: Some(f64::from(paragraph.box_height)).filter(|h| *h > 0.0),
+        vertical: match paragraph.vertical {
+            VerticalAlign::Top => BridgeVerticalAlign::Top,
+            VerticalAlign::Middle => BridgeVerticalAlign::Middle,
+            VerticalAlign::Bottom => BridgeVerticalAlign::Bottom,
+        },
     }
 }
 
+#[frb(ignore)]
+#[allow(clippy::cast_possible_truncation)] // the box height, px held in f32
 pub(super) fn paragraph_of(paragraph: BridgeParagraphStyle) -> lumit_core::text::ParagraphStyle {
-    use lumit_core::text::TextAlign;
+    use lumit_core::text::{TextAlign, VerticalAlign};
+    let size = |v: Option<f64>| v.filter(|v| v.is_finite() && *v > 0.0).unwrap_or(0.0);
     lumit_core::text::ParagraphStyle {
         align: match paragraph.align {
             BridgeTextAlign::Left => TextAlign::Left,
             BridgeTextAlign::Centre => TextAlign::Centre,
             BridgeTextAlign::Right => TextAlign::Right,
         },
-        box_width: paragraph
-            .box_width
-            .filter(|w| w.is_finite() && *w > 0.0)
-            .unwrap_or(0.0),
+        box_width: size(paragraph.box_width),
         justify: paragraph.justify,
+        shrink: paragraph.shrink,
         indent_left: paragraph.indent_left,
         indent_right: paragraph.indent_right,
         indent_first: paragraph.indent_first,
         space_before: paragraph.space_before,
         space_after: paragraph.space_after,
+        box_height: size(paragraph.box_height) as f32,
+        vertical: match paragraph.vertical {
+            BridgeVerticalAlign::Top => VerticalAlign::Top,
+            BridgeVerticalAlign::Middle => VerticalAlign::Middle,
+            BridgeVerticalAlign::Bottom => VerticalAlign::Bottom,
+        },
         extra: serde_json::Map::new(),
     }
 }

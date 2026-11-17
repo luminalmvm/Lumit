@@ -13,12 +13,14 @@ pub mod audio;
 pub mod beats;
 pub mod blender;
 pub mod cache;
+pub mod captions;
 pub mod clip_edits;
 pub mod clip_group;
 pub mod colour;
 pub mod comp_graph;
 pub mod composition;
 pub mod cut;
+pub mod denoise;
 pub mod drive;
 pub mod effect;
 pub mod effect_duplicate;
@@ -29,6 +31,17 @@ pub mod extensions;
 pub mod flare;
 pub mod folder;
 pub mod footage;
+pub mod grade_cdl;
+pub mod grade_groups;
+pub mod grade_lut;
+pub mod grade_matte;
+pub mod grade_memories;
+pub mod grade_nodes;
+pub mod grade_shared;
+pub mod grade_shots;
+pub mod grade_solve;
+pub mod grade_track;
+pub mod grade_versions;
 pub mod graph;
 pub mod graph_looks;
 pub mod handler;
@@ -39,9 +52,12 @@ pub mod keymap;
 pub mod layer;
 pub mod layer_source;
 pub mod lens;
+pub mod library;
 pub mod mask_clipboard;
+pub mod mixer;
 pub mod model;
 pub mod model_rows;
+pub mod multicam;
 pub mod notes;
 pub mod orient;
 pub mod place;
@@ -50,6 +66,7 @@ pub mod presets;
 pub mod project;
 pub mod project_item;
 pub mod projection;
+pub mod remote;
 pub mod retime;
 pub mod roto;
 pub mod routes;
@@ -59,11 +76,18 @@ pub mod shape;
 pub mod share;
 pub mod shell;
 pub mod solid;
+pub mod stabilise;
 pub mod state;
+pub mod stills;
 pub mod streams;
 pub mod styles;
+pub mod surface;
 pub mod system;
+pub mod template;
 pub mod track;
+pub mod transcript;
+pub mod transitions;
+pub mod vector;
 pub mod web_files;
 pub mod wire_tie;
 pub mod wireframes;
@@ -154,6 +178,8 @@ pub enum BridgeError {
     /// time is deliberate: two disk-bound jobs share one drive and
     /// halve each other.
     AnalysisBusy,
+    /// A long run was stopped before it finished, as asked.
+    Stopped,
     /// An addon was asked to install while another one is installing. One at a
     /// time, and never a queue (docs/impl/addons.md §9).
     AddonBusy,
@@ -163,6 +189,9 @@ pub enum BridgeError {
     AddonInvalid(String),
     /// A document or a command needs an addon that is not installed.
     AddonMissing,
+    /// None of the account's other computers can take this export: the one
+    /// named is not the account's, or none online takes exports.
+    NoComputer,
     /// Convert to keyframes was asked of a camera with no solve link to bake,
     /// or one whose link resolves nowhere.
     NotLinked,
@@ -171,6 +200,8 @@ pub enum BridgeError {
     NoSolve,
     /// The razor was pointed at a layer that is not a Sequence layer.
     NotSequence,
+    /// A grade solver found nothing in the picture to read.
+    NothingToRead,
     /// Only a Footage layer converts to a Sequence layer.
     NotFootage,
     /// The layer carries a Retime, and a retimed clip is silent (docs/09 §7),
@@ -232,6 +263,17 @@ pub enum BridgeError {
     ReadFailed,
     WriteFailed,
     InvalidWorkerState,
+    /// A footage item was asked for words it has not been given yet.
+    NoTranscript,
+    /// A transcription was asked for while another is running. One at a time.
+    TranscriptionBusy,
+    /// The edit named a caption layer and the layer is not one.
+    NotCaptions,
+    /// The transcripts hold no words in the stretch the layer plays.
+    NoSpeech,
+    /// A subtitle file stops making sense at this line, or nought when it
+    /// could not be read at all or held no captions.
+    CaptionsUnreadable(u32),
     OpError(OpError),
 }
 
@@ -296,17 +338,27 @@ impl fmt::Display for BridgeError {
                 write!(f, "That layer's speed varies; edit it in the Retime graph")
             }
             BridgeError::NotText => write!(f, "That is not a text layer"),
+            BridgeError::NoTranscript => write!(f, "That footage has no transcript yet"),
+            BridgeError::TranscriptionBusy => write!(f, "A transcription is already running"),
+            BridgeError::NotCaptions => write!(f, "That is not a caption layer"),
+            BridgeError::NoSpeech => write!(f, "No words are heard in that layer"),
+            BridgeError::CaptionsUnreadable(line) => {
+                write!(f, "That subtitle file could not be read at line {line}")
+            }
             BridgeError::NotCamera => write!(f, "That is not a camera layer"),
             BridgeError::NothingToConvert => {
                 write!(f, "That layer has no words to convert")
             }
             BridgeError::AnalysisBusy => write!(f, "Another analysis is already running"),
+            BridgeError::Stopped => write!(f, "Stopped before it finished"),
             BridgeError::AddonBusy => write!(f, "Another addon is installing"),
             BridgeError::AddonInvalid(why) => write!(f, "{why}"),
             BridgeError::AddonMissing => write!(f, "That addon is not installed"),
+            BridgeError::NoComputer => write!(f, "None of your computers can take that export"),
             BridgeError::NotLinked => write!(f, "That camera has no solve to bake"),
             BridgeError::NoSolve => write!(f, "Nothing has been solved at those points"),
             BridgeError::NotSequence => write!(f, "That is not a sequence layer"),
+            BridgeError::NothingToRead => write!(f, "There's nothing in the picture to read"),
             BridgeError::NotFootage => {
                 write!(f, "Only footage layers convert to sequenced")
             }

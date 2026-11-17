@@ -8,7 +8,8 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 **Export** writes a composition out as a file. One dialogue collects the settings, and a
-queue does the writing.
+queue does the writing. A composition written as shapes and keys rather than pixels is
+[Lottie and SVG](/use/lottie-and-svg/).
 
 ## Export a composition
 
@@ -27,6 +28,9 @@ When the file is already there, or the first frame of a sequence is, the dialogu
 first: **Overwrite**, **Keep both**, which writes `name_2`, `name_3` and so on, or
 **Cancel**.
 
+With [Lumit Pro](/use/profiles/#lumit-pro), the **Export on** row sends the export to
+another of your computers. See [Export on another computer](/use/remote-export/).
+
 ## The dialogue
 
 The top of the dialogue holds the preset, the format (video, image sequence or audio only),
@@ -40,7 +44,7 @@ until you close Lumit.
 | **Time** | The span, the frame rate, and overrides for motion blur and Retime blend. |
 | **Picture** | Channels and alpha, depth, bit rate, resize, crop, and the resampler. |
 | **Colour** | The space the file is written and tagged in. |
-| **Audio** | Whether sound is written, at what sample rate, sample width, channel layout and bit rate. |
+| **Audio** | Whether sound is written, its sample rate, sample width, channel layout and bit rate, and its [loudness and stems](#loudness-and-stems). |
 | **Metadata** | Title, author, copyright, comment and created, plus any field of your own. |
 
 The frame rate starts as the composition's own; the span starts as the work area where one
@@ -98,6 +102,7 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | **QuickTime Animation (.mov)** | Yes | Yes | Yes | 8 bit | No | Stated in the file | Yes |
 | **VP9 video (.webm)** | Yes | Yes | Yes | 8 bit | Yes | Stated in the file | Yes |
 | **GIF (.gif)** | Yes | No | Yes | 8 bit | No | None stated | No |
+| **WebP, WebP lossless (.webp)** | Yes | No | Yes | 8 bit | No | None stated | No |
 | **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **OpenEXR sequence** | Yes | No | Yes | 16 or 32 bit float | No | None stated | No |
@@ -120,6 +125,10 @@ A GIF holds 256 colours. Three rows in **Picture** apply to a GIF and nothing el
 - **Plays**: **Forever**, or a number of times from 1 to 1000.
 
 A pixel under half alpha is clear and the rest are solid. **Alpha** is always **Straight**.
+A GIF is written at no more than 50 frames a second.
+
+A WebP keeps the whole of its alpha and plays forever. **WebP lossless** keeps every pixel
+exactly.
 
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
 has no container to carry metadata, so that section is disabled. A still is an image
@@ -140,6 +149,15 @@ Animation are always encoded in software.
 - **Write to**: the file, chosen with **Browse…**. A change of format changes its
   extension. A right-click on the file has **Copy path**, **Browse…** and **Show in
   folder**.
+- **Also write**: up to three more files from the same frames, each a video or an image
+  sequence, written beside the file as `<file name><suffix>.<extension>`. **Add a file**
+  adds one and **Remove** takes it off. Each takes the export's span, rate, size, crop,
+  depth, colour space and sound. A format that cannot carry them is not offered, and one
+  that no longer can is refused by name. Its bitrate is always automatic, and an alpha
+  channel, sound depth or embedded captions it cannot carry are left out, not refused. Two
+  files with the same extension need different suffixes. Caption files and stems are
+  written beside the main file only. An export sent to another computer writes the main
+  file only.
 - **When done**: **Make a noise** plays a sound, and **Open folder** opens the folder the
   file was written to.
 
@@ -155,6 +173,7 @@ Animation are always encoded in software.
 | **Guide layers** | *All off*, or *Current settings*, which writes the [guide layers](/use/layers/#guide-layers) too. |
 | **Disk cache** | *Off*, or *Read only*, which reads frames already on disk and stores none. |
 | **Colour depth** | The same setting as **Depth** in Picture. |
+| **Captions** | Drawn when the composition has a caption layer of its own. *Burn in*, an *SRT file* or *WebVTT file* beside the export, one per caption layer, or *In the video file*, which only an MP4 or MOV holds. |
 
 An audio-only export takes none of these.
 
@@ -206,11 +225,30 @@ mix as an M4A or a WAV. The Audio section sets the sample rate (44.1, 48 or 96 k
 width (16 bit, or 24 for the uncompressed forms) and the layout (stereo, or folded down
 to mono). An AAC bit rate is 128, 192, 256 or 320 kb/s.
 
+## Loudness and stems
+
+**Loudness**, in the Audio section, sets the loudness the mix is brought to: **Off**, the
+composition's [loudness target](/use/mixing/#loudness) as **Target**, **−14 LUFS**,
+**−16 LUFS**, **−23 LUFS**, **−24 LUFS**, or **Custom**, from −40 to −5 LUFS. **True peak**,
+from −9 to 0 dBTP, is the ceiling the master's limiter holds it under. A composition with a
+target starts on **Target**, with the target's true peak, unless a preset of your own or a
+queued export names its own Loudness, **Off** included.
+
+**Stems**, shown when the composition has a bus, writes **A file for each bus** beside the
+export, named `<file name> - <bus name>`. A stem is the bus after its own fader, without the
+master's fader, limiter or loudness, over the export's span. Beside an audio-only export it
+takes the same format, beside a ProRes file it is a WAV, and beside any other video an M4A.
+A character a file name cannot hold becomes `_`. Stopping the export removes the stems it
+wrote.
+
 ## Colour space
 
 The Colour section names the space the file is written and tagged in: sRGB / Rec. 709,
 Linear, Rec. 709, Rec. 2020 or Display P3. An image sequence is offered sRGB / Rec. 709
 only.
+
+**sRGB / Rec. 709**, the default, writes the picture as the Viewer shows it. A video is
+tagged Rec. 709, which is what YouTube and most players expect.
 
 Where the project names a colour configuration, that configuration's own output spaces
 appear under a heading of their own. A file written through one of those is left
@@ -236,8 +274,9 @@ Export queue…** (`Ctrl+Alt+0`) reopens it later.
 One export runs at a time and the rest wait. Each row says which composition it came
 from, its preset or format, the file it writes, and how it is getting on: *Waiting*, a
 bar with how much is done and about how long is left, *Done* with how long it took and the
-file's size, or the failure. Pointing at the bar names the encoder, and pointing at a
-failure shows the whole of it. The footer counts the rows waiting and done.
+size of its files, or the failure. A row that writes other files beside its own shows how
+many after the file's name, and pointing at the name lists them all. Pointing at the bar
+names the encoder, and pointing at a failure shows the whole of it. The footer counts the rows waiting and done.
 
 - **Start** sets the waiting rows running.
 - **Add compositions…** queues several compositions at once. See
@@ -252,10 +291,15 @@ failure shows the whole of it. The footer counts the rows waiting and done.
   **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it. **Duplicate**
   writes to a file of its own, and **Queue again** writes over the row's file. On a
   failed row, **Settings…** queues it again with the changes. On the running row,
-  **Stop after this one** lets that export finish and starts nothing after it.
+  **Stop after this one** lets that export finish and starts nothing after it, and
+  **Pause** holds it between two frames until **Go on**. On a row reached with `Tab`,
+  `Shift+F10` or the menu key opens the same menu.
 - **Right-click around the rows**, or the count under them, for **Start**, **Stop after
-  this one**, **Add compositions…**, **Show in folder** for the last file written, and
-  **Remove finished**.
+  this one**, **Add compositions…**, **Show in folder** for the last file written,
+  **Cancel all**, which asks first, and **Remove finished**. `Shift+F10` or the menu key
+  opens the same menu while no row has the focus.
+- Exports sent to another computer are listed under its name. See
+  [Export on another computer](/use/remote-export/#the-export-queue).
 
 An item's settings are captured the moment it is queued, so working on the project 
 afterwards does not impact the export. The queue is not saved with the project.
@@ -286,6 +330,10 @@ You can carry on editing while an export writes. The status strip at the bottom 
 window says which frame it is on and about how long is left, and has a Cancel. When the
 export is done, click the file's path on the strip to open its folder.
 
+The computer stays awake while an export runs. While Lumit is not the window in front, the
+system shows a notification when an export ends, unless
+[**Notify when exports end**](/use/settings/#export) is off.
+
 Closing Lumit while an export is writing asks **Stop the export and quit?**. **Quit** stops
 the export.
 
@@ -302,7 +350,9 @@ the project names, or *No OCIO configuration*, and cannot be set from here.
 
 ## Related
 
+- [Lottie and SVG](/use/lottie-and-svg/)
 - [Preview and playback](/use/preview/)
+- [Export on another computer](/use/remote-export/)
 - [Compositions](/use/compositions/)
 - [Colour management](/use/colour-management/)
 - [Previews](/use/review-links/)

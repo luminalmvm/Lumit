@@ -1,0 +1,44 @@
+---
+title: Group grade
+description: "Where a grade group's shared grade runs in a member shot."
+---
+
+Group grade is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Marks where a [grade group's](/use/grading/#groups) grade runs in a member shot's stack.
+A shot that joins a group gets two: a **Pre** at the start of its own grade and a **Post**
+after it. The render puts the group's effects in each one's place. One whose group has gone
+passes the picture on untouched.
+
+A [shared node](/use/grading/#shared-nodes) is a Group grade too, its Part **Shared**.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Part** | Dropdown | Pre · Post · Shared | Pre | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Part**: **Pre** runs the group's grade before the shot's own, **Post** the one after it.
+  **Shared** runs a shared node where the effect stands.
+
+## Related
+
+- [Grading](/use/grading/)
+- [Shots](/panels/shots/)
+- [Correction](/effects/colour/correction/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

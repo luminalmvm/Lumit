@@ -237,6 +237,82 @@ pub(super) fn export_start(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(super) struct LottieArgs {
+    path: PathBuf,
+}
+
+pub(super) fn lottie_import(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    a: LottieArgs,
+) -> Result<Value, ScriptError> {
+    let path = match (reach::plain(&a.path)?, reach) {
+        (path, Some(reach)) => reach.lottie(host, path)?,
+        (path, None) => path.to_path_buf(),
+    };
+    let (comp, left_out) = host.import_lottie(&path)?;
+    let doc = host.store().snapshot();
+    let name = doc.comp(comp).map(|c| c.name.clone());
+    Ok(json!({ "comp": comp, "name": name, "left_out": left_out }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct VectorArgs {
+    comp: String,
+    out: PathBuf,
+    format: Option<String>,
+    text: Option<String>,
+    minify: Option<bool>,
+}
+
+pub(super) fn export_vector(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    a: VectorArgs,
+) -> Result<Value, ScriptError> {
+    use lumit_lottie::settings::{Format, Settings, TextMode};
+    let comp = find_comp(&host.store().snapshot(), &a.comp)?.id;
+    let by_name = a.out.extension().and_then(|e| e.to_str()).and_then(|e| {
+        match e.to_ascii_lowercase().as_str() {
+            "json" => Some(Format::Lottie),
+            "lottie" => Some(Format::DotLottie),
+            "svg" => Some(Format::Svg),
+            _ => None,
+        }
+    });
+    let format = match a.format.as_deref() {
+        Some(key) => Format::from_key(key)
+            .ok_or_else(|| bad(format!("There is no format called \"{key}\".")))?,
+        None => by_name
+            .ok_or_else(|| bad("Name the format, or end the file in .json, .lottie or .svg."))?,
+    };
+    let out = reach::plain(&a.out)?;
+    let out = match reach {
+        Some(reach) => reach.vector(host, out, format.extension())?,
+        None => out.to_path_buf(),
+    };
+    let text = match a.text.as_deref() {
+        None | Some("shapes") => TextMode::Shapes,
+        Some("text") => TextMode::Text,
+        Some(other) => return Err(bad(format!("text is shapes or text, not {other}."))),
+    };
+    let settings = Settings {
+        format,
+        text,
+        minify: a.minify.unwrap_or(false),
+        file_stem: out
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "animation".into()),
+        ..Settings::default()
+    };
+    let left_out = host.export_vector(comp, &out, &settings)?;
+    Ok(json!({ "file": out, "left_out": left_out }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct JobArgs {
     job: u64,
 }

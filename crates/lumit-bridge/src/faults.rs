@@ -194,6 +194,10 @@ static ARM_ON_LOAD: extern "C" fn() = arm_on_load;
 
 extern "C" fn arm_on_load() {
     watch();
+    // Which device hardware decode found and why it stepped back to
+    // software, in the same file, from before any footage opens.
+    #[cfg(feature = "media")]
+    lumit_media::decode::report_hardware_to(record);
 }
 
 #[cfg(test)]

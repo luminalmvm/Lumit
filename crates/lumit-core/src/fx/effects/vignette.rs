@@ -96,4 +96,7 @@ impl EffectDef for VignetteDef {
         let (amount, radius, softness, roundness, ramp, mix) = Vignette::read(p).packed();
         cpu::vignette(rgba, w, h, amount, radius, softness, roundness, ramp, mix);
     }
+
+    // A vignette is nothing but where a pixel is, so a LUT keeps none of it.
+    fn apply_cpu_pointwise(&self, _rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {}
 }

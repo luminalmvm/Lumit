@@ -37,6 +37,36 @@ impl Edit<'_> {
         arrival: BridgeStreamsArrival,
         span: Option<(Rational, Rational)>,
     ) -> Cut {
+        self.place_only(
+            target,
+            footage,
+            source_in,
+            source_out,
+            at_frame,
+            insert,
+            linked,
+            with_picture,
+            arrival,
+            span,
+        )?;
+        self.commit()
+    }
+
+    /// [`Self::place`] without the commit, so several go in one edit.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn place_only(
+        &mut self,
+        target: Option<Uuid>,
+        footage: &FootageReference,
+        source_in: BridgeRational,
+        source_out: BridgeRational,
+        at_frame: i64,
+        insert: bool,
+        linked: bool,
+        with_picture: bool,
+        arrival: BridgeStreamsArrival,
+        span: Option<(Rational, Rational)>,
+    ) -> Cut {
         let source_in = Rational::new(source_in.num, source_in.den)?;
         let source_out = Rational::new(source_out.num, source_out.den)?;
         let length = source_out.checked_sub(source_in)?;
@@ -215,7 +245,7 @@ impl Edit<'_> {
             row.clips.push(clip);
             row.clips = placed(std::mem::take(&mut row.clips), dropped, false);
         }
-        self.commit()
+        Ok(())
     }
 
     /// Put the whole of a composition down at `at_frame` as one clip, its
@@ -230,15 +260,31 @@ impl Edit<'_> {
         if comp == self.comp.id {
             return Err(BridgeCutResult::WrongLayer.into());
         }
-        let (length, width, height) = {
+        let (length, width, height, multicam) = {
             let doc = self.of.document()?;
             let inner = doc.comp(comp).ok_or(BridgeError::InvalidComp)?;
             (
                 inner.duration.0,
                 f64::from(inner.width),
                 f64::from(inner.height),
+                inner.is_multicam(),
             )
         };
+        // A multicam comp goes down as its picture and its sound, linked.
+        if multicam {
+            let target = target.map(|layer| layer.id());
+            return self.place_multicam(
+                target,
+                comp,
+                Rational::ZERO,
+                length,
+                at_frame,
+                false,
+                false,
+                None,
+                None,
+            );
+        }
         let at = self.time(at_frame.max(0))?;
         let r = match target {
             Some(layer) => self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?,
@@ -255,6 +301,45 @@ impl Edit<'_> {
         let row = &mut self.rows[r];
         row.clips.push(clip);
         row.clips = placed(std::mem::take(&mut row.clips), dropped, false);
+        self.commit()
+    }
+
+    /// Put one clip of composition `comp` down for each of `copies`, one after
+    /// another from `at_frame`, on a new picture Sequence layer at the top.
+    /// Each holds the values it is given and runs for the seconds it is
+    /// given, or as long as the composition. What placing a graphics
+    /// template's data rows does in Cut.
+    pub(super) fn place_copies(
+        mut self,
+        comp: Uuid,
+        at_frame: i64,
+        copies: Vec<(Option<lumit_core::model::EffectInstance>, Option<f64>)>,
+    ) -> Cut {
+        if comp == self.comp.id || copies.is_empty() {
+            return Err(BridgeCutResult::WrongLayer.into());
+        }
+        let (length, width, height) = {
+            let doc = self.of.document()?;
+            let inner = doc.comp(comp).ok_or(BridgeError::InvalidComp)?;
+            (
+                inner.duration.0,
+                f64::from(inner.width),
+                f64::from(inner.height),
+            )
+        };
+        let mut at = self.time(at_frame.max(0))?;
+        let r = self.add_row(None, false, width, height);
+        let fps = self.comp.frame_rate.fps();
+        for (inputs, seconds) in copies {
+            let long = match seconds {
+                Some(seconds) => self.time((seconds * fps).round().max(1.0) as i64)?,
+                None => length,
+            };
+            let mut clip = Clip::new(ClipSource::Comp(comp), Rational::ZERO, long, at, long);
+            clip.inputs = inputs;
+            self.rows[r].clips.push(clip);
+            at = at.checked_add(long)?;
+        }
         self.commit()
     }
 

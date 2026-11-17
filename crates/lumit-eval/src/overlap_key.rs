@@ -21,7 +21,7 @@ pub(super) fn feed_overlap(
         super::feed_f64(h, opacity);
     }
     if let Some(effect) = incoming.drawn_transition() {
-        h.update(b"seq-transition/");
+        h.update(b"seq-transition/2/");
         // Written straight into the hasher. Serialising plain data cannot fail.
         let rows = (&effect.effect.match_name, &effect.params);
         let _ = serde_json::to_writer(&mut *h, &rows);

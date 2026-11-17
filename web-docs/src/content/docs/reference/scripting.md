@@ -420,6 +420,40 @@ Script: `lumit.effect.set({ ... })`. MCP tool: `effect_set`.
 | `keys[].out.influence` | number (0.1 to 100) |  | Per cent of the span |
 | `expression` | string |  | A JavaScript expression, as After Effects writes them |
 
+## grade.get
+
+A shot's grade versions, which one is showing, and the grade group it is in.
+
+Script: `lumit.grade.get({ ... })`. MCP tool: `grade_get`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `clip` | string |  | For one clip on a sequence layer, its id |
+
+## grade.set
+
+Show another version of a shot's grade, or put the shot in a grade group, move it to another, or take it out.
+
+Script: `lumit.grade.set({ ... })`. MCP tool: `grade_set`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `clip` | string |  | For one clip on a sequence layer, its id |
+| `version` | string |  | The version's id or name |
+| `group` | string or null |  | The grade group's id or name, or null for none |
+
+## grade.groups
+
+Every grade group, with how many shots are in it.
+
+Script: `lumit.grade.groups()`. MCP tool: `grade_groups`.
+
+No arguments.
+
 ## footage.import
 
 Import files as footage items.
@@ -429,6 +463,16 @@ Script: `lumit.footage.import({ ... })`. MCP tool: `footage_import`.
 | Argument | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `paths` | list of strings | yes |  |
+
+## lottie.import
+
+Import a Lottie (.json or .lottie) as comps, and say what didn't come across.
+
+Script: `lumit.lottie.import({ ... })`. MCP tool: `lottie_import`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `path` | string | yes | The .json or .lottie file |
 
 ## export.start
 
@@ -440,6 +484,20 @@ Script: `lumit.export.start({ ... })`. MCP tool: `export_start`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `out` | string |  | The file to write |
+
+## export.vector
+
+Export a comp as a Lottie, a dotLottie or an animated SVG, and say what won't come across.
+
+Script: `lumit.export.vector({ ... })`. MCP tool: `export_vector`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `out` | string | yes | The file to write: .json, .lottie or .svg |
+| `format` | `"lottie"`, `"dotlottie"`, `"svg"` |  | Without it, from the file's extension |
+| `text` | `"shapes"`, `"text"` |  | Text as outlines (the default) or as text naming its font |
+| `minify` | boolean |  |  |
 
 ## export.status
 
@@ -460,3 +518,88 @@ Script: `lumit.export.cancel({ ... })`. MCP tool: `export_cancel`.
 | Argument | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `job` | integer (at least 0) | yes |  |
+
+## comp.controls
+
+A comp's controls and their values, after setting the template's own values when told to.
+
+Script: `lumit.comp.controls({ ... })`. MCP tool: `comp_controls`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `set` | object |  | Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name |
+
+## layer.values
+
+The values a copy of a graphics template has: its own, set or fed by a data row, or the template's.
+
+Script: `lumit.layer.values({ ... })`. MCP tool: `layer_values`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `clip` | string |  | For a copy that is a clip on a Sequence layer: the clip's id |
+| `set` | object |  | Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name |
+| `reset` | boolean or list of strings |  | Controls that follow the template again, by id or label, or true for all |
+| `row` | integer (at least 1) or null |  | The data row to follow, counting from 1, or null to stop |
+
+## data.rows
+
+The data linked to a graphics template, after linking a CSV, TSV or JSON file or saying what its columns feed.
+
+Script: `lumit.data.rows({ ... })`. MCP tool: `data_rows`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `file` | string |  | A CSV, TSV or JSON file to link. Its columns feed the controls of their names |
+| `feeds` | object |  | Column name to what it feeds: a control's id or label, length, file name, or null for nothing |
+
+## data.export
+
+Export a graphics template once for each row of its data.
+
+Script: `lumit.data.export({ ... })`. MCP tool: `data_export`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `rows` | list of 2 integers (at least 1) |  | The first and last row, counting from 1. All of them if left out |
+| `out` | string |  | The files' name, which may hold {Column}, {row}, {comp} and {date} and a folder |
+| `layer` | string |  | A copy's layer, by id or name: the comp it sits in is exported with the copy following each row. The template on its own if left out |
+| `clip` | string |  | With layer, for a copy that is a clip: the clip's id |
+
+## template.list
+
+The graphics templates in the library.
+
+Script: `lumit.template.list()`. MCP tool: `template_list`.
+
+No arguments.
+
+## template.place
+
+Bring a graphics template into the project, and place it in a comp when told to.
+
+Script: `lumit.template.place({ ... })`. MCP tool: `template_place`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `template` | string | yes | Its name in the library, or a .lumt file |
+| `comp` | string |  | The comp to place it in, by id or name, as a Precomp layer |
+| `at` | integer or `{num, den}` |  | Where the layer starts. The start if left out |
+
+## template.save
+
+Save a comp to the library as a graphics template.
+
+Script: `lumit.template.save({ ... })`. MCP tool: `template_save`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `name` | string |  | The comp's name if left out |
+| `group` | string |  | The folder in the library, parted by /. The top if left out |
+| `pack_fonts` | boolean |  | Put the font files its text names in the file |

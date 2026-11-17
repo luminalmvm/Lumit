@@ -229,7 +229,7 @@ pub fn track_status(layer: LayerReference) -> BridgeTrackStatus {
     status
 }
 
-fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
+pub(crate) fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
     use lumit_render::track::AnalysisError;
     use lumit_track::solve::SolveError;
     match why {
@@ -378,6 +378,10 @@ pub fn fire_effect_action(
     param: String,
     frame: Option<u64>,
 ) -> Result<(), BridgeError> {
+    // The clean-up effects' Learn, on the layer's stack or one of its clips'.
+    if let Some(pressed) = crate::api::denoise::try_press(&layer, effect, &param, frame) {
+        return pressed;
+    }
     let item = layer.item()?;
     let fx = item
         .effects
@@ -389,6 +393,9 @@ pub fn fire_effect_action(
         .composition()
         .ok()
         .and_then(|comp| lumit_core::planes::source_span(fx, Some(&item), &comp));
+    if fx.effect.match_name == lumit_core::fx::effects::stabilise::MATCH_NAME {
+        return crate::api::stabilise::press(&layer, &item, fx, &param, frame);
+    }
     // The Roto brush's two go the same way, and so do the Planar
     // track's four: one doorway, so a press is one crossing whichever effect
     // made it.

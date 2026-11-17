@@ -56,6 +56,7 @@ import '../state/text_documents.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'timeline_captions_frb.dart' show typeCaptionAtPlayhead;
 import 'transform_rows_frb.dart' show writeScalar;
 import 'viewer_gizmo.dart';
 import 'viewer_shape_layer.dart' show ShapeSpace;
@@ -770,6 +771,12 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final existing = _textLayerAt(at);
     if (existing == null) return;
     _pressOnText = true;
+    // A caption layer's words are its captions, typed in the Captions panel:
+    // a double-click opens the one under the playhead there.
+    if (typeCaptionAtPlayhead(widget.uiState, existing.layer,
+        ask: clicks == 2)) {
+      return;
+    }
     _begin(existing.layer, created: false, box: existing.box, at: at);
     _dragUnit = null;
     _dragBase = _controller.selection.baseOffset;
@@ -845,10 +852,17 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// no bridge calls however deep the stack — it used to ask `getText()` of
   /// every layer under the pointer. The one read the edit needs is asked of
   /// the layer chosen, in [_begin].
+  ///
+  /// Only a layer on screen at the playhead counts. One before its in point or
+  /// past its out has no words in the picture to click, and opening it took
+  /// the click a new layer should have had.
   ({LayerBox box, LayerReference layer})? _textLayerAt(Offset at) {
+    final frame = widget.uiState.playheadFrame.value;
     final textIds = {
       for (final entry in widget.uiState.model.heldLayers)
-        if (entry.info.kind == BridgeLayerKind.text)
+        if (entry.info.kind == BridgeLayerKind.text &&
+            frame >= entry.info.inFrame &&
+            frame < entry.info.outFrame)
           entry.layer.internallayerId,
     };
     for (final box in widget.boxes) {

@@ -23,6 +23,8 @@ pub mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
 pub mod colour_name;
+/// Denoise's maths: the CPU twin of its kernels, and Learn.
+pub mod denoise;
 /// The drivers and the driver-graph evaluation: one module per driver,
 /// plus the demand-driven walk that works out what every wire carries.
 pub mod drivers;
@@ -72,6 +74,8 @@ pub mod schema;
 /// The Custom shader's text side: the declaration grammar, the assembler and
 /// the uniform layout (docs/impl/custom-shader.md).
 pub mod shader;
+/// A Shape row's points: an outline inside a box.
+pub mod shape_points;
 /// The layer styles (docs/impl/layer-styles.md): nine named slots a
 /// layer wears, in one pinned order — a second, order-locked list beside the
 /// effect stack rather than entries in the catalogue.

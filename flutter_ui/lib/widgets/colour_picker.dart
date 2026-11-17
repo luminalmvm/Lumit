@@ -519,6 +519,10 @@ class ColourSwatchButton extends StatelessWidget {
   /// menu, for a colour with no default of its own.
   final PickedColour? resetTo;
 
+  /// Leave a right press to the row the chip sits in, whose own menu holds
+  /// the colour's rows.
+  final bool rowMenu;
+
   /// The colour is scene-linear light: the chip and the picker show it as the
   /// Viewer does ([showColourPicker]'s `linear`), and [colour] is read as
   /// the linear numbers rather than as what to draw.
@@ -533,6 +537,7 @@ class ColourSwatchButton extends StatelessWidget {
     this.max = 1,
     this.onPreview,
     this.resetTo,
+    this.rowMenu = false,
     this.linear = false,
   });
 
@@ -541,11 +546,13 @@ class ColourSwatchButton extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onSecondaryTapDown: (d) => showColourWellMenu(context, d.globalPosition,
-          current: initial ?? PickedColour.of(colour),
-          onPicked: onPicked,
-          resetTo: resetTo,
-          linear: linear),
+      onSecondaryTapDown: rowMenu
+          ? null
+          : (d) => showColourWellMenu(context, d.globalPosition,
+              current: initial ?? PickedColour.of(colour),
+              onPicked: onPicked,
+              resetTo: resetTo,
+              linear: linear),
       onTap: () async {
         final box = context.findRenderObject();
         if (box is! RenderBox) return;

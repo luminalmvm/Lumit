@@ -22,6 +22,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
 pub mod builtin;
+pub mod library;
 pub mod package;
 pub mod style;
 

@@ -83,7 +83,11 @@ mod project_cache;
 #[cfg(feature = "media")]
 mod audio;
 mod autosave;
+mod awake;
 mod beats;
+mod captioning;
+// ASC CDL files, read and written.
+mod cdl;
 mod claim;
 mod closing;
 // The command line, which the browser build has none of.
@@ -112,14 +116,19 @@ mod probe;
 mod profiling;
 mod proxy;
 mod realtime;
+mod remote;
 mod render;
 mod scratch;
 mod script;
 mod shape_paint;
+mod sound_span;
+mod speech;
 mod streams;
 #[cfg(test)]
 mod test_files;
+mod transcript_export;
 mod turns;
+mod vector_host;
 #[cfg(target_arch = "wasm32")]
 mod web_kept;
 #[cfg(target_arch = "wasm32")]

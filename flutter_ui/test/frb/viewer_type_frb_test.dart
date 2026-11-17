@@ -36,6 +36,7 @@ BridgeTextBlock _measured() => measureText(
       style: plainTextStyle,
       paragraph: plainParagraphStyle,
       animated: false,
+      boxed: false,
     );
 
 void main() {
@@ -215,6 +216,7 @@ void main() {
         style: document.style,
         paragraph: document.paragraph,
         animated: false,
+        boxed: false,
       ).lines.first;
       await tester.tapAt(screenOf(tester, boxOf(tester, p.layer),
           line.carets[5], line.baseline - _size * 0.3));
@@ -256,6 +258,7 @@ void main() {
             style: written.style,
             paragraph: written.paragraph,
             animated: false,
+            boxed: false,
           ).lines.length,
           2);
       await tester.pump(const Duration(seconds: 1));

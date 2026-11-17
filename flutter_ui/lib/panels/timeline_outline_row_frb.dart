@@ -7,6 +7,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/copies.dart' show shownLayerName;
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -25,6 +26,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
+import 'control_rows.dart' show ControlMark;
 import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
 import 'light_rows_frb.dart' show feedsEnvironment;
 import 'property_link.dart' show LinkDrop;
@@ -86,8 +88,8 @@ class OutlineRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
 
-  /// Open or close this layer's sequence view — what a double-click
-  /// on a Sequence layer means, where on other kinds it opens the source.
+  /// Open or close this layer's view in place: a Sequence layer's clips, or
+  /// a caption layer's captions. Null on a layer with no such view.
   final VoidCallback? onOpenSequence;
 
   /// Every layer in the comp, for the parent picker's menu — from the same
@@ -923,14 +925,15 @@ class _OutlineRowState extends State<OutlineRow> {
   /// Double-clicking a layer opens it. A **Sequence** layer opens its
   /// own view in place — its clips and their speed envelope, inside its row —
   /// because cutting is done against the beat you can see, so the
-  /// music and the ruler have to stay on screen. A Precomp opens the comp it
+  /// music and the ruler have to stay on screen. A caption layer opens its
+  /// captions under its bar the same way. A Precomp opens the comp it
   /// draws, the way it does in the Project panel and the Hierarchy. Every
   /// other kind has nothing to open, so the double-click renames it, the same
   /// rename `Enter` starts.
   void _openLayer() {
     final kind = widget.entry.info.kind;
-    if (kind == BridgeLayerKind.sequence) {
-      widget.onOpenSequence?.call();
+    if (widget.onOpenSequence case final open?) {
+      open();
       return;
     }
     if (kind != BridgeLayerKind.precomp) {
@@ -976,12 +979,16 @@ class _OutlineRowState extends State<OutlineRow> {
           // the selected row; every other row keeps `body`.
           child: Row(children: [
             Flexible(
-              child: Text(info.name,
+              // A copy of a graphics template goes by its first text
+              // control until the layer is renamed.
+              child: Text(shownLayerName(info),
                   style: widget.selected ? t.bodyPrimary : t.body,
-                  textDirection: nameDirection(info.name),
+                  textDirection: nameDirection(shownLayerName(info)),
                   textAlign: TextAlign.left,
                   overflow: TextOverflow.ellipsis),
             ),
+            // Marked while its visibility, words or footage is a control.
+            ControlMark.layer(layer.internallayerId),
             // Its eye does nothing, as a light reads it whether it's on or off.
             if (feedsEnvironment(widget.stack, layer.internallayerId)) ...[
               const SizedBox(width: identityGap),

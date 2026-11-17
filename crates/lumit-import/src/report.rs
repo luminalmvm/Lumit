@@ -211,6 +211,14 @@ pub enum Reason {
     ShadowSwitchKeyed,
     /// A Text or Shape layer's depth and bevel came across as Geometry options.
     GeometryOptionsCarried,
+    /// An Essential Graphics controller whose source Lumit has no row for, so
+    /// the composition's graphics template has no control for it. `row` is
+    /// the source as After Effects names it.
+    ControlNotCarried { control: String, row: String },
+    /// A layer placing a graphics template set a control to something that
+    /// could not be read as the control's kind, so the copy follows the
+    /// template there.
+    ControlValueNotCarried { control: String },
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -380,6 +388,12 @@ impl std::fmt::Display for Reason {
             }
             Self::ShadowSwitchKeyed => write!(f, "The shadow setting kept its first key"),
             Self::GeometryOptionsCarried => write!(f, "The geometry options were imported"),
+            Self::ControlNotCarried { control, row } => {
+                write!(f, "The control {control} was not carried ({row})")
+            }
+            Self::ControlValueNotCarried { control } => {
+                write!(f, "The copy's {control} was not carried")
+            }
             Self::SpatialTangentsFlattened => {
                 write!(f, "The motion path's curves were not carried")
             }

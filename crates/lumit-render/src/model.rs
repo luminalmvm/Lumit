@@ -149,6 +149,12 @@ pub(crate) fn stop_reads_with(flag: Arc<AtomicBool>) {
     STOP.with(|s| *s.borrow_mut() = Some(flag));
 }
 
+/// The export's cancel this thread was handed, if any, for the voice model,
+/// which runs in the same thread's mix and may take minutes.
+pub(crate) fn stop_flag() -> Option<Arc<AtomicBool>> {
+    STOP.with(|s| s.borrow().clone())
+}
+
 /// Read models beside the frame on this thread from now on, or not.
 pub fn read_aside(on: bool) {
     ASIDE.with(|a| a.set(on));

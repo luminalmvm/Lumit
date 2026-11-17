@@ -21,19 +21,24 @@ import '../state/clipboard.dart' show ClipboardKind;
 import '../state/tools.dart' show ToolMode;
 import '../state/comp_time.dart';
 import '../state/drag_payloads.dart';
+import '../state/template_controls.dart' show ControlRow;
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
-import 'audio_routes_frb.dart' show writeSend;
+import 'audio_routes_frb.dart' show muteSendRow, writeSend;
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
+import 'control_rows.dart'
+    show ControlMark, effectControlRow, volumeControlRow;
 import 'effect_commands.dart';
 import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
+import 'timeline_metrics_frb.dart' show dimmedRowOpacity;
 import 'layer_fold_frb.dart';
+import 'mixer_panel_frb.dart' show panLabel;
 import 'model_fold_rows.dart' show setModelPartShown;
 import 'light_rows_frb.dart';
 import 'spectral_lane_frb.dart';
@@ -49,6 +54,7 @@ import 'text_animator_rows_frb.dart'
     show animateMenuRows, animatorAddMenuRows, writeTextAnimator;
 import 'timeline_shape_rows_frb.dart';
 import 'shape_entries.dart';
+import 'template_place.dart' show openTemplate;
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'timeline_retime_row_frb.dart';
 import 'timeline_layer_menu_frb.dart' show audioRows, showMenuEntriesAt;
@@ -70,7 +76,9 @@ class EmptyTimelineDrop extends StatelessWidget {
   Widget build(BuildContext context) {
     return DragTarget<Object>(
       onWillAcceptWithDetails: (details) =>
-          details.data is FootageDragData || details.data is CompDragData,
+          details.data is FootageDragData ||
+          details.data is CompDragData ||
+          details.data is TemplateDragData,
       onAcceptWithDetails: (details) async {
         switch (details.data) {
           case FootageDragData(:final footage):
@@ -84,6 +92,10 @@ class EmptyTimelineDrop extends StatelessWidget {
           case CompDragData(comp: final dropped):
             Provider.of<LumitUiState>(context, listen: false)
                 .setSelectedComp(dropped);
+          // A graphics template is brought in and opened, as a comp is.
+          case TemplateDragData(:final path):
+            await openTemplate(state,
+                Provider.of<LumitUiState>(context, listen: false), path);
         }
       },
       builder: (context, candidate, _) => Container(
@@ -1010,7 +1022,45 @@ class FoldRow extends StatelessWidget {
             onChanged();
           },
         ),
-      FoldSendRow(:final send, :final bus) => _VolumeRow(
+      FoldPanRow(:final scalar) => _VolumeRow(
+          comp: comp,
+          layer: layer,
+          scalar: scalar,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+          label: t.propertyCase(l10n.audioPan),
+          rowKey: 'tl-pan',
+          write: (v) => layer.setPan(value: v),
+          min: -100,
+          max: 100,
+          decimals: 0,
+          suffix: null,
+          speed: 0.5,
+          reading: (v) => panLabel(v.toDouble()),
+        ),
+      FoldGainRow(:final db) => _GainRow(
+          layer: layer,
+          db: db,
+          valueColumn: valueColumn,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+        ),
+      // A muted send reads dimmed, as a muted layer's row does, and its menu
+      // brings it back.
+      FoldSendRow(:final send, :final bus) => ParamRowExtras(
+        rows: (close) => [
+          muteSendRow(layer, send, close: close, onChanged: onChanged),
+        ],
+        child: Opacity(
+        opacity: send.muted ? dimmedRowOpacity : 1,
+        child: _VolumeRow(
           comp: comp,
           layer: layer,
           scalar: send.level,
@@ -1037,6 +1087,8 @@ class FoldRow extends StatelessWidget {
             child: Text(send.pre ? l10n.audioSendPre : l10n.audioSendPost),
           ),
         ),
+        ),
+      ),
       FoldRetimeRow(:final scalar) => RetimeRow(
           comp: comp,
           layer: layer,
@@ -1263,8 +1315,30 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
           widget.layer.getClipEffects(clip: c, onCompClock: false),
       null => null,
     };
+    final owner = widget.layer.internallayerId;
     return EffectParamRowFrb(
       key: ValueKey<String>('tl-fx-${row.info.id}-${row.param.id}'),
+      // A row of the layer's own stack or styles, or on a copy the control
+      // of the template placed there. A clip's, a group's, a material's, a
+      // model's and a driver's rows are not the template's to name.
+      controlRow: effectControlRow(
+        owner,
+        row.info.id,
+        row.param,
+        inputs: row.inputs,
+        copy: row.inputs
+            ? ui.model.heldLayers
+                .where((e) => e.layer.internallayerId == owner)
+                .firstOrNull
+                ?.info
+                .copy
+            : null,
+        elsewhere: row.group != null ||
+            row.clip != null ||
+            row.material ||
+            row.model ||
+            row.driver,
+      ),
       // A part's Visible row, which reads as a tick until it is keyed.
       asTick: row.model && row.param.id == 'visible',
       // A material row goes back to its file's value.
@@ -1512,11 +1586,18 @@ class _VolumeRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// A send's row is this one with its own name, writer and Pre button.
+  /// A send's row is this one with its own name, writer and Pre button, and
+  /// Pan's with its own range and reading too.
   final String? label;
   final ValueChanged<BridgeScalar>? write;
   final Widget? trailing;
   final String rowKey;
+  final double min;
+  final double max;
+  final int decimals;
+  final String? suffix;
+  final double speed;
+  final String Function(num value)? reading;
 
   const _VolumeRow({
     required this.comp,
@@ -1530,6 +1611,13 @@ class _VolumeRow extends StatefulWidget {
     this.write,
     this.trailing,
     this.rowKey = 'tl-volume',
+    // The engine's own range (docs/09 §6): silence to a +12 dB boost.
+    this.min = -60,
+    this.max = 12,
+    this.decimals = 1,
+    this.suffix = ' dB',
+    this.speed = 0.2,
+    this.reading,
   });
 
   @override
@@ -1572,17 +1660,33 @@ class _VolumeRowState extends State<_VolumeRow> {
             widget.onChanged();
           },
         );
+        // The layer's own Volume can be a control. A send's level cannot.
+        final control = widget.write != null
+            ? null
+            : volumeControlRow(widget.layer.internallayerId);
         return ParamRowMenu(
-          menu: scalarRowMenu(context, keys, defaults: const [0]),
+          menu: scalarRowMenu(context, keys,
+              defaults: const [0],
+              control: control == null
+                  ? null
+                  : ControlRow(widget.comp, control)),
           child: Row(
             children: [
               keys,
               const SizedBox(width: 4),
               Expanded(
-                  child: Text(widget.label ?? t.propertyCase(l10n.volume),
-                      style: t.body)),
+                child: Row(children: [
+                  Flexible(
+                      child: Text(widget.label ?? t.propertyCase(l10n.volume),
+                          style: t.body)),
+                  ControlMark(control),
+                ]),
+              ),
               if (keys.trailingNavigator case final nav?) nav,
-              if (widget.trailing != null) widget.trailing!,
+              if (widget.trailing != null) ...[
+                widget.trailing!,
+                const SizedBox(width: 6),
+              ],
               SizedBox(
                 width: widget.valueColumn.width,
                 // Animated: the change lands in the key under the playhead (or
@@ -1592,23 +1696,23 @@ class _VolumeRowState extends State<_VolumeRow> {
                     ? KeyedValueField(
                         fieldKey: ValueKey('${widget.rowKey}-db'),
                         value: value,
-                        min: -60,
-                        max: 12,
-                        decimals: 1,
-                        suffix: ' dB',
-                        speed: 0.2,
+                        min: widget.min,
+                        max: widget.max,
+                        decimals: widget.decimals,
+                        suffix: widget.suffix,
+                        reading: widget.reading,
+                        speed: widget.speed,
                         onCommit: (v) => _commitAt(scalar, v, frame),
                       )
                     : DragValueField(
                         key: ValueKey('${widget.rowKey}-db'),
                         value: value,
-                        // The engine's own range (docs/09 §6): silence to a
-                        // +12 dB boost.
-                        min: -60,
-                        max: 12,
-                        decimals: 1,
-                        suffix: ' dB',
-                        speed: 0.2,
+                        min: widget.min,
+                        max: widget.max,
+                        decimals: widget.decimals,
+                        suffix: widget.suffix,
+                        reading: widget.reading,
+                        speed: widget.speed,
                         onChanged: (v) => _commitAt(scalar, v, frame),
                         onChangeLive: (v) =>
                             setState(() => _staged = v.toDouble()),
@@ -1632,5 +1736,69 @@ class _VolumeRowState extends State<_VolumeRow> {
     _write(scalarWithValueAt(scalar, value.toDouble(), widget.comp, frame));
     setState(() => _staged = null);
     widget.onChanged();
+  }
+}
+
+/// The Audio group's Gain: the layer's own level ahead of its effects and
+/// Volume, one value and never keyed. A drag is staged and written once, on
+/// release, so the gesture is one undo step.
+class _GainRow extends StatefulWidget {
+  final LayerReference layer;
+  final double db;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+
+  const _GainRow({
+    required this.layer,
+    required this.db,
+    required this.valueColumn,
+    required this.onChanged,
+  });
+
+  @override
+  State<_GainRow> createState() => _GainRowState();
+}
+
+class _GainRowState extends State<_GainRow> {
+  double? _staged;
+
+  void _commit(num value) {
+    try {
+      widget.layer.setAudioGainDb(db: value.toDouble());
+    } catch (_) {
+      // A locked layer refuses, and quietly.
+    }
+    setState(() => _staged = null);
+    widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        const SizedBox(width: fxKeyframeGutter + 6),
+        const SizedBox(width: 4),
+        Expanded(child: Text(t.propertyCase(l10n.audioGain), style: t.body)),
+        SizedBox(
+          width: widget.valueColumn.width,
+          child: DragValueField(
+            key: const ValueKey('tl-gain-db'),
+            value: _staged ?? widget.db,
+            min: -24,
+            max: 24,
+            decimals: 1,
+            suffix: ' dB',
+            speed: 0.2,
+            resetTo: 0,
+            onChanged: _commit,
+            onChangeLive: (v) => setState(() => _staged = v.toDouble()),
+            onChangeEnd: _commit,
+            onDragCancel: () => setState(() => _staged = null),
+          ),
+        ),
+        SizedBox(width: widget.valueColumn.rightInset),
+      ],
+    );
   }
 }

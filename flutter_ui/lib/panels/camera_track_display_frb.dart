@@ -108,7 +108,9 @@ class TrackSpanBar extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 5),
       child: SizedBox(
         height: 3,
+        // Stretched, or each box takes no height and nothing is drawn.
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (done > 0)
               Expanded(flex: done, child: ColoredBox(color: t.accent)),

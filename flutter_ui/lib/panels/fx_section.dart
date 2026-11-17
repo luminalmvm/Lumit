@@ -62,10 +62,12 @@ const double fxControlColumnWidth = 116;
 /// How wide the label column is on a row [width] wide: what is left once the
 /// control column has its room, between a floor that still reads a short name
 /// and a ceiling that keeps a value within reach of its name in a wide panel.
+/// The ceiling leaves a choice's longer labels their room at the panel's
+/// usual width.
 double fxLabelWidthFor(double width) {
   if (!width.isFinite) return fxLabelColumnWidth;
   return (width - fxKeyColumnWidth - 10 - fxControlColumnWidth)
-      .clamp(88.0, 200.0);
+      .clamp(88.0, 170.0);
 }
 
 /// The label column of a row [width] wide. Beside a [compact] control a long

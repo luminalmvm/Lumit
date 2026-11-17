@@ -13,14 +13,16 @@ use crate::api::effect::BridgeScalar;
 use crate::api::layer::LayerReference;
 use crate::api::{composition::CompositionReference, BridgeError};
 
-/// One send: the bus, how much goes to it in dB, and whether it is taken
-/// before the layer's Volume and Pan.
+/// One send: the bus, how much goes to it in dB, whether it is taken
+/// before the layer's Volume and Pan, and whether it is muted.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeSend {
     pub bus: Uuid,
     pub level: BridgeScalar,
     pub pre: bool,
+    #[frb(default = false)]
+    pub muted: bool,
 }
 
 /// A layer's sends as the read model carries them.
@@ -34,6 +36,7 @@ pub(crate) fn bridge_sends(layer: &lumit_core::model::Layer) -> Vec<BridgeSend> 
             bus: s.bus,
             level: BridgeScalar::read_at(&s.level_db, layer.start_offset.0),
             pre: s.pre,
+            muted: s.muted,
         })
         .collect()
 }
@@ -92,6 +95,7 @@ impl LayerReference {
                     bus: s.bus,
                     level_db,
                     pre: s.pre,
+                    muted: s.muted,
                 })
             })
             .collect::<Result<Vec<_>, BridgeError>>()?;

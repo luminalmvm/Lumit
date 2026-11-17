@@ -14,8 +14,10 @@ use crate::decode::CompLayerPixels;
 /// `pixels_for` bakes into it before the stack sees it — the paint strokes,
 /// the masks at this layer time — and the raster it was made at. Footage and
 /// Sequence layers name their source by the decode job's identity
-/// ([`CompLayerPixels::source_key`]); a solid by its colour and size. `None`
-/// for the kinds nothing names yet (text, shapes), which run uncached.
+/// ([`CompLayerPixels::source_key`]); a solid by its colour and size; text and
+/// shapes by the name their kept raster was made under, found in `names` by
+/// layer and layer time. `None` for a kind nothing names, or a layer with a
+/// puppet, whose warp is not in the name; either runs uncached.
 ///
 /// The masks and paint go in serialised, as the file format writes them: a
 /// keyframed mask is named by its whole animation plus the time it is read
@@ -24,11 +26,15 @@ pub(super) fn fx_input_key(
     doc: &lumit_core::model::Document,
     layer: &lumit_core::model::Layer,
     pixels_by_layer: &HashMap<Uuid, &CompLayerPixels>,
+    names: &HashMap<(Uuid, u64), u128>,
     lt: f64,
     tex_w: u32,
     tex_h: u32,
 ) -> Option<u128> {
     use lumit_core::model::LayerKind;
+    if layer.puppet.is_some() {
+        return None;
+    }
     let mut h = blake3::Hasher::new();
     h.update(b"fxinput/1/");
     match &layer.kind {
@@ -44,6 +50,10 @@ pub(super) fn fx_input_key(
             }
             h.update(&sd.width.to_le_bytes());
             h.update(&sd.height.to_le_bytes());
+        }
+        LayerKind::Text { .. } | LayerKind::Shape { .. } => {
+            h.update(b"raster/");
+            h.update(&names.get(&(layer.id, lt.to_bits()))?.to_le_bytes());
         }
         _ => return None,
     }
@@ -83,5 +93,7 @@ pub(crate) fn still_input_key(
         true => lumit_core::time::layer_time(t_comp, layer.start_offset.0),
         false => 0.0,
     };
-    fx_input_key(doc, layer, pixels_by_layer, lt, tex_w, tex_h)
+    // No text or shape is named here: their names live in the walk.
+    let names = HashMap::new();
+    fx_input_key(doc, layer, pixels_by_layer, &names, lt, tex_w, tex_h)
 }

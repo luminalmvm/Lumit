@@ -95,6 +95,15 @@ impl EffectDef for BlurDef {
         &<Blur as EffectMetadata>::SCHEMA
     }
 
+    /// A hit that lands on the playhead.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        use crate::fx::presets::PresetValue::Keys;
+        &[crate::fx::presets::EffectPreset {
+            name: "Hit",
+            values: &[("radius", Keys(&[(0.0, 0.0), (0.15, 60.0), (0.4, 0.0)]))],
+        }]
+    }
+
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let (radius_px, edge, mix) = Blur::read(p).packed();
         cpu::blur_gaussian(rgba, w, h, radius_px, edge, mix);

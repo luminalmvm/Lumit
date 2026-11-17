@@ -47,8 +47,7 @@ import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'scopes_panel_frb.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The histogram's trace code (docs/17: 0 waveform, 1 parade, 2 vectorscope,
-/// 3 histogram).
+/// The RGB histogram's trace code (`ScopeSlot.engineKind` lists them all).
 const int _histogramKind = 3;
 
 /// The engine's fixed trace size.
@@ -184,7 +183,7 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
       widget.comp.renderScope(
         frame: widget.playheadFrame,
         scale: state.measuredScale,
-        kind: _histogramKind,
+        kinds: const [_histogramKind],
         colours: levelsHistogramColours(t,
             themed: state.workspace.themedEffectGraphs),
         view: state.measuredViewId,

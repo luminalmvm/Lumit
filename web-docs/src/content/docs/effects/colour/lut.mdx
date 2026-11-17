@@ -16,7 +16,8 @@ LUT is a [Colour](/effects/#colour) effect.
 ## What it does
 
 Applies a **look-up table**. This must be a `.cube` file, and is loaded from
-disk.
+disk. When the file is missing, the file of the same name in the
+[library](/use/library/)'s LUTs is read in its place.
 
 :::note[Set Input space to whatever the LUT expects]
 **Input space** says which space the table was written for: the picture is

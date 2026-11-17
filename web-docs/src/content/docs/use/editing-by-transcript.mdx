@@ -1,0 +1,182 @@
+---
+title: Editing by transcript
+description: Cut a composition by deleting, moving and copying the words it says.
+sidebar:
+  order: 8.6
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The **Transcript panel** shows what the composition in the [Cut timeline](/use/cutting/) says,
+as text. Deleting, moving or copying words cuts the composition to match. It is a tab beside
+the Project panel in the **Cut** workspace, and **Window ▸ Panels ▸ Transcript** in any other.
+
+<Shot file="transcript-panel.png" caption="The Transcript panel, with two speakers, pauses and filler words." eager/>
+
+## Transcribing
+
+The panel reads the transcripts of the footage its clips play. A composition with none shows
+**Transcribe**, with the language and the number of speakers beside it, both detected unless
+set. A composition with some footage still to do shows how many at the top, with
+**Transcribe**.
+Progress shows under the panel's strip, with **Cancel**. Each file's words appear as it
+finishes. **··· ▸ Transcribe missing** does the same from the menu, and **··· ▸ Transcribe
+again** hears every file again.
+
+A transcript belongs to its footage item, so every clip of that file, in any composition,
+shows the same words. See [Captions](/use/captions/) for transcribing from the Project panel.
+
+## Reading
+
+| On the page | What it is |
+| --- | --- |
+| A speaker's name | Where somebody else starts talking, with the timecode of their first word |
+| A word | What a clip says, where it says it |
+| A grey word with a dashed line under it | A filler word |
+| A word with a dotted line under it | A word the speech model was unsure of |
+| A short grey bar | A **pause**, as long as the silence is |
+| A line with a length on it | A **break**: a stretch with no transcribed speech, such as b-roll or music |
+| A thin upright line | An edit point between two clips |
+
+The word the playhead is on is lit. With **Follow** on, the page keeps that word in view
+while the composition plays. Scrolling the page stops following until playback starts again.
+
+Only what is heard is shown: a muted track, a silenced clip or a stream the transcript did not
+come from says nothing. Words on two tracks at once are shown once, from the track that heard
+them best. A [multicam](/use/multicam/) clip says what its own angle says.
+
+## Selecting
+
+Click a word to put the playhead on it. Drag across words to select them, `Shift`+click to
+extend, double-click for a word and triple-click for a paragraph. `Ctrl`+drag adds another
+stretch. The arrow keys move a word or a line at a time, and `Shift` with them extends.
+`Ctrl`+`A` selects everything and `Esc` lets go of it.
+
+Selected words are drawn as a band across the Cut timeline, and their clips are picked
+there.
+
+## Editing
+
+| Key | What it does |
+| --- | --- |
+| `Delete`, `Backspace`, `'` | Takes the selected words out and closes the gap. With nothing selected, `Backspace` takes the word before the caret and `Delete` the word after |
+| `;` | Takes the selected words out and leaves the gap |
+| `Ctrl`+`X`, `Ctrl`+`C`, `Ctrl`+`V` | Cut, copy and paste the words. Paste puts them in at the caret and moves everything after it later |
+| Drag | Moves the selected words to where they are dropped. `Alt`+drag copies them |
+| `Enter`, `F2` | Corrects the selected words. Only the text changes, never the cut |
+| `X` | Makes the selected words the work area |
+
+A cut takes the same stretch from every unlocked track, so picture, sound, music and b-roll
+stay together, and moves the layers after it as [a ripple](/use/cutting/#what-a-ripple-moves)
+does. A locked track is left as it is. A footage layer that is not a Sequence layer becomes
+one in the same step. Each edit is one undo step.
+
+A cut falls in the silence between two words, on a whole frame. A sound clip's new end gets
+a 2 ms fade.
+
+Right-click the words for the same commands, **Speaker ▸** to say who says them, **Select
+paragraph** and **Copy as text**. **··· ▸ Copy all as text** copies the whole page.
+
+## Finding
+
+`Ctrl`+`F` searches the page. Matches cross word edges, and case and punctuation are
+ignored. The results bar shows how many there are: `F3` and `Shift`+`F3`, or `Enter` and
+`Shift`+`Enter`, go to the next and previous one. **Delete**, **Delete all** and **Select
+all** act on them, and **Replace** and **Replace all** correct the text of the matches that
+are whole words.
+
+### Filler words
+
+`Ctrl`+`Shift`+`F` lists the filler words.
+
+| Kind | What it finds |
+| --- | --- |
+| **Hesitations** | *um*, *uh*, *er* and the like, and sounds the speech model heard but did not write |
+| **Phrases** | *you know*, *I mean*, *like* and the like, when set off by a comma or a pause |
+| **Repeats** | A word, or two words, said twice in a row: the first time |
+| **Retakes** | A sentence one speaker starts again within 30 s: the earlier attempt |
+
+**Skip tight** leaves out a filler word that runs straight into the words beside it.
+**Keep** passes over one. **Delete** and **Delete all** take them out.
+
+### Pauses
+
+`Ctrl`+`Alt`+`P` lists the pauses longer than **Longer than**. **Shorten** and **Shorten all**
+take out the middle of each, leaving **Shorten to** of the silence. A break is never shortened
+this way.
+
+**Extract** and **Lift** at the end of the results bar choose whether **Delete** and **Delete
+all** close the gaps.
+
+## Removed words
+
+**··· ▸ Show removed words** shows the words a delete took out, struck through, at the edit
+point. `R`, or **Restore** on their menu, puts the selected ones back, on every unlocked
+track the delete cut there. Only words cut out between two clips of the same file show.
+
+## Speakers
+
+A speaker is **Speaker 1**, **Speaker 2** and so on until renamed. A speaker's name is
+double-clicked to rename it, everywhere it is used. **Speaker ▸** on the
+words' menu gives them to someone else, or to a **New speaker**. **··· ▸ Speakers** lists
+everyone, and **Find** on a row steps through what they say.
+
+## From the source
+
+**Source** at the left of the strip shows the transcript of the footage in the
+[source view](/use/cutting/#the-source-view). Select words there, then:
+
+| Key | What it does |
+| --- | --- |
+| `,` | Inserts them at the playhead, and moves everything after it later |
+| `.` | Overwrites with them at the playhead |
+
+On the words' right-click menu, **Append** puts them after the last clip, and **New
+composition from selection** makes a composition of them. Several stretches selected with
+`Ctrl`+drag go down one after another, in the order they are said, and the strip shows how
+long they come to.
+
+## Assembling from a script
+
+**··· ▸ Assemble from script…** takes a script, typed in or opened from a `.txt`, `.md` or
+Final Draft `.fdx` file, and the footage to search, and finds where each line is said. Each line
+becomes a clip, in the script's order, in a new composition or at the playhead. A line said
+more than once is placed from the take that matches best, and the other takes go into the
+clip as its takes, so `T` switches between them. Lines not found are listed.
+
+## Exporting
+
+**··· ▸ Export transcript…** writes the words to a file.
+
+| Format | |
+| --- | --- |
+| **Text** | `.txt` |
+| **Word document** | `.docx` |
+| **Rich text** | `.rtf` |
+| **Markdown** | `.md` |
+| **Web page** | `.html` |
+| **CSV** | `.csv`, one word a row with its times and speaker |
+| **SubRip** | `.srt` subtitles |
+| **WebVTT** | `.vtt` subtitles, with each word's time |
+
+**Speaker names** and **Timecodes** add a name and a timecode at each paragraph. **Filler
+words** keeps them. **Range** is the whole composition, the selection or the work area.
+Removed words are never exported.
+
+## Settings
+
+**··· ▸ Show pauses** shows or hides the pauses, and **··· ▸ Pause length** sets the shortest
+silence shown as one, from 0.1 to 3 s. **··· ▸ Text size**, `Ctrl`+`=` and `Ctrl`+`-`, or
+`Ctrl` with the wheel, size the page. All are kept with your profile.
+
+The panel's keys are rebound under **Transcript panel** on the
+[Shortcuts](/use/settings/#shortcuts) page of Settings.
+
+[Cutting an interview by its words](/tutorials/editing-by-transcript/) goes through it step
+by step.
+
+## Related
+
+- [Cutting](/use/cutting/)
+- [Sequence layers](/use/sequence-layers/)
+- [Captions](/use/captions/)

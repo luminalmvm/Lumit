@@ -12,6 +12,7 @@ lumit-core = { path = "../lumit-core" }
 # After Effects' effects and their controls, converted as importing a
 # project converts them.
 lumit-import = { path = "../lumit-import" }
+lumit-lottie = { path = "../lumit-lottie" }
 lumit-ingress = { path = "../lumit-ingress" }
 # Measures a new text layer so it turns about the middle of its words.
 lumit-text = { path = "../lumit-text" }

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{hundred, is_static_hundred, is_static_zero};
+use super::{hundred, is_default, is_static_hundred, is_static_zero, is_zero};
 use crate::anim::Property;
 
 /// What the selector counts: single letters, or whole words.
@@ -25,13 +25,34 @@ pub enum SelectorBasis {
 /// which is what turns a cascade into a sweep.
 ///
 /// `Smooth` is the ramp eased in and out, so the letters at either end of the
-/// slope barely move and the ones in the middle of it move most.
+/// slope barely move and the ones in the middle of it move most. `Bounce`
+/// overshoots by about a tenth, then settles. Following spoken words, the
+/// shape is how each word changes over the selector's ease.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SelectorShape {
     #[default]
     Square,
     Ramp,
     Smooth,
+    Bounce,
+}
+
+/// What the selector follows: its own range, or the words as they are said.
+///
+/// The spoken modes need the words' times, which only a caption hands in.
+/// Without them they reach no letter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SelectorMode {
+    #[default]
+    Range,
+    /// The word being said.
+    Current,
+    /// Every word said so far.
+    Said,
+    /// The words still to come.
+    Unsaid,
+    /// The words picked out by hand.
+    Emphasis,
 }
 
 /// How a selector picks its letters: by where they come in the words, or by
@@ -120,6 +141,11 @@ pub struct RangeSelector {
     pub basis: SelectorBasis,
     #[serde(default, skip_serializing_if = "is_default_shape")]
     pub shape: SelectorShape,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub mode: SelectorMode,
+    /// Seconds a spoken word takes to change.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub ease: f64,
     /// Range or Proximity. A Proximity selector ignores `start`, `end` and
     /// `offset` and reads the three fields below instead.
     #[serde(default, skip_serializing_if = "is_default_kind")]
@@ -193,6 +219,8 @@ impl Default for RangeSelector {
             offset: Property::zero(),
             basis: SelectorBasis::default(),
             shape: SelectorShape::default(),
+            mode: SelectorMode::default(),
+            ease: 0.0,
             kind: SelectorKind::default(),
             target: None,
             radius: two_hundred(),
@@ -314,6 +342,11 @@ pub(super) fn near_weight(shape: SelectorShape, d: f32, radius: f32) -> f32 {
         SelectorShape::Square => f32::from(u8::from(d <= radius)),
         SelectorShape::Ramp => u,
         SelectorShape::Smooth => u * u * (3.0 - 2.0 * u),
+        SelectorShape::Bounce => {
+            #[allow(clippy::cast_possible_truncation)] // 0 to about 1.1
+            let b = super::spoken::curve(shape, f64::from(u)) as f32;
+            b
+        }
     }
 }
 
@@ -324,14 +357,70 @@ fn weight(shape: SelectorShape, lo: f64, hi: f64, p: f64) -> f32 {
         SelectorShape::Square => f64::from(u8::from(p >= lo && p < hi)),
         // A zero-width ramp is a step, which is the honest limit of the ramp
         // rather than a division by nothing.
-        SelectorShape::Ramp | SelectorShape::Smooth if hi <= lo => f64::from(u8::from(p >= hi)),
-        SelectorShape::Ramp => ((p - lo) / (hi - lo)).clamp(0.0, 1.0),
-        SelectorShape::Smooth => {
-            let u = ((p - lo) / (hi - lo)).clamp(0.0, 1.0);
-            u * u * (3.0 - 2.0 * u)
-        }
+        _ if hi <= lo => f64::from(u8::from(p >= hi)),
+        _ => super::spoken::curve(shape, (p - lo) / (hi - lo)),
     };
     #[allow(clippy::cast_possible_truncation)] // 0–1
     let w = w as f32;
     w
+}
+
+/// Where a Proximity selector measures from: the middle of every character
+/// in the text layer's own pixels, and the targets' anchors there.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Near {
+    /// One per character; `None` for a character with no place, such as a
+    /// line break. Empty when the letters weren't laid out.
+    pub middles: Vec<Option<[f32; 2]>>,
+    pub targets: Vec<(uuid::Uuid, [f32; 2])>,
+}
+
+impl Near {
+    pub(super) fn target(&self, id: Option<uuid::Uuid>) -> Option<[f32; 2]> {
+        let id = id?;
+        self.targets.iter().find(|(t, _)| *t == id).map(|(_, p)| *p)
+    }
+}
+
+/// The places [`super::ports::layer_glyph_xforms`] measures from. Nothing at
+/// all while no animator has a Proximity selector, so a layer without one
+/// costs no layout.
+#[must_use]
+pub fn near_of(
+    doc: &std::sync::Arc<crate::model::Document>,
+    comp: &crate::model::Composition,
+    layer: &crate::model::Layer,
+    document: &crate::model::TextDocument,
+    line: &str,
+    t_comp: f64,
+) -> Near {
+    let mut ids: Vec<uuid::Uuid> = document
+        .animators
+        .iter()
+        .filter(|a| a.selector.kind == SelectorKind::Proximity)
+        .filter_map(|a| a.selector.target)
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() {
+        return Near::default();
+    }
+    #[allow(clippy::cast_possible_truncation)] // px
+    let targets = ids
+        .into_iter()
+        .filter(|id| *id != layer.id)
+        .filter_map(|id| {
+            let target = comp.layers.iter().find(|l| l.id == id)?;
+            let (x, y) = crate::expression::space::anchor_in(doc, comp, target, layer, t_comp)?;
+            Some((id, [x as f32, y as f32]))
+        })
+        .collect();
+    let lt = crate::time::layer_time(t_comp, layer.start_offset.0);
+    Near {
+        middles: super::GLYPH_MIDDLES
+            .get()
+            .map(|middles| middles(layer, document, line, lt))
+            .unwrap_or_default(),
+        targets,
+    }
 }

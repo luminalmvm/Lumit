@@ -29,6 +29,11 @@ export 'files.dart' if (dart.library.js_interop) 'files_web.dart'
 XTypeGroup _projectGroup() =>
     XTypeGroup(label: l10n.fileTypeProject, extensions: const ['lum']);
 
+/// The `.lumt` graphics template type group, which Import adds to the
+/// library.
+XTypeGroup _templateGroup() => XTypeGroup(
+    label: l10n.fileTypeGraphicsTemplate, extensions: const ['lumt']);
+
 /// The extensions the footage filter offers.
 ///
 /// Two lists in one: the containers FFmpeg reads, and every still-image format
@@ -43,7 +48,8 @@ XTypeGroup _projectGroup() =>
 ///
 /// Public because the file picker is no longer the only road in: a folder
 /// dropped on the Project panel is read with this same list, so what a
-/// folder yields and what the dialogue offers cannot drift apart.
+/// folder yields and what the dialogue offers cannot drift apart, Lottie
+/// files aside.
 const List<String> footageExtensions = [
   // Video containers
   'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts',
@@ -61,9 +67,15 @@ const List<String> footageExtensions = [
   'gltf', 'glb', 'fbx', 'obj', 'vdb', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
   'ply', 'stl', 'dae',
 ];
+
+/// What the footage picker offers: the footage, and Lottie files, which
+/// import as a composition. A folder walk leaves these two out, so a `.json`
+/// beside the footage stays where it is.
+const List<String> _pickerExtensions = [...footageExtensions, 'json', 'lottie'];
+
 /// The footage type group.
 XTypeGroup _footageGroup() =>
-    XTypeGroup(label: l10n.fileTypeFootage, extensions: footageExtensions);
+    XTypeGroup(label: l10n.fileTypeFootage, extensions: _pickerExtensions);
 
 /// Everything, offered under the footage group. A file whose extension nobody
 /// listed - a container the machine's own codecs handle, a camera's odd suffix -
@@ -128,15 +140,16 @@ Future<String?> pickProjectSaveLocation(
 
 /// Pick one or more footage files, or an empty list when cancelled. With
 /// [projects] a Lumit project is offered too, which an import brings one
-/// composition in from.
+/// composition in from, and a graphics template, which joins the library.
 Future<List<String>> pickFootage({bool projects = false}) async {
-  final here = await pickFilesHere(
-      l10n.fileTypeFootage, [...footageExtensions, if (projects) 'lum']);
+  final here = await pickFilesHere(l10n.fileTypeFootage,
+      [..._pickerExtensions, if (projects) ...['lum', 'lumt']]);
   if (here != null) return here;
   final files = await openFiles(
     acceptedTypeGroups: [
       _footageGroup(),
       if (projects) _projectGroup(),
+      if (projects) _templateGroup(),
       _anyGroup(),
     ],
   );
@@ -221,6 +234,41 @@ Future<String?> pickFrameSaveLocation(String suggestedName) async {
   return '$path.png';
 }
 
+/// Where to write a grade as a `.cube` LUT, or null when cancelled.
+Future<String?> pickLutSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.fxLut, extensions: const ['cube']),
+    ],
+    suggestedName: '$suggestedName.cube',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.cube')) return path;
+  return '$path.cube';
+}
+
+/// Pick a colour decision (`.cdl`, `.cc` or `.ccc`) to import, or null when
+/// cancelled.
+Future<String?> pickCdlToOpen() async => (await openFile(acceptedTypeGroups: [
+      XTypeGroup(label: l10n.gradeCdl, extensions: const ['cdl', 'cc', 'ccc']),
+    ]))
+        ?.path;
+
+/// Where to export a node as a colour decision, or null when cancelled. A
+/// `.cdl` is written as a decision list, anything else as a `.cc`.
+Future<String?> pickCdlSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.gradeCdl, extensions: const ['cc', 'cdl']),
+    ],
+    suggestedName: '$suggestedName.cc',
+  ))
+      ?.path;
+  if (path == null) return null;
+  final lower = path.toLowerCase();
+  return lower.endsWith('.cc') || lower.endsWith('.cdl') ? path : '$path.cc';
+}
+
 /// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;
@@ -271,6 +319,17 @@ Future<String?> pickScript() async {
 
 /// Pick a program, or null when cancelled.
 Future<String?> pickProgram() async => (await openFile())?.path;
+
+/// Pick a script to assemble a cut from: plain text or Final Draft. Null
+/// when cancelled.
+Future<String?> pickTranscriptScript() async {
+  final file = await openFile(acceptedTypeGroups: [
+    XTypeGroup(
+        label: l10n.transcriptAssembleTitle,
+        extensions: const ['txt', 'md', 'fdx']),
+  ]);
+  return file?.path;
+}
 
 /// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
@@ -438,6 +497,30 @@ Future<String?> pickAeBundle() =>
 Future<String?> pickFolder() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 
+/// Pick a CSV, TSV or JSON file of rows for a graphics template's data, or
+/// null when cancelled.
+Future<String?> pickTemplateData() async =>
+    (await openFile(acceptedTypeGroups: [
+      XTypeGroup(
+          label: l10n.templateDataFileType,
+          extensions: const ['csv', 'tsv', 'tab', 'json']),
+    ]))
+        ?.path;
+
+/// Where to write a starting CSV for a graphics template's data, or null when
+/// cancelled.
+Future<String?> pickTemplateDataSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.templateDataFileType, extensions: const ['csv']),
+    ],
+    suggestedName: '$suggestedName.csv',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.csv')) return path;
+  return '$path.csv';
+}
+
 /// An addon's own description file, the `addon.json` that names what the pack
 /// is and which files belong to it (docs/impl/addons.md §4).
 XTypeGroup _addonGroup() =>
@@ -523,4 +606,70 @@ Future<String?> pickEffectInputFile(
     acceptedTypeGroups: [XTypeGroup(label: label, extensions: extensions)],
   );
   return file?.path;
+}
+
+/// The subtitle files File ▸ Import ▸ Captions… reads.
+XTypeGroup _captionsGroup() => XTypeGroup(
+      label: l10n.fileTypeCaptions,
+      extensions: const [
+        'srt',
+        'vtt',
+        'ttml',
+        'dfxp',
+        'xml',
+        'ass',
+        'ssa',
+        'lrc'
+      ],
+    );
+
+/// Pick a subtitle file to make a caption layer from, or null when cancelled.
+Future<String?> pickCaptionsToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_captionsGroup()]);
+  return file == null ? null : keepPicked(file);
+}
+
+/// Where to write captions as a file ending [extension], or null when
+/// cancelled. In the browser build the file is then given [handOver].
+Future<String?> pickCaptionsSaveLocation(
+    String suggestedName, String extension) async {
+  if (kIsWeb) return pickSaveTarget('$suggestedName.$extension');
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: l10n.fileTypeCaptions, extensions: [extension]),
+    ],
+    suggestedName: '$suggestedName.$extension',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.$extension')) return path;
+  return '$path.$extension';
+}
+
+/// The `.lumlibrary` type group: a zip of library items, which Export writes
+/// and Import takes in.
+XTypeGroup _libraryGroup() =>
+    XTypeGroup(label: l10n.libraryFileType, extensions: const ['lumlibrary']);
+
+/// Pick a library file to import, or null when the dialogue was cancelled.
+Future<String?> pickLibraryToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_libraryGroup()]);
+  return file?.path;
+}
+
+/// Where to write a library file, or null when cancelled.
+Future<String?> pickLibrarySaveLocation() async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [_libraryGroup()],
+    suggestedName: 'library.lumlibrary',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.lumlibrary')) return path;
+  return '$path.lumlibrary';
+}
+
+/// Files to add to the library, of any kind: the library sorts them by
+/// extension. Empty when cancelled.
+Future<List<String>> pickLibraryFiles() async {
+  final files = await openFiles(acceptedTypeGroups: [_anyGroup()]);
+  return droppedPaths(files);
 }

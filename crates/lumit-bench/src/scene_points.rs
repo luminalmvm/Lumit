@@ -99,6 +99,9 @@ fn comp(in_scene: bool) -> Result<(Document, Uuid), String> {
     let c = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -185,6 +188,9 @@ fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

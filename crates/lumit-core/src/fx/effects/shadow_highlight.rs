@@ -202,4 +202,13 @@ impl EffectDef for ShadowHighlightDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::shadow_highlight(rgba, w, h, &ShadowHighlight::read(p).packed());
     }
+
+    // No neighbourhood: each pixel decides by its own brightness.
+    fn apply_cpu_pointwise(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        let packed = cpu::ShadowHighlightParams {
+            radius_px: 0.0,
+            ..ShadowHighlight::read(p).packed()
+        };
+        cpu::shadow_highlight(rgba, w, h, &packed);
+    }
 }

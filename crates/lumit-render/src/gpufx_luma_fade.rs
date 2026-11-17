@@ -27,12 +27,16 @@ impl GpuEffect for LumaFadeFx {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> wgpu::Texture {
-        let l = LumaFade::read(p).packed(p.bool(MATTE_INVERT_ID, false));
+        let l = LumaFade::read(p).packed(p.bool(MATTE_INVERT_ID, false), w, h);
         let op = LumaFadeOp {
             completion: l.completion,
             band: l.band,
             invert: l.invert,
             mix: l.mix,
+            pattern: l.pattern,
+            step: l.step,
+            centre: l.centre,
+            reach: l.reach,
         };
         fx.luma_fade(ctx, tex, w, h, aux.matte(), &op)
     }

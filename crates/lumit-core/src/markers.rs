@@ -80,6 +80,27 @@ impl Marker {
     }
 }
 
+/// Apply [`crate::ops::Op::SetFootageMarkers`], answering its inverse.
+/// Refused on anything but footage. An empty list leaves no entry.
+pub(crate) fn set_on_footage(
+    doc: &mut crate::model::Document,
+    id: Uuid,
+    markers: &[Marker],
+) -> Result<crate::ops::Op, crate::ops::OpError> {
+    if !matches!(doc.item(id), Some(crate::model::ProjectItem::Footage(_))) {
+        return Err(crate::ops::OpError::UnknownItem);
+    }
+    let previous = if markers.is_empty() {
+        doc.footage_markers.remove(&id)
+    } else {
+        doc.footage_markers.insert(id, markers.to_vec())
+    };
+    Ok(crate::ops::Op::SetFootageMarkers {
+        id,
+        markers: previous.unwrap_or_default(),
+    })
+}
+
 /// Merge freshly-detected `beats` into `existing`, replacing only the previous
 /// Beat-kind markers (user and chapter markers are untouched), sorted by time
 /// (docs/impl/beat-detection.md §3, docs/03-DATA-MODEL.md §11).

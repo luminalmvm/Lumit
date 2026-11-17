@@ -11,7 +11,7 @@ import 'package:uuid/uuid.dart';
 part 'export.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// What one output format can and cannot carry. The dialogue asks this
 /// of every format key it offers and disables what the answer refuses.
@@ -131,6 +131,12 @@ void exportQueueCancel({required int id}) =>
 void exportQueueRemove({required int id}) =>
     BridgeLib.instance.api.crateApiExportExportQueueRemove(id: id);
 
+/// Hold the running or waiting item `id` between two frames, or let it go
+/// on. A waiting item that is held is passed over until it is let go.
+void exportQueuePause({required int id, required bool paused}) =>
+    BridgeLib.instance.api
+        .crateApiExportExportQueuePause(id: id, paused: paused);
+
 /// Move one waiting item to `index` in the queue — the drag the queue window's
 /// list offers, so the order work runs in is the order it is looked at in.
 ///
@@ -162,15 +168,46 @@ void exportQueueUpdate(
 
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
-/// sequence the file asked about is frame one.
-bool exportPathTaken({required String path, required String codec}) =>
-    BridgeLib.instance.api
-        .crateApiExportExportPathTaken(path: path, codec: codec);
+/// sequence the file asked about is frame one. The caption files `captions`
+/// writes beside it count too, and so do the files `also` writes.
+bool exportPathTaken(
+        {required String path,
+        required String codec,
+        required BridgeCaptionsOut captions,
+        required List<BridgeExportAlso> also}) =>
+    BridgeLib.instance.api.crateApiExportExportPathTaken(
+        path: path, codec: codec, captions: captions, also: also);
+
+/// Queue an item that has run, or failed, again exactly as it was: the same
+/// snapshot, and for a row of a graphics template the same row. Answers the
+/// new item's id, or `None` once the item has gone.
+int? exportQueueAgain({required int id}) =>
+    BridgeLib.instance.api.crateApiExportExportQueueAgain(id: id);
 
 /// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
-String exportFreePath({required String path, required String codec}) =>
-    BridgeLib.instance.api
-        .crateApiExportExportFreePath(path: path, codec: codec);
+String exportFreePath(
+        {required String path,
+        required String codec,
+        required BridgeCaptionsOut captions,
+        required List<BridgeExportAlso> also}) =>
+    BridgeLib.instance.api.crateApiExportExportFreePath(
+        path: path, codec: codec, captions: captions, also: also);
+
+/// What an export does with the composition's own caption layers.
+enum BridgeCaptionsOut {
+  /// Drawn into the picture.
+  burn,
+
+  /// Left out of the picture and written beside the file as SubRip.
+  srt,
+
+  /// Left out of the picture and written beside the file as WebVTT.
+  vtt,
+
+  /// Left out of the picture and carried inside the file as subtitles.
+  embed,
+  ;
+}
 
 /// The crop an export actually applies, and the frame it leaves — the answer
 /// `crop_for` gives for the typed insets and the Viewer's region together.
@@ -216,6 +253,29 @@ class BridgeCrop {
           right == other.right &&
           width == other.width &&
           height == other.height;
+}
+
+/// One more file an export writes beside its own: its format key, and what
+/// is added to the chosen file's name before its extension.
+class BridgeExportAlso {
+  final String codec;
+  final String suffix;
+
+  const BridgeExportAlso({
+    required this.codec,
+    required this.suffix,
+  });
+
+  @override
+  int get hashCode => codec.hashCode ^ suffix.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExportAlso &&
+          runtimeType == other.runtimeType &&
+          codec == other.codec &&
+          suffix == other.suffix;
 }
 
 /// What the export dialogue opens on when nothing else has been said —
@@ -275,6 +335,32 @@ class BridgeExportDefaults {
           filenameTemplate == other.filenameTemplate &&
           destination == other.destination &&
           folder == other.folder;
+}
+
+/// The loudness an export is made to: the mix is measured, the master moved
+/// to it, and the limiter holds the true peak.
+class BridgeExportLoudness {
+  /// Integrated loudness, in LUFS.
+  final double lufs;
+
+  /// The highest true peak, in dBTP.
+  final double truePeakDb;
+
+  const BridgeExportLoudness({
+    required this.lufs,
+    required this.truePeakDb,
+  });
+
+  @override
+  int get hashCode => lufs.hashCode ^ truePeakDb.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExportLoudness &&
+          runtimeType == other.runtimeType &&
+          lufs == other.lufs &&
+          truePeakDb == other.truePeakDb;
 }
 
 /// What a delivery preset fills the export dialogue with.
@@ -353,6 +439,11 @@ class BridgeExportPresetEntry {
 class BridgeExportQueueItem {
   final int id;
 
+  /// The run of a graphics template's rows this item was queued with, and
+  /// the template's name. The queue folds a run under one heading.
+  final int? group;
+  final String groupName;
+
   /// The composition it was made from. It may have been deleted since.
   final UuidValue comp;
   final String compName;
@@ -373,8 +464,17 @@ class BridgeExportQueueItem {
   final int rangeEndFrame;
   final BridgeExportQueueState state;
 
+  /// The remote export this item does for another computer, empty for one of
+  /// this computer's own. Its other details are in `remote_jobs`.
+  final String job;
+
+  /// The files written beside `path`, in full.
+  final List<String> also;
+
   const BridgeExportQueueItem({
     required this.id,
+    this.group,
+    required this.groupName,
     required this.comp,
     required this.compName,
     required this.path,
@@ -383,11 +483,15 @@ class BridgeExportQueueItem {
     required this.rangeStartFrame,
     required this.rangeEndFrame,
     required this.state,
+    required this.job,
+    required this.also,
   });
 
   @override
   int get hashCode =>
       id.hashCode ^
+      group.hashCode ^
+      groupName.hashCode ^
       comp.hashCode ^
       compName.hashCode ^
       path.hashCode ^
@@ -395,7 +499,9 @@ class BridgeExportQueueItem {
       codec.hashCode ^
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
-      state.hashCode;
+      state.hashCode ^
+      job.hashCode ^
+      also.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -403,6 +509,8 @@ class BridgeExportQueueItem {
       other is BridgeExportQueueItem &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          group == other.group &&
+          groupName == other.groupName &&
           comp == other.comp &&
           compName == other.compName &&
           path == other.path &&
@@ -410,7 +518,9 @@ class BridgeExportQueueItem {
           codec == other.codec &&
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&
-          state == other.state;
+          state == other.state &&
+          job == other.job &&
+          also == other.also;
 }
 
 @freezed
@@ -428,12 +538,15 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
 
     /// The encoder actually chosen, which may not be the one asked for.
     required String encoder,
+
+    /// Held by someone between two frames. It goes on from the next frame.
+    required bool paused,
   }) = BridgeExportQueueState_Running;
   const factory BridgeExportQueueState.done({
     /// How long it took to export, in whole seconds.
     required int seconds,
 
-    /// The file's size, zero for an image sequence.
+    /// The size of the files written, an image sequence counting as none.
     required int bytes,
   }) = BridgeExportQueueState_Done;
   const factory BridgeExportQueueState.failed({
@@ -601,6 +714,19 @@ class BridgeExportSpec {
   /// How many times a GIF plays, `0` for forever.
   final int gifPlays;
 
+  /// What happens to the composition's own caption layers.
+  final BridgeCaptionsOut captions;
+
+  /// The loudness the sound is made to, or none for the mix as it stands.
+  final BridgeExportLoudness? loudness;
+
+  /// Each top-level bus also written to a file of its own beside this one.
+  final bool stems;
+
+  /// Other files written beside this one from the same frames, at most
+  /// three: each a video or still format and a suffix for its name.
+  final List<BridgeExportAlso> also;
+
   const BridgeExportSpec({
     required this.preset,
     required this.codec,
@@ -643,6 +769,10 @@ class BridgeExportSpec {
     this.gifDither = 0,
     this.gifPalettePerFrame = false,
     this.gifPlays = 0,
+    this.captions = BridgeCaptionsOut.burn,
+    this.loudness,
+    this.stems = false,
+    this.also = const [],
   });
 
   /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
@@ -692,7 +822,11 @@ class BridgeExportSpec {
       openFolder.hashCode ^
       gifDither.hashCode ^
       gifPalettePerFrame.hashCode ^
-      gifPlays.hashCode;
+      gifPlays.hashCode ^
+      captions.hashCode ^
+      loudness.hashCode ^
+      stems.hashCode ^
+      also.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -739,7 +873,11 @@ class BridgeExportSpec {
           openFolder == other.openFolder &&
           gifDither == other.gifDither &&
           gifPalettePerFrame == other.gifPalettePerFrame &&
-          gifPlays == other.gifPlays;
+          gifPlays == other.gifPlays &&
+          captions == other.captions &&
+          loudness == other.loudness &&
+          stems == other.stems &&
+          also == other.also;
 }
 
 @freezed
@@ -826,6 +964,13 @@ class BridgeFormatCaps {
   /// arrived, exactly as a codec name is.
   final List<String> colourSpaces;
 
+  /// The fastest the file plays, frames a second: 50 for a GIF, whose
+  /// frames count in hundredths of a second. Zero is no limit.
+  final int maxFps;
+
+  /// Can carry captions inside the file as subtitles.
+  final bool subtitles;
+
   const BridgeFormatCaps({
     required this.video,
     required this.audio,
@@ -838,6 +983,8 @@ class BridgeFormatCaps {
     this.audio24Bit = false,
     required this.metadata,
     this.colourSpaces = const [],
+    this.maxFps = 0,
+    this.subtitles = false,
   });
 
   static Future<BridgeFormatCaps> default_() =>
@@ -855,7 +1002,9 @@ class BridgeFormatCaps {
       audioBitRate.hashCode ^
       audio24Bit.hashCode ^
       metadata.hashCode ^
-      colourSpaces.hashCode;
+      colourSpaces.hashCode ^
+      maxFps.hashCode ^
+      subtitles.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -872,7 +1021,9 @@ class BridgeFormatCaps {
           audioBitRate == other.audioBitRate &&
           audio24Bit == other.audio24Bit &&
           metadata == other.metadata &&
-          colourSpaces == other.colourSpaces;
+          colourSpaces == other.colourSpaces &&
+          maxFps == other.maxFps &&
+          subtitles == other.subtitles;
 }
 
 /// One key/value pair written into the container.

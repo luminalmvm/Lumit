@@ -11,6 +11,12 @@ use crate::time::{CompTime, Duration, FrameRate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod folders;
+mod guards;
+mod locks;
+mod mixer;
+mod reshape;
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum OpError {
     #[error("unknown item")]
@@ -54,6 +60,10 @@ pub enum OpError {
     /// (docs/impl/camera.md §1).
     #[error("the property is not on this layer")]
     PropNotOnLayer,
+    /// [`Op::SetLayerRoutes`] or [`Op::SetLayerDuck`] would send sound
+    /// somewhere it cannot go ([`crate::routes::check_routes`]).
+    #[error("{0}")]
+    InvalidRoute(#[from] crate::routes::RouteError),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -101,6 +111,17 @@ pub enum Op {
     SetFootageTrim {
         id: Uuid,
         trim: Option<Box<crate::model::FootageTrim>>,
+    },
+    /// Land, correct or take away a footage item's transcript.
+    EditTranscript {
+        item: Uuid,
+        edit: Box<crate::transcript::TranscriptEdit>,
+    },
+    /// A footage item's markers, the whole list. Refused on anything but
+    /// footage. An empty list leaves no entry.
+    SetFootageMarkers {
+        id: Uuid,
+        markers: Vec<crate::markers::Marker>,
     },
     /// Flip one item's *use proxy* switch, leaving the proxy attached. Refuses
     /// on an item with no proxy: a switch on nothing would sit in the document
@@ -246,6 +267,12 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         inputs: Option<Box<crate::model::EffectInstance>>,
+    },
+    /// Replace a layer's stored grade versions ([`crate::grade::versions`]).
+    SetLayerGradeVersions {
+        comp: Uuid,
+        layer: Uuid,
+        versions: Option<Box<crate::grade::versions::GradeVersions>>,
     },
     /// Replace a layer's whole **driver graph**: its drivers, its wires and
     /// its canvas positions.
@@ -491,6 +518,12 @@ pub enum Op {
         layer: Uuid,
         document: crate::model::TextDocument,
     },
+    /// Change a Text layer's captions ([`crate::captions::CaptionsEdit`]).
+    EditCaptions {
+        comp: Uuid,
+        layer: Uuid,
+        edit: Box<crate::captions::CaptionsEdit>,
+    },
     SetWorkArea {
         comp: Uuid,
         work_area: Option<(CompTime, CompTime)>,
@@ -667,6 +700,31 @@ pub enum Op {
         layer: Uuid,
         streams: crate::model::AudioStreams,
     },
+    /// Set a layer's **Gain**, its own sound in dB before its rack and Volume.
+    SetLayerAudioGain {
+        comp: Uuid,
+        layer: Uuid,
+        db: f64,
+    },
+    /// Choose how a layer's faders write their keys while the comp plays.
+    SetLayerAutomation {
+        comp: Uuid,
+        layer: Uuid,
+        mode: crate::mixer::AutomationMode,
+    },
+    /// Toggle a layer's solo safe switch.
+    SetLayerSoloSafe {
+        comp: Uuid,
+        layer: Uuid,
+        solo_safe: bool,
+    },
+    /// Set or clear what a layer lowers behind. Refused, changing nothing,
+    /// where it would make a circle ([`crate::routes::check_routes`]).
+    SetLayerDuck {
+        comp: Uuid,
+        layer: Uuid,
+        duck: Option<crate::mixer::Duck>,
+    },
     /// Move a composition's **master fader** — one gain stage on the summed
     /// mix, ahead of the safety limiter (docs/09 §3.1). dB; 0 is
     /// unity, −100 and below is exact silence.
@@ -676,6 +734,21 @@ pub enum Op {
     SetMasterVolume {
         comp: Uuid,
         db: f64,
+    },
+    /// Set or clear the master fader's keys, in comp time.
+    SetMasterAutomation {
+        comp: Uuid,
+        keys: Option<Animation>,
+    },
+    /// Choose how the master fader writes its keys.
+    SetMasterAutomationMode {
+        comp: Uuid,
+        mode: crate::mixer::AutomationMode,
+    },
+    /// Set or clear the loudness a comp's mix is made for.
+    SetLoudnessTarget {
+        comp: Uuid,
+        target: Option<crate::mixer::LoudnessTarget>,
     },
     /// Set or clear a composition's **mix mark**
     /// (docs/impl/audio-timeline.md §2): the Audio timeline sets it the first
@@ -790,6 +863,14 @@ pub enum Op {
     SetProjectSwatches {
         swatches: Vec<crate::model::Swatch>,
     },
+    /// Replace the grade groups whole ([`crate::grade::groups`]).
+    SetGradeGroups {
+        groups: Vec<crate::grade::groups::GradeGroup>,
+    },
+    /// Replace the grade memories whole ([`crate::grade::memories`]).
+    SetGradeMemories {
+        memories: Vec<crate::grade::memories::GradeMemory>,
+    },
     /// Replace the project's notes whole. It changes no pixel.
     SetNotes {
         notes: String,
@@ -865,6 +946,25 @@ pub enum Op {
         comp: Uuid,
         start: CompTime,
     },
+    /// Make a composition a multicam comp, change the angles its clips start
+    /// on, or make it an ordinary comp again (`None`).
+    SetCompMulticam {
+        comp: Uuid,
+        multicam: Option<Box<crate::multicam::Multicam>>,
+    },
+    /// Set a composition's graphics template: its controls, its poster and
+    /// where its intro ends and its outro starts. `None` takes it away, and
+    /// the composition is an ordinary one again.
+    SetCompTemplate {
+        comp: Uuid,
+        template: Option<Box<crate::template::Template>>,
+    },
+    /// Link data to a composition's graphics template, change what its
+    /// columns feed, or take it away (`None`).
+    SetCompTemplateData {
+        comp: Uuid,
+        data: Option<Box<crate::template::feed::Data>>,
+    },
     TrimCompToWorkArea {
         comp: Uuid,
     },
@@ -926,6 +1026,7 @@ impl Op {
             Op::SetItemLabel { .. } => "Set item colour",
             Op::SetItemComment { .. } => "Set item comment",
             Op::SetFootageTrim { .. } => "Mark In and Out",
+            Op::EditTranscript { edit, .. } => edit.name(),
             Op::AddLayer { .. } => "Add layer",
             Op::RemoveLayer { .. } => "Delete layer",
             Op::ReorderLayer { .. } => "Move layer",
@@ -938,6 +1039,7 @@ impl Op {
             Op::SetLayerEffects { .. } => "Edit effects",
             Op::SetLayerStyles { .. } => "Edit layer styles",
             Op::SetLayerGraphInputs { .. } => "Edit node graph inputs",
+            Op::SetLayerGradeVersions { .. } => "Edit grade versions",
             Op::SetLayerGraph { .. } => "Edit drivers",
             Op::SetLayerFx { .. } => "Fx switch",
             Op::SetLayerThreeD { .. } => "3D switch",
@@ -968,6 +1070,7 @@ impl Op {
             Op::SetCompMotionBlur { .. } => "Composition motion blur",
             Op::SetCompBackground { .. } => "Composition background",
             Op::SetTextDocument { .. } => "Edit text",
+            Op::EditCaptions { edit, .. } => edit.name(),
             Op::SetWorkArea { .. } => "Set work area",
             Op::SetCompMarkers { .. } => "Edit composition markers",
             Op::SetLayerMarkers { .. } => "Edit layer markers",
@@ -989,6 +1092,13 @@ impl Op {
             Op::SetLayerRoutes { .. } => "Edit routing",
             Op::SetLayerAudioStreams { .. } => "Set audio streams",
             Op::SetMasterVolume { .. } => "Move master fader",
+            Op::SetLayerAudioGain { .. } => "Edit gain",
+            Op::SetLayerAutomation { .. } => "Set automation mode",
+            Op::SetLayerSoloSafe { .. } => "Solo safe switch",
+            Op::SetLayerDuck { .. } => "Edit lower behind",
+            Op::SetMasterAutomation { .. } => "Edit master automation",
+            Op::SetMasterAutomationMode { .. } => "Set master automation mode",
+            Op::SetLoudnessTarget { .. } => "Set loudness target",
             Op::SetSoundMix { .. } => "Sound mix",
             Op::SetBeatGrid { .. } => "Set beat grid",
             Op::SetRetimeProperty { .. } => "Edit Retime",
@@ -1000,6 +1110,10 @@ impl Op {
             Op::SetColourDepth { .. } => "Set colour depth",
             Op::SetGraphRoom { .. } => "Set node graph overscan",
             Op::SetProjectSwatches { .. } => "Edit swatches",
+            // Its own commands name their steps, so this is what an effect
+            // edit in a group's grade reads as.
+            Op::SetGradeGroups { .. } => "Edit effects",
+            Op::SetGradeMemories { .. } => "Store memory",
             Op::SetNotes { .. } => "Edit notes",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"
@@ -1010,6 +1124,10 @@ impl Op {
             Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
+            Op::SetCompMulticam { .. } => "Set multicam",
+            Op::SetCompTemplate { .. } => "Edit controls",
+            Op::SetCompTemplateData { .. } => "Link data",
+            Op::SetFootageMarkers { .. } => "Edit footage markers",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
             // Unreachable: the loop above leaves no batch behind.
@@ -1022,152 +1140,6 @@ impl Op {
 pub enum AutoFolderKind {
     Solids,
     Compositions,
-}
-
-/// Apply `op` to `doc`, returning the exact inverse operation.
-/// The `(comp, layer)` a lock would protect this op from, or `None` when the
-/// lock has nothing to say about it.
-///
-/// **Lock protects the work, not the housekeeping.** A locked layer refuses
-/// every edit to what it *is* — its transform, effects, masks, paint, art,
-/// text, clips, markers, blend, matte, parent, retime, volume, switches, its
-/// span, its place in the stack and its existence. It still accepts the three
-/// that are about the Timeline's own bookkeeping rather than the composition:
-/// the lock itself (or it could never be undone), **shy** (a filter on the
-/// list, which changes no pixel and no timing) and the **label** colour.
-///
-/// Ops that name no layer — a comp setting, a project item, a folder — are not
-/// the lock's business and answer `None`.
-#[must_use]
-fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
-    match op {
-        // The three a locked layer still accepts.
-        Op::SetLayerLocked { .. } | Op::SetLayerShy { .. } | Op::SetLayerLabel { .. } => None,
-
-        Op::RemoveLayer { comp, layer }
-        | Op::ReorderLayer { comp, layer, .. }
-        | Op::SetLayerSpan { comp, layer, .. }
-        | Op::RenameLayer { comp, layer, .. }
-        | Op::SetLayerMasks { comp, layer, .. }
-        | Op::SetLayerPaint { comp, layer, .. }
-        | Op::SetLayerPuppet { comp, layer, .. }
-        | Op::SetShapeContents { comp, layer, .. }
-        | Op::SetLayerEffects { comp, layer, .. }
-        | Op::SetLayerStyles { comp, layer, .. }
-        | Op::SetLayerGraphInputs { comp, layer, .. }
-        | Op::SetLayerGraph { comp, layer, .. }
-        | Op::SetLayerFx { comp, layer, .. }
-        | Op::SetLayerThreeD { comp, layer, .. }
-        | Op::SetSequenceClips { comp, layer, .. }
-        | Op::SetLayerKind { comp, layer, .. }
-        | Op::SetLayerOrient { comp, layer, .. }
-        | Op::SetLayerAdjustment { comp, layer, .. }
-        | Op::SetLayerPitchFollowsSpeed { comp, layer, .. }
-        | Op::SetLayerAudible { comp, layer, .. }
-        | Op::SetLayerVisible { comp, layer, .. }
-        | Op::SetLayerSolo { comp, layer, .. }
-        | Op::SetLayerGuide { comp, layer, .. }
-        | Op::SetLayerMotionBlur { comp, layer, .. }
-        | Op::SetLayerAcceptsLights { comp, layer, .. }
-        | Op::SetLayerCollapse { comp, layer, .. }
-        | Op::SetTextDocument { comp, layer, .. }
-        | Op::SetLayerMarkers { comp, layer, .. }
-        | Op::SetLayerBlend { comp, layer, .. }
-        | Op::SetLayerMatte { comp, layer, .. }
-        | Op::SetLayerParent { comp, layer, .. }
-        | Op::SetTransformProperty { comp, layer, .. }
-        | Op::SetTransformExpressionSlot { comp, layer, .. }
-        | Op::SetTransformAxisMode { comp, layer, .. }
-        | Op::SetRotationOrder { comp, layer, .. }
-        | Op::SetCameraZoom { comp, layer, .. }
-        | Op::SetCameraSettings { comp, layer, .. }
-        | Op::SetLightSettings { comp, layer, .. }
-        | Op::SetMaterialSettings { comp, layer, .. }
-        | Op::SetLayerGeometry { comp, layer, .. }
-        | Op::SetCameraSolveLink { comp, layer, .. }
-        | Op::SetLayerVolume { comp, layer, .. }
-        | Op::SetLayerPan { comp, layer, .. }
-        | Op::SetLayerRoutes { comp, layer, .. }
-        | Op::SetLayerAudioStreams { comp, layer, .. }
-        | Op::SetRetimeProperty { comp, layer, .. }
-        | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
-
-        // Everything else names no layer to lock: comp settings, project items,
-        // folders, and `Batch`, whose members are each guarded on their own way
-        // through `apply`.
-        _ => None,
-    }
-}
-
-/// The composition an op edits **the layers of**, or `None` when the op has
-/// nothing to do with a layer stack.
-///
-/// **A node graph has no layers, and the engine says so** (docs/impl/
-/// node-graph-comp.md §1.1). One guard beside the lock's covers every op that
-/// adds, removes, reorders or edits a layer or a group of them, so a present or
-/// future layer op cannot forget to check, and a `Batch` is covered through its
-/// members.
-///
-/// The comp-wide settings are deliberately not here: size, rate, duration, the
-/// work area, a trim, a crop, markers, motion blur and the master fader are all
-/// legal on a node graph, because a node graph is a composition.
-#[must_use]
-fn comp_guards(op: &Op) -> Option<Uuid> {
-    match op {
-        Op::AddLayer { comp, .. }
-        | Op::RemoveLayer { comp, .. }
-        | Op::ReorderLayer { comp, .. }
-        | Op::SetLayerSpan { comp, .. }
-        | Op::RenameLayer { comp, .. }
-        | Op::SetLayerMasks { comp, .. }
-        | Op::SetLayerPaint { comp, .. }
-        | Op::SetLayerPuppet { comp, .. }
-        | Op::SetShapeContents { comp, .. }
-        | Op::SetLayerEffects { comp, .. }
-        | Op::SetLayerStyles { comp, .. }
-        | Op::SetLayerGraphInputs { comp, .. }
-        | Op::SetLayerGraph { comp, .. }
-        | Op::SetLayerFx { comp, .. }
-        | Op::SetLayerThreeD { comp, .. }
-        | Op::SetSequenceClips { comp, .. }
-        | Op::SetLayerKind { comp, .. }
-        | Op::SetLayerOrient { comp, .. }
-        | Op::SetLayerAdjustment { comp, .. }
-        | Op::SetLayerPitchFollowsSpeed { comp, .. }
-        | Op::SetLayerAudible { comp, .. }
-        | Op::SetLayerVisible { comp, .. }
-        | Op::SetLayerSolo { comp, .. }
-        | Op::SetLayerMotionBlur { comp, .. }
-        | Op::SetLayerAcceptsLights { comp, .. }
-        | Op::SetLayerShy { comp, .. }
-        | Op::SetLayerGuide { comp, .. }
-        | Op::SetLayerLocked { comp, .. }
-        | Op::SetLayerLabel { comp, .. }
-        | Op::SetLayerCollapse { comp, .. }
-        | Op::SetTextDocument { comp, .. }
-        | Op::SetLayerMarkers { comp, .. }
-        | Op::SetLayerBlend { comp, .. }
-        | Op::SetLayerMatte { comp, .. }
-        | Op::SetLayerParent { comp, .. }
-        | Op::SetTransformProperty { comp, .. }
-        | Op::SetTransformExpressionSlot { comp, .. }
-        | Op::SetTransformAxisMode { comp, .. }
-        | Op::SetRotationOrder { comp, .. }
-        | Op::SetCameraZoom { comp, .. }
-        | Op::SetCameraSolveLink { comp, .. }
-        | Op::SetLayerVolume { comp, .. }
-        | Op::SetLayerPan { comp, .. }
-        | Op::SetLayerRoutes { comp, .. }
-        | Op::SetLayerAudioStreams { comp, .. }
-        | Op::SetRetimeProperty { comp, .. }
-        | Op::SetLayerInterpolation { comp, .. }
-        | Op::GroupLayers { comp, .. }
-        | Op::UngroupLayers { comp, .. }
-        | Op::SetGroupName { comp, .. }
-        | Op::SetGroupLabel { comp, .. }
-        | Op::SetGroupEffects { comp, .. } => Some(*comp),
-        _ => None,
-    }
 }
 
 /// Whether `comp` is a node graph, and so holds boxes instead of layers.
@@ -1198,7 +1170,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     // A `Batch` is guarded by its members: each goes through here on its way
     // in, and a refusal rolls the whole batch back, so a batch is still all or
     // nothing.
-    if let Some((comp, layer)) = lock_guards(op) {
+    if let Some((comp, layer)) = locks::lock_guards(op) {
         if is_locked(doc, comp, layer) {
             return Err(OpError::LayerLocked);
         }
@@ -1206,7 +1178,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     // And a node graph has no layers to edit, by the same road and for the
     // same reason: one guard here covers every layer op there is and every one
     // there will be.
-    if let Some(comp) = comp_guards(op) {
+    if let Some(comp) = guards::comp_guards(op) {
         if is_node_graph(doc, comp) {
             return Err(OpError::CompIsNodeGraph);
         }
@@ -1305,6 +1277,8 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 name: previous,
             })
         }
+        Op::EditTranscript { item, edit } => crate::transcript::apply(doc, *item, edit),
+        Op::EditCaptions { comp, layer, edit } => crate::captions::apply(doc, *comp, *layer, edit),
         Op::SetFootageTrim { id, trim } => {
             if !matches!(doc.item(*id), Some(crate::model::ProjectItem::Footage(_))) {
                 return Err(OpError::UnknownItem);
@@ -1601,6 +1575,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 inputs: previous.map(Box::new),
+            })
+        }
+        Op::SetLayerGradeVersions {
+            comp,
+            layer,
+            versions,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.grade_versions, versions.as_deref().cloned());
+            Ok(Op::SetLayerGradeVersions {
+                comp: *comp,
+                layer: *layer,
+                versions: previous.map(Box::new),
             })
         }
         Op::SetLayerGraph { comp, layer, graph } => {
@@ -2056,7 +2048,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let crate::model::LayerKind::Text { document: current } = &mut l.kind else {
                 return Err(OpError::UnknownLayer);
             };
-            let previous = std::mem::replace(current, document.clone());
+            // Captions stay as they are: only EditCaptions changes them, so a
+            // restyle never carries, or journals, every cue.
+            let captions = current.captions.clone();
+            let mut previous = std::mem::replace(current, document.clone());
+            current.captions = captions;
+            previous.captions = None;
             Ok(Op::SetTextDocument {
                 comp: *comp,
                 layer: *layer,
@@ -2474,6 +2471,13 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             routes,
         } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let duck = c
+                .layers
+                .iter()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?
+                .duck;
+            crate::routes::check_routes(c, *layer, routes, duck.as_ref())?;
             let l = c
                 .layers
                 .iter_mut()
@@ -2520,6 +2524,13 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 on: previous,
             })
         }
+        Op::SetLayerAudioGain { .. }
+        | Op::SetLayerAutomation { .. }
+        | Op::SetLayerSoloSafe { .. }
+        | Op::SetLayerDuck { .. }
+        | Op::SetMasterAutomation { .. }
+        | Op::SetMasterAutomationMode { .. }
+        | Op::SetLoudnessTarget { .. } => mixer::apply(doc, op),
         Op::SetBeatGrid { comp, grid } => {
             // A grid with no tempo in it is no grid: refused rather than
             // stored, so every held grid can be divided by.
@@ -2629,6 +2640,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.swatches, swatches.clone());
             Ok(Op::SetProjectSwatches { swatches: previous })
         }
+        Op::SetGradeGroups { groups } => Ok(Op::SetGradeGroups {
+            groups: std::mem::replace(&mut doc.grade_groups, groups.clone()),
+        }),
+        Op::SetGradeMemories { memories } => Ok(Op::SetGradeMemories {
+            memories: std::mem::replace(&mut doc.grade_memories, memories.clone()),
+        }),
         Op::SetNotes { notes } => {
             let previous = std::mem::replace(&mut doc.notes, notes.clone());
             Ok(Op::SetNotes { notes: previous })
@@ -2715,8 +2732,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 start: previous,
             })
         }
+        Op::SetCompMulticam { comp, multicam } => crate::multicam::set_mark(doc, *comp, multicam),
+        Op::SetCompTemplate { comp, template } => {
+            crate::template::set_template(doc, *comp, template)
+        }
+        Op::SetCompTemplateData { comp, data } => crate::template::set_data(doc, *comp, data),
+        Op::SetFootageMarkers { id, markers } => crate::markers::set_on_footage(doc, *id, markers),
         Op::TrimCompToWorkArea { comp } => {
-            let batch = trim_comp_to_work_area(doc, *comp)?;
+            let batch = reshape::trim_comp_to_work_area(doc, *comp)?;
             apply(doc, &batch)
         }
         Op::CropCompToRegion {
@@ -2726,7 +2749,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             width,
             height,
         } => {
-            let batch = crop_comp_to_region(doc, *comp, *x, *y, *width, *height)?;
+            let batch = reshape::crop_comp_to_region(doc, *comp, *x, *y, *width, *height)?;
             apply(doc, &batch)
         }
         Op::SetSolidDef {
@@ -2764,178 +2787,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             })
         }
     }
-}
-
-/// The batch [`Op::TrimCompToWorkArea`] applies.
-///
-/// # In plain terms
-///
-/// You marked a stretch of the timeline as the bit you are working on. This
-/// makes the composition *be* that stretch: it becomes as long as the work
-/// area, and every layer and every marker slides back by however far the work
-/// area started in, so what was under the work area is now the whole comp.
-/// Nothing is thrown away — a layer that fell outside now hangs off the end and
-/// can be slid back in.
-///
-/// **The work area is cleared first, and that ordering matters.** A batch's
-/// inverse is its members' inverses in reverse, so clearing first means the old
-/// work area is put back *last* on undo — after the comp is long again, and so
-/// without [`Op::SetWorkArea`]'s clamp cutting it down to the shortened comp.
-fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
-    let c = doc.comp(comp).ok_or(OpError::UnknownComp)?;
-    // No work area is the whole comp, so there is nothing to trim to.
-    let Some((start, end)) = c.work_area else {
-        return Ok(Op::Batch { ops: vec![] });
-    };
-    let duration = end.delta(start).map_err(|_| OpError::InvalidSpan)?;
-    let back = Duration(start.0);
-    let shift = |t: CompTime| t.sub_dur(back).map_err(|_| OpError::InvalidSpan);
-
-    let mut ops = vec![
-        Op::SetWorkArea {
-            comp,
-            work_area: None,
-        },
-        Op::SetCompSettings {
-            comp,
-            name: c.name.clone(),
-            width: c.width,
-            height: c.height,
-            frame_rate: c.frame_rate,
-            duration,
-            background: c.background,
-        },
-        // The clock keeps reading what it read: the comp's first frame is
-        // now the work area's, so the Start timecode moves on by as much.
-        Op::SetCompStart {
-            comp,
-            start: c
-                .start_timecode()
-                .add_dur(back)
-                .map_err(|_| OpError::InvalidSpan)?,
-        },
-    ];
-    for l in &c.layers {
-        ops.extend(through_lock(
-            comp,
-            l,
-            vec![Op::SetLayerSpan {
-                comp,
-                layer: l.id,
-                in_point: shift(l.in_point)?,
-                out_point: shift(l.out_point)?,
-                start_offset: shift(l.start_offset)?,
-            }],
-        ));
-    }
-    // Comp markers are on the comp's own clock, so they travel with the
-    // picture. A layer's markers are in layer time (§11) and move with
-    // their layer for free.
-    if !c.markers.is_empty() {
-        let mut markers = c.markers.clone();
-        for m in &mut markers {
-            m.time = shift(m.time)?;
-        }
-        ops.push(Op::SetCompMarkers { comp, markers });
-    }
-    Ok(Op::Batch { ops })
-}
-
-/// The batch [`Op::CropCompToRegion`] applies.
-///
-/// # In plain terms
-///
-/// You swept a rectangle on the picture; this makes the composition that
-/// rectangle. The frame becomes the rectangle's size, and every layer that is
-/// not parented to another moves back by the rectangle's top-left corner, so
-/// the picture inside the rectangle stays exactly where it was. Parented layers
-/// need no move of their own — they travel with the parent they hang from.
-///
-/// **A position driven by an expression is left alone**, because there is no
-/// number to move: the expression decides where the layer goes on every frame,
-/// and rewriting its text is not this command's business.
-fn crop_comp_to_region(
-    doc: &Document,
-    comp: Uuid,
-    x: f64,
-    y: f64,
-    width: u32,
-    height: u32,
-) -> Result<Op, OpError> {
-    let c = doc.comp(comp).ok_or(OpError::UnknownComp)?;
-    if width == 0 || height == 0 {
-        return Err(OpError::InvalidSpan);
-    }
-    let mut ops = vec![Op::SetCompSettings {
-        comp,
-        name: c.name.clone(),
-        width,
-        height,
-        frame_rate: c.frame_rate,
-        duration: c.duration,
-        background: c.background,
-    }];
-    for l in &c.layers {
-        if l.parent.is_some() {
-            continue;
-        }
-        let moves: Vec<Op> = [
-            (TransformProp::PositionX, &l.transform.position_x, x),
-            (TransformProp::PositionY, &l.transform.position_y, y),
-        ]
-        .into_iter()
-        .filter_map(|(prop, property, delta)| {
-            shifted(&property.animation, -delta).map(|animation| Op::SetTransformProperty {
-                comp,
-                layer: l.id,
-                prop,
-                animation,
-            })
-        })
-        .collect();
-        if !moves.is_empty() {
-            ops.extend(through_lock(comp, l, moves));
-        }
-    }
-    Ok(Op::Batch { ops })
-}
-
-/// `ops` for one layer, with the lock lifted around them when the layer has one.
-///
-/// **A comp-level reshape moves the whole world, and a locked layer rides with
-/// it** — which is what After Effects does, and the only behaviour that keeps
-/// the picture together: a locked layer left where it was would sit at the
-/// wrong time, or in the wrong place, beside everything that moved. Without
-/// this the whole command would refuse, because the lock guard reads
-/// each member of the batch on its own way through [`apply`] and a span or a
-/// position is exactly what a lock protects.
-///
-/// The lock comes off and goes back on **inside the same batch**, so it is one
-/// undo step and the journal holds no unlocked moment anyone can stop at — and
-/// the batch's own reversal puts the switch back the same way.
-fn through_lock(comp: Uuid, layer: &Layer, ops: Vec<Op>) -> Vec<Op> {
-    if !layer.switches.locked {
-        return ops;
-    }
-    let switch = |locked| Op::SetLayerLocked {
-        comp,
-        layer: layer.id,
-        locked,
-    };
-    let mut out = Vec::with_capacity(ops.len() + 2);
-    out.push(switch(false));
-    out.extend(ops);
-    out.push(switch(true));
-    out
-}
-
-/// `animation` with every value moved by `delta`, or `None` when there is
-/// nothing to move — an expression, or a shift of nought.
-fn shifted(animation: &Animation, delta: f64) -> Option<Animation> {
-    if delta == 0.0 {
-        return None;
-    }
-    remapped(animation, 1.0, delta)
 }
 
 /// `animation` with every value `v` made `gain * v + offset`, or `None` for
@@ -2998,7 +2849,7 @@ pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animati
 pub fn new_folder_ops(doc: &Document, name: &str, parent: Option<Uuid>) -> (Uuid, Vec<Op>) {
     let id = Uuid::now_v7();
     let name = if name.trim().is_empty() {
-        next_folder_name(doc)
+        folders::next_folder_name(doc)
     } else {
         name.to_owned()
     };
@@ -3046,7 +2897,7 @@ pub fn move_to_folder_ops(doc: &Document, item: Uuid, folder: Uuid) -> Option<Ve
         return None;
     }
     doc.folder(folder)?;
-    if folder_descends_from(doc, folder, item) {
+    if folders::folder_descends_from(doc, folder, item) {
         return None;
     }
 
@@ -3192,51 +3043,6 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
     }
     ops.extend(gone.into_iter().map(|id| Op::RemoveItem { id }));
     Some(ops)
-}
-
-/// Whether `folder` sits anywhere inside `ancestor` — the cycle guard
-/// [`move_to_folder_ops`] refuses on.
-///
-/// Walks children rather than parents, and remembers where it has been: a
-/// document that already holds a cycle (one written by an older build, or by
-/// hand) must make this answer, not spin.
-fn folder_descends_from(doc: &Document, folder: Uuid, ancestor: Uuid) -> bool {
-    let mut seen = std::collections::HashSet::new();
-    let mut queue = vec![ancestor];
-    while let Some(id) = queue.pop() {
-        if !seen.insert(id) {
-            continue;
-        }
-        if let Some(f) = doc.folder(id) {
-            if f.children.contains(&folder) {
-                return true;
-            }
-            queue.extend(f.children.iter().copied());
-        }
-    }
-    false
-}
-
-/// The next unused "Folder N" — the default name [`new_folder_ops`] gives.
-///
-/// Counts up past the names already taken rather than off the number of
-/// folders: a project holding "Folder 1" and "Renders" must not offer
-/// "Folder 2" only to collide the moment "Folder 1" is renamed away.
-#[must_use]
-fn next_folder_name(doc: &Document) -> String {
-    let taken: std::collections::HashSet<&str> = doc
-        .items
-        .iter()
-        .filter(|i| matches!(i, ProjectItem::Folder(_)))
-        .map(ProjectItem::name)
-        .collect();
-    (1..)
-        .map(|n| format!("Folder {n}"))
-        .find(|candidate| !taken.contains(candidate.as_str()))
-        // `1..` is unbounded and `taken` is finite, so this always answers; the
-        // fallback is here because nothing in an engine crate may panic
-        // (docs/14 §4).
-        .unwrap_or_else(|| "Folder".to_owned())
 }
 
 /// The four playhead-relative span edits behind the `[` / `]` / `Alt+[` / `Alt+]`

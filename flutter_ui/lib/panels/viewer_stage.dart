@@ -15,6 +15,7 @@ import 'dart:ui' as dartui;
 
 import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/copies.dart' show shownLayerName;
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -49,8 +50,12 @@ import 'shape_entries.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
+import 'viewer_grade.dart';
+import 'viewer_grade_grid.dart';
+import 'viewer_grade_windows.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_mesh_warp.dart';
+import 'viewer_noise_sample.dart';
 import 'viewer_follow.dart';
 import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
@@ -77,6 +82,7 @@ import 'viewer_shape3d.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
+import 'viewer_stabilise.dart';
 import 'viewer_track.dart';
 import 'viewer_type.dart';
 import 'viewer_zoom.dart';
@@ -206,6 +212,49 @@ class ViewerStage extends StatelessWidget {
       }
     }
     return null;
+  }
+
+  /// The Stabilise whose points are drawn, and whether its layer is the one
+  /// taking clicks: of the enabled ones taking the shake out with Show points
+  /// on, the first on a selected layer, else the first. From the read model,
+  /// as the cloud's layer is.
+  ({LayerReference layer, UuidValue effect, double size, bool selecting})?
+      _stabilised() {
+    final picked = uiState.selectedLayerIds;
+    ({LayerReference layer, UuidValue effect, double size, bool selecting})?
+        first;
+    for (final entry in uiState.model.heldLayers) {
+      for (final fx in entry.info.effects) {
+        if (fx.name != 'stabilise' || !fx.enabled) continue;
+        var show = false;
+        var reverse = false;
+        var size = 100.0;
+        for (final v in fx.values) {
+          switch (v.value) {
+            case BridgeEffectValue_Bool(:final field0)
+                when v.id == 'show_points':
+              show = field0;
+            case BridgeEffectValue_Choice(:final field0) when v.id == 'mode':
+              reverse = field0 == 1;
+            case BridgeEffectValue_Float(
+                  field0: BridgeScalar_Static(:final field0)
+                ) when v.id == 'point_size':
+              size = field0;
+            default:
+          }
+        }
+        if (!show || reverse) continue;
+        final found = (
+          layer: entry.layer,
+          effect: fx.id,
+          size: size,
+          selecting: picked.contains(entry.layer.internallayerId),
+        );
+        if (found.selecting) return found;
+        first ??= found;
+      }
+    }
+    return first;
   }
 
   /// The Roto brush on the **selected** layer, which picture it is drawing, and
@@ -359,7 +408,7 @@ class ViewerStage extends StatelessWidget {
           frame: uiState.playheadFrame.value,
           revision: revision,
           generation: uiState.solveLanded.value);
-      final map = layerMapOf(entry, byId, transformOf, read,
+      final placed = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
           view: rows,
@@ -370,6 +419,17 @@ class ViewerStage extends StatelessWidget {
               frame: uiState.playheadFrame.value,
               revision: revision,
               generation: uiState.solveLanded.value));
+      // A caption raised off the layer's place is drawn moved, so its box and
+      // its click follow it there.
+      final raised = entry.info.kind == BridgeLayerKind.text
+          ? uiState.captionTracks.offsetAt(
+              entry.layer.internallayerId.toString(),
+              uiState.playheadFrame.value)
+          : null;
+      final map = raised == null
+          ? placed
+          : placed.pivotedAt(placed.ax - raised.dx, placed.ay - raised.dy,
+              position: Offset(placed.px, placed.py));
       final rotation =
           read(tf.rotation, entry.layer, BridgeTransformProp.rotation);
       final live = uiState.liveText.value[entry.layer.internallayerId];
@@ -718,6 +778,10 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
+            // A grade's reference, wiped or blended against the picture.
+            if (showPicture)
+              ViewerReferenceLayer(
+                  uiState: uiState, comp: comp, viewId: viewId, fitted: fitted),
             // Why there is no picture, on a machine where the runner had to
             // refuse it. Over the picture's place and under everything else.
             const Positioned.fill(child: ViewerGpuMismatchNotice()),
@@ -1155,6 +1219,47 @@ class ViewerStage extends StatelessWidget {
                 },
               ),
             ),
+            // Stabilise's followed points, under the same kind of listener as
+            // the cloud and for the same reasons.
+            Positioned.fill(
+              child: ListenableBuilder(
+                listenable: Listenable.merge(
+                  [uiState.model, uiState.solveLanded],
+                ),
+                builder: (context, _) {
+                  // Points are composition pixels on the comp's own picture:
+                  // none in a pane looking through another camera, or one
+                  // drawn as lines only.
+                  final points = showPicture && _viewPose() == null
+                      ? _stabilised()
+                      : null;
+                  if (points == null) return const SizedBox.shrink();
+                  return ValueListenableBuilder<int>(
+                    valueListenable: uiState.playheadFrame,
+                    builder: (context, frame, _) => ViewerStabiliseLayer(
+                      key: ValueKey<String>(
+                          'viewer-stabilise-${points.effect}'),
+                      layer: points.layer,
+                      effect: points.effect,
+                      pointSize: points.size,
+                      selecting: points.selecting,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      playheadFrame: frame,
+                      revision: uiState.model.heldRevision,
+                      landed: uiState.solveLanded.value,
+                      accent: t.accent,
+                      muted: t.textMuted,
+                      onChanged: onChanged,
+                      onPictureMenu: (d) => menus.openPicture?.call(d),
+                    ),
+                  );
+                },
+              ),
+            ),
             // Where the selected effects' points are, as the anchor is shown
             // for a selected layer. A mark like the layer controls, so the
             // same switch puts it away.
@@ -1162,12 +1267,19 @@ class ViewerStage extends StatelessWidget {
               ViewerEffectPoints(
                 comp: comp,
                 uiState: uiState,
-                fitted: fitted,
-                compSize: Size(
-                  compSize.width.toDouble(),
-                  compSize.height.toDouble(),
-                ),
+                // Locked layers too: a point is still drawn on one.
+                boxes: () => _boxes(locked: true),
                 colour: t.accent,
+                tool: uiState.tools.tool,
+                onChanged: onChanged,
+              ),
+            // Where a selected Denoise measures its noise: a square, moved
+            // and grown like the layer's own box.
+            if (wireframes)
+              ViewerNoiseSample(
+                comp: comp,
+                uiState: uiState,
+                boxes: () => _boxes(locked: true),
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
               ),
@@ -1181,6 +1293,33 @@ class ViewerStage extends StatelessWidget {
                 tool: uiState.tools.tool,
                 onChanged: onChanged,
               ),
+            // The grading tools: the windows, the qualifier's pick and the
+            // chart, over the layer controls so their drags win.
+            ViewerGradeTools(
+              uiState: uiState,
+              comp: comp,
+              viewId: viewId,
+              fitted: fitted,
+              compSize: Size(
+                compSize.width.toDouble(),
+                compSize.height.toDouble(),
+              ),
+              windows: ViewerGradeWindows(
+                uiState: uiState,
+                comp: comp,
+                fitted: fitted,
+                compSize: Size(
+                  compSize.width.toDouble(),
+                  compSize.height.toDouble(),
+                ),
+                mapOf: (layer) =>
+                    _boxes().where((b) => b.id == layer).firstOrNull?.map,
+              ),
+            ),
+            // The split-screen grid stands in for the picture while it is up.
+            if (showPicture)
+              ViewerGradeGrid(
+                  uiState: uiState, comp: comp, viewId: viewId, fitted: fitted),
             // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a
@@ -1216,7 +1355,11 @@ class ViewerStage extends StatelessWidget {
             // Above both, because while the dropper is armed the whole
             // picture is a target: a drag handle under the pointer must not
             // take the click that was meant to pick a pixel.
-            DropperLayer(comp: comp, uiState: uiState, fitted: fitted),
+            DropperLayer(
+                comp: comp,
+                uiState: uiState,
+                fitted: fitted,
+                boxes: () => _boxes(locked: true)),
             // The rulers along the top and left edges, and the guides dragged
             // out of them. Over the tool layers, because a guide is
             // grabbed by its own thin strip and a handle underneath must not
@@ -1294,6 +1437,15 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
+            // A grade's reference split beside the picture, over the marks
+            // for the same reason.
+            if (showPicture)
+              ViewerReferenceLayer(
+                  uiState: uiState,
+                  comp: comp,
+                  viewId: viewId,
+                  fitted: fitted,
+                  overMarks: true),
             // The notices sit over the tools, which would otherwise take
             // their clicks.
             _missingSlate(),
@@ -2494,7 +2646,7 @@ class ViewerTag extends StatelessWidget {
         for (final entry in uiState.model.heldLayers) {
           if (picked.contains(entry.layer.internallayerId)) {
             // The tag names the box, and a sound has none.
-            if (_drawsPicture(entry)) name = entry.info.name;
+            if (_drawsPicture(entry)) name = shownLayerName(entry.info);
             break;
           }
         }

@@ -32,6 +32,7 @@ pub mod kept;
 mod local;
 pub mod online;
 mod reach;
+pub mod remote;
 mod wire;
 
 use bulk::{Footage, Held, Limits, Wanted};

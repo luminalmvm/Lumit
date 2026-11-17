@@ -10,7 +10,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals, mapEquals;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, kIsWeb, listEquals, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
@@ -20,6 +21,8 @@ import 'package:lumit_flutter/panels/easing_curve.dart'
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show effectLabelOf;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
+import 'package:lumit_flutter/panels/grade_actions.dart'
+    show compShots, pickShots;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
     show RevealFilter, asOneUndoStep, effectPath;
@@ -32,11 +35,13 @@ import 'package:lumit_flutter/panels/viewer_picture.dart'
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
+import 'package:lumit_flutter/shell/pop_out.dart'
+    show NativeDisplay, NativeWindows, displaySetupOf, windowsQuitting;
 import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
-    show audioSetMuted, audioSetOffsetMs, setAudioDevice;
+    show audioClock, audioSetMuted, audioSetOffsetMs, setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
@@ -45,9 +50,12 @@ import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart'
     show BridgeFootageTrim, BridgeMediaInfo, FootageReference;
+import 'package:lumit_flutter/src/rust/api/multicam.dart'
+    show BridgeFootageMarker, BridgeMulticam, BridgeMulticamAt;
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show setTouchReturnMs;
 import 'package:lumit_flutter/src/rust/api/model.dart'
     show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -67,6 +75,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart' as shell
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
+import 'package:lumit_flutter/state/multicam.dart';
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
@@ -76,18 +85,24 @@ import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeSharePerson;
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/app_icon.dart';
+import 'package:lumit_flutter/state/audio_notices.dart';
 import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/background.dart';
+import 'package:lumit_flutter/state/caption_selection.dart';
+import 'package:lumit_flutter/state/caption_tracks.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
+import 'package:lumit_flutter/state/control_surfaces.dart';
+import 'package:lumit_flutter/state/grade_target.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/keymap.dart';
+import 'package:lumit_flutter/state/library.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/motion_paths.dart';
 import 'package:lumit_flutter/state/view_projection.dart';
@@ -96,6 +111,7 @@ import 'package:lumit_flutter/state/online_footage.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:lumit_flutter/state/panel_folds.dart';
 import 'package:lumit_flutter/state/friend_invites.dart';
+import 'package:lumit_flutter/state/remote_exports_frb.dart';
 import 'package:lumit_flutter/state/phone_line_frb.dart';
 import 'package:lumit_flutter/state/playback_loop.dart';
 import 'package:lumit_flutter/state/preview_progress.dart';
@@ -104,6 +120,8 @@ import 'package:lumit_flutter/state/relay_door.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
 import 'package:lumit_flutter/state/reviews.dart';
 import 'package:lumit_flutter/state/settings.dart';
+import 'package:lumit_flutter/state/stabilise_progress.dart';
+import 'package:lumit_flutter/state/template_controls.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/updates.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -181,7 +199,19 @@ class LumitUiState extends ChangeNotifier {
   /// The profiles on this machine and the one in use: its settings, and
   /// keeping them in step with the server when the account has Pro.
   late final ProfilesState profiles =
-      ProfilesState(workspace, account, afterApply: _afterProfile);
+      ProfilesState(workspace, account, afterApply: _afterProfile)
+        ..beforeSwitch = (() => library.pause())
+        ..afterSwitch = (() => library.resume());
+
+  /// The library: presets, styles, themes, fonts and the rest, and with Pro
+  /// the same library on every computer of the account.
+  late final LibraryState library = LibraryState(
+    account: account,
+    profiles: profiles,
+    workspace: workspace,
+    keymap: () => keymap,
+    presetsChanged: presetsChanged,
+  );
 
   /// The way to Lumit's own relay, for a shared project.
   late final RelayDoor relayDoor = RelayDoor(account);
@@ -467,10 +497,15 @@ class LumitUiState extends ChangeNotifier {
   /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
   /// The line to the account's phones, and what pairs one.
-  late final PhoneLine phones = PhoneLine(account, _app, workspace, reviews);
+  late final PhoneLine phones = PhoneLine(account, _app, workspace, reviews)
+    ..onLibrary = (() => unawaited(library.syncNow()));
 
   /// Invites to multi-edit that friends sent this computer, and sending them.
   late final FriendInvites friendInvites = FriendInvites(account);
+
+  /// Exports sent to the account's other computers, and theirs done here.
+  late final RemoteExports remoteExports = RemoteExports(
+      account, _app, workspace, phones, friendInvites, relayDoor);
   /// The open project's backup and the account's backed-up projects.
   late final BackupState backup = BackupState(_app, account, profiles,
       looking: () => (selectedComp, playheadFrame.value));
@@ -526,13 +561,53 @@ class LumitUiState extends ChangeNotifier {
   /// Here for the same reason the updater is: Settings draws it and anything
   /// that sends the user to that page reads the same answer. Built lazily, so a
   /// widget test that never opens the page never asks the engine anything.
-  late final AddonService addons = createAddonService();
+  late final AddonService addons = createAddonService()
+    ..addListener(_addonsMoved);
+
+  /// What was installed when the layers were last read for it, and whether
+  /// this state has been put away: the service outlives it by a download.
+  String _addonsTold = '';
+  bool _addonsDone = false;
+
+  /// An install or a removal changes which effects can run their model, and
+  /// nothing in the document moves to say so. Read the layers again, so a
+  /// missing-addon badge comes or goes, and draw the frame again with the
+  /// model in it. The service also notifies for every step of a download, so
+  /// only a change in what is installed counts.
+  void _addonsMoved() {
+    if (_addonsDone) return;
+    final now = [
+      addons.runtime.state.name,
+      for (final a in addons.installed) '${a.id}@${a.version}',
+    ].join(' ');
+    if (now == _addonsTold) return;
+    _addonsTold = now;
+    // After this turn, not within it: the service's first reading can come
+    // from a dialogue's initState, and telling every listener then would be
+    // asking for a rebuild in the middle of a build.
+    scheduleMicrotask(() {
+      if (_addonsDone) return;
+      model.refresh();
+      solveLanded.value++;
+      requestFrame();
+      // The sound too: a mix already loaded was made without the model, and
+      // nothing in its jobs moved to say it should be made again.
+      try {
+        selectedComp?.audioPrepare();
+      } catch (_) {
+        // The composition has gone; there is no mix to make again.
+      }
+    });
+  }
 
   /// The extensions installed, and which pane each is shown in. Not lazy:
   /// the dock asks it what to call an extension's tab from the first frame.
   /// So it is made in the constructor: given its value here it would wait
   /// for its first use.
   late final ExtensionService extensions;
+
+  /// Tangent panels and MIDI controllers, which drive the grade.
+  late final ControlSurfaces surfaces = ControlSurfaces(this, _app);
 
   /// Whether the extension [id] has its panel in the arrangement.
   bool extensionShown(String id) =>
@@ -663,7 +738,9 @@ class LumitUiState extends ChangeNotifier {
         panel != Panel.effectsAndPresets &&
         panel != Panel.expressions &&
         panel != Panel.effectControls &&
-        panel != Panel.node) {
+        panel != Panel.captions &&
+        panel != Panel.node &&
+        panel != Panel.transcript) {
       return false;
     }
     panelSearchRequest.value++;
@@ -701,6 +778,8 @@ class LumitUiState extends ChangeNotifier {
     Panel.effectControls,
     Panel.graph,
     Panel.cutTimeline,
+    Panel.captions,
+    Panel.transcript,
   };
 
   /// Ask the focused panel to select everything, and say whether one was asked.
@@ -874,6 +953,12 @@ class LumitUiState extends ChangeNotifier {
   void requestRevealProperty(UuidValue layer, String action) =>
       revealPropertyRequest.value = (layer, action);
 
+  /// One row the Timeline has been asked to show and pick, from another
+  /// panel: the layer, the twirls to open on the way to the row, and the
+  /// row's own path. A null row brings the layer's own row into view.
+  final ValueNotifier<({UuidValue layer, List<String> open, String? row})?>
+      revealRowRequest = ValueNotifier(null);
+
   /// A reveal the Timeline has been asked to run over the selection — the
   /// Animation ▸ Reveal rows, which are the `U` machinery under the
   /// menu's own words.
@@ -942,6 +1027,11 @@ class LumitUiState extends ChangeNotifier {
   /// ring it used to fall through to. Null with nothing picked there.
   final ValueNotifier<ItemReference?> selectedProjectItem = ValueNotifier(null);
 
+  /// Everything selected in the Project panel, in the panel's order. What the
+  /// Composition menu makes a multicam comp of.
+  final ValueNotifier<List<ItemReference>> selectedProjectItems =
+      ValueNotifier(const []);
+
   /// An item the Project panel is asked to select and show, by something
   /// outside it that has just made one: a composition brought in from another
   /// project file. Asked for like [selectPropertyRequest], since the panel's
@@ -979,6 +1069,12 @@ class LumitUiState extends ChangeNotifier {
   /// drawing (docs/07 §2.5). Fed from the worker stream below; the Viewer's
   /// progress bar listens to it and nothing else does.
   final PreviewProgressTracker previewProgress = PreviewProgressTracker();
+
+  /// How far the Stabilise analyses in the comp on screen have got, for the
+  /// same slot on the Viewer's transport. Made when the Viewer first asks.
+  StabiliseProgress get stabiliseProgress =>
+      _stabiliseProgress ??= StabiliseProgress(this);
+  StabiliseProgress? _stabiliseProgress;
 
   /// The last measured frame's per-layer and per-effect render times
   /// (docs/13 §7.1). Empty — and the engine not measuring — until a column or
@@ -1073,6 +1169,7 @@ class LumitUiState extends ChangeNotifier {
     // left standing from the frame that started the run would be the only bar
     // that ever appeared during playback.
     previewProgress.stop();
+    audioNotices.restart();
     _playFrom(comp, playheadFrame.value);
     playing.value = true;
   }
@@ -1448,6 +1545,10 @@ class LumitUiState extends ChangeNotifier {
   /// stamp carries the document revision, because relinking a clip or changing
   /// how it is read is exactly what makes the picture different.
   void _askForItem(ViewerSurface view, {bool force = false}) {
+    if (view.angles) {
+      _askForAngles(view, force: force);
+      return;
+    }
     final footage = footageOf(view);
     if (footage == null) return;
     final facts = itemFacts(footage);
@@ -1814,6 +1915,7 @@ class LumitUiState extends ChangeNotifier {
   void _arrived(int frame) {
     frameArrived.value++;
     if (!playing.value) return;
+    audioNotices.read(audioClock(), _app);
     // After a turn, a frame outside the work area is the old leg running on,
     // and the first frame inside it is the new leg arriving.
     final loop = _loop;
@@ -1922,8 +2024,138 @@ class LumitUiState extends ChangeNotifier {
     // A workspace of the user's own keeps the arrangement they drag it into
     // (docs/07 §1.4); a preset's factory layout is not theirs to overwrite.
     workspace.rememberActiveWorkspaceLayout();
+    _rememberSetupDock();
     workspace.save();
     rememberSession();
+  }
+
+  /// The displays there are, the primary one first, as the runner last said.
+  /// Empty until it has, and where no runner answers.
+  final ValueNotifier<List<NativeDisplay>> displays = ValueNotifier(const []);
+
+  /// The display the video monitor fills, in the system's units, or null
+  /// when it is off (lib/shell/video_monitor.dart).
+  final ValueNotifier<Rect?> videoMonitor = ValueNotifier(null);
+
+  /// Put the video monitor on [display], or take it down with null. Kept for
+  /// the displays in use, so it comes back with them.
+  void setVideoMonitor(Rect? display) {
+    if (videoMonitor.value == display) return;
+    videoMonitor.value = display;
+    final setup = displaySetup;
+    if (setup.isEmpty) return;
+    if (display == null) {
+      workspace.videoMonitors.remove(setup);
+    } else {
+      workspace.videoMonitors[setup] = [
+        display.left,
+        display.top,
+        display.width,
+        display.height,
+      ];
+    }
+    workspace.save();
+  }
+
+  /// The video monitor on or off, for its key: on, it goes on the display it
+  /// was last on with these displays, else the first one the main window is
+  /// not on, else the main window's own.
+  Future<void> toggleVideoMonitor() async {
+    if (videoMonitor.value != null) {
+      setVideoMonitor(null);
+      return;
+    }
+    final all = displays.value;
+    if (all.isEmpty) return;
+    final main = await NativeWindows.frame();
+    final remembered = workspace.videoMonitors[displaySetup];
+    final last = remembered == null
+        ? null
+        : Rect.fromLTWH(
+            remembered[0], remembered[1], remembered[2], remembered[3]);
+    final other = [
+      for (final d in all)
+        if (d.bounds != main?.display) d.bounds,
+    ];
+    setVideoMonitor(all.any((d) => d.bounds == last)
+        ? last
+        : other.isNotEmpty
+            ? other.first
+            : all.first.bounds);
+  }
+
+  /// Which displays there are, as the string an arrangement is remembered
+  /// against. Empty while none are known.
+  String get displaySetup => displaySetupOf(displays.value);
+
+  /// Keep the arrangement as the one for the displays in use.
+  void _rememberSetupDock() {
+    final setup = displaySetup;
+    if (setup.isEmpty) return;
+    workspace.setupDocks =
+        rememberSetupDock(workspace.setupDocks, setup, workspace.dock.toJson());
+    workspace.dockSetup = setup;
+  }
+
+  /// Ask the runner which displays there are, and bring back the arrangement
+  /// last used with them when they are not the ones the arrangement in use
+  /// was last used with: Lumit starting on a laptop that was last closed at a
+  /// desk, or a second screen plugged in or taken away while it runs. Only
+  /// when one side or the other has a floating window: panels docked in the
+  /// main window stay where they were put. With none remembered for them, the
+  /// arrangement stays, and the dock brings any window whose display has gone
+  /// back into view.
+  Future<void> refreshDisplays() async {
+    final now = await NativeWindows.displays();
+    if (now.isEmpty) return;
+    displays.value = now;
+    final setup = displaySetup;
+    NativeWindows.setupInUse = setup;
+    // The video monitor comes back on the display it was on with these
+    // displays, and goes when its display has.
+    final monitor = workspace.videoMonitors[setup];
+    final on = monitor == null
+        ? null
+        : Rect.fromLTWH(monitor[0], monitor[1], monitor[2], monitor[3]);
+    videoMonitor.value =
+        on != null && now.any((d) => d.bounds == on) ? on : null;
+    final was = workspace.dockSetup;
+    if (was == setup) return;
+    if (was != null) {
+      workspace.setupDocks = rememberSetupDock(
+          workspace.setupDocks, was, workspace.dock.toJson());
+    }
+    final path = _app.project?.path();
+    final remembered = (path == null
+            ? null
+            : workspace.sessionFor(path)?.setupDocks[setup]) ??
+        workspace.setupDocks[setup];
+    workspace.dockSetup = setup;
+    if (remembered != null &&
+        (workspace.dock.windows.isNotEmpty || _floats(remembered))) {
+      _applyDock(remembered);
+    } else {
+      // The one on screen stays, so it is the one for these displays now.
+      // Not with nothing remembered for them: a window's place on a display
+      // that has gone is not kept against the ones left.
+      if (remembered != null) {
+        _rememberSetupDock();
+        rememberSession();
+      }
+      workspace.save();
+    }
+  }
+
+  /// Whether an arrangement, as JSON, has a floating window this build can
+  /// open.
+  static bool _floats(Map<String, dynamic>? json) {
+    if (json == null) return false;
+    try {
+      final parsed = DockNode.fromJson(json);
+      return parsed is DockSplit && parsed.windows.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   void setScheme(LumitColorScheme next) => workspace.setScheme(next);
@@ -1950,6 +2182,10 @@ class LumitUiState extends ChangeNotifier {
   /// The fronted comp as the panels draw it — refreshed by one bridge
   /// call when the engine reports a change, read by everything else for free.
   final CompModel model = CompModel();
+
+  /// The fronted composition's graphics template: which of its rows are
+  /// controls. Read when [model] says the document moved, never in a build.
+  final TemplateControls templateControls = TemplateControls();
 
   /// Every Viewer view, which pane holds it, and which one is active
   /// (docs/impl/multi-viewer.md §1). The panels that follow the active view
@@ -1996,6 +2232,16 @@ class LumitUiState extends ChangeNotifier {
   /// The layer everything single-layer works on: Effect controls, the keyboard
   /// commands, the Timeline's fold-out. The *primary* of the selection below.
   ValueNotifier<LayerReference?> selectedLayer = ValueNotifier(null);
+
+  /// The captions picked in the Captions panel and the Timeline's captions
+  /// row, which share it.
+  final CaptionSelection captionSelection = CaptionSelection();
+
+  /// Every caption layer's captions in the fronted comp, for the Timeline and
+  /// the Viewer to draw from.
+  CaptionTracks get captionTracks =>
+      _captionTracks ??= CaptionTracks(this, _app.onChange);
+  CaptionTracks? _captionTracks;
 
   /// Which box the Graph panel has picked, or null for none.
   ///
@@ -2222,6 +2468,15 @@ class LumitUiState extends ChangeNotifier {
     }
     notifyListeners();
     return true;
+  }
+
+  /// Whether something else has been copied since the tray was filled: the
+  /// text it mirrored to the system clipboard is no longer there. Ordinary
+  /// text, a picture and files all count.
+  Future<bool> systemClipboardMovedOn() async {
+    final text = await Clipboard.getData(Clipboard.kTextPlain)
+        .then((data) => data?.text, onError: (Object _) => null);
+    return text != clipboard.text;
   }
 
   /// The part of a 3D model the Timeline has picked, by its layer and its rows'
@@ -2681,12 +2936,18 @@ class LumitUiState extends ChangeNotifier {
     // (item 6.35).
     // Except over the Mixer: picking a track there is mixing, and taking the
     // faders away for its effects is the one thing nobody asked for. The
-    // Grade panel is the same: it is the layer's controls in the Colour
-    // workspace, and Effect controls sit one tab behind it on purpose.
+    // Grade panel and the Grade nodes panel are the same: they are the
+    // layer's controls in the Colour workspace, and Effect controls sit one
+    // tab behind them on purpose. So is
+    // the Transcript panel: picking words picks their clips, and the words
+    // have to stay in sight.
     if (primary != null &&
         !_restoring &&
         !frontedOver(split, Panel.mixer, Panel.effectControls) &&
-        !frontedOver(split, Panel.grade, Panel.effectControls)) {
+        !frontedOver(split, Panel.grade, Panel.effectControls) &&
+        !frontedOver(split, Panel.gradeNodes, Panel.effectControls) &&
+        !frontedOver(split, Panel.captions, Panel.effectControls) &&
+        !frontedOver(split, Panel.transcript, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
     }
     if (primary == null) {
@@ -2987,11 +3248,18 @@ class LumitUiState extends ChangeNotifier {
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
+    templateControls.follow(model, () => _selectedComp,
+        edited: _app.notifyDocumentChanged);
     selectedLayer.addListener(_syncSelection);
     selectedLayers.addListener(_noteClickOrder);
     this.workspace.presetApplied.addListener(_onPresetApplied);
     _app.addListener(_sourceNames.clear);
     _app.addListener(_followTrims);
+    _app.addListener(_sourceMarkers.clear);
+    // The angle viewer follows the multicam clip under the playhead, so it
+    // looks again whenever the playhead or the document moves.
+    _app.addListener(_followMulticam);
+    playheadFrame.addListener(_followMulticam);
     // A layer that has gone must leave the selection with it. The
     // model is the one place that knows which layers exist, so the pruning
     // hangs off its refresh rather than off each of the several ways a layer
@@ -3039,6 +3307,10 @@ class LumitUiState extends ChangeNotifier {
     // Where the playhead was left is worth keeping, and it moves far too often
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
+    // Which displays there are decides which arrangement is in use, and a
+    // display plugged in or taken away while Lumit runs changes it.
+    NativeWindows.displaysChanged = () => unawaited(refreshDisplays());
+    unawaited(refreshDisplays());
     _lifecycle = AppLifecycleListener(
       // In front or not, for the engine's power throttling: behind other
       // windows with nothing playing or exporting, Windows may run Lumit
@@ -3091,6 +3363,11 @@ class LumitUiState extends ChangeNotifier {
         // has gone.
         if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
         stopBlenders();
+        // The floating windows go with Lumit and stay in the arrangement,
+        // so they open where they were next time rather than being put back.
+        windowsQuitting = true;
+        rememberSession();
+        this.workspace.save();
         return AppExitResponse.exit;
       },
     );
@@ -3125,6 +3402,7 @@ class LumitUiState extends ChangeNotifier {
     if (largest != null) setLargestPicture(side: largest);
     pushDiscordStatus();
     if (this.workspace.liveEndpoint) applyLiveEndpoint();
+    surfaces.start();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,
@@ -3133,6 +3411,7 @@ class LumitUiState extends ChangeNotifier {
     final device = this.workspace.audioDevice;
     if (device != null) setAudioDevice(id: device);
     audioSetOffsetMs(ms: this.workspace.audioOffsetMs);
+    setTouchReturnMs(ms: this.workspace.touchReturnMs);
     // How often a spare copy of the work is written, and how many are kept.
     // Always handed over rather than skipped when it matches the default: this
     // is what starts the engine's timer, so a fresh install with no settings
@@ -3328,12 +3607,17 @@ class LumitUiState extends ChangeNotifier {
   /// registration is a round trip to the runner, and the playhead, the loop's
   /// turn and everything listening for a frame waited behind it.
   ///
-  /// **Only the active view moves the playhead.** A frame arriving for a
-  /// background view says nothing about where the user is standing, and
-  /// letting one drive the transport would make a locked view's first frame
-  /// drag the playhead somewhere nobody asked for.
+  /// **Only one view moves the playhead**: the active view, or while playing
+  /// the view the transport plays into, which is another one when the source
+  /// side is active. A frame arriving for any other view says nothing about
+  /// where the user is standing, and letting one drive the transport would
+  /// make a locked view's first frame drag the playhead somewhere nobody
+  /// asked for.
   void _followFrame(int frame, int engineId, int tier) {
-    if (engineId != activeViewId) return;
+    final leads = playing.value
+        ? views.previewing?.engineId ?? activeViewId
+        : activeViewId;
+    if (engineId != leads) return;
     _arrived(frame);
     _playAlong(tier);
   }
@@ -3478,21 +3762,33 @@ class LumitUiState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _addonsDone = true;
     _app.removeListener(_adoptProjectSession);
     _app.removeListener(refreshColourSummary);
     _app.removeListener(_sourceNames.clear);
     _app.removeListener(_followTrims);
+    _app.removeListener(_sourceMarkers.clear);
+    _app.removeListener(_followMulticam);
+    playheadFrame.removeListener(_followMulticam);
     workspace.presetApplied.removeListener(_onPresetApplied);
+    transcriptSpan.dispose();
+    sourcePlaying.dispose();
+    cutPickRequest.dispose();
     cutLinked.dispose();
+    _grade?.dispose();
     cutClip.dispose();
     cutClips.dispose();
     cutOverlap.dispose();
     presetsChanged.dispose();
+    captionSelection.dispose();
+    _captionTracks?.dispose();
     _lifecycle.dispose();
     _clock.dispose();
     reviews.dispose();
+    remoteExports.dispose();
     phones.dispose();
     backup.dispose();
+    library.dispose();
     profiles.dispose();
     _app.share.roster.removeListener(_mindDoors);
     valuesInHand.removeListener(_look);
@@ -3514,6 +3810,7 @@ class LumitUiState extends ChangeNotifier {
     // the frb tests it is a failure, and one that lands on whichever test
     // happens to be running when it fires rather than the one that caused it.
     previewProgress.dispose();
+    _stabiliseProgress?.dispose();
     model.dispose();
     cacheChanged.dispose();
     solveLanded.dispose();
@@ -3670,6 +3967,7 @@ class LumitUiState extends ChangeNotifier {
     final into = _viewForOpening(prefer: ViewMode.footage);
     if (into == null) return;
     into.mode = ViewMode.footage;
+    into.angles = false;
     into.itemId = footage.internalid.toString();
     into.compId = null;
     into.sourceFrame = 0;
@@ -3706,6 +4004,7 @@ class LumitUiState extends ChangeNotifier {
     final view = sourceView;
     if (view == null) return;
     final id = footage.internalid.toString();
+    view.angles = false;
     view.itemId = id;
     view.compId = null;
     view.sourceFrame = 0;
@@ -3794,7 +4093,8 @@ class LumitUiState extends ChangeNotifier {
   FootageReference? footageOf(ViewerSurface view) {
     final project = _app.project;
     final id = view.itemId;
-    if (project == null || id == null) return null;
+    // An angle viewer's item is a comp, which is nobody's footage.
+    if (project == null || id == null || view.angles) return null;
     return FootageReference(
       internalproject: project.internalid,
       internalid: UuidValue.withValidation(id),
@@ -3824,6 +4124,9 @@ class LumitUiState extends ChangeNotifier {
   /// Plays or stops the source side, set by its bar while it is on screen.
   VoidCallback? sourcePlayToggle;
 
+  /// Whether the source side is playing, as its bar says.
+  final ValueNotifier<bool> sourcePlaying = ValueNotifier(false);
+
   /// A transport key pressed with the source side in front: it plays and
   /// steps the clip rather than the composition. False for any other key, so
   /// it carries on to the composition.
@@ -3832,10 +4135,19 @@ class LumitUiState extends ChangeNotifier {
       sourcePlayToggle?.call();
       return sourcePlayToggle != null;
     }
-    final footage = footageOf(view);
-    final facts = footage == null ? null : itemFacts(footage);
-    if (facts == null) return false;
-    final last = framesOf(facts) - 1;
+    final int last;
+    if (view.angles) {
+      // Following a clip, its time is the program's, which the keys drive.
+      if (anglesFollowing(view) != null) return false;
+      final frames = _anglesFrames(view);
+      if (frames == null) return false;
+      last = frames - 1;
+    } else {
+      final footage = footageOf(view);
+      final facts = footage == null ? null : itemFacts(footage);
+      if (facts == null) return false;
+      last = framesOf(facts) - 1;
+    }
     final at = view.sourceFrame;
     final to = switch (action) {
       'playback.frame.prev' => at - 1,
@@ -3913,6 +4225,9 @@ class LumitUiState extends ChangeNotifier {
   /// composition beside it has the pane again.
   void clearSourceView(ViewerSurface view) {
     view.itemId = null;
+    view.angles = false;
+    view.anglePicture = null;
+    view.angleSound = null;
     view.sourceFrame = 0;
     view.sourceIn = null;
     view.sourceOut = null;
@@ -4017,6 +4332,16 @@ class LumitUiState extends ChangeNotifier {
     }
   }
 
+  /// The stretch of the composition the Transcript panel's selected words
+  /// cover, in comp frames, which the Cut timeline draws as a band over its
+  /// lanes. Null with no words selected.
+  final ValueNotifier<({int start, int end})?> transcriptSpan =
+      ValueNotifier(null);
+
+  /// The clips the Transcript panel asks the Cut timeline to pick, by id. The
+  /// timeline picks them and puts this back to null.
+  final ValueNotifier<Set<String>?> cutPickRequest = ValueNotifier(null);
+
   /// Whether edits in the Cut timeline carry linked clips along: the panel's
   /// Linked switch, and what the source side's Insert and Overwrite read.
   /// Not written down.
@@ -4028,6 +4353,34 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
       ValueNotifier(null);
 
+  /// What the Colour workspace grades: the current shot, its current node and
+  /// what the grading panels share. Made on first use.
+  GradeTarget get grade => _grade ??= GradeTarget(
+      layer: selectedLayer,
+      clip: cutClip,
+      comp: () => _selectedComp?.internalid,
+      project: () => _app.project)
+    ..linkPlayhead(
+        playhead: playheadFrame,
+        shots: () => compShots(this),
+        grading: () => const [
+              Panel.grade,
+              Panel.gradeNodes,
+              Panel.shots,
+              Panel.gallery,
+            ].any((p) => panelVisible(split, p)),
+        pick: (s) => pickShots(this, s));
+  GradeTarget? _grade;
+
+  /// The picked Cut clip, else the selected layer.
+  ValueListenable<GradeShot?> get gradeShot => grade.shot;
+
+  /// The effect the Grade panel edits on [gradeShot].
+  ValueListenable<UuidValue?> get gradeNode => grade.node;
+
+  /// Whose grade the nodes are: the shot's, a group's or the comp's.
+  ValueNotifier<GradeScope> get gradeScope => grade.scope;
+
   /// Every picture clip picked in the Cut timeline, the pressed one first: what
   /// the Retime panel works on.
   final ValueNotifier<List<({LayerReference layer, UuidValue clip})>> cutClips =
@@ -4037,6 +4390,242 @@ class LumitUiState extends ChangeNotifier {
   /// Null for any other subject.
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutOverlap =
       ValueNotifier(null);
+
+  /// Multicam editing: the switch mode, the angle viewer's page, the multicam
+  /// clip under the playhead, and the job that makes or syncs a multicam comp.
+  late final MulticamState multicam = MulticamState(
+    project: () => _app.project,
+    comp: () => _selectedComp,
+    playhead: () => playheadFrame.value,
+    linked: () => cutLinked.value,
+    notice: (message, {error = false}) =>
+        _app.postNotice(message, error: error),
+    edited: _app.notifyDocumentChanged,
+    refused: reportCut,
+  );
+
+  // --- The angle viewer ----------------------------------------------------
+
+  /// The multicam comp an angle viewer shows, or null for any other view.
+  CompositionReference? multicamOf(ViewerSurface view) {
+    final project = _app.project;
+    final id = view.itemId;
+    if (project == null || id == null || !view.angles) return null;
+    return CompositionReference(
+      internalproject: project.internalid,
+      internalid: UuidValue.withValidation(id),
+    );
+  }
+
+  /// Show every angle of [multicam] in the source side, putting one up if
+  /// there is none. Footage the source side showed goes.
+  void showAngles(CompositionReference multicam) {
+    showSourceView();
+    final view = sourceView;
+    if (view == null) return;
+    _standOnAngles(view, multicam.internalid);
+    views.front(view.id);
+    notifyListeners();
+    rememberSession();
+  }
+
+  /// Stand [view] on the start of the multicam comp [comp], marks and picks
+  /// cleared, and ask for its picture.
+  void _standOnAngles(ViewerSurface view, UuidValue comp) {
+    view.angles = true;
+    view.itemId = comp.toString();
+    view.compId = null;
+    view.sourceFrame = 0;
+    view.sourceIn = null;
+    view.sourceOut = null;
+    view.anglePicture = null;
+    view.angleSound = null;
+    _askForView(view, force: true);
+    views.touch();
+  }
+
+  /// The multicam clip under the playhead whose comp [view] shows, which the
+  /// angle viewer then follows, or null while it stands on its own time.
+  BridgeMulticamAt? anglesFollowing(ViewerSurface view) {
+    final at = multicam.under.value;
+    if (at == null || !view.angles || at.multicam.comp.toString() != view.itemId) {
+      return null;
+    }
+    return at;
+  }
+
+  /// The playhead or the document moved: which multicam clip is under the
+  /// playhead decides what the source side shows. An empty source side takes
+  /// the clip's angles; footage someone loaded stays. While playing the
+  /// engine draws the grid beside every frame itself, and only the marks and
+  /// timecodes over it follow.
+  void _followMulticam() {
+    final source = sourceView;
+    if (source == null) return;
+    if (playing.value) {
+      if (source.angles) multicam.follow();
+      return;
+    }
+    multicam.follow();
+    final at = multicam.under.value;
+    if (at == null) return;
+    final shown = source.itemId;
+    if (shown == null || (source.angles && shown != at.multicam.comp.toString())) {
+      _standOnAngles(source, at.multicam.comp);
+    }
+  }
+
+  /// An angle viewer's picture: page of the comp's angles, drawn by the
+  /// engine as one grid at the size the stage measured, at the frame of the
+  /// clip it follows or its own. Nothing is asked for twice, as for footage.
+  void _askForAngles(ViewerSurface view, {bool force = false}) {
+    final comp = multicamOf(view);
+    if (comp == null) return;
+    final (width, height) = view.canvas;
+    // Not measured yet: the stage asks once it is.
+    if (width <= 0 || height <= 0) return;
+    final frame = anglesFollowing(view)?.frame ?? view.sourceFrame;
+    final page = multicam.page.value;
+    final scale = viewerScale;
+    final stamp = 'angles/${view.itemId}/$frame/$page/$scale/$width/$height/'
+        '${model.heldRevision}';
+    if (!force && _askedFor[view.engineId] == stamp) return;
+    _askedFor[view.engineId] = stamp;
+    try {
+      comp.renderAngles(
+        frame: frame,
+        page: page,
+        scale: scale,
+        width: width,
+        height: height,
+        view: view.engineId,
+      );
+    } catch (_) {
+      // No worker yet, or a comp that has gone away.
+      _askedFor.remove(view.engineId);
+    }
+  }
+
+  /// The angle viewer's picture area in screen pixels, as its stage measured
+  /// it. A new size is a new picture to ask for.
+  void reportAnglesCanvas(ViewerSurface view, int width, int height) {
+    if (view.canvas == (width, height)) return;
+    view.canvas = (width, height);
+    _askForView(view);
+  }
+
+  /// Ask for an angle viewer's picture again: the page turned, or playback
+  /// stopped and the engine's own grid stops coming.
+  void askAngles(ViewerSurface view, {bool force = false}) {
+    if (view.angles) _askForView(view, force: force);
+  }
+
+  /// How many frames the multicam comp an angle viewer shows has, or null
+  /// when it has gone.
+  int? _anglesFrames(ViewerSurface view) {
+    try {
+      final frames = multicamOf(view)?.multicam()?.frames;
+      return frames == null ? null : (frames < 1 ? 1 : frames);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The angle viewer's Insert and Overwrite: its marked stretch of the
+  /// multicam comp, on the angles picked there, placed as [placeSource]
+  /// places footage.
+  void _placeAngles(ViewerSurface view, {required bool insert}) {
+    final comp = _selectedComp;
+    final mc = multicamOf(view);
+    if (comp == null || mc == null) return;
+    final BridgeMulticam? info;
+    try {
+      info = mc.multicam();
+    } catch (_) {
+      return;
+    }
+    if (info == null || info.rateNum <= 0) return;
+    final frames = info.frames < 1 ? 1 : info.frames;
+    final first = (view.sourceIn ?? 0).clamp(0, frames - 1);
+    final last = (view.sourceOut ?? frames - 1).clamp(first, frames - 1);
+    BridgeRational seconds(int frame) =>
+        BridgeRational(num: frame * info!.rateDen, den: info.rateNum);
+    final at = playheadFrame.value;
+    final done = _sourceEdit(() => comp.cutPlaceMulticam(
+          target: _sourceTarget(),
+          comp: mc,
+          sourceIn: seconds(first),
+          sourceOut: seconds(last + 1),
+          atFrame: at,
+          insert: insert,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          picture: view.anglePicture,
+          sound: view.angleSound,
+        ));
+    if (!done) return;
+    final placed =
+        ((last + 1 - first) * info.rateDen / info.rateNum * model.fps).round();
+    final end = model.durationFrames - 1;
+    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+  }
+
+  // --- Markers on footage ---------------------------------------------------
+
+  /// Each item's markers as its source view last read them, by item id,
+  /// dropped when the document changes.
+  final Map<String, List<BridgeFootageMarker>> _sourceMarkers = {};
+
+  /// The markers on a footage view's item, in the item's own frames.
+  List<({UuidValue id, int frame})> sourceMarkers(
+      ViewerSurface view, BridgeMediaInfo facts) {
+    final footage = footageOf(view);
+    if (footage == null || facts.fpsNum <= 0) return const [];
+    final markers = _sourceMarkers[view.itemId!] ??= () {
+      try {
+        return footage.markers();
+      } catch (_) {
+        return const <BridgeFootageMarker>[];
+      }
+    }();
+    return [
+      for (final m in markers)
+        if (m.time.den > 0)
+          (
+            id: m.id,
+            frame: (m.time.num * facts.fpsNum) ~/ (m.time.den * facts.fpsDen),
+          ),
+    ];
+  }
+
+  /// Put a marker on a footage view's item at the frame it stands on.
+  void addSourceMarker(ViewerSurface view) {
+    final footage = footageOf(view);
+    final facts = footage == null ? null : itemFacts(footage);
+    if (footage == null || facts == null || facts.fpsNum <= 0) return;
+    _footageEdit(() => footage.addMarker(
+        at: BridgeRational(
+            num: view.sourceFrame * facts.fpsDen, den: facts.fpsNum)));
+  }
+
+  void removeSourceMarker(ViewerSurface view, UuidValue id) {
+    final footage = footageOf(view);
+    if (footage != null) _footageEdit(() => footage.removeMarker(id: id));
+  }
+
+  void clearSourceMarkers(ViewerSurface view) {
+    final footage = footageOf(view);
+    if (footage != null) _footageEdit(footage.clearMarkers);
+  }
+
+  void _footageEdit(void Function() edit) {
+    try {
+      edit();
+    } catch (_) {
+      // The item went away under the press.
+      return;
+    }
+    _app.notifyDocumentChanged();
+  }
 
   /// Bumped when a preset file has been written, so the Effects & presets
   /// panel reads its folder again.
@@ -4102,6 +4691,10 @@ class LumitUiState extends ChangeNotifier {
   /// else on the lowest one the composition has, else on a new one. The
   /// playhead moves to the end of what was placed, ready for the next.
   void placeSource(ViewerSurface view, {required bool insert}) {
+    if (view.angles) {
+      _placeAngles(view, insert: insert);
+      return;
+    }
     final comp = _selectedComp;
     final marked = _marked(view);
     if (comp == null || marked == null) return;
@@ -4122,6 +4715,23 @@ class LumitUiState extends ChangeNotifier {
     final end = model.durationFrames - 1;
     playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
   }
+
+  /// A placing edit made by another panel, the Transcript panel's words going
+  /// into the composition: the same target layer and switches the source
+  /// side's Insert and Overwrite use, so the two doors cannot disagree.
+  /// [edit] is handed the layer to land on and the Linked, sound-with-picture
+  /// and streams settings as the engine's calls take them. Answers whether it
+  /// went through.
+  bool placeLikeSource(
+    BridgeCutResult Function(LayerReference? target, bool linked,
+            bool withPicture, BridgeStreamsArrival arrival)
+        edit, {
+    String? name,
+  }) =>
+      _sourceEdit(
+          name: name,
+          () => edit(_sourceTarget(), cutLinked.value,
+              workspace.interface.cutSoundWithPicture, streamsArrival));
 
   /// The source side's Replace: the source from its In over the clip picked
   /// in the Cut timeline, which keeps its place and its length.
@@ -5200,6 +5810,7 @@ class LumitUiState extends ChangeNotifier {
         viewerLayout: views.toWorkspaceJson(),
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
+        setupDocks: _sessionSetupDocks(),
         viewerLooks: Map.of(viewerLooks),
         cutTrackHeights: {
           for (final e in cutTrackHeights.entries)
@@ -5218,9 +5829,28 @@ class LumitUiState extends ChangeNotifier {
         folds: folds.toJson());
   }
 
+  /// This project's arrangement with each set of displays it has been open
+  /// with, the one in use now included.
+  Map<String, Map<String, dynamic>> _sessionSetupDocks() {
+    final path = _app.project?.path();
+    final before = path == null
+        ? const <String, Map<String, dynamic>>{}
+        : workspace.sessionFor(path)?.setupDocks ?? const {};
+    final setup = displaySetup;
+    return setup.isEmpty
+        ? before
+        : rememberSetupDock(before, setup, workspace.dock.toJson());
+  }
+
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
-  /// travels with a project shared with someone else.
-  String sessionJson() => jsonEncode(session().toJson());
+  /// travels with a project shared with someone else. Without the floating
+  /// windows or the other displays' arrangements: those are this machine's.
+  String sessionJson() {
+    final json = session().toJson()
+      ..['dock'] = withoutWindows(workspace.dock)
+      ..remove('setup_docks');
+    return jsonEncode(json);
+  }
 
   /// Put the saved session back after a project is opened, and start from
   /// nothing when a new one is made.
@@ -5318,7 +5948,12 @@ class LumitUiState extends ChangeNotifier {
       // is no local record — the first time this project is opened here.
       final session = workspace.sessionFor(path) ?? _embeddedSession(project!);
       if (session == null) return;
-      _applyDock(session.dock);
+      // The arrangement this project last had with these displays, when it
+      // has been open with them before and floating windows are involved.
+      final forSetup = session.setupDocks[displaySetup];
+      _applyDock(forSetup != null && (_floats(forSetup) || _floats(session.dock))
+          ? forSetup
+          : session.dock);
       restoredArrangement = true;
 
       final known = {

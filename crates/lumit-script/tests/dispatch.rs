@@ -891,3 +891,73 @@ fn the_live_endpoint_answers_only_a_program_holding_the_secret() {
     });
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// What a copy of a graphics template is drawn from: a value a script sets
+// on it, and the row of linked data it follows.
+#[test]
+fn a_copy_takes_its_own_values_and_its_data_row() {
+    use lumit_core::template::{author, Target, Template};
+
+    let host = Bare(DocumentStore::new(Document::new()));
+    let card = call(&host, "comp.new", json!({ "name": "Card" }));
+    let card = Uuid::parse_str(card["id"].as_str().unwrap()).unwrap();
+    let title = call(
+        &host,
+        "layer.add",
+        json!({ "comp": "Card", "kind": "text", "name": "Title" }),
+    );
+    let layer = Uuid::parse_str(title["id"].as_str().unwrap()).unwrap();
+    let doc = host.store().snapshot();
+    let mut control = author::control_for(
+        &doc,
+        doc.comp(card).unwrap(),
+        Target::Text { layer },
+        "Title",
+    )
+    .unwrap();
+    control.id = "title".into();
+    let template = Template {
+        controls: vec![control],
+        ..Template::default()
+    };
+    host.store()
+        .commit(lumit_core::ops::Op::SetCompTemplate {
+            comp: card,
+            template: Some(Box::new(template)),
+        })
+        .unwrap();
+    call(&host, "comp.new", json!({ "name": "Main" }));
+    call(
+        &host,
+        "layer.add",
+        json!({ "comp": "Main", "kind": "precomp", "item": "Card", "name": "Copy" }),
+    );
+
+    let set = call(
+        &host,
+        "layer.values",
+        json!({ "comp": "Main", "layer": "Copy", "set": { "Title": "Hello" } }),
+    );
+    assert_eq!(set["controls"][0]["value"], json!("Hello"));
+    assert_eq!(set["controls"][0]["own"], json!(true));
+    let own = call(&host, "comp.controls", json!({ "comp": "Card" }));
+    assert_ne!(own["controls"][0]["value"], json!("Hello"));
+
+    let dir = std::env::temp_dir().join(format!("lumit-rows-{}", Uuid::now_v7()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("rows.csv");
+    std::fs::write(&file, "Title\nFirst\nSecond\n").unwrap();
+    let rows = call(&host, "data.rows", json!({ "comp": "Card", "file": file }));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(rows["rows"], json!(2));
+    assert_eq!(rows["columns"][0]["control"], json!("title"));
+    let fed = call(
+        &host,
+        "layer.values",
+        json!({ "comp": "Main", "layer": "Copy", "reset": true, "row": 2 }),
+    );
+    assert_eq!(fed["row"], json!(2));
+    assert_eq!(fed["controls"][0]["value"], json!("Second"));
+    assert_eq!(fed["controls"][0]["fed"], json!(true));
+    assert_eq!(fed["controls"][0]["own"], json!(false));
+}

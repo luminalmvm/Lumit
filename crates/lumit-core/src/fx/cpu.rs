@@ -2,6 +2,8 @@ use super::maths::lattice_hash;
 use super::noise::{fractal, hash01, value3, FractalField};
 use super::{maths::MAX_BLADES, resolved::MatteKeyParams, resolved::MbQuality, resolved::MbView};
 
+mod path_draw;
+
 /// Apply a whole resolved stack to an RGBA f32 image (premultiplied, linear
 /// light), in place — the CPU-degradation rung and the parity oracle's
 /// entry point.
@@ -23,8 +25,12 @@ use super::{maths::MAX_BLADES, resolved::MatteKeyParams, resolved::MbQuality, re
 /// its `cpu::` reference directly from the lumit-gpu test, which can upload the
 /// second picture.
 pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::params::ResolvedStack) {
-    for fx in ops.iter() {
+    let mut run = super::effects::correction::combine::Run::default();
+    for (i, fx) in ops.iter().enumerate() {
+        run.begin(ops, i, rgba);
         match blend_seam(fx.def.schema(), fx.params) {
+            // A Layer node is drawn by the run, below.
+            _ if run.layers() => {}
             // The Blend row, the CPU half of the seam: the kernel runs
             // at Mix 100 into a copy, and the blend and the Mix are applied
             // here, once, exactly as `run_ops` does on the GPU.
@@ -36,6 +42,7 @@ pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::params::Resolv
             }
             None => fx.def.apply_cpu(rgba, w, h, fx.params),
         }
+        run.end(rgba, w, h, &fx);
     }
 }
 
@@ -9358,34 +9365,6 @@ pub struct PathDrawParams {
     pub style: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-}
-
-impl PathDrawParams {
-    /// An empty drawing — the no-op every path effect degrades to, and the base
-    /// each of them fills in with `..PathDrawParams::blank()`.
-    ///
-    /// Not [`Default`], because an array of 512 does not derive one.
-    #[must_use]
-    pub fn blank() -> Self {
-        Self {
-            segments: [[0.0; 4]; PATH_PRIMITIVES],
-            arcs: [0.0; PATH_PRIMITIVES],
-            count: 0,
-            half_width: 0.0,
-            band: 0.5,
-            inv_segment: 0.0,
-            duty: 2.0,
-            phase: 0.0,
-            wiggle_amp: 0.0,
-            wiggle_freq: 0.0,
-            wiggle_tick: 0.0,
-            seed: 0,
-            colour: [0.0; 3],
-            opacity: 0.0,
-            style: PAINT_ON_ORIGINAL,
-            mix: 0.0,
-        }
-    }
 }
 
 /// Fill `p`'s geometry from a chain of points in raster pixels, trimmed to the

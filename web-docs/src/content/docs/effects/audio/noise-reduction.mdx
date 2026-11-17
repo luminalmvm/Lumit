@@ -1,0 +1,78 @@
+---
+title: Noise reduction
+description: "Turns down steady background noise, such as hiss, a fan or the sound of a room."
+---
+
+Noise reduction is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns down steady noise under a recording: hiss, a fan, the sound of a room. It works from a
+**noise profile**, the level of the noise at every frequency, and turns each frequency down
+by how much of it the profile accounts for.
+
+With **Adaptive** on, or with nothing learned, the profile is found in the whole of the
+layer's own sound, from its quietest moments at each frequency.
+
+**Learn** measures the profile from a stretch of the sound and turns Adaptive off, as one
+undo step:
+
+- With a work area that covers only part of the layer, it reads the work area, up to 30
+  seconds.
+- Otherwise it reads the quietest second and a half in the 30 seconds around the playhead.
+
+Effects above Noise reduction in the stack are run on the stretch first. The profile is kept
+with the effect and saved in the project.
+
+The display above the controls shows the sound arriving around the playhead, the profile,
+the profile raised by **Threshold**, and what comes out. It reads **Measuring** while Learn
+runs, **Learned** when the profile drawn is a learned one, and **Nothing to measure** when
+the layer has no sound there.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Learn** | Button | - | - | - |
+| **Adaptive** | Checkbox | On or off | On | - |
+| **Threshold** | Slider | -10 to 20 | 0 | - |
+| **Reduction** | Slider | 0 to 40 | 12 | - |
+| **Smoothing** | Slider | 0 to 100 | 50 | Per cent |
+| **Tonal reduction** | Slider | 0 to 40 | 0 | - |
+| **Noise only** | Checkbox | On or off | Off | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Learn**: measure the noise over the work area, or the quietest stretch near the playhead.
+- **Adaptive**: find the noise in the layer's own sound and not from a learned profile.
+- **Threshold**: how far the profile is raised before the sound is held against it, in dB.
+- **Reduction**: the most any frequency is turned down, in dB.
+- **Smoothing**: how slowly the reduction follows the sound. Low leaves a watery, chirping
+  residue. High leaves noise after a sound stops.
+- **Tonal reduction**: how much further steady tones in the profile, such as a whine, are
+  turned down, in dB.
+- **Noise only**: plays what is taken away.
+
+**Effect ▸ Learn noise** (`Alt+L`) presses **Learn**, and **Effect ▸ Only what is removed**
+(`Alt+N`) switches **Noise only**.
+
+## Related
+
+- [Cleaning up a noisy shot and its sound](/tutorials/clean-up-a-noisy-shot/)
+- [Hum removal](/effects/audio/hum-removal/)
+- [Voice isolation](/effects/audio/voice-isolation/)
+- [Gate](/effects/audio/gate/)
+- [Denoise](/effects/blur-sharpen/denoise/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

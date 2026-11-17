@@ -246,13 +246,20 @@ class _ProWindowState extends State<_ProWindow>
               ),
               _Feature(
                 index: 3,
+                mark: LumitIcons.export,
+                title: l10n.proFeatureRemoteTitle,
+                body: l10n.proFeatureRemoteBody,
+                on: pro,
+              ),
+              _Feature(
+                index: 4,
                 mark: LumitIcons.undo,
                 title: l10n.proFeatureBackupTitle,
                 body: l10n.proFeatureBackupBody,
                 on: pro,
               ),
               _Feature(
-                index: 4,
+                index: 5,
                 mark: LumitIcons.loop,
                 title: l10n.proFeatureSyncTitle,
                 body: l10n.proFeatureSyncBody,

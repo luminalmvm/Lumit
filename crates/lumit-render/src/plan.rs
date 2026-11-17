@@ -24,9 +24,12 @@
 use crate::decode::{CompJob, Cut};
 use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
+use lumit_core::fx::temporal::FlowWant;
 use lumit_core::model::{Composition, Document, LayerKind};
-use std::path::PathBuf;
+use media_source::media_source;
 use uuid::Uuid;
+mod media_source;
+mod synthesis_key;
 
 /// While the user is actively scrubbing or dragging, footage decodes at most
 /// this wide so a frame comes back fast (the specified resolution reloads the
@@ -187,14 +190,25 @@ impl Quality {
 /// (docs/impl/node-graph-comp.md §5.3), which are part of the frame's name, so
 /// what the builder names and what the planner skips agree. `None` everywhere
 /// else, which is every layer over a layer comp.
-pub type HeldNested<'a> =
-    &'a dyn Fn(&Composition, f64, Option<&lumit_core::model::EffectInstance>) -> bool;
+///
+/// The document is the one the comp is read from, which for a copy of a
+/// graphics template is the one its values make.
+pub type HeldNested<'a> = &'a dyn Fn(
+    &std::sync::Arc<Document>,
+    &Composition,
+    f64,
+    Option<&lumit_core::model::EffectInstance>,
+) -> bool;
 
 /// The inputs a plan walk carries down the Precomp recursion, unchanged at
 /// every depth: what the media is and how coarsely to decode. Bundled so the
 /// recursive walk stays readable.
 pub struct PlanContext<'a> {
     pub doc: &'a Document,
+    /// `doc` as the renderer shares it, when it does. A copy of a graphics
+    /// template is planned in the document its values make, and making one
+    /// starts from this. `None` plans every copy as the template itself.
+    pub shared: Option<&'a std::sync::Arc<Document>>,
     pub quality: Quality,
     pub probes: &'a dyn SourceProbes,
     /// Answers "is this nested comp's frame, at this layer time, already held
@@ -210,45 +224,6 @@ pub struct PlanContext<'a> {
     pub held: Option<HeldNested<'a>>,
 }
 
-/// The decode source for one footage item: the file its pixels are read from
-/// (already resolved through the proxy rule) and — for a numbered run of
-/// stills — the rate to read the run at.
-///
-/// The rate rides only when the file *is* the item's own media. A proxy is one
-/// file standing in for the whole run, so reading it as a sequence would be
-/// reading files that are not there. The same goes for a source layer or a
-/// render pass: a proxy has no layers or passes to pick from.
-fn media_source(
-    doc: &Document,
-    item: Uuid,
-    media: &lumit_core::model::MediaRef,
-) -> lumit_media::sequence::MediaSource {
-    let footage = match doc.item(item) {
-        Some(lumit_core::model::ProjectItem::Footage(f)) => Some(f),
-        _ => None,
-    };
-    let (sequence_fps, source_layer, render_pass) = match footage {
-        Some(f) if std::ptr::eq(&f.media, media) => (
-            f.sequence_fps(),
-            f.source_layer,
-            f.interpretation.render_pass.clone(),
-        ),
-        _ => (None, None, None),
-    };
-    lumit_media::sequence::MediaSource {
-        path: PathBuf::from(&media.absolute_path),
-        sequence_fps,
-        source_layer,
-        render_pass,
-        // A proxy is the same frames, so it is read the way its original is.
-        interpret: footage
-            .map(crate::source::interpretation)
-            .unwrap_or_default(),
-        stamp: None,
-    }
-    .stamped()
-}
-
 /// The neighbour frames a Precomp or adjustment layer's stack reads at layer
 /// time `lt`, each with whether a flow consumer wants motion measured against
 /// it. These layers have no decoded frames, so their picture is built again at
@@ -257,24 +232,26 @@ fn media_source(
 /// its own frame.
 ///
 /// The second half of each entry is the flow offset a field measured against
-/// that picture is filed under, `None` when nothing measures it. On the frame
-/// before a cut (`crosses`, asked per offset) Motion blur is measured a frame
-/// back and filed under its own `1`, so the next shot is never read as motion.
+/// that picture is filed under and how it is wanted, `None` when nothing
+/// measures it. On the frame before a cut (`crosses`, asked per offset) Motion
+/// blur is measured a frame back and filed under its own `1`, so the next shot
+/// is never read as motion.
 pub(crate) fn rebuild_offsets(
     layer: &lumit_core::model::Layer,
     lt: f64,
     comp_dt: f64,
     crosses: impl Fn(i32) -> bool,
-) -> Vec<(i32, Option<i32>)> {
+) -> Vec<(i32, Option<(i32, FlowWant)>)> {
     let fx_on = layer.switches.fx;
-    let flow = lumit_core::fx::temporal::stack_flow_sides(&layer.effects, fx_on, crosses);
-    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side)| side).collect();
+    let flow = lumit_core::fx::temporal::stack_flow_sides_wanted(&layer.effects, fx_on, crosses);
+    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side, _)| side).collect();
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, fx_on) {
         // Asked at the layer's frame, as a footage layer's window is.
         offsets.extend(lumit_core::fx::temporal::stack_temporal_window(
             &layer.effects,
             fx_on,
             lt / comp_dt,
+            1.0 / comp_dt,
         ));
     }
     offsets.retain(|&o| o != 0);
@@ -285,10 +262,8 @@ pub(crate) fn rebuild_offsets(
     offsets
         .into_iter()
         .map(|o| {
-            (
-                o,
-                flow.iter().find(|&&(_, side)| side == o).map(|&(f, _)| f),
-            )
+            let measure = flow.iter().find(|&&(_, side, _)| side == o);
+            (o, measure.map(|&(f, _, want)| (f, want)))
         })
         .collect()
 }
@@ -389,6 +364,7 @@ pub fn collect_comp_jobs(
 ) {
     let PlanContext {
         doc,
+        shared,
         quality,
         probes,
         held,
@@ -541,8 +517,11 @@ pub fn collect_comp_jobs(
             continue;
         }
         // As the build draws it, so a layer a clip's effect reads is decoded.
-        let worn =
-            lumit_core::sequence::worn_at(l, lumit_core::time::layer_time(t, l.start_offset.0));
+        let worn = lumit_core::grade::groups::worn_at(
+            doc,
+            l,
+            lumit_core::time::layer_time(t, l.start_offset.0),
+        );
         let l = worn.as_ref().unwrap_or(l);
         if l.switches.visible
             && (in_span(l) || moment_in_span(idx, l))
@@ -645,7 +624,7 @@ pub fn collect_comp_jobs(
         let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
         // As the build draws it, so a clip's temporal effect is planned its
         // neighbours.
-        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let worn = lumit_core::grade::groups::worn_at(doc, layer, lt);
         let layer = worn.as_ref().unwrap_or(layer);
         match &layer.kind {
             // No footage source to decode (an adjustment layer processes
@@ -660,10 +639,8 @@ pub fn collect_comp_jobs(
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {
-                let flow_neighbours = lumit_core::fx::temporal::stack_flow_neighbours(
-                    &layer.effects,
-                    layer.switches.fx,
-                );
+                let flow_neighbours =
+                    lumit_core::fx::temporal::stack_flow_wants(&layer.effects, layer.switches.fx);
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 // The job for one clip at layer time `lt`, alone (a clip
                 // whose source is a comp has no job). `whole` asks for
@@ -806,14 +783,43 @@ pub fn collect_comp_jobs(
                     let ClipSource::Comp(nested_id) = clip.source else {
                         continue;
                     };
-                    let Some(nested) = doc
-                        .comp(nested_id)
+                    // A clip that is a copy of a graphics template is planned
+                    // in the document its values make, so a picture it puts in
+                    // the template is the one fetched.
+                    let placed = shared.and_then(|shared| {
+                        lumit_core::template::placed::for_clip(
+                            shared,
+                            comp,
+                            layer,
+                            clip,
+                            lt,
+                            sample_times[idx],
+                        )
+                    });
+                    let within = placed.as_ref().map(|placed| PlanContext {
+                        doc: placed,
+                        shared: Some(placed),
+                        quality,
+                        probes,
+                        held,
+                    });
+                    let (ctx, doc) = match (&within, &placed) {
+                        (Some(within), Some(placed)) => (within, &**placed),
+                        _ => (ctx, doc),
+                    };
+                    // A multicam clip decodes its angle and no other.
+                    let Some(nested) = lumit_core::multicam::nested_for(doc, clip)
                         .filter(|_| !visited.contains(&nested_id))
                     else {
                         continue;
                     };
+                    let nested = nested.as_ref();
                     let st = clip.nested_time(nested, lt);
-                    if sample_times[idx] == t && held.is_some_and(|held| held(nested, st, None)) {
+                    if sample_times[idx] == t
+                        && held
+                            .zip(placed.as_ref().or(shared))
+                            .is_some_and(|(held, read)| held(read, nested, st, None))
+                    {
                         continue;
                     }
                     visited.push(nested_id);
@@ -849,7 +855,9 @@ pub fn collect_comp_jobs(
                 // layer's are, through whichever clip is live then. A clip of
                 // this job's footage is one more frame of it, and any other
                 // is a job of its own, as is one inside a fade or a dissolve.
-                // A gap is no neighbour.
+                // A gap is no neighbour, and for Denoise nor is another clip.
+                let other =
+                    |at| lumit_core::fx::temporal::denoise_cut(&flow_neighbours, clips, lt, at);
                 if !in_gap
                     && lumit_core::fx::temporal::stack_is_temporal(
                         &layer.effects,
@@ -860,10 +868,12 @@ pub fn collect_comp_jobs(
                         &layer.effects,
                         layer.switches.fx,
                         lt / comp_dt,
+                        1.0 / comp_dt,
                     );
                     for o in window.into_iter().filter(|&o| o != 0) {
-                        match clip_job(lumit_core::time::frames_on(lt, o, comp_dt), true) {
-                            Some(n) if n.item == job.item && n.cuts.is_empty() => {
+                        let at = lumit_core::time::frames_on(lt, o, comp_dt);
+                        match clip_job(at, true) {
+                            Some(n) if n.item == job.item && n.cuts.is_empty() && !other(at) => {
                                 job.temporal.push((o, n.source_frame));
                             }
                             Some(n) => job.cuts.push(Cut::Neighbour(o, n)),
@@ -893,6 +903,32 @@ pub fn collect_comp_jobs(
                     continue; // cycle guard
                 }
                 if let Some(nested) = doc.comp(*nested_id) {
+                    // A copy of a graphics template is planned in the document
+                    // its values make, so a picture it puts in the template is
+                    // the one fetched.
+                    let placed = shared.and_then(|shared| {
+                        lumit_core::template::placed::for_layer(
+                            shared,
+                            comp,
+                            layer,
+                            lt,
+                            sample_times[idx],
+                            None,
+                        )
+                    });
+                    let within = placed.as_ref().map(|placed| PlanContext {
+                        doc: placed,
+                        shared: Some(placed),
+                        quality,
+                        probes,
+                        held,
+                    });
+                    let (ctx, doc, nested) = match (&within, &placed) {
+                        (Some(within), Some(placed)) => {
+                            (within, &**placed, placed.comp(*nested_id).unwrap_or(nested))
+                        }
+                        _ => (ctx, doc, nested),
+                    };
                     // The Retime map (docs/impl/node-graph-comp.md §5.6): the
                     // moment of the nested comp this layer shows, which is the
                     // moment the builder evaluates and names. Equal to `lt`
@@ -954,7 +990,16 @@ pub fn collect_comp_jobs(
                     if live
                         && !collapsed
                         && nested_moments.is_empty()
-                        && held.is_some_and(|held| held(nested, st, layer.graph_inputs.as_ref()))
+                        && held
+                            .zip(placed.as_ref().or(shared))
+                            .is_some_and(|(held, read)| {
+                                // A template's copy is named by its document
+                                // alone, as the builder names it.
+                                let inputs = layer.graph_inputs.as_ref().filter(|i| {
+                                    lumit_core::fx::effects::template::comp_of(i).is_none()
+                                });
+                                held(read, nested, st, inputs)
+                            })
                     {
                         continue;
                     }
@@ -1025,10 +1070,8 @@ pub fn collect_comp_jobs(
                 let interp = &layer.interpolation;
                 let blend_on = matches!(interp, Interpolation::Blend) || flow.is_some();
                 let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
-                let flow_neighbours = lumit_core::fx::temporal::stack_flow_neighbours(
-                    &layer.effects,
-                    layer.switches.fx,
-                );
+                let flow_neighbours =
+                    lumit_core::fx::temporal::stack_flow_wants(&layer.effects, layer.switches.fx);
                 // A layer that needs flow decodes at its own width whatever the
                 // preview tier says: flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
@@ -1071,6 +1114,7 @@ pub fn collect_comp_jobs(
                         &layer.effects,
                         layer.switches.fx,
                         lt / comp_dt,
+                        1.0 / comp_dt,
                     )
                     .into_iter()
                     .filter(|&o| o != 0)
@@ -1196,6 +1240,7 @@ fn collect_graph_jobs(
 ) {
     let PlanContext {
         doc,
+        shared,
         quality,
         probes,
         held,
@@ -1268,7 +1313,11 @@ fn collect_graph_jobs(
                 // A held nested frame wants no decodes: the realiser will
                 // serve the texture and never look at the pixels. A rebuild
                 // at another moment is made from pixels, as a Precomp's is.
-                if moments.is_empty() && held.is_some_and(|held| held(nested, t, None)) {
+                if moments.is_empty()
+                    && held
+                        .zip(shared)
+                        .is_some_and(|(held, read)| held(read, nested, t, None))
+                {
                     continue;
                 }
                 visited.push(*nested_id);
@@ -1399,13 +1448,27 @@ pub fn plan_comp_frame(
     quality: Quality,
     probes: &dyn SourceProbes,
 ) -> Vec<CompJob> {
-    plan_comp_frame_held(doc, comp, t, quality, probes, None)
+    planned(doc, None, comp, t, quality, probes, None)
 }
 
-/// [`plan_comp_frame`] with the nested-frame answerer ([`PlanContext::held`]).
+/// [`plan_comp_frame`] for the document as the renderer shares it, with the
+/// nested-frame answerer ([`PlanContext::held`]). What a frame is planned by,
+/// so a copy of a graphics template is planned under its own values.
 #[must_use]
 pub fn plan_comp_frame_held(
+    doc: &std::sync::Arc<Document>,
+    comp: &Composition,
+    t: f64,
+    quality: Quality,
+    probes: &dyn SourceProbes,
+    held: Option<HeldNested<'_>>,
+) -> Vec<CompJob> {
+    planned(doc, Some(doc), comp, t, quality, probes, held)
+}
+
+fn planned(
     doc: &Document,
+    shared: Option<&std::sync::Arc<Document>>,
     comp: &Composition,
     t: f64,
     quality: Quality,
@@ -1414,6 +1477,7 @@ pub fn plan_comp_frame_held(
 ) -> Vec<CompJob> {
     let ctx = PlanContext {
         doc,
+        shared,
         quality,
         probes,
         held,
@@ -1505,7 +1569,7 @@ impl CompJob {
         if let Some(flow) = &self.flow {
             h.update(b"flow/");
             h.update(&bincode::serialize(flow).unwrap_or_default());
-            feed_synthesis(&mut h, flow);
+            synthesis_key::feed_synthesis(&mut h, flow);
         }
         for (offset, frame) in &self.temporal {
             h.update(&offset.to_le_bytes());
@@ -1517,8 +1581,9 @@ impl CompJob {
         if self.flow_neighbours.is_empty() {
             h.update(&i32::MIN.to_le_bytes());
         }
-        for offset in &self.flow_neighbours {
+        for (offset, want) in &self.flow_neighbours {
             h.update(&offset.to_le_bytes());
+            h.update(want.name_tag());
         }
         // The extracted channels name the pixels as surely as the frame number
         // does: the same file at the same frame is a different picture read as
@@ -1545,7 +1610,7 @@ impl CompJob {
         if let Some(flow) = &self.shutter_flow {
             h.update(b"shutter-flow/");
             h.update(&bincode::serialize(flow).unwrap_or_default());
-            feed_synthesis(&mut h, flow);
+            synthesis_key::feed_synthesis(&mut h, flow);
         }
         // Another clip's frame is content too, and so is a gap.
         for (kind, offset, clip) in self.cuts.iter().map(Cut::name) {
@@ -1560,942 +1625,6 @@ impl CompJob {
     }
 }
 
-/// Which model paints this job's in-between frames, for a job that asks one to.
-///
-/// The pack is not in the document, so serialising the Flow group cannot say
-/// which one it is. Without this the pixels change when a pack is installed and
-/// their name does not, and every effect on the layer hands back the picture it
-/// worked out from the built-in engine's frames (docs/impl/addons.md §7).
-fn feed_synthesis(h: &mut blake3::Hasher, flow: &lumit_core::retime::FlowParams) {
-    if flow.engine != lumit_core::retime::FlowEngineChoice::Rife {
-        return;
-    }
-    if let Some(identity) = lumit_ml::synthesis::installed_identity() {
-        h.update(b"synth/");
-        h.update(&identity);
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
-    use super::*;
-    use lumit_core::model::ProjectItem;
-
-    /// A source wider or taller than the texture limit decodes shrunk to fit,
-    /// whatever the quality asked for; anything that fits is left alone.
-    #[test]
-    fn oversize_footage_decodes_within_the_texture_limit() {
-        assert_eq!(fit_texture(None, 7680, 4320), None, "8K fits");
-        assert_eq!(fit_texture(Some(960), 7680, 4320), Some(960));
-        assert_eq!(fit_texture(None, 9000, 5000), Some(8192), "wide: capped");
-        assert_eq!(
-            fit_texture(None, 5000, 9000),
-            Some(4551),
-            "tall: the height caps"
-        );
-        assert_eq!(
-            fit_texture(Some(4000), 9000, 5000),
-            Some(4000),
-            "smaller ask kept"
-        );
-        assert_eq!(
-            fit_texture(Some(8500), 9000, 5000),
-            Some(8192),
-            "larger ask capped"
-        );
-    }
-
-    /// Full quality decodes at native width; a divisor and Auto both shrink it,
-    /// and draft caps on top without ever raising the specified width. This is
-    /// the policy both the decode request and the cache key read, so a bug here
-    /// would file a frame under the wrong resolution.
-    #[test]
-    fn a_layer_shown_smaller_decodes_no_larger_than_it_is_shown() {
-        let on = Quality {
-            shown_size: true,
-            ..Quality::default()
-        };
-        assert_eq!(on.target_width_shown(3840, Some(0.5)), Some(1920));
-        assert_eq!(on.target_width_shown(3840, None), None, "not a candidate");
-        let half = Quality { divisor: 2, ..on };
-        assert_eq!(
-            half.target_width_shown(3840, Some(0.5)),
-            Some(960),
-            "Half of the shown size"
-        );
-        let off = Quality::default();
-        assert_eq!(
-            off.target_width_shown(3840, Some(0.5)),
-            None,
-            "the setting off, or export, decodes as before"
-        );
-    }
-
-    #[test]
-    fn target_width_follows_the_quality_policy() {
-        let full = Quality::default();
-        assert_eq!(full.target_width(1920), None, "Full decodes at native");
-
-        let half = Quality {
-            divisor: 2,
-            ..Quality::default()
-        };
-        assert_eq!(half.target_width(1920), Some(960));
-
-        let auto = Quality {
-            auto_res: true,
-            display_scale: 0.25,
-            ..Quality::default()
-        };
-        assert_eq!(auto.target_width(1920), Some(480));
-
-        // Auto never decodes ABOVE native, however far the view is zoomed in.
-        let zoomed = Quality {
-            auto_res: true,
-            display_scale: 4.0,
-            ..Quality::default()
-        };
-        assert_eq!(zoomed.target_width(1920), None);
-
-        // A source already finer than every setting decodes natively.
-        let half_of_small = Quality {
-            auto_res: true,
-            display_scale: 0.5,
-            ..Quality::default()
-        };
-        assert_eq!(half_of_small.target_width(1000), Some(500));
-
-        // Draft caps a large source hard...
-        let draft = Quality {
-            draft: true,
-            ..Quality::default()
-        };
-        assert_eq!(draft.target_width(3840), Some(DRAFT_MAX_WIDTH));
-        assert_eq!(draft.target_width(1920), Some(DRAFT_MAX_WIDTH));
-        // ...still caps when the specified width (960) is above the cap...
-        let draft_half = Quality {
-            draft: true,
-            divisor: 2,
-            ..Quality::default()
-        };
-        assert_eq!(draft_half.target_width(1920), Some(DRAFT_MAX_WIDTH));
-        // ...but never RAISES an already-coarser specified width.
-        let draft_quarter = Quality {
-            draft: true,
-            divisor: 4,
-            ..Quality::default()
-        };
-        assert_eq!(draft_quarter.target_width(1920), Some(480));
-        assert_eq!(draft_quarter.target_width(1280), Some(320));
-        // Auto zoomed right out stays where Auto put it, under draft too.
-        let draft_auto = Quality {
-            draft: true,
-            auto_res: true,
-            display_scale: 0.1,
-            ..Quality::default()
-        };
-        assert_eq!(draft_auto.target_width(1920), Some(192));
-        // A source already smaller than the cap needs no draft decode at all.
-        assert_eq!(draft.target_width(320), None);
-    }
-
-    /// **A hidden matte source decodes for whatever layer names it, an
-    /// adjustment layer included** (docs/06 §1.6).
-    ///
-    /// The regression, and the reason it read as "hiding the matte layer breaks
-    /// the matte": a layer acting as an adjustment draws the composite beneath
-    /// it rather than a picture of its own, so this walk skipped it outright —
-    /// and took its matte reference with it. The matte source was then wanted by
-    /// nothing but itself, so it decoded only while its own visibility switch
-    /// was on. Switch off the eye — which is what everyone does to a matte
-    /// source, since its picture is not meant to be in the frame — and its
-    /// footage never decoded, `pixels_for` gave up, and the matte silently
-    /// vanished. On an ordinary consumer the same matte worked, which is what
-    /// made it look like a visibility bug rather than an adjustment one.
-    ///
-    /// Both consumers are checked, hidden matte source either way: the ordinary
-    /// one is the case that always worked and must keep working, the adjustment
-    /// one is the fix.
-    #[test]
-    fn a_hidden_matte_source_decodes_for_an_adjustment_layer_too() {
-        use lumit_core::model::{
-            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MatteChannel,
-            MatteRef, MediaRef, Switches, TransformGroup,
-        };
-        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-        use std::collections::HashMap;
-
-        let layer = |kind: LayerKind| Layer {
-            graph: Default::default(),
-            markers: Vec::new(),
-            id: Uuid::now_v7(),
-            name: "l".into(),
-            kind,
-            in_point: CompTime(Rational::ZERO),
-            out_point: CompTime(Rational::new(10, 1).unwrap()),
-            start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
-            matte: None,
-            parent: None,
-            label: 0,
-            volume_db: lumit_core::anim::Property::zero(),
-            pan: lumit_core::anim::Property::zero(),
-            audio_only: false,
-            audio_streams: Default::default(),
-            adjustment: false,
-            pitch_follows_speed: false,
-            audio_routes: Default::default(),
-            retime: None,
-            interpolation: lumit_core::retime::Interpolation::default(),
-            parked_flow: None,
-            graph_inputs: None,
-            blend: lumit_core::model::BlendMode::default(),
-            masks: Vec::new(),
-            paint: Vec::new(),
-            puppet: None,
-            effects: Vec::new(),
-            styles: Vec::new(),
-            switches: Switches::default(),
-            extra: serde_json::Map::new(),
-        };
-        let comp = |layers: Vec<Layer>| Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            lighting: Default::default(),
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 64,
-            height: 64,
-            frame_rate: FrameRate::new(60, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour::BLACK,
-            work_area: None,
-            layers,
-            markers: Vec::new(),
-            motion_blur: lumit_core::model::MotionBlur::default(),
-            extra: serde_json::Map::new(),
-        };
-
-        for adjustment in [false, true] {
-            let mut doc = Document::new();
-            let item = Uuid::now_v7();
-            doc.items.push(ProjectItem::Footage(FootageItem {
-                sequence: None,
-                id: item,
-                name: "f".into(),
-                media: MediaRef {
-                    relative_path: "f.mp4".into(),
-                    absolute_path: "/f.mp4".into(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                extra: serde_json::Map::new(),
-                colour_space: None,
-                source_layer: None,
-                interpretation: Default::default(),
-            }));
-            // Hidden, as a matte source always is: its picture is the gate, not
-            // part of the frame.
-            let mut matte_layer = layer(LayerKind::Footage { item });
-            matte_layer.switches.visible = false;
-            let matte_id = matte_layer.id;
-            let mut consumer = layer(LayerKind::Solid {
-                def: Uuid::now_v7(),
-            });
-            consumer.adjustment = adjustment;
-            consumer.matte = Some(MatteRef {
-                layer: matte_layer.id,
-                channel: MatteChannel::Alpha,
-                inverted: false,
-                source: lumit_core::model::LayerInputSource::default(),
-            });
-            let outer = comp(vec![matte_layer, consumer]);
-            let outer_id = outer.id;
-            doc.items.push(ProjectItem::Composition(outer));
-            let probes: HashMap<Uuid, crate::source::SourceProbe> = [(
-                item,
-                crate::source::SourceProbe::Video {
-                    fps: 60.0,
-                    width: 64,
-                    height: 64,
-                    frames: 600,
-                    audio: false,
-                },
-            )]
-            .into_iter()
-            .collect();
-            let outer = doc.comp(outer_id).unwrap();
-            let jobs = plan_comp_frame(&doc, outer, 0.0, Quality::default(), &probes);
-            let who = if adjustment {
-                "a layer acting as an adjustment"
-            } else {
-                "an ordinary layer"
-            };
-            assert_eq!(
-                jobs.len(),
-                1,
-                "{who} matted by a hidden footage layer must plan that layer's decode"
-            );
-            assert_eq!(jobs[0].item, item);
-            assert_eq!(
-                jobs[0].layer, matte_id,
-                "and the job is the matte source's own, not the consumer's"
-            );
-        }
-    }
-
-    /// **A retimed Precomp is planned and held by the moment it shows**
-    /// (docs/impl/node-graph-comp.md §5.6). The builder evaluates the nested
-    /// comp at `source_time_at`, so the planner has to decode there and ask
-    /// the held question there: planning at layer time would fetch the frame
-    /// after the one on screen, and asking at layer time would hold a texture
-    /// the realiser never looks for.
-    #[test]
-    fn a_retimed_precomp_plans_and_holds_by_its_mapped_time() {
-        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-        use lumit_core::model::{
-            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
-            TransformGroup,
-        };
-        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-        use std::collections::HashMap;
-
-        let layer = |kind: LayerKind| Layer {
-            graph: Default::default(),
-            markers: Vec::new(),
-            id: Uuid::now_v7(),
-            name: "l".into(),
-            kind,
-            in_point: CompTime(Rational::ZERO),
-            out_point: CompTime(Rational::new(10, 1).unwrap()),
-            start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
-            matte: None,
-            parent: None,
-            label: 0,
-            volume_db: Property::zero(),
-            pan: Property::zero(),
-            audio_only: false,
-            audio_streams: Default::default(),
-            adjustment: false,
-            pitch_follows_speed: false,
-            audio_routes: Default::default(),
-            retime: None,
-            interpolation: lumit_core::retime::Interpolation::default(),
-            parked_flow: None,
-            graph_inputs: None,
-            blend: lumit_core::model::BlendMode::default(),
-            masks: Vec::new(),
-            paint: Vec::new(),
-            puppet: None,
-            effects: Vec::new(),
-            styles: Vec::new(),
-            switches: Switches::default(),
-            extra: serde_json::Map::new(),
-        };
-        let comp = |layers: Vec<Layer>| Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            lighting: Default::default(),
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 64,
-            height: 64,
-            frame_rate: FrameRate::new(60, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour::BLACK,
-            work_area: None,
-            layers,
-            markers: Vec::new(),
-            motion_blur: lumit_core::model::MotionBlur::default(),
-            extra: serde_json::Map::new(),
-        };
-        let mut doc = Document::new();
-        let item = Uuid::now_v7();
-        doc.items.push(ProjectItem::Footage(FootageItem {
-            sequence: None,
-            id: item,
-            name: "f".into(),
-            media: MediaRef {
-                relative_path: "f.mp4".into(),
-                absolute_path: "/f.mp4".into(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            extra: serde_json::Map::new(),
-            colour_space: None,
-            source_layer: None,
-            interpretation: Default::default(),
-        }));
-        let inner = comp(vec![layer(LayerKind::Footage { item })]);
-        let inner_id = inner.id;
-        doc.items.push(ProjectItem::Composition(inner));
-        // Half speed: at outer time four the nested comp is at two.
-        let mut placed = layer(LayerKind::Precomp { comp: inner_id });
-        placed.retime = Some(Property {
-            animation: Animation::Keyframed(vec![
-                Keyframe {
-                    time: Rational::ZERO,
-                    value: 0.0,
-                    interp_in: SideInterp::Linear,
-                    interp_out: SideInterp::Linear,
-                },
-                Keyframe {
-                    time: Rational::new(10, 1).unwrap(),
-                    value: 5.0,
-                    interp_in: SideInterp::Linear,
-                    interp_out: SideInterp::Linear,
-                },
-            ]),
-            extra: serde_json::Map::new(),
-        });
-        let outer = comp(vec![placed]);
-        let outer_id = outer.id;
-        doc.items.push(ProjectItem::Composition(outer));
-        let probes: HashMap<Uuid, crate::source::SourceProbe> = [(
-            item,
-            crate::source::SourceProbe::Video {
-                fps: 60.0,
-                width: 64,
-                height: 64,
-                frames: 600,
-                audio: false,
-            },
-        )]
-        .into_iter()
-        .collect();
-
-        let asked = std::cell::Cell::new(f64::NAN);
-        let held = |_: &Composition, lt: f64, _: Option<&lumit_core::model::EffectInstance>| {
-            asked.set(lt);
-            false
-        };
-        let held: HeldNested<'_> = &held;
-        let jobs = plan_comp_frame_held(
-            &doc,
-            doc.comp(outer_id).unwrap(),
-            4.0,
-            Quality::default(),
-            &probes,
-            Some(held),
-        );
-        assert_eq!(asked.get(), 2.0, "the held question is asked at the map");
-        assert_eq!(jobs.len(), 1);
-        assert_eq!(
-            jobs[0].source_frame, 120,
-            "and the decode is the frame the map points at, not frame 240"
-        );
-    }
-
-    /// **A clip under an accumulation motion blur is planned at every moment
-    /// of the shutter** (docs/08 §3.26): one shutter sample per offset, each
-    /// picked between the two source frames the moment falls between, with the
-    /// flow settings the in-betweens are made with. A layer above the
-    /// adjustment plans none, and its job keeps the name it always had.
-    #[test]
-    fn a_clip_under_accumulation_mb_is_planned_at_every_shutter_moment() {
-        use lumit_core::model::{
-            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
-            TransformGroup,
-        };
-        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-        use std::collections::HashMap;
-
-        let layer = |kind: LayerKind| Layer {
-            graph: Default::default(),
-            markers: Vec::new(),
-            id: Uuid::now_v7(),
-            name: "l".into(),
-            kind,
-            in_point: CompTime(Rational::ZERO),
-            out_point: CompTime(Rational::new(10, 1).unwrap()),
-            start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
-            matte: None,
-            parent: None,
-            label: 0,
-            volume_db: lumit_core::anim::Property::zero(),
-            pan: lumit_core::anim::Property::zero(),
-            audio_only: false,
-            audio_streams: Default::default(),
-            adjustment: false,
-            pitch_follows_speed: false,
-            audio_routes: Default::default(),
-            retime: None,
-            interpolation: lumit_core::retime::Interpolation::default(),
-            parked_flow: None,
-            graph_inputs: None,
-            blend: lumit_core::model::BlendMode::default(),
-            masks: Vec::new(),
-            paint: Vec::new(),
-            puppet: None,
-            effects: Vec::new(),
-            styles: Vec::new(),
-            switches: Switches::default(),
-            extra: serde_json::Map::new(),
-        };
-        let mut doc = Document::new();
-        let footage = |doc: &mut Document| {
-            let item = Uuid::now_v7();
-            doc.items.push(ProjectItem::Footage(FootageItem {
-                sequence: None,
-                id: item,
-                name: "f".into(),
-                media: MediaRef {
-                    relative_path: "f.mp4".into(),
-                    absolute_path: "/f.mp4".into(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                extra: serde_json::Map::new(),
-                colour_space: None,
-                source_layer: None,
-                interpretation: Default::default(),
-            }));
-            item
-        };
-        let (above_item, below_item) = (footage(&mut doc), footage(&mut doc));
-        // Four samples over a whole frame, centred: offsets -3/8, -1/8, 1/8,
-        // 3/8 of a comp frame.
-        let mut adjust = layer(LayerKind::Adjustment);
-        let mut mb = lumit_core::fx::builtins::instantiate("accumulation_mb").unwrap();
-        for p in &mut mb.params {
-            let v = match p.id.as_str() {
-                "samples" => 4.0,
-                "shutter_angle" => 360.0,
-                "shutter_phase" => -180.0,
-                _ => continue,
-            };
-            p.value = lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
-        }
-        adjust.effects = vec![mb];
-        let above = layer(LayerKind::Footage { item: above_item });
-        let below = layer(LayerKind::Footage { item: below_item });
-        let (above_id, below_id) = (above.id, below.id);
-        // A 30 fps comp over 60 fps clips: a quarter of a comp frame is half a
-        // source frame, so every moment lands between two frames.
-        let mut comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            lighting: Default::default(),
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 64,
-            height: 64,
-            frame_rate: FrameRate::new(30, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour::BLACK,
-            work_area: None,
-            layers: vec![above, adjust, below],
-            markers: Vec::new(),
-            motion_blur: lumit_core::model::MotionBlur::default(),
-            extra: serde_json::Map::new(),
-        };
-        let probe = crate::source::SourceProbe::Video {
-            fps: 60.0,
-            width: 64,
-            height: 64,
-            frames: 600,
-            audio: false,
-        };
-        let probes: HashMap<Uuid, crate::source::SourceProbe> =
-            [(above_item, probe), (below_item, probe)]
-                .into_iter()
-                .collect();
-        let jobs = plan_comp_frame(&doc, &comp, 1.0, Quality::default(), &probes);
-        let job_for = |id: Uuid| jobs.iter().find(|j| j.layer == id).expect("planned");
-
-        let covered = job_for(below_id);
-        assert_eq!(
-            covered.source_frame, 60,
-            "frame 30 of the comp is frame 60 of the clip"
-        );
-        let moment = |offset: f64, source_frame: usize, ceil: usize, weight: f32| {
-            crate::decode::ShutterSample {
-                offset,
-                source_frame,
-                blend: Some((ceil, weight)),
-            }
-        };
-        assert_eq!(
-            covered.shutter,
-            vec![
-                moment(-0.375, 59, 60, 0.25),
-                moment(-0.125, 59, 60, 0.75),
-                moment(0.125, 60, 61, 0.25),
-                moment(0.375, 60, 61, 0.75),
-            ],
-            "each shutter moment is the pair of source frames it falls between"
-        );
-        // Flow runs only where the user switched it on. A clip whose Retime
-        // does not use Flow crossfades its in-betweens.
-        assert_eq!(
-            covered.shutter_flow, None,
-            "a Nearest clip crossfades its in-betweens"
-        );
-
-        let clear = job_for(above_id);
-        assert!(
-            clear.shutter.is_empty(),
-            "a layer above the adjustment is not covered"
-        );
-        assert_eq!(clear.shutter_flow, None);
-        // The moments are content: the covered job cannot share a name with an
-        // uncovered decode of the same frame, or a cached decode would serve a
-        // shutterless picture to the samples.
-        assert_ne!(covered.source_key(), clear.source_key());
-        assert!(!same_decode(
-            std::slice::from_ref(covered),
-            std::slice::from_ref(clear)
-        ));
-
-        // A clip whose Retime uses Flow has asked for synthesis, and its
-        // moments are made with its own settings.
-        let flow = lumit_core::retime::FlowParams {
-            smoothness: 0.25,
-            ..lumit_core::retime::FlowParams::default()
-        };
-        comp.layers[2].interpolation = lumit_core::retime::Interpolation::Flow(flow.clone());
-        let jobs = plan_comp_frame(&doc, &comp, 1.0, Quality::default(), &probes);
-        let covered = jobs.iter().find(|j| j.layer == below_id).expect("planned");
-        assert_eq!(
-            covered.shutter_flow,
-            Some(flow),
-            "a Flow clip makes its in-betweens with its own flow settings"
-        );
-    }
-
-    /// **The decode plan sees a node graph** (docs/impl/node-graph-comp.md §7
-    /// item 10).
-    ///
-    /// Five claims, each a different road into the same walk: a Read of footage
-    /// plans one job under the box's own id, which is what the draw builder
-    /// looks its pixels up by; a Read of a comp plans that comp's jobs; a Node
-    /// graph effect on a layer plans the graph's footage, because the graph is
-    /// part of that layer's picture; a further picture Input's layer row is
-    /// planned already, by the wanted-set pass that walks Layer parameters; and
-    /// a Node graph box inside a graph plans the inner graph's footage, because
-    /// the builder lowers those Read boxes into the same plan.
-    #[test]
-    fn a_node_graph_plans_the_footage_its_boxes_read() {
-        use lumit_core::anim::Property;
-        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
-        use lumit_core::model::{
-            Composition, Document, EffectParam, EffectValue, FootageItem, Layer, LayerKind,
-            LinearColour, MediaRef, Switches, TransformGroup,
-        };
-        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-        use std::collections::HashMap;
-
-        let layer = |kind: LayerKind| Layer {
-            graph: Default::default(),
-            markers: Vec::new(),
-            id: Uuid::now_v7(),
-            name: "l".into(),
-            kind,
-            in_point: CompTime(Rational::ZERO),
-            out_point: CompTime(Rational::new(10, 1).unwrap()),
-            start_offset: CompTime(Rational::ZERO),
-            transform: TransformGroup::default(),
-            matte: None,
-            parent: None,
-            label: 0,
-            volume_db: Property::zero(),
-            pan: Property::zero(),
-            audio_only: false,
-            audio_streams: Default::default(),
-            adjustment: false,
-            pitch_follows_speed: false,
-            audio_routes: Default::default(),
-            retime: None,
-            interpolation: lumit_core::retime::Interpolation::default(),
-            parked_flow: None,
-            graph_inputs: None,
-            blend: lumit_core::model::BlendMode::default(),
-            masks: Vec::new(),
-            paint: Vec::new(),
-            puppet: None,
-            effects: Vec::new(),
-            styles: Vec::new(),
-            switches: Switches::default(),
-            extra: serde_json::Map::new(),
-        };
-        let comp_of = |layers: Vec<Layer>, graph: Option<CompGraph>| Composition {
-            graph,
-            master_volume_db: 0.0,
-            lighting: Default::default(),
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 64,
-            height: 64,
-            frame_rate: FrameRate::new(60, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour::BLACK,
-            work_area: None,
-            layers,
-            markers: Vec::new(),
-            motion_blur: lumit_core::model::MotionBlur::default(),
-            extra: serde_json::Map::new(),
-        };
-        let wire = |from: Uuid, from_port: &str, to: Uuid, to_port: &str| GraphEdge {
-            from,
-            from_port: from_port.to_owned(),
-            to,
-            to_port: to_port.to_owned(),
-        };
-
-        let mut doc = Document::new();
-        let item = Uuid::now_v7();
-        doc.items.push(ProjectItem::Footage(FootageItem {
-            sequence: None,
-            id: item,
-            name: "f".into(),
-            media: MediaRef {
-                relative_path: "f.mp4".into(),
-                absolute_path: "/f.mp4".into(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            extra: serde_json::Map::new(),
-            colour_space: None,
-            source_layer: None,
-            interpretation: Default::default(),
-        }));
-        let probes: HashMap<Uuid, crate::source::SourceProbe> = [(
-            item,
-            crate::source::SourceProbe::Video {
-                fps: 60.0,
-                width: 64,
-                height: 64,
-                frames: 600,
-                audio: false,
-            },
-        )]
-        .into_iter()
-        .collect();
-
-        // A Read of footage, keyed by the box's own id.
-        let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
-        let graph = comp_of(
-            Vec::new(),
-            Some(CompGraph {
-                widths: Vec::new(),
-                notes: Vec::new(),
-                ties: Vec::new(),
-                looks: Default::default(),
-                nodes: vec![
-                    GraphNode::Read {
-                        id: read,
-                        item,
-                        custom_name: None,
-                    },
-                    GraphNode::Output { id: out },
-                ],
-                edges: vec![wire(read, "output", out, "input")],
-                layout: Vec::new(),
-                exposed: Vec::new(),
-                groups: Vec::new(),
-            }),
-        );
-        let graph_id = graph.id;
-        doc.items.push(ProjectItem::Composition(graph.clone()));
-        let jobs = plan_comp_frame(&doc, &graph, 0.0, Quality::default(), &probes);
-        assert_eq!(jobs.len(), 1, "a Read of footage plans one job");
-        assert_eq!(
-            jobs[0].layer, read,
-            "and it is keyed by the box's own id, which is what the builder looks up by"
-        );
-        assert_eq!(jobs[0].item, item);
-
-        // A Read of a comp plans that comp's jobs.
-        let inner_layer = layer(LayerKind::Footage { item });
-        let inner_id = inner_layer.id;
-        let inner = comp_of(vec![inner_layer], None);
-        let inner_comp_id = inner.id;
-        doc.items.push(ProjectItem::Composition(inner));
-        let (read_comp, out2) = (Uuid::now_v7(), Uuid::now_v7());
-        let reader = comp_of(
-            Vec::new(),
-            Some(CompGraph {
-                widths: Vec::new(),
-                notes: Vec::new(),
-                ties: Vec::new(),
-                looks: Default::default(),
-                nodes: vec![
-                    GraphNode::Read {
-                        id: read_comp,
-                        item: inner_comp_id,
-                        custom_name: None,
-                    },
-                    GraphNode::Output { id: out2 },
-                ],
-                edges: vec![wire(read_comp, "output", out2, "input")],
-                layout: Vec::new(),
-                exposed: Vec::new(),
-                groups: Vec::new(),
-            }),
-        );
-        let jobs = plan_comp_frame(&doc, &reader, 0.0, Quality::default(), &probes);
-        assert_eq!(jobs.len(), 1, "a Read of a comp plans that comp's decodes");
-        assert_eq!(
-            jobs[0].layer, inner_id,
-            "keyed by the nested comp's own layer, not by the box"
-        );
-
-        // A Node graph effect on a layer plans the graph's footage, and the
-        // further picture row it names is planned by the pass that already
-        // walks Layer parameters.
-        let mut inst =
-            lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
-        lumit_core::fx::effects::node_graph::bind(
-            &mut inst,
-            graph_id,
-            graph.graph.as_ref().expect("a node graph"),
-        );
-        let mut hidden = layer(LayerKind::Footage { item });
-        hidden.switches.visible = false;
-        inst.params.push(EffectParam {
-            id: "plate".into(),
-            value: EffectValue::Layer(Some(hidden.id)),
-            extra: serde_json::Map::new(),
-        });
-        let mut host = layer(LayerKind::Null);
-        let host_id = host.id;
-        host.effects = vec![inst];
-        let parent = comp_of(vec![host, hidden], None);
-        let jobs = plan_comp_frame(&doc, &parent, 0.0, Quality::default(), &probes);
-        assert!(
-            jobs.iter().any(|j| j.layer == read),
-            "the graph the effect applies must plan its own Read"
-        );
-        assert!(
-            jobs.iter().any(|j| j.layer != read && j.layer != host_id),
-            "and the layer a further picture row names is planned as any layer input is"
-        );
-        assert_eq!(jobs.len(), 2, "those two, and nothing else");
-
-        // A Node graph box inside another graph: the same descent, planned by
-        // the box rather than by a layer.
-        let mut nested_box =
-            lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
-        lumit_core::fx::effects::node_graph::bind(
-            &mut nested_box,
-            graph_id,
-            graph.graph.as_ref().expect("a node graph"),
-        );
-        let out3 = Uuid::now_v7();
-        let box_id = nested_box.id;
-        let outer = comp_of(
-            Vec::new(),
-            Some(CompGraph {
-                widths: Vec::new(),
-                notes: Vec::new(),
-                ties: Vec::new(),
-                looks: Default::default(),
-                nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
-                edges: vec![wire(box_id, "output", out3, "input")],
-                layout: Vec::new(),
-                exposed: Vec::new(),
-                groups: Vec::new(),
-            }),
-        );
-        let jobs = plan_comp_frame(&doc, &outer, 0.0, Quality::default(), &probes);
-        assert_eq!(jobs.len(), 1, "a nested graph plans the inner Read");
-        assert_eq!(
-            jobs[0].layer, read,
-            "keyed by the inner Read's own id, which is what the lowering looks up by"
-        );
-
-        // And on a live group's header, whose stack runs on the members'
-        // composite: the walk above never sees it, so it is planned here.
-        let mut header =
-            lumit_core::fx::builtins::instantiate("node_graph").expect("the effect exists");
-        lumit_core::fx::effects::node_graph::bind(
-            &mut header,
-            graph_id,
-            graph.graph.as_ref().expect("a node graph"),
-        );
-        let member = layer(LayerKind::Null);
-        let member_id = member.id;
-        let mut grouped = comp_of(vec![member], None);
-        grouped.groups = vec![lumit_core::group::LayerGroup {
-            id: Uuid::now_v7(),
-            name: "band".into(),
-            label: 0,
-            members: vec![member_id],
-            effects: vec![header],
-        }];
-        let jobs = plan_comp_frame(&doc, &grouped, 0.0, Quality::default(), &probes);
-        assert_eq!(jobs.len(), 1, "a graph on a header plans its own Read");
-        assert_eq!(jobs[0].layer, read);
-
-        // A Switch on Index 1 with a Read on each of two sockets fetches only
-        // the second. With a driver wired into the Index only the builder
-        // knows the pick, so both are fetched.
-        let switch_jobs = |driven: bool| {
-            let (a, b, out) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
-            let mut switch =
-                lumit_core::fx::builtins::instantiate("switch").expect("the effect exists");
-            if let Some(p) = switch.params.iter_mut().find(|p| p.id == "index") {
-                p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
-            }
-            let switch_id = switch.id;
-            let reader = |id| GraphNode::Read {
-                id,
-                item,
-                custom_name: None,
-            };
-            let mut nodes = vec![
-                reader(a),
-                reader(b),
-                GraphNode::Fx(switch),
-                GraphNode::Output { id: out },
-            ];
-            let mut edges = vec![
-                wire(a, "output", switch_id, "in0"),
-                wire(b, "output", switch_id, "in1"),
-                wire(switch_id, "output", out, "input"),
-            ];
-            if driven {
-                let wiggle =
-                    lumit_core::fx::builtins::instantiate("wiggle").expect("the driver exists");
-                edges.push(wire(wiggle.id, "value", switch_id, "index"));
-                nodes.push(GraphNode::Fx(wiggle));
-            }
-            let comp = comp_of(
-                Vec::new(),
-                Some(CompGraph {
-                    widths: Vec::new(),
-                    notes: Vec::new(),
-                    ties: Vec::new(),
-                    looks: Default::default(),
-                    nodes,
-                    edges,
-                    layout: Vec::new(),
-                    exposed: Vec::new(),
-                    groups: Vec::new(),
-                }),
-            );
-            let jobs = plan_comp_frame(&doc, &comp, 0.0, Quality::default(), &probes);
-            (a, b, jobs)
-        };
-        let (_, b, jobs) = switch_jobs(false);
-        assert_eq!(jobs.len(), 1, "only the socket the Switch shows is fetched");
-        assert_eq!(jobs[0].layer, b);
-        let (_, _, jobs) = switch_jobs(true);
-        assert_eq!(jobs.len(), 2, "a wired Index fetches every socket");
-    }
-}
+mod tests;

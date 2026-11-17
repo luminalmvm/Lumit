@@ -26,7 +26,10 @@ project over MCP.
 ## Export compositions
 
 ```
-lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>] [--range <in>-<out>] [--out <file>]
+lumit-cli export <project.lum or template.lumt> [--comp <name>]... [--all-comps] [--preset <name>] [--range <in>-<out>] [--out <file>]
+                 [--captions burn|srt|vtt|embed]
+                 [--format lottie|dotlottie|svg] [--text shapes|text] [--minify]
+                 [--data <file>] [--rows <first>-<last>]
 ```
 
 - **--comp**: a composition, by name or id. Needed when the project has more than one.
@@ -38,6 +41,20 @@ lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>
   composition's end fails.
 - **--out**: the file to write. The format's extension is added to a name that does not end
   in it. With several compositions it is the folder they go in, which has to be there.
+- **--captions**: what happens to caption layers. `burn` draws them into the picture, `srt`
+  or `vtt` writes them as a file beside it, and `embed` carries them inside an MP4 or MOV.
+  Without it, the preset's choice. See [Captions](/use/captions/#subtitle-files).
+- **--format**: write a Lottie, a dotLottie or an animated SVG instead of a video. An
+  **--out** ending in `.json`, `.lottie` or `.svg` does the same. See
+  [Lottie and SVG](/use/lottie-and-svg/).
+- **--text**: how a Lottie writes text, as outlines (`shapes`, the default) or naming its
+  font (`text`).
+- **--minify**: no names, and numbers rounded to what can be seen.
+- **--data**: a CSV, TSV or JSON file of rows for a
+  [graphics template](/use/graphics-templates/#data): one export for each row, its controls set
+  from the columns of their names. **--comp** names the template, and **--out** is the files'
+  name, which takes `{Column}`, `{row}`, `{comp}` and `{date}`.
+- **--rows**: with **--data**, the first and last row to export, counting from 1.
 
 Without **--preset**, the file is an H.264 mp4 with sound, at the composition's own size and
 rate. Without **--range**, it covers the work area where one is set and the whole
@@ -45,6 +62,8 @@ composition where it is not. Without **--out**, each file goes beside the projec
 the **Export** window names it, from the file name in **Settings ▸ Export** or else the
 composition's name, and numbered when that file is already there. Plugin effects the project
 uses are looked for first.
+
+A Lottie, dotLottie or SVG lists what won't come across on standard error, a line each.
 
 Each composition is exported in turn, to its own file. One that fails is named on standard
 error, the rest still export, and the exit status is 1.

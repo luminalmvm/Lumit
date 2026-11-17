@@ -65,9 +65,12 @@ import 'fx_section.dart'
     show fxEnableMark, fxGroupHeaderRow, fxTwoColumnRow;
 import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
+import 'denoise_display_frb.dart' show DenoiseDisplayFrb;
 import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
+import 'repair_display_frb.dart' show RepairDisplayFrb, repairEffects;
 import 'node_menus.dart' show showGraphBoxMenu;
 import 'placeholder.dart';
+import 'control_rows.dart' show paramControlRow, pointControlRow;
 import '../state/dock.dart' show Panel;
 import 'row_filter.dart';
 import 'plane_display_frb.dart';
@@ -580,6 +583,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           BridgeOutputRef_EffectOutput(:final effect) => (
               graphNodeKey(BridgeNodeRef.effect(effect)),
               'output'
+            ),
+          BridgeOutputRef_EffectKey(:final effect) => (
+              graphNodeKey(BridgeNodeRef.effect(effect)),
+              'key'
             ),
         };
         final source = byRef[fromKey];
@@ -1392,6 +1399,41 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               ? null
               : [for (final c in levelsChannels) curveChannelColour(c)],
         ),
+      // Denoise's and the sound clean-up effects' displays, as in Effect
+      // controls, on a box of a layer's graph.
+      if (layer != null && picked.info.name == 'denoise')
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: DenoiseDisplayFrb(
+            key: ValueKey<String>('node-denoise-display-$id'),
+            layer: layer,
+            effectId: id,
+            comp: ui.selectedComp!,
+            playheadFrame: playhead,
+            values: {
+              for (final p in params)
+                if ((_staged(id, p.id) ?? values[p.id]) case final v?) p.id: v,
+            },
+            pressed: _pressed,
+            onChanged: ui.model.refresh,
+          ),
+        ),
+      if (layer != null && repairEffects.contains(picked.info.name))
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: RepairDisplayFrb(
+            key: ValueKey<String>('node-repair-display-$id'),
+            layer: layer,
+            effectId: id,
+            matchName: picked.info.name,
+            playheadFrame: playhead,
+            values: {
+              for (final p in params)
+                if ((_staged(id, p.id) ?? values[p.id]) case final v?) p.id: v,
+            },
+            pressed: _pressed,
+          ),
+        ),
     ];
     List<Widget> rowsFor(List<BridgeParamInfo> run) {
       final out = <Widget>[];
@@ -1408,6 +1450,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           final stem = pairStemOf(picked.info.name, param.id);
           out.add(EffectPointRowFrb(
             key: ValueKey<String>('node-row-$id-${param.id}-pair'),
+            // An effect on the layer's stack. A driver's rows, and a box in
+            // a node graph, are not a graphics template's to name.
+            controlRow: picked.driver || layer == null
+                ? null
+                : pointControlRow(owner, id, param, next,
+                    engineLabel(pointStem(param.label))),
             effectId: id,
             xParam: param,
             yParam: next,
@@ -1430,6 +1478,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         }
         out.add(EffectParamRowFrb(
           key: ValueKey<String>('node-row-$id-${param.id}'),
+          controlRow: picked.driver || layer == null
+              ? null
+              : paramControlRow(owner, id, param),
           effectId: id,
           param: param,
           value: _staged(id, param.id) ?? values[param.id],

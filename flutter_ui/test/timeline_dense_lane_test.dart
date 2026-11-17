@@ -28,6 +28,7 @@ import 'package:lumit_flutter/panels/timeline_key_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart';
 import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -49,6 +50,9 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
     info: BridgeLayerInfo(
       pitchFollowsSpeed: false,
       sends: const [],
+      audioGainDb: 0,
+      automationMode: BridgeAutomationMode.read,
+      soloSafe: false,
       collapseForced: false,
       volumeDb: const BridgeScalar.static_(0),
       pan: const BridgeScalar.static_(0),

@@ -465,6 +465,12 @@ abstract final class LumitIcons {
   /// A capital T beside a shorter one standing on the same baseline, which is what small capitals are.
   static const String smallCaps =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9.5 7.5h4M11.5 7.5v4"/></svg>';
+  /// A word held between two brackets: a find that matches whole words only.
+  static const String wholeWord =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4h-2v8h2M11.5 4h2v8h-2"/><path d="M5.5 9.5h5"/></svg>';
+  /// Two arrows passing each other: what was found going out and what replaces it coming in.
+  static const String replace =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h8.5M8.5 3l2.5 2.5L8.5 8"/><path d="M13.5 10.5H5M7.5 8L5 10.5 7.5 13"/></svg>';
   static const String superscript =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h6M5.5 5.5v7M11 4l1.5-1v4"/></svg>';
   static const String subscript =
@@ -498,6 +504,16 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="7" height="7" rx="2.5"/><path d="M6.5 3.5h3.5a2.5 2.5 0 0 1 2.5 2.5v3.5"/></svg>';
   static const String windowCloseRound =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l6 6M11 5l-6 6"/></svg>';
+
+  // --- Grade ---
+  static const String pickAdd =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5l.7-2.4 4.3-4.3 1.7 1.7-4.3 4.3z"/><path d="M8.5 3.9a1.5 1.5 0 0 1 2.4 2.4l-1.4 1.4-2.4-2.4z"/><path d="M12 10v4M10 12h4"/></svg>';
+  static const String pickSubtract =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5l.7-2.4 4.3-4.3 1.7 1.7-4.3 4.3z"/><path d="M8.5 3.9a1.5 1.5 0 0 1 2.4 2.4l-1.4 1.4-2.4-2.4z"/><path d="M10 12h4"/></svg>';
+  static const String gradientWindow =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 8h11"/><path d="M2.5 10.5h11M2.5 13h11" opacity=".4"/></svg>';
+  static const String stop =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="8" height="8"/></svg>';
 
   /// Every glyph by its chrome word — the names tooltips and
   /// the Words setting use (docs/15-DESIGN.md §5.1).
@@ -689,6 +705,8 @@ abstract final class LumitIcons {
     'Faux italic': fauxItalic,
     'All caps': allCaps,
     'Small caps': smallCaps,
+    'Whole word': wholeWord,
+    'Replace': replace,
     'Superscript': superscript,
     'Subscript': subscript,
     'Window minimise': windowMinimise,
@@ -702,5 +720,9 @@ abstract final class LumitIcons {
     'Window maximise round': windowMaximiseRound,
     'Window restore round': windowRestoreRound,
     'Window close round': windowCloseRound,
+    'Pick add': pickAdd,
+    'Pick subtract': pickSubtract,
+    'Gradient window': gradientWindow,
+    'Stop': stop,
   };
 }

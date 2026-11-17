@@ -26,6 +26,7 @@ import 'package:lumit_flutter/src/rust/api/colour.dart'
     show BridgeColourItem, BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowRef;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeInputRef, BridgeNodeRef, BridgeOutputRef_Driver, BridgePortType;
@@ -53,6 +54,8 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import '../widgets/layer_picker.dart';
+import '../state/template_controls.dart' show ControlRow;
+import 'control_rows.dart' show ControlMark;
 import 'expression_editor.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
@@ -98,8 +101,8 @@ double logSliderTravel(double value, double min, double max) {
 const double effectCellWidth = 78;
 
 /// How many characters a choice's option can hold and still read whole in the
-/// ordinary dropdown.
-const int _longChoice = 18;
+/// ordinary dropdown. A longer one takes the column.
+const int _longChoice = 15;
 
 /// The gap between a value well and whatever rides beside it — the mockup's
 /// own 6 (§12A.3).
@@ -156,6 +159,18 @@ Widget withUnitRider(LumitTheme t, BridgeUnit unit, Widget control) {
       Text(text, style: unitRiderStyle(t)),
     ],
   );
+}
+
+/// The name a point's two rows share, from the label of the row across:
+/// "Light x" and "Light y" are "Light", and "Scale x %" is "Scale", the unit
+/// being the rider after the wells.
+String pointStem(String label) {
+  var stem = label;
+  if (stem.endsWith(' %')) stem = stem.substring(0, stem.length - 2);
+  if (stem.toLowerCase().endsWith(' x')) {
+    stem = stem.substring(0, stem.length - 2);
+  }
+  return stem;
 }
 
 /// One parameter: its label, and the control its kind asks for.
@@ -306,6 +321,10 @@ class EffectParamRowFrb extends StatelessWidget {
   /// layer's own stack: a style, a material, a clip's or a group's effect.
   final String? rowPath;
 
+  /// This row as a control of the composition's graphics template can name
+  /// it, for Add to controls and the mark. Null where the engine cannot.
+  final BridgeRowRef? controlRow;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -338,6 +357,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.optionNote,
     this.optionReason,
     this.rowPath,
+    this.controlRow,
   });
 
   @override
@@ -439,11 +459,12 @@ class EffectParamRowFrb extends StatelessWidget {
     Widget name(double lit) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onLabelTap,
-          child: nameGroup == null
+          child: nameGroup == null && controlRow == null
               ? labelText(lit)
               : Row(children: [
                   ...flatGroupPrefix(t, nameGroup),
                   Flexible(child: labelText(lit)),
+                  ControlMark(controlRow),
                 ]),
         );
     // Only a name that picks its property lights.
@@ -699,6 +720,10 @@ class EffectParamRowFrb extends StatelessWidget {
             layer: layer,
             row: BridgeExpressionRow.effect(effect: effectId, param: param.id));
     return ParamMenu(
+      control: switch (controlRow) {
+        final row? => ControlRow(comp, row),
+        null => null,
+      },
       // Named as Paste link runs, so a layer or effect renamed since the copy
       // is written under its name now.
       linkTo: (link) => _linkRef(link, ui.model.byId(ownerLayerId)),
@@ -995,16 +1020,24 @@ class EffectParamRowFrb extends StatelessWidget {
     // has none: it carries no `EffectValue` anywhere in the model, which is
     // what makes it a press rather than a write.
     if (param.kind is BridgeParamKind_Action) {
-      return HouseButton(
-        key: ValueKey<String>('fx-action-$id-${param.id}'),
-        small: true,
-        onPressed: onAction == null || !enabled
-            ? null
-            : () => onAction!(id, param.id),
-        child: Text(
-          engineLabel(param.label),
-          style: _off ? t.body.copyWith(color: t.textMuted) : t.body,
-        ),
+      return ValueListenableBuilder<Map<UuidValue, Set<String>>>(
+        valueListenable: actionsResting,
+        builder: (context, resting, _) {
+          final rests = resting[id]?.contains(param.id) ?? false;
+          return HouseButton(
+            key: ValueKey<String>('fx-action-$id-${param.id}'),
+            small: true,
+            onPressed: onAction == null || !enabled || rests
+                ? null
+                : () => onAction!(id, param.id),
+            child: Text(
+              engineLabel(param.label),
+              style: _off || rests
+                  ? t.body.copyWith(color: t.textMuted)
+                  : t.body,
+            ),
+          );
+        },
       );
     }
     if (value == null) return Text('—', style: t.small);
@@ -1228,6 +1261,29 @@ class EffectParamRowFrb extends StatelessWidget {
               ),
             );
           });
+        }
+        return Text('—', style: t.small);
+
+      // An outline is drawn in the Viewer. Here it is a count, and a way to
+      // clear it.
+      case BridgeParamKind_Shape():
+        if (value case BridgeEffectValue_Shape(:final field0)) {
+          return Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(l10n.fxShapePointCount(field0.length), style: t.small),
+            if (field0.isNotEmpty)
+              LumitTooltip(
+                message: l10n.tipResetParameter,
+                child: HouseButton(
+                  key: ValueKey<String>('fx-shape-reset-$id-${param.id}'),
+                  frameless: true,
+                  small: true,
+                  padding: const EdgeInsets.all(1),
+                  onPressed: () => _set(const BridgeEffectValue.shape([])),
+                  child: LumitIcon(LumitIcons.reset,
+                      size: 12, colour: t.textMuted),
+                ),
+              ),
+          ]);
         }
         return Text('—', style: t.small);
 
@@ -2446,9 +2502,14 @@ class EffectPointRowFrb extends StatelessWidget {
   /// graph's box, which has none.
   final UuidValue? ownerLayerId;
 
+  /// The point as a control can name it, both rows as one. Null where the
+  /// engine cannot.
+  final BridgeRowRef? controlRow;
+
   const EffectPointRowFrb({
     super.key,
     this.ownerLayerId,
+    this.controlRow,
     required this.effectId,
     required this.xParam,
     required this.yParam,
@@ -2470,9 +2531,10 @@ class EffectPointRowFrb extends StatelessWidget {
   /// Whether the pair takes the **position dropper**, and in what unit a pick
   /// writes — read off the declaration, never off the parameter's id.
   ///
-  /// `null` is no dropper. `Px` writes comp PIXELS (fraction × comp size, read
-  /// at CLICK time, never in a rebuild), and `Percent` writes
-  /// fraction × 100, which is what Radial blur's Centre has always been. Every
+  /// `null` is no dropper. `Px` writes the layer's own pixels (fraction × its
+  /// frame), or comp pixels where the effect has no layer box on the picture
+  /// (fraction × comp size, read at CLICK time, never in a rebuild).
+  /// `Percent` writes fraction × 100, of the same frame. Every
   /// other unit gets no crosshair: a point picked off the picture is a
   /// *position*, and no arrangement of degrees or seconds is one.
   ///
@@ -2511,13 +2573,7 @@ class EffectPointRowFrb extends StatelessWidget {
     final id = effectId;
     final sx = _scalar(xValue);
     final sy = _scalar(yValue);
-    // The shared stem: "Light x" / "Light y" → "Light", and "Scale x %" →
-    // "Scale", the unit being the rider after the wells.
-    var stem = xParam.label;
-    if (stem.endsWith(' %')) stem = stem.substring(0, stem.length - 2);
-    if (stem.toLowerCase().endsWith(' x')) {
-      stem = stem.substring(0, stem.length - 2);
-    }
+    final stem = pointStem(xParam.label);
 
     // Both halves as one op where the caller can commit one, so a point moved
     // is one undo step and not one per axis.
@@ -2547,11 +2603,15 @@ class EffectPointRowFrb extends StatelessWidget {
             },
           );
 
-    final label = Text(
+    final words = Text(
       t.propertyCase(stem),
       style: enabled ? t.body : t.body.copyWith(color: t.textDisabled),
       overflow: TextOverflow.ellipsis,
     );
+    // The point wears the mark once, for both of its rows.
+    final Widget label = controlRow == null
+        ? words
+        : Row(children: [Flexible(child: words), ControlMark(controlRow)]);
 
     // Deaf, not faded (docs/15 §5): a control that still answers a drag while
     // looking disabled is worse than one that never changed, and the label's
@@ -2715,6 +2775,8 @@ class EffectPointRowFrb extends StatelessWidget {
               // fraction × comp size; a `Percent` pair writes
               // fraction × 100 — which is the same sum with the comp's size
               // set to a hundred, so there is one arithmetic here and not two.
+              // A pick in the layer's own pixels says its frame, and a `Px`
+              // pair takes that instead.
               //
               // The size is read **once, when the tool is armed** — a tap, and
               // so an edit rather than a rebuild. It used to be read
@@ -2731,6 +2793,20 @@ class EffectPointRowFrb extends StatelessWidget {
                   return; // the comp has gone; do not arm at all
                 }
               }
+              double ofX(DropperSample s) =>
+                  s.xFrac * (pickPixels ? (s.frame?.width ?? spanX) : spanX);
+              double ofY(DropperSample s) =>
+                  s.yFrac * (pickPixels ? (s.frame?.height ?? spanY) : spanY);
+              // An effect runs on its layer's picture before the transform,
+              // so its point is in that layer's own pixels. Only an effect in
+              // the layer's own stack: one on a clip inside it is not.
+              final owner = ownerLayerId;
+              final pointLayer = owner != null &&
+                      ui.model.layers.any((e) =>
+                          e.layer.internallayerId == owner &&
+                          e.info.effects.any((fx) => fx.id == id))
+                  ? owner
+                  : null;
               // Both halves at once, so a pick is never scaled by the chain:
               // it is a position, and a position is stated rather than nudged.
               //
@@ -2750,14 +2826,15 @@ class EffectPointRowFrb extends StatelessWidget {
                 id: 'fx-$id-${xParam.id}',
                 reads: DropperReads.position,
                 label: stem,
+                pointLayer: pointLayer,
                 // **The drag is the pick**: the point follows the
                 // pointer through the preview, and the release states it once.
                 onPreview: (sample) {
-                  onLive(id, xParam.id, at(sx, sample.xFrac * spanX));
-                  onLive(id, yParam.id, at(sy, sample.yFrac * spanY));
+                  onLive(id, xParam.id, at(sx, ofX(sample)));
+                  onLive(id, yParam.id, at(sy, ofY(sample)));
                 },
-                onPick: (sample) => writeBoth(
-                    at(sx, sample.xFrac * spanX), at(sy, sample.yFrac * spanY)),
+                onPick: (sample) =>
+                    writeBoth(at(sx, ofX(sample)), at(sy, ofY(sample))),
                 // Abandoned: the two numbers the row had, back through the
                 // same preview path. Nothing was committed either half.
                 onRevert: (sx == null || sy == null)
@@ -2790,6 +2867,10 @@ class EffectPointRowFrb extends StatelessWidget {
             BridgeEffectValue.float(BridgeScalar.expression(
                 read(scalar).toString(), newExpressionLanguage(context))));
     final menu = ParamMenu(
+      control: switch (controlRow) {
+        final row? => ControlRow(comp, row),
+        null => null,
+      },
       keys: keyframes is KeyframeControlsFrb ? keyframes : null,
       reset: fallbacks.$1 == null || fallbacks.$2 == null
           ? null
@@ -3223,6 +3304,12 @@ List<BridgeParamInfo> paramRidersFor(
 /// a Cancel beside Bake takes presses only while there is something to stop.
 final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
 
+/// The Action rows an effect's status line has greyed for now, by effect and
+/// row id: an Analyse while one is running, a Cancel with nothing to stop. An
+/// effect not named here draws its Action rows as its schema says.
+final ValueNotifier<Map<UuidValue, Set<String>>> actionsResting =
+    ValueNotifier(const {});
+
 final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 
 /// An effect's greying rules (`EnabledWhen` in the schema), memoised like the
@@ -3531,10 +3618,12 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       // control, not the storage.
       BridgeParamKind_Slider(:final default_) =>
         BridgeEffectValue.float(BridgeScalar.static_(default_)),
-      // Every curve's default is the identity diagonal — there is
-      // nothing per-parameter to declare, which is why the kind carries no
-      // fields.
-      BridgeParamKind_Curve() => curveValue(curveIdentity),
+      // The declared shape: the diagonal for a tone curve, the flat middle
+      // line for a hue curve.
+      BridgeParamKind_Curve(:final default_) =>
+        curveValue(curvePointsOf(default_)),
+      // A fresh outline has no points.
+      BridgeParamKind_Shape() => const BridgeEffectValue.shape([]),
     };
 
 /// Whether [value] is what [fallback] declares, to the precision a number field
@@ -3625,11 +3714,21 @@ class EffectStackEditor {
   /// lookup does. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? groupStack;
 
+  /// Whether [groupStack] is a grade group's list or a shared grade node's.
+  /// The engine stages those by their ids for a preview, so their drags show
+  /// as they go, as a layer's own rows do.
+  bool gradeList = false;
+
   /// Where a **clip's** stack is read from (docs/impl/audio-timeline.md §4),
   /// set by the Audio timeline while it is showing a clip's rows - the same
   /// place in the search as [groupStack], and never set at the same time,
   /// because a row belongs to one container. Null for every ordinary editor.
   List<BridgeEffectInstance> Function()? clipStack;
+
+  /// Where the rows of a clip that is a copy of a graphics template are read
+  /// from, set by Effect controls while it shows that clip's card. Looked in
+  /// by id ahead of [groupStack] and [clipStack], which are taken unasked.
+  List<BridgeEffectInstance> Function()? clipInputs;
 
   /// Whether this editor's rows are a layer's **drivers** (the Timeline's
   /// Drivers group): the list is the layer's graph nodes, the commit routes
@@ -3683,7 +3782,8 @@ class EffectStackEditor {
       final styleIds = {for (final s in styles) s.id()};
       stack = _staged.keys.every((key) => styleIds.contains(key.$1))
           ? styles
-          : ((groupStack ?? clipStack)?.call() ??
+          : (_clipInputs() ??
+              (groupStack ?? clipStack)?.call() ??
               _materials(layer) ??
               _modelRows(layer) ??
               graphInputsOf(layer));
@@ -3697,6 +3797,23 @@ class EffectStackEditor {
       }
     }
     return stack;
+  }
+
+  /// A clip's graphics template rows when they hold what is staged.
+  List<BridgeEffectInstance>? _clipInputs() {
+    final read = clipInputs;
+    if (read == null) return null;
+    final List<BridgeEffectInstance> rows;
+    try {
+      rows = read();
+    } catch (_) {
+      // The clip went under the panel, so the rows are somebody else's.
+      return null;
+    }
+    final ids = {for (final r in rows) r.id()};
+    return rows.isNotEmpty && _staged.keys.every((key) => ids.contains(key.$1))
+        ? rows
+        : null;
   }
 
   /// A Model layer's material rows when they hold what is staged.
@@ -3736,7 +3853,7 @@ class EffectStackEditor {
     //
     // A clip's rows do preview: the staged list is found by its ids on the
     // clip that holds it, and a picture clip's stack is on the picture.
-    if (groupStack != null) return;
+    if (groupStack != null && !gradeList) return;
     if (drivers) {
       _throttle.request(() => comp.renderFrameWithDriverPreview(
             frame: frame,

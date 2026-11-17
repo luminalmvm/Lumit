@@ -42,6 +42,7 @@ import 'package:lumit_flutter/src/rust/api/cache.dart'
         vramCacheStats;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/mixer.dart' show BridgeLoudnessTarget;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/presets.dart'
     show listPresetGroups, movePreset;
@@ -53,15 +54,23 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/control_rows.dart' show addToControlsRow;
+import '../panels/cut_kinds.dart' show transitionMenu;
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
+import 'create_captions_dialog_frb.dart'
+    show createCaptionsFrb, importCaptionsFrb;
 import '../panels/grade_clipboard.dart'
     show canCopyGrade, canPasteGrade, copyGrade, pasteGrade;
 import '../panels/layer_source_menu.dart';
+import '../panels/noise_actions.dart';
+import '../panels/paste_pictures_frb.dart' show pasteSystemPictures;
 import '../panels/normalise_commands.dart' show normaliseLayers;
+import '../panels/loudness_commands.dart';
 import '../panels/preset_save.dart'
     show deletePreset, isOwnPreset, presetMoveToRow, renamePreset;
 import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
+import '../panels/template_place.dart' show installTemplateFiles;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
 import '../panels/timeline_group_row_frb.dart';
@@ -116,12 +125,16 @@ import '../panels/cut_insert.dart'
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
+import 'multicam_dialog_frb.dart' show newMulticamAction;
 import 'precompose_dialog_frb.dart';
 import 'pro_window.dart';
 import 'profile_chip.dart' show ProBadge;
 import 'project_history_window.dart';
 import 'export_dialog_frb.dart';
+import 'lottie_import_frb.dart';
+import 'vector_export_frb.dart';
 import 'export_queue_frb.dart';
+import 'library_window.dart';
 import 'recovery_dialog_frb.dart';
 import 'review_links_window.dart';
 import 'run_script_frb.dart';
@@ -131,7 +144,9 @@ import 'share_dialog_frb.dart';
 import 'theme_name_dialog.dart';
 import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
 import 'tour_frb.dart';
+import 'pop_out.dart' show popOutAvailable;
 import 'update_dialog_frb.dart';
+import 'video_monitor.dart' show videoMonitorMenu;
 import 'welcome_frb.dart' show projectDisplayName;
 import 'window_frame.dart';
 import 'wordmark.dart';
@@ -876,6 +891,7 @@ class LumitMenuBarFrb extends StatelessWidget {
         category: l10n.menuEffect,
         icon: mark(LumitIcon.fx),
         disabled: layers.isEmpty ? l10n.paletteNeedsLayer : null,
+        otherNames: effect.otherNames,
         run: () => addEffectToLayers(app, ui, layers, effect.name),
       ));
     }
@@ -1263,6 +1279,10 @@ List<MenuSection> lumitMenus(
                           await importDroppedPaths(app, [folder]);
                         }
                       }),
+            // A caption layer from a subtitle file, in the open composition.
+            MenuEntry(
+                l10n.captionsImportEllipsis,
+                comp == null ? null : () => unawaited(importCaptionsFrb(context))),
             // The After Effects route, a row of its own now it is the only
             // one. The Bridge-bundle entry is gone (owner, repeatedly): the
             // bundle format itself remains supported for anything that
@@ -1276,6 +1296,13 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
+            MenuEntry(l10n.menuExportVector,
+                comp == null ? null : () => showVectorExportFrb(context),
+                action: 'file.export.vector'),
+            if (!kIsWeb)
+              MenuEntry(l10n.menuExportRemote,
+                  comp == null ? null : () => exportRemoteFrb(context),
+                  action: 'export.remote', needsPro: needsPro()),
             // Scripts, sharing this project and joining somebody else's, and
             // exports sent out for comments. A page runs and sends nothing.
             if (!kIsWeb) ...[
@@ -1434,6 +1461,7 @@ List<MenuSection> lumitMenus(
             // none to teach.
             MenuEntry(l10n.menuNewNodeGraph,
                 project == null ? null : () => app.newNodeGraph(context)),
+            MenuEntry(l10n.multicamNew, newMulticamAction(context, ui)),
             MenuEntry.divider(),
             MenuEntry(l10n.compositionSettingsEllipsis,
                 comp == null ? null : () => compSettingsFrb(context, app),
@@ -1469,6 +1497,9 @@ List<MenuSection> lumitMenus(
                         ui.setRegionOfInterest(null);
                         app.notifyDocumentChanged();
                       }),
+            MenuEntry.divider(),
+            // The selected rows become controls of the graphics template.
+            addToControlsRow(ui),
             MenuEntry.divider(),
             // "Export", never "render", for anything the user sees (glossary §9).
             // Adding to the queue is what the export dialog does, so this opens
@@ -1511,6 +1542,35 @@ List<MenuSection> lumitMenus(
                 onComp((c) => detectCompBeats(app, c))),
             MenuEntry(
                 l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
+            // The loudness the mix is made for, and the master set to meet it,
+            // as the Master strip's menu has them.
+            MenuEntry.submenu(l10n.menuAudio, [
+              MenuEntry.submenu(l10n.mixerLoudnessTarget, () {
+                BridgeLoudnessTarget? target;
+                try {
+                  target = comp?.loudnessTarget();
+                } catch (_) {}
+                void set(BridgeLoudnessTarget? to) =>
+                    setCompLoudnessTarget(comp!, to, () {});
+                return [
+                  MenuEntry(l10n.mixerLoudnessTargetOff,
+                      onComp((_) => set(null)),
+                      checked: target == null),
+                  for (final lufs in loudnessPresets)
+                    MenuEntry(loudnessTargetLabel(lufs),
+                        onComp((_) => set(presetTarget(lufs))),
+                        checked: isPreset(target, lufs)),
+                  MenuEntry(
+                      l10n.mixerLoudnessTargetCustom,
+                      onComp((c) => customLoudnessTarget(
+                          context, c, app.notifyDocumentChanged))),
+                ];
+              }()),
+              MenuEntry(
+                  l10n.mixerNormaliseMix,
+                  onComp((c) => normaliseMixCommand(
+                      context, app, c, app.notifyDocumentChanged))),
+            ]),
           ]
     ),
     (
@@ -1535,6 +1595,7 @@ List<MenuSection> lumitMenus(
               newRow(l10n.menuCard, 'layer.new.card'),
               newRow(l10n.menuSequence, 'layer.new.sequence'),
               newRow(l10n.menuAudio, 'layer.new.audio'),
+              newRow(l10n.menuBus, 'layer.new.bus'),
               // The Cut ground's two: five seconds from the playhead. Only
               // where the comp has clips, as beside Text and Solid they read
               // as the same thing twice. Without their chord, which only the
@@ -1643,6 +1704,11 @@ List<MenuSection> lumitMenus(
                           then: app.notifyDocumentChanged,
                         ),
               ),
+              // A caption layer from what the layer says. A layer that turns
+              // out to make no sound says so in the status line, as Detach does.
+              MenuEntry.divider(),
+              MenuEntry(l10n.menuCreateCaptions,
+                  onLayer((l) => unawaited(createCaptionsFrb(context, l)))),
             ]),
             // The selected layer's Retime. In the menu as well as on the keyboard
             // (a command whose only route is a chord has no route the day
@@ -1700,6 +1766,7 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuStaggerLayers,
                 comp == null ? null : () => showStaggerPanel(ui)),
+            transitionMenu(app, comp, selectedEntries(ui)),
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),
@@ -1713,6 +1780,7 @@ List<MenuSection> lumitMenus(
             ]),
             MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
             MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
+            MenuEntry.submenu(l10n.menuGrade, gradeRows(context, app, ui)),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuReveal, revealRows(ui)),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it
@@ -1833,6 +1901,7 @@ List<MenuSection> lumitMenus(
             MenuEntry.submenu(
                 l10n.menuSeparateDimensions, axisModeRows(app, ui)),
             trackCameraRow(app, ui),
+            stabiliseRow(app, ui),
             MenuEntry.todo(l10n.menuTrackMotion),
             MenuEntry.divider(),
             // The Reveal family: `U`'s own machinery under the menu's words, each
@@ -2171,6 +2240,19 @@ List<MenuSection> lumitMenus(
                     () => showSettingsWindowFrb(context,
                         initialPage: SettingsPage.addons)),
               ]),
+            // Every floating window's panels back in this one.
+            MenuEntry(
+                l10n.windowPanelsToMain,
+                ui.split.windows.isEmpty
+                    ? null
+                    : () {
+                        dockAllWindows(ui.split);
+                        ui.workspace.touch();
+                        ui.saveLayout();
+                      }),
+            // The Viewer's picture alone, full screen on a display of its own.
+            if (popOutAvailable && !kIsWeb)
+              MenuEntry.submenu(l10n.menuVideoMonitor, videoMonitorMenu(ui)),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once
@@ -2183,6 +2265,8 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuExportQueue,
                 () => showExportQueueFrb(context: context),
                 action: 'export.queue.open'),
+            MenuEntry(l10n.menuLibrary, () => showLibrary(context),
+                action: 'library.open'),
             MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
           ]
     ),
@@ -2252,6 +2336,13 @@ List<MenuEntry> _effectMenu(
               ? () => removeAllEffects(app, layers)
               : null,
           action: 'effect.remove.all'),
+      // The clean-up effects' two, on the one picked or the selection's first.
+      MenuEntry(l10n.fxMenuLearnNoise,
+          canLearnNoise(ui) ? () => learnSelectedNoise(ui) : null,
+          action: 'effect.learn'),
+      MenuEntry.toggle(l10n.fxMenuRemovedOnly,
+          canShowRemoved(ui) ? () => toggleRemovedOnly(ui) : null,
+          action: 'effect.listen', checked: () => removedOnlyOn(ui)),
       MenuEntry.divider(),
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [
@@ -2597,6 +2688,7 @@ Future<void> newLayerFrb(BuildContext context, LumitUiState ui,
           'layer.new.null' => comp.addNullLayer(row: row),
           'layer.new.card' =>
             comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
+          'layer.new.bus' => await _newBus(app, ui, comp),
           _ => insertEmptyLayer(ui, comp, action),
         };
   if (made == null) return;
@@ -2604,6 +2696,39 @@ Future<void> newLayerFrb(BuildContext context, LumitUiState ui,
   ui.model.refresh();
   ui.setSelection([made]);
   if (action == 'layer.new.text') openTypeEdit(ui, made);
+}
+
+/// A new bus, and the picked layers that make a sound, buses aside, routed
+/// into it, all as one undo step.
+Future<LayerReference?> _newBus(
+    LumitState app, LumitUiState ui, CompositionReference comp) async {
+  final picked = ui.selectedLayerIds;
+  final inputs = <LayerReference>[];
+  for (final entry in ui.model.heldLayers) {
+    if (!picked.contains(entry.layer.internallayerId) ||
+        entry.info.kind == BridgeLayerKind.bus) {
+      continue;
+    }
+    try {
+      if (await entry.layer.hasAudio()) inputs.add(entry.layer);
+    } catch (_) {
+      // The layer has gone.
+    }
+  }
+  LayerReference? bus;
+  asOneUndoStep(app.project, () {
+    bus = insertEmptyLayer(ui, comp, 'layer.new.bus');
+    final id = bus?.internallayerId;
+    if (id == null) return;
+    for (final layer in inputs) {
+      try {
+        layer.setAudioRoutes(output: id, sends: layer.getInfo().sends);
+      } catch (_) {
+        // A locked layer refuses, and the rest still take it.
+      }
+    }
+  });
+  return bus;
 }
 
 /// The right-click menu on the empty ground under the Cut and Audio
@@ -2734,10 +2859,25 @@ Future<void> openProjectFrb(LumitState app,
 
 /// Import what was picked, and say whether anything came in. Footage comes
 /// in as footage. A Lumit project is not footage: one of its compositions is
-/// brought in, chosen from a list.
+/// brought in, chosen from a list. A graphics template joins the library.
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
-  final picked = await (picker ?? () => pickFootage(projects: true))();
+  var picked = await (picker ?? () => pickFootage(projects: true))();
+  if (!context.mounted) return false;
+  final templates = [
+    for (final path in picked)
+      if (path.toLowerCase().endsWith('.lumt')) path,
+  ];
+  if (templates.isNotEmpty) {
+    await installTemplateFiles(
+        context, app, context.read<LumitUiState>(), templates);
+    if (!context.mounted) return false;
+    picked = [
+      for (final path in picked)
+        if (!templates.contains(path)) path,
+    ];
+  }
+  picked = await importLottieFrb(context, app, picked);
   final projects = [
     for (final path in picked)
       if (path.toLowerCase().endsWith('.lum')) path,
@@ -2789,6 +2929,18 @@ Future<void> exportFrb(BuildContext context) async {
   final comp = context.read<LumitUiState>().selectedComp;
   if (comp == null) return;
   await showExportDialogFrb(context: context, comp: comp);
+}
+
+/// Export on another computer…: the export dialogue set to the computer last
+/// chosen in this run of Lumit, else any free one. Without Lumit Pro, the Pro
+/// window.
+Future<void> exportRemoteFrb(BuildContext context) async {
+  final ui = context.read<LumitUiState>();
+  if (!ui.account.pro) return showProWindow(context);
+  final comp = ui.selectedComp;
+  if (comp == null) return;
+  await showExportDialogFrb(
+      context: context, comp: comp, on: exportLastComputer ?? '*');
 }
 
 void undoFrb(LumitState app) {
@@ -2982,12 +3134,22 @@ Future<bool> pasteSelectionFrb(
   LayerReference? layer,
 ) async {
   if (ui.pasteClaim?.call() ?? false) return true;
+  // A picture the system clipboard holds is a last resort, except when the tray
+  // is no longer what was copied last: its mirror on the system clipboard has
+  // been replaced, and what replaced it may be a picture.
+  Future<bool> pictures() => pasteSystemPictures(app, ui, comp,
+      row: comp == null ? null : newLayerRow(ui, comp));
+  var triedPictures = false;
+  if (!ui.clipboard.isEmpty && await ui.systemClipboardMovedOn()) {
+    triedPictures = true;
+    if (await pictures()) return true;
+  }
   // Nothing in the tray: something may have been copied in another Lumit
   // window, or in this one before something else on the machine overwrote the
   // tray's mirror.
   if (ui.clipboard.isEmpty) await ui.adoptSystemClipboard();
   final paste = _pasteAction(app, ui, comp, layer);
-  if (paste == null) return false;
+  if (paste == null) return !triedPictures && await pictures();
   paste();
   return true;
 }
@@ -3841,9 +4003,9 @@ class _MenuListState extends State<_MenuList> {
 
   /// One row's contents: the tick column where the menu has toggles, the name,
   /// and the chord it answers to on the right. A row for Lumit Pro, to an
-  /// account without it, wears the badge beside its name, so the chords keep
-  /// their column, faded to about the chord's weight so a menu of them
-  /// doesn't shout.
+  /// account without it, wears the badge on the right too, just before any
+  /// chord so the chords keep their column, faded to about the chord's weight
+  /// so a menu of them doesn't shout.
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
@@ -3859,21 +4021,18 @@ class _MenuListState extends State<_MenuList> {
           const SizedBox(width: 8),
         ],
         Expanded(
-          child: Row(
-            children: [
-              Flexible(
-                child: item.tip == null
-                    ? text
-                    : LumitTooltip(message: item.tip!, child: text),
-              ),
-              if (item.needsPro)
-                const Padding(
-                  padding: EdgeInsetsDirectional.only(start: 8),
-                  child: Opacity(opacity: 0.6, child: ProBadge()),
+          child: item.tip == null
+              ? text
+              : Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: LumitTooltip(message: item.tip!, child: text),
                 ),
-            ],
-          ),
         ),
+        if (item.needsPro)
+          const Padding(
+            padding: EdgeInsetsDirectional.only(start: 16),
+            child: Opacity(opacity: 0.6, child: ProBadge()),
+          ),
         if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),

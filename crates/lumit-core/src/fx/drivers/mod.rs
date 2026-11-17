@@ -467,7 +467,9 @@ pub fn driven_param(
     let v = match from {
         OutputRef::Driver { node, port } => ev.output(*node, port, lt, 0),
         OutputRef::EffectData { effect, port } => ev.effect_number(*effect, port, lt),
-        OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+        OutputRef::SourceMatte | OutputRef::EffectOutput { .. } | OutputRef::EffectKey { .. } => {
+            None
+        }
     }?;
     Some(f64::from(v.as_f32()))
 }
@@ -902,7 +904,9 @@ impl Eval<'_> {
             // unwired, which is the documented no-op rather than a wrong
             // number — and is unreachable through a validated document, where
             // the type check refused it at commit.
-            OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+            OutputRef::SourceMatte
+            | OutputRef::EffectOutput { .. }
+            | OutputRef::EffectKey { .. } => None,
         }
     }
 
@@ -989,7 +993,9 @@ impl Eval<'_> {
             // not a stream and was refused at commit by the type check.
             OutputRef::Driver { node, .. } => self.tap_stream(*node, t, depth),
             // A texture is not a stream either.
-            OutputRef::SourceMatte | OutputRef::EffectOutput { .. } => None,
+            OutputRef::SourceMatte
+            | OutputRef::EffectOutput { .. }
+            | OutputRef::EffectKey { .. } => None,
         }
     }
 
@@ -1421,6 +1427,8 @@ mod tests {
     use crate::fx::{builtins::instantiate, markers::MarkerContext, params::ResolvedStack};
     use crate::graph::Edge;
     use crate::model::{EffectInstance, EffectValue};
+
+    mod stagger;
 
     fn inst(match_name: &str) -> EffectInstance {
         instantiate(match_name).expect("the catalogue knows it")
@@ -2275,6 +2283,9 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -2283,6 +2294,7 @@ mod tests {
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             markers: Vec::new(),
             paint: Default::default(),
@@ -2293,6 +2305,9 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -2788,6 +2803,9 @@ mod tests {
                 adjustment: false,
                 pitch_follows_speed: false,
                 audio_routes: Default::default(),
+                audio_gain_db: 0.0,
+                automation: Default::default(),
+                duck: None,
                 retime: None,
                 blend: Default::default(),
                 masks: Vec::new(),
@@ -2796,6 +2814,7 @@ mod tests {
                 switches: Switches::default(),
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 markers: Vec::new(),
                 paint: Default::default(),
@@ -2809,6 +2828,9 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -3091,55 +3113,6 @@ mod tests {
         );
     }
 
-    /// A refused expression pushes nothing, and the parameter it is wired to
-    /// resolves to its own stored value — the same calm the walk gives a
-    /// bypassed driver or a spent budget. Every kind of refusal: a runtime
-    /// error, a syntax error, a name not in scope, a result of the wrong
-    /// shape, an infinity, and no text at all.
-    #[test]
-    fn a_refused_expression_pushes_nothing_and_the_wired_parameter_keeps_its_keyframes() {
-        let mut blur = inst("blur");
-        set(&mut blur, "radius", 40.0);
-        let radius = |source: &str| -> f32 {
-            let e = expression(source);
-            let graph = LayerGraph {
-                edges: vec![edge(&e, "value", NodeRef::Effect(blur.id), "radius")],
-                nodes: vec![e],
-                ..LayerGraph::default()
-            };
-            let drivers = resolve_drivers(&graph, 0.5, ctx(), None);
-            assert!(drivers.is_empty(), "{source:?} carried something");
-            crate::fx::resolved::resolve_stack_temporal_named(
-                std::slice::from_ref(&blur),
-                &drivers,
-                0.5,
-                0.5,
-                1000.0,
-                1.0,
-                &MarkerContext::NONE,
-                ctx(),
-            )
-            .1
-            .get(0)
-            .expect("one op")
-            .params
-            .float(ParamId::new("radius"), -1.0)
-        };
-        for refused in [
-            "1 / 0",
-            "1 +",
-            "no_such_name * 2",
-            "\"words\"",
-            "[1]",
-            "[1, 2, 3, 4, 5]",
-            "1.0 / 0.0",
-            "",
-            "   ",
-        ] {
-            assert_eq!(radius(refused), 40.0, "{refused:?}: the stored keyframe");
-        }
-    }
-
     /// The expression reads the frame's `time`: two times, two numbers; the
     /// same time twice, the same number. Nothing else moves it.
     #[test]
@@ -3379,70 +3352,5 @@ mod tests {
         assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);
     }
 
-    /// A Stagger wired into Clone to points' Rotation gives each
-    /// point of the stream its own value, through the same resolve the frame
-    /// uses, and a stream with nothing wired is left alone. Guards every stamp
-    /// taking the value its copy is owed.
-    #[test]
-    fn a_stagger_into_clone_to_points_turns_each_stamp() {
-        use super::per_copy::{drive_rows, COPY_ROTATION, COPY_ROWS};
-        let mut stagger = inst("stagger");
-        set(&mut stagger, "maximum", 90.0);
-        let target = inst("clone_to_points");
-        let stream = || PointsStream {
-            position: vec![[0.0; 3]; 3],
-            speed: vec![[0.0; 3]; 3],
-            age: vec![0.0; 3],
-            life: vec![1.0; 3],
-            size: vec![10.0; 3],
-            rotation: vec![0.0; 3],
-            colour: vec![[1.0; 4]; 3],
-            id: vec![0, 1, 2],
-            ..PointsStream::default()
-        };
-
-        let unwired = LayerGraph {
-            nodes: vec![stagger.clone()],
-            ..LayerGraph::default()
-        };
-        let mut s = stream();
-        drive_rows(
-            &unwired,
-            target.id,
-            &mut s,
-            COPY_ROWS,
-            0.0,
-            &ctx(),
-            None,
-            points::Projection::FLAT,
-        );
-        assert!(s.named.is_empty(), "nothing wired, nothing written");
-
-        let graph = LayerGraph {
-            edges: vec![edge(
-                &stagger,
-                "value",
-                NodeRef::Effect(target.id),
-                "rotation",
-            )],
-            nodes: vec![stagger],
-            ..LayerGraph::default()
-        };
-        let mut s = stream();
-        drive_rows(
-            &graph,
-            target.id,
-            &mut s,
-            COPY_ROWS,
-            0.0,
-            &ctx(),
-            None,
-            points::Projection::FLAT,
-        );
-        let column = s.column(COPY_ROTATION);
-        let values: Vec<f32> = (0..3).map(|i| s.read(column, i).unwrap()).collect();
-        assert!((values[0] - 0.0).abs() < 1e-3, "{values:?}");
-        assert!((values[1] - 45.0).abs() < 0.5, "{values:?}");
-        assert!((values[2] - 90.0).abs() < 1e-3, "{values:?}");
-    }
+    mod refused_expression;
 }

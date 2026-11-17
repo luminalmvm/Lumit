@@ -11,6 +11,7 @@ pub mod instances;
 pub mod presets;
 pub mod raster;
 pub mod textures;
+pub mod view;
 
 #[cfg(test)]
 mod tests;

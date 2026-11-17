@@ -54,7 +54,10 @@ Same project and inputs, same exported pixels, every run.
 - GPU and CPU versions of an effect may differ within its tolerance. One version is
   bit-stable against itself.
 - Models aren't bit-stable, so they never run inside a render. They run as a baked
-  analysis written to a sidecar, keyed by pack hash and provider.
+  analysis written to a sidecar, keyed by pack hash and provider. A model on the
+  processor with a fixed thread count is bit-stable on one machine (the runtime picks
+  kernels by processor) and may run inside a bake: Voice isolation runs in the audio
+  bake and keeps its answer by input, rate and pack.
 
 ## 4. Errors
 

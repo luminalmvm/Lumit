@@ -32,7 +32,7 @@ import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/flowchart_frb.dart' show openFlowchartFrb;
 import '../shell/menu_bar_frb.dart' show stepToMarkerFrb, trimCompAction;
-import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/dock_widget.dart' show DockPaneHandle, dockTopLine;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -97,9 +97,10 @@ class CompTabsFrb extends StatelessWidget {
     final comps = _openComps(selected);
     if (comps.isEmpty) return const SizedBox.shrink();
 
-    return Container(
+    return dockTopLine(context, (room) => Container(
       height: t.density.headerStrip,
       color: t.surface1,
+      padding: room,
       child: Row(
         children: [
           // The panel's own name, ahead of the tabs (§12A.1). A kicker like
@@ -147,7 +148,7 @@ class CompTabsFrb extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 
   /// The open comps in the strip's own order. Served from LumitState's cached
@@ -184,10 +185,10 @@ class CompTabsFrb extends StatelessWidget {
     if (comps.isEmpty) return const SizedBox.shrink();
     final mode = this.mode;
     final onMode = this.onMode;
-    return Container(
+    return dockTopLine(context, (room) => Container(
       height: lanternTimelineLine,
       color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10) + room,
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
@@ -274,7 +275,7 @@ class CompTabsFrb extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 
   /// The tabs themselves, scrolling sideways when there are more than fit.
@@ -1901,29 +1902,45 @@ class _TimelineRulerState extends State<TimelineRuler> {
   void _scrubStopped() {
     _edgeScroll?.stopAutoScroll();
     _edgeScroll = null;
+    _endJog();
     _scrubEnded();
   }
 
   @override
   void dispose() {
     _edgeScroll?.stopAutoScroll();
+    _endJog();
     _escape.dispose();
     // A ruler closed with a marker in hand must not leave its line stranded.
     if (_dragMarker != null || _dragSpan != null) markerDragPreview.value = null;
     super.dispose();
   }
 
-  /// The frame the scrub last sounded, so a drag that has not left it yet
-  /// does not sound it again on every pixel of travel.
-  int? _heard;
+  /// Whether a drag is sounding the comp as it goes.
+  bool _jogging = false;
 
-  /// Move the playhead to the pointer at [x], and with `Ctrl` held sound the
-  /// frame it lands on: the comp is heard a frame at a time as the playhead
-  /// is dragged over it, which finds a beat without playing up to it. `Cmd`
-  /// on a Mac.
-  ///
-  /// A [press] always sounds, even on the frame the last drag ended on,
-  /// because pressing there again is asking to hear it again.
+  void _endJog() {
+    if (!_jogging) return;
+    _jogging = false;
+    widget.comp.audioJogEnd();
+  }
+
+  /// Whether the playhead sounds as it moves: `Ctrl` held (`Cmd` on a Mac),
+  /// or any drag when Settings says so.
+  bool get _sounds {
+    final keys = HardwareKeyboard.instance;
+    return keys.isControlPressed ||
+        keys.isMetaPressed ||
+        (Provider.of<LumitUiState?>(context, listen: false)
+                ?.workspace
+                .scrubOnDrag ??
+            false);
+  }
+
+  /// Move the playhead to the pointer at [x], and while [_sounds] hear the
+  /// comp under it: a [press] sounds one short burst of the frame it lands
+  /// on, and a drag jogs, the pointer's speed the speed it plays at, which
+  /// finds a beat without playing up to it.
   ///
   /// With `Shift` held the playhead lands on whatever the pointer comes near:
   /// a marker, a layer's end, a keyframe, a work-area edge. Held rather than
@@ -1945,15 +1962,20 @@ class _TimelineRulerState extends State<TimelineRuler> {
     }
     if (caught != _caught) setState(() => _caught = caught);
     widget.onSeek(frame);
-    final keys = HardwareKeyboard.instance;
-    if (!keys.isControlPressed && !keys.isMetaPressed) return;
-    final last = widget.axis.frames - 1;
-    final at = frame.clamp(0, last < 0 ? 0 : last);
-    if (!press && at == _heard) return;
-    _heard = at;
+    if (!_sounds) {
+      _endJog();
+      return;
+    }
+    final last = max(0, widget.axis.frames - 1);
     // After the seek, which stops playback first: the engine only sounds a
     // scrub while the transport is stopped.
-    widget.comp.audioScrub(frame: at);
+    if (press) {
+      widget.comp.audioScrub(frame: frame.clamp(0, last));
+      return;
+    }
+    _jogging = true;
+    final exact = caught == null ? widget.axis.frameAtExact(x) : frame;
+    widget.comp.audioJog(frame: exact.clamp(0, last).toDouble());
   }
 
   /// Where a drag on the ruler lands: the pointer's own frame, taken to the
@@ -2394,6 +2416,12 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       // in the interface does.
                       label:
                           t.mono.copyWith(fontSize: 9, color: t.textMuted),
+                      scroll: rulerLabelStepSeconds(
+                                  pixelsPerSecond: axis.perFrame * widget.fps) <
+                              0.5
+                          ? Scrollable.maybeOf(context, axis: Axis.horizontal)
+                              ?.position
+                          : null,
                     ),
                   ),
                 ),
@@ -4212,8 +4240,16 @@ double _rulerX(BuildContext context, Offset global) {
 
 /// The label step for a ruler: the smallest nice second count whose labels
 /// sit at least ~80 px apart, so zooming out thins the labels rather than
-/// piling them up. Exposed for its test.
+/// piling them up. Past the layer Timeline's own deepest zoom, where half a
+/// second is wider than the lanes, the steps go on down to a tenth of a
+/// millisecond. Exposed for its test.
 double rulerLabelStepSeconds({required double pixelsPerSecond}) {
+  if (pixelsPerSecond > rulerFineFrom) {
+    const fine = [0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02];
+    for (final step in fine) {
+      if (step * pixelsPerSecond >= 80) return step;
+    }
+  }
   const nice = [
     0.5,
     1.0,
@@ -4232,6 +4268,11 @@ double rulerLabelStepSeconds({required double pixelsPerSecond}) {
   }
   return nice.last;
 }
+
+/// How many pixels a second must span before the ruler labels finer than half
+/// a second: more than the layer Timeline's full zoom gives at the usual rates
+/// and widths, so every zoom it reaches is labelled as it always was.
+const double rulerFineFrom = 6000;
 
 /// The finest tick Desk's engraved scale draws at this zoom, in seconds: four
 /// frames when they stand 30px apart, else one second when seconds do, else
@@ -4491,14 +4532,20 @@ const double markerHoverLift = 0.15;
 /// A ruler label. Seconds and minutes are zero-padded (`00s 02s`, `01:05s`) so
 /// a row of labels keeps one rhythm; hours are not (`1:00:00s`) — the owner's
 /// ruling. Deep zoom labels fractions as decimals, at most two places and
-/// with trailing zeros dropped: `0.5s`, `0.25s`, `02.5s`.
+/// with trailing zeros dropped: `0.5s`, `0.25s`, `02.5s`. The finest steps
+/// keep up to four places: `04.5005s`.
 String rulerLabelOf(double seconds) {
   final whole = seconds.round();
   final isWhole = (seconds - whole).abs() < 1e-9;
   if (seconds < 60) {
     if (!isWhole) {
+      final hundredths = seconds * 100;
       var text = seconds.toStringAsFixed(2);
-      if (text.endsWith('0')) text = text.substring(0, text.length - 1);
+      if ((hundredths - hundredths.round()).abs() > 1e-6) {
+        text = seconds.toStringAsFixed(4).replaceFirst(RegExp(r'0+$'), '');
+      } else if (text.endsWith('0')) {
+        text = text.substring(0, text.length - 1);
+      }
       final dot = text.indexOf('.');
       // Sub-second labels keep their bare `0.` — `00.5s` reads as a timecode.
       final head = seconds >= 1
@@ -4544,6 +4591,12 @@ class _RulerTicksPainter extends CustomPainter {
   /// Which shape's scale to draw.
   final RulerStyle style;
 
+  /// The lanes' scroll, given only while the labels are finer than half a
+  /// second: the ruler then draws the stretch about the view and follows
+  /// the scroll, rather than laying out a label every few pixels of a lane
+  /// millions wide.
+  final ScrollPosition? scroll;
+
   /// The time the comp's clock reads at its first frame, in seconds: its
   /// Start timecode. The labels read the clock's time, and the ticks fall
   /// on its whole steps.
@@ -4557,7 +4610,22 @@ class _RulerTicksPainter extends CustomPainter {
     required this.minorTick,
     required this.label,
     required this.style,
-  });
+    this.scroll,
+  }) : super(repaint: scroll);
+
+  /// The seconds to draw between: the whole comp, or with [scroll] the view
+  /// and a view either side.
+  (double, double) _span(double seconds) {
+    final p = scroll;
+    if (p == null || !p.hasPixels || !p.hasViewportDimension) {
+      return (0, seconds);
+    }
+    final view = p.viewportDimension;
+    return (
+      max(0.0, axis.frameAtExact(p.pixels - view) / fps),
+      min(seconds, axis.frameAtExact(p.pixels + view * 2) / fps),
+    );
+  }
 
   /// Labels already laid out, by their text. A zoom draws the same few again
   /// on every frame of its flight, and laying one out costs far more than
@@ -4565,10 +4633,12 @@ class _RulerTicksPainter extends CustomPainter {
   static final Map<String, TextPainter> _laidOut = {};
   static TextStyle? _laidOutIn;
 
-  /// The first whole multiple of `step` the clock reads at or after the
-  /// comp's first frame.
-  double _first(double step) =>
-      step <= 0 ? start : (start / step - 1e-9).ceilToDouble() * step;
+  /// The first whole multiple of `step` the clock reads at or after `from`
+  /// seconds into the comp.
+  double _first(double step, double from) {
+    final at = start + from;
+    return step <= 0 ? at : (at / step - 1e-9).ceilToDouble() * step;
+  }
 
   TextPainter _labelAt(double seconds) {
     if (_laidOutIn != label || _laidOut.length > 2000) {
@@ -4592,26 +4662,27 @@ class _RulerTicksPainter extends CustomPainter {
   /// half, and none drawn closer than 30px to its neighbour.
   void _paintEngraved(Canvas canvas, Size size, double mid, double seconds,
       double pxPerSec, double step, Paint paint, Paint quiet) {
+    final (from, to) = _span(seconds);
     final fourFrames = 4 / fps;
     final finest = engravedTickSeconds(pixelsPerSecond: pxPerSec, fps: fps);
     if (finest <= fourFrames && fourFrames < 1) {
-      for (var d = _first(fourFrames);
-          d <= start + seconds + 1e-9;
+      for (var d = _first(fourFrames, from);
+          d <= start + to + 1e-9;
           d += fourFrames) {
         final x = axis.xOf((d - start) * fps);
         canvas.drawLine(Offset(x, mid - 4), Offset(x, mid), quiet);
       }
     }
     if (finest <= 1 && step > 1) {
-      for (var d = _first(1);
-          d <= start + seconds + 1e-9;
+      for (var d = _first(1, from);
+          d <= start + to + 1e-9;
           d += 1) {
         final x = axis.xOf((d - start) * fps);
         canvas.drawLine(Offset(x, mid - 8), Offset(x, mid), quiet);
       }
     }
-    for (var d = _first(step);
-        d <= start + seconds + 1e-9;
+    for (var d = _first(step, from);
+        d <= start + to + 1e-9;
         d += step) {
       final x = axis.xOf((d - start) * fps);
       canvas.drawLine(Offset(x, mid - 14), Offset(x, mid), paint);
@@ -4645,9 +4716,10 @@ class _RulerTicksPainter extends CustomPainter {
     // zoom gives them — down to one tick per frame (§12A.1).
     final minor = rulerMinorStepSeconds(
         pixelsPerSecond: pxPerSec, labelStep: step, fps: fps);
+    final (from, to) = _span(seconds);
     if (minor < step) {
-      for (var d = _first(minor);
-          d <= start + seconds + 1e-9;
+      for (var d = _first(minor, from);
+          d <= start + to + 1e-9;
           d += minor) {
         final x = axis.xOf((d - start) * fps);
         canvas.drawLine(
@@ -4655,10 +4727,8 @@ class _RulerTicksPainter extends CustomPainter {
       }
     }
 
-    for (var d = _first(step);
-
-        d <= start + seconds + 1e-9;
-
+    for (var d = _first(step, from);
+        d <= start + to + 1e-9;
         d += step) {
       final x = axis.xOf((d - start) * fps);
       // Seven pixels of labelled tick against the minor ticks' four — the
@@ -4681,7 +4751,8 @@ class _RulerTicksPainter extends CustomPainter {
       old.tick != tick ||
       old.minorTick != minorTick ||
       old.axis.frames != axis.frames ||
-      old.axis.width != axis.width;
+      old.axis.width != axis.width ||
+      old.scroll != scroll;
 }
 
 /// Collapse per-frame strip bytes into the fewest contiguous runs, so a

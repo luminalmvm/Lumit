@@ -15,6 +15,8 @@ use dropper::cut_patch;
 use dropper::sample_layer_alone;
 #[cfg(target_arch = "wasm32")]
 use dropper::soloed;
+#[cfg(not(target_arch = "wasm32"))]
+use scope::trace_scope;
 use uuid::Uuid;
 use views::{close_view, ground_of, set_view, viewed_kept, viewed_through, Viewed};
 #[cfg(target_arch = "wasm32")]
@@ -22,6 +24,10 @@ use web::{sample_pixels, trace_scope};
 
 mod cut;
 mod dropper;
+mod item;
+mod panics;
+mod scope;
+mod shuttle;
 mod views;
 #[cfg(target_arch = "wasm32")]
 mod web;
@@ -64,9 +70,9 @@ pub struct WorkerState {
     /// The document as the Viewer's views look at it, kept between frames
     /// ([`viewed_kept`]).
     viewed: Vec<Viewed>,
-    /// The newest Scopes trace asked for while playing, kept for the moment
-    /// after the next picture.
-    scope_waiting: Option<RenderScopeRequest>,
+    /// The newest Scopes trace of each lane asked for while playing, kept for
+    /// the moment after the next picture.
+    scope_waiting: Vec<RenderScopeRequest>,
     /// The leg last played: its composition, first frame and last. The same
     /// again is a loop ([`Playback::loops_to`]).
     last_leg: Option<(Uuid, u64, u64)>,
@@ -98,6 +104,8 @@ pub struct WorkerState {
     /// The same for every other view, so a picture made before a model was
     /// read or a lens baked is made again in each of them.
     beside_shown: Vec<(u32, CompositionReference, u64, f32)>,
+    /// The angle viewer, drawn beside the program while it plays.
+    angles: Option<item::AnglesLatch>,
     /// How each Viewer view is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
@@ -334,7 +342,8 @@ struct ViewerLook {
 /// through, `None` for the comp's own camera, how it shows models, and for a
 /// 3D viewport the draft that leaves out motion blur and the size of the
 /// picture it fills, comp pixels round the comp's middle. A canvas of
-/// `(0, 0)` is the comp's own size.
+/// `(0, 0)` is the comp's own size. `matte` is the view's matte view, which a
+/// view with no 3D view of its own holds a latch for too.
 #[frb(ignore)]
 #[derive(Clone, Copy, PartialEq)]
 struct ViewLatch {
@@ -343,6 +352,7 @@ struct ViewLatch {
     draft: bool,
     canvas: (u32, u32),
     display: lumit_gpu::mesh::display::ModelDisplay,
+    matte: Option<lumit_core::grade::matte_view::MatteView>,
 }
 
 /// Make the renderer look the way `view` looks, if it does not already.
@@ -1979,6 +1989,12 @@ pub enum WorkerRequest {
         canvas: (u32, u32),
         display: lumit_gpu::mesh::display::ModelDisplay,
     },
+    /// A Viewer view's matte view, or `None` for off. Latched per view beside
+    /// its 3D view, see [`viewed_through`]. Preview only.
+    SetMatteView {
+        view: u32,
+        matte: Option<lumit_core::grade::matte_view::MatteView>,
+    },
     SetViewerLook {
         stops: f64,
         tone_map: bool,
@@ -2108,7 +2124,7 @@ struct Playback {
     /// Counting down rather than up. A reverse leg ends after frame zero.
     reverse: bool,
     /// How many frames each step of the leg covers: 1, or a shuttle's 2, 4 or
-    /// 8. Above 1 the leg has no sound and runs on the wall clock.
+    /// 8. Above 1 the leg runs on the wall clock, heard through the jog.
     speed: u64,
     /// How many times slower than the comp's rate the leg plays. `fps` is
     /// already divided by it; the sound still counts the comp's seconds.
@@ -2250,8 +2266,8 @@ impl Playback {
         seconds / f64::from(self.slow)
     }
 
-    /// Whether the leg has no sound to follow, so the wall clock times it: a
-    /// reverse leg, or a shuttle faster than the comp's rate.
+    /// Whether the leg has no mix to follow, so the wall clock times it and
+    /// the jog sounds it ([`shuttle`]): a reverse leg, or a fast shuttle.
     fn silent(&self) -> bool {
         self.reverse || self.speed > 1
     }
@@ -2586,16 +2602,16 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
     ) {
         AudioChase::Hold => {
             playback.audio_held_for_picture = true;
-            crate::api::audio::audio_pause();
+            crate::api::audio::audio_hold_for_picture();
         }
         AudioChase::Start => {
             playback.audio_held_for_picture = false;
-            crate::api::audio::audio_seek(playback.sound_at(frame as f64 / fps + heard_late()));
+            crate::api::audio::audio_resync(playback.sound_at(frame as f64 / fps + heard_late()));
             resume_audio();
             playback.settle_audio();
         }
         AudioChase::Catch => {
-            crate::api::audio::audio_seek(playback.sound_at(frame as f64 / fps + heard_late()));
+            crate::api::audio::audio_resync(playback.sound_at(frame as f64 / fps + heard_late()));
             playback.settle_audio();
         }
         AudioChase::Leave => {}
@@ -2758,9 +2774,10 @@ pub struct RenderScopeRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     pub scale: f32,
-    /// Which trace: the codes `lumit_render` reads, 0 waveform, 1 RGB
-    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram.
-    pub kind: u32,
+    /// Which traces, each the code `lumit_render` reads: 0 waveform, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram, 6 CIE
+    /// xy, 7 vectorscope at 2x. All of them come from the one picture.
+    pub kinds: Vec<u32>,
     /// Background, trace, then the R, G and B channel tints, each `[r, g, b]`.
     pub colours: [[u8; 3]; 5],
     /// Which Viewer view the trace reads, so it reads that view's picture.
@@ -3220,12 +3237,13 @@ fn worker_loop(
         present_due: None,
         unparked: std::collections::VecDeque::new(),
         last_leg: None,
-        scope_waiting: None,
+        scope_waiting: Vec::new(),
         viewed: Vec::new(),
         prioritised: false,
         prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
         beside_shown: Vec::new(),
+        angles: None,
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
         // which is what it already held.
@@ -3314,7 +3332,7 @@ fn worker_loop(
                 let said = format!(
                     "The render worker faulted ({}); rebuilding the renderer: {}",
                     faults_in_a_row,
-                    panic_message(&*payload),
+                    panics::panic_message(&*payload),
                 );
                 note!("{said}");
                 crate::faults::record(&said);
@@ -3356,20 +3374,6 @@ const MAX_FAULTS_IN_A_ROW: u32 = 3;
 enum Turn {
     Continue,
     Stop,
-}
-
-/// Whatever a panic payload has to say for itself. Panics carry a `&str` or a
-/// `String` in practice; anything else is nameless, and saying so is better
-/// than saying nothing.
-#[frb(ignore)]
-fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
-    if let Some(s) = payload.downcast_ref::<&'static str>() {
-        s
-    } else if let Some(s) = payload.downcast_ref::<String>() {
-        s
-    } else {
-        "no message"
-    }
 }
 
 /// One turn of the worker loop: recover, sync, take a request if there is one,
@@ -3480,7 +3484,7 @@ fn one_turn(
     play_one_frame(state, stream);
     // A trace asked for as playback stopped is still owed.
     if state.playback.is_none() {
-        if let Some(req) = state.scope_waiting.take() {
+        for req in std::mem::take(&mut state.scope_waiting) {
             if let Err(err) = trace_scope(req, state, stream) {
                 note!("Dropping the trace: {err}");
             }
@@ -3526,6 +3530,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             start_audio(playback.comp.id, start, document, playback.slow);
             playback.settle_audio();
         }
+        shuttle::follow(playback);
     }
 
     // Present first: at a frame boundary the due picture goes out BEFORE the
@@ -3564,26 +3569,35 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // it, so a stop resumes filling from where the user actually is.
             state.last_shown = Some((playback.view, playback.comp.clone(), frame, playback.scale));
             state.fill_exhausted = false;
-            // Not on a reverse leg: it has no sound, and a late picture would
-            // otherwise hold the mix so that eight on-time pictures start
-            // the forward mix again under a backward picture.
+            // Not on a reverse leg, which the jog sounds: no forward mix.
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
                 chase_audio(playback, frame, late);
             }
             let present_started = web_time::Instant::now();
+            // The time the angle viewer may take: up to half a frame past
+            // the program's next picture, which the present grid takes up.
+            // None while this picture was that late itself or the ring is
+            // under half: the program comes first.
+            let period = 1.0 / playback.fps.max(1.0);
+            let room = (playback.ring.len() * 2 >= playback.capacity())
+                .then(|| period * 1.5 - late.map_or(0.0, |l| l.as_secs_f64()))
+                .filter(|room| *room > period);
+            let program = playback.comp.id;
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
             // rebuilding (docs/TODO.md, "measure first").
-            let Some(playback) = &mut state.playback else {
-                return;
-            };
             playback
                 .present_costs
                 .push(present_started.elapsed().as_secs_f64());
-            if let Some(req) = state.scope_waiting.take() {
-                if let Err(err) = trace_scope(req, state, stream) {
-                    note!("Dropping the trace: {err}");
+            // The angle viewer moves with the program.
+            item::follow(state, stream, program, frame, room);
+            let waiting = std::mem::take(&mut state.scope_waiting);
+            if !waiting.is_empty() {
+                for req in waiting {
+                    if let Err(err) = trace_scope(req, state, stream) {
+                        note!("Dropping the trace: {err}");
+                    }
                 }
                 return;
             }
@@ -4259,7 +4273,7 @@ fn handle_requests(
         // asks every 120 ms while the Viewer asks every tick, so the picture
         // froze on its first frame while the scopes kept updating. A trace and
         // a frame are different jobs; neither is the other's replacement.
-        let (pictures, scope, sample, superseded) =
+        let (pictures, scopes, sample, superseded) =
             drain_to_newest(request, receiver, classify_request, state.active_view());
         // Deliberately not logged. Superseding is the normal, healthy case —
         // it is how a drag stays attached to the pointer — and a line per
@@ -4273,7 +4287,7 @@ fn handle_requests(
         //
         // A frame that cannot be rendered is dropped, not fatal: the worker has
         // to survive to serve the next request.
-        for request in pictures.into_iter().chain(scope).chain(sample) {
+        for request in pictures.into_iter().chain(scopes).chain(sample) {
             let outcome = match request {
                 // A newer picture for the same view stops this one part way.
                 WorkerRequest::RenderComp(req) => {
@@ -4289,7 +4303,10 @@ fn handle_requests(
                 // It reads a whole frame back off the card, 5 to 15 ms, and
                 // served as it arrived that came out of the next picture.
                 WorkerRequest::TraceScope(req) if state.playback.is_some() => {
-                    state.scope_waiting = Some(req);
+                    state
+                        .scope_waiting
+                        .retain(|older| older.lane() != req.lane());
+                    state.scope_waiting.push(req);
                     Ok(())
                 }
                 WorkerRequest::TraceScope(req) => trace_scope(req, state, stream),
@@ -4312,19 +4329,25 @@ fn handle_requests(
                     canvas,
                     display,
                 } => {
-                    let shown = pose.is_some() || display != Default::default();
+                    let matte = state.camera_views.get(&view).and_then(|v| v.matte);
+                    let shown = pose.is_some() || display != Default::default() || matte.is_some();
                     let latch = shown.then(|| ViewLatch {
                         comp,
                         pose: pose.map(|p| p.core()),
                         draft,
                         canvas,
                         display,
+                        matte,
                     });
                     let ground = ground.and_then(|colour| ground_of(state, comp, colour));
                     set_view(state, view, latch, ground);
                     Ok(())
                 }
-                WorkerRequest::RenderItem(req) => render_item(req, state, stream),
+                WorkerRequest::SetMatteView { view, matte } => {
+                    views::set_matte_view(state, view, matte);
+                    Ok(())
+                }
+                WorkerRequest::RenderItem(req) => item::render_item(req, state, stream),
                 WorkerRequest::CloseView(view) => {
                     close_view(state, view);
                     Ok(())
@@ -4395,11 +4418,12 @@ fn handle_requests(
 #[frb(ignore)]
 fn classify_request(r: &WorkerRequest) -> DrainClass {
     match r {
-        WorkerRequest::TraceScope(_) => DrainClass::Scope,
+        WorkerRequest::TraceScope(req) => DrainClass::Scope(req.lane()),
         WorkerRequest::SamplePixels(_) => DrainClass::Sample,
         WorkerRequest::Play(_)
         | WorkerRequest::StopPlayback
         | WorkerRequest::SetCameraView { .. }
+        | WorkerRequest::SetMatteView { .. }
         | WorkerRequest::CloseView(_)
         | WorkerRequest::SetViewerLook { .. } => DrainClass::PictureKeepAll,
         WorkerRequest::RenderComp(req) => DrainClass::PictureNewestWins(req.view),
@@ -4427,8 +4451,8 @@ enum DrainClass {
     /// Every one is served, in order (transport commands: Play and Stop; and
     /// the display view, which is a setting rather than a picture).
     PictureKeepAll,
-    /// A trace; the newest survives, served after the pictures.
-    Scope,
+    /// A trace; the newest of each lane survives, served after the pictures.
+    Scope(u64),
     /// A dropper read; the newest survives, served after the pictures — and in
     /// its own lane, not the trace's. The two are different questions, and a
     /// Scopes panel open while the dropper is armed must not make either one
@@ -4446,28 +4470,31 @@ const PREVIEW_LANE: u32 = u32::MAX;
 /// `WorkerRequest` needs a live project behind it, and the rule being tested has
 /// nothing to do with rendering.
 ///
-/// Returns `(pictures_in_order, scope, sample, superseded_count)`.
+/// Returns `(pictures_in_order, scopes, sample, superseded_count)`.
 #[frb(ignore)]
 fn drain_to_newest<T>(
     first: T,
     receiver: &Receiver<T>,
     classify: impl Fn(&T) -> DrainClass,
     priority: u32,
-) -> (Vec<T>, Option<T>, Option<T>, usize) {
+) -> (Vec<T>, Vec<T>, Option<T>, usize) {
     let mut kept: Vec<T> = Vec::new();
     // One survivor per view, in the order the views first asked.
     let mut newest_wins: Vec<(u32, T)> = Vec::new();
-    let mut scope = None;
+    // One trace per lane, in the order the lanes first asked.
+    let mut scopes: Vec<(u64, T)> = Vec::new();
     let mut sample = None;
     let mut superseded = 0usize;
     let mut newest = Some(first);
     while let Some(item) = newest.take() {
         match classify(&item) {
-            DrainClass::Scope => {
-                if scope.replace(item).is_some() {
+            DrainClass::Scope(lane) => match scopes.iter_mut().find(|(l, _)| *l == lane) {
+                Some(slot) => {
+                    slot.1 = item;
                     superseded += 1;
                 }
-            }
+                None => scopes.push((lane, item)),
+            },
             DrainClass::Sample => {
                 if sample.replace(item).is_some() {
                     superseded += 1;
@@ -4508,7 +4535,8 @@ fn drain_to_newest<T>(
     // A surviving newest-wins picture runs after the kept ones: the kept ones
     // were asked for earlier, and order is part of every-frame's contract.
     kept.extend(newest_wins.into_iter().map(|(_, item)| item));
-    (kept, scope, sample, superseded)
+    let scopes = scopes.into_iter().map(|(_, item)| item).collect();
+    (kept, scopes, sample, superseded)
 }
 
 /// Translate one measured frame for the frontend (docs/13 §7.1). Ids cross as
@@ -4650,71 +4678,6 @@ fn render_comp(
     Ok(())
 }
 
-/// Draw one item on its own: the footage view and the layer view
-/// (docs/impl/multi-viewer.md §3.6).
-///
-/// **No second render path.** A scratch composition is built around the item
-/// on a clone of the document and composited by the ordinary walk, so the
-/// picture arrives down the same zero-copy transport at the same quality, and
-/// the frame names itself the way every other frame does. Nothing is
-/// committed: the composition never reaches the document, the journal, the
-/// undo stack or the Project panel.
-#[frb(ignore)]
-fn render_item(
-    req: RenderItemRequest,
-    state: &mut WorkerState,
-    stream: &mut WorkerResponseStream,
-) -> Result<(), BridgeError> {
-    let document = {
-        let document = req.project.state()?;
-        let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot()
-    };
-    // A nonsense rate reads as 25, which is a rate rather than a division by
-    // zero: a view of a still needs one only to have a clock at all.
-    let Ok(rate) = lumit_core::time::FrameRate::new(req.rate.0, req.rate.1)
-        .or_else(|_| lumit_core::time::FrameRate::new(25, 1))
-    else {
-        return Ok(());
-    };
-    // The item's own length, as a time: frames over the rate, exactly.
-    let Ok(duration) = lumit_core::time::Rational::from_i128(
-        i128::from(req.frames.max(1)) * i128::from(req.rate.1.max(1)),
-        i128::from(req.rate.0.max(1)),
-    ) else {
-        return Ok(());
-    };
-    let duration = lumit_core::time::Duration(duration);
-    let Some(document) =
-        crate::scratch::document_with(&document, req.of, req.effects, req.size, rate, duration)
-    else {
-        // The item has gone, or the layer has. The view shows its empty state
-        // rather than a picture of something else.
-        return Ok(());
-    };
-    state.set_view_id(req.view);
-    look_at(state, req.view);
-    // Not `last_shown`: the fill, the cache bar and the drags follow the
-    // active composition view, and this item's scratch comp is none of those.
-    let comp = req.of.comp_id();
-    watched(state, stream, req.frame, true, |state, stream| {
-        publish_frame(
-            state,
-            comp,
-            req.frame,
-            req.scale,
-            &document,
-            stream,
-            BridgePlaybackMode::Adaptive,
-            // A scratch composition is not the document, so its frames are not
-            // banked against one: cacheable would file a picture under a
-            // composition nothing else can ever ask for.
-            false,
-        );
-    });
-    Ok(())
-}
-
 /// Replace a text layer's document with the one being typed.
 ///
 /// Only a text layer has a document to replace; anything else is a preview from
@@ -4734,8 +4697,10 @@ fn apply_text_preview(
         // caption fell back to the typed words mid-keystroke.
         // Keys the seam cannot read are a preview nobody can draw, so the
         // layer keeps the document it has rather than the frame failing.
-        if let Ok(written) = crate::api::assets::text_document_of(document, offset) {
+        if let Ok(mut written) = crate::api::assets::text_document_of(document, offset) {
             let shift = crate::api::assets::style::restyle_shift(existing, &written);
+            // The preview leaves captions as they are, as the committed write does.
+            written.captions = existing.captions.clone();
             *existing = written;
             return shift;
         }
@@ -4794,6 +4759,11 @@ fn render_comp_with_preview(
         _ => false,
     };
 
+    // A grade group's list is the document's, not the layer's.
+    let staged_effects = req
+        .effects
+        .filter(|staged| !lumit_core::grade::groups::stage(&mut document, staged));
+
     let comp = document
         .comp_mut(req.layer.map_or(req.comp.id, |l| l.comp_id))
         .ok_or(BridgeError::InvalidComp)?;
@@ -4821,11 +4791,34 @@ fn render_comp_with_preview(
         .position(|i| i.id == layer_ref.layer_id)
         .ok_or(BridgeError::InvalidLayer)?;
 
-    if let Some(effects) = req.effects {
+    if let Some(effects) = staged_effects {
         // **Which list this is, read off the ids** (docs/impl/layer-styles.md
         // §5). What is dragged arrives as one whole list, and the layer says which.
         let layer = &mut comp.layers[index];
-        if staged_graph_inputs {
+        if let Some(first) = effects
+            .first()
+            .filter(|f| lumit_core::fx::effects::template::comp_of(f).is_some())
+        {
+            // A copy of a graphics template: the rows that moved are the
+            // copy's own from here, as the commit will store them, on the
+            // clip they belong to or on the layer.
+            let first = first.clone();
+            match crate::api::template::copy::clip_of_inputs(layer, &first) {
+                Some(id) => {
+                    if let lumit_core::model::LayerKind::Sequence { clips } = &mut layer.kind {
+                        if let Some(clip) = clips.iter_mut().find(|c| c.id == id) {
+                            let before = clip.inputs.take();
+                            clip.inputs =
+                                crate::api::template::copy::stored(first, before.as_ref());
+                        }
+                    }
+                }
+                None => {
+                    let before = layer.graph_inputs.take();
+                    layer.graph_inputs = crate::api::template::copy::stored(first, before.as_ref());
+                }
+            }
+        } else if staged_graph_inputs {
             // A placed graph's Inputs are one instance, staged as a list of
             // one (docs/impl/node-graph-comp.md §5.3).
             layer.graph_inputs = effects.into_iter().next();
@@ -5042,154 +5035,6 @@ fn publish_preview(
     Ok(())
 }
 
-/// Trace `frame` and publish the result.
-///
-/// Always a CPU read-back even on a zero-copy build: the binning kernel needs
-/// the pixels, and on those builds nothing ever brings them back. A failure
-/// publishes nothing rather than taking the worker down — a scope that cannot
-/// draw is a blank panel, not a lost session.
-#[frb(ignore)]
-#[cfg(not(target_arch = "wasm32"))]
-fn trace_scope(
-    req: RenderScopeRequest,
-    state: &mut WorkerState,
-    stream: &mut WorkerResponseStream,
-) -> Result<(), BridgeError> {
-    let (document, revision) = {
-        let document = state.project.state()?;
-        let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot_and_revision()
-    };
-    // The picture that view shows: through its own 3D view, and the chip.
-    // The kept copy, which playback has usually made already.
-    let document = viewed_kept(
-        &mut state.viewed,
-        state.prefix,
-        state.camera_views.get(&req.view).copied(),
-        revision,
-        document,
-    );
-
-    // Reuse the picture the Viewer already has, at whatever resolution it was
-    // made at. Scopes read the *values* in a frame, so any size answers the
-    // question — and compositing the composition a second time to ask it was
-    // doubling the cost of every played frame with the panel open.
-    // Only a frame that is still what this position *shows* will do:
-    // an edit renames every frame it touches, and the entry the edit orphaned
-    // keeps claiming the position it was made for. Asked at the quality each
-    // candidate was made at, so a Half-resolution frame is judged by the Half
-    // name and not by the Full one.
-    // The card first: on a zero-copy build the frame the Viewer shows lives
-    // there and nowhere else, so a frame the bar showed green was composited
-    // a second time for every trace of it. Reading it back is a copy.
-    let quality = quality_for(req.scale);
-    let bgra = zero_copy_wants_bgra();
-    let named = |(width, height, mut bytes): (u32, u32, Vec<u8>)| {
-        if bgra {
-            // The Scopes bin R, G and B by name.
-            for px in bytes.chunks_exact_mut(4) {
-                px.swap(0, 2);
-            }
-        }
-        (width, height, bytes)
-    };
-    // The picture on screen before anything: while a value is dragged the
-    // Viewer shows a preview the document has not been given, and a colourist
-    // grades by the scope, so it must trace what the drag is doing. Only the
-    // frame the Viewer was last given, in that view; playback presents its
-    // frames another way and they are read off the card below.
-    let shown = state
-        .presented
-        .as_ref()
-        .filter(|_| state.playback.is_none())
-        .filter(|(view, comp, frame, _)| {
-            (*view, *comp, *frame) == (req.view, req.comp.id, req.frame)
-        })
-        .and_then(|(.., prepared)| state.renderer.read_back_prepared(prepared))
-        .map(named);
-    let on_card = match shown {
-        Some(shown) => Some(shown),
-        None => state
-            .renderer
-            .frame_key(&document, req.comp.id, req.frame, quality)
-            .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
-            .map(named),
-    };
-    let still_current = |key: u128, quality: lumit_render::plan::Quality| {
-        state
-            .renderer
-            .frame_key_presynced(&document, req.comp.id, req.frame, quality)
-            == Some(key)
-    };
-    let held =
-        on_card.or_else(|| crate::framecache::best_frame(req.comp.id, req.frame, still_current));
-    let (width, height, rgba) = match held {
-        Some(held) => held,
-        None => {
-            // Nothing held for this frame — the zero-copy Viewer keeps no bytes,
-            // so on that path the trace still has to make its own. Cached under
-            // the frame's content name, so a second trace of the same frame is
-            // free; an unnameable frame (footage still being probed) is traced
-            // without banking anything.
-            let key = state
-                .renderer
-                .frame_key(&document, req.comp.id, req.frame, quality);
-            let provenance = lumit_render::headless::FrameProvenance {
-                comp: req.comp.id,
-                frame: req.frame,
-                scale_q: lumit_render::headless::preview_scale_q(quality),
-                quality,
-            };
-            let made = match key.and_then(crate::framecache::get) {
-                Some(hit) => Some(hit),
-                None => {
-                    // A flare that fell back to the previous lens during the
-                    // render made a picture the name taken before it
-                    // no longer describes. Banked only when no flare stood
-                    // anything in.
-                    let subs_before = state.renderer.flare_substitutions();
-                    let made = state
-                        .renderer
-                        .render_preview(
-                            &document,
-                            req.comp.id,
-                            req.frame,
-                            quality_for(req.scale),
-                            req.scale,
-                        )
-                        .ok()
-                        .map(|(rgba, width, height)| (width, height, rgba));
-                    if let (Some(key), Some((w, h, px))) = (key, made.as_ref()) {
-                        if state.renderer.flare_substitutions() == subs_before {
-                            crate::framecache::put_rendered(key, provenance, *w, *h, px);
-                        }
-                    }
-                    made
-                }
-            };
-            let Some(made) = made else {
-                note!("Scope render failed, dropping the trace");
-                return Ok(());
-            };
-            made
-        }
-    };
-
-    match state
-        .renderer
-        .render_scope(&rgba, width, height, req.kind, req.colours)
-    {
-        Ok(trace) => {
-            _ = stream.add(WorkerResponse::Scope(crate::api::state::BridgeScopeTrace {
-                kind: req.kind,
-                rgba: trace,
-            }));
-        }
-        Err(err) => note!("Scope trace failed: {err}"),
-    }
-    Ok(())
-}
-
 /// Answer one dropper read: find the pixels, cut the window, publish it.
 ///
 /// **A window, not a pixel.** The reply carries a whole square of the picture —
@@ -5238,9 +5083,11 @@ fn sample_pixels(
         Some(layer) => sample_layer_alone(&document, revision, layer.layer_id, &req, state)
             .and_then(|(w, h, rgba)| cut_patch(&rgba, w, h, u, v, req.window).map(|p| (p, w, h))),
         None => {
-            // The picture this view shows, through its own 3D view.
-            let document =
-                viewed_through(None, state.camera_views.get(&req.view).copied(), document);
+            // The picture this view shows, through its own 3D view, never
+            // its matte view: a pick reads the picture itself.
+            let view = state.camera_views.get(&req.view);
+            let view = view.map(|v| ViewLatch { matte: None, ..*v });
+            let document = viewed_through(None, view, document);
             // **The frame the Viewer is showing, wherever it is being kept.**
             // The dropper reads what is on screen, so the ladder is the same
             // one `trace_scope` walks, and in the same order — and naming the
@@ -5744,6 +5591,7 @@ mod tests {
             draft: false,
             canvas: (0, 0),
             display: Default::default(),
+            matte: None,
         };
         let through = super::viewed_through(None, Some(latch), two.clone());
         let layers = &through.comp(comp).expect("comp").layers;
@@ -5803,6 +5651,7 @@ mod tests {
             draft: false,
             canvas: (0, 0),
             display: Default::default(),
+            matte: None,
         };
         super::set_view(&mut state, 1, Some(latch), None);
 
@@ -6016,7 +5865,7 @@ mod tests {
         }));
         let payload = outcome.err().expect("the net catches the fault");
         assert_eq!(
-            super::panic_message(&*payload),
+            super::panics::panic_message(&*payload),
             "an effect kernel gave up mid-frame",
             "a caught fault must reach the log with its own words, or it is unfindable"
         );
@@ -6046,12 +5895,13 @@ mod tests {
             present_due: None,
             unparked: std::collections::VecDeque::new(),
             last_leg: None,
-            scope_waiting: None,
+            scope_waiting: Vec::new(),
             viewed: Vec::new(),
             prioritised: false,
             prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
             beside_shown: Vec::new(),
+            angles: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),
             applied_look: (0, super::ViewerLook::default()),
@@ -6114,6 +5964,9 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -6556,8 +6409,8 @@ mod tests {
     }
 
     /// The requests these tests queue: an adaptive picture (newest wins), an
-    /// every-frame picture (all kept, in order), and a scope trace. Standing in
-    /// for `WorkerRequest`, which needs a live project.
+    /// every-frame picture (all kept, in order), and a scope trace with its
+    /// lane. Standing in for `WorkerRequest`, which needs a live project.
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     enum Req {
         /// A picture, with the view that asked for it — several Viewer views
@@ -6567,14 +6420,14 @@ mod tests {
         // (Play, Stop), the only keep-all class since scrubs became
         // newest-wins in every mode.
         EveryFrame(u32),
-        Scope(u32),
+        Scope(u32, u64),
     }
 
     fn classify(r: &Req) -> DrainClass {
         match r {
             Req::Adaptive(_, view) => DrainClass::PictureNewestWins(*view),
             Req::EveryFrame(_) => DrainClass::PictureKeepAll,
-            Req::Scope(_) => DrainClass::Scope,
+            Req::Scope(_, lane) => DrainClass::Scope(*lane),
         }
     }
 
@@ -6671,19 +6524,30 @@ mod tests {
         for frame in 1..=3 {
             tx.send(Req::Adaptive(frame, 0)).unwrap();
         }
-        // The trace arrives last, which is what used to win outright.
-        tx.send(Req::Scope(9)).unwrap();
+        // The traces arrive last, which is what used to win outright. Two
+        // askers (two Scopes panels, or a panel and the Levels row) each keep
+        // their newest.
+        tx.send(Req::Scope(8, 1)).unwrap();
+        tx.send(Req::Scope(7, 2)).unwrap();
+        tx.send(Req::Scope(9, 1)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) =
+        let (pictures, scopes, _, superseded) =
             drain_to_newest(Req::Adaptive(0, 0), &rx, classify, 0);
         assert_eq!(
             pictures,
             vec![Req::Adaptive(3, 0)],
             "the newest frame survives a trace queued behind it"
         );
-        assert_eq!(scope, Some(Req::Scope(9)), "and the trace is served too");
-        assert_eq!(superseded, 3, "the three older frames were dropped");
+        assert_eq!(
+            scopes,
+            vec![Req::Scope(9, 1), Req::Scope(7, 2)],
+            "and each asker's newest trace is served too"
+        );
+        assert_eq!(
+            superseded, 4,
+            "the three older frames and one trace were dropped"
+        );
     }
 
     /// The keep-all class's contract: nothing dropped, order preserved — what
@@ -6696,7 +6560,7 @@ mod tests {
         }
         // An adaptive scrub and a trace land in the middle of the backlog.
         tx.send(Req::Adaptive(9, 0)).unwrap();
-        tx.send(Req::Scope(1)).unwrap();
+        tx.send(Req::Scope(1, 0)).unwrap();
         drop(tx);
 
         let (pictures, scope, _, superseded) =
@@ -6712,7 +6576,7 @@ mod tests {
             ],
             "every-frame requests all survive, in order, before the adaptive one"
         );
-        assert_eq!(scope, Some(Req::Scope(1)));
+        assert_eq!(scope, vec![Req::Scope(1, 0)]);
         assert_eq!(superseded, 0, "nothing every-frame was thrown away");
     }
 
@@ -6780,162 +6644,4 @@ mod tests {
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod bar_strip_tests {
-    use super::{
-        audio_chase, bar_byte, refine_bar_strip, sample_bar_strip, AudioChase,
-        AUDIO_REALTIME_FRAMES,
-    };
-    use crate::framecache::bar::pack;
-
-    /// **The bar says not just "cached" but "cached at what size"**
-    /// (docs/15-DESIGN.md §6.3). Each case names one frame's holdings and
-    /// checks the whole strip byte: the storage state the bar has always
-    /// drawn, and the preview divisor the picture it found was actually made
-    /// at.
-    #[test]
-    fn a_frames_byte_reports_the_finest_picture_there_is_of_it() {
-        // Held at the scale asked about: full, and nothing coarser is probed.
-        let mut probes = 0;
-        let byte = bar_byte(false, |divisor| {
-            probes += 1;
-            (divisor == 1, false)
-        });
-        assert_eq!(byte, pack(2, 1));
-        assert_eq!(probes, 1, "the common answer costs one probe");
-
-        // Held only at half and at quarter: half is the better picture, and
-        // the walk must say so rather than reporting whichever tier it met
-        // last.
-        assert_eq!(
-            bar_byte(false, |divisor| (divisor == 2 || divisor == 4, false)),
-            pack(1, 2)
-        );
-        // Third is a tier the realtime controller genuinely drops to, so a
-        // frame held there is found and named, not rounded to half or quarter.
-        assert_eq!(bar_byte(false, |d| (d == 3, false)), pack(1, 3));
-        assert_eq!(bar_byte(false, |d| (d == 4, false)), pack(1, 4));
-
-        // Parked, not held: the storage state changes, the tier rule does not.
-        assert_eq!(bar_byte(false, |d| (false, d == 1)), pack(4, 1));
-        assert_eq!(bar_byte(false, |d| (false, d == 3 || d == 4)), pack(3, 3));
-
-        // Playable outranks promotable: parked at this scale but held coarser
-        // reads as held, at the tier it is held at.
-        assert_eq!(
-            bar_byte(false, |d| (d == 2, d == 1)),
-            pack(1, 2),
-            "a frame you can play now is not a frame you could promote"
-        );
-
-        // Nothing anywhere has no size either, so the byte is a plain zero —
-        // which is what the sampler's "is this frame held at all?" test reads.
-        assert_eq!(bar_byte(false, |_| (false, false)), 0);
-    }
-
-    /// **The sound gives way once it is in front of the picture, and comes back
-    /// to the picture once the picture has held the rate.**
-    ///
-    /// Every-frame playback shows every frame however long each takes, so the
-    /// picture can fall behind the sound. Lumit stops the sound rather than let
-    /// it run on in front.
-    ///
-    /// The rules tried before this one, and what was wrong with each:
-    ///
-    /// * *Never start again.* The clock stops reporting when the sound stops,
-    ///   so the test that stopped it could not run a second time.
-    /// * *Wait for the picture to reach the sound.* After a long stall it may
-    ///   never reach it, and does not at all if the composition ends first.
-    /// * *Start when frames are banked.* Frames are usually banked when a
-    ///   picture goes out, even in a slow run, so the sound started again on
-    ///   the very next picture and stuttered.
-    /// * *Stop on one late picture.* A picture a few milliseconds late is made
-    ///   up by the next, and stopping for it left holes in a span played from
-    ///   the cache. It also never stopped for a picture running a little slow
-    ///   throughout, which is the case that drifts.
-    #[test]
-    fn the_sound_gives_way_in_front_of_the_picture_and_returns_on_the_rate() {
-        let long = AUDIO_REALTIME_FRAMES;
-        let slack = 0.040;
-        // Running, and level with the picture: nothing happens. A picture a
-        // little late leaves the sound a little in front, and that is level.
-        assert_eq!(
-            audio_chase(false, Some(0.0), slack, long),
-            AudioChase::Leave
-        );
-        assert_eq!(audio_chase(false, Some(0.015), slack, 0), AudioChase::Leave);
-        // Running, and in front by more than the slack: it stops, whether it
-        // got there in one stall or a little at a time.
-        assert_eq!(audio_chase(false, Some(0.060), slack, 0), AudioChase::Hold);
-        assert_eq!(
-            audio_chase(false, Some(0.060), slack, long),
-            AudioChase::Hold
-        );
-        // Running, and behind: it is moved up, not stopped.
-        assert_eq!(
-            audio_chase(false, Some(-0.2), slack, long),
-            AudioChase::Catch
-        );
-        // No clock to read, as just after a seek: left alone.
-        assert_eq!(audio_chase(false, None, slack, 0), AudioChase::Leave);
-
-        // Stopped, and the pictures are still late: it stays stopped.
-        assert_eq!(audio_chase(true, None, slack, 0), AudioChase::Leave);
-        // Stopped, and a few pictures have gone out on time, but not enough.
-        assert_eq!(audio_chase(true, None, slack, 1), AudioChase::Leave);
-        assert_eq!(audio_chase(true, None, slack, long - 1), AudioChase::Leave);
-        // Stopped, and the rate has held: the sound comes back.
-        assert_eq!(audio_chase(true, None, slack, long), AudioChase::Start);
-        assert_eq!(audio_chase(true, None, slack, long + 40), AudioChase::Start);
-    }
-
-    /// A long one is sampled: one frame in four is named and stands for the four.
-    /// The whole stripe therefore has an answer immediately — the alternative is a
-    /// bar that fills in from one end, which reads as the *cache* filling in from
-    /// one end.
-    #[test]
-    fn a_long_composition_is_sampled_then_refined_to_the_truth() {
-        // Frame 4 is the only one held, and it is not a sample point (samples are
-        // 0, 4, 8, … with stride 4 — so it IS one here; use 5 instead).
-        let held = |frame: u64| frame == 5;
-        let tier = move |frame: u64| u8::from(held(frame)) * 2;
-
-        let mut sampled = sample_bar_strip(12, 4, &mut { tier });
-        assert_eq!(
-            sampled.tiers,
-            vec![0; 12],
-            "frame 5 is not a sample point, so the coarse pass misses it"
-        );
-        assert_eq!(sampled.refined_to, 0, "and the strip needs refining");
-
-        // Two turns of four frames each: the truth appears where it belongs, and
-        // only there.
-        let refined = refine_bar_strip(&mut sampled.tiers, 0, 0, 4, &mut { tier });
-        assert_eq!(refined, 4);
-        assert_eq!(sampled.tiers, vec![0; 12], "the first four hold nothing");
-        let refined = refine_bar_strip(&mut sampled.tiers, 0, refined, 4, &mut { tier });
-        assert_eq!(refined, 8);
-        assert_eq!(
-            sampled.tiers,
-            vec![0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0],
-            "frame 5 alone, not the run of four it sits in"
-        );
-
-        // And the sweep finishes rather than running past the end.
-        let refined = refine_bar_strip(&mut sampled.tiers, 0, refined, 100, &mut { tier });
-        assert_eq!(refined, 12);
-    }
-
-    /// Degenerate spans do nothing rather than panicking — an empty composition
-    /// and a zero-length turn both reach here from ordinary interface states.
-    #[test]
-    fn empty_strips_and_empty_turns_are_calm() {
-        let mut none: Vec<u8> = Vec::new();
-        assert_eq!(refine_bar_strip(&mut none, 0, 0, 8, &mut |_| 2), 0);
-        let mut some = vec![0u8; 4];
-        assert_eq!(refine_bar_strip(&mut some, 0, 0, 0, &mut |_| 2), 0);
-        assert_eq!(some, vec![0; 4]);
-        assert!(sample_bar_strip(0, 4, &mut |_| 2).tiers.is_empty());
-        // A stride of zero would divide by nothing; it is floored to one.
-        assert_eq!(sample_bar_strip(2, 0, &mut |_| 2).tiers, vec![2, 2]);
-    }
-}
+mod bar_strip_tests;

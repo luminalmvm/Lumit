@@ -9,7 +9,10 @@ name: ci
 on:
   push:
     branches: [main, nightly]
+    paths-ignore: ['web-docs/**']
   pull_request:
+    # The manual has no Rust or Flutter in it, and nothing below reads it.
+    paths-ignore: ['web-docs/**']
   # Run it by hand from the Actions tab. GitHub occasionally does not deliver
   # the `pull_request` event for a push — a branch sits at "pending" with no run
   # against its head and nothing to re-run, since re-running needs a run to
@@ -46,6 +49,10 @@ env:
 jobs:
   check:
     name: fmt + clippy + tests (macOS)
+    # Pull requests into nightly skip this: the Linux and Windows jobs run the
+    # same tests, and a push to nightly or main, or a pull request into main,
+    # still runs it. Only the macOS-specific part waits for the merge.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,8 +96,22 @@ jobs:
         run: cargo check --workspace --release
 
   windows:
-    name: tests (Windows — the shipping target, with media)
+    name: tests (Windows, ${{ matrix.part }})
     runs-on: windows-latest
+    # Split across two runners. As one job it took an hour, most of it
+    # lumit-render's tests running one test program after another on WARP.
+    # Five runners made the wall clock shorter and the queue longer: each
+    # one compiled the engine again, which was most of its time, and a busy
+    # day of pull requests waited on them for hours.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: render
+            test: -p lumit-render
+          - part: everything else
+            test: --workspace --exclude lumit-render
+            clippy: true
     env:
       # BtbN "shared, GPL" build: GPL matches Lumit's licence, shared gives the
       # import libs + DLLs rsmpeg links against, n8.1 matches the crate's
@@ -139,13 +160,16 @@ jobs:
         shell: pwsh
         run: |
           "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
+      # Every part reads the same cache, and only the part that builds the most
+      # writes it, so the cache holds the dependencies of all of them.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.clippy == true }}
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      # One run, GPU crates included. Every GPU test borrows the process's one
+      - if: matrix.clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      # Every GPU test borrows the process's one
       # device and one set of compiled engines under a lock
       # (crates/lumit-gpu/src/test_support.rs), so the GPU tests run one at a
       # time by construction while the CPU tests around them run in parallel.
@@ -160,7 +184,8 @@ jobs:
       # dying rather than a test failing. Which adapter was picked, the first
       # question about a GPU failure on a runner with no graphics card, is
       # printed by every context as it opens.
-      - run: cargo test --workspace
+      - run: cargo test ${{ matrix.test }}
+        shell: bash
         env:
           RUST_BACKTRACE: 1
 
@@ -238,6 +263,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # GPU crates included: the tests share one device under a lock (see the
       # `windows` job), so a software rasteriser neither races nor thrashes.
@@ -278,6 +304,10 @@ jobs:
   # mesa-vulkan-drivers for the Vulkan adapter.
   performance:
     name: performance gates (ratio vs baseline)
+    # Pull requests into nightly skip this: the ratio gate is noisy on a shared
+    # runner and a regression is as visible on the push after the merge. A push
+    # to nightly or main, or a pull request into main, still runs it.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     # Lavapipe is a software rasteriser, so the span-scaled scenarios measure a
     # tenth of the work area (BENCH_SPAN_FRACTION below): the first full-span
@@ -392,6 +422,9 @@ jobs:
   # bridge needs FFmpeg and libclang), plus Xvfb and Mesa's software GL.
   ui-budget:
     name: UI budgets B1 and B2 (real window, record only)
+    # Not run for pull requests into nightly: it gates nothing there, and a
+    # push to nightly or main, or a pull request into main, still runs it.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     # Held on 24.04 with the flutter job: on 26.04 its package install often
     # crawls past the hour, and the engine shares that job's Mesa crash.
     runs-on: ubuntu-24.04
@@ -1021,6 +1054,9 @@ jobs:
   # about how the bench reaches CI, answered by evidence rather than by hope.
   ofx-conformance:
     name: OFX conformance bench (openfx-misc, ntsc-rs)
+    # Not run for pull requests into nightly: it gates nothing there, and a
+    # push to nightly or main, or a pull request into main, still runs it.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     env:
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1

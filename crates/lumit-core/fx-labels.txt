@@ -11,6 +11,7 @@
 31 Hz
 35 mm
 35 mm stills
+3D
 3D point
 4 kHz
 500 Hz
@@ -23,11 +24,13 @@ A
 APS-C
 Accumulation motion blur
 Across
+Adaptive
 Add
 Add grain
 Add input
 Add to picked
 Add up
+Adjust
 Adjust time by
 Age
 Align
@@ -44,6 +47,7 @@ Alpha
 Alpha bias
 Alpha blur
 Alpha from
+Alternate
 Alternate rows
 Altitude
 Ambient
@@ -53,6 +57,7 @@ Amplitude
 Amplitude x
 Amplitude y
 Analyse
+Analysis
 Anamorphic squeeze
 Anchor
 Anchor in
@@ -91,6 +96,7 @@ Away from points
 B
 Back
 Background
+Background only
 Backing
 Backward
 Backwards
@@ -134,6 +140,7 @@ Beat pulse
 Beat trigger
 Beats
 Bend
+Best quality
 Between
 Bevel
 Bevel and emboss
@@ -144,21 +151,33 @@ Bezier warp
 BiRefNet
 Bias
 Black and white
+Black balance
+Black clip
+Black exposure
+Black offset
+Black range
+Black saturation
 Blades
 Blend
 Blobs
 Block glitch
 Block size
+Blocks
 Bloom
 Blue
 Blue amount
 Blue blade
 Blue blur
 Blue from
+Blue high
+Blue low
+Blue output
 Blue phase
 Blues
 Blur
 Blur & sharpen
+Blur dissolve
+Blur radius
 Blur size
 Boolean
 Boolean layer
@@ -185,6 +204,7 @@ Boxes y
 Bright spots
 Brighter
 Brightness
+Broad
 Broadband, amber
 Broadband, blue
 Broadband, green
@@ -200,6 +220,7 @@ Burst interval
 Bursts
 By strength
 Bypass
+CDL
 Camera
 Camera kick
 Camera track
@@ -209,6 +230,7 @@ Card wipe
 Ceiling
 Cell height
 Cell width
+Cells
 Centre
 Centre X
 Centre Y
@@ -228,11 +250,22 @@ Chisel soft
 Choke
 Choose by
 Chorus
+Chroma
+Chroma broad
+Chroma coarse
+Chroma fine
+Chroma medium
+Chroma noise
 Chromatic aberration
 Chrome
 Circle
 Clamp
+Clean black
+Clean white
 Clearance
+Click removal
+Clicks
+Clicks only
 Clip
 Clip black
 Clip rollback
@@ -252,6 +285,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Coarse
 Coat
 Coat roughness
 Coating
@@ -270,6 +304,7 @@ Colour 4 position
 Colour A
 Colour B
 Colour balance
+Colour boost
 Colour burn
 Colour by
 Colour control
@@ -284,6 +319,7 @@ Colour noise
 Colour overlay
 Colour ramp
 Colour variation
+Colour warper
 Colours
 Column mix
 Column widths
@@ -332,17 +368,22 @@ Corner segments
 Corner x
 Corner y
 Corners
+Correction
 Cosine
 Count
 Count nested inputs
+Cover left
+Cover right
 Crackle
 Create corner pin
 Create transform keys
 Crop
+Crop and scale
 Crop bottom
 Crop left
 Crop right
 Crop top
+Crossfade
 Crossfade Bastiuni
 Crystal Archive paper
 Curl noise
@@ -358,10 +399,15 @@ Cyans
 Cycle
 Cycle evolution
 Damping
+Dark balance
+Dark exposure
+Dark range
+Dark saturation
 Darken
 Darker
 Darker colour
 Datamosh
+De-esser
 Death
 Decay
 Decimals
@@ -372,6 +418,7 @@ Deep yellow
 Deform
 Deformer
 Delay
+Denoise
 Denominator
 Density
 Density layer
@@ -393,8 +440,10 @@ Detect edge threshold
 Detected beats
 Detector
 Diagonal
+Diamonds
 Difference
 Digital
+Dip to black
 Direction
 Direction x
 Direction y
@@ -422,6 +471,8 @@ Draw along
 Drift
 Drive
 Drivers
+Drop sample luma
+Drop samples
 Drop shadow
 Drop the rest
 Droplets
@@ -430,6 +481,7 @@ Duration
 Dust
 Each path
 Each point
+Ease
 Ease in
 Ease out
 Echo
@@ -446,6 +498,7 @@ Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Eight hues
 Ektachrome 100
 Ektar 100
 Electric
@@ -509,6 +562,7 @@ Expansion
 Explosion
 Exposure
 Expression
+Extra scale
 Extract channels
 Extrusion depth
 F-stop
@@ -536,12 +590,19 @@ Fields
 File
 Fill
 Fill cell
+Fill feather
+Fill from
 Film
+Film burn
 Film colour
 Filter
 Final
 Final result
 Find edges
+Find frequency
+Find reverb time
+Fine
+Finish
 Fire
 Fire brightness
 Fire colour
@@ -559,6 +620,7 @@ Flash colour
 Flicker
 Flicker speed
 Flight
+Flip
 Flip axis
 Flip direction
 Flip order
@@ -575,6 +637,7 @@ Focus point x
 Focus point y
 Focus range
 Follow
+Follow motion
 Follow the vectors
 For
 Force on all layers
@@ -590,6 +653,7 @@ Fractal type
 Frame mix
 Frame rate
 Frames
+Frames blended
 Free
 Freeze
 Frequency
@@ -623,7 +687,10 @@ Ghost softness
 Glass
 Glass curvature
 Glass dirt
+Glitch
 Glitch hit
+Glitch slices
+Global balance
 Glow
 Glow colour
 Glow distortion
@@ -644,11 +711,15 @@ Gradient stops
 Gradient type
 Grain
 Graphic EQ
+Graphics template
 Gravity
 Green
 Green amount
 Green blur
 Green from
+Green high
+Green low
+Green output
 Green phase
 Greens
 Grid
@@ -660,11 +731,14 @@ Grit
 Ground
 Ground height
 Group
+Group grade
 Group name
 Grow
 Grow max
 Grow min
 H line rel width
+HDR
+HSL
 Hairs
 Halation
 Half
@@ -676,6 +750,7 @@ Hard hide
 Hard light
 Hard mix
 Hardness
+Harmonics
 Haze
 Height
 Hexagons
@@ -683,14 +758,21 @@ Hide behind
 Hiding
 High
 High cut
+High range
+High soft clip
+Highlight
 Highlight amount
+Highlight balance
 Highlight boost
 Highlight colour
 Highlight exposure
 Highlight opacity
+Highlight range
+Highlight saturation
 Highlight threshold
 Highlight tonal width
 Highlights
+Hit
 Hold
 Hold frame
 Hold off
@@ -705,10 +787,19 @@ Horizontal phase shift
 How to treat
 Hue
 Hue and saturation
+Hue curves
 Hue range
 Hue shift
+Hue softness
 Hue spread
 Hue start
+Hue symmetry
+Hue v hue
+Hue v lum
+Hue v sat
+Hue width
+Hum only
+Hum removal
 Hysteresis
 IOR
 Ice
@@ -720,6 +811,7 @@ In order
 In the scene
 In turn
 Include spaces
+Incoming
 Index
 Inflate
 Initial speed
@@ -727,6 +819,7 @@ Inner bevel
 Inner glow
 Inner radius
 Inner shadow
+Inner softness
 Input
 Input black
 Input colour space
@@ -764,6 +857,11 @@ Jolts only
 Jumpy
 Keep in picked
 Keep inside
+Keep luma
+Keep sample luma
+Keep samples
+Keep scale
+Key
 Key out safe
 Key out unsafe
 Kill
@@ -785,6 +883,7 @@ Layer size
 Layer time
 Layer's box
 Layout
+Learn
 Left
 Left and right
 Left bottom tangent x
@@ -810,11 +909,16 @@ Life jitter
 Lifespan
 Lift
 Light
+Light balance
 Light colour
 Light direction
 Light distance (m)
+Light exposure
 Light flicker
 Light from
+Light leak
+Light range
+Light saturation
 Light size
 Light tint
 Light wrap
@@ -838,18 +942,32 @@ Linear to sRGB
 Linear wipe
 Lines
 Load from file…
+Log
+Log wheels
 Look
 Lookahead
 Loop
 Low
+Low range
+Low soft clip
 Lower left x
 Lower left y
 Lower right x
 Lower right y
+Lum mix
+Lum v sat
 Luma
+Luma broad
+Luma coarse
 Luma fade
+Luma fine
 Luma hide
+Luma high
+Luma low
+Luma medium
+Luma noise
 Luma reveal
+Luma softness
 Luminance
 Luminance only
 Luminosity
@@ -876,6 +994,7 @@ Material
 Math
 Math points
 Matte
+Matte finesse
 Matte inverted
 Matte key
 Matte mode
@@ -891,10 +1010,13 @@ Max points
 Max renders
 Max trails
 Maximum
+Maximum length
+Maximum scale
 Maximum signal
 Maximum span length
 Measure
 Median
+Medium
 Merge
 Merge points
 Mesh warp
@@ -903,7 +1025,9 @@ Method
 Micro Four Thirds
 Middle
 Middle colour
+Midtone
 Midtone contrast
+Midtone detail
 Midtones
 Min
 Min area
@@ -913,6 +1037,7 @@ Minimum gap
 Mirror
 Mirror edges
 Mix
+Mixer
 Mode
 Model
 Model layer
@@ -925,6 +1050,9 @@ Mosaic
 Motion
 Motion blur
 Motion vectors
+Mouth clicks
+Move
+Moves
 Multiply
 NTSC
 Name
@@ -936,8 +1064,15 @@ Nearest (m)
 Nearest distance
 Negative
 Neon
+No motion
+Node
 Node graph
 Noise
+Noise by size
+Noise by tone
+Noise dissolve
+Noise only
+Noise reduction
 Noise scale
 Noise size
 Noise speed
@@ -1000,6 +1135,8 @@ Out low
 Outer bevel
 Outer glow
 Outer radius
+Outer softness
+Outgoing
 Outline
 Output
 Output black
@@ -1016,6 +1153,7 @@ Padding x
 Padding y
 Paint
 Paint style
+Parallel
 Parametric EQ
 Part
 Part id
@@ -1038,6 +1176,7 @@ Per clone
 Per-axis wobble
 Perlin
 Persistence
+Perspective
 Petals
 Phase
 Phase from
@@ -1051,6 +1190,7 @@ Pick
 Pick points
 Picked
 Picked and the rest
+Picture
 Piece scale
 Pillow emboss
 Pin layer
@@ -1061,8 +1201,10 @@ Pinned
 Pinning
 Pipe radius
 Pipe segments
+Pivot
 Pixel motion
 Pixel sort
+Pixelate
 Pixels
 Place
 Place x
@@ -1093,6 +1235,7 @@ Points layer
 Points sample
 Polar coordinates
 Polar to rectangular
+Polygon
 Portra 160
 Portra 400
 Portra 800
@@ -1102,9 +1245,11 @@ Position
 Position x
 Position y
 Position z
+Post
 Posterize
 Posterize time
 Power
+Pre
 Pre-delay
 Preserve luminance
 Preserve luminosity
@@ -1119,11 +1264,18 @@ Propagate
 Provia 100F
 Pull
 Pulse
+Push down
+Push left
 Push or pull
+Push right
+Push up
+Qualifier
 Quality
 Quarter
 Quarter speed
+RGB
 RGB split
+RGB whip
 Radial
 Radial blur
 Radial wipe
@@ -1133,6 +1285,7 @@ Ramp
 Random
 Random hue
 Random offset scale
+Random order
 Random origin
 Random rate
 Random span offsets
@@ -1153,10 +1306,16 @@ Red amount
 Red blade
 Red blur
 Red from
+Red high
+Red low
+Red output
 Red phase
 Reds
+Reduce
 Reduce brightness
 Reduce saturation
+Reduction
+Reference
 Refine radius
 Refraction
 Region from
@@ -1174,6 +1333,7 @@ Remove edge leak
 Remove from picked
 Remove input
 Removed
+Removed noise
 Render
 Rendered
 Repeat
@@ -1190,6 +1350,9 @@ Resonance
 Result
 Reveal original
 Reverb
+Reverb only
+Reverb reduction
+Reverb time
 Reverse
 Right
 Right bottom tangent x
@@ -1208,6 +1371,7 @@ Rise
 Robust Video Matting
 Roll
 Roll speed
+Rolling shutter
 Rolloff
 Room size
 Rose
@@ -1234,15 +1398,25 @@ Row stagger
 Rows
 Rows/columns jitter
 Rubber
+Safe margin
 Same
 Same as Per
+Sample size
+Sample x
+Sample y
 Samples
+Sat v lum
+Sat v sat
 Satin
 Satin colour
 Saturation
+Saturation high
+Saturation low
+Saturation softness
 Save to folder
 Sawtooth
 Scale
+Scale and rotation
 Scale height
 Scale sizes
 Scale width
@@ -1278,15 +1452,21 @@ Sensor
 Separate timing
 Separation
 Sepia
+Serial
 Set channels
 Set matte
 Set number
 Shade colour
+Shadow
 Shadow amount
+Shadow balance
 Shadow colour
+Shadow exposure
 Shadow highlight
 Shadow only
 Shadow opacity
+Shadow range
+Shadow saturation
 Shadow strength
 Shadow tonal width
 Shadows
@@ -1294,16 +1474,21 @@ Shake
 Shape
 Shapes
 Share of frame
+Shared
+Sharp
 Sharp colours
 Sharpen
 Shift per row
 Shift x
 Shift y
+Show
 Show points
 Shuffle
 Shutter
 Shutter angle
 Shutter phase
+Shutters
+Sibilance only
 Siceliot
 Side
 Sides
@@ -1312,6 +1497,7 @@ Simulation
 Sine
 Single
 Single layer, straw
+Six hues
 Size
 Size by
 Size from
@@ -1323,22 +1509,30 @@ Size with distance
 Skew
 Skew axis
 Slice end
+Slice glitch
 Slice repeat
 Slice start
+Slices
 Slide
+Slide left
+Slide right
 Slider
 Slider control
+Slope
 Slope channel
 Slow motion with blur
+Smear
 Smoke
 Smoke and fire
 Smoke colour
 Smooth
+Smooth motion
 Smooth noise
 Smoothing
 Smoothness
 Smudges
 Soft colour
+Soft iris
 Soft light
 Softness
 Solar
@@ -1367,6 +1561,12 @@ Spark size
 Spark speed
 Sparks
 Sparks from
+Spatial
+Spatial by size
+Specular balance
+Specular exposure
+Specular range
+Specular saturation
 Speed
 Speed jitter
 Speed max
@@ -1377,9 +1577,11 @@ Sphere
 Spherize
 Spiky
 Spin
+Spin blur
 Spiral
 Split
 Split channels
+Split colours
 Spread
 Spread z
 Sprite
@@ -1387,6 +1589,8 @@ Sprite flare
 Sprite layer
 Square
 Squeeze
+Stabilise
+Stabilised layer
 Stages
 Stagger
 Standard
@@ -1404,6 +1608,7 @@ Start y
 Starting intensity
 Static
 Status
+Steady crop
 Steps per second
 Stereo phase
 Stereo width
@@ -1452,6 +1657,7 @@ Technique
 Tele lens width
 Temperature
 Temporal
+Temporal strength
 Text
 Text layer
 Text step
@@ -1489,6 +1695,7 @@ To
 To group
 To x
 To y
+Tonal reduction
 Tone
 Top
 Top and bottom
@@ -1517,6 +1724,11 @@ Tremolo
 Triangle
 Triangles
 Trigger
+Trim
+Trim bottom
+Trim left
+Trim right
+Trim top
 Tritone
 True peak
 Turbulence
@@ -1556,14 +1768,18 @@ Upper right x
 Upper right y
 Use colour ramp
 Use focus point
+Use hue
 Use inner radius
 Use light colour
 Use light intensity
+Use luma
 Use masks
 Use middle colour
 Use point colour
 Use point size
+Use saturation
 Use source colour
+Use this frame
 Utility
 V line rel width
 Value
@@ -1587,6 +1803,7 @@ Vertical channel
 Vertical distortion
 Vibrancy
 Vibrato
+Video
 View
 Vignette
 Violet
@@ -1598,6 +1815,8 @@ Vision3 250D
 Vision3 500T
 Vision3 50D
 Vivid light
+Voice
+Voice isolation
 Voices
 Volume
 Vortex
@@ -1622,8 +1841,16 @@ Wavelength
 Waves
 Weak
 Wet
+Wheels
+Whip down
+Whip left
+Whip right
+Whip up
+White clip
 Whole frame
 Whole frames
+Whole sound
+Widen
 Width
 Wiggle
 Wiggle type
@@ -1636,6 +1863,10 @@ Wind x
 Wind y
 Wind z
 Window
+Window 1
+Window 2
+Window 3
+Window 4
 Wipe
 Wipe angle
 Wipe centre x
@@ -1669,6 +1900,10 @@ Z wave frequency
 Z wave phase
 Zebra
 Zoom
+Zoom blur
+Zoom in
+Zoom out
+Zoom spin
 sRGB
 sRGB curve
 sRGB to linear

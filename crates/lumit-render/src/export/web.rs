@@ -18,10 +18,11 @@ use uuid::Uuid;
 
 use super::frame::{self, Pack, Span};
 use super::{
-    apply_render_overrides, audio_samples_through, fps_rational, AudioJob, ExportEvent,
-    ExportFormat, ExportHandle, ExportSpec,
+    apply_render_overrides, fps_rational, ExportEvent, ExportFormat, ExportHandle, ExportSpec,
 };
 use crate::headless::HeadlessRenderer;
+use crate::mix::jobs::AudioJob;
+use crate::mix::mixdown::audio_samples_through;
 
 /// Frames composited and on their way off the card at once.
 const IN_FLIGHT: usize = 2;
@@ -51,6 +52,9 @@ pub struct WebExport {
     /// footage the page was still decoding. It is drawn again once that moves.
     landed: Option<u64>,
     finishing: bool,
+    /// The caption files that go with the video, by name, downloaded once it
+    /// is written.
+    captions: Vec<(PathBuf, String)>,
     tx: Sender<ExportEvent>,
     cancel: Arc<AtomicBool>,
 }
@@ -65,15 +69,33 @@ pub fn start(
     spec: ExportSpec,
     codec: &str,
 ) -> Result<(ExportHandle, WebExport), String> {
+    // The page cannot carry captions inside the file, so a preset that asks
+    // for that draws them into the picture rather than losing them.
+    let mut spec = spec;
+    if spec.captions == super::captions::CaptionsOut::Embed {
+        spec.captions = super::captions::CaptionsOut::Burn;
+    }
+    // The caption files say what the picture would have shown, so they are
+    // worked out before the caption layers leave it.
+    let captions = super::captions::files(&doc, comp, &name, &spec, &|| false);
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
     let doc = apply_render_overrides(&doc, &spec.render_options()).unwrap_or(doc);
+    let doc = super::captions::leave_out(&doc, comp, &spec).unwrap_or(doc);
     let c = doc.comp(comp).ok_or("composition missing")?;
     if !matches!(spec.format, ExportFormat::Video(_)) {
         return Err(format!("export: unknown format '{codec}'"));
     }
     let span = Span::of(c, &spec);
-    let sound = frame::sound(&spec, c, audio, &span);
+    let sound = frame::sound(
+        &spec,
+        &doc,
+        c,
+        audio,
+        &span,
+        &AtomicBool::new(false),
+        &mut |_| {},
+    );
     let mut renderer = HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
     renderer.refuse_substitution();
     renderer.sync_colour(&doc);
@@ -125,6 +147,7 @@ pub fn start(
         coming: VecDeque::new(),
         landed: None,
         finishing: false,
+        captions,
         tx,
         cancel: Arc::clone(&cancel),
     };
@@ -138,6 +161,11 @@ impl WebExport {
         match self.advance() {
             Ok(Some(wait)) => Some(wait),
             Ok(None) => {
+                for (path, text) in &self.captions {
+                    let name = path.file_name().map(|n| n.to_string_lossy());
+                    let _ =
+                        lumit_media::web::export::text(name.as_deref().unwrap_or("captions"), text);
+                }
                 let _ = self.tx.send(ExportEvent::Done(self.name.clone()));
                 None
             }

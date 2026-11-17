@@ -20,7 +20,7 @@ import 'share.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `phase_fraction`, `report_phase`
+// These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `journal_file`, `journal_for`, `phase_fraction`, `report_phase`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
@@ -477,11 +477,10 @@ class BridgeSampledPixels {
 /// serialises a `Vec<u8>` one byte at a time, measured at 8.8 ms for a 1080p
 /// frame, which is why the read-back frame transport was deleted.
 class BridgeScopeTrace {
-  /// The trace this picture *is*, echoed back from the request: 0 waveform,
-  /// 1 parade, 2 vectorscope, 3 histogram. Two panels may want traces at
-  /// once — the Scopes panel and the Levels row's histogram — and
-  /// they share one response stream, so each has to be able to tell whether
-  /// the picture that just arrived is the one it asked for.
+  /// The trace this picture *is*, one of the codes the request named (see
+  /// `render_scope`). Two panels may want traces at once, a Scopes panel and
+  /// the Levels row's histogram, and they share one response stream, so each
+  /// has to be able to tell whether the picture is one it asked for.
   final int kind;
   final Uint8List rgba;
 

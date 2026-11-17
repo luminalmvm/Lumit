@@ -14,8 +14,12 @@ pub mod audio_spectrum;
 pub mod blur;
 pub mod colour;
 pub mod common;
+/// The Correction's passes, built on first use.
+pub mod correction;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
+/// Denoise's passes, built on first use.
+pub mod denoise;
 pub mod depth_points;
 pub mod distort;
 pub mod dof;
@@ -25,6 +29,8 @@ pub mod environment;
 /// Film's passes, built on first use.
 pub mod film;
 pub mod generate;
+/// CDL and the colour warper, built on first use.
+pub mod grade_fx;
 pub mod grid_lines;
 pub mod ground;
 pub mod jolt;
@@ -32,6 +38,7 @@ pub mod lens_blur;
 mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
+pub mod light_leak;
 pub mod lighting;
 pub mod particulate;
 pub mod particulate_params;
@@ -39,15 +46,21 @@ pub mod particulate_scene;
 pub mod particulate_sim;
 pub mod points_draw;
 pub mod points_field;
+pub mod slices;
 pub mod smoke;
 pub mod split;
 pub mod sprite_flare;
+/// Stabilise's warp: the frame drawn through the map its analysis made.
+pub mod stabilise;
 pub mod stylise;
 pub mod temporal;
 pub mod timewarp;
 pub mod utility;
 pub mod volumetric;
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod denoise_tests;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
@@ -210,6 +223,11 @@ pub struct FxEngine {
     /// Corner pin (docs/08 §3.48): the picture pulled onto four points, through
     /// the inverse of the homography they define.
     corner_pin: wgpu::ComputePipeline,
+    /// Stabilise: each frame drawn through the map its analysis made, with
+    /// a bicubic tap.
+    stabilise: wgpu::ComputePipeline,
+    /// Stabilise's Fill: one frame of the fill laid over what is under it.
+    stabilise_fill: wgpu::ComputePipeline,
     /// Displacement map (docs/08 §3.49): another layer's channels push this one.
     /// The seventh kernel to claim the matte inside its own maths, and the
     /// second (after Set matte) for which the matte is the effect's subject.
@@ -313,6 +331,10 @@ pub struct FxEngine {
     shake_mb: wgpu::ComputePipeline,
     /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
     jolt: wgpu::ComputePipeline,
+    /// Light leak: a band of drifting light screened on in one pass.
+    light_leak: wgpu::ComputePipeline,
+    /// Slices: strips read back along their length, one pass.
+    slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.
@@ -388,6 +410,8 @@ pub struct FxEngine {
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
     film: film::LazyFilm,
+    grade: grade_fx::LazyGrade,
+    correction: correction::LazyCorrection,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with

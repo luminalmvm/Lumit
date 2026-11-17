@@ -1088,7 +1088,12 @@ class Outline extends StatelessWidget {
                   key: ValueKey<String>('tl-row-${rows[i].id}'),
                   comp: comp,
                   entry: rows[i].entry,
-                  onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
+                  // Only a layer with a view of its own to open in place.
+                  onOpenSequence: rows[i].entry.info.kind ==
+                              BridgeLayerKind.sequence ||
+                          rows[i].captions
+                      ? () => onOpenSequence?.call(rows[i].entry)
+                      : null,
                   layers: layers,
                   stack: stack,
                   number: numbers[rows[i].id] ?? i + 1,

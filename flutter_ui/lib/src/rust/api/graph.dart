@@ -334,6 +334,11 @@ sealed class BridgeOutputRef with _$BridgeOutputRef {
   const factory BridgeOutputRef.effectOutput({
     required UuidValue effect,
   }) = BridgeOutputRef_EffectOutput;
+
+  /// A Correction's key into the Matte of an effect below it.
+  const factory BridgeOutputRef.effectKey({
+    required UuidValue effect,
+  }) = BridgeOutputRef_EffectKey;
 }
 
 /// One socket on a box: the id the document writes down, the English word drawn
