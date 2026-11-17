@@ -3156,7 +3156,9 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
     if !state.renderer.device_lost() {
         return;
     }
-    note!("The graphics device was lost; rebuilding the renderer");
+    let said = "The graphics device was lost; rebuilding the renderer";
+    note!("{said}");
+    crate::faults::record(said);
     rebuild_renderer(state, stream);
 }
 
@@ -3214,6 +3216,50 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     _ = stream.add(WorkerResponse::DeviceReset);
     // And put the picture back, on the new device.
     republish_last_frame(state, stream);
+}
+
+/// Milliseconds since the first call, and never 0: the turn watch's clock.
+fn turn_clock() -> u64 {
+    static START: std::sync::OnceLock<web_time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(web_time::Instant::now);
+    u64::try_from(start.elapsed().as_millis())
+        .unwrap_or(u64::MAX)
+        .max(1)
+}
+
+/// How long one turn may take before the watch writes it down.
+const TURN_TOO_LONG_MS: u64 = 30_000;
+
+/// Write it to the diagnostics file when the render worker has been on one
+/// turn for [`TURN_TOO_LONG_MS`]. A turn waits for requests at most 200 ms,
+/// and the heaviest frame takes seconds, so a turn that long is stuck: the
+/// worker cannot say so itself, and without this line a frozen Viewer leaves
+/// nothing behind to say when it froze.
+#[cfg(not(target_arch = "wasm32"))]
+fn watch_turns(busy_since: std::sync::Arc<std::sync::atomic::AtomicU64>) {
+    let _ = std::thread::Builder::new()
+        .name("lumit-render-watch".into())
+        .spawn(move || {
+            let mut reported = 0;
+            // The worker holds the other handle; once it has gone, so does this.
+            while std::sync::Arc::strong_count(&busy_since) > 1 {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let since = busy_since.load(std::sync::atomic::Ordering::Relaxed);
+                if since == 0 || since == reported {
+                    continue;
+                }
+                let took = turn_clock().saturating_sub(since);
+                if took >= TURN_TOO_LONG_MS {
+                    reported = since;
+                    let said = format!(
+                        "The render worker has been on one turn for {} s; the Viewer will not change until it ends",
+                        took / 1000
+                    );
+                    note!("{said}");
+                    crate::faults::record(&said);
+                }
+            }
+        });
 }
 
 /// How long the renderer waits on the CPU rasteriser before asking whether the
@@ -3342,6 +3388,10 @@ fn worker_loop(
     // turn would spend the session doing nothing else.
     let mut faults_in_a_row = 0u32;
     let mut state = Some(state);
+    // When the turn under way began, for the watch below; 0 between turns.
+    let busy_since = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    #[cfg(not(target_arch = "wasm32"))]
+    watch_turns(std::sync::Arc::clone(&busy_since));
     // One turn, and whether to take another. A thread of its own on the
     // desktop, which goes straight round again; turns from the page's timer in
     // the browser build (`crate::turns`).
@@ -3357,9 +3407,11 @@ fn worker_loop(
         // thread — leaving the editor perfectly responsive, the Viewer frozen
         // for the rest of the session, and nobody told. See `rebuild_renderer`
         // for why the renderer cannot simply carry on afterwards.
+        busy_since.store(turn_clock(), std::sync::atomic::Ordering::Relaxed);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             one_turn(running, &receiver, &mut stream)
         }));
+        busy_since.store(0, std::sync::atomic::Ordering::Relaxed);
         match outcome {
             Ok(Turn::Continue) => {
                 faults_in_a_row = 0;

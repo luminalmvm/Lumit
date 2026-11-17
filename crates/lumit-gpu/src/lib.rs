@@ -374,6 +374,41 @@ pub fn video_memory_bytes() -> u64 {
 /// It exists so the bridge can write the line into the diagnostics file a bug
 /// report is written from, which this crate can't reach and shouldn't: a
 /// graphics context has no business knowing where Lumit keeps its files.
+/// Where the device's own reports are written: its errors and its loss. The
+/// bridge sets it, so they reach the diagnostics file a bug report is asked
+/// for; the console [`note!`] writes to does not exist in a windowed build.
+static DIAGNOSTICS: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
+
+/// How many uncaptured errors a session writes to the diagnostics file. The
+/// first ones say what went wrong; a fault that repeats every frame would
+/// otherwise fill the file with the same line.
+const ERRORS_RECORDED: u32 = 20;
+static ERRORS_SEEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Send the device's errors and its loss to `record` as well as the console.
+pub fn diagnostics_to(record: fn(&str)) {
+    let _ = DIAGNOSTICS.set(record);
+}
+
+fn diagnose(line: &str) {
+    if let Some(record) = DIAGNOSTICS.get() {
+        record(line);
+    }
+}
+
+/// An error and every cause under it, on one line: wgpu's own `Display` says
+/// only "Validation Error", and the reason is in the sources.
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut said = error.to_string();
+    let mut next = error.source();
+    while let Some(cause) = next {
+        said.push_str(": ");
+        said.push_str(&cause.to_string());
+        next = cause.source();
+    }
+    said
+}
+
 static ADAPTER_SUMMARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// The adapter the first context opened, in the words of the
@@ -1326,7 +1361,14 @@ impl GpuContext {
         // report and carry on, in the same shape as the rest of the workspace's
         // diagnostics, rather than to take the process down mid-edit.
         device.on_uncaptured_error(Box::new(|e| {
-            note!("lumit-gpu: uncaptured wgpu error: {e}");
+            let said = format!("lumit-gpu: uncaptured wgpu error: {}", error_chain(&e));
+            note!("{said}");
+            let seen = ERRORS_SEEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if seen < ERRORS_RECORDED {
+                diagnose(&said);
+            } else if seen == ERRORS_RECORDED {
+                diagnose("lumit-gpu: further wgpu errors this session are not recorded");
+            }
         }));
         // A lost device is survivable, but only if somebody hears about it. The
         // driver calls this on a thread and at a moment of its own choosing, so
@@ -1335,7 +1377,9 @@ impl GpuContext {
         let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let raise = std::sync::Arc::clone(&lost);
         device.set_device_lost_callback(move |reason, msg| {
-            note!("lumit-gpu: device lost ({reason:?}): {msg}");
+            let said = format!("lumit-gpu: device lost ({reason:?}): {msg}");
+            note!("{said}");
+            diagnose(&said);
             raise.store(true, std::sync::atomic::Ordering::Relaxed);
         });
 
