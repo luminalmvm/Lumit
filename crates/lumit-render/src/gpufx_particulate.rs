@@ -174,7 +174,9 @@ impl Particulate {
         let preset = ctx.and_then(|ctx| {
             let px = inst.sprite_picture()?;
             let side = lumit_core::fx::points::sprite_shape::SIZE;
-            Some(lumit_gpu::fx::common::upload_linear_f32(ctx, &px, side, side))
+            Some(lumit_gpu::fx::common::upload_linear_f32(
+                ctx, &px, side, side,
+            ))
         });
         let sprite = match (&preset, inst.sprite_picture().is_some()) {
             (Some(t), _) => Some(t),

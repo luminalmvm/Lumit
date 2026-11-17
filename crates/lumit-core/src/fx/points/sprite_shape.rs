@@ -70,7 +70,9 @@ pub fn picture(shape: SpriteShape, star_points: u32) -> Option<Arc<Vec<f32>>> {
     };
     static MADE: OnceLock<Mutex<HashMap<(SpriteShape, u32), Arc<Vec<f32>>>>> = OnceLock::new();
     let made = MADE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut made = made.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut made = made
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     Some(
         made.entry((shape, n))
             .or_insert_with(|| Arc::new(draw(shape, n)))
@@ -133,7 +135,11 @@ fn star_corners(n: u32) -> Vec<[f32; 2]> {
     (0..2 * n)
         .map(|i| {
             let a = -std::f32::consts::FRAC_PI_2 + i as f32 * std::f32::consts::PI / n as f32;
-            let r = if i % 2 == 0 { REACH } else { REACH * STAR_INNER };
+            let r = if i % 2 == 0 {
+                REACH
+            } else {
+                REACH * STAR_INNER
+            };
             [r * a.cos(), r * a.sin()]
         })
         .collect()
@@ -161,7 +167,11 @@ fn cloud(x: u32, y: u32) -> f32 {
     let mut amp = 0.5;
     let mut freq = 3.0;
     for octave in 0..4u32 {
-        f += amp * value_noise(u * freq + 7.3 * octave as f32, v * freq - 3.1 * octave as f32);
+        f += amp
+            * value_noise(
+                u * freq + 7.3 * octave as f32,
+                v * freq - 3.1 * octave as f32,
+            );
         amp *= 0.5;
         freq *= 2.0;
     }
@@ -182,7 +192,8 @@ fn value_noise(x: f32, y: f32) -> f32 {
     let (fx, fy) = (x - x0, y - y0);
     let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
     let h = |ix: f32, iy: f32| -> f32 {
-        let mut n = (ix as i32 as u32).wrapping_mul(0x9E37_79B1) ^ (iy as i32 as u32).wrapping_mul(0x85EB_CA77);
+        let mut n = (ix as i32 as u32).wrapping_mul(0x9E37_79B1)
+            ^ (iy as i32 as u32).wrapping_mul(0x85EB_CA77);
         n ^= n >> 15;
         n = n.wrapping_mul(0x2C1B_3C6D);
         n ^= n >> 12;
@@ -207,7 +218,10 @@ mod tests {
         for code in 1..SpriteShape::OPTIONS.len() as u32 {
             let p = picture(SpriteShape::from_code(code), 5).unwrap();
             assert_eq!(p.len(), (SIZE * SIZE * 4) as usize);
-            assert!(alpha(&p, SIZE / 2, SIZE / 2) > 0.5, "code {code} is empty in the middle");
+            assert!(
+                alpha(&p, SIZE / 2, SIZE / 2) > 0.5,
+                "code {code} is empty in the middle"
+            );
             assert_eq!(alpha(&p, 0, 0), 0.0, "code {code} fills its corner");
         }
     }
@@ -222,14 +236,25 @@ mod tests {
         assert_eq!(alpha(&ci, 6, m), 1.0, "a circle reaches its side");
         let tr = picture(SpriteShape::Triangle, 0).unwrap();
         assert_eq!(alpha(&tr, 20, 20), 0.0, "a triangle is narrow at the top");
-        assert_eq!(alpha(&tr, 20, SIZE - 6), 1.0, "a triangle is wide at the base");
+        assert_eq!(
+            alpha(&tr, 20, SIZE - 6),
+            1.0,
+            "a triangle is wide at the base"
+        );
         // A star's top point is filled, and between two points it is not.
         for n in STAR_POINTS_MIN..=STAR_POINTS_MAX {
             let st = picture(SpriteShape::Star, n).unwrap();
             assert_eq!(alpha(&st, c, 12), 1.0, "{n} points: no point straight up");
             let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI / n as f32;
-            let (px, py) = (c as f32 + 0.85 * 128.0 * a.cos(), m as f32 + 0.85 * 128.0 * a.sin());
-            assert_eq!(alpha(&st, px as u32, py as u32), 0.0, "{n} points: filled between points");
+            let (px, py) = (
+                c as f32 + 0.85 * 128.0 * a.cos(),
+                m as f32 + 0.85 * 128.0 * a.sin(),
+            );
+            assert_eq!(
+                alpha(&st, px as u32, py as u32),
+                0.0,
+                "{n} points: filled between points"
+            );
         }
     }
 
