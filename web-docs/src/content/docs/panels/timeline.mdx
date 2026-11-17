@@ -142,9 +142,6 @@ columns are kept between launches.
 **Switches** is what the Timeline keeps about a layer, and **Modes** is how the layer is
 rendered. See [Layers](/use/layers/#switches).
 
-A matte, blend or parent picker still at its default reads as muted text. It draws as a
-picker once it is changed, or while the pointer is over its row.
-
 A matte or parent picker shows the number and name of the layer it points at, and its list
 numbers every layer the same way. A layer's number is its place in the composition, and it
 keeps that number while a search or the shy filter hides other layers.
@@ -198,7 +195,10 @@ drag freely.
 Twirl a layer open and its transform, masks, effects, flow options, paint strokes and shape
 contents appear beneath it, each on a lane of its own. An effect's parameter rows show the
 value box without its slider. A click on an effect's name selects the effect, and the arrow
-beside it twirls it open.
+beside it twirls it open. Its rows are laid out as
+[Effect controls](/panels/effect-controls/#parameter-rows) lays them out: groups under
+their headings, and **Compositing** at the foot. A shut heading summarises its rows' keys
+as diamonds on its lane, which are not dragged.
 
 A text layer with [animators](/use/text/#animators) has an **Animators** heading, and a
 layer with [Puppet](/use/puppet/#pins-in-the-timeline) pins a **Puppet** heading. A layer
