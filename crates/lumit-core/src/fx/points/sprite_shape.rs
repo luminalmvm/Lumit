@@ -56,6 +56,9 @@ const STAR_INNER: f32 = 0.45;
 /// Samples a side per pixel for the hard-edged shapes' antialiasing.
 const SS: u32 = 4;
 
+/// The pictures made so far, by shape and Star points.
+type Made = Mutex<HashMap<(SpriteShape, u32), Arc<Vec<f32>>>>;
+
 /// The picture for `shape` (RGBA, [`SIZE`] × [`SIZE`]), or `None` for Layer.
 /// `star_points` is read only by Star. Each picture is made once and kept.
 #[must_use]
@@ -68,7 +71,7 @@ pub fn picture(shape: SpriteShape, star_points: u32) -> Option<Arc<Vec<f32>>> {
     } else {
         0
     };
-    static MADE: OnceLock<Mutex<HashMap<(SpriteShape, u32), Arc<Vec<f32>>>>> = OnceLock::new();
+    static MADE: OnceLock<Made> = OnceLock::new();
     let made = MADE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut made = made
         .lock()

@@ -428,7 +428,7 @@ pub(crate) fn draw(
     // which shape it is.
     let (preset, ready_made) = crate::gpufx_particulate::Particulate::preset_sprite(ctx, p);
     let sprite = if ready_made { preset.as_ref() } else { sprite };
-    let preset_name = ready_made.then(|| [inst.sprite_shape, inst.sprite_star_points as u32]);
+    let preset_name = ready_made.then_some([inst.sprite_shape, inst.sprite_star_points as u32]);
     // A walk that started late is not the walk from the in point. Every frame
     // is stamped with the sprite as it is now, so a sprite walk is named by
     // that picture, and keeps nothing when the picture has no name.
