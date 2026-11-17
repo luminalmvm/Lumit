@@ -133,13 +133,19 @@ Future<void> _start(List<String> args) async {
   // A document on the command line opens over the empty project. On failure
   // openProject posts its notice and the empty project stands — the same
   // degraded-but-alive behaviour as a failed File → Open.
+  for (final argument in args) {
+    if (argument.startsWith('--resolve-open=') ||
+        argument.startsWith('--resolve-import=')) {
+      state.launchResolve = args;
+    }
+  }
   if (fromArgs != null) state.openProject(fromArgs, launch: true);
   // Where a new project's template is, which is the workspace's to say. The
   // project Lumit starts on is a new one too, unless something else was asked
   // for.
   state.projectTemplate = () =>
       ui.workspace.projectTemplate.isEmpty ? null : ui.workspace.projectTemplate;
-  if (fromArgs == null && ui.workspace.projectTemplate.isNotEmpty) {
+  if (fromArgs == null && state.launchResolve == null && ui.workspace.projectTemplate.isNotEmpty) {
     unawaited(state.newProject(ask: false));
   }
   // The account and its sync, which a test never starts: nothing else at
@@ -167,6 +173,7 @@ Future<void> _start(List<String> args) async {
   // screen's question, so it is not put to them.
   runApp(LumitAppNew(state, ui,
       welcome: fromArgs == null &&
+          state.launchResolve == null &&
           state.launchInvite == null &&
           state.launchPackage == null &&
           state.launchStyle == null &&

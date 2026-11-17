@@ -22,6 +22,8 @@ use views::{close_view, ground_of, set_view, viewed_kept, viewed_through, Viewed
 #[cfg(target_arch = "wasm32")]
 use web::{sample_pixels, trace_scope};
 
+#[cfg(windows)]
+mod resolve;
 mod cut;
 mod dropper;
 mod item;
@@ -101,6 +103,8 @@ pub struct WorkerState {
     /// Where the user is looking — the view, comp, frame and scale last shown
     /// — the idle cache-fill's anchor (docs/06 §5.5).
     last_shown: Option<(u32, CompositionReference, u64, f32)>,
+    #[cfg(windows)]
+    resolve_scales: std::collections::HashMap<Uuid, f32>,
     /// The same for every other view, so a picture made before a model was
     /// read or a lens baked is made again in each of them.
     beside_shown: Vec<(u32, CompositionReference, u64, f32)>,
@@ -1956,6 +1960,8 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
 
 #[frb(ignore)]
 pub enum WorkerRequest {
+    #[cfg(windows)]
+    ResolveFrame(resolve::Request),
     RenderComp(RenderCompRequest),
     RenderCompWithPreview(RenderCompRequestWithPreview),
     TraceScope(RenderScopeRequest),
@@ -2966,6 +2972,9 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
         state.sender = Some(send_to_worker);
     }
 
+    #[cfg(windows)]
+    resolve::start(project.clone());
+
     #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || worker_loop(project, receive_from_app, stream, epochs));
     #[cfg(target_arch = "wasm32")]
@@ -3242,6 +3251,8 @@ fn worker_loop(
         prioritised: false,
         prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
+        #[cfg(windows)]
+        resolve_scales: Default::default(),
         beside_shown: Vec::new(),
         angles: None,
         // The first view a frontend asks for. It sends the real look as soon
@@ -4290,6 +4301,18 @@ fn handle_requests(
         for request in pictures.into_iter().chain(scopes).chain(sample) {
             let outcome = match request {
                 // A newer picture for the same view stops this one part way.
+                #[cfg(windows)]
+                WorkerRequest::ResolveFrame(request) => {
+                    let result = resolve::frame(
+                        state,
+                        &request.composition,
+                        request.seconds,
+                        request.gpu,
+                        request.end,
+                    );
+                    let _ = request.reply.send(result);
+                    Ok(())
+                }
                 WorkerRequest::RenderComp(req) => {
                     let _stop =
                         lumit_render::cancel::Scope::new(state.epochs.lane(req.view).token());
@@ -4418,6 +4441,8 @@ fn handle_requests(
 #[frb(ignore)]
 fn classify_request(r: &WorkerRequest) -> DrainClass {
     match r {
+        #[cfg(windows)]
+        WorkerRequest::ResolveFrame(_) => DrainClass::PictureKeepAll,
         WorkerRequest::TraceScope(req) => DrainClass::Scope(req.lane()),
         WorkerRequest::SamplePixels(_) => DrainClass::Sample,
         WorkerRequest::Play(_)
@@ -4628,6 +4653,8 @@ fn render_comp(
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
 ) -> Result<(), BridgeError> {
+    #[cfg(windows)]
+    state.resolve_scales.insert(req.comp.id, req.scale);
     let document = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -5900,6 +5927,8 @@ mod tests {
             prioritised: false,
             prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
+            #[cfg(windows)]
+            resolve_scales: Default::default(),
             beside_shown: Vec::new(),
             angles: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),

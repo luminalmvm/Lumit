@@ -30,6 +30,8 @@ mod job;
 mod relay;
 mod rows;
 mod vector;
+#[cfg(windows)]
+mod resolve_link;
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -106,6 +108,8 @@ Exit status: 0 done, 1 failed, 2 the arguments were wrong.
 /// What was asked for.
 #[derive(Debug, PartialEq)]
 enum Command {
+    #[cfg(windows)]
+    ResolveSetup { directory: PathBuf },
     Help,
     Version,
     Export {
@@ -180,6 +184,8 @@ fn main() -> i32 {
         }
     };
     let done = match command {
+        #[cfg(windows)]
+        Command::ResolveSetup { directory } => resolve_link::run(&directory),
         Command::Help => {
             out!("{}", HELP.trim_end());
             Ok(())
@@ -273,6 +279,10 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
     };
     let first = text(first)?;
     let mut rest: Vec<OsString> = args.collect();
+    #[cfg(windows)]
+    if first == "resolve-setup" && rest.len() == 1 {
+        return Ok(Command::ResolveSetup { directory: PathBuf::from(&rest[0]) });
+    }
     // --help anywhere is a request for help.
     if matches!(first.as_str(), "--help" | "-h" | "help")
         || rest.iter().any(|a| a == "--help" || a == "-h")

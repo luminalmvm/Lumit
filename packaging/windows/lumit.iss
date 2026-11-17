@@ -42,6 +42,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ChangesAssociations=yes
+ChangesEnvironment=yes
 ; Held for as long as this runs. Lumit won't start while it's there, so it
 ; can't hold files halfway through an update (runner/main.cpp).
 SetupMutex=LumitSetup
@@ -50,6 +51,15 @@ Compression=lzma2
 ; releases is the same bytes in both installers and an update only fetches
 ; the rest (flutter_ui/lib/state/blockmap.dart). Costs about 0.5% in size.
 SolidCompression=no
+
+[Types]
+Name: "full"; Description: "Lumit with DaVinci Resolve linking"
+Name: "compact"; Description: "Lumit only"
+Name: "custom"; Description: "Custom installation"; Flags: iscustom
+
+[Components]
+Name: "core"; Description: "Lumit"; Types: full compact custom; Flags: fixed
+Name: "resolvelink"; Description: "DaVinci Resolve Linking"; Types: full
 
 [Files]
 ; The whole runner directory, recursively, which is how `lumit-ofx-broker.exe`,
@@ -62,12 +72,15 @@ SolidCompression=no
 ; The two exports that ask a laptop for its discrete card make the linker write
 ; lumit.lib and lumit.exp beside the exe. Neither is any use to a user.
 Source: "..\..\flutter_ui\build\windows\x64\runner\Release\*"; DestDir: "{app}"; \
-  Excludes: "lumit.lib,lumit.exp"; Flags: recursesubdirs ignoreversion
+  Excludes: "lumit.lib,lumit.exp,Resolve\*"; Flags: recursesubdirs ignoreversion
+Source: "..\..\flutter_ui\build\windows\x64\runner\Release\Resolve\*"; DestDir: "{app}\Resolve"; \
+  Flags: recursesubdirs ignoreversion; Components: resolvelink
 Source: "..\..\assets\brand\lumit-project.ico"; DestDir: "{app}\icons"
 Source: "..\..\assets\brand\lumit-preset.ico"; DestDir: "{app}\icons"
 Source: "..\..\assets\brand\lumit-theme.ico"; DestDir: "{app}\icons"
 
 [InstallDelete]
+Type: filesandordirs; Name: "{app}\Resolve"; Check: not WizardIsComponentSelected('resolvelink')
 ; The runner was lumit_flutter.exe up to 0.3.2. An update over one of those
 ; installs would leave the old name beside the new one without this.
 Type: files; Name: "{app}\lumit_flutter.exe"
@@ -94,6 +107,8 @@ Name: "{group}\Lumit"; Filename: "{app}\{#MyAppExe}"
 Name: "{group}\Uninstall Lumit"; Filename: "{uninstallexe}"
 
 [Registry]
+Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\lumit.exe"; \
+  ValueType: string; ValueData: "{app}\lumit.exe"; Flags: uninsdeletekey
 ; .lum — project documents
 Root: HKA; Subkey: "Software\Classes\.lum"; ValueType: string; \
   ValueData: "Lumit.Project"; Flags: uninsdeletevalue
@@ -258,8 +273,79 @@ begin
   end;
 end;
 
+function ResolveMenuFile(Name: String): String;
+begin
+  Result := ExpandConstant('{userappdata}\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\') + Name + '.lua';
+end;
+
+function LuaQuote(Value: String): String;
+begin
+  StringChangeEx(Value, '\', '\\', True);
+  StringChangeEx(Value, '"', '\"', True);
+  Result := '"' + Value + '"';
+end;
+
+procedure RemoveResolveMenu(Name: String);
+var Content: AnsiString;
+begin
+  if LoadStringFromFile(ResolveMenuFile(Name), Content) then
+    if Pos(LuaQuote(ExpandConstant('{app}')), UTF8Decode(Content)) > 0 then
+      DeleteFile(ResolveMenuFile(Name));
+end;
+
+procedure InstallResolveMenu(Name: String);
+var Content: String;
+begin
+  ForceDirectories(ExtractFileDir(ResolveMenuFile(Name)));
+  Content := 'local root = ' + LuaQuote(ExpandConstant('{app}')) + #13#10 +
+    'assert(loadfile(root .. ''/Resolve/link.lua''))(root)' + #13#10;
+  if not SaveStringToFile(ResolveMenuFile(Name), UTF8Encode(Content), False) then
+    RaiseException('Could not install the Resolve menu command: ' + Name);
+end;
+
+procedure ResolvePath(Enabled: Boolean);
+var Existing, Updated, Item, Own: String; Split: Integer;
+begin
+  Own := ExpandConstant('{app}\Resolve');
+  RegQueryStringValue(HKCU, 'Environment', 'OFX_PLUGIN_PATH', Existing);
+  Updated := '';
+  while Existing <> '' do begin
+    Split := Pos(';', Existing);
+    if Split = 0 then Split := Length(Existing) + 1;
+    Item := Copy(Existing, 1, Split - 1);
+    Delete(Existing, 1, Split);
+    if CompareText(RemoveBackslashUnlessRoot(Trim(Item)), Own) <> 0 then begin
+      if Updated <> '' then Updated := Updated + ';';
+      Updated := Updated + Item;
+    end;
+  end;
+  if Enabled then begin
+    if Updated <> '' then Updated := Updated + ';';
+    Updated := Updated + Own;
+  end;
+  if Updated = '' then RegDeleteValue(HKCU, 'Environment', 'OFX_PLUGIN_PATH')
+  else if not RegWriteExpandStringValue(HKCU, 'Environment', 'OFX_PLUGIN_PATH', Updated) then
+    RaiseException('Could not register the Resolve plugin folder.');
+end;
+
+procedure ConfigureResolveLinking(Enabled: Boolean);
+begin
+  ResolvePath(Enabled);
+  if Enabled then begin
+    InstallResolveMenu('Create Lumit Composition');
+  end else begin
+    RemoveResolveMenu('Create Lumit Composition');
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then ConfigureResolveLinking(False);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
+  if CurStep = ssPostInstall then ConfigureResolveLinking(WizardIsComponentSelected('resolvelink'));
   if CurStep <> ssInstall then exit;
   MoveAside(ExpandConstant('{app}'));
   MoveAside(ExpandConstant('{app}\lib'));
