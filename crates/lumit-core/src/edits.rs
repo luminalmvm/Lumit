@@ -1281,8 +1281,7 @@ pub fn transform_ops(
 }
 
 /// [`transform_ops`], with the keys to keep under an expression that was
-/// already on the property (`None` leaves the ones it has). What is written is
-/// what the property becomes: an expression taken off keys brings them back.
+/// already on the property (`None` leaves the ones it has).
 pub fn transform_ops_with_keys(
     comp: Uuid,
     layer: &Layer,

@@ -10474,8 +10474,8 @@ fn only_its_own_file_opens_as_a_shared_copy() {
 }
 
 /// An expression written over keys keeps them; keys it carries go under it
-/// when it was already there; `None` leaves them; a plain number brings the
-/// keys back.
+/// when it was already there; `None` leaves them; a plain number leaves only
+/// the number.
 #[test]
 fn keys_under_an_expression_cross_the_bridge() {
     use crate::api::effect::{BridgeExpressionLanguage, BridgeScalar};
@@ -10508,8 +10508,9 @@ fn keys_under_an_expression_cross_the_bridge() {
     let text = BridgeScalar::Expression("value".into(), js, None);
     text.put(&mut p, text.animation_at(zero).unwrap(), zero);
     assert_eq!(p.keys_under_expression().map(|k| k.len()), Some(1));
-    // Remove expression.
+    // A reset to default, say.
     let off = BridgeScalar::Static(3.0);
     off.put(&mut p, off.animation_at(zero).unwrap(), zero);
-    assert!(matches!(&p.animation, Animation::Keyframed(k) if k.len() == 1));
+    assert_eq!(p.animation, Animation::Static(3.0));
+    assert!(lumit_core::anim::keys_kept_in(&p.extra).is_none());
 }

@@ -911,7 +911,7 @@ fn a_point_crosses_a_layers_spaces_and_back_in_both_languages() {
 
 /// Keys under an expression: a keyed property keeps its keys when an
 /// expression goes on, `value` reads them at the expression's time,
-/// `loopOut` repeats them, and taking the expression off brings them back.
+/// `loopOut` repeats them, and Remove expression writes them back as keys.
 mod keys_under_expression {
     use super::*;
     use crate::anim::{Animation, Keyframe, Property, SideInterp};
@@ -966,12 +966,12 @@ mod keys_under_expression {
     }
 
     #[test]
-    fn taking_the_expression_off_brings_the_keys_back() {
+    fn a_number_over_the_expression_leaves_only_the_number() {
         let mut p = keyed_with("value");
         p.set_animation(Animation::Static(3.0));
-        assert!(matches!(&p.animation, Animation::Keyframed(k) if k.len() == 2));
+        assert_eq!(p.animation, Animation::Static(3.0));
         assert!(p.extra.get(SLOT_KEY).is_none());
-        // Baking into keys replaces both.
+        // Remove expression, or baking into keys, writes keys and replaces both.
         let mut p = keyed_with("value");
         p.set_animation(Animation::Keyframed(vec![key(0, 1.0)]));
         assert!(matches!(&p.animation, Animation::Keyframed(k) if k.len() == 1));

@@ -610,14 +610,13 @@ impl Property {
     /// **Keys under an expression.** A keyed property keeps its keys when an
     /// expression is put on it, as After Effects does: they are kept beside the
     /// expression ([`KEYS_UNDER_EXPRESSION`]), `value` reads them at the
-    /// expression's time, and `loopOut` repeats them. Taking the expression off
-    /// with a plain number (the Remove expression command) brings the keys
-    /// back. New keys written while the expression is on go under it through
-    /// [`Self::set_keys_under_expression`]; a keyed animation written over an
-    /// expression replaces both, which is what baking one into keys means.
+    /// expression's time, and `loopOut` repeats them. New keys written while
+    /// the expression is on go under it through
+    /// [`Self::set_keys_under_expression`]. Anything else written over an
+    /// expression replaces both: Remove expression writes the kept keys back as
+    /// a keyed animation, and a plain number leaves only the number.
     pub fn set_animation(&mut self, animation: Animation) {
         use crate::expression::{script::Slot, script::SLOT_KEY};
-        let mut animation = animation;
         match (&self.animation, &animation) {
             (Animation::Expression(_), Animation::Expression(_)) => {}
             (was, Animation::Expression(_)) => {
@@ -630,12 +629,6 @@ impl Property {
                     _ => Vec::new(),
                 };
                 self.put_keys_under(&keys);
-            }
-            (Animation::Expression(_), Animation::Static(_)) => {
-                if let Some(keys) = self.keys_under_expression() {
-                    animation = Animation::Keyframed(keys);
-                }
-                self.extra.remove(SLOT_KEY);
             }
             _ => {
                 self.extra.remove(SLOT_KEY);

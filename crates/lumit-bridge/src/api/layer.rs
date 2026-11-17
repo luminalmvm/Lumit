@@ -6645,10 +6645,7 @@ impl LayerReference {
             layer: self.layer_id,
             retime: None,
         };
-        // A number ends the map, unless it is an expression being taken off
-        // keys it was written over: those come back.
-        let restores = retime.keys_under_expression().is_some();
-        if matches!(animation, lumit_core::anim::Animation::Static(_)) && !restores {
+        if matches!(animation, lumit_core::anim::Animation::Static(_)) {
             return self.commit(self.unretime_op(&layer, removal));
         }
         value.put(&mut retime, animation, layer.start_offset.0);

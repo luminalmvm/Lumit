@@ -806,8 +806,9 @@ class EffectParamRowFrb extends StatelessWidget {
           : null,
       removeExpression: expression == null
           ? null
-          : () => _set(BridgeEffectValue.float(
-              BridgeScalar.static_(sampleScalarWithContext(
+          : () => _set(BridgeEffectValue.float(expressionTakenOff(
+              expression,
+              sampleScalarWithContext(
                   scalar: expression,
                   time: timeOfFrame(comp, playhead.value),
                   layer: currentLayer!)))),
@@ -4517,7 +4518,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
           ),
           MenuRow(
             onPressed: () {
-              widget.set(BridgeEffectValue.float(BridgeScalar_Static(_value)));
+              widget.set(BridgeEffectValue.float(
+                  expressionTakenOff(widget.value, _value)));
               close();
             },
             child: MenuLabel(l10n.removeExpression, ticked: false),

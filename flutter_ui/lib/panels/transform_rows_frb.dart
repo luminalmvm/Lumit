@@ -55,7 +55,8 @@ import 'param_row_menu.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 import '../state/expression_language.dart' show PropertyRef;
-import 'expression_editor.dart' show expressionAsKeys, showExpressionEditor;
+import 'expression_editor.dart'
+    show expressionAsKeys, expressionTakenOff, showExpressionEditor;
 import 'property_link.dart';
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
@@ -1461,7 +1462,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       final values = [
         for (final q in targets)
           switch (read(widget.transform, q)) {
-            final BridgeScalar_Expression e => BridgeScalar.static_(
+            final BridgeScalar_Expression e => expressionTakenOff(
+                e,
                 sampleScalarWithContext(
                     scalar: e,
                     time: timeOfFrame(widget.comp, playhead.value),
@@ -1470,8 +1472,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             final other => other,
           },
       ];
-      if (targets.length == 1) {
-        _commit(p, (values.single as BridgeScalar_Static).field0);
+      if (values case [BridgeScalar_Static(:final field0)]) {
+        _commit(p, field0);
         return;
       }
       widget.layer.setTransforms(props: targets, values: values);
@@ -1574,10 +1576,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                 row: BridgeExpressionRow.transform(prop),
                 decimals: cells.firstWhere((c) => c.prop == prop).decimals,
                 onLive: (draft) => _liveExpression(prop, draft),
-                // Removed in the editor, it leaves the number it read.
-                onCommit: (next) => next is BridgeScalar_Static
-                    ? unexpress(prop)
-                    : _commitExpressions(along(prop), next),
+                // Removed in the editor, it leaves what the menu's Remove does.
+                onRemove: () => unexpress(prop),
+                onCommit: (next) => _commitExpressions(along(prop), next),
               );
             },
       convertExpression: picked.length != 1
