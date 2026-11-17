@@ -196,6 +196,10 @@ pub struct WorkerState {
     /// backup has nothing to copy ([`idle_backup`]). Cleared whenever a frame
     /// is banked or the disk tier is re-opened, since either can make work.
     backup_exhausted: bool,
+    /// When to ask again whether the graphics card is back, while a rebuild
+    /// has left the renderer on a CPU rasteriser; `None` on a card, or when
+    /// the session began on the rasteriser ([`return_to_hardware`]).
+    hardware_check: Option<web_time::Instant>,
     /// When the last request arrived — the fill waits out a ~200 ms lull
     /// after it (docs/06 §5.5), so a scrub in progress is never contended.
     last_request: web_time::Instant,
@@ -3170,6 +3174,7 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
 /// "the app is fine but the preview never updates again".
 #[frb(ignore)]
 fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    let was_on_card = !state.renderer.software() || state.hardware_check.is_some();
     let Some(mut renderer) = build_viewer_renderer(&state.project, stream, &state.view_id) else {
         // No second device to be had, or the project has closed under us.
         // Nothing is replaced, so the worker keeps the renderer it has and the
@@ -3181,6 +3186,16 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     // looking at the picture is session state, not something the device owned.
     apply_viewer_look(&mut renderer, &state.applied_look.1);
     state.renderer = renderer;
+    // A card that faulted can be away for a while as its driver resets it,
+    // and a rebuild in that window lands on the CPU rasteriser, which draws a
+    // heavy comp a frame every few seconds. It is a stopgap, not a new home.
+    state.hardware_check = (was_on_card && state.renderer.software())
+        .then(|| web_time::Instant::now() + HARDWARE_RETRY);
+    if state.hardware_check.is_some() {
+        let said = "The renderer is on the CPU rasteriser until the graphics card answers again";
+        note!("{said}");
+        crate::faults::record(said);
+    }
     // The card's cache went with the card. Nothing needs clearing — a new
     // renderer's stores are empty — but the budget must be applied again (it
     // lives on the renderer) and the published figures must stop describing
@@ -3199,6 +3214,34 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     _ = stream.add(WorkerResponse::DeviceReset);
     // And put the picture back, on the new device.
     republish_last_frame(state, stream);
+}
+
+/// How long the renderer waits on the CPU rasteriser before asking whether the
+/// graphics card is back.
+const HARDWARE_RETRY: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Put the renderer back on the graphics card once it answers again, after a
+/// rebuild left it on the CPU rasteriser ([`rebuild_renderer`]).
+#[frb(ignore)]
+fn return_to_hardware(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    let Some(at) = state.hardware_check else {
+        return;
+    };
+    if web_time::Instant::now() < at {
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let back = lumit_gpu::hardware_adapter_ready();
+    #[cfg(target_arch = "wasm32")]
+    let back = false;
+    if !back {
+        state.hardware_check = Some(web_time::Instant::now() + HARDWARE_RETRY);
+        return;
+    }
+    let said = "The graphics card answers again; moving the renderer back onto it";
+    note!("{said}");
+    crate::faults::record(said);
+    rebuild_renderer(state, stream);
 }
 
 #[frb(ignore)]
@@ -3282,6 +3325,7 @@ fn worker_loop(
         bar_published_at: crate::turns::long_ago(BAR_MIN_INTERVAL),
         fill_exhausted: true,
         backup_exhausted: true,
+        hardware_check: None,
         last_request: web_time::Instant::now(),
         bakes_seen: 0,
         layer_sample: None,
@@ -3343,7 +3387,30 @@ fn worker_loop(
                     state = None;
                     return false;
                 }
-                rebuild_renderer(running, &mut stream);
+                // The rebuild draws the last picture again, on a device that
+                // may be no healthier than the one that faulted, so it is held
+                // in the same net: a panic here used to end the thread, leaving
+                // the Viewer on its last picture for the rest of the session.
+                let rebuilt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    rebuild_renderer(running, &mut stream);
+                }));
+                if let Err(payload) = rebuilt {
+                    faults_in_a_row += 1;
+                    let said = format!(
+                        "The renderer faulted as it was rebuilt ({}): {}",
+                        faults_in_a_row,
+                        panics::panic_message(&*payload),
+                    );
+                    note!("{said}");
+                    crate::faults::record(&said);
+                    if faults_in_a_row > MAX_FAULTS_IN_A_ROW {
+                        let stopping = "The render worker faulted on every attempt; it is stopping";
+                        note!("{stopping}");
+                        crate::faults::record(stopping);
+                        state = None;
+                        return false;
+                    }
+                }
                 return true;
             }
         }
@@ -3391,6 +3458,7 @@ fn one_turn(
     // has gone answers nothing, and every step below would fail one at a
     // time until the session looked broken.
     recover_lost_device(state, stream);
+    return_to_hardware(state, stream);
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
         crate::turns::playback_priority(state.prioritised);
@@ -5832,6 +5900,28 @@ mod tests {
         );
     }
 
+    /// A renderer left on the CPU rasteriser asks again for the card when its
+    /// time comes, and goes back onto it once it answers.
+    #[test]
+    fn a_renderer_left_on_the_rasteriser_goes_back_to_the_card() {
+        let (project, _comp) = project_with_solid();
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        if state.renderer.software() || !lumit_gpu::hardware_adapter_ready() {
+            return; // No card here to go back to.
+        }
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        state.hardware_check = Some(web_time::Instant::now() + super::HARDWARE_RETRY);
+        super::return_to_hardware(&mut state, &mut stream);
+        assert!(state.hardware_check.is_some(), "not asked before its time");
+
+        state.hardware_check = Some(web_time::Instant::now());
+        super::return_to_hardware(&mut state, &mut stream);
+        assert_eq!(state.hardware_check, None, "the card answered");
+        assert!(!state.renderer.software(), "and the renderer is back on it");
+    }
+
     /// A turn that panics must not take the worker down with it.
     ///
     /// This is the crash net in [`super::worker_loop`], and the fault it is
@@ -5926,6 +6016,7 @@ mod tests {
             bar_published_at: std::time::Instant::now() - super::BAR_MIN_INTERVAL,
             fill_exhausted: true,
             backup_exhausted: true,
+            hardware_check: None,
             last_request: std::time::Instant::now(),
             bakes_seen: 0,
             layer_sample: None,

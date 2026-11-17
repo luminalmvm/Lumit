@@ -2115,6 +2115,13 @@ impl HeadlessRenderer {
     /// The first time it is true, every LFX effect in a frame of this
     /// renderer's that never finished takes a strike
     /// ([`crate::gpufx::lfx::strike_in_flight`]).
+    /// Whether this renderer draws on a CPU rasteriser (WARP, lavapipe)
+    /// rather than on a graphics card.
+    #[must_use]
+    pub fn software(&self) -> bool {
+        self.gpu.software
+    }
+
     #[must_use]
     pub fn device_lost(&self) -> bool {
         let lost = self.gpu.device_lost();

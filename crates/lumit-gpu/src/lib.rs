@@ -531,6 +531,67 @@ fn adapter_is_required(value: Option<&str>) -> bool {
     matches!(value, Some(v) if !v.is_empty() && v != "0")
 }
 
+/// The instance every engine device is made from, on the platform's pinned
+/// backend.
+#[cfg(not(target_arch = "wasm32"))]
+fn engine_instance() -> wgpu::Instance {
+    // `from_env_or_default` supplies the rest of the descriptor (flags, the
+    // DX12 shader compiler, the GLES minor version) from `WGPU_*`, so those
+    // stay tunable — but `backends` is set explicitly *after* it, so the pin
+    // wins and `WGPU_BACKEND` cannot move it. That is intended: an
+    // environment variable must not be able to break the Viewer.
+    #[cfg(windows)]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::DX12,
+        ..wgpu::InstanceDescriptor::from_env_or_default()
+    });
+    // On a hybrid iGPU+dGPU box (e.g. AMD + Nvidia) mixing GL and Vulkan into one
+    // enumeration makes PowerPreference::HighPerformance pick unreliably (commonly
+    // picking the AMD iGPU driving the display), which can cause VRAM exhaustion
+    // during command submission. Pinning Vulkan prevents that.
+    #[cfg(target_os = "linux")]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::VULKAN,
+        ..wgpu::InstanceDescriptor::from_env_or_default()
+    });
+    #[cfg(target_os = "macos")]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::METAL,
+        ..wgpu::InstanceDescriptor::from_env_or_default()
+    });
+    #[cfg(not(any(
+        windows,
+        target_os = "linux",
+        target_os = "macos",
+        target_arch = "wasm32"
+    )))]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+    instance
+}
+
+/// Whether the adapter a new engine device would be made on is real hardware
+/// rather than a CPU rasteriser (WARP, lavapipe). False while the card a
+/// faulted device was on is still being reset by its driver, which is when a
+/// rebuild lands on the rasteriser: the render worker asks again later, and
+/// goes back to the card once it answers.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub fn hardware_adapter_ready() -> bool {
+    let power = wgpu::PowerPreference::from_env();
+    pollster::block_on(
+        engine_instance().request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: power.unwrap_or(wgpu::PowerPreference::HighPerformance),
+            ..Default::default()
+        }),
+    )
+    .is_some_and(|adapter| {
+        !matches!(
+            adapter.get_info().device_type,
+            wgpu::DeviceType::Cpu | wgpu::DeviceType::Other
+        )
+    })
+}
+
 impl GpuContext {
     /// Wrap an existing device/queue (eframe's render state — wgpu handles
     /// are internally reference-counted, so cloning shares the one device).
@@ -1155,37 +1216,8 @@ impl GpuContext {
         // gone there is no build left that wants a mixed-backend instance.
         // Pinning also fixes the hybrid iGPU+dGPU case described below.
         //
-        // `from_env_or_default` supplies the rest of the descriptor (flags, the
-        // DX12 shader compiler, the GLES minor version) from `WGPU_*`, so those
-        // stay tunable — but `backends` is set explicitly *after* it, so the pin
-        // wins and `WGPU_BACKEND` cannot move it. That is intended: an
-        // environment variable must not be able to break the Viewer.
-        #[cfg(windows)]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
-        // On a hybrid iGPU+dGPU box (e.g. AMD + Nvidia) mixing GL and Vulkan into one
-        // enumeration makes PowerPreference::HighPerformance pick unreliably (commonly
-        // picking the AMD iGPU driving the display), which can cause VRAM exhaustion
-        // during command submission. Pinning Vulkan prevents that.
-        #[cfg(target_os = "linux")]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
-        #[cfg(target_os = "macos")]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
-        #[cfg(not(any(
-            windows,
-            target_os = "linux",
-            target_os = "macos",
-            target_arch = "wasm32"
-        )))]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+        #[cfg(not(target_arch = "wasm32"))]
+        let instance = engine_instance();
         // `WGPU_POWER_PREF=low` puts the engine on the integrated card of a
         // two-card machine, so it can be timed as a laptop without one.
         #[cfg(not(target_arch = "wasm32"))]
