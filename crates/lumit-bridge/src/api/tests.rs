@@ -10501,7 +10501,7 @@ fn keys_under_an_expression_cross_the_bridge() {
     };
     assert_eq!(keys.len(), 2);
     // One key taken away through the row's controls.
-    let edited = BridgeScalar::Expression("loopOut()".into(), js, Some(vec![keys[0].clone()]));
+    let edited = BridgeScalar::Expression("loopOut()".into(), js, Some(vec![keys[0]]));
     edited.put(&mut p, edited.animation_at(zero).unwrap(), zero);
     assert_eq!(p.keys_under_expression().map(|k| k.len()), Some(1));
     // New text alone leaves them.
