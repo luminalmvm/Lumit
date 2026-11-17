@@ -35,7 +35,7 @@ struct Params {
     gamma: f32,
     /// @slider(-200, 200) @default(0) Displacement offset (%)
     offset: f32,
-    /// @choice("None", "Ease in", "Ease out", "Ease in and out") @default("None") Displacement easing
+    /// @choice("Linear", "Ease in", "Ease out", "Ease in and out") @default("Linear") Displacement easing
     easing: u32,
     /// @slider(-2000, 2000) @default(0) @unit(px) Translate X
     translate_x: f32,
@@ -85,7 +85,7 @@ struct Params {
     right: f32,
     /// @slider(0, 2000) @default(0) @unit(px) Bottom
     bottom: f32,
-    /// @choice("None", "2x", "4x", "8x") @default("None") Anti-aliasing
+    /// @choice("Off", "2x", "4x", "8x") @default("Off") Anti-aliasing
     antialias: u32,
     /// @choice("Result", "Map") @default("Result") View
     view: u32,
