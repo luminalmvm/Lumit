@@ -328,6 +328,16 @@ pub trait EffectDef: Sync + Send + 'static {
     /// operation of their own.
     fn apply_cpu(&self, _rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {}
 
+    /// The effect with anything that depends on where a pixel is (windows,
+    /// blurs, keys built from neighbours) left out, so each pixel's answer is
+    /// a function of its own colour. What a grade baked into a LUT runs, on a
+    /// picture of colours rather than of anything. The default is
+    /// [`apply_cpu`](EffectDef::apply_cpu), which is right for every effect
+    /// that only ever looks at one pixel.
+    fn apply_cpu_pointwise(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        self.apply_cpu(rgba, w, h, p);
+    }
+
     /// [`apply_cpu`](EffectDef::apply_cpu), told **which instance** it is
     /// rendering and at **what layer time**.
     ///
@@ -687,6 +697,13 @@ pub trait EffectDef: Sync + Send + 'static {
     /// once per live effect per frame, from the key walk.
     fn frames_needed(&self, _inst: &EffectInstance, _frame: f64) -> Option<Vec<i32>> {
         None
+    }
+
+    /// [`frames_needed`](EffectDef::frames_needed), told the comp's rate too,
+    /// for a built-in whose window is set in seconds. The window is still in
+    /// comp frames.
+    fn frames_needed_at(&self, inst: &EffectInstance, frame: f64, _fps: f64) -> Option<Vec<i32>> {
+        self.frames_needed(inst, frame)
     }
 
     /// Why the last frame this definition rendered was a placeholder rather

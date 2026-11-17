@@ -18,7 +18,8 @@ app never crashes. The crate list is in [GUIDE.md](GUIDE.md).
 
 ## 2. Threads
 
-One process, plus a sandbox process per third-party plugin bundle.
+One process, plus a sandbox process per third-party plugin bundle, and a `lumit-cli` process
+for each remote export this computer does for another.
 
 | Thread | Role |
 |---|---|
@@ -27,9 +28,11 @@ One process, plus a sandbox process per third-party plugin bundle.
 | Decode | One per active stream, never on the pool, because a long-GOP seek would stall it |
 | IO | Disk cache, journal, export files |
 | Analysis | Camera tracking, one at a time |
+| Speech | Transcription: decodes a file's sound and runs the speech model, one job at a time |
 | Audio pair | The cpal callback (lock-free reads only) and a thread that fills ahead of it: decodes the two-second blocks of sound the playhead is coming to |
 | GPU submit | The only thread that submits to the wgpu queue |
 | Share | While a project is shared: one accepting, and a reader and a writer per connection. The readers apply other people's edits. A host that asked its router to open the port has one more keeping it open |
+| Remote export | One that turns the jobs over. While a job's files move, the link's own: one listening and one keeping its room at the relay on the computer doing the export, one reaching it on the other |
 
 **Cancellation.** Every request carries an epoch per consumer (the Viewer, each export,
 background warming). Moving the playhead bumps the Viewer's. Jobs check at node and tile

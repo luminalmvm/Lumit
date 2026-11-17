@@ -16,7 +16,8 @@ OCIO file transform is a [Colour](/effects/#colour) effect.
 Applies a look-up table or an ASC CDL grade from a file, read the way an OCIO config
 reads its own files. No config is needed. A cube is sampled tetrahedrally, where the
 [LUT](/effects/colour/lut/) effect samples trilinearly. A `.ccc` or `.cdl` file with
-several grades applies the first.
+several grades applies the first. When the file is missing, the file of the same name in the
+[library](/use/library/)'s LUTs is read in its place.
 
 :::note[Unset or unreadable]
 An unset, missing or unreadable file passes the layer through unchanged. **Inverse** on

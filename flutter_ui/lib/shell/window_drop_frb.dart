@@ -1,7 +1,7 @@
 // Files dropped anywhere on the window are imported, the way files dropped on
 // the Project panel are. An extension package dropped anywhere opens its
-// install window instead, a style is taken in and used, and a script is run
-// after a question.
+// install window instead, a style is taken in and used, a graphics template
+// joins the library, and a script is run after a question.
 //
 // The drop plugin tells every drop target about every drop, and each one acts
 // if the drop was inside its own box. A target the size of the window would
@@ -16,8 +16,10 @@ import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
+import '../panels/template_place.dart' show installTemplateFiles;
 import '../state/file_dialogs.dart' show droppedPaths;
 import 'extension_install_frb.dart';
+import 'lottie_import_frb.dart';
 import 'style_import.dart';
 import '../src/rust/api/styles.dart';
 import '../state/app_state.dart';
@@ -52,9 +54,21 @@ class WindowDropFrb extends StatelessWidget {
             unawaited(
                 importStyle(context, context.read<LumitState>(), ui, style));
           }
+          // And graphics templates, which join the library.
+          final templates = paths
+              .where((path) => path.toLowerCase().endsWith('.lumt'))
+              .toList();
+          if (templates.isNotEmpty) {
+            unawaited(installTemplateFiles(
+                context, context.read<LumitState>(), ui, templates));
+          }
           if (_inAnotherTarget(context, details.globalPosition)) return;
+          // A Lottie makes a composition of its own; the rest are footage.
+          final rest = await importLottieFrb(
+              context, context.read<LumitState>(), paths);
+          if (!context.mounted) return;
           final imported = await importDroppedPaths(context.read<LumitState>(),
-              paths.where((path) => !isScriptFile(path)).toList());
+              rest.where((path) => !isScriptFile(path)).toList());
           // Nothing lit up under the drop, so show where the files went.
           if (imported) ui.frontPanel(Panel.project);
           if (context.mounted) await runDroppedScripts(context, paths);

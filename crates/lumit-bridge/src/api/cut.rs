@@ -33,11 +33,16 @@ use crate::api::{
 mod attributes;
 pub(crate) mod fold;
 pub(crate) mod freeze;
+pub(crate) mod join;
+pub(crate) mod multicam;
+mod paste;
 pub(crate) mod place;
 pub(crate) mod razor;
+mod relink;
 mod solids;
 mod streams;
 mod takes;
+pub mod transcript;
 pub(crate) mod transition;
 
 /// How a Cut edit ended. Anything but `Done` left the document untouched, and
@@ -357,51 +362,6 @@ fn retrimmed(clip: &Clip, by_start: Rational, by_end: Rational, ripple: bool) ->
     }
 }
 
-/// Give the later pieces of a divided link an id of their own.
-///
-/// A cut or an overwrite leaves both pieces of a clip carrying its link, so a
-/// razor through a picture clip and its sound leaves four clips sharing one
-/// id. On each row the first clip of a link keeps it and the second, third
-/// and so on take a fresh one each, the same fresh one on every row, so the
-/// later halves pair up with each other and with nothing else.
-#[frb(ignore)]
-fn relink(rows: &mut [Row]) {
-    // A link, and the ids its later pieces have been given so far.
-    let mut fresh: Vec<(Uuid, Vec<Uuid>)> = Vec::new();
-    for row in rows {
-        let mut order: Vec<usize> = (0..row.clips.len()).collect();
-        order.sort_by_key(|i| row.clips[*i].place_start);
-        let mut seen: Vec<(Uuid, usize)> = Vec::new();
-        for i in order {
-            let Some(link) = row.clips[i].link else {
-                continue;
-            };
-            let nth = match seen.iter_mut().find(|(l, _)| *l == link) {
-                Some((_, count)) => {
-                    *count += 1;
-                    *count
-                }
-                None => {
-                    seen.push((link, 0));
-                    continue;
-                }
-            };
-            let at = match fresh.iter().position(|(l, _)| *l == link) {
-                Some(at) => at,
-                None => {
-                    fresh.push((link, Vec::new()));
-                    fresh.len() - 1
-                }
-            };
-            let ids = &mut fresh[at].1;
-            while ids.len() < nth {
-                ids.push(Uuid::now_v7());
-            }
-            row.clips[i].link = Some(ids[nth - 1]);
-        }
-    }
-}
-
 impl<'a> Edit<'a> {
     fn open(of: &'a CompositionReference) -> Cut<Self> {
         let comp = of.composition()?;
@@ -643,7 +603,7 @@ impl<'a> Edit<'a> {
     /// ripple carried and every layer made. Nothing changed writes nothing.
     fn commit(mut self) -> Cut {
         self.settle_transitions()?;
-        relink(&mut self.rows);
+        relink::relink(&mut self.rows);
         let (project, comp) = (self.of.project_id(), self.comp.id);
         let ends = self.rows.iter().flat_map(|row| &row.clips);
         let last = ends.map(Clip::place_end).max();
@@ -922,15 +882,7 @@ impl<'a> Edit<'a> {
         if ripple {
             // Spans that touch close as one, and the latest closes first so
             // an earlier one is still where it was read.
-            spans.sort();
-            let mut merged: Vec<(Rational, Rational)> = Vec::new();
-            for (start, end) in spans {
-                match merged.last_mut() {
-                    Some(last) if start <= last.1 => last.1 = last.1.max(end),
-                    _ => merged.push((start, end)),
-                }
-            }
-            for (start, end) in merged.into_iter().rev() {
+            for (start, end) in sequence::spoken::merged(spans).into_iter().rev() {
                 self.ripple(end, start.checked_sub(end)?)?;
             }
         }
@@ -1274,22 +1226,36 @@ impl<'a> Edit<'a> {
         if rows.iter().any(|r| self.rows[*r].locked) {
             return Err(BridgeCutResult::Locked.into());
         }
+        let gone = self.take_span(start, end, &rows, ripple)?;
+        if !ripple && gone == 0 {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        self.commit()
+    }
+
+    /// Cut `rows` at both ends of a span and delete what lies between, and
+    /// with `ripple` close it. Answers how many clips went.
+    fn take_span(
+        &mut self,
+        start: Rational,
+        end: Rational,
+        rows: &[usize],
+        ripple: bool,
+    ) -> Cut<usize> {
         // Cut at both ends, and what still shares the span lies inside it.
-        self.razor(&rows, start, false)?;
-        self.razor(&rows, end, false)?;
+        self.razor(rows, start, false)?;
+        self.razor(rows, end, false)?;
         let mut gone = 0;
         for r in rows {
-            let clips = &mut self.rows[r].clips;
+            let clips = &mut self.rows[*r].clips;
             let had = clips.len();
             clips.retain(|c| !covers(c, start, end));
             gone += had - clips.len();
         }
         if ripple {
             self.ripple(end, start.checked_sub(end)?)?;
-        } else if gone == 0 {
-            return Err(BridgeCutResult::Nothing.into());
         }
-        self.commit()
+        Ok(gone)
     }
 
     fn copy(self, clips: &[Uuid], linked: bool) -> Cut {
@@ -1314,157 +1280,6 @@ impl<'a> Edit<'a> {
         let mut copied = COPIED.lock().map_err(|_| BridgeError::WriteFailed)?;
         *copied = Some((self.of.project_id(), held));
         Ok(())
-    }
-
-    fn paste(mut self, at_frame: i64, target: Option<LayerReference>, end_frame: &mut i64) -> Cut {
-        let at = self.time(at_frame.max(0))?;
-        let held = {
-            let copied = COPIED.lock().map_err(|_| BridgeError::ReadFailed)?;
-            match copied.as_ref() {
-                Some((project, held)) if *project == self.of.project_id() => held.clone(),
-                _ => return Err(BridgeCutResult::Nothing.into()),
-            }
-        };
-        let mut clips: Vec<Clip> = Vec::with_capacity(held.len());
-        for h in &held {
-            let mut clip = h.clip.clone();
-            clip.place_start = clip.place_start.checked_add(at)?;
-            clips.push(clip);
-        }
-        let of_lane = |sound: bool, lane: usize| {
-            let pairs = held.iter().zip(&clips);
-            pairs.filter_map(move |(h, clip)| ((h.sound, h.lane) == (sound, lane)).then_some(clip))
-        };
-
-        // Each lane of the copy, top first with the picture lanes ahead of
-        // the sound, beside how big a layer made for it would be, and the row
-        // it lands on once that is known.
-        type Lane = ((bool, usize), (f64, f64), Option<usize>);
-        let mut lanes: Vec<Lane> = Vec::new();
-        {
-            let proj = self.of.project()?;
-            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-            let doc = state.store.snapshot();
-            let mut keys: Vec<(bool, usize)> = held.iter().map(|h| (h.sound, h.lane)).collect();
-            keys.sort_unstable();
-            keys.dedup();
-            for (sound, lane) in keys {
-                let mut look = None;
-                for clip in of_lane(sound, lane) {
-                    // A composition cannot play itself, and an item deleted
-                    // since the copy is nothing to paste.
-                    let size = match clip.source {
-                        ClipSource::Comp(id) if id == self.comp.id => {
-                            return Err(BridgeCutResult::WrongLayer.into())
-                        }
-                        ClipSource::Comp(id) => {
-                            let inner = doc.comp(id).ok_or(BridgeCutResult::Nothing)?;
-                            (f64::from(inner.width), f64::from(inner.height))
-                        }
-                        ClipSource::Footage(id) => {
-                            let Some(ProjectItem::Footage(f)) = doc.item(id) else {
-                                return Err(BridgeCutResult::Nothing.into());
-                            };
-                            let (_, w, h) =
-                                CompositionReference::footage_span_and_size(&state, f, &self.comp);
-                            (w, h)
-                        }
-                        ClipSource::Solid(id) => {
-                            let sd = doc.solid(id).ok_or(BridgeCutResult::Nothing)?;
-                            (f64::from(sd.width), f64::from(sd.height))
-                        }
-                    };
-                    look.get_or_insert(size);
-                }
-                lanes.extend(look.map(|look| ((sound, lane), look, None)));
-            }
-        }
-        let Some(&((lead_sound, lead_lane), ..)) = lanes.first() else {
-            return Err(BridgeCutResult::Nothing.into());
-        };
-        let of_kind = |sound: bool| -> Vec<usize> {
-            let kind = |r: &usize| self.rows[*r].audio_only == sound;
-            (0..self.rows.len()).filter(kind).collect()
-        };
-        let (pictures, sounds) = (of_kind(false), of_kind(true));
-        // The target is for the top-most picture clip, or the top-most sound
-        // clip when no picture was copied: its place among rows of that kind.
-        let target = match target {
-            Some(layer) => {
-                let r = self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?;
-                if self.rows[r].audio_only != lead_sound {
-                    return Err(BridgeCutResult::WrongLayer.into());
-                }
-                let rows = if lead_sound { &sounds } else { &pictures };
-                rows.iter().position(|o| *o == r)
-            }
-            None => None,
-        };
-        let mut next_sound = 0;
-        for ((sound, lane), _, landing) in &mut lanes {
-            let rows = if *sound { &sounds } else { &pictures };
-            *landing = match target {
-                // As a move chooses rows: the lanes of the lead clip's kind
-                // cross as many layers as it does, and the rest keep theirs.
-                Some(to) if *sound == lead_sound => rows.get(*lane - lead_lane + to).copied(),
-                Some(_) => rows.get(*lane).copied(),
-                // As a placed clip chooses them: a sound lane takes the first
-                // sound layer with room, below the one the lane above took,
-                // and a picture lane a layer of its own.
-                None if *sound => {
-                    let free = |i: &usize| {
-                        let row = &self.rows[rows[*i]];
-                        let mut mine = of_lane(*sound, *lane);
-                        !row.locked
-                            && !mine.any(|m| {
-                                let (start, end) = (m.place_start, m.place_end());
-                                row.clips.iter().any(|c| covers(c, start, end))
-                            })
-                    };
-                    let found = (next_sound..rows.len()).find(free);
-                    next_sound = found.map_or(rows.len(), |i| i + 1);
-                    found.map(|i| rows[i])
-                }
-                None => None,
-            };
-            if landing.is_some_and(|r| self.rows[r].locked) {
-                return Err(BridgeCutResult::Locked.into());
-            }
-        }
-        // A lane with no layer gets one. A picture layer missing below the
-        // ones a target counted from goes under the last of them, and the
-        // bottom lane is made first, so each lands above the one before it
-        // and the lanes keep their order.
-        let under = pictures.last().and_then(|r| {
-            let id = self.rows[*r].id;
-            self.comp.layers.iter().position(|l| l.id == id)
-        });
-        let (width, height) = (f64::from(self.comp.width), f64::from(self.comp.height));
-        for ((sound, _), (w, h), landing) in lanes.iter_mut().rev() {
-            if landing.is_some() {
-                continue;
-            }
-            let (w, h) = if *sound { (width, height) } else { (*w, *h) };
-            let made = self.add_row(None, *sound, w, h);
-            if let (false, Some(_), Some(under)) = (*sound, target, under) {
-                self.rows[made].at = under + 1;
-            }
-            *landing = Some(made);
-        }
-
-        let mut lifted: Vec<(usize, Clip)> = Vec::with_capacity(clips.len());
-        let mut last = at;
-        for (h, clip) in held.iter().zip(clips) {
-            let lane = lanes.iter().find(|(key, ..)| *key == (h.sound, h.lane));
-            if let Some((.., Some(row))) = lane {
-                last = last.max(clip.place_end());
-                lifted.push((*row, clip));
-            }
-        }
-        renew(lifted.iter_mut().map(|(_, clip)| clip));
-        self.land(lifted, false)?;
-        *end_frame = self.frame_up(last)?;
-        self.commit()
     }
 }
 
@@ -1538,6 +1353,26 @@ impl CompositionReference {
         at_frame: i64,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| edit.place_comp(target, comp.id, at_frame))
+    }
+
+    /// **Place rows** in Cut: one clip of the graphics template `template`
+    /// for each of `rows` of its data, one after another from `at_frame` on a
+    /// new track, each following its row and as long as its row says.
+    #[frb(sync)]
+    pub fn cut_place_rows(
+        &self,
+        template: &CompositionReference,
+        rows: Vec<u32>,
+        at_frame: i64,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        let doc = self.document()?;
+        let copies = rows
+            .into_iter()
+            .filter_map(|row| crate::api::template::rows::row_copy(template, &doc, row))
+            .collect();
+        cut(self, |edit| {
+            edit.place_copies(template.id, at_frame, copies)
+        })
     }
 
     /// Put a solid down at `at_frame` as one clip, as long as a still, on
@@ -1930,14 +1765,21 @@ impl CompositionReference {
     /// under `frame` is showing, read through the clip's Retime.
     ///
     /// The clip is the one on `layer`, or without one on the top-most
-    /// unlocked picture Sequence layer that has a clip there. `None` over a
-    /// gap, and for a clip that plays a composition.
+    /// unlocked picture Sequence layer that has a clip there. A multicam
+    /// clip answers for its angle's footage. `None` over a gap, and for a
+    /// clip that plays any other composition.
     #[frb(sync)]
     pub fn cut_match_frame(
         &self,
         frame: i64,
         layer: Option<LayerReference>,
     ) -> Result<Option<BridgeMatchFrame>, BridgeError> {
+        let doc = self
+            .project()?
+            .read()
+            .map_err(|_| BridgeError::ReadFailed)?
+            .store
+            .snapshot();
         let comp = self.composition()?;
         let at = comp.frame_rate.time_of_frame(frame);
         let at = at.map_err(|_| BridgeError::InvalidTime)?.0;
@@ -1949,7 +1791,7 @@ impl CompositionReference {
             let local = at.checked_sub(l.start_offset.0).ok()?;
             let there = |c: &&Clip| c.place_start <= local && local < c.place_end();
             let clip = clips.iter().filter(there).max_by_key(|c| c.place_start)?;
-            Some((clip.source, clip.source_at(local)?))
+            lumit_core::multicam::footage_at(&doc, clip, local)
         };
         let found = match layer {
             Some(layer) => comp
@@ -1965,17 +1807,17 @@ impl CompositionReference {
                 open.find_map(under)
             }
         };
-        let Some((ClipSource::Footage(item), shown)) = found else {
+        let Some(shown) = found else {
             return Ok(None);
         };
         Ok(Some(BridgeMatchFrame {
             footage: FootageReference {
                 project: self.project_id(),
-                id: item,
+                id: shown.item,
             },
             source_time: BridgeRational {
-                num: shown.num(),
-                den: shown.den(),
+                num: shown.source_time.num(),
+                den: shown.source_time.den(),
             },
         }))
     }

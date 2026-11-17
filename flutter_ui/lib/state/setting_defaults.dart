@@ -26,6 +26,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-share-down-limit': w.shareDownLimit,
     'settings-discord-status': w.discordStatus,
     'settings-live-endpoint': w.liveEndpoint,
+    'settings-tangent-panels': w.tangentPanels,
     'settings-blender': w.blenderPath,
     'settings-scripts-folder': w.scriptsFolder,
     for (final event in ScriptEvent.values)
@@ -58,6 +59,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-wire-style': i.wireStyle,
     'settings-multiwave': i.multiwaveWaveforms,
     'settings-waveform-from-bottom': i.waveformsFromBottom,
+    'settings-waveform-scale': i.waveformScale,
     // Timeline
     'settings-retime-speed-lens': i.retimeOpensToSpeed,
     'settings-retime-in-seconds': i.retimeInSeconds,
@@ -85,6 +87,8 @@ final Map<String, Object?> shippedSettings = () {
     // Audio
     'settings-audio-device': w.audioDevice,
     'settings-audio-offset': w.audioOffsetMs,
+    'settings-touch-return': w.touchReturnMs,
+    'settings-scrub-on-drag': w.scrubOnDrag,
     'settings-normalise-target': w.normaliseTargetDb,
     // Autosave
     'settings-autosave-minutes': w.autosaveMinutes,
@@ -93,6 +97,7 @@ final Map<String, Object?> shippedSettings = () {
     'settings-export-preset': '',
     'settings-export-template': '',
     'settings-export-destination': 'ask',
+    'settings-notify-exports': w.notifyExports,
     // Preview and cache
     'settings-playback-mode': p.playback,
     'settings-full-res-drags': p.fullResDragPreviews,

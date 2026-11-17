@@ -98,17 +98,21 @@ pub fn tail(layer: &Layer, at: usize, follow: Follow) -> Layer {
 /// time `lt`, each with the offset a motion field measured against it is filed
 /// under. An Echo reads only as many as it shows.
 #[must_use]
-pub fn neighbour_offsets(tail: &Layer, lt: f64, dt: f64) -> Vec<(i32, Option<i32>)> {
+pub fn neighbour_offsets(
+    tail: &Layer,
+    lt: f64,
+    dt: f64,
+) -> Vec<(i32, Option<(i32, crate::fx::temporal::FlowWant)>)> {
     let fx = &tail.effects;
-    let flow = crate::fx::temporal::stack_flow_sides(fx, true, |_| false);
-    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side)| side).collect();
+    let flow = crate::fx::temporal::stack_flow_sides_wanted(fx, true, |_| false);
+    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side, _)| side).collect();
     if crate::fx::temporal::stack_is_temporal(fx, true) {
         let shown = fx
             .first()
             .filter(|e| live(e, ECHO))
             .map_or(16, |e| crate::fx::effects::echo::shown(e, lt));
         offsets.extend(
-            crate::fx::temporal::stack_temporal_window(fx, true, lt / dt)
+            crate::fx::temporal::stack_temporal_window(fx, true, lt / dt, 1.0 / dt)
                 .into_iter()
                 .filter(|&o| o >= -shown),
         );
@@ -119,10 +123,8 @@ pub fn neighbour_offsets(tail: &Layer, lt: f64, dt: f64) -> Vec<(i32, Option<i32
     offsets
         .into_iter()
         .map(|o| {
-            (
-                o,
-                flow.iter().find(|&&(_, side)| side == o).map(|&(f, _)| f),
-            )
+            let measure = flow.iter().find(|&&(_, side, _)| side == o);
+            (o, measure.map(|&(f, _, want)| (f, want)))
         })
         .collect()
 }
@@ -132,7 +134,13 @@ pub fn neighbour_offsets(tail: &Layer, lt: f64, dt: f64) -> Vec<(i32, Option<i32
 /// or back, so the echoes are as far apart as it says. The offset stays the
 /// echo's place in the trail, which is what the kernel reads it by.
 #[must_use]
-pub fn neighbour_times(tail: &Layer, t: f64, lt: f64, dt: f64) -> Vec<(i32, f64, Option<i32>)> {
+#[allow(clippy::type_complexity)]
+pub fn neighbour_times(
+    tail: &Layer,
+    t: f64,
+    lt: f64,
+    dt: f64,
+) -> Vec<(i32, f64, Option<(i32, crate::fx::temporal::FlowWant)>)> {
     let spacing = tail
         .effects
         .first()

@@ -15,9 +15,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::decode::DecodedFrame;
+use crate::encode::gif::{GifEncoder, GifOptions};
 use crate::encode::{
-    AudioSettings, BitDepth, ColourTags, Encoder, GifEncoder, GifOptions, ImageFormat,
-    ImageSequenceEncoder, Metadata, VideoSettings,
+    AudioSettings, BitDepth, ColourTags, Encoder, ImageFormat, ImageSequenceEncoder, Metadata,
+    VideoSettings,
 };
 use crate::index::{FrameIndex, IndexEntry};
 use crate::probe::MediaProbe;
@@ -190,6 +191,26 @@ impl Encoder {
         _metadata: &Metadata,
     ) -> Result<Self, MediaError> {
         Err(no_ffmpeg())
+    }
+
+    pub fn open_with_subtitles(
+        _path: &Path,
+        _video: Option<&VideoSettings>,
+        _audio: Option<&AudioSettings>,
+        _languages: &[String],
+        _metadata: &Metadata,
+    ) -> Result<Self, MediaError> {
+        Err(no_ffmpeg())
+    }
+
+    pub fn write_subtitle(
+        &mut self,
+        _stream: usize,
+        _start_ms: i64,
+        _end_ms: i64,
+        _lines: &[String],
+    ) -> Result<(), MediaError> {
+        match self.0 {}
     }
 
     pub fn encoder_name(&self) -> &'static str {

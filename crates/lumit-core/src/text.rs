@@ -22,7 +22,7 @@
 //!   a letter half in the range is moved half as far.
 //!
 //! **Deliberately small for v1** (the decision entry argues it): one selector
-//! per animator, two shapes rather than After Effects' six, no random order, no
+//! per animator, four shapes rather than After Effects' six, no random order, no
 //! wiggle, and every animator carries the same five property groups rather than
 //! a menu of thirty. The shape of the model is AE's, so the rest bolts on; what
 //! is here is the part that makes cascade titles.
@@ -33,11 +33,21 @@ use crate::anim::Property;
 
 pub mod ports;
 pub mod selector;
+mod spoken;
 #[cfg(test)]
 mod tests;
 
-use ports::{is_text_port, parse_animator_port};
-use selector::{RangeSelector, SelectorBasis, SelectorKind};
+use selector::{Near, RangeSelector, SelectorBasis, SelectorKind, SelectorMode};
+
+/// One spoken word: which characters of the resolved text it is, and when it
+/// is said, in the layer's own seconds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpokenWord {
+    pub chars: std::ops::Range<usize>,
+    pub start: f64,
+    pub end: f64,
+    pub emphasis: bool,
+}
 
 /// serde default for [`RangeSelector::end`]: the whole run.
 fn hundred() -> Property {
@@ -147,6 +157,33 @@ pub struct TextAnimator {
         skip_serializing_if = "is_static_zero"
     )]
     pub fill_b: Property,
+    /// Per cent. A box drawn behind the letters the animator reaches, in the
+    /// style's plate padding and corner radius.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub box_opacity: Property,
+    /// The box's colour, scene-linear.
+    #[serde(
+        default = "box_red",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_box_red"
+    )]
+    pub box_r: Property,
+    #[serde(
+        default = "box_green",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_box_green"
+    )]
+    pub box_g: Property,
+    #[serde(
+        default = "box_blue",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_box_blue"
+    )]
+    pub box_b: Property,
     /// **Variable font axes**: where a reached letter is set on its font's
     /// own axes, such as weight or width. Unlike the offsets above, each is a
     /// place on the axis rather than an amount added, so a weight of 900 asks
@@ -209,6 +246,37 @@ fn is_default_selector(s: &RangeSelector) -> bool {
     *s == RangeSelector::default()
 }
 
+/// A soft yellow, the box's colour until one is picked.
+const BOX: [f64; 3] = [1.0, 0.75, 0.15];
+
+fn box_red() -> Property {
+    Property::fixed(BOX[0])
+}
+
+fn box_green() -> Property {
+    Property::fixed(BOX[1])
+}
+
+fn box_blue() -> Property {
+    Property::fixed(BOX[2])
+}
+
+fn is_static(p: &Property, v: f64) -> bool {
+    matches!(p.animation, crate::anim::Animation::Static(s) if s == v) && p.extra.is_empty()
+}
+
+fn is_static_box_red(p: &Property) -> bool {
+    is_static(p, BOX[0])
+}
+
+fn is_static_box_green(p: &Property) -> bool {
+    is_static(p, BOX[1])
+}
+
+fn is_static_box_blue(p: &Property) -> bool {
+    is_static(p, BOX[2])
+}
+
 impl TextAnimator {
     /// A fresh animator that changes nothing until a number is moved.
     #[must_use]
@@ -228,10 +296,20 @@ impl TextAnimator {
             fill_r: Property::zero(),
             fill_g: Property::zero(),
             fill_b: Property::zero(),
+            box_opacity: Property::zero(),
+            box_r: box_red(),
+            box_g: box_green(),
+            box_b: box_blue(),
             axes: Vec::new(),
             properties: None,
             extra: serde_json::Map::new(),
         }
+    }
+
+    /// True when the animator can draw a box behind its letters.
+    #[must_use]
+    pub fn has_box(&self) -> bool {
+        !is_static_zero(&self.box_opacity)
     }
 }
 
@@ -255,6 +333,8 @@ pub struct GlyphXform {
     /// px@comp away from the eye, and degrees about x and y. A solid's alone.
     pub depth: f32,
     pub turn: [f32; 2],
+    /// The box behind the letter: scene-linear colour and its alpha, 0–1.
+    pub plate: [f32; 4],
     /// Where the letter is set on its font's axes, relative to the layer's own
     /// setting, which only the font knows.
     pub axes: GlyphAxes,
@@ -270,6 +350,7 @@ impl Default for GlyphXform {
             fill: [0.0, 0.0, 0.0],
             depth: 0.0,
             turn: [0.0, 0.0],
+            plate: [0.0; 4],
             axes: GlyphAxes::default(),
         }
     }
@@ -387,27 +468,19 @@ pub fn unit_indices(text: &str, basis: SelectorBasis) -> (Vec<usize>, usize) {
 /// Two animators reaching the same letter **compose**: their pushes, turns and
 /// tints add, their scales and opacities multiply. That is the only combination
 /// that reads as "and also" rather than "instead of", and it is what lets a
-/// fade animator and a drop animator be written separately.
+/// fade animator and a drop animator be written separately. Their boxes lie
+/// one over the other.
+///
+/// `spoken` is the words' timing, for the selectors that follow speech. An
+/// ordinary Text layer hands in none.
 #[must_use]
-pub fn glyph_xforms(animators: &[TextAnimator], text: &str, lt: f64) -> Vec<GlyphXform> {
-    glyph_xforms_near(animators, text, lt, &Near::default())
-}
-
-/// Where a Proximity selector measures from: the middle of every character
-/// in the text layer's own pixels, and the targets' anchors there.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Near {
-    /// One per character; `None` for a character with no place, such as a
-    /// line break. Empty when the letters weren't laid out.
-    pub middles: Vec<Option<[f32; 2]>>,
-    pub targets: Vec<(uuid::Uuid, [f32; 2])>,
-}
-
-impl Near {
-    fn target(&self, id: Option<uuid::Uuid>) -> Option<[f32; 2]> {
-        let id = id?;
-        self.targets.iter().find(|(t, _)| *t == id).map(|(_, p)| *p)
-    }
+pub fn glyph_xforms(
+    animators: &[TextAnimator],
+    text: &str,
+    lt: f64,
+    spoken: &[SpokenWord],
+) -> Vec<GlyphXform> {
+    glyph_xforms_near(animators, text, lt, spoken, &Near::default())
 }
 
 /// [`glyph_xforms`] with the letters' places, which a Proximity selector
@@ -417,6 +490,7 @@ pub fn glyph_xforms_near(
     animators: &[TextAnimator],
     text: &str,
     lt: f64,
+    spoken: &[SpokenWord],
     near: &Near,
 ) -> Vec<GlyphXform> {
     if animators.is_empty() {
@@ -428,33 +502,40 @@ pub fn glyph_xforms_near(
     }
     let mut out = vec![GlyphXform::default(); count];
     for animator in animators {
-        let (units, total) = unit_indices(text, animator.selector.basis);
-        let weights = match animator.selector.kind {
-            SelectorKind::Range => animator.selector.weights_at(total, lt),
-            SelectorKind::Wiggly => animator.selector.wiggly_weights(total, lt),
-            SelectorKind::Proximity => {
-                // A unit's middle is the mean of its characters' middles, so a
-                // word is measured from its own middle.
-                let mut sums = vec![([0.0f32; 2], 0u32); total];
-                for (ch, unit) in units.iter().enumerate() {
-                    if let (Some(Some(m)), Some(sum)) = (near.middles.get(ch), sums.get_mut(*unit))
-                    {
-                        sum.0[0] += m[0];
-                        sum.0[1] += m[1];
-                        sum.1 += 1;
+        let weights: Vec<f32> = if animator.selector.mode == SelectorMode::Range {
+            let (units, total) = unit_indices(text, animator.selector.basis);
+            let weights = match animator.selector.kind {
+                SelectorKind::Range => animator.selector.weights_at(total, lt),
+                SelectorKind::Wiggly => animator.selector.wiggly_weights(total, lt),
+                SelectorKind::Proximity => {
+                    // A unit's middle is the mean of its characters' middles, so
+                    // a word is measured from its own middle.
+                    let mut sums = vec![([0.0f32; 2], 0u32); total];
+                    for (ch, unit) in units.iter().enumerate() {
+                        if let (Some(Some(m)), Some(sum)) =
+                            (near.middles.get(ch), sums.get_mut(*unit))
+                        {
+                            sum.0[0] += m[0];
+                            sum.0[1] += m[1];
+                            sum.1 += 1;
+                        }
                     }
+                    #[allow(clippy::cast_precision_loss)] // a word is short
+                    let middles: Vec<Option<[f32; 2]>> = sums
+                        .iter()
+                        .map(|(s, n)| (*n > 0).then(|| [s[0] / *n as f32, s[1] / *n as f32]))
+                        .collect();
+                    animator.selector.proximity_weights(
+                        &middles,
+                        near.target(animator.selector.target),
+                        lt,
+                    )
                 }
-                #[allow(clippy::cast_precision_loss)] // a word is short
-                let middles: Vec<Option<[f32; 2]>> = sums
-                    .iter()
-                    .map(|(s, n)| (*n > 0).then(|| [s[0] / *n as f32, s[1] / *n as f32]))
-                    .collect();
-                animator.selector.proximity_weights(
-                    &middles,
-                    near.target(animator.selector.target),
-                    lt,
-                )
-            }
+            };
+            let at = |u: &usize| weights.get(*u).copied().unwrap_or(0.0);
+            units.iter().map(at).collect()
+        } else {
+            spoken::weights(&animator.selector, count, lt, spoken)
         };
         if weights.is_empty() {
             continue;
@@ -484,10 +565,16 @@ pub fn glyph_xforms_near(
             animator.rotation_x.value_at(lt) as f32,
             animator.rotation_y.value_at(lt) as f32,
         );
-        for (i, x) in out.iter_mut().enumerate() {
-            let Some(w) = units.get(i).and_then(|u| weights.get(*u)).copied() else {
-                continue;
-            };
+        #[allow(clippy::cast_possible_truncation)] // per cent and colour, f32 pictures
+        let (box_opacity, box_colour) = (
+            animator.box_opacity.value_at(lt) as f32 / 100.0,
+            [
+                animator.box_r.value_at(lt) as f32,
+                animator.box_g.value_at(lt) as f32,
+                animator.box_b.value_at(lt) as f32,
+            ],
+        );
+        for (x, &w) in out.iter_mut().zip(&weights) {
             if w == 0.0 {
                 continue;
             }
@@ -508,6 +595,16 @@ pub fn glyph_xforms_near(
             for (tag, value) in &axes {
                 x.axes.mix(*tag, *value, w);
             }
+            // A later animator's box lies over an earlier one's.
+            let a = (w * box_opacity).clamp(0.0, 1.0);
+            if a > 0.0 {
+                let under = x.plate[3] * (1.0 - a);
+                let total = a + under;
+                for (c, top) in box_colour.iter().enumerate() {
+                    x.plate[c] = (top * a + x.plate[c] * under) / total;
+                }
+                x.plate[3] = total;
+            }
         }
     }
     out
@@ -520,6 +617,10 @@ fn is_default<T: Default + PartialEq>(v: &T) -> bool {
 }
 
 fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_nought(v: &f32) -> bool {
     *v == 0.0
 }
 
@@ -553,6 +654,25 @@ fn black() -> crate::model::LinearColour {
 
 fn is_black(c: &crate::model::LinearColour) -> bool {
     *c == crate::model::LinearColour::BLACK
+}
+
+/// The plate's colour until one is picked: black, a little see-through.
+const PLATE: crate::model::LinearColour = crate::model::LinearColour([0.0, 0.0, 0.0, 0.6]);
+
+fn plate() -> crate::model::LinearColour {
+    PLATE
+}
+
+fn is_plate(c: &crate::model::LinearColour) -> bool {
+    *c == PLATE
+}
+
+fn plate_padding() -> f64 {
+    12.0
+}
+
+fn is_plate_padding(v: &f64) -> bool {
+    *v == 12.0
 }
 
 /// Whether pairs of letters are pulled together by the font's own kerning.
@@ -610,6 +730,15 @@ pub enum TextAlign {
     Left,
     Centre,
     Right,
+}
+
+/// Where the lines sit in a box of fixed height.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum VerticalAlign {
+    #[default]
+    Top,
+    Middle,
+    Bottom,
 }
 
 /// How a Text layer's letters are set: the font, the spacing, the scale and
@@ -686,6 +815,21 @@ pub struct TextStyle {
     /// the letter beside it.
     #[serde(default, skip_serializing_if = "is_default")]
     pub strokes_together: bool,
+    /// A plate drawn behind the words.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub plate_on: bool,
+    /// Kept while the plate is off, the same as the outline's.
+    #[serde(default = "plate", skip_serializing_if = "is_plate")]
+    pub plate: crate::model::LinearColour,
+    /// Px of plate round the words.
+    #[serde(default = "plate_padding", skip_serializing_if = "is_plate_padding")]
+    pub plate_padding: f64,
+    /// Px, the plate's corners.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub plate_radius: f64,
+    /// One plate per line. Off puts one round the whole block.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub plate_lines: bool,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -714,6 +858,11 @@ impl Default for TextStyle {
             stroke_width: 1.0,
             stroke_over: true,
             strokes_together: false,
+            plate_on: false,
+            plate: PLATE,
+            plate_padding: plate_padding(),
+            plate_radius: 0.0,
+            plate_lines: false,
             extra: serde_json::Map::new(),
         }
     }
@@ -751,6 +900,10 @@ pub struct ParagraphStyle {
     /// Does nothing without a box.
     #[serde(default, skip_serializing_if = "is_default")]
     pub justify: bool,
+    /// Shrink to fit: no line wraps, and the words are set smaller until the
+    /// longest line fits the box. Does nothing without a box.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub shrink: bool,
     /// Px in from the left edge of the block.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub indent_left: f64,
@@ -766,6 +919,13 @@ pub struct ParagraphStyle {
     /// Px of room below every line but the last.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub space_after: f64,
+    /// Px the block is tall. Nought grows the block with its lines. Single
+    /// precision, so a text layer stays as small as it was.
+    #[serde(default, skip_serializing_if = "is_nought")]
+    pub box_height: f32,
+    /// Where the lines sit in that height.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub vertical: VerticalAlign,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -808,92 +968,6 @@ static GLYPH_MIDDLES: std::sync::OnceLock<GlyphMiddles> = std::sync::OnceLock::n
 /// letter.
 pub fn install_glyph_middles(middles: GlyphMiddles) {
     let _ = GLYPH_MIDDLES.set(middles);
-}
-
-/// What each character of `layer`'s words `line` is asked to do at comp time
-/// `t_comp`. The same as [`glyph_xforms`], with every Proximity selector
-/// measured against where its target layer is at that moment.
-#[must_use]
-pub fn layer_glyph_xforms(
-    doc: &std::sync::Arc<crate::model::Document>,
-    comp: &crate::model::Composition,
-    layer: &crate::model::Layer,
-    document: &crate::model::TextDocument,
-    line: &str,
-    t_comp: f64,
-) -> Vec<GlyphXform> {
-    let lt = crate::time::layer_time(t_comp, layer.start_offset.0);
-    let near = near_of(doc, comp, layer, document, line, t_comp);
-    // A number a driver is wired into on the layer's Source box follows the
-    // driver instead of its own keys.
-    let driven = if layer.graph.edges.iter().any(|e| is_text_port(&e.to)) {
-        let context = std::sync::Arc::new(crate::expression::ExpressionContext {
-            document: doc.clone(),
-            comp: Some(comp.id),
-            layer: Some(layer.id),
-            comp_time: t_comp,
-            current_depth: 0,
-            inputs: None,
-        });
-        crate::fx::drivers::driven_source_params(&layer.graph, lt, context, None)
-    } else {
-        Vec::new()
-    };
-    if driven.is_empty() {
-        return glyph_xforms_near(&document.animators, line, lt, &near);
-    }
-    let mut animators = document.animators.clone();
-    for (port, value) in driven {
-        let Some((index, name)) = parse_animator_port(&port) else {
-            continue;
-        };
-        if let Some(p) = animators.get_mut(index).and_then(|a| a.number_mut(name)) {
-            *p = Property::fixed(value);
-        }
-    }
-    glyph_xforms_near(&animators, line, lt, &near)
-}
-
-/// The places [`layer_glyph_xforms`] measures from. Nothing at all while no
-/// animator has a Proximity selector, so a layer without one costs no layout.
-#[must_use]
-pub fn near_of(
-    doc: &std::sync::Arc<crate::model::Document>,
-    comp: &crate::model::Composition,
-    layer: &crate::model::Layer,
-    document: &crate::model::TextDocument,
-    line: &str,
-    t_comp: f64,
-) -> Near {
-    let mut ids: Vec<uuid::Uuid> = document
-        .animators
-        .iter()
-        .filter(|a| a.selector.kind == SelectorKind::Proximity)
-        .filter_map(|a| a.selector.target)
-        .collect();
-    ids.sort_unstable();
-    ids.dedup();
-    if ids.is_empty() {
-        return Near::default();
-    }
-    #[allow(clippy::cast_possible_truncation)] // px
-    let targets = ids
-        .into_iter()
-        .filter(|id| *id != layer.id)
-        .filter_map(|id| {
-            let target = comp.layers.iter().find(|l| l.id == id)?;
-            let (x, y) = crate::expression::space::anchor_in(doc, comp, target, layer, t_comp)?;
-            Some((id, [x as f32, y as f32]))
-        })
-        .collect();
-    let lt = crate::time::layer_time(t_comp, layer.start_offset.0);
-    Near {
-        middles: GLYPH_MIDDLES
-            .get()
-            .map(|middles| middles(layer, document, line, lt))
-            .unwrap_or_default(),
-        targets,
-    }
 }
 
 /// The box [`install_words_box`] measures, or `None` before it is installed.

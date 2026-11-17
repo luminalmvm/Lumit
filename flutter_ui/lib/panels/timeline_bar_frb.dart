@@ -18,6 +18,9 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/share_marks.dart';
+import '../state/caption_tracks.dart';
+import 'copy_ends.dart';
+import 'timeline_captions_frb.dart' show CaptionMarksPainter;
 import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
@@ -387,6 +390,9 @@ class Bar extends StatefulWidget {
   /// moment the hand closes, not the one the panel last built with.
   final SelectionMove Function()? selectionMove;
 
+  /// A shut caption layer's captions, marked faintly along its bar.
+  final CaptionTrack? captions;
+
   const Bar({
     super.key,
     required this.comp,
@@ -409,6 +415,7 @@ class Bar extends StatefulWidget {
     this.showName = false,
     this.quantiseSound = true,
     this.selectionMove,
+    this.captions,
   });
 
   @override
@@ -1084,6 +1091,19 @@ class _BarState extends State<Bar> {
                               ),
                             ),
                           ),
+                        if (widget.captions case final track?)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: CaptionMarksPainter(
+                                  track: track,
+                                  axis: widget.axis,
+                                  left: left,
+                                  ink: t.surface0,
+                                ),
+                              ),
+                            ),
+                          ),
                         // The two trim zones say so under the pointer: a bar
                         // whose ends can be taken hold of should not have to be
                         // discovered by trial. Inside the gesture detector, not
@@ -1092,6 +1112,23 @@ class _BarState extends State<Bar> {
                           _trimCursor(width, left: true),
                           _trimCursor(width, left: false),
                         ],
+                        // A copy of a graphics template shades the stretches
+                        // it plays its intro and its outro in.
+                        if (info.copy case final copy?)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: CopyEndsPainter(
+                                  copy: copy,
+                                  pxPerSecond: widget.fps > 0
+                                      ? (widget.axis.xOf(widget.fps.round()) -
+                                          widget.axis.xOf(0))
+                                      : 0,
+                                  ink: t.surface0,
+                                ),
+                              ),
+                            ),
+                          ),
                         // The corner marks: this bar is as long as its source
                         // allows in that direction.
                         Positioned.fill(

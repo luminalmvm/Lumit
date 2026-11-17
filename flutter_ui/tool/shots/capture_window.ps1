@@ -72,8 +72,8 @@ if ($hwnd -eq [IntPtr]::Zero) {
 }
 
 if ($Width -gt 0 -and $Height -gt 0) {
-  # 0x0014 = SWP_NOMOVE | SWP_NOZORDER
-  [void][Win]::SetWindowPos($hwnd, [IntPtr]::Zero, 0, 0, $Width, $Height, 0x0014)
+  # 0x0016 = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+  [void][Win]::SetWindowPos($hwnd, [IntPtr]::Zero, 0, 0, $Width, $Height, 0x0016)
   Start-Sleep -Milliseconds 700
 }
 

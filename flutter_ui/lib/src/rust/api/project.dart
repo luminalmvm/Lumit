@@ -9,11 +9,18 @@ import '../lib.dart';
 import 'cache.dart';
 import 'colour.dart';
 import 'composition.dart';
+import 'cut.dart';
+import 'cut/transcript.dart';
 import 'effect.dart';
 import 'extensions.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'grade_groups.dart';
+import 'grade_memories.dart';
+import 'grade_shared.dart';
+import 'import.dart';
 import 'layer.dart';
+import 'multicam/make.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
@@ -22,8 +29,11 @@ import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'template/library.dart';
+import 'transcript.dart';
+import 'vector.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bin_folder`, `file_footage`, `file_into`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
+// These functions are ignored because they are not marked as `pub`: `bin_folder`, `file_footage`, `file_into`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `place_layers`, `save_with`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
@@ -338,6 +348,21 @@ class ProjectReference {
         that: this,
       );
 
+  /// Put a cut together from what [`Self::find_script`] found: the best
+  /// take of each line laid down in the script's order, with a little room
+  /// either side of its words, as a picture clip and its linked sound. A
+  /// line's other good takes go on its clips, so T steps through them.
+  /// Into `into` at `at_frame` as an insert, or into a new composition
+  /// called `name`. The lines nobody said come back in `missing`. One undo
+  /// step, taken back whole when the cut is refused.
+  BridgeAssembled assembleFromScript(
+          {required BridgeScriptFound found,
+          CompositionReference? into,
+          required int atFrame,
+          required String name}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceAssembleFromScript(
+          that: this, found: found, into: into, atFrame: atFrame, name: name);
+
   /// Write a rotating autosave beside `project_path`, keeping `keep` slots.
   ///
   /// Deliberately does **not** move the project's own path: an autosave is a
@@ -440,6 +465,12 @@ class ProjectReference {
         that: this,
       );
 
+  /// Stop this project's transcription, if one is running.
+  void cancelTranscription() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceCancelTranscription(
+        that: this,
+      );
+
   /// Drop every undo and redo step and leave the document as it is. Under
   /// the project's lock, as undo and redo are.
   void clearHistory() =>
@@ -505,6 +536,27 @@ class ProjectReference {
         that: this,
       );
 
+  /// Correct words, across any number of items, as one undo step. Each
+  /// edit puts `texts` where `remove` words from `at` were: the same number
+  /// keep their times, speaker and paragraph, any other number is spread
+  /// over the old words' stretch, and no texts takes the words out of the
+  /// transcript. The media is never touched. Several edits to one item are
+  /// read against the transcript as it stands, so they must not overlap.
+  void correctWords({required List<BridgeWordsEdit> edits}) => BridgeLib
+      .instance.api
+      .crateApiProjectProjectReferenceCorrectWords(that: this, edits: edits);
+
+  /// A new group with nothing in its grades yet, and `shots` in it, each
+  /// leaving any group it was in. Answers its id.
+  UuidValue createGradeGroup({required List<BridgeShotId> shots}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceCreateGradeGroup(
+          that: this, shots: shots);
+
+  /// Delete a group, and its place in every member's stack.
+  void deleteGradeGroup({required UuidValue group}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceDeleteGradeGroup(
+          that: this, group: group);
+
   /// Throw away the edits a crash left in the journal, for somebody who was
   /// offered them and said no.
   void discardJournal() =>
@@ -545,8 +597,36 @@ class ProjectReference {
           command: command,
           args: args);
 
+  /// Find `script`'s lines in `footage`'s words, for
+  /// [`Self::assemble_from_script`] to lay down. Changes nothing. Not sync:
+  /// it reads every word, and the first footage found to size a new
+  /// composition by.
+  Future<BridgeScriptFound> findScript(
+          {required String script, required List<FootageReference> footage}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceFindScript(
+          that: this, script: script, footage: footage);
+
+  /// Every grade group, in the order they were made. Shared nodes are
+  /// kept with them but listed apart ([`Self::get_shared_grade_nodes`]).
+  List<BridgeGradeGroup> getGradeGroups() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGetGradeGroups(
+        that: this,
+      );
+
+  /// The filled slots, in slot order.
+  List<BridgeGradeMemory> getGradeMemories() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGetGradeMemories(
+        that: this,
+      );
+
   List<ItemReference> getItems() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceGetItems(
+        that: this,
+      );
+
+  /// Every shared node, in the order they were made.
+  List<BridgeSharedNode> getSharedGradeNodes() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGetSharedGradeNodes(
         that: this,
       );
 
@@ -638,6 +718,13 @@ class ProjectReference {
   Future<int?> importLayers({required String path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceImportLayers(that: this, path: path);
 
+  /// Bring the Lottie at `path` into this project as a comp (its precomps as
+  /// comps in a folder named after the file), as one undo step. Its pictures
+  /// are written beside the file, in a folder named after it.
+  Future<BridgeLottieImport> importLottie({required String path}) =>
+      BridgeLib.instance.api
+          .crateApiProjectProjectReferenceImportLottie(that: this, path: path);
+
   /// Whether the document has moved since it was last saved (or opened).
   /// The status bar's saved/unsaved readout. An undo after a save reads as
   /// dirty: the revision moved, and only a save proves the file matches.
@@ -653,6 +740,27 @@ class ProjectReference {
   /// could; a number past either end stops at that end rather than failing.
   void jumpHistory({required int applied}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceJumpHistory(that: this, applied: applied);
+
+  /// Stop making the multicam comp. Nothing is made.
+  void multicamCancel() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceMulticamCancel(
+        that: this,
+      );
+
+  /// Start making a multicam comp of the footage `items`, in that order.
+  /// Refused while another is being made, and with no footage among them.
+  void multicamNew(
+          {required List<UuidValue> items,
+          required BridgeMulticamNew settings}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceMulticamNew(
+          that: this, items: items, settings: settings);
+
+  /// How the multicam comp being made is getting on. Once its files are
+  /// placed, this makes the comp, one undo step, and says so.
+  BridgeMulticamJob multicamPoll() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceMulticamPoll(
+        that: this,
+      );
 
   /// Call the step the open undo group folds into `name` in the History
   /// list, rather than after the first thing done in it. English, translated
@@ -809,6 +917,18 @@ class ProjectReference {
         that: this,
       );
 
+  /// Bring the library template at `path` into this project, answering its
+  /// composition. A project that already holds that version of it answers
+  /// the one it has. The composition is filed in a folder called `folder`,
+  /// made if the project has none of that name.
+  ///
+  /// Placing it on a timeline is the caller's next step, as placing any
+  /// composition is.
+  Future<CompositionReference> placeTemplate(
+          {required String path, required String folder}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferencePlaceTemplate(
+          that: this, path: path, folder: folder);
+
   /// The project's colour shelf, in the order the colours were kept.
   ///
   /// Empty for a project nobody has kept a colour in. The picker reads this
@@ -822,6 +942,16 @@ class ProjectReference {
   void redo() => BridgeLib.instance.api.crateApiProjectProjectReferenceRedo(
         that: this,
       );
+
+  void renameGradeGroup({required UuidValue group, required String name}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceRenameGradeGroup(
+          that: this, group: group, name: name);
+
+  /// Rename a speaker in every transcript and caption layer that has them.
+  /// One undo step.
+  void renameSpeaker({required String speaker, required String name}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceRenameSpeaker(
+          that: this, speaker: speaker, name: name);
 
   /// Open `project_path` and replay its crash journal on top of it.
   ///
@@ -960,6 +1090,13 @@ class ProjectReference {
           .crateApiProjectProjectReferenceSetColourWorkingSpace(
               that: this, fromConfig: fromConfig);
 
+  /// Keep `grade` in `slot`, with its picture, or with `None` empty the
+  /// slot. One undo step.
+  void setGradeMemory(
+          {required int slot, String? grade, required String picture}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetGradeMemory(
+          that: this, slot: slot, grade: grade, picture: picture);
+
   /// Set [`Self::graph_room`]. Anything but 1, 2 or 0 reads as 1. An
   /// ordinary op, so it is undoable and saved in the `.lum`.
   void setGraphRoom({required int frames}) => BridgeLib.instance.api
@@ -978,6 +1115,13 @@ class ProjectReference {
   void setProjectSwatches({required List<BridgeSwatch> swatches}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetProjectSwatches(
           that: this, swatches: swatches);
+
+  /// Say who said each run of words, or nobody with `None`, as one undo
+  /// step. A speaker another item's transcript knows is added to this
+  /// one's list first.
+  void setSpokenSpeaker({required List<BridgeWordRun> runs, String? speaker}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetSpokenSpeaker(
+          that: this, runs: runs, speaker: speaker);
 
   /// Record the arrangement to be written into the file on the next save.
   /// `None`, or JSON that does not parse, clears it rather than failing: a
@@ -1440,6 +1584,31 @@ class ProjectReference {
         that: this,
       );
 
+  /// The templates in this project that the library has a newer version of.
+  List<BridgeTemplateUpdate> templateUpdates() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceTemplateUpdates(
+        that: this,
+      );
+
+  /// Hear `items` and give each its transcript, as each one finishes.
+  ///
+  /// Returns when the job is over. One job runs at a time across Lumit, and
+  /// a second call while one runs is refused. Cancelling keeps every item
+  /// already finished.
+  Future<BridgeTranscribeOutcome> transcribe(
+          {required List<FootageReference> items,
+          required BridgeTranscribeOptions options,
+          RustStreamSink<BridgeTranscribeEvent>? events}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceTranscribe(
+          that: this, items: items, options: options, events: events);
+
+  /// Where this project's transcription has got to, or `None` while none
+  /// runs.
+  BridgeTranscribeEvent? transcriptionProgress() => BridgeLib.instance.api
+          .crateApiProjectProjectReferenceTranscriptionProgress(
+        that: this,
+      );
+
   /// How the interface was arranged when this project was last saved, as the
   /// JSON the frontend itself wrote, or `None` for a project that has
   /// never carried one.
@@ -1470,6 +1639,20 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceUnpack(
           that: this, onProgress: onProgress);
 
+  /// Stop sharing node `node`: each shot that uses it gets its own copy
+  /// where it stood, and the shared node goes. One undo step.
+  void unshareGradeNode({required UuidValue node}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceUnshareGradeNode(that: this, node: node);
+
+  /// **Update**: put the library's newest version of a template in the
+  /// place of the one this project has. The composition keeps its id, so
+  /// every copy still places it, and every copy keeps the values it set, by
+  /// control. One undo step.
+  Future<void> updateTemplate(
+          {required UuidValue comp, required String folder}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceUpdateTemplate(
+          that: this, comp: comp, folder: folder);
+
   /// The project-wide *use proxies* master switch.
   ///
   /// On — the default, and what every project written before proxies existed
@@ -1482,6 +1665,13 @@ class ProjectReference {
   /// to work cannot quietly ship the small picture.
   bool useProxies() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceUseProxies(
+        that: this,
+      );
+
+  /// Every step of every transcription of this project, whoever started it,
+  /// until the project closes.
+  Stream<BridgeTranscribeEvent> watchTranscription() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceWatchTranscription(
         that: this,
       );
 

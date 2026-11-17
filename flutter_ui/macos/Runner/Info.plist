@@ -8,7 +8,7 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
 	<string></string>
-	<!-- .lum / .lumfx / .lumtheme / .lfx / .lumstyle document types. The .icns document icons
+	<!-- .lum / .lumfx / .lumtheme / .lfx / .lumstyle / .lumt document types. The .icns document icons
 	     live in packaging/macos/ and join the bundle's resources with the
 	     macOS pass — until then the types associate with a generic icon.
 	     A double-clicked document arrives as an event, at
@@ -71,6 +71,16 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>io.github.luminalmvm.lumit.extension</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Lumit graphics template</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.luminalmvm.lumit.template</string>
 			</array>
 		</dict>
 	</array>
@@ -158,6 +168,23 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>lfx</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.luminalmvm.lumit.template</string>
+			<key>UTTypeDescription</key>
+			<string>Lumit graphics template</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>lumt</string>
 				</array>
 			</dict>
 		</dict>

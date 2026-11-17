@@ -1,6 +1,6 @@
 //! A text animator's numbers as ports on its layer's Source box.
 
-use super::{SelectorKind, TextAnimator};
+use super::{glyph_xforms_near, GlyphXform, SelectorKind, SpokenWord, TextAnimator};
 use crate::anim::Property;
 
 /// What a text animator's numbers are called on its layer's Source box:
@@ -123,4 +123,49 @@ impl TextAnimator {
             _ => return None,
         })
     }
+}
+
+/// What each character of `layer`'s words `line` is asked to do at comp time
+/// `t_comp`. The same as [`super::glyph_xforms`], with every Proximity selector
+/// measured against where its target layer is at that moment.
+#[must_use]
+pub fn layer_glyph_xforms(
+    doc: &std::sync::Arc<crate::model::Document>,
+    comp: &crate::model::Composition,
+    layer: &crate::model::Layer,
+    document: &crate::model::TextDocument,
+    line: &str,
+    t_comp: f64,
+    spoken: &[SpokenWord],
+) -> Vec<GlyphXform> {
+    let lt = crate::time::layer_time(t_comp, layer.start_offset.0);
+    let near = super::selector::near_of(doc, comp, layer, document, line, t_comp);
+    // A number a driver is wired into on the layer's Source box follows the
+    // driver instead of its own keys.
+    let driven = if layer.graph.edges.iter().any(|e| is_text_port(&e.to)) {
+        let context = std::sync::Arc::new(crate::expression::ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(layer.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        });
+        crate::fx::drivers::driven_source_params(&layer.graph, lt, context, None)
+    } else {
+        Vec::new()
+    };
+    if driven.is_empty() {
+        return glyph_xforms_near(&document.animators, line, lt, spoken, &near);
+    }
+    let mut animators = document.animators.clone();
+    for (port, value) in driven {
+        let Some((index, name)) = parse_animator_port(&port) else {
+            continue;
+        };
+        if let Some(p) = animators.get_mut(index).and_then(|a| a.number_mut(name)) {
+            *p = Property::fixed(value);
+        }
+    }
+    glyph_xforms_near(&animators, line, lt, spoken, &near)
 }

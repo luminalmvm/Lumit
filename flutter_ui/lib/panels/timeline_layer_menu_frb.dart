@@ -3,12 +3,15 @@
 // picture. Built from the menu bar's own rows, so a row here runs the same
 // code as the Layer and Edit menus and wears the same chord.
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart';
+import 'package:lumit_flutter/src/rust/api/template.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,6 +19,7 @@ import '../l10n/engine_labels.dart' show deleteStepName;
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart';
 import '../shell/menu_layer_frb.dart';
+import '../shell/create_captions_dialog_frb.dart' show createCaptionsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
 import 'layer_source_menu.dart';
@@ -25,6 +29,8 @@ import '../state/dock.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
+import 'control_rows.dart' show layerControlRow;
+import 'cut_kinds.dart' show transitionMenu;
 import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
 import 'retime_commands.dart' show reverseRow;
 import 'sequence_view_frb.dart';
@@ -136,7 +142,10 @@ List<MenuEntry> layerMenuEntries(
     if (_styled(kind))
       MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
     if (_sounds(kind))
-      MenuEntry.submenu(l10n.menuAudio, audioRows(app, ui, entry)),
+      MenuEntry.submenu(
+          l10n.menuAudio,
+          audioRows(app, ui, entry,
+              createCaptions: (l) => unawaited(createCaptionsFrb(context, l)))),
     if (kind != BridgeLayerKind.sequence)
       MenuEntry.submenu(l10n.retime, [
         MenuEntry(
@@ -176,6 +185,9 @@ List<MenuEntry> layerMenuEntries(
     if (canReplaceSource(entry))
       ReplaceSourceEntry(() => replaceSourceRows(app, ui)),
     if (creates.isNotEmpty) MenuEntry.submenu(l10n.menuCreate, creates),
+    // Not inside a node graph, whose rows the engine cannot name.
+    if (ui.templateControls.offers(comp))
+      MenuEntry.submenu(l10n.controlsAdd, _controlRows(ui, entry, entries)),
     if (kind == BridgeLayerKind.footage)
       MenuEntry(
           l10n.menuConvertToSequenceLayer,
@@ -312,6 +324,7 @@ List<MenuEntry> layerMenuEntries(
             )),
         action: 'layer.precompose'),
     if (many) MenuEntry(l10n.menuStaggerLayers, () => showStaggerPanel(ui)),
+    if (many) transitionMenu(app, comp, entries),
     if (source != null)
       MenuEntry(l10n.menuRevealInProject, () => revealInProject(ui, source)),
     MenuEntry.divider(),
@@ -329,6 +342,47 @@ List<MenuEntry> layerMenuEntries(
           app.notifyDocumentChanged();
         }),
         action: 'edit.delete.selection'),
+  ];
+}
+
+/// Add to controls ▸: the layer's own rows a control of the composition's
+/// graphics template can name. One that is a control is ticked, and choosing
+/// it removes the control. Every selected layer that has the row goes with
+/// the one clicked, as one undo step.
+List<MenuEntry> _controlRows(LumitUiState ui, BridgeLayerEntry entry,
+    List<BridgeLayerEntry> entries) {
+  final controls = ui.templateControls;
+  bool pictured(BridgeLayerKind kind) =>
+      kind == BridgeLayerKind.footage || kind == BridgeLayerKind.precomp;
+  MenuEntry row(
+      String label, BridgeRowKind kind, bool Function(BridgeLayerKind) has) {
+    BridgeRowRef of(BridgeLayerEntry e) =>
+        layerControlRow(kind, e.layer.internallayerId, label);
+    final on = controls.controlFor(of(entry)) != null;
+    return MenuEntry(
+      label,
+      () {
+        final rows = [
+          of(entry),
+          for (final e in entries)
+            if (e.layer.internallayerId != entry.layer.internallayerId &&
+                has(e.info.kind))
+              of(e),
+        ];
+        on ? controls.remove(rows) : controls.add(rows);
+      },
+      checked: on,
+    );
+  }
+
+  final kind = entry.info.kind;
+  return [
+    if (kind == BridgeLayerKind.text)
+      row(l10n.controlsWords, BridgeRowKind.text,
+          (k) => k == BridgeLayerKind.text),
+    if (pictured(kind))
+      row(l10n.controlsFootage, BridgeRowKind.source, pictured),
+    row(l10n.controlsVisibility, BridgeRowKind.visible, (_) => true),
   ];
 }
 
@@ -401,7 +455,8 @@ MenuEntry _switchRow(
 /// file it plays, and whether a retimed sound keeps its pitch. The Audio
 /// heading in the fold has the same rows.
 List<MenuEntry> audioRows(
-    LumitState app, LumitUiState ui, BridgeLayerEntry entry) {
+    LumitState app, LumitUiState ui, BridgeLayerEntry entry,
+    {void Function(LayerReference layer)? createCaptions}) {
   final layer = entry.layer;
   final locked = entry.info.switches.locked;
   final entries = selectedEntries(ui);
@@ -499,6 +554,10 @@ List<MenuEntry> audioRows(
           locked ? null : () => _streams(app, entries, split: true)),
       MenuEntry(l10n.menuMergeAudioStreams,
           locked ? null : () => _streams(app, entries, split: false)),
+    ],
+    if (createCaptions != null) ...[
+      MenuEntry.divider(),
+      MenuEntry(l10n.menuCreateCaptions, () => createCaptions(layer)),
     ],
   ];
 }

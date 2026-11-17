@@ -16,6 +16,7 @@ import '../state/text_documents.dart';
 import '../state/tools.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart';
+import 'template_place.dart' show insertTitleTemplate;
 import 'viewer_type.dart' show textAnchor, viewerTypeEditRequest;
 
 const int _insertSeconds = 5;
@@ -53,9 +54,13 @@ void _place(CompositionReference comp, LayerReference layer, int frame) {
 /// [frame], above row [row]. One undo step. The Text panel comes to the front
 /// and the words open for typing in the Viewer, all of them picked, so a first
 /// key replaces them.
+///
+/// With a graphics template chosen for it (**Use for Insert title**), that
+/// template goes down as a clip instead, its first words ready to type.
 void insertTitle(BuildContext context, LumitUiState ui,
     CompositionReference comp, int frame, int? row) {
   final app = Provider.of<LumitState>(context, listen: false);
+  if (insertTitleTemplate(app, ui, comp, frame)) return;
   final settings = comp.getSettings();
   LayerReference? made;
   asOneUndoStep(app.project, () {

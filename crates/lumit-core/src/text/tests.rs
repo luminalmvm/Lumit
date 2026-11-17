@@ -67,7 +67,7 @@ fn a_word_selector_moves_a_whole_word_at_once() {
     a.selector = selector(0.0, 50.0, 0.0);
     a.selector.basis = SelectorBasis::Words;
     a.position_y = Property::fixed(-40.0);
-    let x = glyph_xforms(&[a], "ab cd", 0.0);
+    let x = glyph_xforms(&[a], "ab cd", 0.0, &[]);
     assert_eq!(x.len(), 5);
     // "ab " is the first of two words, and every one of its characters —
     // the space included — is pushed the same way.
@@ -92,7 +92,7 @@ fn two_animators_compose_rather_than_replace() {
     fade.position_y = Property::fixed(-10.0);
     fade.scale_x = Property::fixed(50.0);
     fade.opacity = Property::fixed(50.0);
-    let x = glyph_xforms(&[drop, fade], "A", 0.0);
+    let x = glyph_xforms(&[drop, fade], "A", 0.0, &[]);
     assert!((x[0].position[1] + 40.0).abs() < 1e-4, "{x:?}");
     assert!((x[0].scale[0] - 0.25).abs() < 1e-6, "{x:?}");
     assert!((x[0].opacity - 0.25).abs() < 1e-6, "{x:?}");
@@ -109,11 +109,100 @@ fn a_half_weighted_letter_is_moved_half_as_far() {
     };
     a.position_x = Property::fixed(100.0);
     a.scale_x = Property::fixed(200.0);
-    let x = glyph_xforms(&[a], "ab", 0.0);
+    let x = glyph_xforms(&[a], "ab", 0.0, &[]);
     // Two letters: their middles sit at 25 % and 75 % of the run.
     assert!((x[0].position[0] - 25.0).abs() < 1e-4, "{x:?}");
     assert!((x[1].position[0] - 75.0).abs() < 1e-4, "{x:?}");
     assert!((x[0].scale[0] - 1.25).abs() < 1e-6, "{x:?}");
+}
+
+/// **Spoken selectors follow the words as they are said.** Each mode weighs
+/// a word by its own times: the one being said, the ones said, the ones to
+/// come, the emphasised ones, letter by letter across a word, and eased in
+/// over a word's first moments. No words, no letters reached. Wrong here is a
+/// caption style highlighting the wrong word.
+#[test]
+fn spoken_selectors_follow_the_words_as_they_are_said() {
+    let spoken = [
+        SpokenWord {
+            chars: 0..2,
+            start: 1.0,
+            end: 2.0,
+            emphasis: false,
+        },
+        SpokenWord {
+            chars: 3..5,
+            start: 2.0,
+            end: 3.0,
+            emphasis: true,
+        },
+    ];
+    let pushes = |mode: SelectorMode,
+                  basis: SelectorBasis,
+                  shape: SelectorShape,
+                  ease: f64,
+                  lt: f64|
+     -> Vec<f32> {
+        let mut a = TextAnimator::new("Said");
+        a.selector.mode = mode;
+        a.selector.basis = basis;
+        a.selector.shape = shape;
+        a.selector.ease = ease;
+        a.position_y = Property::fixed(-10.0);
+        glyph_xforms(&[a], "ab cd", lt, &spoken)
+            .iter()
+            .map(|x| -x.position[1] / 10.0)
+            .collect()
+    };
+    let close = |got: Vec<f32>, want: [f32; 5]| {
+        let same =
+            got.len() == want.len() && got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-4);
+        assert!(same, "{got:?}, not {want:?}");
+    };
+    let words = SelectorBasis::Words;
+    let step = SelectorShape::Square;
+    close(
+        pushes(SelectorMode::Current, words, step, 0.0, 1.5),
+        [1.0, 1.0, 1.0, 0.0, 0.0],
+    );
+    close(pushes(SelectorMode::Said, words, step, 0.0, 2.5), [1.0; 5]);
+    close(
+        pushes(SelectorMode::Unsaid, words, step, 0.0, 1.5),
+        [0.0, 0.0, 0.0, 1.0, 1.0],
+    );
+    close(
+        pushes(SelectorMode::Emphasis, words, step, 0.0, 0.0),
+        [0.0, 0.0, 0.0, 1.0, 1.0],
+    );
+    // Letter by letter, "b" is said halfway through its word, and the space,
+    // in no word, counts as said.
+    let letters = SelectorBasis::Characters;
+    close(
+        pushes(SelectorMode::Said, letters, step, 0.0, 1.4),
+        [1.0, 0.0, 1.0, 0.0, 0.0],
+    );
+    // Eased over half a second: a quarter second into "cd", each word is
+    // halfway between being said and not.
+    let eased = pushes(
+        SelectorMode::Current,
+        words,
+        SelectorShape::Smooth,
+        0.5,
+        2.25,
+    );
+    for w in eased {
+        assert!((w - 0.5).abs() < 1e-4, "{w}");
+    }
+    // A bounce overshoots on its way in.
+    assert!(pushes(SelectorMode::Said, words, SelectorShape::Bounce, 1.0, 1.5)[0] > 1.0);
+    assert!(pushes(SelectorMode::Said, words, SelectorShape::Ramp, 1.0, 1.5)[0] > 0.4);
+
+    let mut a = TextAnimator::new("Said");
+    a.selector.mode = SelectorMode::Said;
+    a.position_y = Property::fixed(-10.0);
+    for x in glyph_xforms(&[a], "ab cd", 2.5, &[]) {
+        assert_eq!(x.position[1], 0.0, "no words reach no letter");
+    }
 }
 
 fn proximity(radius: f64, shape: SelectorShape, target: uuid::Uuid) -> TextAnimator {
@@ -148,6 +237,7 @@ fn a_proximity_selector_reaches_the_letters_near_its_target() {
         &[proximity(100.0, SelectorShape::Ramp, target)],
         "abc\n",
         0.0,
+        &[],
         &near,
     );
     let pushes: Vec<f32> = ramp.iter().map(|x| x.position[1]).collect();
@@ -157,6 +247,7 @@ fn a_proximity_selector_reaches_the_letters_near_its_target() {
         &[proximity(60.0, SelectorShape::Square, target)],
         "abc\n",
         0.0,
+        &[],
         &near,
     );
     let pushes: Vec<f32> = square.iter().map(|x| x.position[1]).collect();
@@ -170,7 +261,7 @@ fn a_proximity_selector_reaches_the_letters_near_its_target() {
     // Inverted, the far letters move and the near ones stay.
     let mut inverted = proximity(100.0, SelectorShape::Ramp, target);
     inverted.selector.invert = true;
-    let x = glyph_xforms_near(&[inverted], "abc", 0.0, &near);
+    let x = glyph_xforms_near(&[inverted], "abc", 0.0, &[], &near);
     assert_eq!(x[0].position[1], 0.0);
     assert_eq!(x[2].position[1], -10.0);
 }
@@ -180,7 +271,7 @@ fn a_proximity_selector_reaches_the_letters_near_its_target() {
 #[test]
 fn a_proximity_selector_without_its_target_reaches_nothing() {
     let animator = proximity(100.0, SelectorShape::Ramp, uuid::Uuid::from_u128(1));
-    let x = glyph_xforms(&[animator], "ab", 0.0);
+    let x = glyph_xforms(&[animator], "ab", 0.0, &[]);
     assert!(x.iter().all(GlyphXform::is_identity), "{x:?}");
 }
 
@@ -196,7 +287,7 @@ fn a_font_axis_is_set_half_way_by_half_a_weight() {
         value: Property::fixed(900.0),
     });
     // Two letters: the ramp gives the first a quarter, the second three.
-    let x = glyph_xforms(&[a.clone()], "ab", 0.0);
+    let x = glyph_xforms(&[a.clone()], "ab", 0.0, &[]);
     let base = |_: [u8; 4]| 100.0f32;
     let at = |x: &GlyphXform| x.axes.resolved(&base).next().unwrap();
     assert_eq!(at(&x[0]).0, *b"wght");
@@ -209,7 +300,7 @@ fn a_font_axis_is_set_half_way_by_half_a_weight() {
         tag: "wght".into(),
         value: Property::fixed(500.0),
     });
-    let x = glyph_xforms(&[a, b], "ab", 0.0);
+    let x = glyph_xforms(&[a, b], "ab", 0.0, &[]);
     assert!((at(&x[0]).1 - 500.0).abs() < 1e-3);
     assert_eq!(x[0].axes.len, 1);
 }
@@ -226,7 +317,7 @@ fn a_layer_moves_at_most_eight_axes() {
             value: Property::fixed(1.0),
         });
     }
-    let x = glyph_xforms(&[a], "a", 0.0);
+    let x = glyph_xforms(&[a], "a", 0.0, &[]);
     assert_eq!(usize::from(x[0].axes.len), MAX_ANIMATED_AXES);
     assert_eq!(axis_tag("wdth"), Some(*b"wdth"));
     assert_eq!(axis_tag("ab"), Some(*b"ab  "));

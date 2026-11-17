@@ -1,19 +1,27 @@
 // The application widget, the boot gate, and the shell view that dispatches
 // keys and lays the panels out. Lifted out of main.dart unchanged.
 
+import 'dart:async' show unawaited;
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/control_rows.dart' show addToControlsRow;
+import 'package:lumit_flutter/panels/grade_actions.dart' show runGradeAction;
 import 'package:lumit_flutter/panels/grade_clipboard.dart' show copyGrade, pasteGrade;
 import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
+import 'package:lumit_flutter/panels/noise_actions.dart'
+    show learnSelectedNoise, toggleRemovedOnly;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
+import 'package:lumit_flutter/panels/transcript_panel_frb.dart'
+    show transcriptKeyOf;
 import 'package:lumit_flutter/panels/viewer_camera.dart'
     show cameraFromView, cameraToView, isFlyKey;
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
@@ -27,7 +35,12 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/library_window.dart' show showLibrary;
 import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
+import 'package:lumit_flutter/panels/template_place.dart'
+    show installTemplateFiles;
+import 'package:lumit_flutter/panels/caption_layers.dart'
+    show frontCaptionsPanel, stepToCaption;
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
@@ -44,6 +57,8 @@ import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/theme/style_sheet.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
+import 'package:lumit_flutter/shell/vector_export_frb.dart';
+import 'package:lumit_flutter/shell/video_monitor.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
 import 'package:lumit_flutter/shell/window_frame.dart';
@@ -62,6 +77,8 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/share.dart';
+import 'package:lumit_flutter/state/template_library.dart'
+    show TemplateUpdates;
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
@@ -90,7 +107,12 @@ class LumitAppNew extends StatelessWidget {
     // was doing real damage here: Material's own greys showed through wherever a
     // panel did not paint, so the shell read as a Material app with Lumit panels
     // in it rather than as Lumit. The backdrop is `surface0` from the theme.
-    return MaterialApp(
+    //
+    // Told the language again whenever the settings change, so the interface
+    // turns to read right to left, or back, as the language is picked.
+    return ListenableBuilder(
+      listenable: uiState.workspace,
+      builder: (context, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
       scrollBehavior: const HouseScrollBehavior(),
       // Lumit's own strings come from the `l10n` global rather than from
@@ -160,7 +182,7 @@ class LumitAppNew extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -324,6 +346,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     // funeral). A hardware-keyboard handler fires wherever focus is; the
     // focused-text-field guard inside _onKey keeps typing safe.
     HardwareKeyboard.instance.addHandler(_handleKey);
+    // A caption asked to be typed into, from the Timeline or the Viewer, is
+    // typed into in the Captions panel, which comes up for it.
+    _captionUi = context.read<LumitUiState>();
+    _captionUi!.captionSelection.typeRequest.addListener(_frontCaptions);
     // A pane filling the window is a full-window surface, so Escape puts the
     // arrangement back — above the selection rung, and below a dialogue over
     // the top of it (docs/07 §14.1).
@@ -405,10 +431,19 @@ class _LumitAppViewState extends State<LumitAppView> {
           importStyle(context, app, ui, style);
           return;
         }
+        final template = app.launchTemplate;
+        if (template != null) {
+          app.launchTemplate = null;
+          installTemplateFiles(context, app, ui, [template]);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
     _share = context.read<LumitState>().share..addListener(_offerConflicts);
+    // Which graphics templates the library has newer versions of, and which
+    // timeline had the keys last, followed from the start.
+    TemplateUpdates.of(context.read<LumitState>(), context.read<LumitUiState>());
     listenForOpenRequests(_openAsked);
     // A friend's invite that comes while Lumit is open is said on the status
     // line, with the way to the Multi-edit window, where it is joined.
@@ -423,12 +458,13 @@ class _LumitAppViewState extends State<LumitAppView> {
     };
   }
 
-  /// A project, an extension package, a style, a preset or a theme
-  /// double-clicked, or an invite link clicked in a browser, while Lumit is
+  /// A project, an extension package, a style, a preset, a theme or a
+  /// graphics template double-clicked, or an invite link clicked in a browser, while Lumit is
   /// running. On macOS all of them come to this Lumit. Elsewhere all but a
   /// project and a link always do, and those two when it is kept running in
   /// the background. They are opened as File ▸ Open, the install window,
-  /// Import style, [openPresetOrTheme] and the Shared project window would.
+  /// Import style, [openPresetOrTheme], [installTemplateFiles] and the Shared
+  /// project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -444,6 +480,11 @@ class _LumitAppViewState extends State<LumitAppView> {
       importStyle(context, app, context.read<LumitUiState>(), style);
     }
     openPresetOrTheme(app, context.read<LumitUiState>(), asked);
+    final template = templatePathFromArgs(asked);
+    if (template != null) {
+      installTemplateFiles(
+          context, app, context.read<LumitUiState>(), [template]);
+    }
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);
   }
@@ -479,8 +520,14 @@ class _LumitAppViewState extends State<LumitAppView> {
   /// The question about someone's export is on screen.
   bool _asking = false;
 
+  LumitUiState? _captionUi;
+  void _frontCaptions() {
+    if (_captionUi case final ui?) frontCaptionsPanel(ui);
+  }
+
   @override
   void dispose() {
+    _captionUi?.captionSelection.typeRequest.removeListener(_frontCaptions);
     _share.removeListener(_offerConflicts);
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
@@ -563,14 +610,16 @@ class _LumitAppViewState extends State<LumitAppView> {
   }
 
   Widget _shell(LumitUiState uiState, LumitState state) {
-    final dock = DockWidget(
-      root: uiState.split,
-      buildPanel: buildPanelBodyFrb,
-      // Persisted, so an arrangement survives a restart.
-      onLayoutChanged: uiState.saveLayout,
-      activePanel: uiState.activePane,
-      maximised: uiState.maximisedPane,
-      uiScale: uiState.workspace.interface.uiScale,
+    final dock = VideoMonitorHost(
+      child: DockWidget(
+        root: uiState.split,
+        buildPanel: buildPanelBodyFrb,
+        // Persisted, so an arrangement survives a restart.
+        onLayoutChanged: uiState.saveLayout,
+        activePanel: uiState.activePane,
+        maximised: uiState.maximisedPane,
+        uiScale: uiState.workspace.interface.uiScale,
+      ),
     );
     // Toolbar position Left: the tools go on a rail flush to the window's
     // left edge, and the menu bar's line carries the options and the
@@ -585,13 +634,19 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The tools, under the menu and above everything else, where a
         // toolbar goes, and where docs/07 §1.7 puts it.
         if (!rail) const LumitToolBarFrb(),
+        // A row with or without the rail, so the dock stays where it is when
+        // a style brings the rail or takes it away. Moved, it would be built
+        // afresh: its panels' state lost, its floating windows shut and
+        // opened again.
         Expanded(
-          child: rail
-              ? Row(textDirection: TextDirection.ltr, children: [
-                  const LumitToolRailFrb(),
-                  Expanded(child: dock),
-                ])
-              : dock,
+          child: Row(
+            textDirection: TextDirection.ltr,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (rail) const LumitToolRailFrb(),
+              Expanded(child: dock),
+            ],
+          ),
         ),
         // The strip under the dock (docs/07 §1): the running export's
         // progress and Cancel, reachable without the dialogue open.
@@ -615,8 +670,16 @@ class _LumitAppViewState extends State<LumitAppView> {
         // the transport come from there, and the Audio timeline is a timeline.
         Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
         Panel.cutTimeline => BridgeKeyContext.cut,
+        Panel.transcript => BridgeKeyContext.transcript,
         Panel.effectControls => BridgeKeyContext.effects,
         Panel.graph => BridgeKeyContext.nodes,
+        Panel.captions => BridgeKeyContext.captions,
+        Panel.grade ||
+        Panel.gradeNodes ||
+        Panel.shots ||
+        Panel.gallery =>
+          BridgeKeyContext.colour,
+        Panel.mixer => BridgeKeyContext.mixer,
         _ => BridgeKeyContext.global,
       };
 
@@ -675,6 +738,11 @@ class _LumitAppViewState extends State<LumitAppView> {
       return KeyEventResult.ignored;
     }
 
+    // The Transcript panel's caret and text-size keys are its own.
+    if (ui.activePanel == Panel.transcript && transcriptKeyOf(event) != null) {
+      return KeyEventResult.ignored;
+    }
+
     final project = state.project;
     final comp = ui.selectedComp;
 
@@ -721,6 +789,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         front.mode == ViewMode.footage &&
         ui.driveSource(front, action)) {
       return KeyEventResult.handled;
+    }
+    // Multicam keys, from the Cut timeline or either side of the Viewer. A
+    // digit with no multicam clip under the playhead goes to its marker.
+    if (action.startsWith('multicam.')) {
+      if (ui.multicam.handle(action)) return KeyEventResult.handled;
+      if (!action.startsWith('multicam.cut.')) return KeyEventResult.ignored;
+      action = 'marker.goto.${action.substring('multicam.cut.'.length)}';
     }
 
     var handled = true;
@@ -881,6 +956,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           removeAllEffects(state, layers);
         }
+      case 'effect.learn':
+        handled = learnSelectedNoise(ui);
+      case 'effect.listen':
+        handled = toggleRemovedOnly(ui);
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —
@@ -897,6 +976,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'layer.new.light.point' ||
             'layer.new.solid' ||
             'layer.new.audio' ||
+            'layer.new.bus' ||
             'layer.new.sequence' ||
             'layer.new.text' ||
             'layer.new.camera' ||
@@ -1022,11 +1102,27 @@ class _LumitAppViewState extends State<LumitAppView> {
       // where it finally does something.
       case 'panel.maximise':
         ui.toggleMaximisedPane();
+      // The panel the keyboard is in, into a window of its own and back.
+      case 'panel.float':
+        final pane = ui.activePane.value;
+        handled = pane != null && DockCommands.float(pane);
+      case 'panel.dock':
+        final pane = ui.activePane.value;
+        handled = pane != null && DockCommands.dock(pane);
+      // The Viewer's picture alone on a display of its own, and off again.
+      case 'window.monitor':
+        unawaited(ui.toggleVideoMonitor());
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);
+        if (ui.activePane.value case final pane? when handled) {
+          DockCommands.front(pane);
+        }
       case 'panel.focus.prev':
         handled = ui.cyclePanelFocus(-1);
+        if (ui.activePane.value case final pane? when handled) {
+          DockCommands.front(pane);
+        }
       case 'panel.search.focus':
         handled = ui.requestPanelSearch();
       case 'console.open':
@@ -1134,6 +1230,18 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           exportFrb(context);
         }
+      case 'file.export.vector':
+        if (comp == null) {
+          handled = false;
+        } else {
+          showVectorExportFrb(context);
+        }
+      case 'export.remote':
+        if (comp == null || kIsWeb) {
+          handled = false;
+        } else {
+          exportRemoteFrb(context);
+        }
       // Composition ▸ Save frame as….
       case 'comp.frame.save':
         if (comp == null) {
@@ -1207,7 +1315,14 @@ class _LumitAppViewState extends State<LumitAppView> {
       // returns to it. The numbered pair is the whole point — the key that
       // marks a moment is the key that goes back to it.
       case 'marker.add':
-        if (comp == null) {
+        // With the source side in front the marker goes on its footage, at
+        // the frame shown.
+        if (ui.activePanel == Panel.viewer &&
+            front != null &&
+            front.mode == ViewMode.footage &&
+            !front.angles) {
+          ui.addSourceMarker(front);
+        } else if (comp == null) {
           handled = false;
         } else {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);
@@ -1297,6 +1412,16 @@ class _LumitAppViewState extends State<LumitAppView> {
       // chord is taken here so nothing else answers it.
       case final id when id.startsWith('cut.'):
         handled = ui.activePanel == Panel.cutTimeline;
+      // The Captions panel answers its own keys; taken here so nothing else
+      // does. The previous and next caption work wherever focus is.
+      case 'captions.split' || 'captions.merge' || 'captions.add':
+        handled = ui.activePanel == Panel.captions;
+      case 'captions.prev' || 'captions.next':
+        handled = stepToCaption(ui, forward: action == 'captions.next');
+      // The Transcript panel's keys act on its own words, on its own key
+      // handler; taken here the same way.
+      case final id when id.startsWith('transcript.'):
+        handled = ui.activePanel == Panel.transcript;
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
         // first — a selected mask row is what Delete is about, not the
@@ -1344,6 +1469,11 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = keyframeSpeedRow(context, state, ui).press();
       case 'expression.add':
         handled = addExpressionRow(context, state, ui).press();
+      // The selected rows, as the Composition menu's own row adds them.
+      case 'template.controls.add':
+        handled = addToControlsRow(ui).press();
+      case 'layer.stabilise':
+        handled = stabiliseRow(state, ui).press();
       // The Layer menu's rows the same way. Stepping the blend mode repeats
       // while the key is held, and stops at either end of the list.
       case 'layer.blend.next':
@@ -1401,6 +1531,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'export.queue.open':
         showExportQueueFrb(context: context);
+      case 'library.open':
+        showLibrary(context);
       case 'help.open':
         openLumitHelp(state);
       // The View menu's two switches that had no key.
@@ -1422,9 +1554,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       // A bound action this shell has no call for yet — the menus carry those.
       // Ignored rather than swallowed, so the key still reaches whatever else
-      // wants it.
+      // wants it. The grading keys are the Colour workspace's.
       default:
-        handled = false;
+        handled = runGradeAction(state, ui, action);
     }
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
@@ -1461,6 +1593,10 @@ bool _pressedOnce(String action) =>
       'keyframe.interpolation',
       'keyframe.speed',
       'expression.add',
+      'effect.learn',
+      'effect.listen',
+      'template.controls.add',
+      'layer.stabilise',
       'layer.lock.toggle',
       'layer.unlock.all',
       'layer.centre',
@@ -1475,6 +1611,7 @@ bool _pressedOnce(String action) =>
       'marker.add.region',
       'export.queue.add',
       'export.queue.open',
+      'library.open',
       'help.open',
       'viewer.controls.toggle',
       'viewer.snap.grid.toggle',

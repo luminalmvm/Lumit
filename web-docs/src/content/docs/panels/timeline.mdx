@@ -75,8 +75,9 @@ shuts them.
 | `U` three times | Shuts the layers. |
 | `Shift+U` | The rows changed from what a new layer has, and nothing else. |
 
-`U` and `L` count presses made within half a second of each other. With no layer selected,
-`U` and `Shift+U` act on every layer in the composition.
+`U` and `L` count presses made within half a second of each other. A later `U` shuts what
+the last one opened. With no layer selected, `U` and `Shift+U` act on every layer in the
+composition.
 
 **Layer ▸ Reveal** carries the single reveals as commands. The **Animation** menu carries
 these, on the selected layers or on every layer when none is selected:
@@ -107,7 +108,8 @@ A twirl pressed on a selected layer twirls every selected layer with it.
 
 - Click or drag on the ruler to move the playhead. Dragging it past either end of the lanes
   scrolls them.
-- Hold `Ctrl` while dragging and each frame the playhead lands on is sounded.
+- Hold `Ctrl` while dragging to hear the composition at the speed of the drag. See
+  [Scrubbing](/use/audio/#scrubbing).
 - Hold `Shift` while dragging and the playhead lands on the nearest marker, layer end, edit
   point, keyframe or work-area edge.
 - Double-click the work area's band, in the lower half of the ruler, to give the work area
@@ -201,10 +203,16 @@ value box without its slider. A click on an effect's name selects the effect, an
 beside it twirls it open.
 
 A text layer with [animators](/use/text/#animators) has an **Animators** heading, and a
-layer with [Puppet](/use/puppet/#pins-in-the-timeline) pins a **Puppet** heading. A layer
-with sound has an **Audio** group. See [Audio](/use/audio/#waveforms).
+layer with [Puppet](/use/puppet/#pins-in-the-timeline) pins a **Puppet** heading.
 
-A [Sequence layer](/use/sequence-layers/) draws its clips on one row.
+A layer that makes a sound has an **Audio** group: **Volume**, **Pan**, **Gain** from −24 to
++24 dB, a **Sends** fold with a keyable row and a **Pre** or **Post** switch for each send, and
+the **Waveform**. A send's row has **Mute send** on its right-click, and is dimmed while the
+send is muted. A bus has no Gain and no Waveform. See [Mixing](/use/mixing/) and
+[Audio](/use/audio/#waveforms).
+
+A [Sequence layer](/use/sequence-layers/) draws its clips on one row. A
+[caption layer](/use/captions/#edit-captions) twirls open to its captions as blocks.
 
 On a [node graph composition](/use/node-graphs/) the Timeline draws the ruler and, under
 it, a lane for each keyed parameter of the box selected on the canvas, or of every box with
@@ -228,11 +236,11 @@ for linear, an hourglass half for bezier or automatic, a square half for hold.
 ### Sound mix
 
 Once a composition has been edited in the [Audio timeline](/panels/audio/#audio-timeline),
-its Audio layers fold into a **Sound mix** row pinned at the foot of the Timeline. The row
-draws the composition's mix, and its dB well sets the master fader. Its twirl opens the
-fold. A double-click opens the **Audio** workspace, and the right-click menu offers **Open
-Audio workspace** and **Convert to precomp**, which moves the Audio layers into a nested
-composition and takes the row away.
+its Audio and Bus layers fold into a **Sound mix** row pinned at the foot of the Timeline.
+The row draws the composition's mix, and its dB well sets the master fader. Its twirl opens
+the fold. A double-click opens the **Audio** workspace, and the right-click menu offers
+**Open Audio workspace** and **Convert to precomp**, which moves the folded layers into a
+nested composition and takes the row away.
 
 ### Right-click menus
 

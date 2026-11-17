@@ -149,6 +149,7 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
                 .unwrap_or(0.0),
             ..ParagraphStyle::default()
         },
+        captions: None,
         extra: serde_json::Map::new(),
     }
 }

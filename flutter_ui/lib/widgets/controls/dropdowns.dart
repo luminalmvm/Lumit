@@ -140,6 +140,10 @@ class BareDropdown<T> extends StatelessWidget {
   /// null for none.
   final String? Function(T)? note;
 
+  /// A few quiet words at the end of an option's row while the list is open,
+  /// such as how a computer stands, or null for none.
+  final String? Function(T)? aside;
+
   /// Called with the option under the pointer while the list is open, so it
   /// can be shown before it's picked. The colour scheme list uses it to draw
   /// the interface in the hovered scheme. Only [onChanged] picks anything.
@@ -163,6 +167,7 @@ class BareDropdown<T> extends StatelessWidget {
     this.dense = false,
     this.disabledReason,
     this.note,
+    this.aside,
     this.onPreview,
     this.onPreviewEnd,
   });
@@ -224,7 +229,7 @@ class BareDropdown<T> extends StatelessWidget {
                           selected: options[i] == value,
                           enabled: false,
                           onPressed: () {},
-                          child: Text(label(options[i])),
+                          child: _row(t, options[i]),
                         ),
                       )
                     else
@@ -236,7 +241,7 @@ class BareDropdown<T> extends StatelessWidget {
                           onEnter: onPreview == null
                               ? null
                               : () => onPreview!(options[i]),
-                          child: Text(label(options[i])),
+                          child: _row(t, options[i]),
                         ),
                       ),
                   ],
@@ -249,6 +254,19 @@ class BareDropdown<T> extends StatelessWidget {
     );
     onPreviewEnd?.call();
     if (picked != null) onChanged!(picked.single);
+  }
+
+  /// An option's name, and its [aside] after it.
+  Widget _row(LumitTheme t, T option) {
+    final words = aside?.call(option);
+    if (words == null) return Text(label(option));
+    return Row(
+      children: [
+        Expanded(child: Text(label(option))),
+        const SizedBox(width: 16),
+        Text(words, style: t.small.copyWith(color: t.textMuted)),
+      ],
+    );
   }
 
   static Widget _noted(String? note, Widget row) =>

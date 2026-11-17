@@ -11,21 +11,24 @@ import 'package:uuid/uuid.dart';
 // These functions are ignored because they are not marked as `pub`: `bridge_sends`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `eq`, `fmt`
 
-/// One send: the bus, how much goes to it in dB, and whether it is taken
-/// before the layer's Volume and Pan.
+/// One send: the bus, how much goes to it in dB, whether it is taken
+/// before the layer's Volume and Pan, and whether it is muted.
 class BridgeSend {
   final UuidValue bus;
   final BridgeScalar level;
   final bool pre;
+  final bool muted;
 
   const BridgeSend({
     required this.bus,
     required this.level,
     required this.pre,
+    this.muted = false,
   });
 
   @override
-  int get hashCode => bus.hashCode ^ level.hashCode ^ pre.hashCode;
+  int get hashCode =>
+      bus.hashCode ^ level.hashCode ^ pre.hashCode ^ muted.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -34,5 +37,6 @@ class BridgeSend {
           runtimeType == other.runtimeType &&
           bus == other.bus &&
           level == other.level &&
-          pre == other.pre;
+          pre == other.pre &&
+          muted == other.muted;
 }

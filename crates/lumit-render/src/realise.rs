@@ -17,10 +17,13 @@
 use crate::draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw,
 };
+use grow::{grow_offset, grow_size};
 use order::{draw_order, runs_of};
 use shadows::{casts_shadows, shadow_only};
 
+mod grow;
 mod lighting;
+mod neighbour_textures;
 mod order;
 mod paint;
 mod passes;
@@ -289,6 +292,18 @@ pub type LateCloneMaker<'a> = dyn Fn(&crate::draw::LateClones, usize) -> Vec<Lay
 #[derive(Default)]
 pub struct CompositeFlow {
     engine: Option<lumit_flow::FlowEngine>,
+    /// The pictures made of neighbour frames, kept for the next frame.
+    neighbours: neighbour_textures::NeighbourTextures,
+    /// The synthesis model a Precomp on Flow with RIFE paints with, opened
+    /// as the decode pool opens its own.
+    synthesis: Option<(
+        u64,
+        Result<lumit_ml::synthesis::Synthesis, lumit_ml::error::MlError>,
+    )>,
+    /// Whether a model that will not paint fails the frame, as an export's
+    /// does, and the sentence it failed with.
+    refuse: bool,
+    refused: Option<String>,
 }
 
 impl Realiser<'_> {
@@ -649,6 +664,7 @@ impl Realiser<'_> {
                         })
                     }
                     LayerInputDraw::EffectOutput(id) => return LayerInput::EffectOutput(*id),
+                    LayerInputDraw::EffectKey(id) => return LayerInput::EffectKey(*id),
                     // Made when its op comes round (`late_clones`).
                     LayerInputDraw::Late(_) => return LayerInput::Late,
                     // An op's whole list: each layer rendered as it would be
@@ -1412,6 +1428,7 @@ impl Realiser<'_> {
         // ([`crate::fxops::run_ops`]), so there is no flag here to set and
         // later remember to clear. Rung two is this.
         self.fx_cache.borrow_mut().trim_under_pressure();
+        self.let_go_of_kept();
         if self.ctx.try_begin_frame(estimate).is_err() {
             self.ctx.begin_frame();
         }
@@ -1804,58 +1821,14 @@ impl Realiser<'_> {
             // Only an offset a flow consumer asked for is measured. An Echo
             // or a plugin reads the neighbour picture and nothing more. A
             // field measured on the other side of the frame is turned round.
-            if let Some(under) = *measure {
-                if let Some(field) = self.measure_flow(now, &then, under != *offset) {
+            if let Some((under, want)) = *measure {
+                if let Some(field) = self.field_to(now, &then, under != *offset, want) {
                     fields.push((under, field));
                 }
             }
             neighbours.push((*offset, then));
         }
         (neighbours, fields)
-    }
-
-    /// A Precomp on Flow: the picture `phase` of the way from `a` to `b`,
-    /// measured on the card and painted by the synthesis footage on Flow is
-    /// painted by, in linear float so nothing above white is lost. Without a
-    /// flow engine, or if either step fails, the two are mixed.
-    ///
-    /// ponytail: both pictures come back off the card and the painting runs on
-    /// the processor, the float path footage takes too. A painting pass that
-    /// reads textures would keep it on the card.
-    fn flow_between(
-        &self,
-        a: &wgpu::Texture,
-        b: &wgpu::Texture,
-        phase: f32,
-        params: &lumit_core::retime::FlowParams,
-    ) -> wgpu::Texture {
-        let (w, h) = (a.width(), a.height());
-        let painted = || {
-            let set = crate::decode::flow_settings(params);
-            let mut held = self.flow?.borrow_mut();
-            let engine = held
-                .engine
-                .get_or_insert_with(|| lumit_flow::FlowEngine::with_context(&self.ctx));
-            // The solver and the reads run on encoders of their own.
-            self.ctx.flush();
-            let (fwd, bwd) = engine.flow_pair_textures(a, b, &set)?;
-            let (fwd, bwd) = (
-                lumit_flow::borrow_uncertain(&fwd, &bwd),
-                lumit_flow::borrow_uncertain(&bwd, &fwd),
-            );
-            let bytes = |t: &wgpu::Texture| {
-                let px = self.engine.readback_linear_f32(&self.ctx, t).ok()?;
-                Some(px.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>())
-            };
-            let (pa, pb) = (bytes(a)?, bytes(b)?);
-            let px =
-                engine.synthesize_at_f32(&pa, &pb, w as usize, h as usize, &fwd, &bwd, phase, &set);
-            Some(self.engine.upload_float_frame(&self.ctx, &px, w, h))
-        };
-        painted().unwrap_or_else(|| {
-            self.compositor
-                .accumulate(&self.ctx, w, h, &[(a, 1.0 - phase), (b, phase)])
-        })
     }
 
     /// One measurement, entirely on the card: two pictures in, the `rgba32float`
@@ -2740,28 +2713,6 @@ fn below_px_per_metre(slots: &[LayerInputDraw]) -> Option<f64> {
         LayerInputDraw::Several(list) => below_px_per_metre(list),
         _ => None,
     })
-}
-
-/// The quad a grown picture needs (docs/08 §3.39).
-///
-/// **In plain terms.** Tile with Output width or height above 100 % hands back a
-/// picture wider than the layer it came from, grown evenly on all four sides.
-/// The layer's placement is expressed as a rectangle (`size`) with a pin in it
-/// (`anchor`); to draw the wider picture in the same place, the rectangle grows
-/// by the same factor and the pin slides to stay over the same pixel. Every
-/// layer whose stack grew nothing has a factor of exactly 1, and both functions
-/// then return what they were given, to the bit.
-fn grow_size(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
-    (natural.0 * grow.0, natural.1 * grow.1)
-}
-
-/// How far the pin slides: half the width the growth added, on each axis.
-/// See [`grow_size`].
-fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
-    (
-        natural.0 * (grow.0 - 1.0) * 0.5,
-        natural.1 * (grow.1 - 1.0) * 0.5,
-    )
 }
 
 /// Whether this layer's picture goes straight from its upload to the composite

@@ -77,6 +77,8 @@ selecting something else or playing a composition.
   for you.
 - **Drop a folder** and the files Lumit can take come in from it and every folder inside it,
   filed in project folders of the same names.
+- **Paste** with `Ctrl+V` imports a picture, or picture files, from the system clipboard.
+  See [Paste a picture](/use/importing/#paste-a-picture).
 - **Double-click empty space** in the tree to open the import dialogue.
 - **Import footage** on the bottom bar opens the same dialogue.
 - An empty project shows **Import…** and **New composition** in place of the tree.
@@ -113,6 +115,7 @@ A double-click **opens** the row.
 | Item | What opening does |
 | --- | --- |
 | **Composition** | Fronts it in the Viewer and Timeline. |
+| **Multicam comp** | In the Cut workspace, shows its angles in the source view. Elsewhere it opens as a composition. |
 | **Node graph** | Fronts it in the Node graph panel. |
 | **Footage** | Raises [New composition](/use/compositions/#make-a-composition) filled in from it. With a source view on screen, as in the Cut workspace, the footage loads into the source view instead. |
 | **Folder** | Shows or hides its children. |
@@ -201,6 +204,7 @@ everything.
 | --- | --- |
 | `proxy` | The footage is read from its proxy. |
 | `stand-in` | In a shared project, the footage is read from a stand-in. |
+| `Update` | The library has a newer version of this graphics template. Click the badge to bring it in. |
 | `missing` | The file cannot be found. Click the badge to relink. On a 3D model, pictures it names are missing, and the badge's tooltip lists them. |
 | `unreadable` | The file is on disk and Lumit cannot read it. |
 | `converting` | A 3D model is being converted. Click the badge to stop. |
@@ -219,13 +223,18 @@ table says one row.
 | **Expand**, **Collapse** | Folders | Shows or hides what the folder holds. |
 | **New folder** | Folders | Makes a folder inside this one. |
 | **Make proxies** | Folders | Queues a proxy for every footage item in the folder. |
+| **Update all** | The **Graphics templates** folder, while the library has a newer version of one in it | Updates each of them. |
 | **Open** | One composition | Fronts it. |
 | **Composition settings…** | One composition | Opens the composition's [settings](/use/compositions/#the-settings). |
+| **Multicam** | One composition | Makes it a [multicam comp](/use/multicam/), or an ordinary composition again. |
 | **Export…** | One composition | Opens the [export](/use/export/) dialogue on it. |
+| **Update graphics template** | One graphics template the library has a newer version of | Brings that version in. See [Graphics templates](/use/graphics-templates/#the-library). |
 | **Add to composition**, **Reveal in composition** | Footage, compositions, solids | See [Into a composition](#into-a-composition). |
 | **New composition from selection** | Footage | Raises **New composition** on the selected footage. |
+| **New multicam comp…** | Footage | Makes a [multicam comp](/use/multicam/) of the selected footage. |
 | **Add audio only** | Footage with sound, with a composition open | Adds the item's sound to the open composition as an Audio layer. |
 | **Open in source view** | One footage item, with a source view on screen | Loads it into the source view. |
+| **Transcribe**, **Remove transcript** | Footage with sound | Writes down what is said in the file, or removes the transcript once there is one. See [Captions](/use/captions/#transcripts). |
 | **Relink…** | One missing footage item | Points the item at the file's new path. |
 | **Replace footage…** | One footage item that is found | Points the item at a different file. |
 | **Find missing footage** | Footage, while any is missing | Narrows the tree to the missing rows. |

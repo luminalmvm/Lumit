@@ -36,7 +36,10 @@
 use crate::err_json;
 use serde_json::{json, Value};
 
+mod also;
+pub(crate) mod caps;
 mod names;
+pub(crate) mod taken;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
@@ -111,9 +114,10 @@ fn preset_default_file_name(name: &str) -> &'static str {
 // ---------------------------------------------------------------------------
 
 use crate::api::export::{
-    BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec, BridgeFormatCaps,
+    BridgeCaptionsOut, BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec,
 };
 use lumit_render::colour::ColourState;
+use lumit_render::export::captions::{CaptionsOut, SubtitleFormat};
 // Only the conversion names a metadata field, and only a build with an encoder
 // converts anything.
 #[cfg(feature = "media")]
@@ -250,12 +254,12 @@ pub(crate) fn preset_delete(name: &str) -> Result<(), String> {
     library.save_default()
 }
 
-/// The format key an [`ExportFormat`](lumit_render::export::ExportFormat) is
+/// The format key an [`ExportFormat`](lumit_render::export::format::ExportFormat) is
 /// named by over the seam, and back again.
 #[cfg(feature = "media")]
-fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, String> {
+fn export_format(codec: &str) -> Result<lumit_render::export::format::ExportFormat, String> {
     use lumit_media::encode::{ImageFormat, VideoCodec};
-    use lumit_render::export::{AudioFormat, ExportFormat};
+    use lumit_render::export::format::{AudioFormat, ExportFormat};
     Ok(match codec {
         "h264" => ExportFormat::Video(VideoCodec::H264),
         #[cfg(target_arch = "wasm32")]
@@ -277,6 +281,8 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
         "m4a" => ExportFormat::Audio(AudioFormat::M4a),
         "wav" => ExportFormat::Audio(AudioFormat::Wav),
         "gif" => ExportFormat::Gif,
+        "webp" => ExportFormat::Webp { lossless: false },
+        "webp_lossless" => ExportFormat::Webp { lossless: true },
         other => return Err(format!("export: unknown format '{other}'")),
     })
 }
@@ -310,9 +316,9 @@ pub(crate) fn with_format_extension(out_path: &str, _codec: &str) -> String {
 }
 
 #[cfg(feature = "media")]
-fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
+fn format_key(format: lumit_render::export::format::ExportFormat) -> &'static str {
     use lumit_media::encode::{ImageFormat, VideoCodec};
-    use lumit_render::export::{AudioFormat, ExportFormat};
+    use lumit_render::export::format::{AudioFormat, ExportFormat};
     match format {
         ExportFormat::Video(VideoCodec::H264) => "h264",
         ExportFormat::Video(VideoCodec::Hevc) => "hevc",
@@ -330,66 +336,9 @@ fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
         ExportFormat::Audio(AudioFormat::M4a) => "m4a",
         ExportFormat::Audio(AudioFormat::Wav) => "wav",
         ExportFormat::Gif => "gif",
+        ExportFormat::Webp { lossless: false } => "webp",
+        ExportFormat::Webp { lossless: true } => "webp_lossless",
     }
-}
-
-/// What one format can carry, as the dialogue reads it. A build with no encoder
-/// can carry nothing, which disables every control rather than offering choices
-/// no file will honour.
-#[cfg(feature = "media")]
-pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
-    use lumit_media::encode::BitDepth;
-    let Ok(format) = export_format(codec) else {
-        return BridgeFormatCaps::default();
-    };
-    #[cfg(target_arch = "wasm32")]
-    if !web::offers(codec) {
-        return BridgeFormatCaps::default();
-    }
-    let caps = format.caps();
-    // The page writes no metadata and states no colour space.
-    let web = cfg!(target_arch = "wasm32");
-    BridgeFormatCaps {
-        video: caps.video,
-        audio: caps.audio,
-        alpha: caps.alpha,
-        alpha_mode: caps.alpha_mode,
-        gif: caps.gif,
-        depths: caps
-            .depths
-            .iter()
-            .map(|d| match d {
-                BitDepth::Eight => 8,
-                // Half and Sixteen are both "16" to the dialogue, and never
-                // both on offer: OpenEXR carries the float depths and nothing
-                // else, every other still format the integer ones. So the
-                // number says which within a format, which is the only place
-                // it is read.
-                BitDepth::Sixteen | BitDepth::Half => 16,
-                BitDepth::Float => 32,
-            })
-            .collect(),
-        bit_rate: caps.bit_rate,
-        // Uncompressed PCM is exactly what it is; AAC has a rate to choose.
-        audio_bit_rate: caps.audio
-            && format.audio_codec(lumit_render::export::AudioDepth::Sixteen)
-                == lumit_media::encode::AudioCodec::Aac,
-        audio_24_bit: caps
-            .audio_depths
-            .contains(&lumit_render::export::AudioDepth::TwentyFour),
-        metadata: caps.metadata && !web,
-        colour_spaces: caps
-            .colour_spaces
-            .iter()
-            .take(if web { 1 } else { usize::MAX })
-            .map(lumit_render::export::ColourSpace::stored_name)
-            .collect(),
-    }
-}
-
-#[cfg(not(feature = "media"))]
-pub(crate) fn format_caps(_codec: &str) -> BridgeFormatCaps {
-    BridgeFormatCaps::default()
 }
 
 /// Every sample rate an export can write sound at — the engine's own list, so
@@ -488,7 +437,9 @@ pub(crate) fn to_export_spec(
         // refused, which is what the caps row already told the dialogue.
         depth: match (export_format(&spec.codec)?, spec.depth) {
             (
-                lumit_render::export::ExportFormat::Images(lumit_media::encode::ImageFormat::Exr),
+                lumit_render::export::format::ExportFormat::Images(
+                    lumit_media::encode::ImageFormat::Exr,
+                ),
                 d,
             ) => {
                 if d >= 32 {
@@ -556,15 +507,25 @@ pub(crate) fn to_export_spec(
         } else {
             WhenDone::Nothing
         },
-        gif: lumit_media::encode::GifOptions {
+        gif: lumit_media::encode::gif::GifOptions {
             dither: match spec.gif_dither {
-                1 => lumit_media::encode::GifDither::Pattern,
-                2 => lumit_media::encode::GifDither::None,
-                _ => lumit_media::encode::GifDither::Diffusion,
+                1 => lumit_media::encode::gif::GifDither::Pattern,
+                2 => lumit_media::encode::gif::GifDither::None,
+                _ => lumit_media::encode::gif::GifDither::Diffusion,
             },
             palette_per_frame: spec.gif_palette_per_frame,
             plays: (spec.gif_plays > 0).then_some(spec.gif_plays),
         },
+        captions: captions_out(spec.captions),
+        loudness: spec
+            .loudness
+            .filter(|l| l.lufs.is_finite() && l.true_peak_db.is_finite())
+            .map(|l| lumit_render::export::format::ExportLoudness {
+                lufs: l.lufs,
+                true_peak_db: l.true_peak_db,
+            }),
+        stems: spec.stems,
+        also: also::to_engine(&spec.also)?,
     })
 }
 
@@ -658,12 +619,26 @@ pub(crate) fn from_export_spec(
         make_a_noise: false,
         open_folder: false,
         gif_dither: match spec.gif.dither {
-            lumit_media::encode::GifDither::Diffusion => 0,
-            lumit_media::encode::GifDither::Pattern => 1,
-            lumit_media::encode::GifDither::None => 2,
+            lumit_media::encode::gif::GifDither::Diffusion => 0,
+            lumit_media::encode::gif::GifDither::Pattern => 1,
+            lumit_media::encode::gif::GifDither::None => 2,
         },
         gif_palette_per_frame: spec.gif.palette_per_frame,
         gif_plays: spec.gif.plays.unwrap_or(0),
+        captions: match spec.captions {
+            CaptionsOut::Burn => BridgeCaptionsOut::Burn,
+            CaptionsOut::File(SubtitleFormat::Srt) => BridgeCaptionsOut::Srt,
+            CaptionsOut::File(SubtitleFormat::Vtt) => BridgeCaptionsOut::Vtt,
+            CaptionsOut::Embed => BridgeCaptionsOut::Embed,
+        },
+        loudness: spec
+            .loudness
+            .map(|l| crate::api::export::BridgeExportLoudness {
+                lufs: l.lufs,
+                true_peak_db: l.true_peak_db,
+            }),
+        stems: spec.stems,
+        also: also::from_engine(&spec.also),
     })
 }
 
@@ -742,6 +717,9 @@ pub(crate) fn export_cancel() -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct QueueRow {
     pub id: u32,
+    /// The run of rows it was queued with, and what the run is called.
+    pub group: Option<u32>,
+    pub group_name: String,
     /// The composition it was made from, so its settings can be opened again.
     pub comp: uuid::Uuid,
     pub comp_name: String,
@@ -753,6 +731,10 @@ pub(crate) struct QueueRow {
     /// queue time, else the whole comp.
     pub range: Option<(u64, u64)>,
     pub state: QueueRowState,
+    /// The remote export this item does for another computer, if it is one.
+    pub job: Option<uuid::Uuid>,
+    /// The files written beside `out_path`.
+    pub also: Vec<String>,
 }
 
 /// Where one queued item has got to.
@@ -764,6 +746,8 @@ pub(crate) enum QueueRowState {
         frame: u64,
         total: u64,
         encoder: String,
+        /// Held between two frames.
+        paused: bool,
     },
     /// How long it took in seconds, and the file's size, zero for a sequence.
     Done {
@@ -786,6 +770,44 @@ pub(crate) fn queue_add(
     start: bool,
 ) -> Result<u32, String> {
     driving::queue_add(doc, comp, comp_name, spec, out_path, start)
+}
+
+/// A number for a run of a template's rows queued together, called `name`.
+pub(crate) fn queue_group(name: String) -> u32 {
+    driving::queue_group(name)
+}
+
+/// Queue one row's version of a template: `version` is applied to the
+/// snapshot when the item starts, so a run of rows shares one snapshot.
+pub(crate) fn queue_add_version(
+    doc: std::sync::Arc<lumit_core::model::Document>,
+    comp: uuid::Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: &str,
+    version: Vec<lumit_core::ops::Op>,
+    group: u32,
+) -> Result<u32, String> {
+    driving::queue_add_version(
+        doc,
+        comp,
+        comp_name,
+        spec,
+        out_path,
+        version,
+        Some(group),
+        false,
+    )
+}
+
+/// Queue an item that has run, or failed, again as it was.
+pub(crate) fn queue_again(id: u32) -> Option<u32> {
+    driving::queue_again(id)
+}
+
+/// Today's date, as the `{date}` token writes it.
+pub(crate) fn today() -> String {
+    names::today()
 }
 
 /// Show a file in the desktop's own file manager — the *Open folder* tick, and
@@ -852,6 +874,40 @@ pub(crate) fn queue_cancel(id: u32) {
     driving::queue_cancel(id);
 }
 
+/// Hold item `id` between two frames, or let it go on. A waiting item that
+/// is held is passed over until it is let go.
+pub(crate) fn queue_pause(id: u32, paused: bool) {
+    driving::queue_pause(id, paused);
+}
+
+/// Add the remote export `job`, whose files are gathered in `folder`, as an
+/// item passed over until [`queue_job_ready`]. Returns the item's id.
+pub(crate) fn queue_add_job(
+    job: uuid::Uuid,
+    folder: std::path::PathBuf,
+    comp: uuid::Uuid,
+    comp_name: String,
+    spec: &BridgeExportSpec,
+    out_path: String,
+) -> u32 {
+    driving::queue_add_job(job, folder, comp, comp_name, spec, out_path)
+}
+
+/// The job item `id` has all its files, and runs when its turn comes.
+pub(crate) fn queue_job_ready(id: u32) {
+    driving::job_ready(id);
+}
+
+/// Whether remote export `job` was done when its row was removed.
+pub(crate) fn queue_job_landed(job: uuid::Uuid) -> bool {
+    driving::job_landed(job)
+}
+
+#[cfg(all(test, feature = "media"))]
+pub(crate) fn queue_done_for_test(id: u32) {
+    driving::queue_done_for_test(id);
+}
+
 /// Forget one item. A running item is cancelled first: a row cannot leave the
 /// list while the encoder it named is still writing.
 pub(crate) fn queue_remove(id: u32) {
@@ -881,50 +937,26 @@ pub(crate) fn queue_update(id: u32, spec: &BridgeExportSpec, out_path: &str) -> 
 
 /// The first file an export to `path` writes: the file itself, or frame one
 /// of an image sequence, which is the one to ask about for the whole run.
-fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
+pub(crate) fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
     #[cfg(feature = "media")]
-    if let Ok(lumit_render::export::ExportFormat::Images(_)) = export_format(codec) {
+    if let Ok(lumit_render::export::format::ExportFormat::Images(_)) = export_format(codec) {
         return lumit_media::encode::sequence_frame_path(std::path::Path::new(path), 1);
     }
     let _ = codec;
     std::path::PathBuf::from(path)
 }
 
-/// Whether an export to `out_path` would write over something: a file already
-/// there, or an export still waiting or running in the queue under that name.
-pub(crate) fn path_taken(out_path: &str, codec: &str) -> bool {
-    let path = with_format_extension(out_path, codec);
-    first_file(&path, codec).exists()
-        || queue_list().iter().any(|row| {
-            row.out_path == path
-                && matches!(
-                    row.state,
-                    QueueRowState::Waiting | QueueRowState::Running { .. }
-                )
-        })
+/// The engine's answer for what an export does with caption layers.
+fn captions_out(captions: BridgeCaptionsOut) -> CaptionsOut {
+    match captions {
+        BridgeCaptionsOut::Burn => CaptionsOut::Burn,
+        BridgeCaptionsOut::Srt => CaptionsOut::File(SubtitleFormat::Srt),
+        BridgeCaptionsOut::Vtt => CaptionsOut::File(SubtitleFormat::Vtt),
+        BridgeCaptionsOut::Embed => CaptionsOut::Embed,
+    }
 }
 
-/// The first of `name_2.ext`, `name_3.ext`, … that writes over nothing, for
-/// Keep both. `out_path` itself when every number up to the cap is taken.
-pub(crate) fn free_path(out_path: &str, codec: &str) -> String {
-    let path = with_format_extension(out_path, codec);
-    let file = std::path::Path::new(&path);
-    let stem = file
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("export");
-    let ext = file
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{e}"))
-        .unwrap_or_default();
-    (2..10_000)
-        .map(|n| file.with_file_name(format!("{stem}_{n}{ext}")))
-        .map(|p| p.to_string_lossy().into_owned())
-        .find(|p| !path_taken(p, codec))
-        .unwrap_or(path)
-}
-
+mod child;
 mod driving;
 
 #[cfg(test)]

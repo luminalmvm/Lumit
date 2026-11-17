@@ -10,6 +10,8 @@ use crate::expression::ExpressionContext;
 use crate::model::{Composition, EffectInstance, EffectNamespace, EffectValue, Layer};
 use crate::time::Rational;
 
+mod point_generators;
+
 // These tests are about *parameter resolution*, not about expressions, so they
 // call the resolvers without an expression context and get the detached one.
 // Shadowing the two entry points here keeps that out of every call below —
@@ -322,9 +324,13 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -415,9 +421,13 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -2807,6 +2817,9 @@ fn marker_rig(
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -2844,9 +2857,13 @@ fn marker_rig(
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -5195,6 +5212,9 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -5244,9 +5264,13 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -6173,6 +6197,9 @@ pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -6221,9 +6248,13 @@ pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -6659,6 +6690,10 @@ fn every_parameter_declares_a_unit() {
             ("radial_blur", "centre_x"),
             ("radial_blur", "centre_y"),
             ("sharpen", "radius"),
+            // Denoise's sample is a place on the picture and a side.
+            ("denoise", "sample_x"),
+            ("denoise", "sample_y"),
+            ("denoise", "sample_size"),
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
             ("sprite_flare", "light_z"),
@@ -6761,6 +6796,12 @@ fn every_parameter_declares_a_unit() {
             ("bezier_warp", "left_top_tangent_y"),
             ("bezier_warp", "left_bottom_tangent_x"),
             ("bezier_warp", "left_bottom_tangent_y"),
+            // Stabilise's Fill feather and trims, pixels of the frame.
+            ("stabilise", "fill_feather"),
+            ("stabilise", "trim_left"),
+            ("stabilise", "trim_top"),
+            ("stabilise", "trim_right"),
+            ("stabilise", "trim_bottom"),
             ("gradient", "start_x"),
             ("gradient", "start_y"),
             ("gradient", "end_x"),
@@ -6997,6 +7038,34 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "point2_y"),
             ("planar_track", "region"),
             ("depth_points", "point_size"),
+            // The Correction: the qualifier's Blur and Grow, and each
+            // window's place, size and softness.
+            ("correction", "qual_blur"),
+            ("correction", "qual_grow"),
+            ("correction", "win1_x"),
+            ("correction", "win1_y"),
+            ("correction", "win1_w"),
+            ("correction", "win1_h"),
+            ("correction", "win1_soft"),
+            ("correction", "win1_soft_in"),
+            ("correction", "win2_x"),
+            ("correction", "win2_y"),
+            ("correction", "win2_w"),
+            ("correction", "win2_h"),
+            ("correction", "win2_soft"),
+            ("correction", "win2_soft_in"),
+            ("correction", "win3_x"),
+            ("correction", "win3_y"),
+            ("correction", "win3_w"),
+            ("correction", "win3_h"),
+            ("correction", "win3_soft"),
+            ("correction", "win3_soft_in"),
+            ("correction", "win4_x"),
+            ("correction", "win4_y"),
+            ("correction", "win4_w"),
+            ("correction", "win4_h"),
+            ("correction", "win4_soft"),
+            ("correction", "win4_soft_in"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -7198,6 +7267,7 @@ fn payload_len(v: Value) -> usize {
         Value::Curve(c) => 4 + 8 * c.points().len(),
         // A length byte, then the bytes typed.
         Value::Text(t) => 1 + t.as_str().len(),
+        Value::Shape(s) => 4 + 8 * s.len(),
     }
 }
 
@@ -7553,7 +7623,10 @@ fn every_effect_carries_a_matte_row() {
             s.category,
             FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
         ) || s.category.is_driver()
-            || matches!(s.match_name, "camera_track" | "planar_track" | "smoke")
+            || matches!(
+                s.match_name,
+                "camera_track" | "planar_track" | "smoke" | "grade_group"
+            )
         {
             assert_eq!(
                 s.matte,
@@ -7594,6 +7667,11 @@ fn every_effect_carries_a_matte_row() {
         //
         // **Scene pass** is a reading, as Depth is, and **Part matte** a coverage.
         //
+        // **Stabilise** moves the whole frame by the shot's measured motion. A
+        // strength per pixel would tear the picture between where it was and
+        // where it is moved to; how much of the correction is used is its
+        // Amount row, for the whole frame.
+        //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
         if matches!(
@@ -7606,6 +7684,7 @@ fn every_effect_carries_a_matte_row() {
                 | "depth_points"
                 | "scene_pass"
                 | "part_matte"
+                | "stabilise"
         ) {
             assert_eq!(
                 s.matte,
@@ -7619,10 +7698,14 @@ fn every_effect_carries_a_matte_row() {
                 s.match_name
             );
             // The Matte key carries no such row at all; Set matte's is its own,
-            // and is the auxiliary layer the render threads to it.
+            // and is the auxiliary layer the render threads to it. Stabilise's
+            // is the layer a Reverse puts the shake of back.
             assert_eq!(
                 s.layer_input().is_some(),
-                matches!(s.match_name, "set_matte" | "depth_points" | "scene_pass" | "part_matte"),
+                matches!(
+                    s.match_name,
+                    "set_matte" | "depth_points" | "scene_pass" | "part_matte" | "stabilise"
+                ),
                 "{}: Set matte keeps its source on the layer-input carriage, as Depth points does its depth",
                 s.match_name
             );
@@ -7729,6 +7812,12 @@ fn every_effect_carries_a_matte_row() {
                 // as deep inside an effect's own maths as a matte gets — it
                 // decides the set rather than fading the picture that set drew.
                 | "scatter"
+                // Denoise: the matte scales how much noise is taken, so the
+                // Removed noise view shows what the matte lets through.
+                | "denoise"
+                // The Correction: the matte joins the node's key, which
+                // mixes the grade back per pixel inside the kernel.
+                | "correction"
         );
         assert_eq!(
             !s.matte.generic(),
@@ -8577,7 +8666,10 @@ fn every_x_parameter_is_half_of_a_declared_pair() {
                     p.id
                 );
             }
-            if let Some(stem) = p.id.strip_suffix("_y") {
+            // Only a number can be half a point: the Correction's Luma
+            // curve is `curve_y` and is no one's other half.
+            let number = matches!(p.kind, ParamKind::Float { .. });
+            if let Some(stem) = p.id.strip_suffix("_y").filter(|_| number) {
                 assert!(
                     schema.pairs().any(|q| q.stem == stem),
                     "{}.{}: a `_y` with no `{stem}_x` before it",
@@ -10606,216 +10698,7 @@ fn the_garbage_masks_hold_the_matte_open_and_shut() {
     assert_eq!(cpu::mask_fill_params(&open, 1.0).count, 0);
 }
 
-// ------------------------------------------------- the run-time catalogue --
-
-/// A definition that arrived at run time, as a plugin's does. Declared
-/// here rather than driven by a real OFX bundle because what is under test is
-/// the *seam*: `lumit-core` cannot depend on the plugin host (docs/05), so what
-/// it can be shown is that an effect it never compiled in becomes an effect like
-/// any other. `lumit-ofx` proves the other half — that a real plugin makes one
-/// of these.
-struct RegisteredDef {
-    schema: &'static EffectSchema,
-    /// The frames the instance reads, as `frames_needed` answers them. `None` is
-    /// every effect but a retimer.
-    window: Option<Vec<i32>>,
-}
-
-impl EffectDef for RegisteredDef {
-    fn schema(&self) -> &'static EffectSchema {
-        self.schema
-    }
-    fn frames_needed(&self, _inst: &EffectInstance, _lt: f64) -> Option<Vec<i32>> {
-        self.window.clone()
-    }
-}
-
-/// A leaked declaration under a plugin-shaped name, exactly as the OFX host
-/// leaks one for a plugin it has just described.
-fn a_registered_schema(
-    match_name: &'static str,
-    temporal: &'static [i32],
-) -> &'static EffectSchema {
-    Box::leak(Box::new(EffectSchema {
-        match_name,
-        label: "Registered",
-        version: 1,
-        category: FxCategory::Utility,
-        traits: EffectTraits {
-            cost: CostClass::Heavy,
-            roi: Roi::FullFrame,
-            temporal,
-            premultiplied: true,
-            seeded: false,
-            beat_input: false,
-        },
-        params: &[],
-        groups: &[],
-        enabled_when: &[],
-        matte: MatteRole::None,
-    }))
-}
-
-/// An instance of a registered effect, in the namespace a plugin's instance
-/// carries.
-fn a_plugin_instance(match_name: &str) -> EffectInstance {
-    let mut inst = instantiate(match_name).expect("the catalogue knows it");
-    assert_eq!(
-        inst.effect.namespace,
-        crate::model::EffectNamespace::Ofx,
-        "an ofx: name instantiates in the plugin namespace"
-    );
-    inst.enabled = true;
-    inst
-}
-
-/// The whole point of the widening: an effect nobody compiled in is found by
-/// the same lookup a built-in is found by, and the built-in menu order is
-/// untouched by its arrival.
-#[test]
-fn a_registered_definition_joins_the_catalogue_behind_the_builtins() {
-    let before: Vec<&str> = BUILTIN_DEFS.iter().map(|d| d.schema().match_name).collect();
-    let builtin_count = BUILTINS.len();
-
-    let schema = a_registered_schema("ofx:test.core.joins", &[0]);
-    let def: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
-        schema,
-        window: None,
-    }));
-    assert!(BUILTIN_DEFS.register(def), "it registered");
-
-    // Found by name, and it is the definition that was registered.
-    let found = BUILTIN_DEFS
-        .get("ofx:test.core.joins")
-        .expect("the catalogue answers to it");
-    assert_eq!(found.schema().match_name, "ofx:test.core.joins");
-    assert!(std::ptr::eq(found.schema(), schema));
-    assert!(crate::fx::builtins::schema("ofx:test.core.joins").is_some());
-
-    // The built-ins are still the first `BUILTINS.len()` entries, in their own
-    // order: the Add-effect menu, the command palette and the preset browser all
-    // read that order, and a plugin must never move it.
-    let after: Vec<&str> = BUILTIN_DEFS.iter().map(|d| d.schema().match_name).collect();
-    assert_eq!(
-        &after[..builtin_count],
-        &BUILTINS.iter().map(|s| s.match_name).collect::<Vec<_>>()[..],
-        "a plugin reordered the built-in menu"
-    );
-    assert_eq!(&after[..builtin_count], &before[..builtin_count]);
-    assert!(after.contains(&"ofx:test.core.joins"));
-    assert!(BUILTIN_DEFS.len() > builtin_count);
-
-    // A second registration under the same name is a rescan, not a second
-    // effect: nothing is added, and the first definition still answers.
-    let twin: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
-        schema: a_registered_schema("ofx:test.core.joins", &[0]),
-        window: None,
-    }));
-    assert!(!BUILTIN_DEFS.register(twin), "a duplicate name is refused");
-    let still = BUILTIN_DEFS
-        .get("ofx:test.core.joins")
-        .expect("still there");
-    assert!(std::ptr::eq(still.schema(), schema));
-
-    // And a name the built-ins already own is refused too, whichever way round.
-    let shadow: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
-        schema: a_registered_schema("blur", &[0]),
-        window: None,
-    }));
-    assert!(
-        !BUILTIN_DEFS.register(shadow),
-        "a built-in cannot be shadowed"
-    );
-    assert_eq!(
-        crate::fx::builtins::schema("blur").map(|s| s.match_name),
-        Some("blur")
-    );
-}
-
-/// A retimer's declared frames reach the neighbour window, and therefore the
-/// frame key and the prefetch (docs/12 §2.1). The declaration on the
-/// schema is the fallback; the instance's own answer wins.
-#[test]
-fn a_retimers_declared_frames_land_in_the_temporal_window() {
-    // Declared ±1 at describe time — the widening the host applies when a plugin
-    // says it reads other frames at all.
-    let schema = a_registered_schema("ofx:test.core.retimer", &[-1, 0, 1]);
-    let def: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
-        schema,
-        window: Some(vec![-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]),
-    }));
-    assert!(BUILTIN_DEFS.register(def));
-
-    let inst = a_plugin_instance("ofx:test.core.retimer");
-    let one = std::slice::from_ref(&inst);
-    assert_eq!(
-        stack_temporal_window(one, true, 0.0),
-        vec![-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5],
-        "the plugin's own frames are what the layer decodes"
-    );
-    // The gate in front of it is the declaration, which is why the widening at
-    // describe time matters.
-    assert!(stack_is_temporal(one, true));
-
-    // Bypassed, disabled, and a plain built-in stack are all untouched.
-    assert_eq!(stack_temporal_window(one, false, 0.0), vec![0]);
-    let mut off = inst.clone();
-    off.enabled = false;
-    assert_eq!(
-        stack_temporal_window(std::slice::from_ref(&off), true, 0.0),
-        vec![0]
-    );
-
-    // A registered effect that answers `None` falls back to its declaration,
-    // exactly as every built-in does.
-    let plain_schema = a_registered_schema("ofx:test.core.plain", &[-1, 0, 1]);
-    let plain: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
-        schema: plain_schema,
-        window: None,
-    }));
-    assert!(BUILTIN_DEFS.register(plain));
-    let plain_inst = a_plugin_instance("ofx:test.core.plain");
-    assert_eq!(
-        stack_temporal_window(std::slice::from_ref(&plain_inst), true, 0.0),
-        vec![-1, 0, 1]
-    );
-}
-
-/// A plugin instance resolves into the arena beside the built-ins, in stack
-/// order, carrying the layer time its parameters were read at.
-#[test]
-fn a_plugin_instance_resolves_between_two_builtins() {
-    let schema = a_registered_schema("ofx:test.core.stack", &[0]);
-    let def: &'static RegisteredDef = Box::leak(Box::new(RegisteredDef {
-        schema,
-        window: None,
-    }));
-    assert!(BUILTIN_DEFS.register(def));
-
-    let stack = vec![
-        instantiate("invert").expect("a built-in"),
-        a_plugin_instance("ofx:test.core.stack"),
-        instantiate("exposure").expect("a built-in"),
-    ];
-    let resolved = super::resolved::resolve_stack(
-        &stack,
-        1.5,
-        1000.0,
-        1.0,
-        &MarkerContext::NONE,
-        Arc::new(ExpressionContext::detached()),
-    );
-    let names: Vec<&str> = resolved
-        .iter()
-        .map(|op| op.def.schema().match_name)
-        .collect();
-    assert_eq!(names, vec!["invert", "ofx:test.core.stack", "exposure"]);
-    let plugin_op = resolved.get(1).expect("the middle op");
-    assert!(
-        (plugin_op.lt - 1.5).abs() < 1e-9,
-        "the op carries the layer time its values were read at"
-    );
-}
+mod runtime_catalogue;
 
 /// Pixel sort (docs/08 §3.99) on the CPU alone: the four promises the effect
 /// makes about *which* pixels may move, none of which needs a card.
@@ -11081,6 +10964,9 @@ fn two_solids(
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -11681,146 +11567,6 @@ fn round_corners_radius_is_along_the_sides() {
 /// The square `x`, `y`, `side` as a closed flattened path.
 fn square_path(x: f64, y: f64, side: f64) -> crate::mask::MaskPolyline {
     crate::mask::flatten_path(&crate::mask::Mask::rectangle(x, y, side, side).path, 0.25)
-}
-
-/// **Sort distribution puts the stream in a new order and keeps the ids**: across,
-/// reversed, and a shuffle that is the same for one seed and another for
-/// another.
-#[test]
-fn sort_points_orders_the_stream_and_keeps_the_ids() {
-    use effects::sort_points::SortPoints;
-    let mut stream = points::PointsStream::default();
-    for (i, x) in [30.0f32, 10.0, 20.0, 40.0].into_iter().enumerate() {
-        stream.position.push([x, 0.0, 0.0]);
-        stream.size.push(1.0);
-        stream.id.push(i as u64);
-    }
-    let across = SortPoints {
-        sort_by: 1,
-        ..SortPoints::read(Params::EMPTY)
-    };
-    let out = across.apply(&stream);
-    let xs: Vec<f32> = out.position.iter().map(|p| p[0]).collect();
-    assert_eq!(xs, [10.0, 20.0, 30.0, 40.0]);
-    assert_eq!(out.id, [1, 2, 0, 3], "each point keeps its id");
-    let back = SortPoints {
-        reverse: true,
-        ..across
-    }
-    .apply(&stream);
-    assert_eq!(back.id, [3, 0, 2, 1]);
-    let shuffle = |seed| {
-        SortPoints {
-            sort_by: 0,
-            seed,
-            ..SortPoints::read(Params::EMPTY)
-        }
-        .apply(&stream)
-        .id
-    };
-    assert_eq!(shuffle(1), shuffle(1), "one seed, one shuffle");
-    let mut all = shuffle(1);
-    all.sort_unstable();
-    assert_eq!(all, [0, 1, 2, 3], "every point still there");
-}
-
-/// **Math points lays out its formula**: a Linear wave across from one side
-/// to the other, and a rose of four petals within its radius, through the
-/// middle.
-#[test]
-fn math_points_lays_out_waves_and_a_rose() {
-    use effects::math_points::MathPoints;
-    let base = MathPoints {
-        count: 5,
-        position_x: 0.0,
-        position_y: 0.0,
-        ..MathPoints::read(Params::EMPTY)
-    };
-    let waves = MathPoints {
-        x_wave: 0,
-        x_amplitude: 100.0,
-        y_amplitude: 0.0,
-        ..base
-    }
-    .stream(points::Projection::FLAT);
-    let xs: Vec<f32> = waves.position.iter().map(|p| p[0]).collect();
-    assert_eq!(xs, [-100.0, -50.0, 0.0, 50.0, 100.0]);
-    let rose = MathPoints {
-        shape: 1,
-        count: 64,
-        radius: 100.0,
-        petals: 2.0,
-        denominator: 1.0,
-        ..base
-    }
-    .stream(points::Projection::FLAT);
-    assert_eq!(rose.len(), 64);
-    assert!(rose.position.iter().all(|p| p[0].hypot(p[1]) <= 100.001));
-    assert!(
-        rose.position.iter().any(|p| p[0].hypot(p[1]) < 1.0),
-        "the petals meet in the middle"
-    );
-    // A Denominator keyed through 1 does not jump there: five petals over 1
-    // lie where five over a hair more do.
-    let five = |denominator: f32| {
-        MathPoints {
-            shape: 1,
-            count: 64,
-            radius: 100.0,
-            petals: 5.0,
-            denominator,
-            ..base
-        }
-        .stream(points::Projection::FLAT)
-    };
-    let (on, near) = (five(1.0), five(1.0001));
-    assert!(on
-        .position
-        .iter()
-        .zip(&near.position)
-        .all(|(a, b)| (a[0] - b[0]).hypot(a[1] - b[1]) < 0.5));
-}
-
-/// **Contour points puts one point on each piece**: two squares are two
-/// points, each on its square's middle, and Size from area is the circle of
-/// the square's area.
-#[test]
-fn contour_points_puts_a_point_on_each_piece() {
-    use effects::contour_points::ContourPoints;
-    let mut path = square_path(0.0, 0.0, 10.0);
-    path.append(&square_path(100.0, 0.0, 20.0));
-    let points = ContourPoints {
-        size_from_area: true,
-        ..ContourPoints::read(Params::EMPTY)
-    }
-    .stream(&path, points::Projection::FLAT);
-    assert_eq!(points.len(), 2);
-    let [x, y, _] = points.position[0];
-    assert!((x - 5.0).abs() < 1e-3 && (y - 5.0).abs() < 1e-3, "{x} {y}");
-    let [x, y, _] = points.position[1];
-    assert!(
-        (x - 110.0).abs() < 1e-3 && (y - 10.0).abs() < 1e-3,
-        "{x} {y}"
-    );
-    let circle = 2.0 * (400.0 / std::f32::consts::PI).sqrt();
-    assert!((points.size[1] - circle).abs() < 1e-2);
-}
-
-/// **Intersection points finds where paths cross, once each**: two squares
-/// overlapping by a corner cross twice; touching neighbours on one square
-/// are not crossings.
-#[test]
-fn intersection_points_finds_each_crossing_once() {
-    use effects::intersection_points::crossings;
-    let one = square_path(0.0, 0.0, 10.0);
-    assert!(crossings(&one).is_empty(), "a square does not cross itself");
-    let mut two = one.clone();
-    two.append(&square_path(5.0, 5.0, 10.0));
-    let mut found: Vec<[f32; 2]> = crossings(&two).into_iter().map(|(p, _)| p).collect();
-    found.sort_by(|a, b| a[0].total_cmp(&b[0]));
-    assert_eq!(found.len(), 2, "{found:?}");
-    assert!((found[0][0] - 5.0).abs() < 1e-3 && (found[0][1] - 10.0).abs() < 1e-3);
-    assert!((found[1][0] - 10.0).abs() < 1e-3 && (found[1][1] - 5.0).abs() < 1e-3);
 }
 
 /// **Time loop's moments**: Cycle starts again, Ping-pong comes back, and

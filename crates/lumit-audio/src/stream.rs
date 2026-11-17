@@ -19,7 +19,7 @@
 //!   plays as silence. It takes no lock it could wait on, allocates nothing
 //!   and never frees a block: a block is only ever dropped by the thread that
 //!   decided to drop it.
-//! - **The thread that fills ahead** ([`crate::mix::MixPlan::fill_step`])
+//! - **The thread that fills ahead** ([`crate::plan::MixPlan::fill_step`])
 //!   keeps the blocks around the playhead decoded, nearest first.
 //! - **Everything else** (an export, a rack being baked, a scrub) asks for a
 //!   stretch and waits for it ([`Source::read`]).
@@ -282,6 +282,23 @@ impl Source {
         }
     }
 
+    /// Whether every frame of `[start, start + frames)` can be read now: in
+    /// memory, or never to be (past the end, or a file that will not
+    /// decode). Never waits.
+    #[must_use]
+    pub fn ready(&self, start: usize, frames: usize) -> bool {
+        match &self.kind {
+            Kind::Whole(_) => true,
+            Kind::File(file) => {
+                if file.block_frames == 0 || frames == 0 {
+                    return true;
+                }
+                let last = start.saturating_add(frames - 1) / file.block_frames;
+                (start / file.block_frames..=last).all(|block| file.settled(block))
+            }
+        }
+    }
+
     /// One frame, or `None` where there is none in memory. Not for the
     /// callback: it waits for a block that is being put in.
     #[must_use]
@@ -430,7 +447,7 @@ impl Source {
 ///
 /// A clock and not a counter, so that the thread filling ahead of the
 /// playhead can want its blocks a little into the future
-/// ([`crate::mix::MixPlan::fill_step`]) and an export reading through the same
+/// ([`crate::plan::MixPlan::fill_step`]) and an export reading through the same
 /// pool at full speed does not push them out between two of its passes. It
 /// decides only which block is dropped, never what a block holds, so nothing
 /// that is rendered depends on it.

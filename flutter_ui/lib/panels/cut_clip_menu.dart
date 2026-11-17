@@ -212,11 +212,12 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
             ))));
   }
 
-  /// Make the overlap at one edge of [clip] the kind named, or the dissolve
-  /// with none, making the overlap first where the edit point only meets. A
-  /// kind's rows come up in Effect controls when [show] is set.
+  /// Make the overlap at one edge of [clip] the kind named at [look], or the
+  /// dissolve with none, making the overlap first where the edit point only
+  /// meets. A kind's rows come up in Effect controls when [show] is set.
   void _setKind(CompositionReference comp, CutTrack track, BridgeClip clip,
-      bool endEdge, String? kind, int frames, {bool show = false}) {
+      bool endEdge, String? kind, int frames,
+      {int? look, bool show = false}) {
     _afterCut(_cut(() => _named(
         'Transition',
         () => comp.cutSetTransition(
@@ -224,6 +225,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               endEdge: endEdge,
               frames: frames,
               kind: kind,
+              look: look,
               linked: _linked,
             ))));
     if (kind != null && show) {
@@ -241,8 +243,9 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     ui.frontPanel(Panel.effectControls);
   }
 
-  /// The Transition rows for one edit point: the dissolve, then every kind, the
-  /// one in force ticked.
+  /// The Transition rows for one edit point: the dissolve, then a flyout of
+  /// kinds per group, the one in force ticked. A kind with several looks is a
+  /// flyout of them.
   List<Widget> _kindRows(
     void Function(void) close,
     String key,
@@ -256,6 +259,33 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     final overlaps = cutEdgeOverlaps(track, clip, endEdge: endEdge);
     final incoming = endEdge ? other : clip;
     final now = overlaps ? incoming?.transition : null;
+    String? action(BridgeTransitionKind kind) =>
+        _settings.cutDefaultTransition == kind.matchName
+            ? 'cut.transition.default'
+            : null;
+    void pick(BridgeTransitionKind kind, int? look) =>
+        _setKind(comp, track, clip, endEdge, kind.matchName, frames,
+            look: look, show: true);
+    Widget kindRow(BridgeTransitionKind kind) {
+      final looks = kind.looks;
+      if (looks.length < 2) {
+        return _row(close, '$key-${kind.matchName}', kindLabel(kind),
+            () => pick(kind, null),
+            action: action(kind), ticked: now == kind.matchName);
+      }
+      return _flyout(close, '$key-${kind.matchName}', engineLabel(kind.label), [
+        for (var i = 0; i < looks.length; i++)
+          _row(close, '$key-${kind.matchName}-$i', engineLabel(looks[i]),
+              () => pick(kind, i),
+              action: i == 0 ? action(kind) : null),
+      ], ticked: now == kind.matchName);
+    }
+
+    final groups = [
+      l10n.cutTransitionWipes,
+      l10n.cutTransitionMoves,
+      l10n.cutTransitionHits,
+    ];
     return [
       _row(close, '$key-dissolve', l10n.cutDissolve,
           () => _setKind(comp, track, clip, endEdge, null, frames),
@@ -263,17 +293,14 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               ? 'cut.transition.default'
               : null,
           ticked: overlaps && now == null),
-      for (final kind in transitionKinds)
-        _row(
-            close,
-            '$key-${kind.matchName}',
-            engineLabel(kind.label),
-            () => _setKind(comp, track, clip, endEdge, kind.matchName, frames,
-                show: true),
-            action: _settings.cutDefaultTransition == kind.matchName
-                ? 'cut.transition.default'
-                : null,
-            ticked: now == kind.matchName),
+      for (var g = 0; g < groups.length; g++)
+        if (transitionKinds.any((kind) => kind.group == g))
+          _flyout(close, '$key-group-$g', groups[g], [
+            for (final kind in transitionKinds)
+              if (kind.group == g) kindRow(kind),
+          ],
+              ticked: transitionKinds
+                  .any((kind) => kind.group == g && kind.matchName == now)),
     ];
   }
 
@@ -292,6 +319,11 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   /// first frame otherwise, with the In and Out marks on the clip's own span.
   void _openClip(LumitUiState ui, CompositionReference comp, CutTrack track,
       BridgeClip clip) {
+    // A multicam clip shows its angles rather than opening its comp.
+    if (clip.angle != null) {
+      ui.showAngles(cutMulticamOf(comp, clip));
+      return;
+    }
     if (clip.sourceIsComp) {
       _openAsComposition(ui, comp, clip);
       return;
@@ -389,6 +421,10 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   /// their end, ready for the next.
   bool _pasteAt(LumitUiState ui, CompositionReference comp, int frame,
       {LayerReference? onto}) {
+    if (onto != null && cutIsBusLayer(cutTracks, onto)) {
+      cutRefuseOnBus(Provider.of<LumitState>(context, listen: false));
+      return true;
+    }
     final BridgeCutPaste paste;
     try {
       paste = comp.cutPaste(atFrame: frame, target: onto);
@@ -588,8 +624,19 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     final endEdge = frame - start > end - frame;
     final across = cutClipAcross(track, clip, endEdge: endEdge) != null;
     final dissolved = across && cutEdgeOverlaps(track, clip, endEdge: endEdge);
-    final fadesIn = cutClipAcross(track, clip, endEdge: false) == null;
+    final before = cutClipAcross(track, clip, endEdge: false);
+    final after = cutClipAfter(track, clip);
+    final fadesIn = before == null;
     final fadesOut = cutClipAcross(track, clip, endEdge: true) == null;
+    // A through edit, a cut with nothing changed across it: the one at the
+    // nearer end where that is one, else the one at the other end.
+    final atStart = before != null && cutThroughEdit(before, clip)
+        ? (before, clip)
+        : null;
+    final atEnd =
+        after != null && cutThroughEdit(clip, after) ? (clip, after) : null;
+    final seam = endEdge ? atEnd ?? atStart : atStart ?? atEnd;
+    final joins = seam != null;
     // The audio streams of the clip's file, for the rows that choose among
     // them. The item was probed when it was placed, so this opens nothing.
     BridgeAudioStreams? streams;
@@ -644,6 +691,14 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                     [for (final (layer, c) in heardPicks) (layer, c.id)],
                     then: afterLevel,
                     loudness: true)
+                : null,
+            onTogether: heard && clip.audible && heardPicks.length > 1
+                ? (lufs) => normaliseTogether(
+                    Provider.of<LumitState>(context, listen: false),
+                    lufs ?? ui.workspace.normaliseTargetDb,
+                    clips: heardPicks,
+                    then: afterLevel,
+                    loudness: lufs != null)
                 : null,
             resetGainShown: heard && clip.audible,
             onResetGain: heardPicks.any((p) => p.$2.gainDb != 0)
@@ -721,6 +776,17 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
           _cell(close, 'ctl-menu-split', l10n.cutMenuSplit,
               () => _addEdit(ui, comp, all: false),
               action: 'cut.add.edit', enabled: inside),
+          // The cut taken away again, where a neighbour carries straight on.
+          if (joins)
+            _cell(
+                close,
+                'ctl-menu-join',
+                l10n.cutJoin,
+                // One clip joins across that cut, several across the cuts
+                // between them.
+                () => _afterCut(_cut(() => comp.cutJoin(
+                    clips: one ? [seam.$1.id, seam.$2.id] : _selectedIds(),
+                    linked: _linked)))),
           _flyout(close, 'ctl-menu-trim', l10n.cutTrimMenu, [
             _cell(
                 close,
@@ -901,6 +967,10 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                       _cut(() => comp.cutDeleteTake(clip: clip.id, take: 0))),
                   ticked: false),
             ], width: 240),
+          if (clip.angle != null) ...[
+            const MenuDivider(),
+            ..._multicamRows(close, ui, comp, clip),
+          ],
           const MenuDivider(),
           // What opens or looks at the clip. A solid has nothing inside it to
           // open, and making a composition of a clip changes the document, so
@@ -921,7 +991,8 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
           if (!one)
             _cell(close, 'ctl-menu-fold', l10n.cutNewCompositionFromSelection,
                 () => _foldPicked(ui, comp))
-          else if (!clip.sourceIsSolid)
+          // A multicam clip's comp is opened from its own rows.
+          else if (!clip.sourceIsSolid && clip.angle == null)
             _cell(
                 close,
                 'ctl-menu-open-comp',

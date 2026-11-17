@@ -1,0 +1,48 @@
+---
+title: Captioning a talking clip
+description: Turn the speech in a clip into styled captions, fix them, and export them.
+sidebar:
+  order: 7
+---
+
+Lumit hears the speech in a layer and makes a [caption layer](/use/captions/) from it.
+
+**1. Put the clip in the composition.** Drag it from the [Project panel](/panels/project/)
+into the Timeline, and select its layer.
+
+**2. Open Create captions.** Choose **Layer ▸ Audio ▸ Create captions…**.
+
+**3. Install the speech model.** The first time, the **Speech model** window opens. Press
+**Install**. See [Addons](/use/addons/#captions-whisper).
+
+**4. Choose how the captions are cut.** Leave **Language** and **Speakers** on **Detect**.
+Pick a **Style**, and set **Lines** and **Characters per line**.
+
+**5. Make them.** Press **Create captions**. The status line shows the transcription, and
+**Cancel** stops it. The caption layer goes at the top of the stack, and the **Captions**
+panel opens on it.
+
+**6. Fix a word.** Double-click a caption in the Captions panel, retype it and press
+`Enter`.
+
+**7. Retime a caption.** Twirl the caption layer open in the Timeline and drag the end of a
+block.
+
+**8. Split a long caption.** Put the playhead where it should break, click in the Captions
+panel and press `Ctrl+Shift+D`.
+
+**9. Pick a word out.** Right-click a word in a caption and choose **Emphasise**.
+
+**10. Move a caption off a title.** Right-click the caption and choose **Raise to top**.
+
+**11. Change the look.** Press **Style** in the Captions panel and pick another.
+
+**12. Export.** Open the [export](/use/export/) dialog and set **Captions** to **Burn in**,
+**SRT file**, **WebVTT file** or **In the video file**.
+
+## Related
+
+- [Captions](/use/captions/)
+- [Text](/use/text/)
+- [Export](/use/export/)
+- [Addons](/use/addons/)

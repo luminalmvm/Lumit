@@ -24,7 +24,8 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 #[must_use]
 pub fn default_keymap() -> Keymap {
     use KeyContext::{
-        Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Viewer,
+        Captions, Colour, Cut, Effects, Global, Graph, Mixer, Nodes, Panels, Project, Timeline,
+        Tools, Transcript, Viewer,
     };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
@@ -56,6 +57,8 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+.", "edit.point.next"),
         row(Global, "Mod+Alt+ArrowLeft", "marker.prev"),
         row(Global, "Mod+Alt+ArrowRight", "marker.next"),
+        row(Global, "Mod+Alt+ArrowUp", "captions.prev"),
+        row(Global, "Mod+Alt+ArrowDown", "captions.next"),
         // A keyframe at the playhead on whichever property rows are picked, or
         // the one already there taken away. After Effects has no key for this,
         // only the per-property five below, so the chord is Lumit's own.
@@ -122,6 +125,10 @@ pub fn default_keymap() -> Keymap {
         // A still of the frame at the playhead, beside the chord that
         // exports the whole composition.
         row(Global, "Mod+Alt+Shift+M", "comp.frame.save"),
+        // The comp as a Lottie or an animated SVG, the third of the family.
+        row(Global, "Mod+Shift+M", "file.export.vector"),
+        // Export on another of the account's computers, beside Export.
+        row(Global, "Alt+M", "export.remote"),
         row(Global, "Mod+N", "comp.new"),
         row(Global, "Mod+A", "edit.select.all"),
         row(Global, "Mod+Shift+A", "edit.deselect.all"),
@@ -156,6 +163,7 @@ pub fn default_keymap() -> Keymap {
         // so they take the family's chord with their own initial.
         row(Global, "Mod+Alt+Shift+S", "layer.new.sequence"),
         row(Global, "Mod+Alt+Shift+A", "layer.new.audio"),
+        row(Global, "Mod+Alt+Shift+B", "layer.new.bus"),
         // What else After Effects does to the selected layers from the
         // keyboard, on its own chords. App-wide like the ones above, since a
         // layer picked in the Viewer is as selected as one picked in the
@@ -278,9 +286,16 @@ pub fn default_keymap() -> Keymap {
         row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
         row(Effects, "Mod+D", "effect.duplicate"),
+        // The selected rows become controls of the graphics template.
+        row(Timeline, "Mod+Alt+A", "template.controls.add"),
+        row(Effects, "Mod+Alt+A", "template.controls.add"),
         // The Effect menu's two rows above its categories, from anywhere.
         row(Global, "Mod+Alt+Shift+E", "effect.apply.last"),
         row(Global, "Mod+Shift+E", "effect.remove.all"),
+        // The clean-up effects' two: Learn on the selected one, and its view
+        // or listen switch for only what it takes away.
+        row(Global, "Alt+L", "effect.learn"),
+        row(Global, "Alt+N", "effect.listen"),
         // The Grade panel's Copy grade and Paste grade, from anywhere, so a
         // grade goes across a dozen shots with one key each.
         row(Global, "Alt+Shift+C", "grade.copy"),
@@ -339,6 +354,9 @@ pub fn default_keymap() -> Keymap {
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
         row(Panels, "Mod+F", "panel.search.focus"),
+        // The Viewer's picture alone, filling a display of its own. F11 is
+        // what fills a screen nearly everywhere else.
+        row(Global, "Mod+F11", "window.monitor"),
         // Putting a panel up and taking it down, on the numbers After Effects
         // gives its own.
         row(Panels, "Mod+0", "panel.toggle.project"),
@@ -412,14 +430,106 @@ pub fn default_keymap() -> Keymap {
         // one modifier along.
         row(Cut, "Mod+D", "cut.duplicate"),
         row(Cut, "Mod+Shift+D", "cut.transition.default"),
+        row(Captions, "Mod+Shift+D", "captions.split"),
+        row(Captions, "Mod+J", "captions.merge"),
+        row(Captions, "Mod+Alt+C", "captions.add"),
         row(Cut, "Mod+T", "cut.insert.title"),
         row(Cut, "=", "timeline.zoom.in"),
         row(Cut, "-", "timeline.zoom.out"),
         row(Cut, "\\", "timeline.zoom.fit"),
         row(Cut, "ArrowUp", "edit.point.prev"),
         row(Cut, "ArrowDown", "edit.point.next"),
+        // --- Transcript panel ---
+        // Delete, the keyframe keys, Shift+F3 and Mod+Shift+F act on the
+        // words while the panel has focus. The command palette's
+        // Mod+Shift+P has to keep working here, so the pauses take
+        // Mod+Alt+P.
+        row(Transcript, "Delete", "transcript.extract"),
+        row(Transcript, "Backspace", "transcript.extract"),
+        row(Transcript, "'", "transcript.extract"),
+        row(Transcript, ";", "transcript.lift"),
+        row(Transcript, "R", "transcript.restore"),
+        row(Transcript, "Enter", "transcript.correct"),
+        row(Transcript, "F2", "transcript.correct"),
+        row(Transcript, ",", "transcript.insert"),
+        row(Transcript, ".", "transcript.overwrite"),
+        row(Transcript, "F3", "transcript.find.next"),
+        row(Transcript, "Shift+F3", "transcript.find.prev"),
+        row(Transcript, "X", "transcript.mark"),
+        row(Transcript, "Mod+Shift+F", "transcript.fillers"),
+        row(Transcript, "Mod+Alt+P", "transcript.pauses"),
+        // --- Colour workspace ---
+        // The matte view works from the Viewer too, so it is app-wide. The
+        // rest belong to the grading panels: there Alt+L adds a layer node
+        // rather than learning noise, and the arrows and Home and End walk
+        // the shots, not the playhead.
+        row(Colour, "Alt+S", "grade.node.serial"),
+        row(Colour, "Alt+P", "grade.node.parallel"),
+        row(Colour, "Alt+L", "grade.node.layer"),
+        row(Colour, "Alt+O", "grade.node.outside"),
+        row(Global, "Shift+H", "grade.matte"),
+        row(Colour, "Mod+Alt+G", "grade.still.grab"),
+        row(Colour, "ArrowUp", "grade.shot.prev"),
+        row(Colour, "ArrowDown", "grade.shot.next"),
+        row(Colour, "Home", "grade.shot.first"),
+        row(Colour, "End", "grade.shot.last"),
+        row(Colour, "=", "grade.apply.previous"),
+        row(Colour, "-", "grade.apply.second"),
+        row(Colour, "Mod+Alt+L", "grade.lightbox"),
+        row(Colour, "Mod+Alt+C", "grade.compare"),
+        // --- Mixer ---
+        // The arrows walk the strips and ride the picked faders. Home takes
+        // a fader back to 0 dB rather than the playhead to the start.
+        row(Mixer, "ArrowLeft", "mixer.strip.prev"),
+        row(Mixer, "ArrowRight", "mixer.strip.next"),
+        row(Mixer, "ArrowUp", "mixer.fader.up"),
+        row(Mixer, "ArrowDown", "mixer.fader.down"),
+        row(Mixer, "Shift+ArrowUp", "mixer.fader.up.fine"),
+        row(Mixer, "Shift+ArrowDown", "mixer.fader.down.fine"),
+        row(Mixer, "Home", "mixer.fader.reset"),
+        row(Mixer, "M", "mixer.mute"),
+        row(Mixer, "S", "mixer.solo"),
+        row(Mixer, "Alt+S", "mixer.solo.alone"),
+        row(Mixer, "A", "mixer.automation.next"),
+        // A multicam clip's angles. The digits cut, with Alt they switch.
+        row(Cut, "Mod+Shift+ArrowRight", "multicam.angle.next"),
+        row(Cut, "Mod+Shift+ArrowLeft", "multicam.angle.prev"),
+        row(Viewer, "Mod+Shift+ArrowRight", "multicam.angle.next"),
+        row(Viewer, "Mod+Shift+ArrowLeft", "multicam.angle.prev"),
+        row(Cut, "Mod+Alt+1", "multicam.mode.both"),
+        row(Cut, "Mod+Alt+2", "multicam.mode.picture"),
+        row(Cut, "Mod+Alt+3", "multicam.mode.sound"),
+        row(Cut, "Mod+Shift+ArrowDown", "multicam.page.next"),
+        row(Cut, "Mod+Shift+ArrowUp", "multicam.page.prev"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
+    // A multicam clip's angles: the digit cuts to one, with Alt it switches
+    // to one without a cut. From the program side of the Viewer the digits
+    // cut too. Where no multicam clip is under the playhead a digit still
+    // goes to its marker.
+    for d in 1..=9u8 {
+        for (context, chord, action) in [
+            (Cut, format!("{d}"), format!("multicam.cut.{d}")),
+            (Cut, format!("Alt+{d}"), format!("multicam.switch.{d}")),
+            (Viewer, format!("{d}"), format!("multicam.cut.{d}")),
+        ] {
+            if let Some(b) = row(context, &chord, &action) {
+                bindings.push(b);
+            }
+        }
+    }
+    // A colourist's memories: Alt and a digit lays one on, Mod+Alt and the
+    // digit keeps the current shot's grade in it.
+    for d in 1..=8u8 {
+        for (chord, action) in [
+            (format!("Alt+{d}"), format!("grade.memory.apply.{d}")),
+            (format!("Mod+Alt+{d}"), format!("grade.memory.store.{d}")),
+        ] {
+            if let Some(b) = row(Colour, &chord, &action) {
+                bindings.push(b);
+            }
+        }
+    }
     // Alt+Shift+1…9 switch workspace.
     for d in 1..=9u8 {
         if let Some(b) = row(
@@ -444,20 +554,25 @@ pub fn default_keymap() -> Keymap {
     }
     Keymap {
         bindings,
-        unbound: UNBOUND.iter().map(|a| (Viewer, (*a).into())).collect(),
+        unbound: UNBOUND.iter().map(|(c, a)| (*c, (*a).into())).collect(),
         wheel: WheelKeys::default(),
         break_handles: HandleModifier::default(),
     }
 }
 
-/// The Viewer actions that ship with no key: how a 3D view shows models.
-const UNBOUND: &[&str] = &[
-    "viewer.look.final",
-    "viewer.look.shaded",
-    "viewer.look.wireframe",
-    "viewer.look.shaded_wire",
-    "viewer.look.normals",
-    "viewer.look.faces",
+/// The actions that ship with no key: how a 3D view shows models, moving a
+/// panel between windows, and stabilising a layer, which Track camera's row
+/// beside it has no key for either.
+const UNBOUND: &[(KeyContext, &str)] = &[
+    (KeyContext::Viewer, "viewer.look.final"),
+    (KeyContext::Viewer, "viewer.look.shaded"),
+    (KeyContext::Viewer, "viewer.look.wireframe"),
+    (KeyContext::Viewer, "viewer.look.shaded_wire"),
+    (KeyContext::Viewer, "viewer.look.normals"),
+    (KeyContext::Viewer, "viewer.look.faces"),
+    (KeyContext::Panels, "panel.float"),
+    (KeyContext::Panels, "panel.dock"),
+    (KeyContext::Global, "layer.stabilise"),
 ];
 
 /// A **stored** keymap laid over the shipped defaults: the file's chord
@@ -476,18 +591,22 @@ const UNBOUND: &[&str] = &[
 pub fn with_new_defaults(stored: Keymap) -> Keymap {
     let mut out = stored;
     // The actions that ship with no key, so the page lists them.
-    for action in UNBOUND {
+    for (context, action) in UNBOUND {
         let known = out.bindings.iter().any(|b| b.action.0 == *action)
             || out.unbound.iter().any(|(_, a)| a.0 == *action);
         if !known {
-            out.unbound.push((KeyContext::Viewer, (*action).into()));
+            out.unbound.push((*context, (*action).into()));
         }
     }
+    // Read against the file as it was, so an action with several chords
+    // gains every one of them, not just the first.
+    let stored: Vec<_> = out
+        .bindings
+        .iter()
+        .map(|b| (b.context, b.action.clone()))
+        .collect();
     for binding in default_keymap().bindings {
-        let known = out
-            .bindings
-            .iter()
-            .any(|b| b.context == binding.context && b.action == binding.action)
+        let known = stored.contains(&(binding.context, binding.action.clone()))
             || out
                 .unbound
                 .iter()

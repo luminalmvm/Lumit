@@ -45,7 +45,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod chord;
+mod example_cube;
+mod oval_mask;
 
+mod skipped;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -60,6 +63,7 @@ use lumit_core::model::{
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
+use oval_mask::oval_mask;
 use uuid::Uuid;
 
 /// The example frame's size: the source plate's own, and close enough to 1080p
@@ -485,9 +489,13 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         adjustment: false,
         pitch_follows_speed: false,
         audio_routes: Default::default(),
+        audio_gain_db: 0.0,
+        automation: Default::default(),
+        duck: None,
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
+        grade_versions: None,
         graph_inputs: None,
         blend: Default::default(),
         masks: Vec::new(),
@@ -496,43 +504,6 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         effects: Vec::new(),
         styles: Vec::new(),
         switches: Switches::default(),
-        extra: serde_json::Map::new(),
-    }
-}
-
-/// An oval covering most of the frame, for the three effects that draw along a
-/// mask path (Vegas, Scribble, Stroke). Four vertices with the usual circular
-/// tangent length, which is close enough to an ellipse for a figure.
-fn oval_mask(mode: MaskMode) -> Mask {
-    let (cx, cy) = (f64::from(W) / 2.0, f64::from(H) / 2.0);
-    let (rx, ry) = (f64::from(W) * 0.3, f64::from(H) * 0.34);
-    // The magic number that turns four cubic segments into a circle.
-    let k = 0.552_284_75;
-    let (hx, hy) = (rx * k, ry * k);
-    let v = |pos: (f64, f64), tin: (f64, f64), tout: (f64, f64)| Vertex {
-        pos,
-        tan_in: tin,
-        tan_out: tout,
-    };
-    Mask {
-        id: id("Oval"),
-        name: "Oval".into(),
-        path: BezierPath {
-            vertices: vec![
-                v((cx, cy - ry), (-hx, 0.0), (hx, 0.0)),
-                v((cx + rx, cy), (0.0, -hy), (0.0, hy)),
-                v((cx, cy + ry), (hx, 0.0), (-hx, 0.0)),
-                v((cx - rx, cy), (0.0, hy), (0.0, -hy)),
-            ],
-            closed: true,
-        },
-        path_keys: Vec::new(),
-        inverted: false,
-        opacity: Property::fixed(100.0),
-        mode,
-        feather: Property::zero(),
-        vertex_feather: Vec::new(),
-        expansion: Property::zero(),
         extra: serde_json::Map::new(),
     }
 }
@@ -711,61 +682,6 @@ fn points_above(match_name: &str) -> Vec<(&'static str, EffectInstance)> {
     }
 }
 
-/// Effects the example frame cannot honestly illustrate. Posterize time holds
-/// one frame for several, which is a change to the clock and shows only in
-/// motion. Matte key wants a screen to pull, and this frame has none, so every
-/// setting of it either does nothing or keys something arbitrary. Both are left
-/// without a picture; the manual's generator omits the figure for any effect
-/// with no file on disk, so nothing links to an image that is not there.
-fn unillustrable(match_name: &str) -> Option<&'static str> {
-    match match_name {
-        "posterize_time" => Some("holds frames, which only shows in motion"),
-        "matte_key" => Some("the example frame has no screen in it to key"),
-        // Camera track and Planar track hold a job, and the Controls hold values
-        // for expressions to read; none of them draws, so a picture would be the
-        // plate twice.
-        "camera_track" | "planar_track" | "slider_control" | "angle_control"
-        | "checkbox_control" | "colour_control" | "point_control" | "custom_controls" => {
-            Some("draws nothing by design")
-        }
-        // The drivers. A driver answers with a *number*, a colour or a bag of
-        // points for something else to use, and reaches whatever it drives
-        // through a wire in the node graph. There is no picture of one.
-        "wiggle" | "smooth" | "math" | "remap" | "audio_level" | "colour_cycle"
-        | "points_sample" | "layer_points" | "split" | "combine" | "expression" | "clone_index"
-        | "measure" | "beat_trigger" => Some("a driver: it answers with a value, not a picture"),
-        // The Compositing family. Merge lays one picture over another, Switch
-        // picks between several and Time offset shows its input at another
-        // moment, and Split and Combine channels take a picture apart and put
-        // it back: each is realised by the node graph's own walk rather than by
-        // a kernel, and only a node graph can hold one. This harness stages one
-        // effect on one layer, so there is no graph here to hold it and nothing
-        // to wire a second picture from.
-        "merge" | "switch" | "time_offset" | "split_channels" | "combine_channels" => {
-            Some("only a node graph holds one, and there is no graph here")
-        }
-        // And the effect that applies a graph: it shows whatever graph it is
-        // bound to, and this harness has no node graph composition to bind.
-        "node_graph" => Some("applies a node graph, and there is none in this project"),
-        // **Not a nature — a defect.** The physical flare adds nothing to a
-        // headless render: the frame comes back bit-identical to the plate at
-        // the defaults and still bit-identical with Intensity at 3.5 and an
-        // area light placed on the brightest part of the picture. Its showcase
-        // entry below is written and correct; it is skipped here so that the
-        // run does not stop, and so that the manual does not carry a picture of
-        // the plate with "Lens flare" under it. Take this line out the day the
-        // flare's additive pass reaches this renderer.
-        "lens_flare" => Some("adds nothing to a headless render (defect, not by design)"),
-        // The three config-bound OCIO effects list the project's config, and
-        // this harness has no config to point at. The file transform draws
-        // the example cube, as the LUT does.
-        "ocio_colour_space" | "ocio_display" | "ocio_look" => {
-            Some("needs the project's OCIO config, and there is none here")
-        }
-        _ => None,
-    }
-}
-
 /// The auxiliary layer some effects read as a second picture.
 ///
 /// With a depth clip supplied it is the plate's own depth pass, frame for frame,
@@ -929,6 +845,7 @@ fn example_doc(
                         animators: Vec::new(),
                         style: Default::default(),
                         paragraph: Default::default(),
+                        captions: None,
                         extra: serde_json::Map::new(),
                     },
                 },
@@ -1000,6 +917,9 @@ fn example_doc(
     doc.items.push(ProjectItem::Composition(Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -1051,43 +971,6 @@ fn wire_aux(inst: &mut EffectInstance) {
 
 // ---------------------------------------------------------------------------
 
-/// A small 3D LUT for the LUT effect's picture: cool shadows, warm highlights,
-/// which is the grade everyone recognises and the one a `.cube` is usually
-/// bought to apply. Written as text, because a `.cube` is text.
-fn write_example_cube(path: &std::path::Path) -> std::io::Result<()> {
-    const N: usize = 17;
-    let mut out = String::from(
-        "TITLE \"Lumit manual example\"
-LUT_3D_SIZE 17
-
-",
-    );
-    for b in 0..N {
-        for g in 0..N {
-            for r in 0..N {
-                let (rf, gf, bf) = (
-                    r as f32 / (N - 1) as f32,
-                    g as f32 / (N - 1) as f32,
-                    b as f32 / (N - 1) as f32,
-                );
-                let luma = 0.2126 * rf + 0.7152 * gf + 0.0722 * bf;
-                // Warmth rises with brightness, coolness falls away with it.
-                let warm = luma * luma;
-                let cool = (1.0 - luma) * (1.0 - luma);
-                let clamp = |v: f32| v.clamp(0.0, 1.0);
-                out.push_str(&format!(
-                    "{:.6} {:.6} {:.6}
-",
-                    clamp(rf * (1.0 + 0.55 * warm) - 0.10 * cool),
-                    clamp(gf * (1.0 + 0.10 * warm) - 0.04 * cool),
-                    clamp(bf * (1.0 + 0.70 * cool) - 0.22 * warm),
-                ));
-            }
-        }
-    }
-    std::fs::write(path, out)
-}
-
 fn env_path(key: &str) -> Option<PathBuf> {
     std::env::var_os(key).map(PathBuf::from)
 }
@@ -1133,7 +1016,7 @@ fn render_every_effect_example() {
         Some(p) => p,
         None => {
             let p = out.join("example.cube");
-            write_example_cube(&p).expect("write the example .cube");
+            example_cube::write_example_cube(&p).expect("write the example .cube");
             p
         }
     };
@@ -1152,7 +1035,7 @@ fn render_every_effect_example() {
         if only.as_deref().is_some_and(|o| o != e.match_name) {
             continue;
         }
-        if let Some(why) = unillustrable(e.match_name) {
+        if let Some(why) = skipped::unillustrable(e.match_name) {
             skipped.push(format!("{}: {why}", e.slug));
             continue;
         }

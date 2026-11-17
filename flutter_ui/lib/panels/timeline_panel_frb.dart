@@ -35,6 +35,7 @@ import 'dart:math';
 import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -100,6 +101,8 @@ import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
 import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
+import '../state/caption_tracks.dart';
+import 'timeline_captions_frb.dart';
 import 'sound_mix_row_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'stagger.dart';
@@ -107,6 +110,7 @@ import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'model_fold_rows.dart' show modelPartPath, modelPartReveal;
 import 'shape_entries.dart';
+import 'template_place.dart' show placeTemplateInTimeline;
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
@@ -197,6 +201,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The layer's own twirl, by hand or by another reveal, so it stops
     // answering the last single `U`.
     _revealed.remove(path);
+    _cycleOpened.remove(path);
     _revealShut.removeWhere((p) => isUnderPath(path, p));
     if (open) {
       _open.add(path);
@@ -210,6 +215,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
     _revealed.remove(id);
+    _cycleOpened.remove(id);
     _revealShut.removeWhere((p) => isUnderPath(id, p));
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
@@ -324,6 +330,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return WaveformStyle(
       multiwave: interface.multiwaveWaveforms,
       fromBottom: interface.waveformsFromBottom,
+      scale: interface.waveformScale,
     );
   }
 
@@ -358,7 +365,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // draws with.
     final maxOffset = max(0.0, width - _laneViewport);
     final offset =
-        _hLane.hasClients ? _hLane.offset.clamp(0.0, maxOffset) : 0.0;
+        (positionOf(_hLane)?.pixels ?? 0.0).clamp(0.0, maxOffset);
     final secondsPerPixel = frames / fps / width;
     final viewStart = offset * secondsPerPixel;
     final viewEnd = (offset + _laneViewport) * secondsPerPixel;
@@ -426,6 +433,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         buckets: request.buckets,
         multiwave: bands,
       )
+          .then((peaks) => withSamples(peaks, secondsPerPixel, request,
+              (a, b) => entry.layer.audioSamples(startSeconds: a, endSeconds: b)))
           .then((peaks) {
         // A later window may already have been asked for while this one was
         // decoding; the newest ask wins, so an old answer is dropped rather
@@ -1309,13 +1318,44 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   Map<String, double> get _sequenceGraph => _ui!.sequenceGraph;
 
   /// How much taller each open view makes its layer's row.
-  Map<String, double> get _sequenceExtra => {
-        for (final id in _sequenceOpen)
-          // The clips' top row *is* the layer's own bar row, so opening adds
-          // only the two under it — which is what keeps the layer's row
-          // looking exactly as it did when the view is shut.
-          id: sequenceClipExtra + (_sequenceGraph[id] ?? sequenceEnvelopeStrip),
-      };
+  Map<String, double> get _sequenceExtra {
+    final sequences = {
+      for (final e in _ui!.model.heldLayers)
+        if (e.info.kind == BridgeLayerKind.sequence)
+          e.layer.internallayerId.toString(),
+    };
+    final captions = captionRowHeight(ThemeScope.of(context).theme);
+    return {
+      for (final id in _sequenceOpen)
+        // A caption layer keeps its bar and opens one row of captions under
+        // it.
+        if (_captions.has(id))
+          id: captions
+        // The clips' top row *is* the layer's own bar row, so opening adds
+        // only the two under it, which is what keeps the layer's row
+        // looking exactly as it did when the view is shut.
+        else if (sequences.contains(id))
+          id: sequenceClipExtra +
+              (_sequenceGraph[id] ?? sequenceEnvelopeStrip),
+    };
+  }
+
+  /// Every caption layer in the comp, read when its layer changes.
+  CaptionTracks get _captions => _ui!.captionTracks;
+
+  /// Captions read again: a layer may have become a caption layer, or its
+  /// marks moved. After the frame when the read came in mid-build.
+  void _onCaptions() {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    setState(() {});
+  }
 
   /// Where each open sequence view sits down the table, as (top, bottom) in
   /// the rows' own coordinates — what the row seams skip over, so an open view
@@ -1332,7 +1372,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // as a single block. The seams that *bound* the whole view are left
         // alone: the range is exclusive at both ends, so the layer still has a
         // line above it and the fold-out below still has one over it.
-        out.add((y, y + row.rowHeight + extra));
+        // A caption layer's row of captions sits under its bar, so the seam
+        // under the bar stays.
+        out.add((row.captions ? y + row.rowHeight : y,
+            y + row.rowHeight + extra));
       }
       y += row.height;
     }
@@ -1359,8 +1402,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           .openNestedComp(entry.layer, source.field0);
       return;
     }
-    if (entry.info.kind != BridgeLayerKind.sequence) return;
     final id = entry.layer.internallayerId.toString();
+    if (entry.info.kind != BridgeLayerKind.sequence && !_captions.has(id)) {
+      return;
+    }
     setState(() {
       if (!_sequenceOpen.remove(id)) _sequenceOpen.add(id);
     });
@@ -1883,6 +1928,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     });
   }
 
+  /// A row asked for from another panel: the twirls on the way to it open,
+  /// and it is picked and brought into view.
+  void _onRevealRowRequested() {
+    final request = _ui?.revealRowRequest.value;
+    if (request == null || !mounted) return;
+    _ui!.revealRowRequest.value = null;
+    final id = request.layer.toString();
+    final row = request.row;
+    setState(() {
+      if (row == null) {
+        _layerToShow = id;
+        return;
+      }
+      _setOpen(id, true);
+      _open.addAll(request.open);
+      _foldToShow = row;
+    });
+    if (row != null) _ui!.requestSelectProperty(row);
+  }
+
   /// Layer ▸ Reveal ▸ Expand all or Collapse all: the ground menu's rows.
   void _onFoldAllRequested() {
     if (!mounted) return;
@@ -2279,6 +2344,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _itemChanges =Provider.of<LumitState>(context, listen: false)
         .onChange
         .listen(_onItemsChanged);
+    _captions.addListener(_onCaptions);
     // Someone else selecting a layer marks its row. The roster, not the whole
     // notifier, which also fires for every playhead and pointer move.
     _share = Provider.of<LumitState>(context, listen: false).share
@@ -2322,6 +2388,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // be on screen. Ensure-open, not the reveal keys' toggle: showing
     // a row that is already showing must never hide it.
     _ui!.revealPropertyRequest.addListener(_onRevealRequested);
+    _ui!.revealRowRequest.addListener(_onRevealRowRequested);
     // Animation ▸ Reveal …: the menu says which reveal, the panel runs
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
@@ -2698,7 +2765,31 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _deleteSelectedShapeEntries() ||
         _deleteSelectedAnimators() ||
         _deleteSelectedEffects() ||
+        _deleteCaptions() ||
         _deleteSequenceClip();
+  }
+
+  /// The captions picked in a caption layer's open row go, and the layer
+  /// stays.
+  bool _deleteCaptions() {
+    final layer = captionRowPick.value;
+    final ui = _ui;
+    if (layer == null || ui == null) return false;
+    final picked = ui.captionSelection;
+    if (picked.layer != layer.internallayerId || picked.cues.isEmpty) {
+      return false;
+    }
+    try {
+      layer.removeCues(cues: picked.cues.toList());
+    } catch (_) {
+      Provider.of<LumitState>(context, listen: false)
+          .postNotice(l10n.captionsEditFailed, error: true);
+      return true;
+    }
+    picked.choose(layer.internallayerId, const {});
+    _captions.reread(layer);
+    ui.model.refresh();
+    return true;
   }
 
   /// The clip picked in an open sequence view goes, and leaves a gap: what
@@ -3592,11 +3683,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// How long a second `U` still counts as the same gesture. Timed on `clock`,
   /// which a widget test drives, so a slow machine cannot split `UU` in two.
   /// Long enough to type deliberately, short enough that a `U` a moment later
-  /// starts again rather than collapsing what you just opened.
+  /// is a fresh press rather than the next step of the cycle.
   static const Duration _revealWindow = Duration(milliseconds: 500);
 
+  /// Layers the last `U` or `UU` opened. A fresh `U` on them shuts them again,
+  /// as in After Effects. A layer leaves the set when its own twirl turns or
+  /// another reveal opens it.
+  final Set<String> _cycleOpened = {};
+
   /// One press of the reveal key: `U` opens the **keyed rows**, `UU` opens
-  /// every modified property whole, `UUU` shuts the layer again.
+  /// every modified property whole, `UUU` shuts the layer again. A `U` after
+  /// the window shuts what the cycle opened, so a second press always closes
+  /// rather than depending on how quickly it came.
   ///
   /// The *counting* is ours, because a multi-tap is a gesture like a
   /// double-click and gestures are the frontend's. Which groups qualify is the
@@ -3633,6 +3731,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         ? _revealTaps + 1
         : 1;
     _lastReveal = now;
+    // A fresh `U` on layers the cycle has open, with nothing else open beside
+    // them and nothing folded inside them, shuts them: the key toggles, as `P`
+    // and the other reveal keys do.
+    final open = [
+      for (final l in layers)
+        if (_isOpen(l.internallayerId.toString()))
+          l.internallayerId.toString()
+    ];
+    if (_revealTaps == 1 &&
+        open.isNotEmpty &&
+        open.every((id) =>
+            _cycleOpened.contains(id) &&
+            !_revealShut.any((p) => isUnderPath(id, p)))) {
+      _revealTaps = 3;
+    }
 
     setState(() {
       // Every tap starts from the layers closed, so a reveal shows exactly
@@ -3643,7 +3756,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _dropSelectionUnder(id);
       }
       if (_revealTaps >= 3) {
-        // UUU: shut, and the next U starts the cycle over.
+        // UUU, or a fresh U on what the cycle opened: shut, and the next U
+        // starts the cycle over.
         _revealTaps = 0;
         _lastReveal = null;
         return;
@@ -3675,6 +3789,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           if (row.foldRows.isEmpty) continue;
           _setOpen(row.id, true);
           _revealed[row.id] = RevealFilter.keyframed;
+          _cycleOpened.add(row.id);
         }
         return;
       }
@@ -3685,6 +3800,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // a list of headings the reveal just said were empty.
         if (!groups.any) continue;
         _setOpen(id, true);
+        _cycleOpened.add(id);
         // `UU`: a heading opened by path shows everything under it.
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
@@ -3780,6 +3896,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         hasAudio: _hasAudio,
         hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
+        captionLayers: _captions.ids,
         flowParams: _flowParams,
         volumeDb: _volumeDb,
         driven: _driven,
@@ -3871,6 +3988,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (renameLayerInView == _renameInView) renameLayerInView = null;
     _mixRetry?.cancel();
     _itemChanges?.cancel();
+    _captions.removeListener(_onCaptions);
     _share.roster.removeListener(_onRoster);
     sayInHand(_keyStretch, const []);
     sayInHand(_barDrag, const []);
@@ -3885,6 +4003,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
+    _ui?.revealRowRequest.removeListener(_onRevealRowRequested);
     _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
     _ui?.foldAllRequest.removeListener(_onFoldAllRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
@@ -4674,9 +4793,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         hasAudio: _hasAudio,
         hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
+        captionLayers: _captions.ids,
         flowParams: _flowParams,
         volumeDb: _volumeDb,
         driven: _driven,
+        busNames: {
+          for (final l in ui.model.layers)
+            if (l.info.kind == BridgeLayerKind.bus)
+              l.layer.internallayerId.toString(): l.info.name,
+        },
         // The strip filters the whole comp; a reveal filters only the layers
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
@@ -4766,7 +4891,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             onWillAcceptWithDetails: (details) =>
                 details.data is FootageDragData ||
                 details.data is CompDragData ||
-                details.data is SolidDragData,
+                details.data is SolidDragData ||
+                details.data is TemplateDragData,
             // With Alt held the row under the pointer is the one that changes,
             // so it lights up.
             onMove: (details) {
@@ -4840,19 +4966,30 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   try {
                     comp.addSolidItemLayer(solid: solid, row: at);
                   } catch (_) {}
+                case TemplateDragData(:final path):
+                  // Brought into the project, then nested as a comp is.
+                  placeTemplateInTimeline(
+                      Provider.of<LumitState>(context, listen: false),
+                      ui,
+                      comp,
+                      path,
+                      row: at);
               }
               ui.model.refresh();
             },
             builder: (context, candidate, _) => Container(
               key: _dropArea,
               // A live outline while something is over it, so the drop is
-              // visibly going to land rather than being taken on faith.
-              foregroundDecoration: candidate.isEmpty
-                  ? null
-                  : BoxDecoration(
-                      border: Border.all(
-                          color: ThemeScope.of(context).theme.accent, width: 2),
-                    ),
+              // visibly going to land rather than being taken on faith. Always
+              // a decoration, only its border coming and going: a decoration
+              // that appears adds a box above the lanes, which rebuilds them
+              // and throws the scroll back to the start of the comp.
+              foregroundDecoration: BoxDecoration(
+                border: candidate.isEmpty
+                    ? null
+                    : Border.all(
+                        color: ThemeScope.of(context).theme.accent, width: 2),
+              ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // A panel narrower than the outline's columns shows a
@@ -5882,6 +6019,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       blockHeights: blockHeights,
                       groupActions: _groupActions(ui, comp),
                       onOpenSequence: _openLayerView,
+                      captions: _captions,
                       onGraphHeight: (entry, h) => setState(() =>
                           _sequenceGraph[
                               entry.layer.internallayerId.toString()] = h),

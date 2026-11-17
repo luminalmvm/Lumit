@@ -449,6 +449,25 @@ MenuEntry trackCameraRow(LumitState app, LumitUiState ui) => MenuEntry(
 /// The tracker's own name in the effect registry.
 const String _cameraTrack = 'camera_track';
 
+/// Animation ▸ Stabilise: adds the effect, whose analysis starts by itself,
+/// to each selected footage or Precomp layer that has none.
+MenuEntry stabiliseRow(LumitState app, LumitUiState ui) => MenuEntry(
+      l10n.menuStabilise,
+      onSelection(
+        app,
+        ui,
+        (entry) => entry.layer.addEffect(name: _stabilise),
+        when: (entry) =>
+            (entry.info.kind == BridgeLayerKind.footage ||
+                entry.info.kind == BridgeLayerKind.precomp) &&
+            !entry.info.effects.any((fx) => fx.name == _stabilise),
+      ),
+      action: 'layer.stabilise',
+    );
+
+/// Stabilise's own name in the effect registry.
+const String _stabilise = 'stabilise';
+
 // ---------------------------------------------------------------------------
 // Presets
 // ---------------------------------------------------------------------------

@@ -23,14 +23,18 @@ arrangement. Toggling one adds or drops it.
 | [**Project**](/panels/project/) | Assets and folders. |
 | [**Timeline**](/panels/timeline/) | Time, layers, keyframes, and the graph editor. |
 | **Cut timeline** | The composition's layers as tracks of clips. See [Cutting](/use/cutting/). |
+| **Transcript** | What the Cut timeline's composition says, as text that cuts it. See [Editing by transcript](/use/editing-by-transcript/). |
 | [**Effect controls**](/panels/effect-controls/) | The selected layer's whole effect stack, parameter by parameter. |
 | [**Effects & presets**](/panels/effects-presets/) | Every effect, preset and installed [plugin](/use/plugins/). |
 | **Node graph** | Boxes and wires: the selected layer's stack, a Custom shader's inner graph, or a [node graph composition](/use/node-graphs/). See [The node graph](/use/nodes/). |
 | **Node** | The parameter rows of whichever box the Node graph has picked, and the form of a Read or Input box. |
 | [**Easing**](/panels/easing/) | Shape a curve and apply it to the selected keyframes. |
 | **Retime** | Set a layer's speed, stretch, freeze or reverse it, and choose its in-between frames. |
-| [**Scopes**](/panels/scopes/) | Waveform, RGB parade, vectorscope and histogram. |
-| **Grade** | The selected layer's grade as wheels, primaries, curves and a look. See [Grade a layer](/use/colour-management/#grade-a-layer). |
+| **Scopes** | Waveform, parade, vectorscope, histogram and CIE chromaticity. See [Scopes](/panels/scopes/). |
+| **Grade** | The current shot's current node, a page at a time. See [Grade](/panels/grade/). |
+| **Grade nodes** | The current shot's stack as nodes. See [Grade nodes](/panels/grade-nodes/). |
+| **Shots** | Every shot of the composition, each with its graded picture. See [Shots](/panels/shots/). |
+| **Gallery** | Stills kept with their grades. See [Gallery](/panels/gallery/). |
 | **Text** | The font, size, spacing and outline of a [text layer](/use/text/). |
 | **Paragraph** | How a text layer's lines are aligned, indented and spaced. |
 | **Expressions** | Saved [expressions](/use/expressions/), and an editor that applies one. |
@@ -39,7 +43,7 @@ arrangement. Toggling one adds or drops it.
 | **Align** | Moves the selected layers' anchor points, or lines the layers up with the composition. See [Align](/panels/align/). |
 | [**Hierarchy**](/panels/hierarchy/) | The open composition's layers as a tree, precomps expandable. |
 | [**Debug**](/panels/debug-view/) | Engine readouts. Off, and out of the Panels list, until you turn it on from the Help menu. |
-| **Mixer** | A strip per audible layer, and the Master strip. See [Mixer](/panels/audio/#mixer). |
+| **Mixer** | A strip per layer that makes a sound, then the buses and the Master strip. See [Mixer](/panels/audio/#mixer). |
 | **Audio** | Output levels, beats, and the selected layer's sound. See [Audio panel](/panels/audio/#audio-panel). |
 | **Audio timeline** | A row per layer that makes a sound, with its wave on the lane. See [Audio timeline](/panels/audio/#audio-timeline). |
 
@@ -74,7 +78,7 @@ strip offers:
 | --- | --- |
 | **Close panel** | Takes the panel out of the arrangement. |
 | **Close other panels** | Closes the rest of its group. |
-| **Pop out** | On a Viewer only. Moves it into a window of its own that can sit on another monitor. Close that window to put the Viewer back where it was. |
+| **Move to new window**, **Move group to new window** | Moves the panel, or its whole group, into a [window of its own](#floating-windows). |
 | **Maximise panel** | Fills the window with the panel, or puts it back. |
 | **Add panel** | Lists the panels not in the arrangement, and adds the one picked to this group. |
 | **Stacked group**, **One open at a time** | See [Stack a group](#stack-a-group). |
@@ -96,9 +100,54 @@ another, each under a header with its name.
 A panel ticked in **Window ▸ Panels** joins a stack when the arrangement has one. Unticking
 **Stacked group** turns the stack back into tabs.
 
-:::note[Not built yet]
-Popping out any panel but the Viewer into its own operating-system window.
+## Floating windows
+
+Any panel can go into a window of its own, on any monitor. A floating window holds panels
+the way the main window does: tabs, stacks and splits.
+
+- Drag a tab off every Lumit window and let go. The panel opens in a window there.
+- Hold `Ctrl` (`Cmd` on macOS) while dragging a tab, and it opens in a window wherever you
+  let go.
+- Right-click a tab for **Move to new window**, or **Move group to new window** for its
+  whole group.
+- Drag a tab from one window into another. The drop zones are the same in every window.
+- Right-click a tab in a floating window for **Move to main window** and **Keep on top**.
+
+A floating window's close button puts its panels back in the main window. **Window ▸ Move
+panels to main window** does it for every floating window.
+
+Floating windows stay above the main window and are minimised with it. On Windows, and on
+Linux with Lumit's own title bar, the title lines of the panels along a floating window's
+top are its title bar, with its buttons at the end of the top right one. An empty part of
+them moves the window, a double-click maximises it, and a right-click offers **Full
+screen**, **Keep on top** and **Move panels to main window**. macOS keeps its own title
+bar.
+
+Shortcuts work in whichever window is in front, and `Ctrl+F6` moves the keyboard from panel
+to panel across every window. A menu opens in the window it was asked from, and so does a
+dialogue, unless that window is smaller than 840 × 560.
+
+Where each window stands, its size, and whether it is maximised or full screen are part of
+the arrangement. Lumit keeps an arrangement for each set of displays it is used with, so a
+laptop on its own and the same laptop with a second screen each open as they were last
+left. When neither arrangement has a floating window, the main window stays as it is. A
+window whose display has gone opens over the main window.
+
+:::note[Linux]
+- An extension's panel stays in the main window.
+- On Wayland a floating window opens where Wayland puts it, and keeps its size but not its
+  place.
+- On Wayland a tab cannot be dragged from one window into another. **Move to new window**
+  and **Move to main window** do it.
 :::
+
+## Video monitor
+
+**Window ▸ Video monitor** fills a display with the Viewer's picture alone, on black, with
+no bars, guides or handles. It follows the view being worked in, plays with it, and shows a
+wipe or a split when that view's Viewer is comparing two. `Ctrl+F11` turns it on and off, and
+`Escape` takes it down when it is over the main window's own display. It comes back on the same display whenever that set of displays is
+connected.
 
 ## The shipped workspaces
 
@@ -112,10 +161,10 @@ first and then your own. Each button's tooltip gives its name and its shortcut.
 | **Edit** | The default. Project, Effect controls and Notes tabbed on the left, Viewer centre, Timeline across the bottom, and a stack on the right: Effects & presets open, with Text, Paragraph, Align and Stagger shut below it. |
 | **Effects** | Project and Effect controls tabbed on the left, Viewer centre, the Easing panel beside it, and a stack at the right-hand edge with Effects & presets open and Expressions and Scopes shut. |
 | **Nodes** | The [Node graph](/use/nodes/) across most of the window, a short Timeline under it, a small Viewer down the right, and the Node panel open under it with Effects & presets and Expressions shut. |
-| **Colour** | Project and Effects & presets tabbed on the left, Viewer centre with Scopes under it, and the Grade panel on the right with Effect controls tabbed behind it. |
+| **Colour** | Gallery and Project tabbed on the left, the Viewer over Shots in the centre, Grade nodes and Effect controls tabbed over Scopes on the right, and Grade across the bottom with the Timeline behind it. See [Grading](/use/grading/). |
 | **Audio** | Mixer in front of Project and Effect controls on the left, Viewer centre, the Audio panel open on the right with Effects & presets shut below it, and the Audio timeline across the bottom. |
 | **Retiming** | Project, Effect controls and Effects & presets tabbed on the left, the Retime panel open on the right, with Easing, Stagger and Expressions shut below it, and the Timeline on the speed graph. |
-| **Cut** | Project, Effect controls, Effects & presets and Notes tabbed on the left, a Viewer showing a source view beside the composition, and the [Cut timeline](/use/cutting/) across the bottom with the Mixer at its right. |
+| **Cut** | Project, Transcript, Effect controls, Effects & presets and Notes tabbed on the left, a Viewer showing a source view beside the composition, and the [Cut timeline](/use/cutting/) across the bottom with the Mixer at its right. |
 
 Rearranging under a preset moves the panels and leaves the preset alone. A preset moved
 from how it shipped carries a dot on the strip.
@@ -152,7 +201,7 @@ A project opened on another machine is the same edit under that machine's panel 
 
 | Yours, per user | The project's |
 | --- | --- |
-| Which panels are open, where, size | Which compositions are open, and which is in front |
+| Which panels are open, where, size, and the floating windows | Which compositions are open, and which is in front |
 | Timeline column visibility and widths | Per-composition Viewer state: resolution, magnification, channel, guides |
 | Interface scale, tooltips, motion | Per-composition Timeline state: twirls, work area, playhead, zoom, horizontal and vertical scroll |
 | Where a settings or export window was left | Guides, markers, the region of interest |
@@ -258,7 +307,7 @@ The strip along the bottom of the window. Left to right:
 | **Driving** | While another program is connected and can [edit the open project](/use/command-line/#let-another-program-edit-the-project-open-in-lumit), its name, with **Disconnect**. |
 | **Shared** | While a project is shared, who is in it. It opens the **Multi-edit** window. See [Shared projects](/use/projects/#shared-projects). |
 | **Notice** | The latest message, with **×** to dismiss it. Click it to list the last twenty. |
-| **Jobs** | A running export or proxy, with its frame count, a bar and a **Cancel**. An export adds the time left once it has run for five seconds. A finished job reads where the file went, that it was cancelled, or why it failed. A click on a finished export opens its folder. |
+| **Jobs** | A running export or proxy, or an [export sent to another computer](/use/remote-export/#the-status-line), with its frame count, a bar and a **Cancel**. An export adds the time left once it has run for five seconds. A finished job reads where the file went, that it was cancelled, or why it failed. A click on a finished export opens its folder. |
 | **Output peak** | While playing, what the sound output peaked at, in dB. |
 | **Hint** | While `Shift`, `Alt` or `Ctrl` is held, what it does to the armed tool, at the right-hand end. |
 

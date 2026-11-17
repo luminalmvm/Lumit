@@ -12,6 +12,7 @@ import 'package:lumit_flutter/src/rust/api/effect_presets.dart'
     show listPresetsFor;
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowKind;
 import 'package:lumit_flutter/src/rust/api/model.dart'
     show listMaterialPresets, materialPreset;
 import 'package:provider/provider.dart';
@@ -23,6 +24,7 @@ import '../state/clipboard.dart';
 import '../state/external_links.dart';
 import '../state/layer_bounds.dart' show geometryOptionsNames;
 import '../widgets/controls.dart';
+import 'control_rows.dart' show layerControlRow;
 import 'effect_param_row_frb.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'param_row_menu.dart' show menuGroups;
@@ -378,6 +380,20 @@ class EffectCommands {
             ? const <BridgePresetInfo>[]
             : listPresetsFor(name: info.name);
     final pastable = onStack && ui.clipboard.kind == ClipboardKind.effects;
+    // Whether the effect is on, as a control of the composition's graphics
+    // template. Only an effect of the layer's own stack or styles can be
+    // named, and nothing inside a node graph.
+    final controls = ui.templateControls;
+    final onOff = inputs ||
+            material ||
+            group != null ||
+            clip != null ||
+            !controls.offers(comp)
+        ? null
+        : layerControlRow(BridgeRowKind.effectOn, layer.internallayerId,
+            info.customName ?? effectLabelOf(info.name),
+            owner: info.id);
+    final isControl = onOff != null && controls.controlFor(onOff) != null;
     // A style, the Inputs and a material have no clipboard.
     final copies = !style && !inputs && !material;
     final effectInfo = inputs
@@ -443,6 +459,14 @@ class EffectCommands {
                   row('reset', l10n.reset, () => reset(context),
                       enabled: !atDefault && !locked,
                       ticked: inputs ? null : false),
+                if (onOff != null)
+                  row(
+                      'control',
+                      l10n.controlsEffectOnOff,
+                      () => isControl
+                          ? controls.remove([onOff])
+                          : controls.add([onOff]),
+                      ticked: isControl),
               ],
               extra?.own ?? const [],
               // A clip's or a group's stack is not a layer's to paste onto.

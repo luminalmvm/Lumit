@@ -132,6 +132,15 @@ pub struct BridgeTextStyle {
     pub stroke_over: bool,
     /// Every fill, then every outline (or the other way round), not letter by letter.
     pub strokes_together: bool,
+    /// A plate behind the words, in its colour with alpha.
+    pub plate_on: bool,
+    pub plate: BridgeColourRgba,
+    /// Px of plate round the words.
+    pub plate_padding: f64,
+    /// Px, the plate's corners.
+    pub plate_radius: f64,
+    /// One plate per line rather than one round the block.
+    pub plate_lines: bool,
 }
 
 /// How the lines of a text layer are laid out against each other. All px.
@@ -143,11 +152,26 @@ pub struct BridgeParagraphStyle {
     pub box_width: Option<f64>,
     /// Stretch every line but a paragraph's last to the box.
     pub justify: bool,
+    /// Shrink to fit: no line wraps, and the words are set smaller until the
+    /// longest line fits the box. Does nothing without a box.
+    pub shrink: bool,
     pub indent_left: f64,
     pub indent_right: f64,
     pub indent_first: f64,
     pub space_before: f64,
     pub space_after: f64,
+    /// Px the block is tall. Unset grows it with its lines.
+    pub box_height: Option<f64>,
+    pub vertical: BridgeVerticalAlign,
+}
+
+/// Where the lines sit in a box of fixed height.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeVerticalAlign {
+    Top,
+    Middle,
+    Bottom,
 }
 
 /// The style a text layer has before anything is styled.
@@ -194,6 +218,18 @@ pub enum BridgeSelectorShape {
     Square,
     Ramp,
     Smooth,
+    Bounce,
+}
+
+/// What a range selector follows: its own range, or the spoken words.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorMode {
+    Range,
+    Current,
+    Said,
+    Unsaid,
+    Emphasis,
 }
 
 /// How a selector picks its letters: by place in the words, or by how near
@@ -216,6 +252,9 @@ pub struct BridgeRangeSelector {
     pub offset: BridgeScalar,
     pub basis: BridgeSelectorBasis,
     pub shape: BridgeSelectorShape,
+    pub mode: BridgeSelectorMode,
+    /// Seconds a spoken word takes to change.
+    pub ease: f64,
     pub kind: BridgeSelectorKind,
     /// The layer a Proximity selector measures from, in the same comp.
     pub target: Option<Uuid>,
@@ -326,6 +365,11 @@ pub struct BridgeTextAnimator {
     pub fill_r: BridgeScalar,
     pub fill_g: BridgeScalar,
     pub fill_b: BridgeScalar,
+    /// Per cent, the box behind the reached letters, and its colour.
+    pub box_opacity: BridgeScalar,
+    pub box_r: BridgeScalar,
+    pub box_g: BridgeScalar,
+    pub box_b: BridgeScalar,
     /// The font axes the reached letters are set along, at most eight on a
     /// layer.
     pub axes: Vec<BridgeAnimatorAxis>,
@@ -377,7 +421,8 @@ pub struct BridgeTextBlock {
 }
 
 /// Lay out `text` the way the engine draws it in this style, with or without
-/// the room animators get round it. The first call with a font loads it.
+/// the room animators get round it, and `boxed` when an animator draws boxes.
+/// The first call with a font loads it.
 #[frb(sync)]
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::needless_pass_by_value)]
@@ -387,6 +432,7 @@ pub fn measure_text(
     style: BridgeTextStyle,
     paragraph: BridgeParagraphStyle,
     animated: bool,
+    boxed: bool,
 ) -> BridgeTextBlock {
     let (style, paragraph) = (style_of(style), paragraph_of(paragraph));
     let l = lumit_text::layout(
@@ -397,6 +443,7 @@ pub fn measure_text(
             fill: lumit_core::model::LinearColour::BLACK,
             style: &style,
             paragraph: &paragraph,
+            boxed,
         },
         animated,
     );
@@ -584,6 +631,7 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
+        lumit_core::grade::versions::respawn(&mut copy.grade_versions);
         // The Source row stays **unset**, which reads this effect's own input —
         // the words underneath it. Pointing it at the copy by name would say
         // the same thing in a way that breaks the moment the layer is renamed
@@ -918,6 +966,7 @@ pub(crate) fn text_document_of(
             .collect::<Result<Vec<_>, _>>()?,
         style: Box::new(style_of(document.style)),
         paragraph: paragraph_of(document.paragraph),
+        captions: None,
         extra: serde_json::Map::new(),
     })
 }

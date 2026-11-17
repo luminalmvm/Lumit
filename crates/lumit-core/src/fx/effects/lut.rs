@@ -8,14 +8,18 @@
 //! list — the k-th `lut` effect in the stack binds the k-th slot. What
 //! the effect itself resolves to is the Mix alone.
 //!
-//! There is no CPU reference. The parsed cube never reaches the single-buffer
-//! CPU dispatcher, so the degradation rung renders a LUT as identity, exactly as
-//! the old `Resolved::Lut` arm did; the §1.6 oracle is [`crate::lut::Lut3d::
+//! The parsed cube never reaches the single-buffer CPU dispatcher, so the
+//! degradation rung renders a LUT as identity, exactly as the old
+//! `Resolved::Lut` arm did; the §1.6 oracle is [`crate::lut::Lut3d::
 //! sample_in`], exercised directly from the lumit-gpu test — the transfer into
 //! and back out of the Input space is part of that oracle, so the two
 //! paths cannot disagree about where the picture sits when the table reads it.
+//! A caller holding the cube runs [`apply_cube_cpu`], the kernel on the CPU,
+//! which is how a grade with a LUT in it is baked into a `.cube` of its own.
 
-use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
+use crate::fx::{
+    params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
+};
 use lumit_fx_macros::Effect;
 
 /// LUT's controls.
@@ -79,12 +83,31 @@ impl Lut {
     }
 }
 
-/// LUT's behaviour: no CPU reference (the cube is a texture), so `apply_cpu`
-/// keeps its identity default — the passthrough the old `Resolved::Lut` arm was.
+/// LUT's behaviour: the cube is not in the bag, so `apply_cpu` keeps its
+/// identity default — the passthrough the old `Resolved::Lut` arm was.
 pub struct LutDef;
 
 impl EffectDef for LutDef {
     fn schema(&self) -> &'static EffectSchema {
         &<Lut as EffectMetadata>::SCHEMA
+    }
+}
+
+/// The LUT on the CPU, given its cube: `fx_lut.wgsl`'s `lut_apply` step for
+/// step. Straight colour into the Input space, the lookup, back to linear,
+/// premultiplied again and mixed with what came in. Alpha is left alone.
+pub fn apply_cube_cpu(cube: &crate::lut::Lut3d, rgba: &mut [f32], p: Params<'_>) {
+    let (mix, space) = Lut::read(p).packed();
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3];
+        let straight = if a > 0.0 {
+            [px[0] / a, px[1] / a, px[2] / a]
+        } else {
+            [0.0; 3]
+        };
+        let graded = cube.sample_in(space, straight);
+        for c in 0..3 {
+            px[c] += (graded[c] * a - px[c]) * mix;
+        }
     }
 }

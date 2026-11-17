@@ -25,9 +25,12 @@ areas and components of Lumit.
 | **Relay** | A server that passes a shared project's edits between a host and guests who cannot reach each other. It cannot read them. |
 | **[Shared preview](/use/review-links/)** | An address where an export of a composition is watched in a browser and commented on. The window that lists them is **Previews**. The people watching are **reviewers**, and each upload is a **version**. |
 | **Folder** | A grouping item in the Project panel. |
+| **[Transcript](/use/captions/#transcripts)** | The words said in a footage item, each with when it is said and who says it. |
 | **Comment** | A line of text kept on an asset. |
 | **Composition** | A resolution, frame rate, duration and background, holding a layer stack or a node graph. |
 | **[Node graph](/use/node-graphs/)** (composition) | A composition whose picture is made by boxes and wires instead of a layer stack. |
+| **[Multicam comp](/use/multicam/)** | A composition holding the cameras and recorders of one shoot, in step. |
+| **Angle** | One camera or recorder in a multicam comp. A **sound angle** has no picture. |
 
 ## Layers
 
@@ -37,10 +40,12 @@ areas and components of Lumit.
 | **Footage layer** | A layer showing one footage item. |
 | **[Sequence layer](/use/sequence-layers/)** | Clips cut back to back on one row. |
 | **Clip** | One item within a Sequence layer. A cut between two clips is an **edit point**. |
+| **Multicam clip** | A clip that plays one angle of a multicam comp. |
 | **Dissolve**, **transition** | Two clips overlapping on a picture layer: the later comes in as the earlier goes out, or a Transition effect runs over the earlier one. On an audio-only layer the overlap is a crossfade. |
 | **Linked clips** | A picture clip and its sound clip, on two Sequence layers, that move, trim and cut together. |
 | **Precomp layer** | A layer showing another composition. The verb is **precompose**, and the command is **Layer ▸ Precompose…**. |
 | **Solid**, **Text**, **Shape**, **Null** layers | Flat colour, styled text, vector shapes, and a layer with a transform and no picture. |
+| **[Caption layer](/use/captions/)** | A Text layer that shows the words being said, a few at a time. |
 | **Adjustment layer** | A layer that applies its effects to everything below it. |
 | **Layer group** | A header row folding layers together in the Timeline. |
 | **Audio layer** | A layer playing an audio item, or footage's sound. |
@@ -116,6 +121,7 @@ areas and components of Lumit.
 | **Render** | The engine making pixels, for anything. |
 | **Preview** | Playback inside Lumit. |
 | **Export** | Renders and outputs a composition as a file. |
+| **[Remote export](/use/remote-export/)** | An export one of an account's computers does for another. |
 | **Cache** | Rendered frames kept in VRAM, RAM and on disk. |
 | **[Proxy](/use/proxies/)** | A smaller copy of a footage file, kept beside the original and read in its place while working. |
 | **Stand-in** | In a shared project, a small copy of a whole clip sent to someone who has not got the file. |
@@ -160,6 +166,20 @@ areas and components of Lumit.
 | **[Extension](/use/extensions/)** | A folder somebody else made that adds panels or effects. Its panel is shown in the dock. |
 | **[Preset](/use/presets/)** | Saved effects, properties or animation. |
 | **[Script](/use/scripts/)** | A JavaScript file that edits a project. After Effects `.jsx` scripts run as they are. |
+
+## Sound
+
+| Term | Meaning |
+| --- | --- |
+| **[Bus](/use/mixing/#buses)** | A layer that sums the sound routed to it and passes it on. |
+| **Send** | A copy of a layer's sound taken to a bus at a level of its own. |
+| **Gain** | A layer's or a clip's level before its effects and Volume. |
+| **Volume** | A layer's fader, after its effects. |
+| **[Solo safe](/use/mixing/#solo-and-mute)** | A layer that stays heard whatever is soloed. |
+| **[Automation mode](/use/mixing/#automation)** | How a strip's controls write keys while the composition plays. |
+| **[Lower behind](/use/mixing/#lower-behind)** | A sound's level brought down while another is heard. |
+| **[Loudness target](/use/mixing/#loudness)** | The loudness a composition's mix is made for. |
+| **Stem** | One bus's sound, exported to a file of its own. |
 
 ## Related
 

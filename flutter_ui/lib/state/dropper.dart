@@ -32,10 +32,12 @@
 // on screen.
 
 import 'dart:math' as math;
+import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:uuid/uuid.dart';
 
 /// What a pick is being read *for*. The magnifier looks the same in every case
 /// — it is the caption and the committed value that differ.
@@ -96,6 +98,11 @@ class DropperArm {
   /// the number is no part at all.
   final String? Function(int part)? partName;
 
+  /// For a position pick, the layer whose own pixels the point is in: an
+  /// effect's point, which runs before the layer's transform. Null picks in
+  /// the composition's pixels.
+  final UuidValue? pointLayer;
+
   /// Write the picked value. Called **once**, on the release that ends the
   /// pick — never per pointer move, so the gesture is one undo step.
   final void Function(DropperSample sample) onPick;
@@ -120,6 +127,7 @@ class DropperArm {
     this.sampleLayer,
     this.sampleLayerName,
     this.partName,
+    this.pointLayer,
   });
 }
 
@@ -143,6 +151,11 @@ class DropperSample {
   /// pick writes into an x/y parameter pair (docs/07 §6.1).
   final double xFrac, yFrac;
 
+  /// For a position pick in a layer's own pixels ([DropperArm.pointLayer]),
+  /// that layer's frame, which the fractions are of. Null when they are of
+  /// the composition.
+  final Size? frame;
+
   /// How many pixels a side were averaged.
   final int region;
 
@@ -158,6 +171,7 @@ class DropperSample {
     required this.y,
     this.xFrac = 0,
     this.yFrac = 0,
+    this.frame,
     required this.region,
     this.part = 0,
   });

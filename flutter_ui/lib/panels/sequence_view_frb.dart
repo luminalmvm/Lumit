@@ -751,6 +751,9 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
                         right: width,
                         colours: t.waveform,
                         style: widget.style,
+                        gainDb:
+                            clip.gainDb + widget.entry.info.audioGainDb,
+                        full: t.error,
                       ),
                     ),
                   ),

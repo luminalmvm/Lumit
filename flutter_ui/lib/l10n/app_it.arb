@@ -10830,10 +10830,6 @@
   "@playbackEveryFrame": {
     "description": "Playback setting: show every frame at full resolution, however long it takes."
   },
-  "popOutPanel": "Sgancia",
-  "@popOutPanel": {
-    "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
   "precompose": "Pre-componi",
   "@precompose": {
     "description": "Title and button: put the selected layers inside a new composition."

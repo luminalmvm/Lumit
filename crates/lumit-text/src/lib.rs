@@ -1,10 +1,5 @@
-//! Text rasterisation (docs/03-DATA-MODEL.md §9.1, Phase 1 v1 scope).
-//!
-//! In plain terms: turning a line of text into pixels. v1 is one embedded
-//! font (Inter, OFL-licensed, vendored in assets/fonts per the household's
-//! self-hosted rule), single-style runs, simple advance-based layout. Styled
-//! runs, font selection, shaping/kerning via a full text stack (cosmic-text)
-//! and per-character animators follow the data model doc.
+//! Text rasterisation (docs/03-DATA-MODEL.md §9.1). An unstyled line is set
+//! in the embedded Inter by its advances. Anything styled goes to `styled.rs`.
 //!
 //! **A line can also run along a path**. The advance walk is the same
 //! one — each glyph steps the pen by its own advance — but the pen measures
@@ -17,8 +12,9 @@ use std::sync::OnceLock;
 
 use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
 use lumit_core::model::{LinearColour, TextDocument};
-use lumit_core::text::{GlyphXform, ParagraphStyle, TextStyle};
+use lumit_core::text::{GlyphXform, ParagraphStyle, TextAnimator, TextStyle};
 
+mod block_key;
 pub mod fonts;
 mod styled;
 
@@ -49,6 +45,8 @@ pub struct TextBlock<'a> {
     pub fill: LinearColour,
     pub style: &'a TextStyle,
     pub paragraph: &'a ParagraphStyle,
+    /// An animator draws boxes behind the letters, which only the shaper can.
+    pub boxed: bool,
 }
 
 impl<'a> TextBlock<'a> {
@@ -62,14 +60,15 @@ impl<'a> TextBlock<'a> {
             fill: document.fill,
             style: &document.style,
             paragraph: &document.paragraph,
+            boxed: document.animators.iter().any(TextAnimator::has_box),
         }
     }
 
-    /// One unstyled line, which draws the way every Text layer drew before
-    /// there was a style. Keeping that path is what keeps old projects, and
-    /// the frames they have cached, exactly as they were.
+    /// One unstyled line, which draws as every Text layer drew before there
+    /// was a style, so old projects and their cached frames stay as they were.
     fn plain(&self) -> bool {
-        self.style.is_default() && self.paragraph.is_default() && !self.text.contains(['\n', '\r'])
+        let unstyled = self.style.is_default() && self.paragraph.is_default();
+        unstyled && !self.boxed && !self.text.contains(['\n', '\r'])
     }
 }
 
@@ -138,8 +137,7 @@ pub fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
 /// Where a Text layer's words sit in its own pixels: left, top, right, bottom.
 /// The letters as they are set, from the first line's ascent to the last
 /// line's descent and from the leftmost caret to the rightmost, not the
-/// paragraph box they wrap in. What `lumit_core::text::install_words_box`
-/// is handed.
+/// paragraph box. What `lumit_core::text::install_words_box` is handed.
 #[must_use]
 pub fn words_box(document: &TextDocument, text: &str) -> Option<[f64; 4]> {
     let laid = layout(&TextBlock::of(document, text), false);
@@ -302,8 +300,8 @@ pub fn shape_items(
     offset: f32,
 ) -> Vec<lumit_core::shape::modifier::ShapeEntry> {
     use lumit_core::shape::modifier::{ShapeEntry, ShapeGroup};
-    let glyphs = if block.plain() {
-        glyph_outlines(block.text, block.size, path, offset)
+    let (glyphs, shrink) = if block.plain() {
+        (glyph_outlines(block.text, block.size, path, offset), 1.0)
     } else {
         styled::outlines(block, path, offset)
     };
@@ -319,7 +317,7 @@ pub fn shape_items(
             }
             if stroke {
                 item.stroke = Some(lumit_core::shape::colour::still(style.stroke));
-                item.stroke_width = lumit_core::anim::Property::fixed(style.stroke_width);
+                item.stroke_width = lumit_core::anim::Property::fixed(style.stroke_width * shrink);
             }
             item.combine = u32::from(i > 0) * 4;
             ShapeEntry::Item(item)
@@ -1264,6 +1262,7 @@ mod tests {
             fill: white(),
             style: &style,
             paragraph: &paragraph,
+            boxed: false,
         };
         let old = rasterise_line("Lumit", 48.0, [255, 255, 255]);
         let new = rasterise(&block("Lumit"), &[]);
@@ -1395,6 +1394,7 @@ mit",
             fill: white(),
             style: &style,
             paragraph: &paragraph,
+            boxed: false,
         };
         let groups = shape_items(&block, None, 0.0);
         lumit_core::shape::modifier::items(&groups)
@@ -1528,7 +1528,7 @@ mit",
         let mut a = TextAnimator::new("Fade");
         a.selector.end = Property::fixed(50.0);
         a.opacity = Property::fixed(0.0);
-        let xforms = glyph_xforms(&[a], "AAAA", 0.0);
+        let xforms = glyph_xforms(&[a], "AAAA", 0.0, &[]);
         let faded = rasterise_line_animated("AAAA", 48.0, white(), &xforms);
         let (x0, _, x1, _) = ink_box(&faded).expect("two letters are still there");
         let whole = rasterise_line_animated("AAAA", 48.0, white(), &[]);
@@ -1554,7 +1554,7 @@ mit",
         a.rotation = Property::fixed(35.0);
         a.scale_x = Property::fixed(160.0);
         a.fill_r = Property::fixed(-0.4);
-        let xforms = glyph_xforms(&[a], "Lumit", 0.0);
+        let xforms = glyph_xforms(&[a], "Lumit", 0.0, &[]);
         let go = || rasterise_line_animated("Lumit", 36.0, white(), &xforms).rgba;
         assert_eq!(go(), go());
         assert!(ink_box(&rasterise_line_animated("Lumit", 36.0, white(), &xforms)).is_some());

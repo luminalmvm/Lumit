@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 //! Luma fade's kernel against its CPU oracle, on the layer's own picture and
-//! through a matte. Completion 0 and Mix 0 keep the picture exactly, and 100
-//! leaves nothing.
+//! through a matte, and every pattern. Completion 0 and Mix 0 keep the
+//! picture exactly, and 100 leaves nothing.
 
 use lumit_core::fx::effects::luma_fade::{luma_fade, LumaFadeParams};
 use lumit_gpu::fx::common::{readback_linear_f32, upload_linear_f32};
@@ -31,6 +31,11 @@ fn params(completion: f32, band: f32, invert: bool, mix: f32) -> LumaFadeParams 
         band,
         invert,
         mix,
+        // The picture, on the 40 by 24 raster below.
+        pattern: 0,
+        step: 8.0 / 24.0,
+        centre: [20.0, 12.0],
+        reach: 2.0 / 40f32.hypot(24.0),
     }
 }
 
@@ -64,14 +69,29 @@ fn wgsl_luma_fade_matches_the_cpu_oracle() {
         ("none", params(0.0, 0.2, false, 1.0), false),
         ("all", params(1.0, 0.2, true, 1.0), true),
         ("mix zero", params(0.5, 1e-3, false, 0.0), false),
-    ] {
+    ]
+    .into_iter()
+    // Each pattern, a little soft, at a scale that puts no cell edge on a
+    // pixel centre.
+    .chain((1..=5).map(|pattern| {
+        let p = LumaFadeParams {
+            pattern,
+            step: 0.3,
+            ..params(0.45, 0.1, false, 1.0)
+        };
+        ("pattern", p, false)
+    })) {
         let mut cpu = img.clone();
-        luma_fade(&mut cpu, &p, if with_matte { &matte } else { &[] });
+        luma_fade(&mut cpu, w, &p, if with_matte { &matte } else { &[] });
         let op = LumaFadeOp {
             completion: p.completion,
             band: p.band,
             invert: p.invert,
             mix: p.mix,
+            pattern: p.pattern,
+            step: p.step,
+            centre: p.centre,
+            reach: p.reach,
         };
         let m = with_matte.then_some(&matte_tex);
         let out = fx.luma_fade(&ctx, &tex, w, h, m, &op);
@@ -84,7 +104,7 @@ fn wgsl_luma_fade_matches_the_cpu_oracle() {
             .zip(&gpu)
             .filter(|(a, b)| (*a - *b).abs() > 2e-3)
             .count();
-        assert!(off <= 4, "{name}: {off} values differ");
+        assert!(off <= 4, "{name} {}: {off} values differ", p.pattern);
         match name {
             "none" | "mix zero" => assert_eq!(gpu, img, "{name}: must keep the picture exactly"),
             "all" => assert!(gpu.iter().all(|v| *v == 0.0), "{name}: must leave nothing"),

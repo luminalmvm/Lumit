@@ -177,9 +177,13 @@ pub fn stress_document(p: &StressParams) -> Document {
                 adjustment: false,
                 pitch_follows_speed: false,
                 audio_routes: Default::default(),
+                audio_gain_db: 0.0,
+                automation: Default::default(),
+                duck: None,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
@@ -196,6 +200,9 @@ pub fn stress_document(p: &StressParams) -> Document {
         items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -224,6 +231,8 @@ pub fn stress_document(p: &StressParams) -> Document {
         // switch is on like any new project.
         proxies: Default::default(),
         footage_trims: Default::default(),
+        transcripts: Default::default(),
+        footage_markers: Default::default(),
         use_proxies: true,
         // Nothing packed: the fixture names its media by path.
         packed: Default::default(),
@@ -238,6 +247,8 @@ pub fn stress_document(p: &StressParams) -> Document {
         // the fixture's bytes are the same as they were before swatches.
         swatches: Vec::new(),
         notes: String::new(),
+        grade_groups: Vec::new(),
+        grade_memories: Vec::new(),
         // The fixture caches wherever the application is set to, like any
         // ordinary project.
         cache_location: None,

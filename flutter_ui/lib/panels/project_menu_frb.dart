@@ -25,8 +25,12 @@ import '../shell/comp_settings_frb.dart';
 import '../shell/dialog_frame.dart' show askLumitChoice;
 import '../shell/export_dialog_frb.dart' show showExportDialogFrb;
 import '../shell/interpret_footage_frb.dart';
+import '../shell/create_captions_dialog_frb.dart'
+    show rememberedTranscribeOptions;
+import '../shell/speech_install_dialog_frb.dart' show transcribeWithPrompt;
 import '../shell/model_settings_dialog.dart'
     show modelLightNames, showDroppedModelSettingsFrb;
+import '../shell/multicam_dialog_frb.dart' show showMulticamDialogFrb;
 import '../shell/status_line_frb.dart';
 import '../state/dock.dart';
 import '../state/file_dialogs.dart';
@@ -40,6 +44,8 @@ enum _ProjectMenuAction {
   addToComp,
   revealInComp,
   newCompFromSelection,
+  newMulticam,
+  multicam,
   openInSource,
   toggleFolder,
   newFolder,
@@ -57,6 +63,8 @@ enum _ProjectMenuAction {
   editInBlender,
   findMissing,
   addAudioOnly,
+  transcribe,
+  removeTranscript,
   setProxy,
   makeProxy,
   shareStandIn,
@@ -64,6 +72,8 @@ enum _ProjectMenuAction {
   useProxy,
   clearProxy,
   moveToRoot,
+  updateTemplate,
+  updateAll,
   delete
 }
 
@@ -313,6 +323,14 @@ Future<void> showProjectMenuFrb({
 
   /// Make a comp from these items, the panel's own New composition.
   void Function(List<FootageReference> footage)? onNewComposition,
+
+  /// Bring in the library's newer version of this composition's graphics
+  /// template. Null when it has none, and the row is left off.
+  VoidCallback? onUpdateTemplate,
+
+  /// On the Graphics templates folder: bring in the newer version of every
+  /// template in it that has one. Null when none has.
+  VoidCallback? onUpdateAll,
 }) async {
   final isFootage = item is ItemReference_Footage;
   // Where this footage is in a shared project, and who has it. Read once,
@@ -360,6 +378,28 @@ Future<void> showProjectMenuFrb({
   };
   final picked = targets ?? [item];
   final several = picked.length > 1;
+  // Whether anything picked has its words written down, for Remove
+  // transcript. Read as the menu opens.
+  final transcribed = picked.any((target) {
+    try {
+      return target is ItemReference_Footage && target.field0.hasTranscript();
+    } catch (_) {
+      return false;
+    }
+  });
+  final transcribing =
+      Provider.of<LumitState>(context, listen: false).transcription.running;
+  // Whether the comp is a multicam comp, for its tick. Read as the menu opens.
+  final isMulticam = switch (item) {
+    ItemReference_Composition(:final field0) => () {
+        try {
+          return field0.isMulticam();
+        } catch (_) {
+          return false;
+        }
+      }(),
+    _ => false,
+  };
   // Where Reveal in composition can go: a list of them when there are two.
   final usedIn = several || item is ItemReference_Folder
       ? const <(CompositionReference, String)>[]
@@ -409,6 +449,9 @@ Future<void> showProjectMenuFrb({
               row(_ProjectMenuAction.makeProxy, l10n.makeProxies,
                   key: 'make-proxies',
                   enabled: (targets ?? [item]).any(_holdsFootage)),
+              if (onUpdateAll != null)
+                row(_ProjectMenuAction.updateAll, l10n.templateUpdateAll,
+                    key: 'update-all'),
             ],
             if (isComp) ...[
               row(_ProjectMenuAction.open, l10n.projectOpen,
@@ -418,8 +461,13 @@ Future<void> showProjectMenuFrb({
                   key: 'comp-settings',
                   chord: 'comp.settings',
                   enabled: !several),
+              row(_ProjectMenuAction.multicam, l10n.multicamMark,
+                  key: 'multicam', enabled: !several, ticked: isMulticam),
               row(_ProjectMenuAction.export, l10n.menuExport,
                   key: 'export', enabled: !several),
+              if (onUpdateTemplate != null)
+                row(_ProjectMenuAction.updateTemplate, l10n.templateUpdateMenu,
+                    key: 'update-template', enabled: !several),
             ],
             if (item is! ItemReference_Folder) ...[
               row(_ProjectMenuAction.addToComp, l10n.projectAddToComp,
@@ -450,12 +498,21 @@ Future<void> showProjectMenuFrb({
               row(_ProjectMenuAction.newCompFromSelection,
                   l10n.projectNewCompFromSelection,
                   key: 'new-comp'),
+              row(_ProjectMenuAction.newMulticam, l10n.multicamNew,
+                  key: 'new-multicam'),
               if (openComp != null && hasAudio)
                 row(_ProjectMenuAction.addAudioOnly, l10n.addAudioOnly,
                     key: 'add-audio-only'),
               if (ui.hasSourceView && !missing)
                 row(_ProjectMenuAction.openInSource, l10n.projectOpenInSource,
                     key: 'open-in-source', enabled: !several),
+              if (hasAudio && !missing)
+                row(_ProjectMenuAction.transcribe, l10n.projectTranscribe,
+                    key: 'transcribe', enabled: !transcribing),
+              if (transcribed)
+                row(_ProjectMenuAction.removeTranscript,
+                    l10n.projectRemoveTranscript,
+                    key: 'remove-transcript'),
             ],
             // What the item is on disc, which only footage has.
             if (isFootage) ...[
@@ -715,6 +772,20 @@ Future<void> showProjectMenuFrb({
         for (final target in acts)
           if (target case ItemReference_Footage(:final field0)) field0,
       ]);
+    case _ProjectMenuAction.newMulticam:
+      await showMulticamDialogFrb(context: context, items: [
+        for (final target in acts)
+          if (target case ItemReference_Footage(:final field0)) field0,
+      ]);
+    case _ProjectMenuAction.multicam:
+      if (item case ItemReference_Composition(:final field0)) {
+        try {
+          field0.setMulticam(on_: !isMulticam);
+        } catch (_) {
+          // The comp went as the menu closed.
+        }
+        onLocalEdit();
+      }
     case _ProjectMenuAction.openInSource:
       if (item case ItemReference_Footage(:final field0)) {
         ui.openFootageView(field0);
@@ -783,6 +854,23 @@ Future<void> showProjectMenuFrb({
       }
     case _ProjectMenuAction.findMissing:
       onFindMissing?.call();
+    case _ProjectMenuAction.transcribe:
+      unawaited(transcribeWithPrompt(
+          context,
+          [
+            for (final target in acts)
+              if (target case ItemReference_Footage(:final field0)) field0,
+          ],
+          rememberedTranscribeOptions(ui.workspace)));
+    case _ProjectMenuAction.removeTranscript:
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
+        if (target case ItemReference_Footage(:final field0)
+            when field0.hasTranscript()) {
+          field0.removeTranscript();
+        }
+      }, name: 'Delete transcript');
+      onLocalEdit();
     case _ProjectMenuAction.addAudioOnly:
       eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
           (target) {
@@ -877,6 +965,10 @@ Future<void> showProjectMenuFrb({
       eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
           (target) => target.moveToRoot());
       onLocalEdit();
+    case _ProjectMenuAction.updateTemplate:
+      onUpdateTemplate?.call();
+    case _ProjectMenuAction.updateAll:
+      onUpdateAll?.call();
     case _ProjectMenuAction.delete:
       if (await deleteProjectItems(context, acts)) onLocalEdit();
   }

@@ -26,7 +26,7 @@
 //! matrix in this file's tests.
 
 use crate::decode::{CompFrame, CompJob, DecodePool};
-use crate::export::AudioJob;
+use crate::mix::jobs::AudioJob;
 use crate::plan::{plan_comp_frame, Quality};
 use crate::source::{SourceProbe, SourceProbes};
 use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectItem};
@@ -799,6 +799,7 @@ impl HeadlessRenderer {
         // against this one account (docs/13 §3).
         let ledger = std::sync::Arc::clone(gpu.ledger());
         crate::model::account_against(&ledger);
+        crate::voice::account_against(&ledger);
         Self {
             gpu,
             parts: Some(parts),
@@ -1392,23 +1393,22 @@ impl HeadlessRenderer {
             probes: &self.probes,
         };
         let keys = crate::cache::NestedKeys {
-            doc,
             probes: &probes,
             quality,
         };
         let jobs = {
-            let held = |nested: &Composition,
+            let held = |read: &Arc<Document>,
+                        nested: &Composition,
                         lt: f64,
                         inputs: Option<&lumit_core::model::EffectInstance>|
              -> bool {
                 let Some(parts) = self.parts.as_ref() else {
                     return false;
                 };
-                // The very name the builder gives that frame, a placed graph's
-                // own Input values included, or the planner would skip decodes
-                // for a texture the realiser never finds.
+                // The name the builder gives that frame, a placed graph's Input values
+                // included, or the planner skips decodes for a texture never found.
                 let Some(key) =
-                    crate::cache::NestedKeyer::nested_key_with(&keys, nested, lt, inputs)
+                    crate::cache::NestedKeyer::nested_key_with(&keys, read, nested, lt, inputs)
                 else {
                     return false;
                 };
@@ -1421,6 +1421,7 @@ impl HeadlessRenderer {
             };
             if let Some(parts) = self.parts.as_ref() {
                 parts.fx_cache.borrow_mut().unpin_nested();
+                parts.flow.borrow_mut().next_frame();
             }
             let held: Option<crate::plan::HeldNested<'_>> =
                 if watcher.is_none() { Some(&held) } else { None };
@@ -1446,7 +1447,7 @@ impl HeadlessRenderer {
                         w.decoded(done as u32, total);
                     }
                 })
-                .map_err(|e| format!("headless preview: {e}"))?;
+                .map_err(|e| crate::cancel::or_fault(e, "headless preview"))?;
             self.retained = Some(Retained {
                 comp: comp_id,
                 frame,
@@ -1493,7 +1494,7 @@ impl HeadlessRenderer {
             // Clone to points' pictures for a stream that is only made during
             // the render: the walk asks for them here once it has the stream.
             let late_clones = |spec: &crate::draw::LateClones, points: usize| {
-                crate::build::late_clone_pictures(doc, spec, points, &pixels_by_layer)
+                crate::build::late_clone_pictures(spec, points, &pixels_by_layer)
             };
             let realiser = crate::realise::Realiser {
                 graph_reach: Some(&reach),
@@ -1569,6 +1570,9 @@ impl HeadlessRenderer {
             // work queued on the card under the next frame's.
             if crate::cancel::drawn_short() {
                 break 'frame Err(crate::cancel::CANCELLED.to_string());
+            }
+            if let Some(why) = parts.flow.borrow_mut().take_refusal() {
+                break 'frame Err(why);
             }
             let linear = match roi {
                 Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
@@ -1779,7 +1783,8 @@ impl HeadlessRenderer {
     ///
     /// Not a display: no view transform, no encoding curve, no clamp. A value
     /// four times white comes back as four, which is the whole reason the
-    /// format is worth writing.
+    /// format is worth writing. A `quality` below full composites smaller,
+    /// and the size returned is the picture's own.
     pub fn render_preview_linear(
         &mut self,
         doc: &Arc<Document>,
@@ -1787,15 +1792,16 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Result<(Vec<f32>, u32, u32), String> {
-        let (shown, cw, ch) =
+        let (shown, _, _) =
             self.preview_display_texture_fmt(doc, comp_id, frame, quality, Present::LinearF32)?;
         let Some(parts) = self.parts.as_ref() else {
             return Err("headless preview: renderer is unavailable after an earlier fault".into());
         };
+        let (w, h) = (shown.width(), shown.height());
         parts
             .colour
             .readback_linear_f32(&self.gpu, &shown)
-            .map(|px| (px, cw, ch))
+            .map(|px| (px, w, h))
             .map_err(|e| format!("headless preview: {e}"))
     }
 
@@ -1805,6 +1811,9 @@ impl HeadlessRenderer {
     /// carries the substitution (docs/08 §3.1, docs/impl/addons.md §6.3).
     pub fn refuse_substitution(&mut self) {
         self.pool.refuse_substitution();
+        if let Some(parts) = &self.parts {
+            parts.flow.borrow_mut().refuse_substitution();
+        }
     }
 
     /// Hand frames decoded ahead to the render rather than copy them
@@ -1961,9 +1970,12 @@ impl HeadlessRenderer {
                     // plays.
                     let items = match clip.source {
                         lumit_core::sequence::ClipSource::Footage(item) => vec![item],
+                        // A multicam clip opens its angle's files only.
                         lumit_core::sequence::ClipSource::Comp(nested) => {
-                            doc.comp(nested).map_or_else(Vec::new, |c| {
-                                lumit_core::model::comp_footage_items(doc, c)
+                            lumit_core::multicam::angle_items(doc, clip).unwrap_or_else(|| {
+                                doc.comp(nested).map_or_else(Vec::new, |c| {
+                                    lumit_core::model::comp_footage_items(doc, c)
+                                })
                             })
                         }
                         lumit_core::sequence::ClipSource::Solid(_) => Vec::new(),
@@ -2156,31 +2168,30 @@ impl HeadlessRenderer {
         self.render_preview(doc, comp_id, frame, Quality::default(), scale)
     }
 
-    /// Compute a v1 scope trace (waveform/vectorscope/histogram) from an
-    /// already-rendered comp frame's display bytes, returning the `GRID × GRID`
-    /// RGBA8 trace. `rgba` is the exact frame the Viewer shows (served from the
-    /// bridge's rendered-frame cache, so the scope traces the same frame at no
-    /// re-render cost); the binning runs on the GPU and only the tiny trace is
-    /// read back.
+    /// Compute scope traces from the display bytes of the frame the Viewer
+    /// shows, one `GRID × GRID` RGBA8 trace per kind, in the order asked.
     ///
-    /// `kind` is `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram
-    /// / `4` parade / `5` luma histogram (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
+    /// `kinds` are the codes `ScopeKind::from_code` reads (0 luma, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram, 6 CIE
+    /// xy, 7 vectorscope at 2x); `colours` carries the frontend's fixed
     /// `ScopeColours` as `[bg, trace, red, green, blue]` RGB byte triples, so no
     /// colour literal lives in the engine (docs/15-DESIGN.md) and the bridge need
-    /// not name `lumit-gpu`. `Err` on an unknown kind or if the tiny readback
-    /// fails.
+    /// not name `lumit-gpu`. `Err` on an unknown kind or if the readback fails.
     pub fn render_scope(
         &self,
         rgba: &[u8],
         width: u32,
         height: u32,
-        kind: u32,
+        kinds: &[u32],
         colours: [[u8; 3]; 5],
-    ) -> Result<Vec<u8>, String> {
-        let kind = lumit_gpu::scope::ScopeKind::from_code(kind)
-            .ok_or_else(|| format!("headless scope: unknown kind {kind}"))?;
+    ) -> Result<Vec<Vec<u8>>, String> {
+        let kinds = kinds
+            .iter()
+            .map(|&k| lumit_gpu::scope::ScopeKind::from_code(k).ok_or(k))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|k| format!("headless scope: unknown kind {k}"))?;
         self.scope
-            .trace_rgba8(&self.gpu, kind, colours.into(), rgba, width, height)
+            .trace_rgba8(&self.gpu, &kinds, colours.into(), rgba, width, height)
             .map_err(|e| e.to_string())
     }
 
@@ -3074,12 +3085,21 @@ impl HeadlessRenderer {
 /// Volumes. A soloed sound silences non-soloed audio per comp, as a soloed
 /// picture hides the other pictures. The has-audio probe result is cached per item, so each file is probed
 /// at most once per session.
+///
+/// At the comp being mixed the walk leaves routing and solo to the desk
+/// ([`crate::mix::graph::build_graph`]): each layer's jobs are filed under it
+/// as they are, a muted layer has none, and the Bus layers and muted strips
+/// are read off the comp by the desk itself. A [`Self::folded`] builder
+/// still folds them into the jobs, for a reader that sums jobs without a
+/// desk.
 #[derive(Default)]
 pub struct AudioJobsBuilder {
     /// The one layer that is heard whatever the switches say — see
     /// [`AudioJobsBuilder::layer_audio_jobs`]. `None` for every ordinary mix,
     /// which is the comp as it actually sounds.
     heard: Option<Uuid>,
+    /// Route and solo the comp being mixed in the jobs, as a nested comp is.
+    fold: bool,
 }
 
 /// How many audio streams each footage **item** carries, probed once per
@@ -3111,7 +3131,7 @@ fn driven_volume_of(
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::DrivenVolume>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::DrivenVolume>> {
     use lumit_core::graph::{InputRef, NodeRef, OUT_VOLUME_PORT};
     let wired = layer.graph.edges.iter().any(|e| {
         matches!(
@@ -3120,7 +3140,7 @@ fn driven_volume_of(
         )
     });
     wired.then(|| {
-        std::sync::Arc::new(crate::export::DrivenVolume {
+        std::sync::Arc::new(crate::mix::jobs::DrivenVolume {
             doc: Arc::clone(doc),
             comp: comp.id,
             layer: layer.id,
@@ -3149,11 +3169,11 @@ fn audio_chain_of(
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
     if layer.effects.is_empty() || !layer.switches.fx {
         return None;
     }
-    Some(std::sync::Arc::new(crate::export::AudioChain {
+    Some(std::sync::Arc::new(crate::mix::jobs::AudioChain {
         doc: Arc::clone(doc),
         comp: comp.id,
         layer: layer.id,
@@ -3171,22 +3191,14 @@ fn audio_chain_of(
 /// the family is asked here rather than left to the chain to answer when it
 /// opens: a picture effect on a Precomp layer is the ordinary case, and it
 /// must not put a whole nested comp through the bus stage for nothing.
-fn bus_chain_of(
+pub(crate) fn bus_chain_of(
     doc: &Arc<Document>,
     comp: &Composition,
     layer: &lumit_core::model::Layer,
     offset_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::AudioChain>> {
-    let sounds = layer.effects.iter().filter(|e| e.enabled).any(|e| {
-        lumit_core::fx::builtins::audio_plugin_id(&e.effect.match_name).is_some()
-            || lumit_core::fx::catalogue::BUILTIN_DEFS
-                .get(&e.effect.match_name)
-                .is_some_and(|def| {
-                    def.schema().category == lumit_core::fx::schema::FxCategory::Audio
-                })
-    });
-    if !sounds {
+) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
+    if !crate::mix::rack_stream::sounds(&layer.effects) {
         return None;
     }
     audio_chain_of(doc, comp, layer, offset_s, base_s)
@@ -3199,14 +3211,15 @@ fn bus_chain_of(
 ///
 /// It goes last, so it sits inside the bus: the rack hears the comp at the
 /// level its own master fader sets, and the parent's insert comes after it.
-fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::export::Carrier> {
-    (nested.master_volume_db != 0.0).then(|| crate::export::Carrier {
+fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::mix::jobs::Carrier> {
+    (nested.master_volume_db != 0.0).then(|| crate::mix::jobs::Carrier {
         volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
         pan: lumit_core::anim::Property::zero(),
         offset_s,
         fade: None,
         chain: None,
         retime: None,
+        scope: None,
     })
 }
 
@@ -3223,11 +3236,11 @@ fn clip_chain_of(
     clip: &lumit_core::sequence::Clip,
     start_s: f64,
     base_s: f64,
-) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+) -> Option<std::sync::Arc<crate::mix::jobs::AudioChain>> {
     if clip.effects.is_empty() || !clip.fx {
         return None;
     }
-    Some(std::sync::Arc::new(crate::export::AudioChain {
+    Some(std::sync::Arc::new(crate::mix::jobs::AudioChain {
         doc: Arc::clone(doc),
         comp: comp.id,
         layer: layer.id,
@@ -3242,6 +3255,17 @@ impl AudioJobsBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A builder whose jobs carry the comp's own routing and solo, as a
+    /// nested comp's do: buses as carriers, sends as copies, a solo as
+    /// silence. For the Audio level tap, which sums jobs without a desk.
+    #[must_use]
+    pub fn folded() -> Self {
+        Self {
+            fold: true,
+            ..Self::default()
+        }
     }
 
     /// The comp's audio jobs (empty for a silent comp) — the same list export,
@@ -3302,7 +3326,7 @@ impl AudioJobsBuilder {
         comp: &Composition,
         base_s: f64,
         window: (f64, f64),
-        carriers: &[crate::export::Carrier],
+        carriers: &[crate::mix::jobs::Carrier],
         // The mixer strip everything found down this branch belongs to — the
         // outermost layer of the comp being mixed (`None` at the top, where
         // each layer is its own strip). See `AudioJob::layer`.
@@ -3338,8 +3362,17 @@ impl AudioJobsBuilder {
             }
             return;
         }
-        // Only a soloed layer that makes a sound silences the rest, as in
-        // After Effects: soloing a title to look at it leaves the music playing.
+        // At the comp being mixed, routing and solo are the desk's.
+        if strip.is_none() && !self.fold {
+            for layer in &comp.layers {
+                self.walk_layer(
+                    doc, comp, layer, false, base_s, window, carriers, strip, visited, jobs,
+                );
+            }
+            return;
+        }
+        // Only a soloed layer that makes a sound silences the rest: soloing a
+        // title to look at it leaves the music playing.
         let any_solo = comp
             .layers
             .iter()
@@ -3378,7 +3411,7 @@ impl AudioJobsBuilder {
         any_solo: bool,
         base_s: f64,
         window: (f64, f64),
-        carriers: &[crate::export::Carrier],
+        carriers: &[crate::mix::jobs::Carrier],
         strip: Option<Uuid>,
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
@@ -3398,7 +3431,7 @@ impl AudioJobsBuilder {
         let offset_s = layer.start_offset.0.to_f64() + base_s;
         // A retimed layer's sound follows its map: a footage layer's file is
         // read through it, and a Precomp's whole mix is.
-        let retime = layer.retime.as_ref().map(|map| crate::export::Retimed {
+        let retime = layer.retime.as_ref().map(|map| crate::mix::jobs::Retimed {
             map: map.clone(),
             origin_s: offset_s,
             held: None,
@@ -3430,6 +3463,7 @@ impl AudioJobsBuilder {
                     chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
                     clip_chain: None,
                     retime: retime.map(Arc::new),
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
                 });
             }
             LayerKind::Precomp { comp: nested_id } => {
@@ -3439,10 +3473,44 @@ impl AudioJobsBuilder {
                 let Some(nested) = doc.comp(*nested_id) else {
                     return;
                 };
+                // A copy of a graphics template is heard as the document its
+                // own values make, so footage it puts in the template sounds.
+                //
+                // ponytail: read once, at the copy's first moment, so a keyed
+                // control on a row that sounds is heard at the value it
+                // starts on. Reading the mix per moment is the upgrade.
+                let first = layer.in_point.0.to_f64();
+                let placed = lumit_core::template::placed::for_layer(
+                    doc,
+                    comp,
+                    layer,
+                    lumit_core::time::layer_time(first, layer.start_offset.0),
+                    first,
+                    None,
+                );
+                let doc = placed.as_ref().unwrap_or(doc);
+                let nested = doc.comp(*nested_id).unwrap_or(nested);
+                // A template with an intro or an outro is heard through the
+                // clock its picture is seen through.
+                let retime = retime.or_else(|| {
+                    let timing = nested.template_timing()?;
+                    let ends = layer.graph_inputs.as_ref().map_or(
+                        lumit_core::template::time::Ends::BOTH,
+                        lumit_core::fx::effects::template::ends,
+                    );
+                    let start = first - layer.start_offset.0.to_f64();
+                    let length = layer.out_point.0.to_f64() - first;
+                    Some(crate::mix::jobs::Retimed {
+                        map: lumit_core::template::time::copy_map(timing, ends, start, length)?,
+                        origin_s: offset_s,
+                        held: None,
+                        pitch_follows_speed: layer.pitch_follows_speed,
+                    })
+                });
                 // Retimed, the comp is heard over the stretch of its own time
                 // the map reaches, and the sum read through the map.
                 let retime = retime.map(|retime| {
-                    Arc::new(crate::export::BusRetime {
+                    Arc::new(crate::mix::jobs::BusRetime {
                         retime,
                         zero_s: offset_s,
                         span: (in_s, out_s),
@@ -3450,7 +3518,7 @@ impl AudioJobsBuilder {
                 });
                 let reach = match &retime {
                     Some(bus) => {
-                        let Some((lo, hi)) = crate::export::retimed_reach(&bus.retime, bus.span)
+                        let Some((lo, hi)) = crate::mix::jobs::retimed_reach(&bus.retime, bus.span)
                         else {
                             return;
                         };
@@ -3459,7 +3527,7 @@ impl AudioJobsBuilder {
                     None => (in_s, out_s),
                 };
                 let mut inner = carriers.to_vec();
-                inner.push(crate::export::Carrier {
+                inner.push(crate::mix::jobs::Carrier {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
@@ -3469,6 +3537,7 @@ impl AudioJobsBuilder {
                     // ahead of the Volume and Pan beside it here.
                     chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
                     retime,
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
                 });
                 inner.extend(master_carrier(nested, offset_s));
                 visited.push(*nested_id);
@@ -3529,7 +3598,7 @@ impl AudioJobsBuilder {
         in_s: f64,
         out_s: f64,
         offset_s: f64,
-        carriers: &[crate::export::Carrier],
+        carriers: &[crate::mix::jobs::Carrier],
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
@@ -3577,7 +3646,7 @@ impl AudioJobsBuilder {
             // a footage clip's file is read through it, and a comp clip's mix.
             let retime = clip.retime.as_ref().map(|map| {
                 let (a, b) = (clip.source_in.to_f64(), clip.source_out.to_f64());
-                crate::export::Retimed {
+                crate::mix::jobs::Retimed {
                     map: map.clone(),
                     origin_s: offset_s + clip.place_start.to_f64(),
                     held: Some((a.min(b), a.max(b))),
@@ -3666,7 +3735,7 @@ impl AudioJobsBuilder {
             let stored = |seconds: lumit_core::time::Rational| seconds.to_f64().max(0.0).min(span);
             let head_overlap = overlap(true);
             let tail_overlap = overlap(false);
-            let fade = crate::export::ClipFade {
+            let fade = crate::mix::jobs::ClipFade {
                 start_s,
                 head_s: if head_overlap > 0.0 {
                     head_overlap
@@ -3693,19 +3762,54 @@ impl AudioJobsBuilder {
                 let lumit_core::sequence::ClipSource::Comp(nested_id) = clip.source else {
                     continue;
                 };
-                let Some(nested) = doc
-                    .comp(nested_id)
+                // A clip that is a copy of a graphics template is heard as
+                // the document its own values make, read at its first moment
+                // as a Precomp layer's copy is.
+                let first = clip.place_start.to_f64();
+                let placed = lumit_core::template::placed::for_clip(
+                    doc,
+                    comp,
+                    layer,
+                    clip,
+                    first,
+                    first + layer.start_offset.0.to_f64(),
+                );
+                let doc = placed.as_ref().unwrap_or(doc);
+                // A multicam clip hears its comp through its angle.
+                let Some(nested) = lumit_core::multicam::nested_for(doc, clip)
                     .filter(|_| !visited.contains(&nested_id))
                 else {
                     continue;
                 };
+                let nested = nested.as_ref();
+                // A template with an intro or an outro is heard through the
+                // clock its picture is seen through, which starts at the
+                // clip's start whatever its trim.
+                let responsive = retime.is_none().then(|| nested.template_timing()).flatten();
+                let retime = retime.or_else(|| {
+                    let ends = clip.inputs.as_ref().map_or(
+                        lumit_core::template::time::Ends::BOTH,
+                        lumit_core::fx::effects::template::ends,
+                    );
+                    let length = clip.place_duration.to_f64();
+                    Some(crate::mix::jobs::Retimed {
+                        map: lumit_core::template::time::copy_map(responsive?, ends, 0.0, length)?,
+                        origin_s: offset_s + first,
+                        held: None,
+                        pitch_follows_speed: layer.pitch_follows_speed,
+                    })
+                });
                 // The comp's own time 0 sits where the clip's source time 0
                 // does: the clip's start, less how far it is trimmed in.
-                let nested_s = start_s - clip.source_in.to_f64();
+                let nested_s = if responsive.is_some() {
+                    start_s
+                } else {
+                    start_s - clip.source_in.to_f64()
+                };
                 // Retimed, the comp is heard over the stretch of its own time
                 // the map reaches, and the sum read through the map.
                 let retime = retime.map(|retime| {
-                    Arc::new(crate::export::BusRetime {
+                    Arc::new(crate::mix::jobs::BusRetime {
                         retime,
                         zero_s: nested_s,
                         span: (clip_in, clip_out),
@@ -3713,7 +3817,7 @@ impl AudioJobsBuilder {
                 });
                 let reach = match &retime {
                     Some(bus) => {
-                        let Some((lo, hi)) = crate::export::retimed_reach(&bus.retime, bus.span)
+                        let Some((lo, hi)) = crate::mix::jobs::retimed_reach(&bus.retime, bus.span)
                         else {
                             continue;
                         };
@@ -3723,7 +3827,7 @@ impl AudioJobsBuilder {
                 };
                 let rack = clip_chain_of(doc, comp, layer, clip, start_s, base_s);
                 let mut inner = carriers.to_vec();
-                inner.push(crate::export::Carrier {
+                inner.push(crate::mix::jobs::Carrier {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
@@ -3734,18 +3838,20 @@ impl AudioJobsBuilder {
                     // The retime is the clip's, so it goes on the innermost
                     // carrier and is heard ahead of both racks.
                     retime: if rack.is_none() { retime.clone() } else { None },
+                    scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
                 });
                 // The clip's own rack is a bus inside the row's, so it
                 // hears the comp first, as a footage clip's rack hears its
                 // file ahead of the row's.
                 if let Some(rack) = rack {
-                    inner.push(crate::export::Carrier {
+                    inner.push(crate::mix::jobs::Carrier {
                         volume: lumit_core::anim::Property::zero(),
                         pan: lumit_core::anim::Property::zero(),
                         offset_s: start_s,
                         fade: None,
                         chain: Some(rack),
                         retime,
+                        scope: None,
                     });
                 }
                 inner.extend(master_carrier(nested, nested_s));
@@ -3789,6 +3895,7 @@ impl AudioJobsBuilder {
                 chain: chain.clone(),
                 clip_chain: clip_chain_of(doc, comp, layer, clip, start_s, base_s),
                 retime: retime.map(Arc::new),
+                scope: crate::mix::jobs::ExpressionScope::of(doc, comp.id, layer.id, base_s),
             });
         }
     }
@@ -4396,7 +4503,7 @@ fn crop_texture(
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
+pub(crate) mod tests {
     /// The shared-target pool's eviction rule, which needs no graphics card to
     /// be true and so is tested where every machine runs it
     /// (docs/impl/multi-viewer.md §2.2).
@@ -4446,6 +4553,8 @@ mod tests {
     use lumit_core::store::DocumentStore;
     use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 
+    mod precomp_layers;
+
     /// A transform that centres a `w`×`h` object over a `w`×`h` comp (anchor at
     /// the object's middle, position at the comp's middle) — a copy of the
     /// engine's `centred_transform`, so the solid fills the frame.
@@ -4494,9 +4603,13 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -4510,6 +4623,9 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -4534,7 +4650,7 @@ mod tests {
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
     /// so a probe here costs a `stat` and never FFmpeg.
-    pub(super) fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
+    pub(crate) fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
         let id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
@@ -4558,12 +4674,12 @@ mod tests {
     /// Tell the has-audio memo that `item` carries sound, so a test can place a
     /// song without a file on disk. Ids are fresh per test, so seeding one says
     /// nothing about anybody else's.
-    pub(super) fn seed_has_audio(item: Uuid) {
+    pub(crate) fn seed_has_audio(item: Uuid) {
         AUDIO_STREAMS.lock().unwrap().insert(item, 1);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
-    pub(super) fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
+    pub(crate) fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
         let layer = lumit_core::model::Layer {
             graph: Default::default(),
             markers: Vec::new(),
@@ -4584,9 +4700,13 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -4603,11 +4723,14 @@ mod tests {
     }
 
     /// An empty composition added to `doc`, returning its id.
-    pub(super) fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
+    pub(crate) fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -4673,6 +4796,9 @@ mod tests {
                 adjustment: false,
                 pitch_follows_speed: false,
                 audio_routes: Default::default(),
+                audio_gain_db: 0.0,
+                automation: Default::default(),
+                duck: None,
                 graph: Default::default(),
                 markers: Vec::new(),
                 id: Uuid::now_v7(),
@@ -4700,6 +4826,7 @@ mod tests {
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
+                grade_versions: None,
                 graph_inputs: None,
                 blend: Default::default(),
                 masks: Vec::new(),
@@ -4713,6 +4840,9 @@ mod tests {
             doc.items.push(ProjectItem::Composition(Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                master_keys: None,
+                master_automation: Default::default(),
+                loudness_target: None,
                 lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
@@ -5214,61 +5344,6 @@ mod tests {
         );
     }
 
-    /// **The export cannot see the Viewer's view**, and it is neutral by
-    /// *construction* rather than by discipline: `export::run` builds its own
-    /// `HeadlessRenderer` and nothing ever calls the setter on it, then renders
-    /// each frame through `render_preview` exactly as this does.
-    ///
-    /// So the property under test is that the view is renderer-owned state. The
-    /// obvious regression — making it a global, a static or a thread-local, all
-    /// of which would look fine in every preview test — fails here, because the
-    /// export's fresh renderer would then inherit a view somebody else set. The
-    /// first assertion also proves the view is doing something at all, so this
-    /// cannot pass by the display transform being a no-op.
-    #[test]
-    fn an_export_renders_neutral_whatever_the_viewer_is_set_to() {
-        let mut viewer = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.18, 0.18, 0.18, 1.0]), 8, 8);
-        let doc = store.snapshot();
-        let q = crate::plan::Quality::default();
-
-        let (neutral, _, _) = viewer
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("neutral render");
-
-        viewer.set_display_view(lumit_gpu::DisplayParams::from_stops(2.0, true));
-        let (exposed, _, _) = viewer
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("exposed render");
-        assert_ne!(
-            exposed, neutral,
-            "two stops and a tone map must visibly change the preview, or this \
-             test would pass on a display transform that does nothing"
-        );
-
-        // What the exporter does, in the order it does it (`export::run`): its
-        // own renderer, then `render_preview` per frame at full quality.
-        let mut exporter = HeadlessRenderer::new().expect("export renderer");
-        assert!(
-            exporter.display_view().is_neutral(),
-            "a fresh renderer starts neutral, which is what makes export neutral"
-        );
-        let (exported, _, _) = exporter
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("export render");
-        assert_eq!(
-            exported, neutral,
-            "the export's bytes are the neutral bytes, with the Viewer set to \
-             two stops and a tone map"
-        );
-    }
-
     /// Audio-only media (a readable file with no video stream) must not draw
     /// the missing-footage slate: it is a valid source, not a broken one. Bugs
     /// here previously conflated the two (`Probe::Slate`), which painted the
@@ -5510,7 +5585,7 @@ mod tests {
         let driven = job.driven.as_ref().expect("the wire rides the job");
         assert_eq!(driven.db_at(0.5), Some(-40.0));
 
-        let (gain, envelope) = crate::export::volume_bake(job, 0, 48_000, 48_000);
+        let (gain, envelope) = crate::mix::bake::volume_bake(job, 0, 48_000, 48_000);
         assert_eq!(gain, [1.0, 1.0], "driven is always an envelope");
         let envelope = envelope.expect("driven is always an envelope");
         let want = lumit_audio::mix::db_to_gain(-40.0);
@@ -5530,7 +5605,7 @@ mod tests {
         let c = plain.comp(comp).expect("comp").clone();
         let jobs = builder.audio_jobs(&Arc::new(plain), &c);
         assert!(jobs[0].driven.is_none(), "no wire, no handle");
-        let (gain, envelope) = crate::export::volume_bake(&jobs[0], 0, 48_000, 48_000);
+        let (gain, envelope) = crate::mix::bake::volume_bake(&jobs[0], 0, 48_000, 48_000);
         assert_eq!(envelope, None);
         assert_eq!(gain, [1.0, 1.0], "0 dB unity, straight off the keyframes");
     }
@@ -5598,30 +5673,9 @@ mod tests {
         let shot = push_footage_item(&mut doc, "shot.mp4");
         let comp = push_comp(&mut doc, "cut", 32, 32);
         // 0..1, 1..2 (butt cut), 1.5..2.5 (overlaps the second by 0.5).
-        let clip = |start: Rational, dur: Rational, src_in: Rational| Clip {
-            id: Uuid::now_v7(),
-            source: ClipSource::Footage(shot),
-            source_in: src_in,
-            source_out: src_in.checked_add(dur).expect("out"),
-            place_start: start,
-            place_duration: dur,
-            retime: None,
-            interpolation: Default::default(),
-            fade_in: Default::default(),
-            fade_out: Default::default(),
-            effects: Vec::new(),
-            fx: true,
-            gain_db: 0.0,
-            link: None,
-            audio_streams: Default::default(),
-            audible: true,
-            blend: None,
-            label: None,
-            group: None,
-            opacity: 1.0,
-            takes: Vec::new(),
-            transition: None,
-            extra: serde_json::Map::new(),
+        let clip = |start: Rational, dur: Rational, src_in: Rational| {
+            let out = src_in.checked_add(dur).expect("out");
+            Clip::new(ClipSource::Footage(shot), src_in, out, start, dur)
         };
         push_layer(
             &mut doc,
@@ -5728,7 +5782,7 @@ mod tests {
         // A hundred points a second from the clip's start: silent at the
         // start, half way up a quarter of a second in, then at the clip's
         // own level.
-        let (_, envelope) = crate::export::volume_bake(job, 3 * 48_000, 2 * 48_000, 48_000);
+        let (_, envelope) = crate::mix::bake::volume_bake(job, 3 * 48_000, 2 * 48_000, 48_000);
         let envelope = envelope.expect("a fade is an envelope");
         let level = lumit_audio::mix::db_to_gain(-6.0);
         for (point, want) in [(0, 0.0), (25, 0.5 * level), (50, level), (150, level)] {
@@ -6571,9 +6625,13 @@ mod tests {
             adjustment: false,
             pitch_follows_speed: false,
             audio_routes: Default::default(),
+            audio_gain_db: 0.0,
+            automation: Default::default(),
+            duck: None,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
+            grade_versions: None,
             graph_inputs: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -8063,6 +8121,9 @@ mod tests {
             doc.items.push(ProjectItem::Composition(Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                master_keys: None,
+                master_automation: Default::default(),
+                loudness_target: None,
                 lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
@@ -8209,6 +8270,9 @@ mod tests {
             doc.items.push(ProjectItem::Composition(Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                master_keys: None,
+                master_automation: Default::default(),
+                loudness_target: None,
                 lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
@@ -8526,6 +8590,9 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -8552,6 +8619,9 @@ mod tests {
         Composition {
             graph: Some(graph),
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -9971,6 +10041,9 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
             lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
@@ -10212,146 +10285,7 @@ mod tests {
         );
     }
 
-    /// **A precomp set as a track matte must actually gate the layer**.
-    ///
-    /// The regression: a comp has no pixels until it is rendered, so the draw
-    /// builder's `pixels_for` answered None for a Precomp matte source and the
-    /// whole matte quietly disappeared — the consumer drew everywhere, as if
-    /// no matte had been set. An earlier fix closed the same hole for the
-    /// *layer-input* mattes (a flare source, a DoF depth pass); the track
-    /// matte, which is how everyone actually reaches for a precomp matte,
-    /// still had it.
-    ///
-    /// The scene: a full-frame red solid matted by a hidden precomp layer whose
-    /// own 16×16 blue solid covers the LEFT half of a 32×16 comp. Red survives
-    /// where the precomp has alpha and nowhere else.
-    ///
-    /// Also at half scale, where the comp is realised at half size. It used to
-    /// be padded back to full size rather than stretched, so the matte shrank
-    /// into the middle of its square and the corner went dark.
-    #[test]
-    fn a_precomp_track_matte_gates_the_layer() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 16u32);
-        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
-        let (child_doc, child_id, _) = matrix_base(16, 16, LinearColour([0.1, 0.2, 0.9, 1.0]));
-        for item in child_doc.items {
-            doc.items.push(item);
-        }
-        // The matte itself is hidden, as a matte source always is.
-        let mut matte = matrix_layer("Matte", LayerKind::Precomp { comp: child_id }, 16, 16);
-        matte.switches.visible = false;
-        let matte_id = matte.id;
-        {
-            let comp = doc.comp_mut(comp_id).unwrap();
-            comp.layers[0].matte = Some(lumit_core::model::MatteRef {
-                layer: matte_id,
-                channel: lumit_core::model::MatteChannel::Alpha,
-                inverted: false,
-                source: lumit_core::model::LayerInputSource::default(),
-            });
-            comp.layers.push(matte);
-        }
-
-        let doc = std::sync::Arc::new(doc);
-        let half = Quality {
-            auto_res: true,
-            display_scale: 0.5,
-            ..Quality::default()
-        };
-        for quality in [Quality::default(), half] {
-            let (rgba, w, h) = r
-                .render_preview(&doc, comp_id, 0, quality, 1.0)
-                .expect("render");
-            // Comp pixels, whatever size the frame came back at.
-            let at = |x: u32, y: u32| {
-                let i = (((y * h / ch) * w + x * w / cw) * 4) as usize;
-                (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3])
-            };
-            // Left half: inside the precomp's opaque square, so the red shows.
-            // The middle and a corner, so a shrunken matte shows too.
-            for (x, y) in [(8, 8), (2, 2)] {
-                let (lr, _lg, _lb, la) = at(x, y);
-                assert!(
-                    lr > 150,
-                    "red should survive under the matte at {x},{y}, got {lr}"
-                );
-                assert_eq!(la, 255, "and it should be opaque there");
-            }
-            // Right half: the precomp is transparent there, so nothing is drawn —
-            // this is the pixel that stayed red while the matte was being dropped.
-            let (rr, rg, rb, _ra) = at(24, 8);
-            assert!(
-                rr < 30 && rg < 30 && rb < 30,
-                "outside the precomp matte the layer must be gated out, got {:?}",
-                (rr, rg, rb)
-            );
-        }
-    }
-
-    /// **A paint stroke on a Precomp layer must reach the picture**.
-    ///
-    /// Every other kind of layer is painted in its own raster before it is
-    /// uploaded; a Precomp has no raster until it is rendered, so its strokes
-    /// were built into the draw list, carried nowhere, and quietly dropped —
-    /// the brush drew a Timeline row and no pixels. The realiser now stamps
-    /// them into the nested picture with the same `apply_strokes` every other
-    /// layer goes through.
-    ///
-    /// The scene: a 32×32 precomp of solid white inside a black comp, with one
-    /// fat red dab in the middle of the precomp layer. The middle is red; a
-    /// corner of the precomp is still white.
-    #[test]
-    fn a_paint_stroke_on_a_precomp_layer_reaches_the_picture() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 32u32);
-        let white = LinearColour([1.0, 1.0, 1.0, 1.0]);
-        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
-        let (child_doc, child_id, _) = matrix_base(cw, ch, white);
-        for item in child_doc.items {
-            doc.items.push(item);
-        }
-        let mut pre = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, cw, ch);
-        let mut stroke = lumit_core::paint::PaintStroke::new("Brush 1", vec![(16.0, 16.0)]);
-        stroke.width = 12.0;
-        stroke.hardness = 1.0;
-        stroke.colour = LinearColour([1.0, 0.0, 0.0, 1.0]);
-        pre.paint.push(stroke);
-        // Index 0 is the top of the stack, over the black base.
-        doc.comp_mut(comp_id).unwrap().layers.insert(0, pre);
-
-        let (rgba, w, _h) = r
-            .render_rgba(&std::sync::Arc::new(doc.clone()), comp_id, 0, 1.0)
-            .expect("render");
-        let at = |x: u32, y: u32| {
-            let i = ((y * w + x) * 4) as usize;
-            (rgba[i], rgba[i + 1], rgba[i + 2])
-        };
-        let (mr, mg, mb) = at(16, 16);
-        assert!(
-            mr > 200 && mg < 60 && mb < 60,
-            "the dab must land on the precomp's picture, got {:?}",
-            (mr, mg, mb)
-        );
-        let (cr, cg, cb) = at(2, 2);
-        assert!(
-            cr > 200 && cg > 200 && cb > 200,
-            "and only under the brush — the corner stays white, got {:?}",
-            (cr, cg, cb)
-        );
-    }
+    mod neutral_export;
 }
 
 /// The renderer every test borrows, over the one device and set of compiled

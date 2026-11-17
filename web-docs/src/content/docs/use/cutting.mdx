@@ -30,6 +30,9 @@ the same composition opens in the [Timeline](/panels/timeline/) and the
   Light and a Null have no track here, and stay in the Timeline.
 - A footage layer with sound also draws its sound on a track below the line. Both tracks are
   the same layer.
+- A [Bus layer](/use/mixing/#buses) is a bus track, below the sound tracks, with the bus
+  glyph before its name. Its bar draws the mix routed into it. A clip let go on a bus track
+  is **refused**, and the status line says *Clips don't go on a bus track.*
 
 A track's header carries the layer's name and switches: audible, solo, visible and lock on
 a picture track, audible, solo and lock on a sound track, and visible and lock on a plain
@@ -38,17 +41,18 @@ Double-click it, or press `Enter`, to rename the layer.
 
 With **Settings ▸ Timeline ▸ Cut tracks in any order** on, the tracks stand in the
 composition's layer order and there is no line. Drag a track's name up or down to move it.
-With the setting off, a track moves only among the tracks on its side of the line.
+With the setting off, a track moves only among the tracks on its side of the line, and a bus
+track only among the bus tracks.
 
 Drag the lower edge of a track's header to make the track taller or shorter. Double-click
 the edge to put it back. Heights are saved with the project. Drag the headers' right edge to
 make them wider or narrower, from 120 to 480 pixels. Double-click that edge, or right-click
 it for **Reset width**, to put them back.
 
-A track's header has a **Vol** and a **Pan** slider on a sound track and a **Level** slider on
-a picture track, where the track is tall enough. Drag across one to change it, with `Ctrl`
-for finer steps. Double-click puts it back. On a keyed property the slider sets a key at the
-playhead.
+A track's header has a **Vol** and a **Pan** slider on a sound track or a bus track and a
+**Level** slider on a picture track, where the track is tall enough. Drag across one to
+change it, with `Ctrl` for finer steps. Double-click puts it back. On a keyed property the
+slider sets a key at the playhead.
 
 A track wears its layer's label colour: its clips are tinted with it and their waveforms
 drawn in it. Right-click a track's header, or a plain bar, for the layer's commands:
@@ -68,11 +72,12 @@ A picture clip shows a strip of its frames. A retimed clip's frames follow its s
 clip draws its waveform, the left channel over the right where the sound is stereo.
 
 Right-click the empty ground under the tracks for **Insert title** (`Ctrl`+`T`), **Insert
-solid**, **Insert audio layer**, **Insert Sequence layer** and **Insert adjustment layer**.
-Each adds a track above the selected one, or at the top. The first two are also under
-**Layer ▸ New**. With nothing selected an audio layer goes to the bottom. A title or a solid
-is five seconds long from the playhead, and a title opens for typing with the composition's
-name in it. A gap on a track has the title and the solid too, at the frame under the pointer.
+solid**, **Insert audio layer**, **Insert bus**, **Insert Sequence layer** and **Insert
+adjustment layer**. Each adds a track above the selected one, or at the top. The first two
+are also under **Layer ▸ New**. With nothing selected an audio layer goes to the bottom. A
+title or a solid is five seconds long from the playhead, and a title opens for typing with
+the composition's name in it. A gap on a track has the title and the solid too, at the frame
+under the pointer.
 
 Double-clicking the bar of a Precomp layer opens its composition.
 
@@ -93,6 +98,9 @@ composition has the Viewer back. Drag along the strip under the picture to move 
 | **Overwrite**, `.` | Places the marked stretch at the playhead, over what is there. |
 | **Replace**, `Shift+R` | Places the footage from its In over the clip picked in the Cut timeline, which keeps its place and length. |
 | **Fit to fill**, `Shift+F` | Places the marked stretch over the work area, at whatever speed fills it. |
+
+A [multicam comp](/use/multicam/) loads as the angle viewer, which shows every angle at
+once. `M` puts a marker on the footage at the frame shown.
 
 With no marks set, the whole item is placed. The clip lands on the selected picture track,
 or the lowest one, or a new track when the composition has none. The playhead moves to the
@@ -152,7 +160,9 @@ on linked clips either way.
 Right-click a sound clip for **Normalise**, which sets the gain of every picked clip so its
 loudest sample lands at **Normalise to** in [Settings](/use/settings/#audio), as one undo step,
 **Normalise loudness ▸**, which does the same for a measured loudness of −14, −16 or −23 LUFS,
-and **Reset gain**, which puts it back at 0 dB. **Keep pitch** is the
+and **Reset gain**, which puts it back at 0 dB. With several sound clips picked, **Normalise
+together** and **Normalise loudness together ▸** move them all by one change. The loudest
+lands on the target and the rest keep their balance. **Keep pitch** is the
 [track's setting](/use/retime/#sound), and **Add audio effect ▸** adds an
 [audio effect](/use/audio/#audio-effects) to the clip.
 
@@ -264,6 +274,8 @@ the Audio timeline and Audio layers in the Timeline follow it.
   every clip after it, and **Select layer** every clip on its track.
 - **Trim to playhead ▸** on a clip's menu has **Trim start**, **Trim end**, **Ripple trim
   start** and **Ripple trim end**, the same edits as `Alt`+`Q`, `Alt`+`W`, `Q` and `W`.
+- A cut that changed nothing, where the clip after carries straight on from the clip
+  before, is drawn dotted. **Join** on either clip's menu takes it away.
 - Right-click a gap for **Paste**, **Close gap**, **Insert title**, **Insert solid**,
   **Select layer**, **Select all**, **Add marker here**, **Work area starts here**, **Work
   area ends here** and **Clear work area**.
@@ -298,20 +310,45 @@ that overlap crossfade.
 - With **Select**, drag the handle at a clip's top corner to set the length of its fade.
   A readout beside the pointer gives the length in frames. Dragged back to the corner, the
   fade is removed.
-- An edit point on a picture track can be a wipe rather than a dissolve. **Transition ▸** on a
-  clip's menu lists **Dissolve**, **Linear wipe**, **Radial wipe**, **Iris wipe**, **Card
-  wipe**, **Venetian blinds** and **Luma fade**, and **Remove transition** where there is an
-  overlap. The effect runs over the outgoing clip with the incoming clip beneath it, from
-  nothing to everything across the overlap.
+- An edit point on a picture track can be something other than a dissolve. **Transition ▸**
+  on a clip's menu lists **Dissolve**, then **Wipes ▸**, **Moves ▸** and **Hits ▸**, and
+  **Remove transition** where there is an overlap. A kind with several looks lists them
+  under its name.
+- A wipe runs over the outgoing clip with the incoming clip beneath it, from nothing to
+  everything across the overlap. A move runs on both clips. A hit runs on both clips while
+  they dissolve about the middle of the overlap: nothing at either end, strongest in the
+  middle.
 - Right-click an overlap on a picture track to change what it is. **Effect controls** on that
   menu opens its rows in [Effect controls](/panels/effect-controls/), marked **Transition**,
-  less the ones the overlap decides. Bypassed there, it is a dissolve again.
+  less the ones the overlap decides. A hit keeps the row it sweeps, as its strength in the
+  middle of the overlap. Bypassed there, it is a dissolve again.
 - **Settings ▸ Timeline ▸ Default transition** picks what `Ctrl`+`Shift`+`D` adds, and what a
   clip dragged across another under **Auto crossfade** takes.
 - Right-click a fade, a dissolve or a crossfade for its curve: **Linear**, **Fast**,
   **Slow**, **Smooth** or **Sharp**. **Length…** on the same menu types its length in frames,
   and the last row removes it.
 - A dissolve between two clips with no spare media at the cut is **refused**.
+
+| Under **Transition ▸** | Lists |
+| --- | --- |
+| **Wipes** | **Linear wipe**, **Radial wipe**, **Iris wipe**, **Card wipe ▸** with **Card wipe**, **Flip** and **Shutters**, **Venetian blinds**, and **Luma fade ▸** with **Luma fade**, **Noise dissolve**, **Blocks**, **Diamonds**, **Stripes** and **Soft iris**. |
+| **Moves** | **Move ▸** with **Push left**, **Push right**, **Push up**, **Push down**, **Slide left**, **Slide right**, **Cover left**, **Cover right**, **Whip left**, **Whip right**, **Whip up**, **Whip down**, **RGB whip**, **Zoom in**, **Zoom out**, **Spin**, **Zoom spin**, **Stretch** and **Drift**, and **Slices ▸** with **Slices** and **Slice glitch**. |
+| **Hits** | **Flash ▸** with **Flash** and **Dip to black**, **Blur dissolve**, **Smear**, **Radial blur ▸** with **Zoom blur** and **Spin blur**, **Block glitch ▸** with **Glitch** and **Glitch slices**, **RGB split**, **Shake**, **Pixelate**, **Twirl**, **Bulge**, **Warp**, **Bloom**, and **Light leak ▸** with **Light leak** and **Film burn**. |
+
+The looks are described on [Card wipe](/effects/transition/card-wipe/#looks),
+[Luma fade](/effects/transition/luma-fade/#looks), [Move](/effects/transition/move/#presets),
+[Slices](/effects/transition/slices/#presets) and
+[Light leak](/effects/stylise/light-leak/#presets). **Blur dissolve** is
+[Gaussian blur](/effects/blur-sharpen/gaussian-blur/), **Smear**
+[Directional blur](/effects/blur-sharpen/directional-blur/), **Pixelate**
+[Mosaic](/effects/stylise/mosaic/), **Bulge** [Spherize](/effects/distortion/spherize/),
+**Warp** [Turbulent displace](/effects/distortion/turbulent-displace/) and **Bloom**
+[Glow](/effects/stylise/glow/). **Dip to black** is [Flash](/effects/stylise/flash/) with
+**Colour** at black. **Zoom blur** and **Spin blur** are
+[Radial blur](/effects/blur-sharpen/radial-blur/) with **Type** on Zoom and on Spin.
+**Glitch** is [Block glitch](/effects/distortion/block-glitch/) with **Channel offset**
+parting the colours of its blocks, and **Glitch slices** is larger blocks with **Slice
+repeat** at 100.
 
 ## Effects and blend mode on a clip
 
@@ -367,9 +404,9 @@ A picture clip's linked sound clip plays at normal speed.
 
 ## Gain
 
-A sound clip's level is a line across it, at the top for 0 dB. Drag it down to turn the clip
-down, with `Ctrl` for finer steps. Double-click it to put it back at 0 dB. A readout beside
-the pointer gives the level, and the waveform shrinks with it.
+A sound clip's level is a line across it, from −60 dB at the foot to +24 dB at the top. Drag
+it to turn the clip up or down, with `Ctrl` for finer steps. Double-click it to put it back
+at 0 dB. A readout beside the pointer gives the level, and the waveform follows it.
 
 A picture clip's opacity is the same line along its top edge. Drag it down to make the clip
 see-through, and double-click it to put it back at full. Below full the line shows across
@@ -511,14 +548,17 @@ composition with a window on the part in view. The slider on the bottom bar zoom
 middle-button drag pans.
 
 :::note[Not built yet]
-Multicam, captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
+Captions, and EDL, XML or AAF interchange. Trimming with `J`, `K` and `L`.
 :::
 
 ## Related
 
 - [Sequence layers](/use/sequence-layers/)
 - [Retiming and speed](/use/retime/)
+- [Mixing](/use/mixing/)
 - [Audio, Mixer and Audio timeline](/panels/audio/)
+- [Editing by transcript](/use/editing-by-transcript/)
+- [Multicam](/use/multicam/)
 - [Cutting to the beat](/tutorials/cut-to-the-beat/)
 - [Workspaces and panels](/use/workspaces/)
 - [Proxies](/use/proxies/)

@@ -1,6 +1,8 @@
 use super::colour_name::ColourNameRole;
 use super::params::Unit;
 
+mod matte_role;
+
 /// Cost class (docs/08 §1.3) — consumed by degradation ordering and budgets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CostClass {
@@ -447,6 +449,15 @@ pub enum ParamKind {
         /// start invisible and grow from nothing (particulate.md §2).
         default: &'static [[f32; 2]],
     },
+    /// An **outline** inside a box: up to
+    /// [`SHAPE_MAX_POINTS`](super::shape_points::SHAPE_MAX_POINTS) points in
+    /// order round a closed shape, each in `-1..1` of the box the rows beside
+    /// it place (a Correction window's polygon). The value is an
+    /// [`EffectValue::Shape`](crate::model::EffectValue::Shape), empty for a
+    /// fresh row, read through
+    /// [`ShapePoints::sanitised`](super::shape_points::ShapePoints::sanitised).
+    /// Static, as a curve is: the box animates, the points do not.
+    Shape,
     /// A **button**, not a value: a row the panel draws as a push
     /// button, which asks the engine to *do* something rather than describing
     /// what a picture should look like.
@@ -503,6 +514,7 @@ impl ParamKind {
             | ParamKind::Clip
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
+            | ParamKind::Shape
             | ParamKind::ColourName { .. }
             | ParamKind::Text { .. }
             | ParamKind::Action => None,
@@ -929,41 +941,6 @@ pub enum MatteRole {
         /// arrive as one attribute.
         meaning: &'static str,
     },
-}
-
-impl MatteRole {
-    /// The parameter the matte layer reference is stored under, or `None` when
-    /// this effect takes no matte. **The one lookup key**: the draw builder
-    /// enumerates slots by it, so a role and a declared parameter that disagree
-    /// is a matte bound to a layer nobody renders — which
-    /// `every_matte_role_names_a_declared_layer_row` refuses to let happen.
-    #[must_use]
-    pub const fn param(self) -> Option<&'static str> {
-        match self {
-            MatteRole::None => None,
-            MatteRole::Strength => Some(MATTE_PARAM),
-            MatteRole::Own { param, .. } => Some(param),
-        }
-    }
-
-    /// The one-sentence meaning an override declares, `None` for the generic
-    /// strength semantic (whose meaning is the same sentence for every effect
-    /// that uses it, and is written once in docs/08 §2.6).
-    #[must_use]
-    pub const fn meaning(self) -> Option<&'static str> {
-        match self {
-            MatteRole::Own { meaning, .. } => Some(meaning),
-            _ => None,
-        }
-    }
-
-    /// Whether the generic dissolve runs beside the dispatch. False for an
-    /// override, which is the whole point of overriding: the matte is already
-    /// spent inside the kernel.
-    #[must_use]
-    pub const fn generic(self) -> bool {
-        matches!(self, MatteRole::Strength)
-    }
 }
 
 /// One built-in effect's full declaration.

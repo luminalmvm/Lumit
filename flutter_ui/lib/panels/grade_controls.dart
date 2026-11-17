@@ -8,11 +8,31 @@ import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 
 /// The room every row keeps from the panel's edge.
 const double gradeInset = 10;
+
+/// [child] with a small dot after it while [on]: a page or a mode that holds
+/// edits on the current node. The room is kept either way, so a tab doesn't
+/// change width as its dot comes and goes.
+Widget gradeDotted(LumitTheme t, Widget child, bool on) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        child,
+        const SizedBox(width: 3),
+        Container(
+          width: 4,
+          height: 4,
+          decoration: BoxDecoration(
+            color: on ? t.accent : null,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ],
+    );
 
 /// A right-click holder that floats [rows] at the pointer. The rows are built
 /// on the click, so they read the document as it stands then.
@@ -174,6 +194,10 @@ class GradeSlider extends StatefulWidget {
   /// numbers line up.
   final Widget? trailing;
 
+  /// Two colours the track runs between, for a row that pushes the picture
+  /// one way or another (warm and cool), or none for a plain line.
+  final List<Color>? tint;
+
   const GradeSlider({
     super.key,
     required this.label,
@@ -193,6 +217,7 @@ class GradeSlider extends StatefulWidget {
     this.keyed = false,
     this.menu,
     this.trailing,
+    this.tint,
   });
 
   @override
@@ -297,6 +322,7 @@ class _GradeSliderState extends State<GradeSlider> {
                                   (widget.max - widget.min))
                               .clamp(0.0, 1.0),
                           track: widget.enabled ? t.hairlineStrong : t.hairline,
+                          tint: widget.enabled ? widget.tint : null,
                           fill: !widget.enabled
                               ? t.hairline
                               : widget.keyed
@@ -366,6 +392,7 @@ class _GradeSliderState extends State<GradeSlider> {
 class _TrackPainter extends CustomPainter {
   final double at, from;
   final Color track, fill, knob;
+  final List<Color>? tint;
 
   const _TrackPainter({
     required this.at,
@@ -373,6 +400,7 @@ class _TrackPainter extends CustomPainter {
     required this.track,
     required this.fill,
     required this.knob,
+    this.tint,
   });
 
   @override
@@ -380,13 +408,16 @@ class _TrackPainter extends CustomPainter {
     final y = size.height / 2;
     final inset = 4.0;
     final w = size.width - inset * 2;
-    canvas.drawLine(
-      Offset(inset, y),
-      Offset(inset + w, y),
-      Paint()
-        ..color = track
-        ..strokeWidth = 1,
-    );
+    final line = Paint()
+      ..color = track
+      ..strokeWidth = 1;
+    if (tint case final tint?) {
+      line
+        ..strokeWidth = 2
+        ..shader = LinearGradient(colors: tint).createShader(
+            Rect.fromLTWH(inset, y - 1, w, 2));
+    }
+    canvas.drawLine(Offset(inset, y), Offset(inset + w, y), line);
     final x0 = inset + from * w;
     final x1 = inset + at * w;
     if ((x1 - x0).abs() > 0.5) {
@@ -407,5 +438,6 @@ class _TrackPainter extends CustomPainter {
       old.from != from ||
       old.fill != fill ||
       old.knob != knob ||
-      old.track != track;
+      old.track != track ||
+      old.tint != tint;
 }

@@ -2,8 +2,8 @@
 //! dissolve of one that plays a composition or a solid, and every Transition
 //! effect (`lumit_core::sequence::transition`).
 //!
-//! A transition runs its effect over the outgoing clip, with the incoming clip
-//! beneath. So the two footage pictures can't be mixed where they are decoded,
+//! A Transition kind runs on the outgoing clip, or on both clips, across the
+//! overlap. So the two footage pictures can't be mixed where they are decoded,
 //! as a plain dissolve's are. The outgoing one comes along beside the incoming
 //! one instead, filed under a moment nothing else asks for.
 
@@ -12,7 +12,8 @@ use std::sync::Arc;
 use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::markers::MarkerContext;
 use lumit_core::model::{Composition, EffectInstance, Layer};
-use lumit_core::sequence::{transition, Clip};
+use lumit_core::sequence::transition::{self, Side, Sweep};
+use lumit_core::sequence::Clip;
 use lumit_gpu::composite::Blend;
 
 use crate::build::read_draw;
@@ -55,6 +56,9 @@ fn part(layer: &Layer, (source, size): Picture, natural: (f32, f32)) -> CompLaye
     draw.position = (natural.0 * 0.5, natural.1 * 0.5);
     let fit = (natural.0 / size.0.max(1.0)).min(natural.1 / size.1.max(1.0));
     draw.scale = (fit * 100.0, fit * 100.0);
+    // Its stack is resolved at the picture's own size, and drawn at the
+    // preview's, so px rows follow the picture down.
+    draw.fx_ref_width = Some(size.0);
     draw
 }
 
@@ -77,6 +81,18 @@ fn mix(draws: Vec<CompLayerDraw>, natural: (f32, f32), lt: f64) -> Picture {
         },
         natural,
     )
+}
+
+/// A footage or solid picture drawn once into one of its own size, so its
+/// colour has its alpha in it before a stack runs on it, as a comp clip's has.
+fn whole(layer: &Layer, picture: Picture, lt: f64) -> Picture {
+    match picture.0 {
+        DrawSource::Pixels { .. } => {
+            let size = picture.1;
+            mix(vec![part(layer, picture, size)], size, lt)
+        }
+        _ => picture,
+    }
 }
 
 /// A dissolve: both, each at its share, the second laid on the first with
@@ -111,10 +127,11 @@ fn own_stack(clip: &Clip) -> Vec<EffectInstance> {
     stack
 }
 
-/// A transition: the incoming clip whole, and the outgoing clip over it with the
-/// effect run on it after its own stack, swept to `u`. Spatial rows are px@comp,
-/// and each stack runs on its clip's own picture, as a layer's does. The effect's
-/// keys are stored from the incoming clip's start.
+/// A transition: the outgoing clip with the effect run on it after its own
+/// stack, swept to `u`, over the incoming clip whole. A kind that sweeps both
+/// clips runs it on the incoming clip too, and a Peak kind dissolves the two.
+/// Spatial rows are px@comp, and each stack runs on its clip's own picture, as
+/// a layer's does. The effect's keys are stored from the incoming clip's start.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn wiped(
     layer: &Layer,
@@ -127,43 +144,65 @@ pub(crate) fn wiped(
     (lt, frame_lt): (f64, f64),
     context: Arc<ExpressionContext>,
 ) -> Picture {
+    let (going, coming) = (whole(layer, going, lt), whole(layer, coming, lt));
     let natural = coming.1;
     let size = going.1;
     let local = lt - incoming.place_start.to_f64();
-    let mut swept = [transition::swept(
-        effect,
-        u,
-        f64::from(size.0),
-        f64::from(size.1),
-        local,
-    )];
-    lumit_core::preset::shift_keys(&mut swept, incoming.place_start);
+    let swept = |side, (w, h): (f32, f32)| {
+        let mut swept = [transition::swept(
+            effect,
+            u,
+            side,
+            f64::from(w),
+            f64::from(h),
+            local,
+        )];
+        lumit_core::preset::shift_keys(&mut swept, incoming.place_start);
+        swept
+    };
     let mut gone = own_stack(outgoing);
-    gone.extend(swept);
+    gone.extend(swept(Side::Out, size));
+    let mut come = own_stack(incoming);
+    let sweep = transition::kind(&effect.effect.match_name).map(|k| k.sweep);
+    if matches!(sweep, Some(Sweep::Both | Sweep::Peak { .. })) {
+        come.extend(swept(Side::In, natural));
+    }
     let diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
     let markers = MarkerContext::for_layer(comp, layer);
-    let run = |draw: &mut CompLayerDraw, stack: &[EffectInstance], picture_scale: f32| {
+    // Both pictures are whole ones now, drawn at the comp's own scale.
+    let run = |draw: &mut CompLayerDraw, stack: &[EffectInstance]| {
         let (fx_ids, fx) = lumit_core::fx::resolved::resolve_stack_temporal_named(
             stack,
             &Default::default(),
             lt,
             frame_lt,
-            diag * picture_scale,
-            picture_scale,
+            diag,
+            1.0,
             &markers,
             context.clone(),
         );
         draw.fx = fx;
         draw.fx_ids = fx_ids;
     };
-    let scale_of = |picture: &Picture| match &picture.0 {
-        DrawSource::Pixels { tex_w, .. } => *tex_w as f32 / picture.1 .0.max(1.0),
-        _ => 1.0,
+    let mut coming = part(layer, coming, natural);
+    run(&mut coming, &come);
+    let mut going = part(layer, going, natural);
+    run(&mut going, &gone);
+    let draws = match transition::share(effect, u) {
+        // As `dissolved` mixes them.
+        Some(here) => {
+            going.opacity = ((1.0 - here) * 100.0) as f32;
+            coming.opacity = (here * 100.0) as f32;
+            coming.blend = Blend::Plus;
+            vec![going, coming]
+        }
+        None if transition::incoming_over(effect) => vec![going, coming],
+        // Two pictures of different sizes don't meet edge to edge.
+        None if size == natural && transition::side_by_side(effect, local) => {
+            coming.blend = Blend::Plus;
+            vec![going, coming]
+        }
+        None => vec![coming, going],
     };
-    let (going_scale, coming_scale) = (scale_of(&going), scale_of(&coming));
-    let mut under = part(layer, coming, natural);
-    run(&mut under, &own_stack(incoming), coming_scale);
-    let mut over = part(layer, going, natural);
-    run(&mut over, &gone, going_scale);
-    mix(vec![under, over], natural, lt)
+    mix(draws, natural, lt)
 }

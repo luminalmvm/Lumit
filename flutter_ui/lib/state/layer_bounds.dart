@@ -24,7 +24,7 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgeEffectInstanceInfo;
+    show BridgeEffectInstanceInfo, BridgeScalar_Static;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
@@ -87,6 +87,7 @@ BridgeTextBlock measuredText(BridgeTextDocument document, {String? text}) {
     document.style,
     document.paragraph,
     textIsAnimated(document),
+    textIsBoxed(document),
   );
   final held = _blocks[key];
   if (held != null) return held;
@@ -97,10 +98,11 @@ BridgeTextBlock measuredText(BridgeTextDocument document, {String? text}) {
     style: key.$3,
     paragraph: key.$4,
     animated: key.$5,
+    boxed: key.$6,
   );
 }
 
-final Map<(String, double, BridgeTextStyle, BridgeParagraphStyle, bool),
+final Map<(String, double, BridgeTextStyle, BridgeParagraphStyle, bool, bool),
     BridgeTextBlock> _blocks = {};
 const int _maxHeldBlocks = 512;
 
@@ -125,6 +127,14 @@ Size textLayerBounds(BridgeTextDocument document) {
 /// path's own box either way).
 bool textIsAnimated(BridgeTextDocument document) =>
     document.animators.isNotEmpty && document.path == null;
+
+/// Whether an animator can draw a box behind [document]'s letters, which the
+/// engine sets the way it sets styled text.
+bool textIsBoxed(BridgeTextDocument document) =>
+    document.animators.any((a) => switch (a.boxOpacity) {
+          BridgeScalar_Static(:final field0) => field0 != 0,
+          _ => true,
+        });
 
 /// The box a shape layer's art fills, in the **art's** own coordinates, or null
 /// when there is no art.

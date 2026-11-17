@@ -2,7 +2,10 @@
 // Settings asks for. Every clip or layer by its own peak, as one undo step.
 //
 // The peaks are read first, because the first read of a file decodes it, and the
-// writes all happen together once they are in.
+// writes all happen together once they are in. Normalise together moves them
+// all by one change instead, so their balance holds.
+
+import 'dart:math' show min;
 
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
@@ -10,7 +13,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 
-import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
 
 /// Picked clips, as the layer each is on and its id. [then] runs inside the undo
@@ -77,7 +79,8 @@ void _writeClips(List<(LayerReference, BridgeClipLevel)> levels) {
 }
 
 /// Whole layers: every clip on a Sequence layer by its own peak, and a layer
-/// that is one file through its Volume, which takes a key at [frame] when keyed.
+/// that is one file through its Gain, so its Volume and keys stay as they are.
+/// The engine reads the file's own peak, so the answer is the whole Gain.
 Future<void> normaliseLayers(
   LumitState app,
   CompositionReference comp,
@@ -87,7 +90,7 @@ Future<void> normaliseLayers(
   required void Function() then,
 }) async {
   final levels = <(LayerReference, BridgeClipLevel)>[];
-  final volumes = <(BridgeLayerEntry, double)>[];
+  final gains = <(BridgeLayerEntry, double)>[];
   for (final t in targets) {
     try {
       if (t.info.clips.isNotEmpty) {
@@ -98,7 +101,7 @@ Future<void> normaliseLayers(
         }
       } else if (await t.layer.normaliseLayer(targetDb: targetDb)
           case final db?) {
-        volumes.add((t, db));
+        gains.add((t, db));
       }
     } catch (_) {
       // The layer has gone. The rest still take theirs.
@@ -106,10 +109,74 @@ Future<void> normaliseLayers(
   }
   asOneUndoStep(app.project, () {
     _writeClips(levels);
-    for (final (t, db) in volumes) {
+    for (final (t, db) in gains) {
       try {
-        t.layer.setVolumeDb(
-            value: scalarWithValueAt(t.info.volumeDb, db, comp, frame));
+        t.layer.setAudioGainDb(db: db);
+      } catch (_) {
+        // A locked layer refuses, and the rest still take it.
+      }
+    }
+    then();
+  }, name: 'Normalise');
+}
+
+/// Several clips or layers brought up or down by one change, so the loudest
+/// lands on [targetDb] and the rest keep their balance: by peak, or with
+/// [loudness] by measured loudness in LUFS. A layer goes by its clips, or by
+/// its Gain where it is one file (by peak only). One undo step.
+Future<void> normaliseTogether(
+  LumitState app,
+  double targetDb, {
+  List<(LayerReference, BridgeClip)> clips = const [],
+  List<BridgeLayerEntry> layers = const [],
+  required void Function() then,
+  bool loudness = false,
+}) async {
+  final byLayer = <LayerReference, List<BridgeClip>>{};
+  for (final (layer, clip) in [
+    ...clips,
+    for (final t in layers)
+      for (final c in t.info.clips) (t.layer, c),
+  ]) {
+    (byLayer[layer] ??= []).add(clip);
+  }
+  // What each would move on its own, and how it is written moved by [by].
+  final moves = <(double, void Function(double by))>[];
+  for (final MapEntry(key: layer, value: picked) in byLayer.entries) {
+    final now = {for (final c in picked) c.id: c.gainDb};
+    final ids = [for (final c in picked) c.id];
+    try {
+      for (final level in loudness
+          ? await layer.loudnessClips(clips: ids, targetLufs: targetDb)
+          : await layer.normaliseClips(clips: ids, targetDb: targetDb)) {
+        final was = now[level.clip] ?? 0;
+        moves.add((
+          level.db - was,
+          (by) => layer.setClipGain(clip: level.clip, db: was + by),
+        ));
+      }
+    } catch (_) {
+      // The layer has gone. The rest still take theirs.
+    }
+  }
+  for (final t in layers) {
+    if (loudness || t.info.clips.isNotEmpty) continue;
+    try {
+      if (await t.layer.normaliseLayer(targetDb: targetDb) case final db?) {
+        final was = t.info.audioGainDb;
+        moves.add((db - was, (by) => t.layer.setAudioGainDb(db: was + by)));
+      }
+    } catch (_) {
+      // The layer has gone. The rest still take theirs.
+    }
+  }
+  if (moves.isEmpty) return;
+  // The loudest needs the least, and every one moves by that.
+  final by = moves.map((m) => m.$1).reduce(min);
+  asOneUndoStep(app.project, () {
+    for (final (_, write) in moves) {
+      try {
+        write(by);
       } catch (_) {
         // A locked layer refuses, and the rest still take it.
       }

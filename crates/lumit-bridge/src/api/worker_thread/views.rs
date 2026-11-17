@@ -25,14 +25,16 @@ pub(super) fn viewed_kept(
     revision: u64,
     document: std::sync::Arc<lumit_core::model::Document>,
 ) -> std::sync::Arc<lumit_core::model::Document> {
+    // A data row of a graphics template being looked at, which is a way of
+    // looking as the other two are.
+    let row = crate::api::template::rows::row_look();
     // Nothing is copied, so there is nothing to keep.
-    if prefix.is_none() && view.is_none() {
+    if prefix.is_none() && view.is_none() && row.is_none() {
         return document;
     }
-    if let Some(at) = kept
-        .iter()
-        .position(|was| (was.revision, was.prefix, was.view) == (revision, prefix, view))
-    {
+    if let Some(at) = kept.iter().position(|was| {
+        (was.revision, was.prefix, was.view, was.row) == (revision, prefix, view, row)
+    }) {
         let was = kept.remove(at);
         let document = was.document.clone();
         kept.insert(0, was);
@@ -47,6 +49,7 @@ pub(super) fn viewed_kept(
             revision,
             prefix,
             view,
+            row,
             document: document.clone(),
         },
     );
@@ -65,6 +68,7 @@ pub(super) struct Viewed {
     revision: u64,
     prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     view: Option<ViewLatch>,
+    row: Option<crate::api::template::rows::RowLook>,
     document: std::sync::Arc<lumit_core::model::Document>,
 }
 
@@ -83,12 +87,23 @@ pub(super) fn viewed_through(
     document: std::sync::Arc<lumit_core::model::Document>,
 ) -> std::sync::Arc<lumit_core::model::Document> {
     let document = viewed(prefix, document);
+    // The data row being looked at first, so the view's camera sees it.
+    let document = match crate::api::template::rows::row_look() {
+        Some(look) => crate::api::template::rows::looked(look, document),
+        None => document,
+    };
+    let document = match view.and_then(|v| v.matte) {
+        Some(matte) => lumit_core::grade::matte_view::apply(&document, matte)
+            .map_or(document, std::sync::Arc::new),
+        None => document,
+    };
     let Some(ViewLatch {
         comp: comp_id,
         pose,
         draft,
         canvas,
         display,
+        ..
     }) = view
     else {
         return document;
@@ -203,7 +218,45 @@ pub(super) fn close_view(state: &mut WorkerState, view: u32) {
     state.grounds.remove(&view);
     state.names.forget_view(view);
     state.stand_ins.retain(|(v, ..)| *v != view);
+    if state
+        .angles
+        .as_ref()
+        .is_some_and(|latch| latch.view == view)
+    {
+        state.angles = None;
+    }
     state.renderer.drop_view_targets(view);
+}
+
+/// Latch one view's matte view, keeping its 3D view: a latch with no pose
+/// stands for the matte view alone and goes when it does.
+#[frb(ignore)]
+pub(super) fn set_matte_view(
+    state: &mut WorkerState,
+    view: u32,
+    matte: Option<lumit_core::grade::matte_view::MatteView>,
+) {
+    let latch = match state.camera_views.get(&view).copied() {
+        Some(latch) => Some(ViewLatch { matte, ..latch }),
+        None => matte.map(|m| ViewLatch {
+            comp: m.shot.comp,
+            pose: None,
+            draft: false,
+            canvas: (0, 0),
+            display: Default::default(),
+            matte: Some(m),
+        }),
+    };
+    let alone = |l: &ViewLatch| {
+        l.matte.is_none()
+            && l.pose.is_none()
+            && !l.draft
+            && l.canvas == (0, 0)
+            && l.display == Default::default()
+    };
+    let latch = latch.filter(|l| !alone(l));
+    let ground = state.grounds.get(&view).copied();
+    set_view(state, view, latch, ground);
 }
 
 /// Latch one view's 3D view and its ground, the way [`set_prefix`] latches

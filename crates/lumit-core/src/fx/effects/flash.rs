@@ -148,6 +148,15 @@ impl EffectDef for FlashDef {
         &<Flash as EffectMetadata>::SCHEMA
     }
 
+    /// One hit at the playhead: a key on Trigger is a hit.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        use crate::fx::presets::PresetValue::{Float, Keys};
+        &[crate::fx::presets::EffectPreset {
+            name: "Hit",
+            values: &[("trigger", Keys(&[(0.0, 1.0)])), ("decay", Float(200.0))],
+        }]
+    }
+
     /// The trigger envelope, scaled by Intensity and clamped — the whole of what
     /// the old resolve arm did, moved unchanged.
     ///

@@ -4,7 +4,7 @@ use flutter_rust_bridge::frb;
 
 use super::{
     BridgeAnimatorAxis, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorKind,
-    BridgeSelectorShape, BridgeTextAnimator,
+    BridgeSelectorMode, BridgeSelectorShape, BridgeTextAnimator,
 };
 use crate::api::{effect::BridgeScalar, BridgeError};
 
@@ -14,7 +14,7 @@ pub(crate) fn read_animator(
     animator: &lumit_core::text::TextAnimator,
     offset: lumit_core::time::Rational,
 ) -> BridgeTextAnimator {
-    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorShape};
+    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorMode, SelectorShape};
     let read = |p| BridgeScalar::read_at(p, offset);
     let s = &animator.selector;
     BridgeTextAnimator {
@@ -31,7 +31,16 @@ pub(crate) fn read_animator(
                 SelectorShape::Square => BridgeSelectorShape::Square,
                 SelectorShape::Ramp => BridgeSelectorShape::Ramp,
                 SelectorShape::Smooth => BridgeSelectorShape::Smooth,
+                SelectorShape::Bounce => BridgeSelectorShape::Bounce,
             },
+            mode: match s.mode {
+                SelectorMode::Range => BridgeSelectorMode::Range,
+                SelectorMode::Current => BridgeSelectorMode::Current,
+                SelectorMode::Said => BridgeSelectorMode::Said,
+                SelectorMode::Unsaid => BridgeSelectorMode::Unsaid,
+                SelectorMode::Emphasis => BridgeSelectorMode::Emphasis,
+            },
+            ease: s.ease,
             kind: match s.kind {
                 SelectorKind::Range => BridgeSelectorKind::Range,
                 SelectorKind::Proximity => BridgeSelectorKind::Proximity,
@@ -58,6 +67,10 @@ pub(crate) fn read_animator(
         fill_r: read(&animator.fill_r),
         fill_g: read(&animator.fill_g),
         fill_b: read(&animator.fill_b),
+        box_opacity: read(&animator.box_opacity),
+        box_r: read(&animator.box_r),
+        box_g: read(&animator.box_g),
+        box_b: read(&animator.box_b),
         axes: animator
             .axes
             .iter()
@@ -76,7 +89,7 @@ pub(super) fn animator_from(
     animator: BridgeTextAnimator,
     offset: lumit_core::time::Rational,
 ) -> Result<lumit_core::text::TextAnimator, BridgeError> {
-    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorShape};
+    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorMode, SelectorShape};
     let write = |s: &BridgeScalar| -> Result<lumit_core::anim::Property, BridgeError> {
         Ok(lumit_core::anim::Property {
             animation: s.animation_at(offset)?,
@@ -114,7 +127,18 @@ pub(super) fn animator_from(
                 BridgeSelectorShape::Square => SelectorShape::Square,
                 BridgeSelectorShape::Ramp => SelectorShape::Ramp,
                 BridgeSelectorShape::Smooth => SelectorShape::Smooth,
+                BridgeSelectorShape::Bounce => SelectorShape::Bounce,
             },
+            mode: match s.mode {
+                BridgeSelectorMode::Range => SelectorMode::Range,
+                BridgeSelectorMode::Current => SelectorMode::Current,
+                BridgeSelectorMode::Said => SelectorMode::Said,
+                BridgeSelectorMode::Unsaid => SelectorMode::Unsaid,
+                BridgeSelectorMode::Emphasis => SelectorMode::Emphasis,
+            },
+            ease: Some(s.ease)
+                .filter(|e| e.is_finite())
+                .map_or(0.0, |e| e.max(0.0)),
             kind: match s.kind {
                 BridgeSelectorKind::Range => SelectorKind::Range,
                 BridgeSelectorKind::Proximity => SelectorKind::Proximity,
@@ -141,6 +165,10 @@ pub(super) fn animator_from(
         fill_r: write(&animator.fill_r)?,
         fill_g: write(&animator.fill_g)?,
         fill_b: write(&animator.fill_b)?,
+        box_opacity: write(&animator.box_opacity)?,
+        box_r: write(&animator.box_r)?,
+        box_g: write(&animator.box_g)?,
+        box_b: write(&animator.box_b)?,
         axes,
         // Each group once, in the order added.
         properties: animator.properties.map(|list| {

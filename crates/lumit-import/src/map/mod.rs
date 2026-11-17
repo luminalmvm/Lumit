@@ -34,13 +34,16 @@
 
 mod curves;
 pub mod effects;
+mod essential;
 mod fx_audio;
 mod fx_colour;
+mod fx_denoise;
 mod fx_distort;
 mod fx_energy;
 mod fx_grid;
 mod fx_jolt;
 mod fx_luma_fade;
+mod fx_stabilise;
 mod fx_timewarp;
 mod layers;
 mod masks;
@@ -329,6 +332,10 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
             }
         }
     }
+
+    // Pass four: Essential Graphics, once every composition a layer can
+    // place has its layers and their ids.
+    essential::apply(&mut doc, &mut report, capture, &items);
 
     doc.extra = project_extra(&mut report, capture);
     doc.colour = project_colour(&mut report, capture);
@@ -658,6 +665,9 @@ fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
@@ -796,6 +806,9 @@ fn composition(
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        master_keys: None,
+        master_automation: Default::default(),
+        loudness_target: None,
         // Lit as After Effects lights it, so the comp looks as it did there.
         lighting,
         sound_mix: false,

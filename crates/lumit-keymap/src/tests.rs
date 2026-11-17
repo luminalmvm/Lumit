@@ -105,9 +105,11 @@ fn conflicts_flag_same_context_and_global_overlap_but_not_disjoint_contexts() {
 }
 
 /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-/// everywhere else. That, the Cut timeline's editing keys and a camera
-/// tool's Look at all are the shadows the default ships with, and they
-/// are deliberate.
+/// everywhere else. That, the Cut timeline's editing keys, the Transcript
+/// panel's, the Colour panels' Alt+L (a layer node, not Learn), Home and End,
+/// a camera tool's Look at, the Mixer's Home and the digits that cut to a
+/// multicam clip's angles in Cut and the Viewer are all the shadows the
+/// default ships with, and they are deliberate.
 #[test]
 fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
     let km = default_keymap();
@@ -125,23 +127,41 @@ fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         Some(&ActionId::from("reveal.audio"))
     );
     let shadows = km.shadows();
+    let mut expected: Vec<String> = [
+        "Mod+Shift+F",
+        "L",
+        "I",
+        "O",
+        ",",
+        ".",
+        "B",
+        "N",
+        "Mod+K",
+        "Mod+Shift+K",
+        "Delete",
+        "Backspace",
+        ",",
+        ".",
+        "Shift+F3",
+        "Mod+Shift+F",
+        "Alt+L",
+        "Home",
+        "End",
+        "Home",
+    ]
+    .map(String::from)
+    .to_vec();
+    // Each digit goes to its marker everywhere else, and in Cut and in the
+    // Viewer where no multicam clip is under the playhead.
+    for d in 1..=9 {
+        expected.extend([d.to_string(), d.to_string()]);
+    }
     assert_eq!(
         shadows
             .iter()
             .map(|s| s.chord.to_string())
             .collect::<Vec<_>>(),
-        [
-            "Mod+Shift+F",
-            "L",
-            "I",
-            "O",
-            ",",
-            ".",
-            "B",
-            "N",
-            "Mod+K",
-            "Mod+Shift+K"
-        ],
+        expected,
         "the deliberate shadows, and no others"
     );
 }
@@ -196,6 +216,9 @@ fn a_stored_keymap_keeps_the_defaults_for_actions_it_never_heard_of() {
     older
         .bindings
         .retain(|b| !matches!(b.action.0.as_str(), "edit.copy" | "edit.cut" | "edit.paste"));
+    older
+        .bindings
+        .retain(|b| b.context != KeyContext::Transcript);
     older.rebind_action(
         KeyContext::Global,
         &"edit.undo".into(),
@@ -209,6 +232,11 @@ fn a_stored_keymap_keeps_the_defaults_for_actions_it_never_heard_of() {
         restored.lookup(KeyContext::Global, &"Mod+C".parse().unwrap()),
         Some(&"edit.copy".into()),
         "an action added since the file was written takes its default"
+    );
+    assert_eq!(
+        restored.lookup(KeyContext::Transcript, &"Backspace".parse().unwrap()),
+        Some(&"transcript.extract".into()),
+        "and every one of its chords, not only the first"
     );
     assert_eq!(
         restored.binding_for(KeyContext::Global, &"edit.undo".into()),

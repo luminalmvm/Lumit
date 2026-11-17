@@ -186,6 +186,13 @@ pub fn note_footage_frame(item: uuid::Uuid, width: u32, height: u32) {
     }
 }
 
+/// The frame size of footage `item` as the renderer read it, or `None` before
+/// it has been opened.
+#[must_use]
+pub fn footage_frame(item: uuid::Uuid) -> Option<(u32, u32)> {
+    FOOTAGE.read().ok().and_then(|s| s.get(&item).copied())
+}
+
 /// What `layer` shows at comp time `t`, as left, top, right and bottom in its
 /// own pixels, or `None` where it shows nothing. The one measuring both this
 /// driver and an expression's `sourceRectAtTime` read.

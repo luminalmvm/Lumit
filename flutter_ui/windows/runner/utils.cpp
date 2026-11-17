@@ -4,6 +4,7 @@
 #include <io.h>
 #include <stdio.h>
 #include <windows.h>
+#include <windowsx.h>
 
 #include <iostream>
 
@@ -66,4 +67,18 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
     return std::string();
   }
   return utf8_string;
+}
+
+int FrameThickness(HWND window) {
+  const UINT dpi = FlutterDesktopGetDpiForHWND(window);
+  return GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
+         GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+
+bool OnTopEdge(HWND window, LPARAM point) {
+  RECT frame;
+  if (IsZoomed(window) || !GetWindowRect(window, &frame)) {
+    return false;
+  }
+  return GET_Y_LPARAM(point) < frame.top + FrameThickness(window) / 2;
 }

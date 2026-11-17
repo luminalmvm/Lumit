@@ -32,6 +32,7 @@ mod audio_spectrum;
 mod energy_line;
 pub mod lfx;
 pub mod ofx;
+mod stabilise;
 
 type Tex = wgpu::Texture;
 
@@ -60,6 +61,8 @@ pub enum AuxKind {
     /// The layer's decoded motion — the dense field and the neighbour frames
     /// beside it, both whole, never per-op.
     FlowField,
+    /// Every motion field measured, by offset, and the neighbour frames.
+    FlowFields,
 }
 
 /// Everything the render prepared beside one op: the [`AuxData`] its
@@ -76,7 +79,7 @@ pub enum AuxKind {
 /// consumes the matte — one seam, whatever else the effect happens to need.
 #[derive(Clone, Copy)]
 pub struct AuxSlot<'a> {
-    data: AuxData<'a>,
+    pub(crate) data: AuxData<'a>,
     matte: Option<&'a Tex>,
     /// This op's matte **whatever its role** — including the generic strength
     /// one, whose texture is spent in the dissolve beside the dispatch and so
@@ -125,6 +128,8 @@ pub enum AuxData<'a> {
         field: Option<&'a Tex>,
         neighbours: &'a [(i32, Tex)],
     },
+    /// Every field by offset, at its measured size, then the neighbour frames.
+    FlowFields(&'a [(i32, Tex)], &'a [(i32, Tex)]),
 }
 
 impl<'a> AuxSlot<'a> {
@@ -281,7 +286,9 @@ impl<'a> AuxSlot<'a> {
     pub fn neighbours(self) -> &'a [(i32, Tex)] {
         match self.data {
             AuxData::Neighbours(n) => n,
-            AuxData::FlowField { neighbours, .. } => neighbours,
+            AuxData::FlowField { neighbours, .. } | AuxData::FlowFields(_, neighbours) => {
+                neighbours
+            }
             _ => &[],
         }
     }
@@ -434,6 +441,9 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Invert,
     &Tint,
     &Curves,
+    &crate::gpufx_correction::CorrectionFx,
+    &crate::gpufx_grade::CdlFx,
+    &crate::gpufx_grade::ColourWarperFx,
     &Levels,
     &Brightness,
     &HueSaturation,
@@ -449,8 +459,12 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_crop::Crop,
     &crate::gpufx_film::Film,
     &crate::gpufx_luma_fade::LumaFadeFx,
+    &crate::gpufx_move::MoveFx,
+    &crate::gpufx_light_leak::LightLeakFx,
+    &crate::gpufx_slices::SlicesFx,
     &crate::gpufx_srgb_curve::SrgbCurveFx,
     &crate::gpufx_timewarp::TimewarpFx,
+    &crate::gpufx_denoise::DenoiseFx,
     &RadialWipe,
     &VenetianBlinds,
     &IrisWipe,
@@ -463,6 +477,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &energy_line::EnergyLine,
+    &stabilise::Stabilise,
     &audio_spectrum::AudioSpectrum,
     &crate::gpufx_particulate::Particulate,
     &Grid,
@@ -8669,90 +8684,5 @@ mod tests {
         );
     }
 
-    /// **The k-th matte-carrying op binds the k-th matte slot** (the
-    /// parallel-list contract with its second predicate).
-    ///
-    /// The mirror of `the_kth_lut_op_binds_the_kth_slot`, and it exists for the
-    /// same reason: nothing but the counting joins `build.rs`'s enumeration to
-    /// `run_ops`'s walk, so a slot skipped or double-counted drives the wrong
-    /// effect — a project where reordering the stack moves which effect a matte
-    /// controls.
-    ///
-    /// The first slot is deliberately **absent** (the unset row every list
-    /// allows), so an implementation that advances its counter only when a matte
-    /// is really there hands the second op the first op's slot and dissolves
-    /// nothing. The second slot is black, which switches its op off entirely —
-    /// so the picture must be "the first effect applied, the second not".
-    #[test]
-    fn the_kth_matte_op_binds_the_kth_slot() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (4u32, 4u32);
-        // Opaque mid grey, so both an exposure up and an exposure down are
-        // visible and neither clips.
-        let source: Vec<f32> = (0..(w * h))
-            .flat_map(|_| [0.25f32, 0.25, 0.25, 1.0])
-            .collect();
-
-        let exposure = |stops: f64| {
-            let mut inst =
-                lumit_core::fx::builtins::instantiate("exposure").expect("exposure is a built-in");
-            for p in &mut inst.params {
-                if p.id == "stops" {
-                    p.value = lumit_core::model::EffectValue::Float(
-                        lumit_core::anim::Property::fixed(stops),
-                    );
-                }
-            }
-            inst
-        };
-        let ops = lumit_core::fx::resolved::resolve_stack(
-            &[exposure(2.0), exposure(-2.0)],
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::markers::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        assert_eq!(ops.len(), 2, "two ops, two matte slots to bind");
-
-        let black: Vec<f32> = (0..(w * h)).flat_map(|_| [0.0f32, 0.0, 0.0, 1.0]).collect();
-        let off = crate::fxops::LayerInput::Texture(lumit_gpu::fx::common::upload_linear_f32(
-            &ctx, &black, w, h,
-        ));
-        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &source, w, h);
-        let out = crate::fxops::run_ops(
-            fx,
-            &ctx,
-            tex,
-            w,
-            h,
-            &ops,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            // Slot 0 absent (the first exposure applies in full), slot 1 black
-            // (the second is switched off).
-            &[crate::fxops::LayerInput::Absent, off],
-            &[],
-            &[],
-            &crate::fxops::Side::NONE,
-            &[],
-            None,
-            None,
-        );
-        let got = lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-
-        assert!(
-            (got[0] - 1.0).abs() < 1e-2,
-            "red is {} — expected 0.25 lifted two stops and NOT pulled back \
-             down, i.e. the second op bound the second slot",
-            got[0]
-        );
-    }
+    mod matte_slots;
 }

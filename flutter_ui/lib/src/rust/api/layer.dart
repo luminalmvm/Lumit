@@ -8,14 +8,21 @@ import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
 import 'audio.dart';
+import 'captions.dart';
 import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'grade_groups.dart';
+import 'grade_track.dart';
+import 'grade_versions.dart';
 import 'graph.dart';
 import 'graph_looks.dart';
+import 'layer/clip_peaks.dart';
+import 'mixer.dart';
 import 'model.dart';
 import 'model_rows.dart';
+import 'multicam.dart';
 import 'orient.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
@@ -28,10 +35,14 @@ import 'shape.dart';
 import 'solid.dart';
 import 'state.dart';
 import 'streams.dart';
+import 'template.dart';
+import 'template/copy.dart';
+import 'track.dart';
+import 'transcript.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `map_start_value`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `sequenced`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -539,6 +550,13 @@ class BridgeClip {
   final double startExact;
   final double endExact;
 
+  /// The angle a multicam clip plays, or `None` on any other clip.
+  final BridgeClipAngle? angle;
+
+  /// The graphics template this clip is a copy of, and what the copy has
+  /// set. `None` on every other clip.
+  final BridgeCopy? copy;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -571,6 +589,8 @@ class BridgeClip {
     this.group,
     required this.startExact,
     required this.endExact,
+    this.angle,
+    this.copy,
   });
 
   @override
@@ -605,7 +625,9 @@ class BridgeClip {
       label.hashCode ^
       group.hashCode ^
       startExact.hashCode ^
-      endExact.hashCode;
+      endExact.hashCode ^
+      angle.hashCode ^
+      copy.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -642,7 +664,9 @@ class BridgeClip {
           label == other.label &&
           group == other.group &&
           startExact == other.startExact &&
-          endExact == other.endExact;
+          endExact == other.endExact &&
+          angle == other.angle &&
+          copy == other.copy;
 }
 
 /// One end of a clip's fade: how long it takes, and the curve it takes. Zero
@@ -854,6 +878,11 @@ class BridgeLayerInfo {
   /// fresh one, which the user's next edit adopts.
   final BridgeEffectInstanceInfo? graphInputs;
 
+  /// The graphics template this Precomp layer is a copy of, and what the
+  /// copy has set. Its rows are in `graph_inputs`. `None` on every other
+  /// layer.
+  final BridgeCopy? copy;
+
   /// A Model layer's material rows, `None` while its file is being read.
   final List<BridgeEffectInstanceInfo>? materials;
 
@@ -888,6 +917,16 @@ class BridgeLayerInfo {
   /// The Bus layer this layer's sound goes to, or `None` for the master.
   final UuidValue? output;
   final List<BridgeSend> sends;
+
+  /// The layer's own level before its rack and Volume, in dB.
+  final double audioGainDb;
+  final BridgeAutomationMode automationMode;
+
+  /// Keeps sounding while another layer is soloed.
+  final bool soloSafe;
+
+  /// What this layer lowers behind, if anything.
+  final BridgeDuck? duck;
 
   /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
@@ -1017,6 +1056,7 @@ class BridgeLayerInfo {
     required this.styles,
     required this.drivers,
     this.graphInputs,
+    this.copy,
     this.materials,
     this.modelRows,
     required this.collapseForced,
@@ -1026,6 +1066,10 @@ class BridgeLayerInfo {
     required this.pitchFollowsSpeed,
     this.output,
     required this.sends,
+    required this.audioGainDb,
+    required this.automationMode,
+    required this.soloSafe,
+    this.duck,
     required this.masks,
     required this.paint,
     this.puppet,
@@ -1065,6 +1109,7 @@ class BridgeLayerInfo {
       styles.hashCode ^
       drivers.hashCode ^
       graphInputs.hashCode ^
+      copy.hashCode ^
       materials.hashCode ^
       modelRows.hashCode ^
       collapseForced.hashCode ^
@@ -1074,6 +1119,10 @@ class BridgeLayerInfo {
       pitchFollowsSpeed.hashCode ^
       output.hashCode ^
       sends.hashCode ^
+      audioGainDb.hashCode ^
+      automationMode.hashCode ^
+      soloSafe.hashCode ^
+      duck.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
       puppet.hashCode ^
@@ -1115,6 +1164,7 @@ class BridgeLayerInfo {
           styles == other.styles &&
           drivers == other.drivers &&
           graphInputs == other.graphInputs &&
+          copy == other.copy &&
           materials == other.materials &&
           modelRows == other.modelRows &&
           collapseForced == other.collapseForced &&
@@ -1124,6 +1174,10 @@ class BridgeLayerInfo {
           pitchFollowsSpeed == other.pitchFollowsSpeed &&
           output == other.output &&
           sends == other.sends &&
+          audioGainDb == other.audioGainDb &&
+          automationMode == other.automationMode &&
+          soloSafe == other.soloSafe &&
+          duck == other.duck &&
           masks == other.masks &&
           paint == other.paint &&
           puppet == other.puppet &&
@@ -2879,13 +2933,19 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceAddClipEffect(
           that: this, clip: clip, name: name);
 
+  /// A new caption saying `text` at comp time `at`, and its index.
+  int addCue({required BridgeRational at, required String text}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceAddCue(that: this, at: at, text: text);
+
   /// Append the built-in effect named `name` to this layer's stack — or, when
   /// `name` is a **driver**, to this layer's graph.
   ///
-  /// Seeded at composition size, because a few effects' defaults are positions
-  /// (a transform's anchor and position start at the centre of the frame), and
-  /// a fresh effect should look like identity rather than dragging the picture
-  /// to a corner. An unknown name is refused; nothing partial is committed.
+  /// Seeded at the size of the picture the stack runs on, because a few
+  /// effects' defaults are positions (a transform's anchor and position start
+  /// at the centre of the layer), and a fresh effect should look like identity
+  /// rather than dragging the picture to a corner. An unknown name is refused;
+  /// nothing partial is committed.
   ///
   /// **The fork is here rather than in each caller.** A driver is browsed as
   /// one more Controls entry, so the console, the Effect menu, the palette and
@@ -2896,6 +2956,28 @@ class LayerReference {
   /// with no layout entry). One op either way, so one undo step either way.
   void addEffect({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddEffect(that: this, name: name);
+
+  /// Add the effect called `name` to the end of one of a group's grades. A
+  /// driver, a graph-only effect and a group's own reference are refused.
+  void addGradeGroupEffect(
+          {required UuidValue group,
+          required BridgeGradePart part_,
+          required String name}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddGradeGroupEffect(
+          that: this, group: group, part_: part_, name: name);
+
+  /// Add a version and show it: a copy of the grade showing, or with `copy`
+  /// off an empty one. Answers its id.
+  UuidValue addGradeVersion({UuidValue? clip, required bool copy}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddGradeVersion(
+          that: this, clip: clip, copy: copy);
+
+  /// A new Correction right after `after`, grading the same picture
+  /// `after` grades and laid over the run's through its key. Answers its
+  /// id.
+  UuidValue addLayerGradeNode({UuidValue? clip, required UuidValue after}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddLayerGradeNode(
+          that: this, clip: clip, after: after);
 
   /// Add `mask` to the top of this layer's stack.
   ///
@@ -2925,6 +3007,20 @@ class LayerReference {
       .instance.api
       .crateApiLayerLayerReferenceAddNodeGraphEffect(that: this, graph: graph);
 
+  /// An outside node: a new Correction right after the Correction `after`,
+  /// its Matte wired from `after`'s key and inverted, so it grades what
+  /// `after` leaves alone. Answers its id. Only a layer carries wires, so a
+  /// clip takes none.
+  UuidValue addOutsideGradeNode({required UuidValue after}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceAddOutsideGradeNode(that: this, after: after);
+
+  /// A new Correction right after `after`, grading the same picture
+  /// `after` grades and adding its change to the run's. Answers its id.
+  UuidValue addParallelGradeNode({UuidValue? clip, required UuidValue after}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddParallelGradeNode(
+          that: this, clip: clip, after: after);
+
   /// Add a pin to this layer's puppet. Errors when there is no block yet:
   /// the first pin is what creates one, and it is the click that decides the
   /// reference time, so the caller says so with [`Self::set_puppet`].
@@ -2953,9 +3049,23 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceAddPuppetPinAt(
           that: this, frame: frame, kind: kind, name: name, x: x, y: y);
 
+  /// A new Correction right after `after`, grading what `after` made.
+  /// Answers its id.
+  UuidValue addSerialGradeNode({UuidValue? clip, required UuidValue after}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddSerialGradeNode(
+          that: this, clip: clip, after: after);
+
   /// Add one piece of art on top of this shape layer's stack.
   void addShapeItem({required BridgeShapeItem item}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddShapeItem(that: this, item: item);
+
+  /// Shared node `node` in this shot, right after effect `after`, or after
+  /// its last grade node. A shot that already uses it keeps the one it has.
+  /// One undo step; answers the reference's id in the stack.
+  UuidValue addSharedGradeNode(
+          {UuidValue? clip, required UuidValue node, UuidValue? after}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddSharedGradeNode(
+          that: this, clip: clip, node: node, after: after);
 
   /// Add `stroke` on top of this layer's paint.
   ///
@@ -3068,6 +3178,15 @@ class LayerReference {
           buckets: buckets,
           multiwave: multiwave);
 
+  /// This layer's samples over `[start_seconds, end_seconds)` of the clock
+  /// [`Self::audio_peaks`] takes, mixed to one channel as its wave is.
+  /// Empty for a layer with no sound of its own, or a window holding more
+  /// than 16,384 frames. Not sync: it decodes the window.
+  Future<BridgeAudioSamples> audioSamples(
+          {required double startSeconds, required double endSeconds}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAudioSamples(
+          that: this, startSeconds: startSeconds, endSeconds: endSeconds);
+
   /// One window of this layer's audio as a **spectrogram**: what the
   /// spectral lane mode draws, in the same window-fetch shape the peaks take —
   /// the visible stretch of the source, one column per pixel, so the drawn
@@ -3148,6 +3267,18 @@ class LayerReference {
   bool canTakeSource({required ItemReference item}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCanTakeSource(that: this, item: item);
 
+  /// This layer's captions, or `None` when it is not a caption layer.
+  BridgeCaptions? captions() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCaptions(
+        that: this,
+      );
+
+  /// Let rows of this copy follow the template again. An empty list is
+  /// every row, which is the card's **Reset**.
+  void clearCopyRows({required List<String> rows, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClearCopyRows(
+          that: this, rows: rows, clip: clip);
+
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does
@@ -3201,6 +3332,24 @@ class LayerReference {
           endSeconds: endSeconds,
           buckets: buckets,
           multiwave: multiwave,
+          stereo: stereo);
+
+  /// One Sequence clip's samples over `[start_seconds, end_seconds)` of its
+  /// own placed clock, clamped to the clip, as [`Self::clip_audio_peaks`]
+  /// takes it. With `stereo`, left and right apart where the sound has
+  /// two. Empty for a clip with no sound of its own (a multicam clip
+  /// included), or a window holding more than 16,384 frames. Not sync: it
+  /// decodes the window.
+  Future<BridgeAudioSamples> clipAudioSamples(
+          {required UuidValue clip,
+          required double startSeconds,
+          required double endSeconds,
+          required bool stereo}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClipAudioSamples(
+          that: this,
+          clip: clip,
+          startSeconds: startSeconds,
+          endSeconds: endSeconds,
           stereo: stereo);
 
   /// One Sequence clip's audio as a **spectrogram** - the twin of
@@ -3435,6 +3584,12 @@ class LayerReference {
   void deleteClipAt({required int frame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteClipAt(that: this, frame: frame);
 
+  /// Delete a version. The one showing goes only when it is the last, and
+  /// its grade stays on the shot.
+  void deleteGradeVersion({UuidValue? clip, required UuidValue version}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceDeleteGradeVersion(
+          that: this, clip: clip, version: version);
+
   /// Take the last stroke off — the undo inside the tool, for a brush drag
   /// that went wrong. Errors when there is nothing painted.
   void deleteLastStroke() =>
@@ -3507,6 +3662,13 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceExpandShapeCopies(
           that: this, repeater: repeater, time: time, intoLayers: intoLayers);
 
+  /// Write the captions this layer shows to `path` as `format`, on the
+  /// comp's clock.
+  Future<void> exportCaptions(
+          {required BridgeCaptionFormat format, required String path}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceExportCaptions(
+          that: this, format: format, path: path);
+
   /// **Fade the layer's sound up from silence** over `seconds` from its in
   /// point (docs/09 §6).
   ///
@@ -3553,6 +3715,13 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceFlowEngineState(
         that: this,
       );
+
+  /// Let this copy, or its clip `clip`, follow row `row` of its template's
+  /// data, or with `None` stop following one. Its controls then come from
+  /// that row, except the ones it sets itself.
+  void followDataRow({int? row, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceFollowDataRow(
+          that: this, row: row, clip: clip);
 
   /// **Insert a freeze at the playhead** (docs/04 §7.3,
   /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
@@ -3610,6 +3779,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetClipEffects(
           that: this, clip: clip, onCompClock: onCompClock);
 
+  /// The rows of the template this clip places, as a staged copy to drag,
+  /// key and commit through [`Self::set_effects`], as
+  /// [`Self::get_graph_inputs`] hands a layer's. On the clip's own clock, or
+  /// with `on_comp_clock` on the composition's, as [`Self::get_clip_effects`]
+  /// crosses a clip's effects.
+  BridgeEffectInstance? getClipInputs(
+          {required UuidValue clip, required bool onCompClock}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetClipInputs(
+          that: this, clip: clip, onCompClock: onCompClock);
+
   /// The instance behind the overlap at `clip`'s start, as a staged copy on
   /// the comp's clock like [`Self::get_clip_effects`] with `on_comp_clock`.
   /// `None` for a dissolve.
@@ -3626,6 +3805,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetClips(
         that: this,
       );
+
+  /// What this layer, or its clip `clip`, is a copy of, as its card draws
+  /// it. `None` when it places no graphics template.
+  BridgeCopy? getCopy({UuidValue? clip}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceGetCopy(that: this, clip: clip);
 
   /// This layer's effect stack as staged copies.
   ///
@@ -3676,6 +3860,23 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetFlowParams(
         that: this,
       );
+
+  /// The group the shot is in, if any.
+  UuidValue? getGradeGroup({UuidValue? clip}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceGetGradeGroup(that: this, clip: clip);
+
+  /// One of a group's grades as staged copies, edited through this layer's
+  /// effect commands like its own. Their keys are on the comp's clock.
+  List<BridgeEffectInstance> getGradeGroupEffects(
+          {required UuidValue group, required BridgeGradePart part_}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGradeGroupEffects(
+          that: this, group: group, part_: part_);
+
+  /// The shot's versions in the order they were made. Empty for a shot
+  /// that has none.
+  List<BridgeGradeVersion> getGradeVersions({UuidValue? clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceGetGradeVersions(that: this, clip: clip);
 
   /// This layer's whole driver graph in one crossing
   /// (docs/impl/node-graph.md §5) — every box the canvas draws with its
@@ -4003,6 +4204,27 @@ class LayerReference {
         that: this,
       );
 
+  /// The footage this layer plays sound from, down through any Precomp
+  /// layers, each once: what has to be heard to caption it.
+  List<FootageReference> heardItems() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceHeardItems(
+        that: this,
+      );
+
+  /// A CDL node holding the grade in the `.cdl`, `.cc` or `.ccc` at `path`:
+  /// the ColorCorrection whose id is `id`, or the first. It goes right
+  /// after effect `after`, or with `None` after the shot's last grade node,
+  /// or at the end of its stack when it has none. One undo step; answers
+  /// the new node's id. A file with no such block, or numbers that don't
+  /// read, is refused as unreadable.
+  Future<UuidValue> importCdl(
+          {UuidValue? clip,
+          UuidValue? after,
+          required String path,
+          String? id}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceImportCdl(
+          that: this, clip: clip, after: after, path: path, id: id);
+
   /// Insert a saved node group at canvas point `(x, y)` — **one commit**, so
   /// one undo step however many boxes and wires it carries.
   ///
@@ -4069,6 +4291,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceMergeAudioStreams(
         that: this,
       );
+
+  /// Join `count` captions from `first` into one.
+  void mergeCues({required int first, required int count}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceMergeCues(
+          that: this, first: first, count: count);
 
   /// This layer's **motion path** (docs/07 §2.4), or `None` while its
   /// Position is still — see [`motion_path_of`].
@@ -4176,7 +4403,7 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceNormaliseClips(
           that: this, clips: clips, targetDb: targetDb);
 
-  /// The Volume this layer needs for its loudest sample, over the stretch of
+  /// The Gain this layer needs for its loudest sample, over the stretch of
   /// the file it plays, to land at `target_db`. None for a layer with no file
   /// of its own to read, or one with nothing but silence on it.
   ///
@@ -4260,6 +4487,16 @@ class LayerReference {
         that: this,
       );
 
+  /// Raise `cues` to the top of the picture, or put them back down. One
+  /// undo step.
+  void raiseCues({required List<int> cues, required bool raised}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceRaiseCues(
+          that: this, cues: cues, raised: raised);
+
+  /// Delete these captions.
+  void removeCues({required List<int> cues}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceRemoveCues(that: this, cues: cues);
+
   /// Remove `effect` from this layer's stack — **or from its style list**,
   /// whichever holds it ([`Self::is_style`]). An effect that is no longer
   /// there is an error rather than a silent success, so a double-click on
@@ -4270,6 +4507,13 @@ class LayerReference {
 
   void rename({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceRename(that: this, name: name);
+
+  void renameGradeVersion(
+          {UuidValue? clip,
+          required UuidValue version,
+          required String name}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceRenameGradeVersion(
+          that: this, clip: clip, version: version, name: name);
 
   /// **Detach audio**: put this layer's sound on a row of its own.
   ///
@@ -4342,6 +4586,19 @@ class LayerReference {
           {required BridgeEffectInstance effect, required int newIndex}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceReorderEffect(
           that: this, effect: effect, newIndex: newIndex);
+
+  /// Swap every `find` for `with` across the captions, and say how many.
+  int replaceInCaptions(
+          {required String find,
+          required String with_,
+          required bool matchCase,
+          required bool wholeWord}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceReplaceInCaptions(
+          that: this,
+          find: find,
+          with_: with_,
+          matchCase: matchCase,
+          wholeWord: wholeWord);
 
   /// Put row `param` of `material` back to its file's value, as one undo
   /// step.
@@ -4466,6 +4723,11 @@ class LayerReference {
   void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
 
+  /// Set the layer's own level before its rack and Volume, in dB, held to
+  /// -60 to +24 as a clip's gain line is.
+  void setAudioGainDb({required double db}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAudioGainDb(that: this, db: db);
+
   /// Route this layer's sound to `output` (a Bus layer, or `None` for the
   /// master) and set its sends, as one undoable step.
   void setAudioRoutes({UuidValue? output, required List<BridgeSend> sends}) =>
@@ -4480,6 +4742,10 @@ class LayerReference {
   /// file of its own.
   void setAudioStreams({required List<int> streams}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAudioStreams(that: this, streams: streams);
+
+  void setAutomationMode({required BridgeAutomationMode mode}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSetAutomationMode(that: this, mode: mode);
 
   /// Set how one two-axis property is shown and edited: combined on
   /// one row, linked (Scale), or separated onto a row per axis.
@@ -4512,6 +4778,17 @@ class LayerReference {
   /// every other curve-capable value.
   void setCameraZoom({required BridgeScalar zoom}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetCameraZoom(that: this, zoom: zoom);
+
+  /// The language the captions are in, for the files written from them.
+  void setCaptionLanguage({required String language}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCaptionLanguage(
+          that: this, language: language);
+
+  /// New limits; with `rebuild`, every caption is cut again from its words.
+  void setCaptionLimits(
+          {required BridgeCaptionLimits limits, required bool rebuild}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCaptionLimits(
+          that: this, limits: limits, rebuild: rebuild);
 
   /// Choose which audio streams one clip of this Sequence layer sounds,
   /// mixed. One undo step.
@@ -4605,6 +4882,62 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipSpeed(
           that: this, clip: clip, percent: percent, endPercent: endPercent);
 
+  /// **Set as default**: write this copy's value for `control` into the
+  /// template, for every copy that has not set its own, and let this copy
+  /// follow the template again. One undo step.
+  void setCopyAsDefault({required String control, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCopyAsDefault(
+          that: this, control: control, clip: clip);
+
+  /// Set one of a text control's further rows on this copy: its font.
+  void setCopyFont(
+          {required String row,
+          required String family,
+          required String face,
+          UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCopyFont(
+          that: this, row: row, family: family, face: face, clip: clip);
+
+  /// Set a control on this copy to a value that does not key: words, a
+  /// font, a picture, a tick, a menu's option. A number, a point or a
+  /// colour set this way is fixed, in place of any keys the copy had.
+  void setCopyValue(
+          {required String control,
+          required BridgeControlValue value,
+          UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCopyValue(
+          that: this, control: control, value: value, clip: clip);
+
+  /// Where caption `cue`'s lines break, by the words that start them.
+  void setCueBreaks({required int cue, required List<int> breaks}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCueBreaks(
+          that: this, cue: cue, breaks: breaks);
+
+  /// Move caption `cue` this far from where the layer puts it, in comp
+  /// pixels; nought both ways puts it back.
+  void setCueOffset({required int cue, required double x, required double y}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCueOffset(
+          that: this, cue: cue, x: x, y: y);
+
+  /// Show caption `cue` from `start` to `end`, in comp time.
+  void setCueSpan(
+          {required int cue,
+          required BridgeRational start,
+          required BridgeRational end}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetCueSpan(
+          that: this, cue: cue, start: start, end: end);
+
+  /// Give caption `cue` new text. Words that stay keep their times.
+  void setCueText({required int cue, required String text}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceSetCueText(that: this, cue: cue, text: text);
+
+  /// Lower this layer behind another layer or a bus, or stop, as one
+  /// undoable step. Refused, with nothing changed, when the sound would go
+  /// round in a circle.
+  void setDuck({BridgeDuck? duck}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetDuck(that: this, duck: duck);
+
   /// Enable or bypass `effect` — **or a style**, whichever list holds it
   /// ([`Self::is_style`]), which is what makes a style row's own on/off tick
   /// the command the effect row already had. A bypassed effect renders as
@@ -4674,6 +5007,12 @@ class LayerReference {
   void setFlowParams({required BridgeFlowParams params}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSetFlowParams(that: this, params: params);
+
+  /// Put the shot in `group`, move it there from another, or with `None`
+  /// take it out of any.
+  void setGradeGroup({UuidValue? clip, UuidValue? group}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetGradeGroup(
+          that: this, clip: clip, group: group);
 
   /// Commit a whole graph: the staged driver nodes and the edited wiring, as
   /// one [`lumit_core::ops::Op::SetLayerGraph`].
@@ -4903,6 +5242,10 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
           that: this, id: id, keys: keys);
 
+  /// A solo safe layer keeps sounding while another layer is soloed.
+  void setSoloSafe({required bool enabled}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetSoloSafe(that: this, enabled: enabled);
+
   /// Point this layer at `item`, keeping its transform, keys, masks, effects
   /// and markers. An anchor keeps its place on the picture as the size
   /// changes, a name that was the old source's follows the new one, and a
@@ -5009,6 +5352,23 @@ class LayerReference {
   void setVolumeDb({required BridgeScalar value}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetVolumeDb(that: this, value: value);
 
+  /// Pick a word out for emphasis, or put it back.
+  void setWordEmphasis(
+          {required int cue, required int word, required bool on_}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetWordEmphasis(
+          that: this, cue: cue, word: word, on_: on_);
+
+  /// Share node `node` of this shot with `shots`: it moves into a new
+  /// shared node, this shot keeps it where it was, and each of `shots`
+  /// gets it after its last grade node. One undo step; answers the shared
+  /// node's id. Rename it as a group is renamed.
+  UuidValue shareGradeNode(
+          {UuidValue? clip,
+          required UuidValue node,
+          required List<BridgeShotId> shots}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceShareGradeNode(
+          that: this, clip: clip, node: node, shots: shots);
+
   /// Slide a clip along the row so it starts at `to_frame` (docs/04 §8.2).
   ///
   /// Its length, its trim and its map are untouched — the same frames play,
@@ -5076,6 +5436,25 @@ class LayerReference {
         that: this,
       );
 
+  /// Cut caption `cue` in two before its word `at_word`.
+  void splitCue({required int cue, required int atWord}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSplitCue(
+          that: this, cue: cue, atWord: atWord);
+
+  /// Cut the caption showing at comp time `at` in two there.
+  void splitCueAt({required BridgeRational at}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSplitCueAt(that: this, at: at);
+
+  /// This shot's stack with the still at `path` graded on it in place of
+  /// its own grade, to preview and never to write: the old grade stays in
+  /// the list switched off, and the still's comes right after it. The list
+  /// starts with the shot's own first effect, which is how a clip's preview
+  /// is found on its clip, so a clip with an empty stack has none.
+  List<BridgeEffectInstance> stillGradePreview(
+          {UuidValue? clip, required String path}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceStillGradePreview(
+          that: this, clip: clip, path: path);
+
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half
   /// speed and twice as long.
@@ -5127,6 +5506,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceStretchTo(
           that: this, inPoint: inPoint, outPoint: outPoint);
 
+  /// Show version `version` in place of the one showing.
+  void switchGradeVersion({UuidValue? clip, required UuidValue version}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSwitchGradeVersion(
+          that: this, clip: clip, version: version);
+
   /// Key this mask's **shape** at `time`, or take the key already there away —
   /// the ◆ on the mask's Path row.
   ///
@@ -5172,6 +5556,24 @@ class LayerReference {
           {required UuidValue id, required BridgeRational time}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceToggleShapePathKey(
           that: this, id: id, time: time);
+
+  /// Track window `slot` (1 to 4) of the Correction `effect` on this layer,
+  /// or on its clip `clip`, from comp frame `frame` as far as `run` says.
+  /// Returns once the run has started; `status` hears each frame and then
+  /// how it ended, and the keys land as one edit when it stops.
+  Stream<BridgeWindowTrackStatus> trackGradeWindow(
+          {UuidValue? clip,
+          required UuidValue effect,
+          required int slot,
+          required int frame,
+          required BridgeTrackRun run}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceTrackGradeWindow(
+          that: this,
+          clip: clip,
+          effect: effect,
+          slot: slot,
+          frame: frame,
+          run: run);
 
   /// Trim one edge of a clip inward (docs/04 §8.2, non-ripple).
   ///

@@ -1,0 +1,73 @@
+---
+title: Cleaning up a noisy shot and its sound
+description: Take the noise out of a picture with Denoise, then the hiss, hum, clicks and room out of its sound.
+sidebar:
+  order: 9
+---
+
+[Denoise](/effects/blur-sharpen/denoise/) takes camera noise out of a shot from a measurement
+of it. The sound has an effect for each fault, all on the same layer.
+
+## The picture
+
+**1. Add Denoise.** Select the footage layer and choose **Effect ▸ Blur & sharpen ▸
+Denoise**. Denoise reads the frames either side only as the first enabled effect on the
+layer. Where the layer has other effects, drag it above them in **Effect controls**.
+
+**2. Learn the noise.** Put the playhead on a frame with a flat, evenly lit area in it.
+Select Denoise in Effect controls and press **Learn**, or `Alt+L`. The square on the Viewer
+moves to the patch that was measured, and the display above the controls reads **Quality**.
+
+**3. Move the square if the quality is low.** With the **Selection** tool (`V`), drag the
+square onto a flat patch with no edges in it, or drag a corner to make it larger. The noise
+is measured again when it is let go.
+
+**4. Check what is removed.** Set **View** to **Removed noise**, or press `Alt+N`. Where
+outlines of the picture show in the grey, lower **Luma** or raise **Detail**. Press `Alt+N`
+again for the result.
+
+**5. Check the frames either side.** Set **View** to **Frames blended**. White is where
+every frame either side was averaged in, and black where none was. Set **View** back to
+**Result**.
+
+## The sound
+
+**6. Add Noise reduction.** With the layer selected, choose **Effect ▸ Audio ▸ Noise
+reduction**.
+
+**7. Mark a stretch of noise.** Find a second or more where nobody speaks. Put the playhead
+at its start and press `B`, then at its end and press `N`.
+
+**8. Learn it.** Select Noise reduction in Effect controls and press **Learn**, or `Alt+L`.
+**Adaptive** turns off, and the display draws the profile it learned and reads **Learned**.
+
+**9. Listen to what is removed.** Tick **Noise only**, or press `Alt+N`, and play. Where the
+voice is heard in it, lower **Threshold** or **Reduction**. Untick it.
+
+**10. Take out the hum.** Add **Effect ▸ Audio ▸ Hum removal**. The display reads the
+frequency it found, such as **Hum at 50.0 Hz**.
+
+**11. Take out the clicks.** Add **Effect ▸ Audio ▸ Click removal**. For the clicks of a
+mouth, set **Type** to **Mouth clicks**. The display counts the clicks around the playhead.
+
+**12. Soften the S sounds.** Add **Effect ▸ Audio ▸ De-esser**. Tick **Sibilance only** and
+play. Move **Frequency** and **Threshold** until only the S sounds are heard, then untick
+it.
+
+**13. Install the voice model.** Open **Edit ▸ Settings… ▸ Addons**, press **Check for
+addons**, and install the **Model runtime** and **DeepFilterNet3**. See
+[Addons](/use/addons/#voice-isolation).
+
+**14. Isolate the voice.** Add **Effect ▸ Audio ▸ Voice isolation**. Raise **Background**
+from -60 to leave some of the room in.
+
+## Related
+
+- [Denoise](/effects/blur-sharpen/denoise/)
+- [Noise reduction](/effects/audio/noise-reduction/)
+- [Hum removal](/effects/audio/hum-removal/)
+- [Click removal](/effects/audio/click-removal/)
+- [De-esser](/effects/audio/de-esser/)
+- [Voice isolation](/effects/audio/voice-isolation/)
+- [Reverb reduction](/effects/audio/reverb-reduction/)
+- [Addons and models](/use/addons/)

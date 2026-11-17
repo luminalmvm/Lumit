@@ -438,6 +438,19 @@ void main() {
       final layer = comp.addSolidLayer();
       p.uiState.setSelection([layer]);
       await tester.pump();
+      // A system clipboard that keeps what Copy mirrors to it, as the real one
+      // does. Paste asks it whether something else was copied since.
+      String? mirrored;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          mirrored = (call.arguments as Map)['text'] as String?;
+        }
+        if (call.method == 'Clipboard.getData') return {'text': mirrored};
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);

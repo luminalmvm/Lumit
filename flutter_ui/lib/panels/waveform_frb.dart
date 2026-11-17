@@ -64,7 +64,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/layer/clip_peaks.dart';
 
+import '../state/settings.dart' show WaveformScale;
 import '../theme/theme.dart';
 
 /// The most buckets one request may ask for. Mirrors `MAX_PEAK_BUCKETS` on the
@@ -141,10 +143,50 @@ class WaveformRequest {
   int get hashCode => Object.hash(startSeconds, endSeconds, buckets);
 }
 
-/// The height a level is drawn at: the level itself, or its square root with
-/// its sign kept, which is the same curve either side of silence.
-double _level(double v, bool sqrtScale) =>
-    !sqrtScale ? v : (v < 0 ? -math.sqrt(-v) : math.sqrt(v));
+/// The rate the engine takes a wave's samples at, as it takes its peaks.
+const double waveSampleRate = 48000;
+
+/// Whether a wave drawn at [secondsPerPixel] has passed one sample per pixel,
+/// where the samples themselves are drawn rather than a summary of them.
+bool waveWantsSamples(double secondsPerPixel) =>
+    secondsPerPixel > 0 && secondsPerPixel * waveSampleRate < 1;
+
+/// The samples kept with the peaks they were fetched alongside, so every
+/// painter handed those peaks draws them and no lane holds a map of its own.
+final Expando<BridgeAudioSamples> _samplesOf = Expando('wave samples');
+
+/// [peaks] with the samples over [request]'s window kept beside them, where
+/// a wave drawn at [secondsPerPixel] has passed one sample per pixel.
+/// [fetch] asks the engine for them, off the build as the peaks are; a
+/// refusal leaves the peaks as they are.
+Future<BridgeAudioPeaks> withSamples(
+    BridgeAudioPeaks peaks,
+    double secondsPerPixel,
+    WaveformRequest request,
+    Future<BridgeAudioSamples> Function(double start, double end) fetch) async {
+  if (!waveWantsSamples(secondsPerPixel)) return peaks;
+  try {
+    final samples = await fetch(request.startSeconds, request.endSeconds);
+    if (samples.frames > 0) _samplesOf[peaks] = samples;
+  } catch (_) {
+    // No samples: the summary is drawn as it was.
+  }
+  return peaks;
+}
+
+/// The height a level is drawn at on [scale], its sign kept, so the curve is
+/// the same either side of silence. Logarithmic puts -60 dB at the centre and
+/// 0 dB at the edge.
+double _level(double v, WaveformScale scale) {
+  final a = v.abs();
+  final h = switch (scale) {
+    WaveformScale.linear => a,
+    WaveformScale.squareRoot => math.sqrt(a),
+    WaveformScale.logarithmic =>
+      a <= 0.001 ? 0.0 : (1 + math.log(a) / math.ln10 / 3).clamp(0.0, 1.0),
+  };
+  return v < 0 ? -h : h;
+}
 
 int _roundUpToPowerOfTwo(int n) {
   var p = 64;
@@ -191,17 +233,16 @@ class WaveformStyle {
   /// of it mirroring the other half.
   final bool fromBottom;
 
-  /// Draw each level on a square-root scale rather than straight through. A
-  /// mix sits well below full scale for most of its length, so a linear wave
-  /// spends the box on room nothing reaches into and reads as a line; the
-  /// square root lifts the quiet end and leaves the loud end where it is. The
-  /// sign rides through it, so a centred wave still swings both ways.
-  final bool sqrtScale;
+  /// How the height follows the level. A mix sits well below full scale for
+  /// most of its length, so a linear wave spends the box on room nothing
+  /// reaches into; the square root and decibels lift the quiet end. The sign
+  /// rides through, so a centred wave still swings both ways.
+  final WaveformScale scale;
 
   const WaveformStyle({
     this.multiwave = true,
     this.fromBottom = false,
-    this.sqrtScale = false,
+    this.scale = WaveformScale.linear,
   });
 
   /// What the peaks are fetched for. Only [multiwave] reaches the engine —
@@ -214,10 +255,10 @@ class WaveformStyle {
       other is WaveformStyle &&
       other.multiwave == multiwave &&
       other.fromBottom == fromBottom &&
-      other.sqrtScale == sqrtScale;
+      other.scale == scale;
 
   @override
-  int get hashCode => Object.hash(multiwave, fromBottom, sqrtScale);
+  int get hashCode => Object.hash(multiwave, fromBottom, scale);
 }
 
 /// The waveform of one span of audio, drawn a pixel column at a time.
@@ -274,6 +315,14 @@ class WaveformPainter extends CustomPainter {
   /// was, and only the painting reaches above it.
   final double? height;
 
+  /// The gain the sound is played at, in dB: the clip's and the layer's, which
+  /// the wave is drawn after. Volume has its own line and stays out of it.
+  final double gainDb;
+
+  /// The colour of a column whose gained peak reaches full scale, null to
+  /// leave it in the band's own.
+  final Color? full;
+
   const WaveformPainter({
     required this.peaks,
     required this.originSeconds,
@@ -284,6 +333,8 @@ class WaveformPainter extends CustomPainter {
     this.style = const WaveformStyle(),
     this.inset = 1,
     this.height,
+    this.gainDb = 0,
+    this.full,
   });
 
   /// The bands to draw, back to front: which slice of the answer each one is,
@@ -307,7 +358,13 @@ class WaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final held = peaks;
-    if (held == null || held.buckets == 0 || held.values.isEmpty) return;
+    if (held == null) return;
+    final samples = _samplesOf[held];
+    if (samples != null && waveWantsSamples(secondsPerPixel)) {
+      _paintSamples(canvas, size, samples);
+      return;
+    }
+    if (held.buckets == 0 || held.values.isEmpty) return;
     // Two channels: the left over the right, each in half the room, as
     // Vegas stacks them.
     if (held.channels == 2) {
@@ -325,6 +382,8 @@ class WaveformPainter extends CustomPainter {
           style: style,
           inset: inset,
           height: height == null ? null : height! / 2,
+          gainDb: gainDb,
+          full: full,
         ).paint(canvas, half);
         canvas.restore();
       }
@@ -371,7 +430,8 @@ class WaveformPainter extends CustomPainter {
     );
     final buckets = held.buckets;
     final span = held.endSeconds - held.startSeconds;
-    final curved = style.sqrtScale;
+    final curved = style.scale;
+    final gain = gainDb == 0 ? 1.0 : math.pow(10, gainDb / 20).toDouble();
     // Every column of a band goes into one list and is drawn in one call.
     // A line at a time is a draw call per column per band, and a lane is a
     // couple of thousand columns wide: ten stacked lanes came to sixty
@@ -381,6 +441,8 @@ class WaveformPainter extends CustomPainter {
     final room = (to.ceil() - from.floor() + 1) * 4;
     final bodyLines = Float32List(room);
     final coreLines = stacked ? null : Float32List(room);
+    final fullColour = full;
+    final fullLines = fullColour == null ? null : Float32List(room);
 
     for (var drawn = 0; drawn < bands.length; drawn++) {
       final band = bands[drawn].band;
@@ -399,6 +461,7 @@ class WaveformPainter extends CustomPainter {
         ..strokeWidth = 1;
       var bodyAt = 0;
       var coreAt = 0;
+      var fullAt = 0;
 
       for (var x = from.floorToDouble(); x < to; x += 1) {
         final seconds = originSeconds + (x + 0.5) * secondsPerPixel;
@@ -407,23 +470,36 @@ class WaveformPainter extends CustomPainter {
         final bucket = at.floor();
         final base = 3 * (band * buckets + bucket);
         if (base + 2 >= held.values.length) continue;
-        final lo = _level(held.values[base].clamp(-1.0, 1.0), curved);
-        final hi = _level(held.values[base + 1].clamp(-1.0, 1.0), curved);
-        final rms = _level(held.values[base + 2].clamp(0.0, 1.0), curved);
+        final rawLo = held.values[base] * gain;
+        final rawHi = held.values[base + 1] * gain;
+        final lo = _level(rawLo.clamp(-1.0, 1.0), curved);
+        final hi = _level(rawHi.clamp(-1.0, 1.0), curved);
+        final rms =
+            _level((held.values[base + 2] * gain).clamp(0.0, 1.0), curved);
         if (lo == 0 && hi == 0 && rms == 0) continue;
-        bodyLines[bodyAt++] = x + 0.5;
+        // A column that reaches full scale once gained is drawn whole in
+        // [full], the error colour its callers pass, core and all.
+        final over = fullLines != null && (rawHi >= 1 || rawLo <= -1);
+        final lines = over ? fullLines : bodyLines;
+        var n = over ? fullAt : bodyAt;
+        lines[n++] = x + 0.5;
         if (style.fromBottom) {
           // Rectified: the column reaches up by how far the signal swung
           // either way, whichever was further.
           final amp = math.max(hi.abs(), lo.abs());
-          bodyLines[bodyAt++] = floor;
-          bodyLines[bodyAt++] = x + 0.5;
-          bodyLines[bodyAt++] = floor - amp * reach;
+          lines[n++] = floor;
+          lines[n++] = x + 0.5;
+          lines[n++] = floor - amp * reach;
         } else {
-          bodyLines[bodyAt++] = floor - hi * reach;
-          bodyLines[bodyAt++] = x + 0.5;
-          bodyLines[bodyAt++] = floor - lo * reach;
+          lines[n++] = floor - hi * reach;
+          lines[n++] = x + 0.5;
+          lines[n++] = floor - lo * reach;
         }
+        if (over) {
+          fullAt = n;
+          continue;
+        }
+        bodyAt = n;
         // The energy inside the envelope: what tells a sustained note from a
         // spike that happens to reach the same height. The stack says that
         // with its own brightness, so only the single wave draws it.
@@ -443,6 +519,82 @@ class WaveformPainter extends CustomPainter {
         canvas.drawRawPoints(ui.PointMode.lines,
             Float32List.view(coreLines.buffer, 0, coreAt), core);
       }
+      if (fullLines != null && fullColour != null && fullAt > 0) {
+        canvas.drawRawPoints(
+            ui.PointMode.lines,
+            Float32List.view(fullLines.buffer, 0, fullAt),
+            Paint()
+              ..color = fullColour
+              ..strokeWidth = 1);
+      }
+    }
+  }
+
+  /// Past one sample per pixel: the samples joined by a line, each a dot
+  /// once they are more than four pixels apart. Placed and gained as the
+  /// summary is, two channels left over right.
+  void _paintSamples(Canvas canvas, Size size, BridgeAudioSamples samples) {
+    final n = samples.frames;
+    final step = (samples.endSeconds - samples.startSeconds) / n;
+    if (n == 0 || !(step > 0)) return;
+    final rows = samples.channels == 2 ? 2 : 1;
+    if (samples.values.length < n * rows) return;
+    final x0 = math.max(0.0, left);
+    final x1 = math.min(size.width, right);
+    if (!(x1 > x0)) return;
+    // The frames under the visible columns, and one either side so the line
+    // runs off the edge rather than stopping short of it.
+    final first = math.max(0,
+        ((originSeconds + x0 * secondsPerPixel - samples.startSeconds) / step)
+                .floor() -
+            1);
+    final last = math.min(n - 1,
+        ((originSeconds + x1 * secondsPerPixel - samples.startSeconds) / step)
+                .ceil() +
+            1);
+    if (last < first) return;
+    final gain = gainDb == 0 ? 1.0 : math.pow(10, gainDb / 20).toDouble();
+    final dotted = step / secondsPerPixel > 4;
+    final row = size.height / rows;
+    final tall = (height ?? size.height) / rows;
+    final line = Paint()
+      ..color = colours.rest
+      ..strokeWidth = 1;
+    final dot = Paint()
+      ..color = colours.rest
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    final fullColour = full;
+    for (var c = 0; c < rows; c++) {
+      final top = row * (c + 1) - tall;
+      final baseline = style.fromBottom ? top + tall - inset : top + tall / 2;
+      final reach =
+          math.max(0.5, style.fromBottom ? tall - inset * 2 : tall / 2 - inset);
+      final points = Float32List((last - first + 1) * 2);
+      final over = <double>[];
+      var k = 0;
+      for (var i = first; i <= last; i++) {
+        final raw = samples.values[c * n + i] * gain;
+        final h = _level(raw.clamp(-1.0, 1.0), style.scale);
+        final x =
+            (samples.startSeconds + i * step - originSeconds) / secondsPerPixel;
+        final y = style.fromBottom ? baseline - h.abs() * reach : baseline - h * reach;
+        points[k++] = x;
+        points[k++] = y;
+        if (fullColour != null && raw.abs() >= 1) over.addAll([x, y]);
+      }
+      canvas.save();
+      canvas.clipRect(Rect.fromLTRB(x0, top, x1, row * (c + 1)));
+      canvas.drawRawPoints(ui.PointMode.polygon, points, line);
+      if (dotted) canvas.drawRawPoints(ui.PointMode.points, points, dot);
+      if (fullColour != null && over.isNotEmpty) {
+        canvas.drawRawPoints(ui.PointMode.points, Float32List.fromList(over),
+            Paint()
+              ..color = fullColour
+              ..strokeWidth = dotted ? 3 : 1
+              ..strokeCap = StrokeCap.round);
+      }
+      canvas.restore();
     }
   }
 
@@ -456,7 +608,9 @@ class WaveformPainter extends CustomPainter {
       old.colours != colours ||
       old.style != style ||
       old.inset != inset ||
-      old.height != height;
+      old.height != height ||
+      old.gainDb != gainDb ||
+      old.full != full;
 
   /// A background painter's default is to absorb hits across its whole rect,
   /// which would eat the keyframe marquee underneath. The lane is a picture,

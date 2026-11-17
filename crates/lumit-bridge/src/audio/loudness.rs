@@ -10,8 +10,10 @@ pub(crate) fn loudness() -> LoudnessReading {
     match &st.device {
         Device::Ready { meters, .. } => meters.loudness(),
         _ => LoudnessReading {
+            momentary: f32::NEG_INFINITY,
             short_term: f32::NEG_INFINITY,
             integrated: f32::NEG_INFINITY,
+            range: 0.0,
             true_peak: 0.0,
         },
     }

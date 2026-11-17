@@ -797,6 +797,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
     TResult Function(BridgeOutputRef_SourceMatte value)? sourceMatte,
     TResult Function(BridgeOutputRef_EffectData value)? effectData,
     TResult Function(BridgeOutputRef_EffectOutput value)? effectOutput,
+    TResult Function(BridgeOutputRef_EffectKey value)? effectKey,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -809,6 +810,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return effectData(_that);
       case BridgeOutputRef_EffectOutput() when effectOutput != null:
         return effectOutput(_that);
+      case BridgeOutputRef_EffectKey() when effectKey != null:
+        return effectKey(_that);
       case _:
         return orElse();
     }
@@ -833,6 +836,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
     required TResult Function(BridgeOutputRef_SourceMatte value) sourceMatte,
     required TResult Function(BridgeOutputRef_EffectData value) effectData,
     required TResult Function(BridgeOutputRef_EffectOutput value) effectOutput,
+    required TResult Function(BridgeOutputRef_EffectKey value) effectKey,
   }) {
     final _that = this;
     switch (_that) {
@@ -844,6 +848,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return effectData(_that);
       case BridgeOutputRef_EffectOutput():
         return effectOutput(_that);
+      case BridgeOutputRef_EffectKey():
+        return effectKey(_that);
     }
   }
 
@@ -865,6 +871,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
     TResult? Function(BridgeOutputRef_SourceMatte value)? sourceMatte,
     TResult? Function(BridgeOutputRef_EffectData value)? effectData,
     TResult? Function(BridgeOutputRef_EffectOutput value)? effectOutput,
+    TResult? Function(BridgeOutputRef_EffectKey value)? effectKey,
   }) {
     final _that = this;
     switch (_that) {
@@ -876,6 +883,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return effectData(_that);
       case BridgeOutputRef_EffectOutput() when effectOutput != null:
         return effectOutput(_that);
+      case BridgeOutputRef_EffectKey() when effectKey != null:
+        return effectKey(_that);
       case _:
         return null;
     }
@@ -899,6 +908,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
     TResult Function()? sourceMatte,
     TResult Function(UuidValue effect, String port)? effectData,
     TResult Function(UuidValue effect)? effectOutput,
+    TResult Function(UuidValue effect)? effectKey,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -911,6 +921,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return effectData(_that.effect, _that.port);
       case BridgeOutputRef_EffectOutput() when effectOutput != null:
         return effectOutput(_that.effect);
+      case BridgeOutputRef_EffectKey() when effectKey != null:
+        return effectKey(_that.effect);
       case _:
         return orElse();
     }
@@ -935,6 +947,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
     required TResult Function() sourceMatte,
     required TResult Function(UuidValue effect, String port) effectData,
     required TResult Function(UuidValue effect) effectOutput,
+    required TResult Function(UuidValue effect) effectKey,
   }) {
     final _that = this;
     switch (_that) {
@@ -946,6 +959,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return effectData(_that.effect, _that.port);
       case BridgeOutputRef_EffectOutput():
         return effectOutput(_that.effect);
+      case BridgeOutputRef_EffectKey():
+        return effectKey(_that.effect);
     }
   }
 
@@ -967,6 +982,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
     TResult? Function()? sourceMatte,
     TResult? Function(UuidValue effect, String port)? effectData,
     TResult? Function(UuidValue effect)? effectOutput,
+    TResult? Function(UuidValue effect)? effectKey,
   }) {
     final _that = this;
     switch (_that) {
@@ -978,6 +994,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return effectData(_that.effect, _that.port);
       case BridgeOutputRef_EffectOutput() when effectOutput != null:
         return effectOutput(_that.effect);
+      case BridgeOutputRef_EffectKey() when effectKey != null:
+        return effectKey(_that.effect);
       case _:
         return null;
     }
@@ -1210,6 +1228,71 @@ class _$BridgeOutputRef_EffectOutputCopyWithImpl<$Res>
     Object? effect = null,
   }) {
     return _then(BridgeOutputRef_EffectOutput(
+      effect: null == effect
+          ? _self.effect
+          : effect // ignore: cast_nullable_to_non_nullable
+              as UuidValue,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeOutputRef_EffectKey extends BridgeOutputRef {
+  const BridgeOutputRef_EffectKey({required this.effect}) : super._();
+
+  final UuidValue effect;
+
+  /// Create a copy of BridgeOutputRef
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeOutputRef_EffectKeyCopyWith<BridgeOutputRef_EffectKey> get copyWith =>
+      _$BridgeOutputRef_EffectKeyCopyWithImpl<BridgeOutputRef_EffectKey>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeOutputRef_EffectKey &&
+            (identical(other.effect, effect) || other.effect == effect));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, effect);
+
+  @override
+  String toString() {
+    return 'BridgeOutputRef.effectKey(effect: $effect)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeOutputRef_EffectKeyCopyWith<$Res>
+    implements $BridgeOutputRefCopyWith<$Res> {
+  factory $BridgeOutputRef_EffectKeyCopyWith(BridgeOutputRef_EffectKey value,
+          $Res Function(BridgeOutputRef_EffectKey) _then) =
+      _$BridgeOutputRef_EffectKeyCopyWithImpl;
+  @useResult
+  $Res call({UuidValue effect});
+}
+
+/// @nodoc
+class _$BridgeOutputRef_EffectKeyCopyWithImpl<$Res>
+    implements $BridgeOutputRef_EffectKeyCopyWith<$Res> {
+  _$BridgeOutputRef_EffectKeyCopyWithImpl(this._self, this._then);
+
+  final BridgeOutputRef_EffectKey _self;
+  final $Res Function(BridgeOutputRef_EffectKey) _then;
+
+  /// Create a copy of BridgeOutputRef
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? effect = null,
+  }) {
+    return _then(BridgeOutputRef_EffectKey(
       effect: null == effect
           ? _self.effect
           : effect // ignore: cast_nullable_to_non_nullable

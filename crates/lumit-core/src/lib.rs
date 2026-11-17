@@ -8,6 +8,8 @@ extern crate self as lumit_core;
 
 pub mod anim;
 pub mod camera;
+/// Captions: a Text layer whose words change with the speech.
+pub mod captions;
 /// The node graph composition: what a comp holds instead of a layer stack.
 pub mod comp_graph;
 /// The layer and asset defaults every front end builds from.
@@ -17,6 +19,8 @@ pub mod environment;
 pub mod expression;
 pub mod extrude;
 pub mod fx;
+pub mod grade;
+pub mod grade_solve;
 /// The layer driver graph: the additive wiring beside the effect stack.
 pub mod graph;
 /// Layer groups: the Timeline's organisational fold over a run of layers.
@@ -32,10 +36,12 @@ pub mod lut;
 pub mod markers;
 pub mod mask;
 pub mod mesh_shape;
+pub mod mixer;
 pub mod model;
 pub mod model_layer;
 pub mod model_material;
 pub mod model_part;
+pub mod multicam;
 /// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;
 pub mod ops;
@@ -60,11 +66,17 @@ pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.
 pub mod shared;
 pub mod shown_size;
+/// Stabilise: the path, the edges and the plan a frame is drawn with.
+pub mod stabilise;
 pub mod store;
+/// Graphics templates: a composition with controls a placed copy can set.
+pub mod template;
 /// Text animators: a Text layer's words moved a letter at a time.
 pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
+/// What was said in a footage item's sound, word by word.
+pub mod transcript;
 pub mod view_camera;
 pub mod wire_tie;

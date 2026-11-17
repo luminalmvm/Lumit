@@ -20,7 +20,7 @@ pub(super) fn offers(codec: &str) -> bool {
 pub(super) fn start(
     doc: std::sync::Arc<lumit_core::model::Document>,
     comp: uuid::Uuid,
-    audio: &[lumit_render::export::AudioJob],
+    audio: &[lumit_render::mix::jobs::AudioJob],
     out_path: &str,
     spec: lumit_render::export::ExportSpec,
     codec: &str,

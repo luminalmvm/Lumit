@@ -126,7 +126,9 @@ pub(crate) fn preview_rung(scale: f32) -> f32 {
 /// render or export prep never blocks an edit. Shared by the Viewer render path
 /// and the export-input builder ([`with_export_inputs`]) so both drive the one
 /// renderer and share its probe cache.
-fn with_ready<R>(f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -> R) -> Option<R> {
+pub(crate) fn with_ready<R>(
+    f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -> R,
+) -> Option<R> {
     let mutex = RENDERER.get_or_init(|| Mutex::new(Slot::Uninit));
     let mut guard = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
     // A device that has been lost takes this renderer with it. The
@@ -181,6 +183,33 @@ pub(crate) fn thumbnail(
     .flatten()
 }
 
+/// `comp` at `frame` as scene-linear floats, four a pixel and premultiplied,
+/// composited at about `scale`: the picture before any view or display
+/// transform, clear where nothing is drawn. What the grade solvers and the
+/// window tracker read. Drawn by the same renderer as [`thumbnail`], for the
+/// same reason.
+pub(crate) fn linear_still(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+) -> Option<(Vec<f32>, u32, u32)> {
+    if cfg!(target_arch = "wasm32") {
+        return None;
+    }
+    with_ready(|renderer| {
+        renderer.sync_colour(doc);
+        // The comp's backdrop is not part of the shot.
+        renderer.set_transparent_background(true);
+        let out = renderer
+            .render_preview_linear(doc, comp, frame, quality_for(scale))
+            .ok();
+        renderer.set_transparent_background(false);
+        out
+    })
+    .flatten()
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn still(
     renderer: &mut lumit_render::headless::HeadlessRenderer,
@@ -229,6 +258,41 @@ fn still(
     })
 }
 
+/// Frame `frame` of `comp` at its own size, seen through the config's
+/// `[display, view]` the way a Viewer showing it through them sees it, or
+/// through the built-in transform for `None`. Drawn by the thumbnail's
+/// renderer, which is put back to the built-in view after.
+pub(crate) fn viewed_frame(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    view: Option<(String, String)>,
+) -> Option<(Vec<u8>, u32, u32)> {
+    if cfg!(target_arch = "wasm32") {
+        return None;
+    }
+    with_ready(|renderer| {
+        renderer.sync_colour(doc);
+        renderer.set_colour_view(view);
+        let made = still(renderer, doc, comp, frame, 1.0);
+        renderer.set_colour_view(None);
+        made
+    })
+    .flatten()
+}
+
+/// Straight RGBA8 pixels as the bytes of a PNG file.
+pub(crate) fn png_of(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, png::EncodingError> {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .and_then(|mut writer| writer.write_image_data(rgba).and_then(|()| writer.finish()))?;
+    Ok(bytes)
+}
+
 /// Frame `frame` of `comp` at `scale`, written to a new PNG at `out`, never
 /// over a file. Answers its width and height. The thumbnail's renderer draws
 /// it, so a script's frame neither waits behind the Viewer nor holds it up.
@@ -242,17 +306,7 @@ pub(crate) fn save_frame(
     use std::io::Write;
     let (rgba, width, height) =
         thumbnail(doc, comp, frame, scale).ok_or("The frame could not be rendered.")?;
-    let mut bytes = Vec::new();
-    let mut encoder = png::Encoder::new(&mut bytes, width, height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder
-        .write_header()
-        .and_then(|mut writer| {
-            writer
-                .write_image_data(&rgba)
-                .and_then(|()| writer.finish())
-        })
+    let bytes = png_of(&rgba, width, height)
         .map_err(|e| format!("The frame could not be made into a PNG: {e}."))?;
     // Made new, so a file that appeared since the name was chosen is kept.
     std::fs::File::options()

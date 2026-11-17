@@ -267,6 +267,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// Handed in from the panel's cache, for the reason the name is.
   final bool nodeGraph;
 
+  /// Whether this composition is a multicam comp, which wears four squares
+  /// in place of the comp glyph. Handed in from the panel's cache too.
+  final bool multicam;
+
   /// A 3D model rather than footage that plays, which wears the cube.
   final bool model;
 
@@ -356,6 +360,11 @@ class ProjectRowFrb extends StatefulWidget {
   final void Function(List<ItemReference> items)? onDropItems;
   final Future<String?> Function()? relinkPicker;
 
+  /// Bring in the library's newer version of this composition's graphics
+  /// template. Null when the library has none, and the row wears no Update
+  /// badge.
+  final VoidCallback? onUpdate;
+
   const ProjectRowFrb({
     super.key,
     required this.item,
@@ -371,6 +380,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.label,
     required this.inherited,
     this.nodeGraph = false,
+    this.multicam = false,
     this.model = false,
     required this.inUse,
     required this.proxy,
@@ -397,6 +407,7 @@ class ProjectRowFrb extends StatefulWidget {
     required this.onSetLabel,
     this.onDropItems,
     this.relinkPicker,
+    this.onUpdate,
   });
 
   @override
@@ -497,7 +508,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   }
 
   /// **Opening a row**, and what opening means is the item's own answer: a
-  /// composition fronts in the Timeline, footage raises New composition
+  /// composition fronts in the Timeline (a multicam comp shows its angles in
+  /// the Viewer's source side when one is on screen), footage raises New composition
   /// sized and timed to it (or loads into the Viewer's source side when one
   /// is on screen), a folder opens and shuts.
   ///
@@ -509,7 +521,20 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   void _open() {
     if (widget.renaming) return;
     if (item case ItemReference_Composition(:final field0)) {
-      Provider.of<LumitUiState>(context, listen: false).setSelectedComp(field0);
+      final ui = Provider.of<LumitUiState>(context, listen: false);
+      // With a source side on screen, a multicam comp shows its angles there
+      // to be picked and placed, as footage loads into it.
+      var multicam = false;
+      try {
+        multicam = field0.isMulticam();
+      } catch (_) {
+        // A comp that has gone opens as nothing below.
+      }
+      if (multicam && ui.hasSourceView) {
+        ui.showAngles(field0);
+      } else {
+        ui.setSelectedComp(field0);
+      }
       return;
     }
     // Footage has no window of its own to open, and the thing people want
@@ -797,17 +822,27 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                   : Center(
                       // The tint says what the item is, so it is lifted and
                       // not replaced.
-                      child: lumitIcon(
-                        widget.missing ? LumitIcon.unlink : icon,
-                        size: projectRowIconSize,
-                        color: Color.lerp(
+                      child: Builder(builder: (_) {
+                        final colour = Color.lerp(
                             widget.missing
                                 ? t.warning
                                 : (tag != 0 ? t.labelColour(tag) : tint)
                                     .withValues(alpha: _unused ? 0.6 : 1),
                             t.textPrimary,
-                            0.35 * lit)!,
-                      ),
+                            0.35 * lit)!;
+                        if (widget.multicam &&
+                            item is ItemReference_Composition) {
+                          return CustomPaint(
+                            size: const Size.square(projectRowIconSize),
+                            painter: _MulticamGlyph(colour),
+                          );
+                        }
+                        return lumitIcon(
+                          widget.missing ? LumitIcon.unlink : icon,
+                          size: projectRowIconSize,
+                          color: colour,
+                        );
+                      }),
                     ),
             ),
           ),
@@ -846,6 +881,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           ],
         null => const <(String, String, Color)>[],
       },
+      // The library has a newer version of this graphics template.
+      if (widget.onUpdate != null)
+        ('update-$id', l10n.templateUpdate, t.accent),
       // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
       // about which file the item is being read from, not something that
       // wants acting on, so it takes the badge family's shape at
@@ -991,6 +1029,25 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 )
+              else if (key.startsWith('update-'))
+                LumitTooltip(
+                  message: l10n.templateUpdateMenu,
+                  child: HoverMark(
+                    swells: true,
+                    builder: (context, lit) => GestureDetector(
+                      key: ValueKey<String>(key),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onUpdate,
+                      // Claims a double-click too, so the row does not open
+                      // under the badge.
+                      onDoubleTap: widget.onUpdate,
+                      child: ProjectBadge(
+                        label: label,
+                        colour: Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
+                      ),
+                    ),
+                  ),
+                )
               else if (key.startsWith('blender-failed-'))
                 LumitTooltip(
                   message: switch (widget.blender) {
@@ -1087,6 +1144,34 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       ItemReference_Solid() => (LumitIcon.solid, t.labelColour(fallback)),
     };
   }
+}
+
+/// A multicam comp's glyph: four squares in a two by two, drawn on the icon
+/// set's 16-unit grid with its 1.5-unit stroke.
+class _MulticamGlyph extends CustomPainter {
+  final Color colour;
+  const _MulticamGlyph(this.colour);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 16;
+    final paint = Paint()
+      ..color = colour
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 * unit
+      ..strokeJoin = StrokeJoin.round;
+    const side = 5.0;
+    for (final x in const [2.0, 9.0]) {
+      for (final y in const [2.0, 9.0]) {
+        canvas.drawRect(
+            Rect.fromLTWH(x * unit, y * unit, side * unit, side * unit),
+            paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MulticamGlyph old) => old.colour != colour;
 }
 
 /// The floating label shown under the pointer while a row is dragged.

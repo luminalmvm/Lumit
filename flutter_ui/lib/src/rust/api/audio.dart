@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `document_snapshot`, `level_for`, `source_loudness`, `source_peak`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `audio_hold_for_picture`, `audio_resync`, `document_snapshot`, `level_for`, `source_loudness`, `source_peak`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Pause. The clock holds its position, so play resumes from here.
 void audioPause() => BridgeLib.instance.api.crateApiAudioAudioPause();
@@ -41,8 +41,8 @@ void audioStop() => BridgeLib.instance.api.crateApiAudioAudioStop();
 BridgeAudioClock audioClock() =>
     BridgeLib.instance.api.crateApiAudioAudioClock();
 
-/// What the mix is doing: one entry per sounding strip in the order the mixer
-/// draws them, then the master last.
+/// What the mix is doing: one entry per strip and bus in the mix's order,
+/// then the master last.
 ///
 /// Meant to be polled while the mixer is on screen — it takes one short lock
 /// and reads lock-free atomics the audio callback publishes once per buffer.
@@ -61,6 +61,13 @@ void resetAudioClip() => BridgeLib.instance.api.crateApiAudioResetAudioClip();
 /// [`reset_audio_loudness`].
 BridgeAudioLoudness audioLoudness() =>
     BridgeLib.instance.api.crateApiAudioAudioLoudness();
+
+/// Where each fader of the mix playing is now: every strip and bus in the
+/// mix's order, then the master. Read from the keys at the clock, or the
+/// value heard while a control is held, so faders move with the automation.
+/// Polled with [`audio_meters`]; empty when nothing is loaded.
+List<BridgeStripPosition> audioPositions() =>
+    BridgeLib.instance.api.crateApiAudioAudioPositions();
 
 /// Start the integrated loudness and the true peak afresh.
 void resetAudioLoudness() =>
@@ -96,14 +103,29 @@ class BridgeAudioClock {
   /// clock until this turns true, and follow `seconds` after that.
   final bool loaded;
 
+  /// How many times the output had to be opened again because the one in
+  /// use went away. Only grows.
+  final int deviceChanges;
+
+  /// How much sound, in milliseconds, has been played as silence because
+  /// it was not ready in time. Only grows.
+  final int starvedMs;
+
   const BridgeAudioClock({
     required this.seconds,
     required this.playing,
     required this.loaded,
+    required this.deviceChanges,
+    required this.starvedMs,
   });
 
   @override
-  int get hashCode => seconds.hashCode ^ playing.hashCode ^ loaded.hashCode;
+  int get hashCode =>
+      seconds.hashCode ^
+      playing.hashCode ^
+      loaded.hashCode ^
+      deviceChanges.hashCode ^
+      starvedMs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -112,7 +134,9 @@ class BridgeAudioClock {
           runtimeType == other.runtimeType &&
           seconds == other.seconds &&
           playing == other.playing &&
-          loaded == other.loaded;
+          loaded == other.loaded &&
+          deviceChanges == other.deviceChanges &&
+          starvedMs == other.starvedMs;
 }
 
 /// One output the machine can play through.
@@ -180,6 +204,10 @@ class BridgeAudioDevices {
 
 /// The master's loudness (ITU-R BS.1770, EBU R128).
 class BridgeAudioLoudness {
+  /// The last 400 milliseconds, in LUFS. Minus infinity while stopped or
+  /// silent.
+  final double momentary;
+
   /// The last three seconds, in LUFS. Minus infinity while stopped or silent.
   final double shortTerm;
 
@@ -191,27 +219,38 @@ class BridgeAudioLoudness {
   /// being full scale.
   final double truePeak;
 
+  /// How far the loudness ranges since the measure began, in LU.
+  final double range;
+
   const BridgeAudioLoudness({
+    required this.momentary,
     required this.shortTerm,
     required this.integrated,
     required this.truePeak,
+    required this.range,
   });
 
   @override
   int get hashCode =>
-      shortTerm.hashCode ^ integrated.hashCode ^ truePeak.hashCode;
+      momentary.hashCode ^
+      shortTerm.hashCode ^
+      integrated.hashCode ^
+      truePeak.hashCode ^
+      range.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BridgeAudioLoudness &&
           runtimeType == other.runtimeType &&
+          momentary == other.momentary &&
           shortTerm == other.shortTerm &&
           integrated == other.integrated &&
-          truePeak == other.truePeak;
+          truePeak == other.truePeak &&
+          range == other.range;
 }
 
-/// One mixer strip's bars, or the master's (docs/09 §3.1).
+/// One mixer strip's bars, a bus's, or the master's (docs/09 §3.1).
 ///
 /// **Linear sample amplitudes, not decibels.** The mix works in amplitudes;
 /// a bar that wants dB converts where it is drawn, once, rather than the
@@ -221,6 +260,7 @@ class BridgeAudioMeter {
   /// Precomp layer's row covers everything inside it — the mixer draws the
   /// rows of the comp in front of you.
   final String layer;
+  final BridgeMeterKind kind;
 
   /// Loudest sample of the last buffer (about ten milliseconds), left then
   /// right. The little line that rests above the bar for a few seconds is
@@ -232,29 +272,37 @@ class BridgeAudioMeter {
   final double rmsLeft;
   final double rmsRight;
 
-  /// Something has reached the master ceiling since the clip lights were
-  /// last put out, so the limiter is holding sound back. Sticky until
-  /// [`reset_audio_clip`], because a light that cleared itself would only
-  /// report an overload to somebody who happened to be looking.
+  /// Something has reached full scale since the clip lights were last put
+  /// out. Sticky until [`reset_audio_clip`], because a light that cleared
+  /// itself would only report an overload to somebody who happened to be
+  /// looking.
   final bool clipped;
+
+  /// The most the last buffer was pulled down, in dB (positive): a
+  /// strip's lower behind, the master's limiter.
+  final double gainReductionDb;
 
   const BridgeAudioMeter({
     required this.layer,
+    required this.kind,
     required this.peakLeft,
     required this.peakRight,
     required this.rmsLeft,
     required this.rmsRight,
     required this.clipped,
+    required this.gainReductionDb,
   });
 
   @override
   int get hashCode =>
       layer.hashCode ^
+      kind.hashCode ^
       peakLeft.hashCode ^
       peakRight.hashCode ^
       rmsLeft.hashCode ^
       rmsRight.hashCode ^
-      clipped.hashCode;
+      clipped.hashCode ^
+      gainReductionDb.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -262,11 +310,13 @@ class BridgeAudioMeter {
       other is BridgeAudioMeter &&
           runtimeType == other.runtimeType &&
           layer == other.layer &&
+          kind == other.kind &&
           peakLeft == other.peakLeft &&
           peakRight == other.peakRight &&
           rmsLeft == other.rmsLeft &&
           rmsRight == other.rmsRight &&
-          clipped == other.clipped;
+          clipped == other.clipped &&
+          gainReductionDb == other.gainReductionDb;
 }
 
 /// What one clip's gain has to be for its peak to land where it was asked.
@@ -289,4 +339,46 @@ class BridgeClipLevel {
           runtimeType == other.runtimeType &&
           clip == other.clip &&
           db == other.db;
+}
+
+/// Which row of the desk a meter is.
+enum BridgeMeterKind {
+  strip,
+  bus,
+  master,
+  ;
+}
+
+/// Where one strip's controls are now, or the master's.
+class BridgeStripPosition {
+  /// The layer, or an empty string for the master.
+  final String layer;
+  final double volumeDb;
+
+  /// -100 full left to 100 full right. Nought for the master.
+  final double pan;
+
+  /// Each send's level in dB, in the layer's send order.
+  final Float64List sends;
+
+  const BridgeStripPosition({
+    required this.layer,
+    required this.volumeDb,
+    required this.pan,
+    required this.sends,
+  });
+
+  @override
+  int get hashCode =>
+      layer.hashCode ^ volumeDb.hashCode ^ pan.hashCode ^ sends.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeStripPosition &&
+          runtimeType == other.runtimeType &&
+          layer == other.layer &&
+          volumeDb == other.volumeDb &&
+          pan == other.pan &&
+          sends == other.sends;
 }

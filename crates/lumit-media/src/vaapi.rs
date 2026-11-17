@@ -47,19 +47,26 @@ pub(crate) fn to_device(ctx: &mut AVCodecContext, frame: AVFrame) -> Result<AVFr
 /// Whether libva is installed. The Linux FFmpeg build opens it through
 /// stubs that abort the whole process when it is missing, rather than
 /// failing the call, so this asks first.
+pub(crate) fn libva_loads() -> Result<(), MediaError> {
+    loads(&["libva.so.2", "libva-drm.so.2", "libdrm.so.2"])
+        .map_err(|e| MediaError::Ffmpeg(format!("no VAAPI: {e}")))
+}
+
+/// Whether each of these libraries is installed.
 #[cfg(target_os = "linux")]
-fn libva_loads() -> Result<(), MediaError> {
-    for name in ["libva.so.2", "libva-drm.so.2"] {
-        // SAFETY: libva's load-time code only registers itself, and the
-        // library is closed again straight away without calling into it.
+pub(crate) fn loads(names: &[&str]) -> Result<(), String> {
+    for name in names {
+        // SAFETY: a driver library's load-time code only registers itself,
+        // and the library is closed again straight away without calling
+        // into it.
         #[allow(unsafe_code)]
         let loaded = unsafe { libloading::Library::new(name) };
-        loaded.map_err(|e| MediaError::Ffmpeg(format!("no VAAPI: {e}")))?;
+        loaded.map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]
-fn libva_loads() -> Result<(), MediaError> {
+pub(crate) fn loads(_names: &[&str]) -> Result<(), String> {
     Ok(())
 }

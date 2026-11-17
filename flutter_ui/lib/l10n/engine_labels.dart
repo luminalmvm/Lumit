@@ -63,6 +63,108 @@ Strings? _tableOf;
 Map<String, String> _held = const {};
 
 Map<String, String> get _built => {
+      "CDL": l10n.fxCdl,
+      "Colour warper": l10n.fxColourWarper,
+      "Six hues": l10n.fxSixHues,
+      "Eight hues": l10n.fxEightHues,
+      "Shared": l10n.fxShared,
+      "3D": l10n.fx3d,
+      "Keep samples": l10n.fxKeepSamples,
+      "Keep sample luma": l10n.fxKeepSampleLuma,
+      "Drop samples": l10n.fxDropSamples,
+      "Drop sample luma": l10n.fxDropSampleLuma,
+      "HDR": l10n.fxHdr,
+      "Global balance": l10n.fxGlobalBalance,
+      "Black offset": l10n.fxBlackOffset,
+      "Black balance": l10n.fxBlackBalance,
+      "Black exposure": l10n.fxBlackExposure,
+      "Black saturation": l10n.fxBlackSaturation,
+      "Black range": l10n.fxBlackRange,
+      "Dark balance": l10n.fxDarkBalance,
+      "Dark exposure": l10n.fxDarkExposure,
+      "Dark saturation": l10n.fxDarkSaturation,
+      "Dark range": l10n.fxDarkRange,
+      "Shadow balance": l10n.fxShadowBalance,
+      "Shadow exposure": l10n.fxShadowExposure,
+      "Shadow saturation": l10n.fxShadowSaturation,
+      "Shadow range": l10n.fxShadowRange,
+      "Light balance": l10n.fxLightBalance,
+      "Light exposure": l10n.fxLightExposure,
+      "Light saturation": l10n.fxLightSaturation,
+      "Light range": l10n.fxLightRange,
+      "Highlight balance": l10n.fxHighlightBalance,
+      "Highlight saturation": l10n.fxHighlightSaturation,
+      "Highlight range": l10n.fxHighlightRange,
+      "Specular balance": l10n.fxSpecularBalance,
+      "Specular exposure": l10n.fxSpecularExposure,
+      "Specular saturation": l10n.fxSpecularSaturation,
+      "Specular range": l10n.fxSpecularRange,
+      "Adjust": l10n.fxAdjust,
+      "Black clip": l10n.fxBlackClip,
+      "Blue high": l10n.fxBlueHigh,
+      "Blue low": l10n.fxBlueLow,
+      "Blue output": l10n.fxBlueOutput,
+      "Blur radius": l10n.fxBlurRadius,
+      "Clean black": l10n.fxCleanBlack,
+      "Clean white": l10n.fxCleanWhite,
+      "Colour boost": l10n.fxColourBoost,
+      "Correction": l10n.fxCorrection,
+      "Green high": l10n.fxGreenHigh,
+      "Green low": l10n.fxGreenLow,
+      "Green output": l10n.fxGreenOutput,
+      "HSL": l10n.fxHsl,
+      "High range": l10n.fxHighRange,
+      "High soft clip": l10n.fxHighSoftClip,
+      "Highlight": l10n.fxHighlight,
+      "Hue curves": l10n.fxHueCurves,
+      "Hue softness": l10n.fxHueSoftness,
+      "Hue symmetry": l10n.fxHueSymmetry,
+      "Hue v hue": l10n.fxHueVHue,
+      "Hue v lum": l10n.fxHueVLum,
+      "Hue v sat": l10n.fxHueVSat,
+      "Hue width": l10n.fxHueWidth,
+      "Inner softness": l10n.fxInnerSoftness,
+      "Keep luma": l10n.fxKeepLuma,
+      "Log": l10n.fxLog,
+      "Log wheels": l10n.fxLogWheels,
+      "Low range": l10n.fxLowRange,
+      "Low soft clip": l10n.fxLowSoftClip,
+      "Lum mix": l10n.fxLumMix,
+      "Lum v sat": l10n.fxLumVSat,
+      "Luma high": l10n.fxLumaHigh,
+      "Luma low": l10n.fxLumaLow,
+      "Luma softness": l10n.fxLumaSoftness,
+      "Matte finesse": l10n.fxMatteFinesse,
+      "Midtone": l10n.fxMidtone,
+      "Midtone detail": l10n.fxMidtoneDetail,
+      "Mixer": l10n.fxMixer,
+      "Node": l10n.fxNode,
+      "Outer softness": l10n.fxOuterSoftness,
+      "Parallel": l10n.fxParallel,
+      "Pivot": l10n.fxPivot,
+      "Polygon": l10n.fxPolygon,
+      "Qualifier": l10n.fxQualifier,
+      "RGB": l10n.fxRgb,
+      "Red high": l10n.fxRedHigh,
+      "Red low": l10n.fxRedLow,
+      "Red output": l10n.fxRedOutput,
+      "Sat v lum": l10n.fxSatVLum,
+      "Sat v sat": l10n.fxSatVSat,
+      "Saturation high": l10n.fxSaturationHigh,
+      "Saturation low": l10n.fxSaturationLow,
+      "Saturation softness": l10n.fxSaturationSoftness,
+      "Serial": l10n.fxSerial,
+      "Shadow": l10n.fxShadow,
+      "Use hue": l10n.fxUseHue,
+      "Use luma": l10n.fxUseLuma,
+      "Use saturation": l10n.fxUseSaturation,
+      "Video": l10n.fxVideo,
+      "Wheels": l10n.fxWheels,
+      "White clip": l10n.fxWhiteClip,
+      "Window 1": l10n.fxWindow1,
+      "Window 2": l10n.fxWindow2,
+      "Window 3": l10n.fxWindow3,
+      "Window 4": l10n.fxWindow4,
       "1 kHz": l10n.fx1kHz,
       "125 Hz": l10n.fx125Hz,
       "16 kHz": l10n.fx16kHz,
@@ -76,6 +178,7 @@ Map<String, String> get _built => {
       "A": l10n.fxA,
       "All frames": l10n.fxAllFrames,
       "Ambient": l10n.fxAmbient,
+      "Analysis": l10n.fxAnalysis,
       "APS-C": l10n.fxApsC,
       "Accumulation motion blur": l10n.fxAccumulationMotionBlur,
       "Add grain": l10n.fxAddGrain,
@@ -113,13 +216,38 @@ Map<String, String> get _built => {
       "Audio spectrum": l10n.fxAudioSpectrum,
       "Bands": l10n.fxBands,
       "Bars": l10n.fxBars,
+      "Crop and scale": l10n.fxCropAndScale,
+      "Extra scale": l10n.fxExtraScale,
+      "Fill feather": l10n.fxFillFeather,
+      "Fill from": l10n.fxFillFrom,
+      "Keep scale": l10n.fxKeepScale,
+      "Rolling shutter": l10n.fxRollingShutter,
+      "Reduce": l10n.fxReduce,
+      "Maximum scale": l10n.fxMaximumScale,
+      "No motion": l10n.fxNoMotion,
+      "Perspective": l10n.fxPerspective,
+      "Scale and rotation": l10n.fxScaleAndRotation,
+      "Reference": l10n.fxReference,
+      "Safe margin": l10n.fxSafeMargin,
+      "Show": l10n.fxShow,
+      "Smooth motion": l10n.fxSmoothMotion,
+      "Stabilise": l10n.fxStabilise,
+      "Stabilised layer": l10n.fxStabilisedLayer,
       "Start frequency": l10n.fxStartFrequency,
       "End frequency": l10n.fxEndFrequency,
       "Hue spread": l10n.fxHueSpread,
       "Smoothing": l10n.fxSmoothing,
+      "Steady crop": l10n.fxSteadyCrop,
+      "Trim": l10n.fxTrim,
+      "Trim bottom": l10n.fxTrimBottom,
+      "Trim left": l10n.fxTrimLeft,
+      "Trim right": l10n.fxTrimRight,
+      "Trim top": l10n.fxTrimTop,
+      "Use this frame": l10n.fxUseThisFrame,
       "Waveform": l10n.fxWaveform,
       "B": l10n.fxB,
       "Background": l10n.fxBackground,
+      "Background only": l10n.fxBackgroundOnly,
       "Backwards": l10n.fxBackwards,
       "Balance": l10n.fxBalance,
       "Band 1 Q": l10n.fxBand1Q,
@@ -239,6 +367,36 @@ Map<String, String> get _built => {
       "Edge": l10n.fxEdge,
       "Edge margin": l10n.fxEdgeMargin,
       "Edit lens…": l10n.fxEditLens,
+      // Denoise: its controls, views and groups.
+      "Denoise": l10n.fxDenoise,
+      "Removed noise": l10n.fxRemovedNoise,
+      "Frames blended": l10n.fxFramesBlended,
+      "Learn": l10n.fxLearn,
+      "Sample x": l10n.fxSampleX,
+      "Sample y": l10n.fxSampleY,
+      "Sample size": l10n.fxSampleSize,
+      "Luma noise": l10n.fxLumaNoise,
+      "Chroma noise": l10n.fxChromaNoise,
+      "Luma fine": l10n.fxLumaFine,
+      "Luma medium": l10n.fxLumaMedium,
+      "Luma coarse": l10n.fxLumaCoarse,
+      "Luma broad": l10n.fxLumaBroad,
+      "Chroma fine": l10n.fxChromaFine,
+      "Chroma medium": l10n.fxChromaMedium,
+      "Chroma coarse": l10n.fxChromaCoarse,
+      "Chroma broad": l10n.fxChromaBroad,
+      "Follow motion": l10n.fxFollowMotion,
+      "Temporal strength": l10n.fxTemporalStrength,
+      "Chroma": l10n.fxChroma,
+      "Fine": l10n.fxFine,
+      "Medium": l10n.fxMedium,
+      "Coarse": l10n.fxCoarse,
+      "Broad": l10n.fxBroad,
+      "Noise by size": l10n.fxNoiseBySize,
+      "Noise by tone": l10n.fxNoiseByTone,
+      "Spatial": l10n.fxSpatial,
+      "Spatial by size": l10n.fxSpatialBySize,
+      "Finish": l10n.fxFinish,
       // Energy line: its controls, its noise types and its looks.
       "Paths": l10n.fxPaths,
       "One after another": l10n.fxOneAfterAnother,
@@ -608,6 +766,11 @@ Map<String, String> get _built => {
       "Point 2 y": l10n.fxPoint2Y,
       "Point control": l10n.fxPointControl,
       "Custom controls": l10n.fxCustomControls,
+      "Graphics template": l10n.fxGraphicsTemplate,
+      "Font": l10n.fxFont,
+      "Fit": l10n.fxFit,
+      "Intro": l10n.fxIntro,
+      "Outro": l10n.fxOutro,
       "Point x": l10n.fxPointX,
       "Point y": l10n.fxPointY,
       "Points": l10n.fxPoints,
@@ -719,9 +882,35 @@ Map<String, String> get _built => {
       "Up": l10n.fxUp,
       "Units": l10n.fxUnits,
       "Vibrato": l10n.fxVibrato,
+      "Voice": l10n.fxVoice,
+      "Voice isolation": l10n.fxVoiceIsolation,
       "Voices": l10n.fxVoices,
       "Wah": l10n.fxWah,
       "Wet": l10n.fxWet,
+      "Noise reduction": l10n.fxNoiseReduction,
+      "Adaptive": l10n.fxAdaptive,
+      "Tonal reduction": l10n.fxTonalReduction,
+      "Noise only": l10n.fxNoiseOnly,
+      "Reduction": l10n.fxReduction,
+      "Hum removal": l10n.fxHumRemoval,
+      "Find frequency": l10n.fxFindFrequency,
+      "Harmonics": l10n.fxHarmonics,
+      "Slope": l10n.fxSlope,
+      "Hum only": l10n.fxHumOnly,
+      "Click removal": l10n.fxClickRemoval,
+      "Clicks": l10n.fxClicks,
+      "Mouth clicks": l10n.fxMouthClicks,
+      "Maximum length": l10n.fxMaximumLength,
+      "Widen": l10n.fxWiden,
+      "Clicks only": l10n.fxClicksOnly,
+      "De-esser": l10n.fxDeEsser,
+      "Whole sound": l10n.fxWholeSound,
+      "Sibilance only": l10n.fxSibilanceOnly,
+      "Reverb reduction": l10n.fxReverbReduction,
+      "Find reverb time": l10n.fxFindReverbTime,
+      "Reverb time": l10n.fxReverbTime,
+      "Best quality": l10n.fxBestQuality,
+      "Reverb only": l10n.fxReverbOnly,
       "Work area": l10n.fxWorkArea,
       "sRGB": l10n.fxSrgb,
       "sRGB curve": l10n.fxSrgbCurve,
@@ -1148,6 +1337,7 @@ Map<String, String> get _built => {
       "Invert noise": l10n.fxInvertNoise,
       "Iris": l10n.fxIris,
       "Jumpy": l10n.fxJumpy,
+      "Key": l10n.fxKey,
       "Key out safe": l10n.fxKeyOutSafe,
       "Key out unsafe": l10n.fxKeyOutUnsafe,
       "Layer": l10n.fxLayer,
@@ -1260,6 +1450,9 @@ Map<String, String> get _built => {
       "Near blur": l10n.fxNearBlur,
       "Nearest distance": l10n.fxNearestDistance,
       "Node graph": l10n.fxNodeGraph,
+      "Group grade": l10n.fxGroupGrade,
+      "Pre": l10n.fxGradePre,
+      "Post": l10n.fxGradePost,
       "Noise": l10n.fxNoise,
       "Noise type": l10n.fxNoiseType,
       "None": l10n.fxNone,
@@ -1870,6 +2063,54 @@ Map<String, String> get _built => {
       "Plastic": l10n.fxPlastic,
       "Rubber": l10n.fxRubber,
       "Emissive": l10n.fxEmissive,
+      // The looks a cut's Transition menu offers.
+      "Flip": l10n.fxFlip,
+      "Shutters": l10n.fxShutters,
+      "Dip to black": l10n.fxDipToBlack,
+      "Blur dissolve": l10n.fxBlurDissolve,
+      "Smear": l10n.fxSmear,
+      "Zoom blur": l10n.fxZoomBlur,
+      "Spin blur": l10n.fxSpinBlur,
+      "Glitch": l10n.fxGlitch,
+      "Glitch slices": l10n.fxGlitchSlices,
+      "Pixelate": l10n.fxPixelate,
+      // Move, and its looks. Zoom in and Zoom out share the keymap's words.
+      "Move": l10n.fxMove,
+      "Moves": l10n.fxMoves,
+      "Outgoing": l10n.fxOutgoing,
+      "Incoming": l10n.fxIncoming,
+      "Ease": l10n.fxEase,
+      "Sharp": l10n.fxSharp,
+      "Split colours": l10n.fxSplitColours,
+      "Crossfade": l10n.fxCrossfade,
+      "Push left": l10n.fxPushLeft,
+      "Push right": l10n.fxPushRight,
+      "Push up": l10n.fxPushUp,
+      "Push down": l10n.fxPushDown,
+      "Slide left": l10n.fxSlideLeft,
+      "Slide right": l10n.fxSlideRight,
+      "Cover left": l10n.fxCoverLeft,
+      "Cover right": l10n.fxCoverRight,
+      "Whip left": l10n.fxWhipLeft,
+      "Whip right": l10n.fxWhipRight,
+      "Whip up": l10n.fxWhipUp,
+      "Whip down": l10n.fxWhipDown,
+      "RGB whip": l10n.fxRgbWhip,
+      "Zoom spin": l10n.fxZoomSpin,
+      "Hit": l10n.fxHit,
+      // Light leak, and its looks.
+      "Light leak": l10n.fxLightLeak,
+      "Film burn": l10n.fxFilmBurn,
+      // Slices, and its looks.
+      "Slices": l10n.fxSlices,
+      "Slice glitch": l10n.fxSliceGlitch,
+      "Alternate": l10n.fxAlternate,
+      "Random order": l10n.fxRandomOrder,
+      // Luma fade's patterns, and its looks.
+      "Diamonds": l10n.fxDiamonds,
+      "Blocks": l10n.fxBlocks,
+      "Noise dissolve": l10n.fxNoiseDissolve,
+      "Soft iris": l10n.fxSoftIris,
       // Settings -> Keymap: what each shortcut does, and the headings saying
       // where it is live (crates/lumit-keymap/src/lib.rs).
       "Play or pause": l10n.keyPlayOrPause,
@@ -1931,6 +2172,13 @@ Map<String, String> get _built => {
           l10n.keySwitchThePickedClipsToTheirNextTake,
       "Switch the picked clips to their previous take":
           l10n.keySwitchThePickedClipsToTheirPreviousTake,
+      "Switch to the next angle": l10n.keyMulticamAngleNext,
+      "Switch to the previous angle": l10n.keyMulticamAnglePrev,
+      "Switch picture and sound together": l10n.keyMulticamModeBoth,
+      "Switch the picture only": l10n.keyMulticamModePicture,
+      "Switch the sound only": l10n.keyMulticamModeSound,
+      "Show the next page of angles": l10n.keyMulticamPageNext,
+      "Show the previous page of angles": l10n.keyMulticamPagePrev,
       "Paste a clip's attributes onto the picked clips":
           l10n.keyPasteAClipSAttributesOntoThePickedClips,
       "Minimise every track, or restore them":
@@ -1972,6 +2220,8 @@ Map<String, String> get _built => {
       "Save a version with a name": l10n.backupKeySaveVersion,
       "Import footage": l10n.keyImportFootage,
       "Export the composition": l10n.keyExportTheComposition,
+      "Export as Lottie or SVG": l10n.keyExportAsLottieOrSvg,
+      "Export on another computer": l10n.keyExportOnAnotherComputer,
       "New composition": l10n.keyNewComposition,
       "Open Settings": l10n.keyOpenSettings,
       "Open Project settings": l10n.keyOpenProjectSettings,
@@ -2013,9 +2263,24 @@ Map<String, String> get _built => {
       "Trim the layer's out point to the playhead":
           l10n.keyTrimTheLayerSOutPointToThePlayhead,
       "Split the layer at the playhead": l10n.keySplitTheLayerAtThePlayhead,
-      "Copy the layer's grade": l10n.keyCopyTheLayerSGrade,
-      "Paste the grade onto the selected layers":
-          l10n.keyPasteTheGradeOntoTheSelectedLayers,
+      "Copy the shot's grade": l10n.keyCopyTheShotSGrade,
+      "Paste the grade onto the picked shots":
+          l10n.keyPasteTheGradeOntoThePickedShots,
+      "Add a serial node": l10n.keyAddASerialNode,
+      "Add a parallel node": l10n.keyAddAParallelNode,
+      "Add a layer node": l10n.keyAddALayerNode,
+      "Add an outside node": l10n.keyAddAnOutsideNode,
+      "Change the matte view": l10n.keyChangeTheMatteView,
+      "Grab a still": l10n.keyGrabAStill,
+      "Previous shot": l10n.keyPreviousShot,
+      "Next shot": l10n.keyNextShot,
+      "First shot": l10n.keyFirstShot,
+      "Last shot": l10n.keyLastShot,
+      "Apply the previous shot's grade": l10n.keyApplyThePreviousShotSGrade,
+      "Show or hide the reference": l10n.keyShowOrHideTheReference,
+      "Apply the grade from two shots back":
+          l10n.keyApplyTheGradeFromTwoShotsBack,
+      "Show or hide the Lightbox": l10n.keyShowOrHideTheLightbox,
       "Duplicate the layer": l10n.keyDuplicateTheLayer,
       "Precompose the layer": l10n.keyPreComposeTheLayer,
       "Group the selected layers": l10n.keyGroupTheSelectedLayers,
@@ -2026,6 +2291,9 @@ Map<String, String> get _built => {
       "Apply the last effect again": l10n.keyApplyTheLastEffectAgain,
       "Remove every effect from the selected layers":
           l10n.keyRemoveEveryEffectFromTheSelectedLayers,
+      "Learn the noise": l10n.keyLearnTheNoise,
+      "Show only what the effect removes":
+          l10n.keyShowOnlyWhatTheEffectRemoves,
       "New Solid layer": l10n.keyNewSolidLayer,
       "New Text layer": l10n.keyNewTextLayer,
       "New Camera layer": l10n.keyNewCameraLayer,
@@ -2036,6 +2304,18 @@ Map<String, String> get _built => {
       "New Null layer": l10n.keyNewNullLayer,
       "New Sequence layer": l10n.keyNewSequenceLayer,
       "New Audio layer": l10n.keyNewAudioLayer,
+      "New bus": l10n.keyNewBus,
+      "Previous strip": l10n.keyPreviousStrip,
+      "Next strip": l10n.keyNextStrip,
+      "Raise the fader by 0.5 dB": l10n.keyRaiseTheFaderBy05Db,
+      "Lower the fader by 0.5 dB": l10n.keyLowerTheFaderBy05Db,
+      "Raise the fader by 0.1 dB": l10n.keyRaiseTheFaderBy01Db,
+      "Lower the fader by 0.1 dB": l10n.keyLowerTheFaderBy01Db,
+      "Return the fader to 0 dB": l10n.keyReturnTheFaderTo0Db,
+      "Mute or unmute the strip": l10n.keyMuteOrUnmuteTheStrip,
+      "Solo or unsolo the strip": l10n.keySoloOrUnsoloTheStrip,
+      "Solo the strip alone": l10n.keySoloTheStripAlone,
+      "Next automation mode": l10n.keyNextAutomationMode,
       "Zoom in": l10n.keyZoomIn,
       "Zoom out": l10n.keyZoomOut,
       "Zoom to fit": l10n.keyZoomToFit,
@@ -2058,6 +2338,7 @@ Map<String, String> get _built => {
           l10n.keyApplyTheRememberedInterpretation,
       "Rename the selected effect": l10n.keyRenameTheSelectedEffect,
       "Duplicate the selected effects": l10n.keyDuplicateTheSelectedEffects,
+      "Add to controls": l10n.keyAddToControls,
       "Show or hide the layer": l10n.keyShowOrHideTheLayer,
       "Easy ease": l10n.keyEasyEase,
       "Easy ease in": l10n.keyEasyEaseIn,
@@ -2117,6 +2398,9 @@ Map<String, String> get _built => {
       "Focus the next panel": l10n.keyFocusTheNextPanel,
       "Focus the previous panel": l10n.keyFocusThePreviousPanel,
       "Focus the panel's search box": l10n.keyFocusThePanelSSearchBox,
+      "Move the panel to a new window": l10n.keyMoveThePanelToANewWindow,
+      "Move the panel to the main window": l10n.keyMoveThePanelToTheMainWindow,
+      "Show or hide the video monitor": l10n.keyShowOrHideTheVideoMonitor,
       "Anywhere": l10n.keyAnywhere,
       "Tools": l10n.keyTools,
       "Project panel": l10n.keyProjectPanel,
@@ -2126,6 +2410,31 @@ Map<String, String> get _built => {
       "Panels": l10n.keyPanels,
       "Effect controls": l10n.keyEffectControls,
       "Cut timeline": l10n.keyCutTimeline,
+      "Captions panel": l10n.keyCaptionsPanel,
+      "Split the caption at the playhead": l10n.keySplitTheCaptionAtThePlayhead,
+      "Join the selected captions": l10n.keyJoinTheSelectedCaptions,
+      "Add a caption at the playhead": l10n.keyAddACaptionAtThePlayhead,
+      "Go to the previous caption": l10n.keyGoToThePreviousCaption,
+      "Go to the next caption": l10n.keyGoToTheNextCaption,
+      "Transcript panel": l10n.keyTranscriptPanel,
+      "Colour panels": l10n.keyColourPanels,
+      "Delete the selected words and close the gap":
+          l10n.keyDeleteTheSelectedWordsAndCloseTheGap,
+      "Delete the selected words and leave a gap":
+          l10n.keyDeleteTheSelectedWordsAndLeaveAGap,
+      "Put back the selected removed words":
+          l10n.keyPutBackTheSelectedRemovedWords,
+      "Correct the selected words": l10n.keyCorrectTheSelectedWords,
+      "Insert the selected words at the playhead":
+          l10n.keyInsertTheSelectedWordsAtThePlayhead,
+      "Overwrite with the selected words at the playhead":
+          l10n.keyOverwriteWithTheSelectedWordsAtThePlayhead,
+      "Next result": l10n.keyNextResult,
+      "Previous result": l10n.keyPreviousResult,
+      "Mark the selected words as the work area":
+          l10n.keyMarkTheSelectedWordsAsTheWorkArea,
+      "Review filler words": l10n.keyReviewFillerWords,
+      "Review pauses": l10n.keyReviewPauses,
       "Copy the selection": l10n.keyCopyTheSelection,
       "Cut the selection": l10n.keyCutTheSelection,
       "Paste": l10n.keyPaste,
@@ -2141,9 +2450,11 @@ Map<String, String> get _built => {
       "Set the keyframe's interpolation": l10n.keySetTheKeyframeSInterpolation,
       "Set the keyframe's speed": l10n.keySetTheKeyframeSSpeed,
       "Add an expression": l10n.keyAddAnExpression,
+      "Stabilise the selected layers": l10n.keyStabiliseTheSelectedLayers,
       "Trim the composition to the work area":
           l10n.keyTrimTheCompositionToTheWorkArea,
       "Open the export queue": l10n.keyOpenTheExportQueue,
+      "Open the library": l10n.keyOpenTheLibrary,
       "Open Lumit help": l10n.keyOpenLumitHelp,
       "Layer settings": l10n.keyLayerSettings,
       "Next blend mode": l10n.keyNextBlendMode,
@@ -2189,6 +2500,12 @@ Map<String, String> get _built => {
       "Relink footage": l10n.histRelinkFootage,
       "Set sequence rate": l10n.histSetSequenceRate,
       "Mark In and Out": l10n.histMarkInAndOut,
+      "Transcribe": l10n.histTranscribe,
+      "Delete transcript": l10n.histDeleteTranscript,
+      "Edit transcript": l10n.histEditTranscript,
+      "Edit speakers": l10n.histEditSpeakers,
+      "Edit captions": l10n.histEditCaptions,
+      "Remove captions": l10n.histRemoveCaptions,
       "Set proxy": l10n.histSetProxy,
       "Use proxy": l10n.useProxy,
       "Use proxies": l10n.histUseProxies,
@@ -2224,6 +2541,49 @@ Map<String, String> get _built => {
       "Grade": l10n.histGrade,
       "Paste grade": l10n.histPasteGrade,
       "Apply look": l10n.histApplyLook,
+      "Apply grade": l10n.histApplyGrade,
+      "Add node": l10n.histAddNode,
+      "Bypass node": l10n.histBypassNode,
+      "Reset node": l10n.histResetNode,
+      "Delete node": l10n.histDeleteNode,
+      "Move node": l10n.histMoveNode,
+      "Paste node": l10n.histPasteNode,
+      "Bypass grade": l10n.histBypassGrade,
+      "Reset grade": l10n.histResetGrade,
+      "Auto balance": l10n.histAutoBalance,
+      "Match shot": l10n.histMatchShot,
+      "Delete words": l10n.histDeleteWords,
+      "Lift words": l10n.histLiftWords,
+      "Paste words": l10n.histPasteWords,
+      "Move words": l10n.histMoveWords,
+      "Restore words": l10n.histRestoreWords,
+      "Shorten pauses": l10n.histShortenPauses,
+      "Delete filler words": l10n.histDeleteFillerWords,
+      "Correct words": l10n.histCorrectWords,
+      "Change speaker": l10n.histChangeSpeaker,
+      "Rename speaker": l10n.histRenameSpeaker,
+      "Insert words": l10n.histInsertWords,
+      "Overwrite with words": l10n.histOverwriteWithWords,
+      "Append words": l10n.histAppendWords,
+      "Mark as work area": l10n.histMarkAsWorkArea,
+      "Assemble from script": l10n.histAssembleFromScript,
+      "Edit grade versions": l10n.histEditGradeVersions,
+      "New grade version": l10n.histNewGradeVersion,
+      "Switch grade version": l10n.histSwitchGradeVersion,
+      "Rename grade version": l10n.histRenameGradeVersion,
+      "Delete grade version": l10n.histDeleteGradeVersion,
+      "New grade group": l10n.histNewGradeGroup,
+      "Rename grade group": l10n.histRenameGradeGroup,
+      "Delete grade group": l10n.histDeleteGradeGroup,
+      "Join grade group": l10n.histJoinGradeGroup,
+      "Share node": l10n.histShareNode,
+      "Unshare node": l10n.histUnshareNode,
+      "Leave grade group": l10n.histLeaveGradeGroup,
+      "Apply memory": l10n.histApplyMemory,
+      "Store memory": l10n.histStoreMemory,
+      "Wire key": l10n.histWireKey,
+      "Remove key wire": l10n.histRemoveKeyWire,
+      "Invert key": l10n.histInvertKey,
       // Named by the interface for its commonest commands. "Split" is the
       // effect's own word above; a step naming its thing ("Delete Glow")
       // arrives already in the reader's words, since no table could hold it.
@@ -2254,6 +2614,10 @@ Map<String, String> get _built => {
       "Set work area": l10n.histSetWorkArea,
       "Edit composition markers": l10n.histEditCompMarkers,
       "Edit layer markers": l10n.histEditLayerMarkers,
+      "Edit footage markers": l10n.histEditFootageMarkers,
+      "Set multicam": l10n.histSetMulticam,
+      "Edit controls": l10n.histEditControls,
+      "Link data": l10n.histLinkData,
       "Set blend mode": l10n.histSetBlendMode,
       "Set parent": l10n.histSetParent,
       "Edit transform": l10n.histEditTransform,
@@ -2288,6 +2652,15 @@ Map<String, String> get _built => {
       "Edit routing": l10n.histEditRouting,
       "Set audio streams": l10n.histSetAudioStreams,
       "Move master fader": l10n.histMoveMasterFader,
+      "Edit gain": l10n.histEditGain,
+      "Set automation mode": l10n.histSetAutomationMode,
+      "Solo safe switch": l10n.histSoloSafeSwitch,
+      "Edit lower behind": l10n.histEditLowerBehind,
+      "Edit master automation": l10n.histEditMasterAutomation,
+      "Set master automation mode": l10n.histSetMasterAutomationMode,
+      "Set loudness target": l10n.histSetLoudnessTarget,
+      "Record automation": l10n.histRecordAutomation,
+      "Normalise mix": l10n.histNormaliseMix,
       // The mark the Audio timeline writes, which reads in the history under
       // the same words the row carries.
       "Sound mix": l10n.timelineSoundMix,
@@ -2400,6 +2773,10 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeShadowSwitchKeyed;
     case 'geometry_options_carried':
       return l10n.aeGeometryOptionsCarried;
+    case 'control_not_carried':
+      return l10n.aeControlNotCarried(a('control'), a('row'));
+    case 'control_value_not_carried':
+      return l10n.aeControlValueNotCarried(a('control'));
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':
@@ -2456,6 +2833,108 @@ String? importReason(String key, Map<String, String> args) {
 
 /// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasImportReason(String key) => importReason(key, const {}) != null;
+
+/// The one-line reason for a line of the Lottie and SVG window's check
+/// (`crates/lumit-lottie/src/check.rs`), or null when this build has no
+/// sentence for [key] and the engine's own English stands in. The same shape
+/// as [importReason]: a stable id and its facts by name. [somePlayers] is the
+/// line's outcome, for the one id whose sentence differs by it.
+String? vectorReason(String key, Map<String, String> args,
+    {bool somePlayers = false}) {
+  String a(String name) => engineLabel(args[name] ?? '');
+  switch (key) {
+    case 'effect' || 'style' || 'modifier_animated':
+      return somePlayers
+          ? l10n.vectorReasonEffectPlayers(a('label'))
+          : l10n.vectorReasonEffect(a('label'));
+    case 'camera_layer':
+      return l10n.vectorReasonCameraLayer;
+    case 'light_layer':
+      return l10n.vectorReasonLightLayer;
+    case 'model_layer':
+      return l10n.vectorReasonModelLayer;
+    case 'shape_3d_layer':
+      return l10n.vectorReasonShape3dLayer;
+    case 'adjustment_layer':
+      return l10n.vectorReasonAdjustmentLayer;
+    case 'sequence_layer':
+      return l10n.vectorReasonSequenceLayer;
+    case 'node_graph':
+      return l10n.vectorReasonNodeGraph;
+    case 'matte_source':
+      return l10n.vectorReasonMatteSource;
+    case 'matte_chain':
+      return l10n.vectorReasonMatteChain;
+    case 'video_footage':
+      return l10n.vectorReasonVideoFootage;
+    case 'missing_footage':
+      return l10n.vectorReasonMissingFootage;
+    case 'three_d_flat':
+      return l10n.vectorReasonThreeDFlat;
+    case 'motion_blur':
+      return l10n.vectorReasonMotionBlur;
+    case 'paint':
+      return l10n.vectorReasonPaint;
+    case 'puppet':
+      return l10n.vectorReasonPuppet;
+    case 'mask_feather':
+      return l10n.vectorReasonMaskFeather;
+    case 'mask_mode':
+      return l10n.vectorReasonMaskMode(a('mode'));
+    case 'mask_expansion':
+      return l10n.vectorReasonMaskExpansion;
+    case 'blend_mode':
+      return somePlayers
+          ? l10n.vectorReasonBlendModePlayers(a('mode'))
+          : l10n.vectorReasonBlendModeLeftOut(a('mode'));
+    case 'baked_outline':
+      return l10n.vectorReasonBakedOutline(a('label'));
+    case 'merge':
+      return l10n.vectorReasonMerge(a('label'));
+    case 'expression_baked':
+      return l10n.vectorReasonExpressionBaked;
+    case 'text_needs_font':
+      return l10n.vectorReasonTextNeedsFont(a('font'));
+    case 'text_animators':
+      return l10n.vectorReasonTextAnimators;
+    case 'luma_matte':
+      return l10n.vectorReasonLumaMatte;
+    case 'split_easing':
+      return l10n.vectorReasonSplitEasing;
+    case 'mask_opacity':
+      return l10n.vectorReasonMaskOpacity;
+    case 'offset_paths':
+      return l10n.vectorReasonOffsetPaths;
+    case 'taper':
+      return l10n.vectorReasonTaper;
+    case 'text_on_path_still':
+      return l10n.vectorReasonTextOnPathStill;
+    case 'text_on_path':
+      return l10n.vectorReasonTextOnPath;
+    case 'text_fill_animator':
+      return l10n.vectorReasonTextFillAnimator;
+    case 'text_held':
+      return l10n.vectorReasonTextHeld;
+    case 'precomp_cycle':
+      return l10n.vectorReasonPrecompCycle;
+    case 'effect_mix':
+      return l10n.vectorReasonEffectMix(a('label'));
+    case 'effect_option':
+      return l10n.vectorReasonEffectShadowOnly(a('label'));
+    case 'effect_hard_edge':
+      return l10n.vectorReasonEffectHardEdge(a('label'));
+    case 'effect_repeat_edge':
+      return l10n.vectorReasonEffectRepeatEdge(a('label'));
+    case 'combined_trim':
+      return l10n.vectorReasonCombinedTrim;
+    case 'set_matte_channel':
+      return l10n.vectorReasonSetMatteChannel(a('label'));
+    case 'set_matte_hidden':
+      return l10n.vectorReasonSetMatteHidden(a('label'));
+    default:
+      return null;
+  }
+}
 
 // --- The colour config's refusals (docs/impl/ocio.md §6.1) ----------------
 //
@@ -2584,6 +3063,10 @@ String? effectBadge(String key, [String? detail]) {
   switch (key) {
     case 'plugin_failed':
       return l10n.badgePluginFailed;
+    // Voice isolation given more sound than it will take. The sound plays
+    // unchanged, and the headline says what to do.
+    case 'too_long':
+      return l10n.badgeVoiceTooLong;
     case 'plugin_disabled':
       return l10n.badgePluginDisabled;
     case 'plugin_missing':
@@ -2622,7 +3105,7 @@ bool hasEffectBadge(String key) => effectBadge(key) != null;
 
 /// What a model pack does, for the line under its name on the Addons page.
 ///
-/// The word arrives as one of the four tasks a pack may declare in its manifest
+/// The word arrives as one of the six tasks a pack may declare in its manifest
 /// (docs/impl/addons.md §4). A task this build has no word for comes back as it
 /// arrived, which is what a catalogue written for a newer Lumit would send.
 String addonTask(String task) {
@@ -2635,6 +3118,10 @@ String addonTask(String task) {
       return l10n.addonTaskMatte;
     case 'segmentation':
       return l10n.addonTaskSegmentation;
+    case 'speech':
+      return l10n.addonTaskSpeech;
+    case 'voice':
+      return l10n.addonTaskVoice;
     default:
       return task;
   }

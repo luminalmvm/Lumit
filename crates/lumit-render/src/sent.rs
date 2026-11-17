@@ -41,53 +41,78 @@ pub fn files(doc: &Document) -> Vec<(Uuid, PathBuf)> {
 /// analysis.
 #[must_use]
 pub fn adopt(doc: &Document, id: Uuid, bytes: &[u8]) -> bool {
+    let never = AtomicBool::new(false);
+    match keep(doc, id, bytes) {
+        Some(Kept::Plane(job)) => planes::run(job, &never),
+        Some(Kept::Brush(job)) => roto::run(job, &never),
+        Some(Kept::Track(job)) => track::run(job, &never),
+        None => return false,
+    }
+    true
+}
+
+/// What [`keep`] wrote, to be read into the store.
+enum Kept {
+    Plane(planes::PlaneJob),
+    Brush(roto::RotoJob),
+    Track(track::Job),
+}
+
+/// Write `bytes` into this machine's sidecar folder for the analysis filed
+/// under `id`, and nothing more: the store the open project reads is left as
+/// it is. For a file a later export reads, such as one in another process.
+/// False when it is not one, or `doc` has no such analysis.
+#[must_use]
+pub fn write(doc: &Document, id: Uuid, bytes: &[u8]) -> bool {
+    keep(doc, id, bytes).is_some()
+}
+
+fn keep(doc: &Document, id: Uuid, bytes: &[u8]) -> Option<Kept> {
     let plane = planes::warm_jobs(doc)
         .into_iter()
         .find(|job| job.instance == id);
     if let Some(job) = plane {
-        let (Some(dir), Some(key)) = (planes::cache_dir(), job.key) else {
-            return false;
-        };
+        let (dir, key) = (planes::cache_dir()?, job.key?);
         let body = sidecar::unframe(bytes, planes::MAGIC, planes::FORMAT_VERSION);
         let record = body.and_then(|body| bincode::deserialize::<planes::Record>(body).ok());
-        let Some(run) = record.and_then(planes::record_to_run) else {
-            return false;
-        };
+        let run = record.and_then(planes::record_to_run)?;
         planes::write_sidecar(&dir, key, &run);
-        planes::run(job, &AtomicBool::new(false));
-        return true;
+        return Some(Kept::Plane(job));
     }
     let brush = roto::warm_jobs(doc)
         .into_iter()
         .find(|job| job.instance == id);
     if let Some(job) = brush {
-        let (Some(dir), Some(key)) = (roto::cache_dir(), job.key) else {
-            return false;
-        };
+        let (dir, key) = (roto::cache_dir()?, job.key?);
         let small = bytes.len() as u64 <= roto::MAX_SIDECAR_BYTES;
         let run = small.then(|| roto::decode(bytes, None)).flatten();
-        let Some(run) = run.and_then(roto::record_to_run) else {
-            return false;
-        };
+        let run = run.and_then(roto::record_to_run)?;
         roto::write_sidecar(&dir, key, &run);
-        roto::run(job, &AtomicBool::new(false));
-        return true;
+        return Some(Kept::Brush(job));
     }
-    let tracked = track::warm_jobs(doc)
+    let job = track::warm_jobs(doc)
         .into_iter()
-        .find(|job| job.media == id);
-    let Some(job) = tracked else {
-        return false;
-    };
-    let (Some(dir), Some(key)) = (track::cache_dir(), job.key) else {
-        return false;
-    };
+        .find(|job| job.media == id)?;
+    let (dir, key) = (track::cache_dir()?, job.key?);
     // A track is named by the shot and its settings alone, the same on every
     // machine, so the file is kept as it came once it says it is that one.
-    if track::decode(bytes, key).is_none() {
-        return false;
-    }
+    track::decode(bytes, key)?;
     sidecar::write(&dir, &key.file_name(), bytes);
-    track::run(job, &AtomicBool::new(false));
-    true
+    Some(Kept::Track(job))
+}
+
+/// Read every analysis `doc` has in this machine's sidecar folders into the
+/// stores, on this thread. Opening a project does the same on threads of its
+/// own, which an export that starts straight after would race.
+pub fn warm(doc: &Document) {
+    let never = AtomicBool::new(false);
+    for job in planes::warm_jobs(doc) {
+        planes::run(job, &never);
+    }
+    for job in roto::warm_jobs(doc) {
+        roto::run(job, &never);
+    }
+    for job in track::warm_jobs(doc) {
+        track::run(job, &never);
+    }
 }

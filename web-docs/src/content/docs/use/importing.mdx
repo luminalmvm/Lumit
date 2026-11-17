@@ -28,6 +28,32 @@ Everything picked at once is one undo step. While the files are read, a card sho
 the import has got, with **Cancel import**, which leaves the project as it was. One import
 runs at a time.
 
+## Paste a picture
+
+`Ctrl+V` imports a picture from the system clipboard: one copied in a browser, a screenshot
+tool or an image editor, or picture files copied in a file manager. Files are imported where
+they are. A picture copied as pixels is saved as `Pasted image 1.png`, then 2, and on, in a
+`Pasted images` folder beside the saved project, or in Lumit's settings folder while the
+project has no file.
+
+- With the [Project panel](/panels/project/) active, the picture is imported and selected.
+- With any other panel active and a composition open, each picture is also placed on a new
+  layer at the playhead, above the selected layer, and the layers are selected. A layer
+  ends where the composition does.
+- In the Cut timeline the picture is imported and not placed.
+
+PNG, JPEG, TIFF, OpenEXR, HDR, Targa, DPX, BMP, WebP, GIF and the Netpbm family are taken.
+Other files on the clipboard are left alone.
+
+A layer, effect or mask copied in Lumit pastes as it always has, until something else is
+copied.
+
+:::note[Not built yet]
+On Windows a picture copied as pixels arrives without its transparency. **Edit ▸ Paste**
+stays unavailable while only a picture is on the clipboard; the chord and the Paste on the
+Timeline's and the Viewer's menus work.
+:::
+
 ## What Lumit opens
 
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
@@ -305,6 +331,14 @@ dragged onto the window is not imported.
   other project's name after it in brackets.
 - The whole import is one undo step.
 
+## Lottie files
+
+A Lottie (`.json`) or dotLottie (`.lottie`) picked in the import dialogue, or dropped on the
+window, becomes a composition. Its precomps arrive as compositions in a folder named after
+the file, and its pictures are written beside the file in a folder named after it. The
+**Import report** lists what didn't come across. See
+[Lottie and SVG](/use/lottie-and-svg/#import-a-lottie).
+
 ## After Effects projects
 
 A whole After Effects project can be imported via **File ▸ Import .aep
@@ -315,17 +349,28 @@ light keeps its type, its aim and its light options, and a 3D layer its Orientat
 Anchor Z, Scale Z and material options, keyframes included. A 3D layer, camera or light
 turns its X, Y and Z Rotation in After Effects' order.
 
+The import makes a new project in place of the open one. For a step-by-step guide, see
+[Bringing in an After Effects project](/tutorials/after-effects-import/).
+
 A common third-party effect becomes the maker's own OFX plugin where one is installed, with
 its controls carried across by name. Any other third-party effect arrives as a placeholder
 that keeps its values and draws nothing. Neither stops the rest of the project importing.
 
-The import makes a new project in place of the open one. For a step-by-step guide, see
-[Bringing in an After Effects project](/tutorials/after-effects-import/).
+**Remove Grain** arrives as [Denoise](/effects/blur-sharpen/denoise/). Temporal filtering
+sets **Frames** to 2, or to 0 when it is off. Its amount becomes **Temporal strength**, and
+the blend with the original becomes **Mix**. Nothing else comes across, the noise samples
+included: select the effect and press **Learn**.
+
+A Warp Stabilizer becomes a [Stabilise](/use/stabilising/#from-after-effects).
 
 Expressions come across as JavaScript and run as written, and a pseudo effect arrives as
 [Custom controls](/effects/controls/custom-controls/). A property with both keyframes and
 an expression keeps its keyframes. See
 [Expressions](/use/expressions/#what-javascript-can-read).
+
+Essential Graphics come across as a [graphics template](/use/graphics-templates/#from-after-effects):
+a composition's controllers as its controls, and a precomp layer's Essential Properties as its
+copy's values. A Dropdown Menu Control arrives as a Custom controls menu.
 
 Animation presets (`.ffx`) are imported from **Settings ▸ General ▸ After Effects
 presets**. See [Effects & presets](/panels/effects-presets/#after-effects-presets).

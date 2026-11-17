@@ -248,6 +248,8 @@ pub enum LayerInputDraw {
     /// The picture an effect above this one in the same stack made, wired into
     /// this one's Matte. `run_ops` keeps it from when that effect ran.
     EffectOutput(uuid::Uuid),
+    /// The key a Correction above this one made, wired into this one's Matte.
+    EffectKey(uuid::Uuid),
     /// Another layer, rendered alone at this raster.
     Layer(DofInputDraw),
     /// One op's whole list of layers, for an effect with more than one layer
@@ -266,9 +268,12 @@ pub enum LayerInputDraw {
     Late(Box<LateClones>),
 }
 
-/// Where a [`LayerInputDraw::Late`] list belongs, as plain data: enough for
+/// Where a [`LayerInputDraw::Late`] list belongs: enough for
 /// the builder to walk back to the effect and make its pictures.
 pub struct LateClones {
+    /// The document the walk read. Inside a copy of a graphics template that
+    /// is the copy's own, not the frame's.
+    pub doc: std::sync::Arc<lumit_core::model::Document>,
     /// The composition, the layer the effect is on, and the effect.
     pub comp: uuid::Uuid,
     pub owner: uuid::Uuid,
@@ -613,16 +618,15 @@ pub struct CompLayerDraw {
     /// Decoded neighbour source frames for a temporal effect (echo etc.),
     /// keyed by frame offset — same sRGB8 form and decoded size as a Pixels
     /// source. Empty unless the stack is temporal.
-    pub neighbours: Vec<(i32, Vec<u8>, u32, u32)>,
-    /// The layer's dense forward flow fields `(offset, u, v, conf, w, h)`, one
+    pub neighbours: Vec<(i32, std::sync::Arc<Vec<u8>>, u32, u32)>,
+    /// The layer's dense forward flow fields `(offset, field)`, one
     /// per neighbour offset a flow-consuming effect asked for — Fast
     /// motion blur (docs/08 §3.2) reads `+1`, Datamosh (§3.12) reads `-1`, and a
     /// stack with both carries both rather than one of them silently doing
-    /// nothing. Carried from the decode job; `w × h` matches the decoded source.
+    /// nothing. Carried from the decode job, at the size each was filed at.
     /// `conf` is the per-pixel confidence in 0..1 (FX-19) that tapers the
     /// streak; Datamosh reads only `(u, v)`. Empty unless the stack wants one.
-    #[allow(clippy::type_complexity)]
-    pub flow_fields: Vec<(i32, Vec<f32>, Vec<f32>, Vec<f32>, u32, u32)>,
+    pub flow_fields: Vec<(i32, crate::decode::FlowFieldData)>,
     /// The ordered file paths of the layer's enabled built-in `lut` effects
     /// (docs/08 §3.11; None = unset). Because `resolve_stack` keeps the same
     /// filter and order and a `lut` effect always resolves to exactly one
@@ -742,13 +746,14 @@ pub struct CompLayerDraw {
     /// (`ResolvedStack::rescale_spatial`) so px@comp parameters land where
     /// the user put them at every preview resolution.
     pub fx_ref_width: Option<f32>,
-    /// The content name of the picture `fx` runs on: what the source
-    /// is (the decode job's identity for footage, the colour and size for a
-    /// solid), plus the masks and paint baked into it and its raster size. The
-    /// per-effect cache names each op's output from this; a nested comp's is
-    /// its own frame key; `None` — a text or shape layer, an
-    /// adjustment's composite — runs the stack uncached in v1. Never the pixels themselves: naming by identity is what
-    /// keeps a build free of hashing a frame's worth of bytes.
+    /// The content name of the picture `fx` runs on: what the source is (the
+    /// decode job's identity for footage, the colour and size for a solid, the
+    /// kept raster's name for text and shapes), plus the masks and paint baked
+    /// into it and its raster size. The per-effect cache names each op's
+    /// output from this; a nested comp's is its own frame key; `None` (a layer
+    /// with a puppet, an adjustment's composite) runs the stack uncached.
+    /// Never the pixels themselves: naming by identity is what keeps a build
+    /// free of hashing a frame's worth of bytes.
     pub fx_input_key: Option<u128>,
     /// Per-layer motion-blur sub-frame placements (docs/06 §4): the
     /// layer's own transform re-evaluated across the open shutter. Empty unless
@@ -806,10 +811,12 @@ pub struct CompLayerDraw {
     /// The same pictures are the neighbour frames of any other temporal effect
     /// on these two kinds (Echo, a plugin that reads the frames either side),
     /// so the list covers the stack's whole window. The last field is the
-    /// flow offset the field measured against that picture is filed under:
-    /// only those are measured, and an Echo pays for the render and nothing
-    /// else. It is the picture's own offset, or on the frame before a cut the
-    /// other side's, with the field turned round (`rebuild_offsets`).
+    /// flow offset the field measured against that picture is filed under,
+    /// and how it is wanted: only those are measured (Denoise with Follow
+    /// motion off is handed one of no motion instead), and an Echo pays for
+    /// the render and nothing else. It is the picture's own offset, or on the
+    /// frame before a cut the other side's, with the field turned round
+    /// (`rebuild_offsets`).
     ///
     /// Empty on every layer whose motion the decode worker can measure and on
     /// every layer that asks for none, which is almost all of them.
@@ -818,7 +825,7 @@ pub struct CompLayerDraw {
         i32,
         Vec<CompLayerDraw>,
         Option<lumit_core::model::CameraPose>,
-        Option<i32>,
+        Option<(i32, lumit_core::fx::temporal::FlowWant)>,
     )>,
     /// What a Particulate in the scene takes from the comp beyond its rows.
     /// `None` on every other layer.
