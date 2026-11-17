@@ -208,8 +208,12 @@ class UpdateRelease {
     // candidate, which is a rehearsal, and not a stable release either. A
     // stable 0.8.1 outranks 0.8.1-nightly but is cut from older code, so a
     // nightly that took it would lose a day's features until the next one.
+    // The stable channel refuses a nightly's tag too, even if it is not
+    // marked as a pre-release.
     if (json['draft'] == true) return null;
-    if (nightly ? !isNightlyVersion(tag) : json['prerelease'] == true) {
+    if (nightly
+        ? !isNightlyVersion(tag)
+        : (json['prerelease'] == true || isNightlyVersion(tag))) {
       return null;
     }
 
@@ -1018,6 +1022,12 @@ class UpdateService extends ChangeNotifier {
         return l10n.updateNotInManifest;
       case ReleaseTrust.trusted:
         break;
+    }
+
+    // Stops an old signed release, or a nightly, being reposted under another
+    // tag.
+    if (manifest?.version != release.version) {
+      return l10n.updateNotInManifest;
     }
 
     // The signature held up. Now the file has to be one the manifest names,
