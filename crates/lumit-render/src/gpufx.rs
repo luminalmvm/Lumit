@@ -598,21 +598,22 @@ impl GpuEffect for Blur {
         aux: AuxSlot<'_>,
     ) -> Tex {
         let (radius_px, edge, mix) = effects::blur::Blur::read(p).packed();
-        let op = lumit_gpu::fx::blur::BlurOp {
-            radius_px,
-            edge,
-            mix,
-        };
-        // Without a matte a wide radius runs on a grid, at a cost that does
-        // not grow with it (`cpu::blur_gaussian_wide` is its twin).
-        let Some(matte) = aux.matte() else {
-            let step = lumit_core::fx::cpu::blur_grid_step(radius_px);
-            return fx.blur_wide(ctx, tex, w, h, &op, step);
-        };
         // **The blur claims its matte**: it scales the radius per pixel
         // rather than dissolving a finished blur, so the texture goes into the
-        // kernel and no dissolve runs beside this op.
-        fx.blur(ctx, tex, w, h, Some(matte), &op)
+        // kernel and no dissolve runs beside this op. With no matte bound the
+        // kernel takes the branch it always took, byte for byte.
+        fx.blur(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::blur::BlurOp {
+                radius_px,
+                edge,
+                mix,
+            },
+        )
     }
 }
 

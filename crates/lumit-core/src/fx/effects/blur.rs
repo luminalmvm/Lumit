@@ -106,7 +106,7 @@ impl EffectDef for BlurDef {
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let (radius_px, edge, mix) = Blur::read(p).packed();
-        cpu::blur_gaussian_wide(rgba, w, h, radius_px, edge, mix);
+        cpu::blur_gaussian(rgba, w, h, radius_px, edge, mix);
     }
 
     fn spread_px(&self, p: Params<'_>) -> [f32; 2] {

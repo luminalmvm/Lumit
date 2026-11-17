@@ -6336,67 +6336,6 @@ pub fn blur_gaussian(rgba: &mut [f32], w: u32, h: u32, radius_px: f32, edge: u32
     }
 }
 
-/// From this Radius up, Gaussian blur works on a grid rather than pixel by
-/// pixel (see [`blur_gaussian_wide`]).
-pub const BLUR_GRID_FROM_PX: f32 = 64.0;
-
-/// How many grid texels a wide blur's radius spans: the grid step is the
-/// radius over this, so the kernel read on the grid is the same length at any
-/// radius.
-pub const BLUR_GRID_TAPS: f32 = 32.0;
-
-/// The grid step a Gaussian blur of `radius_px` runs at: 1 (every pixel) below
-/// [`BLUR_GRID_FROM_PX`], `radius ÷` [`BLUR_GRID_TAPS`] above it.
-pub fn blur_grid_step(radius_px: f32) -> f32 {
-    if radius_px > BLUR_GRID_FROM_PX {
-        radius_px / BLUR_GRID_TAPS
-    } else {
-        1.0
-    }
-}
-
-/// **Gaussian blur at any radius, at a cost that does not grow with it**
-/// (docs/08 §3.8). Up to [`BLUR_GRID_FROM_PX`] this is [`blur_gaussian`],
-/// to the bit. Above it the picture is shrunk onto a grid with Glow's tent,
-/// blurred there at [`BLUR_GRID_TAPS`] texels, and brought back up with
-/// Glow's Catmull-Rom, then mixed against the input.
-///
-/// **In plain terms.** A radius of 470 read every pixel 941 pixels out, twice;
-/// on a frame that size that is a few seconds of graphics card. A blur that
-/// wide has no detail left finer than a few pixels, so working it out on a
-/// grid fourteen pixels apart and filling in between gives the same picture
-/// at about a hundredth of the reads. The grid's own softening (the tent,
-/// a variance of step²/6) is a 1/1536 of the gaussian's at this ratio, too
-/// small to correct for.
-///
-/// The WGSL twin is `FxEngine::blur_wide`, pass for pass.
-pub fn blur_gaussian_wide(rgba: &mut [f32], w: u32, h: u32, radius_px: f32, edge: u32, mix: f32) {
-    let step = blur_grid_step(radius_px);
-    if step <= 1.0 {
-        return blur_gaussian(rgba, w, h, radius_px, edge, mix);
-    }
-    let (fw, fh) = (w as usize, h as usize);
-    let n = fw * fh * 4;
-    if rgba.len() < n {
-        return;
-    }
-    let (cw, ch) = (glow_grid(w, step) as usize, glow_grid(h, step) as usize);
-    let across = glow_tent(&rgba[..n], (fw, fh), (cw, fh), step, true);
-    let mut coarse = glow_tent(&across, (cw, fh), (cw, ch), step, false);
-    blur_gaussian(
-        &mut coarse,
-        cw as u32,
-        ch as u32,
-        radius_px / step,
-        edge,
-        1.0,
-    );
-    let mut soft = vec![0.0f32; n];
-    glow_up_add(&mut soft, (fw, fh), &coarse, (cw, ch), step, 1.0);
-    for (o, s) in rgba[..n].iter_mut().zip(&soft) {
-        *o = *o * (1.0 - mix) + s * mix;
-    }
-}
 /// **The Matte-driven Gaussian blur** (docs/08 §2.6) — the §1.6 oracle
 /// for `fx_blur.wgsl`'s matted path, op-for-op.
 ///
