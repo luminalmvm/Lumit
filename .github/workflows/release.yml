@@ -11,7 +11,8 @@
 # setup .exe again, silently. The setup .exe and the macOS .zip each get a
 # .blockmap, so an update only fetches the parts that changed. Every job
 # gates the release; nothing is continue-on-error, so a partial release is
-# never published quietly.
+# never published quietly. A run leaves a draft release, nightlies too, and
+# scripts/sign-release.ps1 signs it and publishes it.
 #
 # Toolchain steps mirror ci.yml's `windows` and `flutter-linux` jobs exactly
 # (same FFmpeg 8.1 shared build, same LLVM 18 pin, same Flutter 3.47.1); when
@@ -43,8 +44,8 @@ on:
   # A manual run builds all three artefacts from whatever ref it is started
   # on. The version cannot come from a branch name, so it is typed in. By
   # default it is a rehearsal that leaves the installers as run artefacts and
-  # creates no release; with `publish` ticked it creates the GitHub release
-  # and its tag at the built commit, exactly as a tag push does. Typing
+  # creates no release; with `publish` ticked it creates the draft release
+  # at the built commit, exactly as a tag push does. Typing
   # `nightly` for the version cuts a nightly now, changes or no changes.
   workflow_dispatch:
     inputs:
@@ -87,6 +88,13 @@ jobs:
             sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/nightly" --jq .sha)"
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # Publishing a draft makes its tag, and that push lands here too. The
+          # release it belongs to is already out, so there is nothing to build.
+          if [ "$GITHUB_EVENT_NAME" = push ] \
+            && gh api "repos/$GITHUB_REPOSITORY/releases/tags/$REQUESTED" > /dev/null 2>&1; then
+            echo "$REQUESTED is already published. Nothing to build."
+            exit 0
+          fi
           if [ "$GITHUB_EVENT_NAME" != schedule ] && [ "$REQUESTED" != nightly ]; then
             echo "version=$REQUESTED" >> "$GITHUB_OUTPUT"
             exit 0
@@ -562,42 +570,14 @@ jobs:
         with:
           merge-multiple: true
           path: dist
-      # Everything in dist/, named with its size and digest, signed with a key
-      # that lives nowhere near this repository.
-      #
-      # In plain terms: GitHub will tell the updater the digest of a download,
-      # and that proves the file arrived as published. It does not prove who
-      # published it — anything that could put a different installer on the
-      # release could put its digest beside it. A signature made with a key held
-      # outside the release infrastructure is the part that cannot be forged by
-      # compromising the release infrastructure, and the application carries the
-      # matching public key (flutter_ui/lib/state/release_signature.dart).
-      #
-      # Gated on the secret: without it a release still publishes, unless the
-      # application pins a key, when it would be a release nobody can install
-      # and the step fails instead. The key is Ed25519, made once on a machine
-      # that is not a runner:
-      #
-      #   openssl genpkey -algorithm ed25519 -out lumit-release-key.pem
-      #   openssl pkey -in lumit-release-key.pem -pubout -outform DER | tail -c 32 | base64 -w0
-      #
-      # The file's contents are the secret. The line the second command prints
-      # is what `updateSigningKey` pins.
-      - name: Sign the release manifest
-        env:
-          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+      # The manifest names every file in dist/ with its size and digest. CI
+      # leaves the release as a draft; scripts/sign-release.ps1 checks every
+      # file against the manifest, signs it with a key that never touches
+      # GitHub, and publishes. The app pins the public keys
+      # (flutter_ui/lib/state/release_signature.dart).
+      - name: Write the release manifest
         run: |
           set -euo pipefail
-          pinned="$(sed -n "s/^const String updateSigningKey = '\(.*\)';\$/\1/p" \
-            flutter_ui/lib/state/release_signature.dart)"
-          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
-            if [ -n "$pinned" ]; then
-              echo "No RELEASE_SIGNING_KEY secret, and flutter_ui pins a key. Every updater would refuse this release." >&2
-              exit 1
-            fi
-            echo "::warning::No RELEASE_SIGNING_KEY secret — this release ships without a signed manifest."
-            exit 0
-          fi
           tag="v${RELEASE_VERSION#v}"
           # The manifest is built from the files themselves, never from a list
           # written by hand: a name that drifts is then a signature that does
@@ -618,46 +598,6 @@ jobs:
             printf ']}'
           } > dist/lumit-release-manifest.json
 
-          # Ed25519 over the manifest's exact bytes. `-rawin` is what makes this
-          # Ed25519's own one-shot signing rather than a hash-then-sign, which
-          # is the only mode Ed25519 has and the one the verifier expects.
-          umask 077
-          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/release-key.pem"
-          openssl pkeyutl -sign -rawin \
-            -inkey "$RUNNER_TEMP/release-key.pem" \
-            -in dist/lumit-release-manifest.json \
-            -out "$RUNNER_TEMP/manifest.sig"
-          base64 -w0 "$RUNNER_TEMP/manifest.sig" > dist/lumit-release-manifest.json.sig
-
-          # Verify what was just made, with the public half derived from the
-          # same key, before it goes anywhere. A signature nobody checked is a
-          # signature that gets discovered to be wrong by every user at once.
-          # Verified from the *published* file, not the raw one, so what is
-          # checked is what the updater will read.
-          openssl pkey -in "$RUNNER_TEMP/release-key.pem" -pubout \
-            -out "$RUNNER_TEMP/release-key.pub"
-          base64 -d dist/lumit-release-manifest.json.sig > "$RUNNER_TEMP/manifest.check.sig"
-          openssl pkeyutl -verify -rawin -pubin \
-            -inkey "$RUNNER_TEMP/release-key.pub" \
-            -in dist/lumit-release-manifest.json \
-            -sigfile "$RUNNER_TEMP/manifest.check.sig"
-
-          # And that the key that signed is the key the application pins.
-          # A rotated or mistyped secret still signs perfectly well; only this
-          # comparison catches it before a release every updater refuses.
-          # `updateSigningKey` is base64 of the raw 32-byte public key, which
-          # is the last 32 bytes of the DER SubjectPublicKeyInfo. Skipped while
-          # the pin is empty.
-          derived="$(openssl pkey -in "$RUNNER_TEMP/release-key.pem" -pubout -outform DER \
-            | tail -c 32 | base64 -w0)"
-          if [ -n "$pinned" ] && [ "$pinned" != "$derived" ]; then
-            echo "RELEASE_SIGNING_KEY is not the key flutter_ui pins (updateSigningKey)." >&2
-            echo "The release would be signed with a key every updater refuses." >&2
-            exit 1
-          fi
-          rm -f "$RUNNER_TEMP/release-key.pem" "$RUNNER_TEMP/release-key.pub" \
-            "$RUNNER_TEMP/manifest.sig" "$RUNNER_TEMP/manifest.check.sig"
-
           echo "Manifest covers:"
           grep -o '"name":"[^"]*"' dist/lumit-release-manifest.json
 
@@ -665,11 +605,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A tag with a suffix (v0.2.0-rc1) publishes as a pre-release, so a
+          # Every release lands as a draft, for scripts/sign-release.ps1 to sign
+          # and publish. A tag with a suffix (v0.2.0-rc1) is a pre-release, so a
           # dry run of the whole pipeline never becomes the download page's
-          # "latest". Plain v0.2.0 is the real thing.
+          # "latest". Plain v0.2.0 is a full release.
           # The tag: the one pushed, or for a manual run the typed version,
-          # which gh creates at the commit this run built.
+          # which is made at the commit this run built,
+          # once the draft is published.
           tag="v${RELEASE_VERSION#v}"
           case "$tag" in *-*) prerelease=--prerelease ;; *) prerelease= ;; esac
           # The "Before you update" section of the release notes, when the
@@ -697,4 +639,4 @@ jobs:
           gh release create "$tag" dist/* \
             --target "${{ needs.plan.outputs.sha }}" \
             --title "Lumit $tag" \
-            --generate-notes $prerelease $before
+            --generate-notes --draft $prerelease $before
