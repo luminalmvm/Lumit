@@ -75,7 +75,7 @@ struct Params {
     green: f32,
     /// @slider(-5, 5) @default(1) Blue
     blue: f32,
-    /// @choice("Transparent", "Clamp", "Repeat", "Mirror") @default("Transparent") Edge behaviour
+    /// @choice("None", "Edge repeat", "Repeat", "Mirror repeat") @default("None") Edge behaviour
     edge: u32,
     /// @slider(0, 2000) @default(0) @unit(px) Left
     left: f32,
@@ -261,7 +261,7 @@ fn dx_fold(x: f32, lo: f32, hi: f32) -> f32 {
     if (p.edge == 2u) {
         return lo + fract(t) * span;
     }
-    // Mirror: a triangle wave across the span.
+    // Mirror repeat: a triangle wave across the span.
     let m = abs(fract(t * 0.5) * 2.0 - 1.0);
     return lo + (1.0 - m) * span;
 }
