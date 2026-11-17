@@ -437,13 +437,12 @@ class _OutlineRowState extends State<OutlineRow> {
   bool _claimed = false;
 
   /// Whether the pointer is over this row, and whether one of its controls
-  /// has the keyboard. At rest, with neither, an off switch draws dim and a
-  /// picker at its default draws as its word alone.
+  /// has the keyboard. At rest, with neither, an off switch draws dim.
   bool _hover = false;
   bool _focus = false;
 
   /// Whether a menu opened from this row is up. Its barrier takes the pointer
-  /// away, and a picker must not go quiet under its own open menu.
+  /// away, and a switch must not go quiet under its own open menu.
   bool _underMenu = false;
   bool get _resting => !_hover && !_focus && !_underMenu;
 
@@ -881,9 +880,6 @@ class _OutlineRowState extends State<OutlineRow> {
             all: widget.stack,
             width: matteWidth,
             toggleRoom: widget.matteToggles,
-            // Always drawn in full: a layer with no matte still shows the
-            // picker, as its Blend and Parent do.
-            resting: false,
             onChanged: widget.onChanged,
           ),
         ),
@@ -909,7 +905,6 @@ class _OutlineRowState extends State<OutlineRow> {
           info: info,
           all: widget.stack,
           width: width,
-          resting: false,
           onChanged: widget.onChanged,
         ),
       );
@@ -1267,7 +1262,7 @@ class _OutlineRowState extends State<OutlineRow> {
     final value = current < modes.length ? current : 0;
     // The cell's share of its group: a dropdown that overflows its cell is a
     // layout error, not a cosmetic one, and the label ellipsises to fit.
-    final picker = SizedBox(
+    return SizedBox(
       width: width,
       child: BareDropdown<int>(
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
@@ -1282,8 +1277,6 @@ class _OutlineRowState extends State<OutlineRow> {
         },
       ),
     );
-    // Always drawn in full, Normal included.
-    return picker;
   }
 
   /// The layer menu, shared with every other place a layer is shown. This

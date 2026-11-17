@@ -1051,23 +1051,6 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
   }
 }
 
-/// A row picker showing its default value, at rest: its word alone in the
-/// muted colour, with no box and no caret.
-///
-/// [picker] is still underneath, laid out and taking the click, so the cell's
-/// width and its target are what they always were. It only stops being
-/// painted. The word stands exactly where the picker's own label does (the
-/// same inset, the same type, and the caret's room kept beside it), so
-/// nothing moves when the box comes back. The tree is the same shape either
-/// way, so a picker keeps its focus as it comes and goes.
-///
-/// [trailing] is room at the cell's end that is not the picker's face: the
-/// matte cell's two toggles.
-Widget restingPicker({required bool resting, required Widget picker}) =>
-    // Still laid out and still clickable, so the cell keeps its width and a
-    // click on the empty cell opens the picker.
-    Opacity(opacity: resting ? 0 : 1, child: picker);
-
 /// The parent picker: every *other* layer in the comp, plus None.
 ///
 /// A layer cannot parent to itself, so it is not in its own list — the engine
@@ -1089,11 +1072,6 @@ class ParentPickerFrb extends StatelessWidget {
   final double width;
   final VoidCallback onChanged;
 
-  /// Whether the row is at rest, with no pointer over it and no focus in it.
-  /// A picker with no parent set then draws as its word alone
-  /// ([restingPicker]).
-  final bool resting;
-
   const ParentPickerFrb({
     super.key,
     required this.layer,
@@ -1101,12 +1079,11 @@ class ParentPickerFrb extends StatelessWidget {
     required this.all,
     required this.onChanged,
     this.width = parentCellWidth,
-    this.resting = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final picker = SizedBox(
+    return SizedBox(
       width: width,
       child: LayerPicker(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
@@ -1134,8 +1111,6 @@ class ParentPickerFrb extends StatelessWidget {
         },
       ),
     );
-    return restingPicker(
-        resting: resting && info.parent == null, picker: picker);
   }
 }
 
@@ -1160,11 +1135,6 @@ class MattePickerFrb extends StatelessWidget {
   final bool toggleRoom;
   final VoidCallback onChanged;
 
-  /// Whether the row is at rest, with no pointer over it and no focus in it.
-  /// A cell with no matte set then draws as its words alone
-  /// ([restingPicker]).
-  final bool resting;
-
   const MattePickerFrb({
     super.key,
     required this.layer,
@@ -1173,7 +1143,6 @@ class MattePickerFrb extends StatelessWidget {
     required this.onChanged,
     required this.toggleRoom,
     this.width = matteFaceWidth,
-    this.resting = false,
   });
 
   void _set(BridgeMatte? matte) {
@@ -1192,7 +1161,7 @@ class MattePickerFrb extends StatelessWidget {
     final faceWidth =
         toggleRoom ? (width - matteToggleWidth).clamp(40.0, width) : width;
 
-    final cell = SizedBox(
+    return SizedBox(
       width: width,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1258,7 +1227,6 @@ class MattePickerFrb extends StatelessWidget {
         ],
       ),
     );
-    return restingPicker(resting: resting && matte == null, picker: cell);
   }
 
   Widget _toggle(
