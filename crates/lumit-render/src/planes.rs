@@ -1560,6 +1560,7 @@ pub fn warm(jobs: Vec<PlaneJob>) {
         });
 }
 
+pub mod blend;
 mod lazy;
 pub mod steady;
 
