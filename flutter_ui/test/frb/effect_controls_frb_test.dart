@@ -578,23 +578,18 @@ void main() {
       expect(find.text('Threshold'), findsOneWidget);
       expect(find.text('Threshold softness'), findsOneWidget);
 
-      // The Matte row carries its Invert, like every other one: drawn
-      // inside the picker's row and never given one of its own, folded by the
-      // same id convention the injected rows use — and it belongs to the
-      // Matte-only group, so the rows under it stay conditional.
+      // The Matte's Invert is a row of its own, like every other one, and
+      // it belongs to the Matte-only group, so it stays conditional.
       final fxId = p.layer.getEffects().single.id();
       expect(find.text('Invert'), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byKey(ValueKey<String>('fx-row-$fxId-matte')),
+          of: find.byKey(ValueKey<String>('fx-row-$fxId-matte_invert')),
           matching: find.byKey(ValueKey<String>('fx-bool-$fxId-matte_invert')),
         ),
         findsOneWidget,
-        reason: 'the flare Invert sits beside its picker, on the same row',
+        reason: 'the flare Invert has a row of its own',
       );
-      expect(find.byKey(ValueKey<String>('fx-row-$fxId-matte_invert')),
-          findsNothing,
-          reason: 'and so has no row of its own to sit on');
 
       // The Matte starts pointed at the layer the effect is ON, and the
       // picker says so. Before this it defaulted to None and the effect sat
@@ -688,6 +683,11 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
+      // The fold's heading is there at its defaults, shut, where the Timeline
+      // and a node box list it too.
+      expect(find.byKey(ValueKey<String>('fx-compositing-$id')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('fx-layer-$id-matte')), findsNothing,
+          reason: 'shut until it is opened');
       await openCompositing(tester, id);
       final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
       final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));
@@ -696,19 +696,23 @@ void main() {
       expect(find.text('Matte'), findsOneWidget);
       expect(find.text('Invert'), findsOneWidget);
 
-      // ONE row, not two adjacent ones: the switch is drawn *inside* the
-      // picker's row, and never gets a row of its own.
+      // A row of its own under the picker's, as the Timeline lists it.
       expect(
         find.descendant(
           of: find.byKey(ValueKey<String>('fx-row-$id-matte')),
           matching: invert,
         ),
-        findsOneWidget,
-        reason: 'the Invert sits beside its picker, on the same row',
+        findsNothing,
+        reason: 'the Invert does not ride beside its picker',
       );
       expect(
-          find.byKey(ValueKey<String>('fx-row-$id-matte_invert')), findsNothing,
-          reason: 'and so has no row of its own to sit on');
+        find.descendant(
+          of: find.byKey(ValueKey<String>('fx-row-$id-matte_invert')),
+          matching: invert,
+        ),
+        findsOneWidget,
+        reason: 'it has a row of its own',
+      );
 
       // The switch writes, from where it now lives.
       await tester.tap(invert);
@@ -733,11 +737,11 @@ void main() {
       );
     });
 
-    /// **The Matte row picks a channel and the Mix row a blend**. The
-    /// engine injects `matte_channel` beside the matte pair and `blend` beside
-    /// `mix`; the panel draws each on its parent's row, never on one of its own.
-    testWidgets(
-        'the Channel sits on the Matte row and the Blend on the Mix row',
+    /// **The Channel and the Blend are rows of their own**. The engine
+    /// injects `matte_channel` beside the matte pair and `blend` beside `mix`;
+    /// the panel draws each on a row of its own in the Compositing fold, as
+    /// the Timeline does.
+    testWidgets('the Channel and the Blend are rows of their own',
         (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
@@ -751,23 +755,26 @@ void main() {
       final blend = find.byKey(ValueKey<String>('fx-choice-$id-blend'));
       expect(
         find.descendant(
-            of: find.byKey(ValueKey<String>('fx-row-$id-matte')),
+            of: find.byKey(ValueKey<String>('fx-row-$id-matte_channel')),
             matching: channel),
         findsOneWidget,
-        reason: 'the Channel choice rides on the Matte row',
+        reason: 'the Channel choice has a row of its own',
       );
-      expect(find.byKey(ValueKey<String>('fx-row-$id-matte_channel')),
-          findsNothing);
+      expect(
+        find.descendant(
+            of: find.byKey(ValueKey<String>('fx-row-$id-blend')),
+            matching: blend),
+        findsOneWidget,
+        reason: 'the Blend choice has a row of its own',
+      );
       expect(
         find.descendant(
             of: find.byKey(ValueKey<String>('fx-row-$id-mix')),
             matching: blend),
-        findsOneWidget,
-        reason: 'the Blend choice rides on the Mix row',
+        findsNothing,
       );
-      expect(find.byKey(ValueKey<String>('fx-row-$id-blend')), findsNothing);
 
-      // A rider writes, from where it lives.
+      // It writes, from where it lives.
       await tester.tap(blend);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add').last);

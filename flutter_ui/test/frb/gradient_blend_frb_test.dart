@@ -1,14 +1,14 @@
-// A gradient's Blend is in view: the built-in Gradient's and every extension
-// gradient's Mix row, with the Blend beside it, is drawn with the effect's own
-// rows rather than in the Compositing fold, which starts shut.
+// A gradient's Mix, Blend, Matte, Invert and Channel sit in the Compositing
+// fold, as every other effect's do: in the Effect controls panel, in the
+// Timeline and on a node graph box.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/comp_graph_panel.dart' show compBoxRows;
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show blendInView, compositingRowIds, instanceParameters;
-import 'package:lumit_flutter/panels/layer_fold_frb.dart' show foldEffectParams;
+    show compositingRowIds, instanceParameters;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart'
     show extensionRescan;
 
@@ -28,16 +28,8 @@ void main() {
     'lfx:siceliot/gradient-map',
   ];
 
-  test('the gradients are the effects whose Blend is in view', () {
-    for (final name in gradients) {
-      expect(blendInView(name), isTrue, reason: name);
-    }
-    expect(blendInView('blur'), isFalse);
-    expect(blendInView('lfx:siceliot/voronoi'), isFalse);
-  });
-
   for (final name in gradients) {
-    testWidgets('$name shows its Blend on its Mix row, after its own rows',
+    testWidgets('$name keeps its compositing rows in the Compositing fold',
         (tester) async {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -52,65 +44,66 @@ void main() {
         child: const EffectControlsPanelFrb(),
         state: p.state,
         uiState: p.uiState,
+        // Tall enough for every row of the longest gradient to be on screen.
+        size: const Size(480, 2400),
       ));
       await tester.pump();
 
       final effect = layer.getEffects().single;
       final id = effect.id();
-      expect(
-        find.descendant(
-            of: find.byKey(ValueKey<String>('fx-row-$id-blend')),
-            matching: find.byKey(ValueKey<String>('fx-choice-$id-blend'))),
-        findsOneWidget,
-        reason: 'the Blend is a row of its own, without opening Compositing',
-      );
-      expect(
-        find.descendant(
-            of: find.byKey(ValueKey<String>('fx-row-$id-mix')),
-            matching: find.byKey(ValueKey<String>('fx-choice-$id-blend'))),
-        findsNothing,
-        reason: 'not beside Mix as well',
-      );
-      // Matte, Invert and Channel too: each a row of its own, in view.
-      for (final row in ['matte', 'matte_invert', 'matte_channel']) {
-        expect(find.byKey(ValueKey<String>('fx-row-$id-$row')), findsOneWidget,
-            reason: '$row is a row of its own, without opening Compositing');
-      }
-      final ids = [for (final r in instanceParameters(effect.getInfo())) r.id];
-      expect(
-          ids.sublist(ids.length - compositingRowIds.length), compositingRowIds,
-          reason: 'the compositing rows come after the effect\'s own rows');
-
-      // A shut node graph box keeps them, the Matte as its socket.
       final info = effect.getInfo();
-      final box = compBoxRows(
-        name,
-        instanceParameters(info),
-        {for (final v in info.values) v.id: v.value},
-        const {},
-      );
-      final shut = [for (final r in box.telling) r.id];
-      expect(shut,
-          containsAllInOrder(['mix', 'blend', 'matte_invert', 'matte_channel']),
-          reason: 'a shut box shows them at their defaults');
-      expect(shut, isNot(contains('matte')),
-          reason: 'the Matte is the box\'s socket');
-      expect(box.riders['mix'], isNull,
-          reason: 'the box draws the Blend once, as its own row');
-      expect(box.riders['matte'], isNull);
+      final values = {for (final v in info.values) v.id: v.value};
 
-      // The Timeline lists what the panel lists: the compositing rows, and
-      // no colour the Colours count leaves out.
-      final fold = [
-        for (final r in foldEffectParams(
-            info, {for (final v in info.values) v.id: v.value}))
-          r.id
-      ];
-      expect(fold, containsAllInOrder(compositingRowIds));
+      // The panel: the fold's heading, shut, and none of its rows.
+      final heading = find.byKey(ValueKey<String>('fx-compositing-$id'));
+      expect(heading, findsOneWidget);
+      for (final row in compositingRowIds) {
+        expect(find.byKey(ValueKey<String>('fx-row-$id-$row')), findsNothing,
+            reason: '$row waits in the fold');
+      }
+      // Opened, each is a row of its own.
+      tester.widget<GestureDetector>(heading).onTap!();
+      await tester.pump();
+      await tester.pump();
+      for (final row in compositingRowIds) {
+        expect(find.byKey(ValueKey<String>('fx-row-$id-$row')), findsOneWidget,
+            reason: '$row is a row of its own in the fold');
+      }
+
+      // The Timeline: the same fold, at the foot, with the same rows.
+      final path = effectPath('layer', '$id');
+      List<String> fold(Set<String> open) => [
+            for (final r in effectFoldRows(info, values,
+                path: path,
+                depth: 3,
+                open: open,
+                row: (param, depth) => FoldEffectParamRow(
+                    info, param, values[param.id],
+                    depth: depth)))
+              switch (r) {
+                FoldEffectParamRow(:final param) => param.id,
+                FoldGroupRow(:final label) => '[$label]',
+                _ => '?',
+              }
+          ];
+      expect(fold(const {}).last, '[Compositing]');
+      final opened = fold({effectGroupPath(path, 'compositing')});
+      expect(
+          opened.sublist(opened.indexOf('[Compositing]') + 1), compositingRowIds);
       if (name == 'gradient') {
-        expect(fold, isNot(contains('colour_2')),
+        expect(opened, isNot(contains('colour_2')),
             reason: 'Colours is Two: no colour in between');
       }
+
+      // A node box: nothing at the defaults while shut, and open, the same
+      // rows last under the Compositing heading.
+      final box =
+          compBoxRows(name, instanceParameters(info), values, const {});
+      expect(box.telling, isEmpty);
+      final listed = [for (final r in box.open) r.id];
+      expect(listed.sublist(listed.length - compositingRowIds.length),
+          compositingRowIds);
+      expect(box.kickers['mix'], 'Compositing');
     });
   }
 }
