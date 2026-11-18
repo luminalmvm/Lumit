@@ -21,6 +21,7 @@ import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'graph_maths.dart';
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
+import 'expression_editor.dart' show showExpressionEditor;
 import 'retime_commands.dart';
 
 /// The layer's Retime: which moment of the source, in seconds, the
@@ -166,6 +167,28 @@ class _RetimeRowState extends State<RetimeRow> {
           onSeek: widget.onSeek,
           rowKey: 'tl-retime',
           navigatorApart: true,
+          // Alt+click: an expression on the map, `loopOut("cycle")` for one.
+          onExpression: () {
+            final size = MediaQuery.sizeOf(context);
+            showExpressionEditor(
+              context: context,
+              over: Rect.fromLTWH(
+                  (size.width - 520) / 2, size.height / 3, 520, 0),
+              value: scalar is BridgeScalar_Expression
+                  ? scalar
+                  : BridgeScalar_Expression(
+                      value.toString(), ui.workspace.defaultExpressionLanguage),
+              fresh: scalar is! BridgeScalar_Expression,
+              held: scalar,
+              comp: widget.comp,
+              layer: widget.layer,
+              decimals: 3,
+              onCommit: (next) {
+                widget.layer.setRetimeProperty(value: next);
+                widget.onChanged();
+              },
+            );
+          },
           onWrite: (next) {
             widget.layer.setRetimeProperty(value: next.single);
             widget.onChanged();

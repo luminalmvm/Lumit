@@ -421,6 +421,8 @@ class EffectParamRowFrb extends StatelessWidget {
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: fixed,
                 navigatorApart: valueColumn != null,
+                // Alt+click: the expression editor over the row.
+                onExpression: () => _altExpression(context, scalars),
                 onWrite: (next) => _set(next.length == 4
                     ? BridgeEffectValue.colour(BridgeColour(
                         r: next[0], g: next[1], b: next[2], a: next[3]))
@@ -697,6 +699,40 @@ class EffectParamRowFrb extends StatelessWidget {
     }
   }
 
+  /// Alt+click on the stopwatch: the expression editor over the row. A new
+  /// expression opens holding the number showing, its keys kept under it, and
+  /// is written only when the editor is closed with a change.
+  void _altExpression(BuildContext context, List<BridgeScalar> scalars) {
+    final owner = currentLayer;
+    if (owner == null || scalars.length != 1) return;
+    if (param.kind is BridgeParamKind_Colour) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached) return;
+    final held = scalars.single;
+    final fresh = held is! BridgeScalar_Expression;
+    final frame =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
+    showExpressionEditor(
+      context: context,
+      over: box.localToGlobal(Offset.zero) & box.size,
+      value: held is BridgeScalar_Expression
+          ? held
+          : BridgeScalar_Expression(
+              sampledScalar(held, timeOfFrame(comp, frame)).toString(),
+              newExpressionLanguage(context)),
+      fresh: fresh,
+      held: held,
+      comp: comp,
+      layer: owner,
+      row: BridgeExpressionRow.effect(effect: effectId, param: param.id),
+      decimals: param.kind is BridgeParamKind_Int ? 0 : 2,
+      // A new one is not previewed: a cancel would write it back.
+      onLive:
+          fresh ? null : (draft) => _setLive(BridgeEffectValue.float(draft)),
+      onCommit: (next) => _set(BridgeEffectValue.float(next)),
+    );
+  }
+
   /// What this row's right-click menu offers.
   ParamMenu _menu(BuildContext context, KeyframeControlsFrb? keys) {
     final fallback = defaultEffectValue(param.kind);
@@ -770,8 +806,9 @@ class EffectParamRowFrb extends StatelessWidget {
           : null,
       removeExpression: expression == null
           ? null
-          : () => _set(BridgeEffectValue.float(
-              BridgeScalar.static_(sampleScalarWithContext(
+          : () => _set(BridgeEffectValue.float(expressionTakenOff(
+              expression,
+              sampleScalarWithContext(
                   scalar: expression,
                   time: timeOfFrame(comp, playhead.value),
                   layer: currentLayer!)))),
@@ -4502,7 +4539,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
           ),
           MenuRow(
             onPressed: () {
-              widget.set(BridgeEffectValue.float(BridgeScalar_Static(_value)));
+              widget.set(BridgeEffectValue.float(
+                  expressionTakenOff(widget.value, _value)));
               close();
             },
             child: MenuLabel(l10n.removeExpression, ticked: false),

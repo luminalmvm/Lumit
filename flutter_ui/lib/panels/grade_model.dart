@@ -1058,7 +1058,8 @@ mixin _GradeModel on State<GradePanelFrb> {
       removeExpression: expression == null
           ? null
           : () => write(
-              (_) => BridgeEffectValue.float(BridgeScalar.static_(
+              (_) => BridgeEffectValue.float(expressionTakenOff(
+                  expression,
                   sampleScalarWithContext(
                       scalar: expression,
                       time: timeOfFrame(comp, ui.playheadFrame.value),

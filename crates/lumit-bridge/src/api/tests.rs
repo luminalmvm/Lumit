@@ -9205,6 +9205,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
             BridgeEffectValue::Float(BridgeScalar::Expression(
                 "time".into(),
                 crate::api::effect::BridgeExpressionLanguage::Rhai,
+                None,
             )),
         )
         .expect("driven");
@@ -10037,6 +10038,7 @@ fn a_transform_expression_keeps_its_language_through_undo() {
     let typed = BridgeScalar::Expression(
         "value + Math.round(7 / 2)".into(),
         BridgeExpressionLanguage::JavaScript,
+        None,
     );
     layer
         .set_transform(rotation, typed.clone())
@@ -10051,7 +10053,7 @@ fn a_transform_expression_keeps_its_language_through_undo() {
         expression_fault(draft.clone(), js, at(), layer, Some(read()), row()),
         None
     );
-    let typing = BridgeScalar::Expression(draft, js);
+    let typing = BridgeScalar::Expression(draft, js, None);
     assert_eq!(
         sample_scalar_with_context(typing, at(), layer, Some(read()), row()),
         31.0
@@ -10064,6 +10066,7 @@ fn a_transform_expression_keeps_its_language_through_undo() {
             vec![BridgeScalar::Expression(
                 "7 / 2".into(),
                 BridgeExpressionLanguage::Rhai,
+                None,
             )],
         )
         .expect("the same row in Rhai");
@@ -10468,4 +10471,46 @@ fn only_its_own_file_opens_as_a_shared_copy() {
     std::fs::remove_file(&copy).expect("removed");
     assert!(copy_is_at(id, &other));
     note_copy(id, None);
+}
+
+/// An expression written over keys keeps them; keys it carries go under it
+/// when it was already there; `None` leaves them; a plain number leaves only
+/// the number.
+#[test]
+fn keys_under_an_expression_cross_the_bridge() {
+    use crate::api::effect::{BridgeExpressionLanguage, BridgeScalar};
+    use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+    use lumit_core::time::Rational;
+    let key = |s: i64, v: f64| Keyframe {
+        time: Rational::new(s, 1).unwrap(),
+        value: v,
+        interp_in: SideInterp::Linear,
+        interp_out: SideInterp::Linear,
+    };
+    let zero = Rational::ZERO;
+    let mut p = Property::fixed(0.0);
+    p.animation = Animation::Keyframed(vec![key(0, 0.0), key(2, 10.0)]);
+    let js = BridgeExpressionLanguage::JavaScript;
+    let new = BridgeScalar::Expression("loopOut()".into(), js, None);
+    new.put(&mut p, new.animation_at(zero).unwrap(), zero);
+    assert_eq!(p.keys_under_expression().map(|k| k.len()), Some(2));
+    // Read back, the keys come with it.
+    let read = BridgeScalar::read_at(&p, zero);
+    let BridgeScalar::Expression(_, _, Some(keys)) = &read else {
+        panic!("{read:?}");
+    };
+    assert_eq!(keys.len(), 2);
+    // One key taken away through the row's controls.
+    let edited = BridgeScalar::Expression("loopOut()".into(), js, Some(vec![keys[0]]));
+    edited.put(&mut p, edited.animation_at(zero).unwrap(), zero);
+    assert_eq!(p.keys_under_expression().map(|k| k.len()), Some(1));
+    // New text alone leaves them.
+    let text = BridgeScalar::Expression("value".into(), js, None);
+    text.put(&mut p, text.animation_at(zero).unwrap(), zero);
+    assert_eq!(p.keys_under_expression().map(|k| k.len()), Some(1));
+    // A reset to default, say.
+    let off = BridgeScalar::Static(3.0);
+    off.put(&mut p, off.animation_at(zero).unwrap(), zero);
+    assert_eq!(p.animation, Animation::Static(3.0));
+    assert!(lumit_core::anim::keys_kept_in(&p.extra).is_none());
 }

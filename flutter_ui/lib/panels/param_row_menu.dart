@@ -20,6 +20,7 @@ import '../widgets/colour_picker.dart'
 import '../widgets/controls.dart';
 import 'drive_chain.dart';
 import 'effect_param_row_frb.dart' show newExpressionLanguage;
+import 'expression_editor.dart' show expressionTakenOff;
 import 'graph_channels.dart' show graphChannels;
 import 'keyframe_controls_frb.dart';
 import 'property_link.dart';
@@ -243,7 +244,8 @@ ParamMenu scalarRowMenu(
     removeExpression: !held || scalars.length != 1
         ? null
         : () => keys.onWrite([
-              BridgeScalar.static_(keys.valuesAtFrame(playhead.value).first),
+              expressionTakenOff(
+                  scalars.single, keys.valuesAtFrame(playhead.value).first),
             ]),
     graphPath: held ? null : path,
   );

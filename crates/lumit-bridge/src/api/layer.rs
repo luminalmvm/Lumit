@@ -3012,38 +3012,61 @@ impl BridgeTransform {
         target: &mut lumit_core::model::TransformGroup,
         offset: Rational,
     ) -> Result<(), BridgeError> {
-        self.anchor_x
-            .put(&mut target.anchor_x, self.anchor_x.animation_at(offset)?);
-        self.anchor_y
-            .put(&mut target.anchor_y, self.anchor_y.animation_at(offset)?);
+        self.anchor_x.put(
+            &mut target.anchor_x,
+            self.anchor_x.animation_at(offset)?,
+            offset,
+        );
+        self.anchor_y.put(
+            &mut target.anchor_y,
+            self.anchor_y.animation_at(offset)?,
+            offset,
+        );
         self.position_x.put(
             &mut target.position_x,
             self.position_x.animation_at(offset)?,
+            offset,
         );
         self.position_y.put(
             &mut target.position_y,
             self.position_y.animation_at(offset)?,
+            offset,
         );
         self.position_z.put(
             &mut target.position_z,
             self.position_z.animation_at(offset)?,
+            offset,
         );
-        self.scale_x
-            .put(&mut target.scale_x, self.scale_x.animation_at(offset)?);
-        self.scale_y
-            .put(&mut target.scale_y, self.scale_y.animation_at(offset)?);
-        self.rotation
-            .put(&mut target.rotation, self.rotation.animation_at(offset)?);
+        self.scale_x.put(
+            &mut target.scale_x,
+            self.scale_x.animation_at(offset)?,
+            offset,
+        );
+        self.scale_y.put(
+            &mut target.scale_y,
+            self.scale_y.animation_at(offset)?,
+            offset,
+        );
+        self.rotation.put(
+            &mut target.rotation,
+            self.rotation.animation_at(offset)?,
+            offset,
+        );
         self.rotation_x.put(
             &mut target.rotation_x,
             self.rotation_x.animation_at(offset)?,
+            offset,
         );
         self.rotation_y.put(
             &mut target.rotation_y,
             self.rotation_y.animation_at(offset)?,
+            offset,
         );
-        self.opacity
-            .put(&mut target.opacity, self.opacity.animation_at(offset)?);
+        self.opacity.put(
+            &mut target.opacity,
+            self.opacity.animation_at(offset)?,
+            offset,
+        );
         if let Some(d) = &self.depth {
             use lumit_core::model::TransformProp as P;
             // A keyed Orientation previews with all three angles keyed
@@ -3056,7 +3079,7 @@ impl BridgeTransform {
                 let animation = from.animation_at(offset)?;
                 if matches!(animation, lumit_core::anim::Animation::Expression(_)) {
                     if let Some(to) = target.get_mut(prop) {
-                        from.put(to, animation);
+                        from.put(to, animation, offset);
                     }
                 } else if target.get(prop).map(|p| &p.animation) != Some(&animation) {
                     target.set_orientation_angle(prop, animation);
@@ -3066,7 +3089,7 @@ impl BridgeTransform {
                 (&mut target.anchor_z, &d.anchor_z),
                 (&mut target.scale_z, &d.scale_z),
             ] {
-                from.put(to, from.animation_at(offset)?);
+                from.put(to, from.animation_at(offset)?, offset);
             }
         }
         if let Some(m) = &self.material {
@@ -6648,7 +6671,7 @@ impl LayerReference {
         if matches!(animation, lumit_core::anim::Animation::Static(_)) {
             return self.commit(self.unretime_op(&layer, removal));
         }
-        retime.animation = animation;
+        value.put(&mut retime, animation, layer.start_offset.0);
         self.commit(lumit_core::ops::Op::SetRetimeProperty {
             comp: self.comp_id,
             layer: self.layer_id,
@@ -7036,15 +7059,16 @@ impl LayerReference {
     ) -> Result<Vec<lumit_core::ops::Op>, BridgeError> {
         let animation = value.animation_at(layer.start_offset.0)?;
         let language = match value {
-            BridgeScalar::Expression(_, language) => Some(language.read()),
+            BridgeScalar::Expression(_, language, _) => Some(language.read()),
             _ => None,
         };
-        Ok(lumit_core::edits::transform_ops(
+        Ok(lumit_core::edits::transform_ops_with_keys(
             self.comp_id,
             layer,
             prop.core(),
             animation,
             language,
+            value.keys_under_at(layer.start_offset.0),
         ))
     }
 

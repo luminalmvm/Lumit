@@ -128,6 +128,13 @@ Retime values in seconds** shows seconds instead.
 **Disable Retime** removes the map, and so does turning off the row's stopwatch. The layer
 keeps the frame it showed at its in point and plays on from there at normal speed.
 
+The Retime row takes an [expression](/use/expressions/): `Alt`+click its stopwatch, or
+choose **Add expression** on its right-click menu. The expression gives the moment of the
+source in seconds. `time` is the composition's time, and a JavaScript expression reads the
+[keyframes under it](/use/expressions/#keyframes-under-an-expression):
+`loopOut("cycle")` repeats the map after its last keyframe. A Retime expression cannot read
+the composition or a layer.
+
 A [node graph](/use/node-graphs/) placed as a Precomp layer retimes the same way. Inside a
 graph, a **Time offset** box shifts one branch.
 
@@ -290,6 +297,7 @@ Stretching a clip by dragging its edge inside a Sequence layer in the Timeline.
 
 - [Making a speed ramp](/tutorials/speed-ramp/)
 - [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/)
+- [Looping keyframes](/tutorials/looping-keyframes/#loop-a-layers-retime)
 - [The graph editor](/use/graph-editor/)
 - [Sequence layers](/use/sequence-layers/)
 - [Node graph compositions](/use/node-graphs/)
