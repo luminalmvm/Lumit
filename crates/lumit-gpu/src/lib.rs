@@ -212,9 +212,27 @@ pub struct GpuContext {
     /// `in_flight` at [`Self::submit`], so another handle seeing the queue
     /// empty before then can't clear them.
     noted: std::cell::RefCell<Vec<u64>>,
+    /// The last command buffer this handle submitted, for [`Self::end_frame`]
+    /// to name the frame it closes by.
+    last_submission: std::cell::RefCell<Option<wgpu::SubmissionIndex>>,
+    /// The frames submitted to this device and not yet waited for, oldest
+    /// first, each by its last submission. Never longer than
+    /// [`FRAMES_IN_FLIGHT`]: see [`Self::end_frame`]. Shared with every
+    /// handle, as `in_flight` is: a nested comp and the frame after this one
+    /// are each drawn through a handle of their own, and it is the one card
+    /// that falls behind.
+    frames_in_flight: FramesInFlight,
 }
 
 type InFlight = std::sync::Arc<std::sync::Mutex<Vec<u64>>>;
+type FramesInFlight =
+    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
+
+/// How many frames a device is left with before it waits for the
+/// oldest ([`GpuContext::end_frame`]). Two keeps the card fed while the CPU
+/// records the next frame, and holds at most two frames of intermediates more
+/// than the one being made.
+const FRAMES_IN_FLIGHT: usize = 2;
 
 /// The multisample counts the composite is willing to use, highest first.
 /// Nothing outside this list is ever asked for.
@@ -676,6 +694,8 @@ impl GpuContext {
             in_flight: InFlight::default(),
             batches_in_flight: BatchesInFlight::default(),
             noted: std::cell::RefCell::new(Vec::new()),
+            last_submission: std::cell::RefCell::new(None),
+            frames_in_flight: FramesInFlight::default(),
         }
     }
 
@@ -780,6 +800,8 @@ impl GpuContext {
             in_flight: std::sync::Arc::clone(&self.in_flight),
             batches_in_flight: std::sync::Arc::clone(&self.batches_in_flight),
             noted: std::cell::RefCell::new(Vec::new()),
+            last_submission: std::cell::RefCell::new(None),
+            frames_in_flight: std::sync::Arc::clone(&self.frames_in_flight),
         }
     }
 
@@ -822,6 +844,7 @@ impl GpuContext {
     ) -> wgpu::SubmissionIndex {
         let mut n = 0u64;
         let index = self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
+        *self.last_submission.borrow_mut() = Some(index.clone());
         self.submits
             .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
         let noted = std::mem::take(&mut *self.noted.borrow_mut());
@@ -1149,6 +1172,18 @@ impl GpuContext {
 
     /// Close one [`Self::begin_frame`]. On the outermost one, submit whatever
     /// the batch holds and empty the work-texture pool.
+    ///
+    /// **And wait for the card when it has fallen behind.** Recording a frame
+    /// takes the CPU a few milliseconds; running it can take the card far
+    /// longer, and a texture the frame dropped cannot be freed until the card
+    /// has run the commands that use it. A caller that makes frames back to
+    /// back, a cache fill or a playback run, therefore held every frame it was
+    /// ahead of the card by: a comp whose frames each take 200 MB of
+    /// intermediates filled a 12 GB card and then the system memory the driver
+    /// spills into, and the device was lost. So no more than
+    /// [`FRAMES_IN_FLIGHT`] frames are left with the card: closing one more
+    /// waits for the oldest. A card that keeps up never waits here, and one
+    /// that does not is the limit on how fast frames come either way.
     pub fn end_frame(&self) {
         let depth = self.frame_depth.get().saturating_sub(1);
         self.frame_depth.set(depth);
@@ -1159,7 +1194,45 @@ impl GpuContext {
             if let Ok(mut batches) = self.batches_in_flight.lock() {
                 batches.clear();
             }
+            self.wait_for_frames_behind();
         }
+    }
+
+    /// See [`Self::end_frame`].
+    fn wait_for_frames_behind(&self) {
+        let Some(closed) = self.last_submission.borrow_mut().take() else {
+            return;
+        };
+        // The lock is let go before the wait: another handle closing a frame
+        // meanwhile waits for its own oldest, not for this one.
+        let oldest = {
+            let Ok(mut frames) = self.frames_in_flight.lock() else {
+                return;
+            };
+            frames.push_back(closed);
+            if frames.len() <= FRAMES_IN_FLIGHT {
+                return;
+            }
+            frames.pop_front()
+        };
+        if let Some(oldest) = oldest {
+            // A lost device answers no wait.
+            if self.device_lost() {
+                return;
+            }
+            let done = self
+                .device
+                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
+            self.forget_finished(done);
+        }
+    }
+
+    /// How many frames this device has been left with and not waited for. The test of [`Self::end_frame`] reads it; nothing else does.
+    #[must_use]
+    pub fn frames_in_flight(&self) -> usize {
+        self.frames_in_flight
+            .lock()
+            .map_or(0, |frames| frames.len())
     }
 
     /// Offer a work texture back to the frame's pool, for a later pass in the
@@ -1497,6 +1570,8 @@ impl GpuContext {
             in_flight: InFlight::default(),
             batches_in_flight: BatchesInFlight::default(),
             noted: std::cell::RefCell::new(Vec::new()),
+            last_submission: std::cell::RefCell::new(None),
+            frames_in_flight: FramesInFlight::default(),
         })
     }
 }
@@ -3387,6 +3462,36 @@ mod counter_tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// **Frames made back to back wait for the card.** A fill that recorded
+    /// frames faster than the card ran them held every one of them: the
+    /// textures a frame drops are freed only once its commands have run. No
+    /// more than [`FRAMES_IN_FLIGHT`] may be left behind, however many are
+    /// made.
+    #[test]
+    fn frames_made_back_to_back_leave_at_most_two_with_the_card() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        // A frame that submits nothing leaves nothing behind.
+        ctx.begin_frame();
+        ctx.end_frame();
+        assert_eq!(ctx.frames_in_flight(), 0);
+        for made in 1..=8usize {
+            ctx.begin_frame();
+            drop(ctx.encoder("a frame"));
+            ctx.end_frame();
+            assert_eq!(ctx.frames_in_flight(), made.min(FRAMES_IN_FLIGHT));
+        }
+        // A nested comp and the next frame are drawn through handles of their
+        // own: they count against the same card.
+        let other = ctx.clone_handle();
+        other.begin_frame();
+        drop(other.encoder("a frame on another handle"));
+        other.end_frame();
+        assert_eq!(other.frames_in_flight(), FRAMES_IN_FLIGHT);
+        assert_eq!(ctx.frames_in_flight(), FRAMES_IN_FLIGHT);
+    }
 
     /// **A machine that is supposed to have an adapter must fail, not skip.**
     ///

@@ -1834,18 +1834,17 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // is full, promoting one would push another down — and the next turn
     // would promote that one, for ever. A frame in memory is warm enough; it
     // goes up when playback asks for it.
-    let (_, ram_budget, _, _, _) = crate::framecache::stats();
-    // ponytail: `reach` spends the RAM budget as though this comp and this
-    // scale owned all of it. They do not — the tier holds every other comp's
-    // and every other scale's frames too — so the over-reach is at most one
-    // whole RAM budget in frames, and the tail of the walk renders frames the
-    // LRU then evicts before playback ever asks for them. The trigger is the
-    // fill never setting `fill_exhausted` on a work area that fits the two
-    // budgets: the worker keeps rendering while idle, and Settings' cache
-    // stats show misses climbing on each pass round a loop that should be
-    // warm. The fix is small — `framecache::stats()` already returns the used
-    // bytes, so subtract them and count only the RAM actually free.
-    let reach = (budget + ram_budget) / frame_bytes;
+    // **The walk spends only the room there is.** Each frame it passes costs a
+    // frame of room, except one already held in memory, whose bytes are
+    // already out of the free figure. The room is the card's budget plus the
+    // memory tier's *free* bytes, not its whole budget: the tier holds every
+    // other comp's and every other scale's frames too, and counting those
+    // bytes as room sent the walk past what the tier could keep, so frames it
+    // made were evicted before playback asked for them and the next turn made
+    // them again. The fill never ran out, and an idle editor kept the graphics
+    // card busy.
+    let (ram_used, ram_budget, _, _, _) = crate::framecache::stats();
+    let mut room = (budget + ram_budget.saturating_sub(ram_used)) / frame_bytes;
     // Frames the disk holds are asked for as the walk passes them, and the walk
     // carries on. A load is a message to another thread, thus queueing several
     // costs nothing here — and by the time the fill comes round again they have
@@ -1860,12 +1859,16 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // and a hash comparison — and the reason a config edited on disk
     // retires the frames it made.
     state.renderer.sync_colour(&document);
-    for frame in crate::playback::fill_order(anchor, first, last).take(reach) {
+    for frame in crate::playback::fill_order(anchor, first, last) {
+        if room == 0 {
+            break;
+        }
         // Naming the frame is what tells the fill whether there is anything to
         // do — and under content keying the name is the same one every tier files
         // it under, so a frame already held anywhere is skipped without a render.
         if let Some(key) = frame_name(state, &document, revision, comp_ref.id, frame, quality) {
             if state.renderer.has_frame_texture(key, bgra) {
+                room -= 1;
                 continue;
             }
             // **Held below: climb it, do not make it again.** The fill has no
@@ -1878,14 +1881,17 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // rendering the whole of it a second time.
             let in_memory = crate::framecache::contains(key);
             if in_memory || state.disk.contains(key) {
+                if !in_memory {
+                    room -= 1;
+                }
                 let (used, budget, _) = state.renderer.frame_texture_stats();
-                let room = used + frame_bytes <= budget;
+                let fits = used + frame_bytes <= budget;
                 // A full card climbs nothing, from memory or from disk: a
                 // promotion would push another frame down, and the next turn
                 // would promote that one, round and round through the disk
                 // for ever. Frames below stay where they are until playback
                 // or a scrub asks for them.
-                if !room {
+                if !fits {
                     continue;
                 }
                 let provenance = lumit_render::headless::FrameProvenance {
