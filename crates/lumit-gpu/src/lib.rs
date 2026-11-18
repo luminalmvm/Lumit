@@ -1216,6 +1216,10 @@ impl GpuContext {
             frames.pop_front()
         };
         if let Some(oldest) = oldest {
+            // A lost device answers no wait.
+            if self.device_lost() {
+                return;
+            }
             let done = self
                 .device
                 .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
