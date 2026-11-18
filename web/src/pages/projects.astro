@@ -123,6 +123,7 @@ const projects = [
     tag: "Type fill",
     p: "Rows of words with one shape after another cut through them, the words inside set large in coral.",
     alt: "Rows of the words Flood the Grid in black on cream, framed by small captions, with the words set in coral inside a black diamond tilted across the middle",
+    seconds: 14,
     layers: 27,
     fonts: [font("Bebas Neue"), font("IBM Plex Mono")],
     credit: [
@@ -199,7 +200,7 @@ const projects = [
                 <dl class="facts">
                   <div>
                     <dt>Length</dt>
-                    <dd>10 seconds, {project.layers} layers</dd>
+                    <dd>{project.seconds ?? 10} seconds, {project.layers} layers</dd>
                   </div>
                   {project.credit && (
                     <div>
