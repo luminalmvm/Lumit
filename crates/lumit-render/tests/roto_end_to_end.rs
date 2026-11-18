@@ -205,6 +205,23 @@ fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_s
          background shows through"
     );
 
+    // **Every stroke undone.** The run stays in the store, but the
+    // brush has no base frame any more, so the layer comes back whole.
+    let mut undone = (*doc).clone();
+    for item in &mut undone.items {
+        if let ProjectItem::Composition(c) = item {
+            c.layers[0].effects[0].roto = None;
+        }
+    }
+    let (bare, w, _) = r
+        .render_rgba(&Arc::new(undone), comp, 0, 1.0)
+        .expect("the render with every stroke undone");
+    assert_eq!(
+        px(&bare, w, CUT)[0],
+        255,
+        "with every stroke undone the old matte no longer cuts"
+    );
+
     // **Outside the span, passthrough.** A Solid layer's source frame is nought
     // at every comp time — it is the same picture throughout — so the span is
     // moved rather than the playhead: a run holding only frame 5 has nothing to

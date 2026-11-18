@@ -5402,13 +5402,14 @@ fn analysed_frame(
         .map_or(0, |px| px.source_frame)
 }
 
-/// One Roto brush's matte for one **source** frame, or `None` outside the
-/// propagated span, with nothing propagated yet, or with the cache folder
-/// deleted - the effect's passthrough and never a fault (docs/impl/roto.md §5).
+/// One Roto brush's matte for one **source** frame, or `None` with no base
+/// frame, outside the span, with nothing propagated or the cache deleted: the
+/// effect's passthrough and never a fault (docs/impl/roto.md §5).
 fn roto_matte_of(
     brush: &lumit_core::model::EffectInstance,
     source_frame: i64,
 ) -> Option<crate::draw::RotoMatteDraw> {
+    brush.roto.as_ref()?.base_frame?;
     let (width, height, gray) = crate::roto::matte(brush.id, source_frame)?;
     Some(crate::draw::RotoMatteDraw {
         width,
