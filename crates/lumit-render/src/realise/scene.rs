@@ -189,7 +189,9 @@ fn shape(
     layer: &Layer,
 ) -> Option<(Arc<lumit_scene::ModelScene>, glam::Mat4)> {
     let e = layer.effects.iter().find(|e| is_scene(e))?;
-    let src = matches!(e.param("mode"), Some(EffectValue::Choice(1)))
+    // A ready-made Sprite shape is a picture, never the model.
+    let layer_sprite = matches!(e.param("sprite_shape"), None | Some(EffectValue::Choice(0)));
+    let src = (layer_sprite && matches!(e.param("mode"), Some(EffectValue::Choice(1))))
         .then(|| e.layer_ref("sprite_layer"))
         .flatten()
         .and_then(|id| comp.layers.iter().find(|l| l.id == id))?;

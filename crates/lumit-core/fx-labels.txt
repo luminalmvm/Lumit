@@ -285,6 +285,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Cloudy
 Coarse
 Coat
 Coat roughness
@@ -1588,6 +1589,7 @@ Spread z
 Sprite
 Sprite flare
 Sprite layer
+Sprite shape
 Square
 Squeeze
 Stabilise
@@ -1597,6 +1599,7 @@ Stagger
 Standard
 Star
 Star depth
+Star points
 Starburst intensity
 Start
 Start angle

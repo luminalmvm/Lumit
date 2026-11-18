@@ -264,7 +264,7 @@ impl LayerReference {
             let mut effects = layer.effects.clone();
             effects.extend(added.effects);
             graph.prune_rows(&effects);
-            ops.push(lumit_core::fx::effects::particulate::set_effects(
+            ops.push(lumit_core::fx::effects::particulate::rows::set_effects(
                 self.comp_id,
                 &layer,
                 effects,

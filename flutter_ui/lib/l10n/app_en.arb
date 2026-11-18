@@ -1619,6 +1619,10 @@
   "@fxStarDepth": {
     "description": "Effect controls — a control on Radio waves: how deep the star's notches go."
   },
+  "fxStarPoints": "Star points",
+  "@fxStarPoints": {
+    "description": "Effect controls — a control on Particulate: how many points a Star sprite has, 4 to 8."
+  },
   "fxStart": "Start",
   "@fxStart": {
     "description": "Effect controls — a control on Scribble and Stroke: where the drawing begins, as a per cent of its length."
@@ -6276,6 +6280,14 @@
   "fxSpriteLayer": "Sprite layer",
   "@fxSpriteLayer": {
     "description": "Effect controls — a control on Particulate: which layer is drawn in place of each particle."
+  },
+  "fxSpriteShape": "Sprite shape",
+  "@fxSpriteShape": {
+    "description": "Effect controls — a menu on Particulate: stamp the Sprite layer, or a ready-made shape (Circle, Square, Triangle, Star, Cloudy)."
+  },
+  "fxCloudy": "Cloudy",
+  "@fxCloudy": {
+    "description": "Effect controls — a Sprite shape option on Particulate: a soft, billowing puff."
   },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {

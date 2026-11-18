@@ -7302,7 +7302,7 @@ impl LayerReference {
         proj.store
             .commit(lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::fx::effects::particulate::set_effects(
+                    lumit_core::fx::effects::particulate::rows::set_effects(
                         self.comp_id,
                         &layer,
                         effects,
@@ -7988,7 +7988,7 @@ impl LayerReference {
         } else {
             lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::fx::effects::particulate::set_effects(
+                    lumit_core::fx::effects::particulate::rows::set_effects(
                         self.comp_id,
                         &layer,
                         effects,
