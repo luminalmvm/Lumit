@@ -6477,6 +6477,86 @@
   "@fxStrings": {
     "description": "Effect controls — a Fractal type option on Fractal noise."
   },
+  "fxChips": "Chips",
+  "@fxChips": {
+    "description": "Effect controls — a Noise type option on Fractal noise: one flat grey per cell."
+  },
+  "fxCircular": "Circular",
+  "@fxCircular": {
+    "description": "Effect controls — a Noise type option on Fractal noise: a soft round dot per cell."
+  },
+  "fxBuya": "Buya",
+  "@fxBuya": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxCranal": "Cranal",
+  "@fxCranal": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxDents": "Dents",
+  "@fxDents": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's Dents noise: bright lumps parted by creases."
+  },
+  "fxHama": "Hama",
+  "@fxHama": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxLuka": "Luka",
+  "@fxLuka": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxNaki": "Naki",
+  "@fxNaki": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxNutous": "Nutous",
+  "@fxNutous": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxOber": "Ober",
+  "@fxOber": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxPezo": "Pezo",
+  "@fxPezo": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxPoxo": "Poxo",
+  "@fxPoxo": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxSema": "Sema",
+  "@fxSema": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxStupl": "Stupl",
+  "@fxStupl": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxZada": "Zada",
+  "@fxZada": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name; a proper name, not translated."
+  },
+  "fxBlisteredTurbulence": "Blistered turbulence",
+  "@fxBlisteredTurbulence": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxDisplacedTurbulence": "Displaced turbulence",
+  "@fxDisplacedTurbulence": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxWavyTurbulence": "Wavy turbulence",
+  "@fxWavyTurbulence": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxDisplacedVoronoi": "Displaced Voronoi",
+  "@fxDisplacedVoronoi": {
+    "description": "Effect controls — a Noise type option on Fractal noise, after Cinema 4D's noise of that name."
+  },
+  "fxVlNoise": "VL noise",
+  "@fxVlNoise": {
+    "description": "Effect controls — a Noise type option on Fractal noise: Musgrave's variable-lacunarity noise, after Cinema 4D's VL noise."
+  },
   "fxTurbulentDisplace": "Turbulent displace",
   "@fxTurbulentDisplace": {
     "description": "Effect name in the Add effect menu — the fractal-driven warp."

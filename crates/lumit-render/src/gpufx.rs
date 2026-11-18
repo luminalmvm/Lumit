@@ -1604,6 +1604,7 @@ impl GpuEffect for FractalNoise {
                 turbulent: f.field.turbulent,
                 base: f.base,
                 kind: f.kind,
+                distortion: f.distortion,
                 cycle: f.field.cycle,
                 cos_sin: f.cos_sin,
                 offset: f.offset,

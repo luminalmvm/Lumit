@@ -95,7 +95,7 @@ pub const FRACTAL_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "fractal_noise",
     label = "Fractal noise",
     version = 1,
-    category = Generate,
+    category = Textures,
     // Up to ten octaves of 3-D noise a pixel — no neighbour taps, but far from
     // pointwise.
     cost = Moderate,
@@ -146,10 +146,45 @@ pub struct FractalNoise {
     /// sixteen of them, the softest of the five and the dearest.
     #[choice(
         label = "Noise type",
-        options = ["Value", "Perlin", "Block", "Linear", "Spline"],
+        options = [
+            "Value",
+            "Perlin",
+            "Block",
+            "Linear",
+            "Spline",
+            "Chips",
+            "Circular",
+            "Box",
+            "Buya",
+            "Cranal",
+            "Dents",
+            "Electric",
+            "Fire",
+            "Hama",
+            "Luka",
+            "Naki",
+            "Nutous",
+            "Ober",
+            "Pezo",
+            "Poxo",
+            "Sema",
+            "Stupl",
+            "Zada",
+            "Blistered turbulence",
+            "Displaced turbulence",
+            "Wavy turbulence",
+            "Displaced Voronoi",
+            "VL noise"
+        ],
         default = 1
     )]
     pub noise_type: u32,
+
+    /// Blender's Distortion: every point is pushed by a second noise before the
+    /// field is read, so the pattern swirls and runs. In cells of the base
+    /// octave; nought leaves the field exactly as it was.
+    #[slider(label = "Distortion", min = 0.0, max = 4.0, default = 0.0, hard_min = 0.0, unit = Raw)]
+    pub distortion: f32,
 
     /// Flip the finished field, after contrast and brightness.
     ///
@@ -322,8 +357,9 @@ impl FractalNoise {
                 turbulent: self.fractal_type == 1,
                 cycle,
             },
-            base: self.noise_type.min(noise::NOISE_SPLINE),
-            kind: self.fractal_type.min(noise::FRACTAL_STRINGS),
+            base: self.noise_type.min(noise::NOISE_LAST),
+            kind: self.fractal_type.min(noise::FRACTAL_LAST),
+            distortion: self.distortion.max(0.0),
             cos_sin: [rad.cos(), rad.sin()],
             offset: [self.offset_x, self.offset_y],
             inv_scale: [1.0 / sx.max(1e-3), 1.0 / sy.max(1e-3)],

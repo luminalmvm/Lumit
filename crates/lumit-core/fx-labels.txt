@@ -159,6 +159,7 @@ Black range
 Black saturation
 Blades
 Blend
+Blistered turbulence
 Blobs
 Block
 Block glitch
@@ -219,6 +220,7 @@ Burst
 Burst count
 Burst interval
 Bursts
+Buya
 By strength
 Bypass
 CDL
@@ -246,6 +248,7 @@ Character
 Checkbox
 Checkbox control
 Checker
+Chips
 Chisel hard
 Chisel soft
 Choke
@@ -260,6 +263,7 @@ Chroma noise
 Chromatic aberration
 Chrome
 Circle
+Circular
 Clamp
 Clean black
 Clean white
@@ -377,6 +381,7 @@ Count nested inputs
 Cover left
 Cover right
 Crackle
+Cranal
 Create corner pin
 Create transform keys
 Crop
@@ -424,6 +429,7 @@ Denoise
 Denominator
 Density
 Density layer
+Dents
 Depth
 Depth Anything V2 Small
 Depth channel
@@ -456,6 +462,8 @@ Dirt alone
 Dirt scale
 Disc
 Dispersion
+Displaced Voronoi
+Displaced turbulence
 Displacement
 Displacement map
 Display
@@ -749,6 +757,7 @@ Halation
 Half
 Half speed
 Halo
+Hama
 Hard
 Hard colour
 Hard hide
@@ -959,6 +968,7 @@ Lower left x
 Lower left y
 Lower right x
 Lower right y
+Luka
 Lum mix
 Lum v sat
 Luma
@@ -1060,6 +1070,7 @@ Move
 Moves
 Multiply
 NTSC
+Naki
 Name
 Native
 Near blur
@@ -1097,11 +1108,13 @@ Number from
 Number of echoes
 Number range
 Number to
+Nutous
 OCIO colour space transform
 OCIO configuration
 OCIO display transform
 OCIO file transform
 OCIO look transform
+Ober
 Off
 Offset
 Offset forward
@@ -1183,6 +1196,7 @@ Perlin
 Persistence
 Perspective
 Petals
+Pezo
 Phase
 Phase from
 Phase offset
@@ -1254,6 +1268,7 @@ Post
 Posterize
 Posterize time
 Power
+Poxo
 Pre
 Pre-delay
 Preserve luminance
@@ -1452,6 +1467,7 @@ Seed from
 Segment
 Segment length
 Segments
+Sema
 Semicircle
 Sensitivity
 Sensor
@@ -1643,6 +1659,7 @@ Stroke emboss
 Stroke width
 Strokes
 Strong
+Stupl
 Style
 Stylise
 Sub influence
@@ -1796,6 +1813,7 @@ Use source colour
 Use this frame
 Utility
 V line rel width
+VL noise
 Value
 Value noise
 Variation
@@ -1853,6 +1871,7 @@ Wave y
 Waveform
 Wavelength
 Waves
+Wavy turbulence
 Weak
 Wet
 Wheels
@@ -1912,6 +1931,7 @@ Z frequency
 Z wave
 Z wave frequency
 Z wave phase
+Zada
 Zebra
 Zoom
 Zoom blur

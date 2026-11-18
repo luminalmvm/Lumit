@@ -1,5 +1,5 @@
 use super::maths::lattice_hash;
-use super::noise::{fractal, fractal_typed, hash01, value3, FractalField};
+use super::noise::{fractal, fractal_typed, hash01, perlin3, value3, FractalField};
 use super::{maths::MAX_BLADES, resolved::MatteKeyParams, resolved::MbQuality, resolved::MbView};
 
 mod path_draw;
@@ -2371,6 +2371,9 @@ pub struct FractalNoiseParams {
     pub base: u32,
     /// Fractal type: one of `noise::FRACTAL_*`. `field.turbulent` is not read here.
     pub kind: u32,
+    /// How far a second noise pushes every point before the field is read,
+    /// in cells of the base octave; nought reads it where it is.
+    pub distortion: f32,
     /// `(cos, sin)` of the Rotation control, host-computed.
     pub cos_sin: [f32; 2],
     /// The field origin in raster pixels (the §2.3 preview factor applied).
@@ -2388,6 +2391,21 @@ pub struct FractalNoiseParams {
     pub mix: f32,
 }
 
+/// Fractal noise's Distortion: the point pushed by two gradient octaves of
+/// their own channels before the field is read, Blender's Distortion. At
+/// nought the point is returned untouched, so the field is bit-identical.
+fn distorted(p: &FractalNoiseParams, x: f32, y: f32) -> (f32, f32) {
+    if p.distortion == 0.0 {
+        return (x, y);
+    }
+    let dx = perlin3(p.field.seed, DISTORT_CHANNEL, x, y, p.z, p.field.cycle);
+    let dy = perlin3(p.field.seed, DISTORT_CHANNEL + 1, x, y, p.z, p.field.cycle);
+    (x + p.distortion * dx, y + p.distortion * dy)
+}
+
+/// The noise channels Distortion reads, clear of the octaves' own.
+const DISTORT_CHANNEL: u32 = 0x00d1_5700;
+
 /// Fractal noise (docs/08 §3.37): the seeded multi-octave generator. Replaces
 /// the frame edge to edge with opaque grey noise, shaped by contrast and
 /// brightness and clamped to 0..1 (§3.37 decision 5 — a generator that cannot be
@@ -2403,14 +2421,8 @@ pub fn fractal_noise(rgba: &mut [f32], w: u32, h: u32, p: &FractalNoiseParams) {
             // the frame.
             let qx = px * p.cos_sin[0] + py * p.cos_sin[1];
             let qy = py * p.cos_sin[0] - px * p.cos_sin[1];
-            let n = fractal_typed(
-                &p.field,
-                p.base,
-                p.kind,
-                qx * p.inv_scale[0],
-                qy * p.inv_scale[1],
-                p.z,
-            );
+            let (fx, fy) = distorted(p, qx * p.inv_scale[0], qy * p.inv_scale[1]);
+            let n = fractal_typed(&p.field, p.base, p.kind, fx, fy, p.z);
             let n01 = n * 0.5 + 0.5;
             let mut v = ((n01 - 0.5) * p.contrast + 0.5 + p.brightness).clamp(0.0, 1.0);
             if p.invert {

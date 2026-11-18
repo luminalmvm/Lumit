@@ -239,6 +239,34 @@ pub const NOISE_PERLIN: u32 = 1;
 pub const NOISE_BLOCK: u32 = 2;
 pub const NOISE_LINEAR: u32 = 3;
 pub const NOISE_SPLINE: u32 = 4;
+/// Octane's two cellular bases: a flat grey per cell, and a soft round dot.
+pub const NOISE_CHIPS: u32 = 5;
+pub const NOISE_CIRCULAR: u32 = 6;
+/// Cinema 4D's noise types, each an octave shaped from gradient noise or from
+/// cells. Mod noise is not here: it is the Block base.
+pub const NOISE_BOX: u32 = 7;
+pub const NOISE_BUYA: u32 = 8;
+pub const NOISE_CRANAL: u32 = 9;
+pub const NOISE_DENTS: u32 = 10;
+pub const NOISE_ELECTRIC: u32 = 11;
+pub const NOISE_FIRE: u32 = 12;
+pub const NOISE_HAMA: u32 = 13;
+pub const NOISE_LUKA: u32 = 14;
+pub const NOISE_NAKI: u32 = 15;
+pub const NOISE_NUTOUS: u32 = 16;
+pub const NOISE_OBER: u32 = 17;
+pub const NOISE_PEZO: u32 = 18;
+pub const NOISE_POXO: u32 = 19;
+pub const NOISE_SEMA: u32 = 20;
+pub const NOISE_STUPL: u32 = 21;
+pub const NOISE_ZADA: u32 = 22;
+pub const NOISE_BLISTERED_TURBULENCE: u32 = 23;
+pub const NOISE_DISPLACED_TURBULENCE: u32 = 24;
+pub const NOISE_WAVY_TURBULENCE: u32 = 25;
+pub const NOISE_DISPLACED_VORONOI: u32 = 26;
+pub const NOISE_VL: u32 = 27;
+/// The last noise type.
+pub const NOISE_LAST: u32 = NOISE_VL;
 
 /// Fractal type options, in the panel's order.
 pub const FRACTAL_BASIC: u32 = 0;
@@ -256,6 +284,8 @@ pub const FRACTAL_CLOUDY: u32 = 11;
 pub const FRACTAL_TERRAIN: u32 = 12;
 pub const FRACTAL_SUBSCALE: u32 = 13;
 pub const FRACTAL_STRINGS: u32 = 14;
+/// The last fractal type.
+pub const FRACTAL_LAST: u32 = FRACTAL_STRINGS;
 
 /// How far a warping type moves the next octave, per unit of slope, in cells of
 /// the base octave.
@@ -318,6 +348,211 @@ fn spline_d(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
         + 1.5 * t * t * (3.0 * (p1 - p2) + p3 - p0)
 }
 
+// ── The shaped bases: Octane's cells and Cinema 4D's noise types ────────────
+//
+// Each is one octave built from the gradient octave (`perlin3`, several
+// channels of it) or from moving cells, then shaped: thresholded into
+// speckles, folded into veins, banded into contours. The looks follow the
+// pictures Maxon publishes of each type; the formulas are this file's own.
+// No trigonometry and no `powf`: a periodic wave is a smoothed triangle, so
+// the WGSL twin agrees op for op.
+
+/// The central-difference step a warping type reads a shaped base's slope
+/// with, in the octave's cells.
+const SLOPE_STEP: f32 = 0.25;
+
+/// A sine-like wave of period one, `−1..=1`: a triangle with its corners
+/// rounded by a cubic. Smooth enough for contours, and exact in WGSL.
+fn wave(t: f32) -> f32 {
+    let f = t - t.floor();
+    let g = 1.0 - 4.0 * (f - 0.5).abs();
+    g * (1.5 - 0.5 * g * g)
+}
+
+/// The gradient octave on its own channel `c`.
+#[allow(clippy::too_many_arguments)]
+fn grad(seed: u32, channel: u32, c: u32, x: f32, y: f32, z: f32, cycle: i32) -> f32 {
+    perlin3(seed, channel ^ (c << 20), x, y, z, cycle)
+}
+
+/// The nearest two distances to the cell points around `(x, y)`, in cells,
+/// and the nearest cell's hash. Each point circles inside its cell as the
+/// depth runs: once per loop when Evolution cycles, a quarter turn per turn
+/// when it does not.
+fn cells(seed: u32, channel: u32, x: f32, y: f32, z: f32, cycle: i32) -> (f32, f32, u32) {
+    // The depth's whole part wrapped as the lattice wraps it, so a loop
+    // lands on exactly the same phase.
+    let zf = z.floor();
+    let zw = wrap_z(zf as i32, cycle) as f32 + (z - zf);
+    let phase = if cycle > 0 {
+        zw / cycle as f32
+    } else {
+        z * 0.25
+    };
+    let (xf, yf) = (x.floor(), y.floor());
+    let (ix, iy) = (xf as i32, yf as i32);
+    let (fx, fy) = (x - xf, y - yf);
+    let h0 = super::maths::splitmix32(seed ^ channel ^ 0x5bd1_e995);
+    let (mut f1, mut f2, mut near) = (9.0f32, 9.0f32, 0u32);
+    for cy in -1i32..=1 {
+        for cx in -1i32..=1 {
+            let h = fold(fold(h0, ix.wrapping_add(cx)), iy.wrapping_add(cy));
+            let a = unit(fold(h, 3)) + phase;
+            let px = cx as f32 + 0.15 + 0.7 * unit(fold(h, 1)) + 0.12 * wave(a + 0.25);
+            let py = cy as f32 + 0.15 + 0.7 * unit(fold(h, 2)) + 0.12 * wave(a);
+            let (dx, dy) = (fx - px, fy - py);
+            let d = (dx * dx + dy * dy).sqrt();
+            if d < f1 {
+                f2 = f1;
+                f1 = d;
+                near = h;
+            } else if d < f2 {
+                f2 = d;
+            }
+        }
+    }
+    (f1, f2, near)
+}
+
+/// `t` clamped to `0..=1` and smoothstepped.
+fn ramp(t: f32) -> f32 {
+    smooth(t.clamp(0.0, 1.0))
+}
+
+/// One octave of a shaped base, in about `−1..=1`.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn shaped_octave(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i32) -> f32 {
+    let g = |c: u32, x: f32, y: f32| grad(seed, ch, c, x, y, z, cycle);
+    match base {
+        NOISE_CHIPS => {
+            let (_, _, h) = cells(seed, ch, x, y, z, cycle);
+            unit(h) * 2.0 - 1.0
+        }
+        NOISE_CIRCULAR => {
+            let (f1, _, h) = cells(seed, ch, x, y, z, cycle);
+            let r = 0.25 + 0.2 * unit(fold(h, 9));
+            ramp((r - f1) / (0.4 * r)) * 2.0 - 1.0
+        }
+        NOISE_BOX => {
+            // Linear value noise read through a plateau: flat in each cell's
+            // middle, eased across its edges.
+            let (xf, yf) = (x.floor(), y.floor());
+            let bx = xf + ramp((x - xf - 0.3) * 2.5);
+            let by = yf + ramp((y - yf - 0.3) * 2.5);
+            octave(NOISE_LINEAR, seed, ch, bx, by, z, cycle, false).0
+        }
+        NOISE_BUYA => {
+            // Fine bright speckles on black.
+            let t = (g(0, x * 1.5, y * 1.5) * 1.6).clamp(0.0, 1.0);
+            let t2 = t * t;
+            t2 * t2 * 2.0 - 1.0
+        }
+        NOISE_CRANAL => {
+            // Pale cells with soft darker borders, a little cloud over them.
+            let (f1, f2, _) = cells(seed, ch, x, y, z, cycle);
+            let t = 0.25 + 0.55 * ramp((f2 - f1) * 4.0) + 0.15 * g(0, x, y);
+            t * 2.0 - 1.0
+        }
+        NOISE_DENTS => {
+            // Fat bright lumps parted by dark creases.
+            let t = (g(0, x, y).abs() * 1.5).min(1.0);
+            t * t * 2.0 - 1.0
+        }
+        NOISE_ELECTRIC => {
+            // Stretched along the diagonal and bent: streaks that flow.
+            let w = g(1, x, y) * 0.8;
+            let u = (x + y) * std::f32::consts::FRAC_1_SQRT_2;
+            let v = (y - x) * std::f32::consts::FRAC_1_SQRT_2;
+            g(0, u * 0.4 + w, v * 2.2 + w)
+        }
+        NOISE_FIRE => {
+            // Dark, with bright tongues where the octave runs high.
+            let t = (g(0, x, y) * 1.5 + 0.1).clamp(0.0, 1.0);
+            t * t * 2.0 - 1.0
+        }
+        NOISE_HAMA => {
+            // Glossy cells of their own brightness, parted by black lines.
+            let (f1, f2, h) = cells(seed, ch, x, y, z, cycle);
+            let t = ramp((f2 - f1) * 4.0) * (0.35 + 0.65 * unit(fold(h, 5))) * (1.0 - 0.5 * f1);
+            t * 2.0 - 1.0
+        }
+        NOISE_LUKA => {
+            // Crinkled: half the octave, half a finer one's fold.
+            let m = g(1, x * 2.3, y * 2.3);
+            (0.9 * g(0, x, y) + 0.9 * (0.5 - m.abs())).clamp(-1.0, 1.0)
+        }
+        NOISE_NAKI => {
+            // Soft clouds with shallow creases.
+            let n = g(0, x, y);
+            (1.2 * n + 0.75 * (0.4 - n.abs())).clamp(-1.0, 1.0)
+        }
+        NOISE_NUTOUS => {
+            // Thin bright filaments where the octave crosses nought.
+            let r = (1.0 - g(0, x, y).abs()).max(0.0);
+            let r3 = r * r * r;
+            r3 * r3 * 2.0 - 1.0
+        }
+        NOISE_OBER => {
+            // Contour bands of the octave, their middles flattened.
+            let s = wave(g(0, x, y) * 1.6);
+            let a = s.abs();
+            s.signum() * (a * (2.0 - a)) * 0.9
+        }
+        NOISE_PEZO => {
+            // Scattered bright blobs on black.
+            ramp((g(0, x, y) - 0.35) / 0.35) * 2.0 - 1.0
+        }
+        NOISE_POXO => {
+            // Faint, fine, sparse dots.
+            ramp((g(0, x * 2.0, y * 2.0) - 0.45) / 0.4) * 1.2 - 1.0
+        }
+        NOISE_SEMA => {
+            // White wiry lines along the octave's nought, on black.
+            (1.0 - ramp(g(0, x, y).abs() / 0.08)) * 2.0 - 1.0
+        }
+        NOISE_STUPL => {
+            // Soft folds in a middle grey.
+            let n = g(0, x, y);
+            let c = 1.0 - n.abs();
+            (1.05 * n + 0.75 * (1.0 - c * c) - 0.45).clamp(-1.0, 1.0)
+        }
+        NOISE_ZADA => {
+            // Close contours through two octaves at once: swirled stripes.
+            let n = g(0, x, y);
+            let m = g(1, x * 0.7, y * 0.7);
+            wave((n + 0.6 * m) * 2.2) * 0.8 + 0.2 * n
+        }
+        NOISE_BLISTERED_TURBULENCE => {
+            // Calm turbulence with small raised blisters.
+            let m = g(1, x * 3.1, y * 3.1).max(0.0);
+            (0.75 * g(0, x, y).abs() - 0.4 + 0.9 * m * m * m).clamp(-1.0, 1.0)
+        }
+        NOISE_DISPLACED_TURBULENCE => {
+            let dx = g(1, x, y);
+            let dy = g(2, x, y);
+            g(0, x + 0.7 * dx, y + 0.7 * dy) * 0.7
+        }
+        NOISE_WAVY_TURBULENCE => {
+            // Folded, with its edges rippled across.
+            let n = g(0, x, y + 0.35 * wave(x * 0.64 + 0.32 * g(1, x, y)));
+            (n.abs() * 2.0 - 1.0) * 0.7
+        }
+        NOISE_DISPLACED_VORONOI => {
+            let dx = g(1, x, y);
+            let dy = g(2, x, y);
+            let (f1, _, _) = cells(seed, ch, x + 0.6 * dx, y + 0.6 * dy, z, cycle);
+            f1.min(1.0) * 2.0 - 1.0
+        }
+        // VL noise: Musgrave's variable lacunarity, the octave read where a
+        // coarser one pushes it.
+        _ => {
+            let dx = g(1, x * 0.5, y * 0.5);
+            let dy = g(2, x * 0.5, y * 0.5);
+            g(0, x + 1.5 * dx, y + 1.5 * dy)
+        }
+    }
+}
+
 /// One octave of any noise base: the value in about `−1..=1` and, when `slope`
 /// is asked for, its x and y derivatives in the octave's own cells (zero
 /// otherwise). For Value and Perlin the value is bit-identical to [`value3`] and
@@ -334,6 +569,22 @@ pub fn octave(
     cycle: i32,
     slope: bool,
 ) -> (f32, f32, f32) {
+    if base >= NOISE_CHIPS {
+        // The shaped bases have no interpolation of their own to take a slope
+        // from; a warping type reads it as a central difference instead.
+        let n = shaped_octave(base, seed, channel, x, y, z, cycle);
+        if !slope {
+            return (n, 0.0, 0.0);
+        }
+        let e = SLOPE_STEP;
+        let gx = (shaped_octave(base, seed, channel, x + e, y, z, cycle)
+            - shaped_octave(base, seed, channel, x - e, y, z, cycle))
+            * (0.5 / e);
+        let gy = (shaped_octave(base, seed, channel, x, y + e, z, cycle)
+            - shaped_octave(base, seed, channel, x, y - e, z, cycle))
+            * (0.5 / e);
+        return (n, gx, gy);
+    }
     let (xf, yf, zf) = (x.floor(), y.floor(), z.floor());
     let (ix, iy, iz) = (xf as i32, yf as i32, zf as i32);
     let (fx, fy, fz) = (x - xf, y - yf, z - zf);
