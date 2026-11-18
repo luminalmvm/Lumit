@@ -196,6 +196,10 @@ pub struct WorkerState {
     /// backup has nothing to copy ([`idle_backup`]). Cleared whenever a frame
     /// is banked or the disk tier is re-opened, since either can make work.
     backup_exhausted: bool,
+    /// When to ask again whether the graphics card is back, while a rebuild
+    /// has left the renderer on a CPU rasteriser; `None` on a card, or when
+    /// the session began on the rasteriser ([`return_to_hardware`]).
+    hardware_check: Option<web_time::Instant>,
     /// When the last request arrived — the fill waits out a ~200 ms lull
     /// after it (docs/06 §5.5), so a scrub in progress is never contended.
     last_request: web_time::Instant,
@@ -3152,7 +3156,9 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
     if !state.renderer.device_lost() {
         return;
     }
-    note!("The graphics device was lost; rebuilding the renderer");
+    let said = "The graphics device was lost; rebuilding the renderer";
+    note!("{said}");
+    crate::faults::record(said);
     rebuild_renderer(state, stream);
 }
 
@@ -3170,6 +3176,7 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
 /// "the app is fine but the preview never updates again".
 #[frb(ignore)]
 fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    let was_on_card = !state.renderer.software() || state.hardware_check.is_some();
     let Some(mut renderer) = build_viewer_renderer(&state.project, stream, &state.view_id) else {
         // No second device to be had, or the project has closed under us.
         // Nothing is replaced, so the worker keeps the renderer it has and the
@@ -3181,6 +3188,16 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     // looking at the picture is session state, not something the device owned.
     apply_viewer_look(&mut renderer, &state.applied_look.1);
     state.renderer = renderer;
+    // A card that faulted can be away for a while as its driver resets it,
+    // and a rebuild in that window lands on the CPU rasteriser, which draws a
+    // heavy comp a frame every few seconds. It is a stopgap, not a new home.
+    state.hardware_check = (was_on_card && state.renderer.software())
+        .then(|| web_time::Instant::now() + HARDWARE_RETRY);
+    if state.hardware_check.is_some() {
+        let said = "The renderer is on the CPU rasteriser until the graphics card answers again";
+        note!("{said}");
+        crate::faults::record(said);
+    }
     // The card's cache went with the card. Nothing needs clearing — a new
     // renderer's stores are empty — but the budget must be applied again (it
     // lives on the renderer) and the published figures must stop describing
@@ -3199,6 +3216,78 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     _ = stream.add(WorkerResponse::DeviceReset);
     // And put the picture back, on the new device.
     republish_last_frame(state, stream);
+}
+
+/// Milliseconds since the first call, and never 0: the turn watch's clock.
+fn turn_clock() -> u64 {
+    static START: std::sync::OnceLock<web_time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(web_time::Instant::now);
+    u64::try_from(start.elapsed().as_millis())
+        .unwrap_or(u64::MAX)
+        .max(1)
+}
+
+/// How long one turn may take before the watch writes it down.
+const TURN_TOO_LONG_MS: u64 = 30_000;
+
+/// Write it to the diagnostics file when the render worker has been on one
+/// turn for [`TURN_TOO_LONG_MS`]. A turn waits for requests at most 200 ms,
+/// and the heaviest frame takes seconds, so a turn that long is stuck: the
+/// worker cannot say so itself, and without this line a frozen Viewer leaves
+/// nothing behind to say when it froze.
+#[cfg(not(target_arch = "wasm32"))]
+fn watch_turns(busy_since: std::sync::Arc<std::sync::atomic::AtomicU64>) {
+    let _ = std::thread::Builder::new()
+        .name("lumit-render-watch".into())
+        .spawn(move || {
+            let mut reported = 0;
+            // The worker holds the other handle; once it has gone, so does this.
+            while std::sync::Arc::strong_count(&busy_since) > 1 {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let since = busy_since.load(std::sync::atomic::Ordering::Relaxed);
+                if since == 0 || since == reported {
+                    continue;
+                }
+                let took = turn_clock().saturating_sub(since);
+                if took >= TURN_TOO_LONG_MS {
+                    reported = since;
+                    let said = format!(
+                        "The render worker has been on one turn for {} s; the Viewer will not change until it ends",
+                        took / 1000
+                    );
+                    note!("{said}");
+                    crate::faults::record(&said);
+                }
+            }
+        });
+}
+
+/// How long the renderer waits on the CPU rasteriser before asking whether the
+/// graphics card is back.
+const HARDWARE_RETRY: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Put the renderer back on the graphics card once it answers again, after a
+/// rebuild left it on the CPU rasteriser ([`rebuild_renderer`]).
+#[frb(ignore)]
+fn return_to_hardware(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    let Some(at) = state.hardware_check else {
+        return;
+    };
+    if web_time::Instant::now() < at {
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let back = lumit_gpu::hardware_adapter_ready();
+    #[cfg(target_arch = "wasm32")]
+    let back = false;
+    if !back {
+        state.hardware_check = Some(web_time::Instant::now() + HARDWARE_RETRY);
+        return;
+    }
+    let said = "The graphics card answers again; moving the renderer back onto it";
+    note!("{said}");
+    crate::faults::record(said);
+    rebuild_renderer(state, stream);
 }
 
 #[frb(ignore)]
@@ -3282,6 +3371,7 @@ fn worker_loop(
         bar_published_at: crate::turns::long_ago(BAR_MIN_INTERVAL),
         fill_exhausted: true,
         backup_exhausted: true,
+        hardware_check: None,
         last_request: web_time::Instant::now(),
         bakes_seen: 0,
         layer_sample: None,
@@ -3298,6 +3388,10 @@ fn worker_loop(
     // turn would spend the session doing nothing else.
     let mut faults_in_a_row = 0u32;
     let mut state = Some(state);
+    // When the turn under way began, for the watch below; 0 between turns.
+    let busy_since = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    #[cfg(not(target_arch = "wasm32"))]
+    watch_turns(std::sync::Arc::clone(&busy_since));
     // One turn, and whether to take another. A thread of its own on the
     // desktop, which goes straight round again; turns from the page's timer in
     // the browser build (`crate::turns`).
@@ -3313,9 +3407,11 @@ fn worker_loop(
         // thread — leaving the editor perfectly responsive, the Viewer frozen
         // for the rest of the session, and nobody told. See `rebuild_renderer`
         // for why the renderer cannot simply carry on afterwards.
+        busy_since.store(turn_clock(), std::sync::atomic::Ordering::Relaxed);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             one_turn(running, &receiver, &mut stream)
         }));
+        busy_since.store(0, std::sync::atomic::Ordering::Relaxed);
         match outcome {
             Ok(Turn::Continue) => {
                 faults_in_a_row = 0;
@@ -3343,7 +3439,30 @@ fn worker_loop(
                     state = None;
                     return false;
                 }
-                rebuild_renderer(running, &mut stream);
+                // The rebuild draws the last picture again, on a device that
+                // may be no healthier than the one that faulted, so it is held
+                // in the same net: a panic here used to end the thread, leaving
+                // the Viewer on its last picture for the rest of the session.
+                let rebuilt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    rebuild_renderer(running, &mut stream);
+                }));
+                if let Err(payload) = rebuilt {
+                    faults_in_a_row += 1;
+                    let said = format!(
+                        "The renderer faulted as it was rebuilt ({}): {}",
+                        faults_in_a_row,
+                        panics::panic_message(&*payload),
+                    );
+                    note!("{said}");
+                    crate::faults::record(&said);
+                    if faults_in_a_row > MAX_FAULTS_IN_A_ROW {
+                        let stopping = "The render worker faulted on every attempt; it is stopping";
+                        note!("{stopping}");
+                        crate::faults::record(stopping);
+                        state = None;
+                        return false;
+                    }
+                }
                 return true;
             }
         }
@@ -3391,6 +3510,7 @@ fn one_turn(
     // has gone answers nothing, and every step below would fail one at a
     // time until the session looked broken.
     recover_lost_device(state, stream);
+    return_to_hardware(state, stream);
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
         crate::turns::playback_priority(state.prioritised);
@@ -5832,6 +5952,28 @@ mod tests {
         );
     }
 
+    /// A renderer left on the CPU rasteriser asks again for the card when its
+    /// time comes, and goes back onto it once it answers.
+    #[test]
+    fn a_renderer_left_on_the_rasteriser_goes_back_to_the_card() {
+        let (project, _comp) = project_with_solid();
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        if state.renderer.software() || !lumit_gpu::hardware_adapter_ready() {
+            return; // No card here to go back to.
+        }
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        state.hardware_check = Some(web_time::Instant::now() + super::HARDWARE_RETRY);
+        super::return_to_hardware(&mut state, &mut stream);
+        assert!(state.hardware_check.is_some(), "not asked before its time");
+
+        state.hardware_check = Some(web_time::Instant::now());
+        super::return_to_hardware(&mut state, &mut stream);
+        assert_eq!(state.hardware_check, None, "the card answered");
+        assert!(!state.renderer.software(), "and the renderer is back on it");
+    }
+
     /// A turn that panics must not take the worker down with it.
     ///
     /// This is the crash net in [`super::worker_loop`], and the fault it is
@@ -5926,6 +6068,7 @@ mod tests {
             bar_published_at: std::time::Instant::now() - super::BAR_MIN_INTERVAL,
             fill_exhausted: true,
             backup_exhausted: true,
+            hardware_check: None,
             last_request: std::time::Instant::now(),
             bakes_seen: 0,
             layer_sample: None,

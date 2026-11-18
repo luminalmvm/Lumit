@@ -5,18 +5,16 @@
 // value. A quickselect would diverge every lane in a warp and would execute a
 // different sequence of comparisons on the two paths, which §1.6 could not hold
 // to agreement; this sweeps the window once, carrying the `keep` smallest values
-// seen so far in a sorted array and inserting each new sample by bubbling it
+// seen so far in a sorted run and inserting each new sample by bubbling it
 // down with min/max pairs. Because min and max on a vector are componentwise,
 // the three colour channels — and the alpha — are selected SIMULTANEOUSLY, four
 // medians for the price of one network.
 //
-// The window swept is always the widest one (7x7, the §3.64 cap): samples
-// outside the requested radius are padded with PAD, a value larger than any real
-// pixel, and inserting PAD into the array is provably a no-op — min(slot, PAD)
-// is slot and max(slot, PAD) is PAD, so nothing moves. The CPU reference, which
-// may branch, sweeps only the window it was asked for, and the two answers are
-// bit-identical because min and max are exact and a sorted set does not depend
-// on insertion order.
+// Only the requested window is swept, as on the CPU. The run starts full of PAD,
+// a value larger than any real pixel, so the first slot still holding PAD takes
+// the carried value and passes PAD on, which changes nothing further down. Both
+// paths carry the same run, and the answers are bit-identical because min and
+// max are exact and a sorted set does not depend on insertion order.
 //
 // Edges repeat (the coordinate is clamped): a transparent surround would win the
 // vote on a corner pixel and eat the frame's own border. Radius 0 is the
@@ -72,6 +70,15 @@ fn unpremult(c: vec4<f32>) -> vec3<f32> {
     return vec3<f32>(0.0);
 }
 
+// One rung of the network: the slot keeps the smaller value and the larger
+// one carries on down.
+fn ce(slot: ptr<function, vec4<f32>>, v: ptr<function, vec4<f32>>) {
+    let lo = min(*slot, *v);
+    let hi = max(*slot, *v);
+    *slot = lo;
+    *v = hi;
+}
+
 @compute @workgroup_size(8, 8)
 fn median(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -95,29 +102,80 @@ fn median(@builtin(global_invocation_id) gid: vec3<u32>) {
     // The rank the network has to carry, for THIS pixel's window (== the CPU
     // reference's `keep`); the host's own `p.keep` is the same number at r.
     let keep = ((2 * r + 1) * (2 * r + 1) + 1) / 2;
-    var sorted: array<vec4<f32>, 25>;
-    for (var i = 0; i < KEEP; i++) {
-        sorted[i] = vec4<f32>(PAD, PAD, PAD, PAD);
-    }
-    for (var dy = -MAX_RADIUS; dy <= MAX_RADIUS; dy++) {
-        for (var dx = -MAX_RADIUS; dx <= MAX_RADIUS; dx++) {
-            var v = vec4<f32>(PAD, PAD, PAD, PAD);
-            if (abs(dx) <= r && abs(dy) <= r) {
-                let s = clamp(xy + vec2<i32>(dx, dy), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
-                let c = textureLoad(src, s, 0);
-                v = vec4<f32>(unpremult(c), c.a);
+    // The sorted run is KEEP named values, not an array. An array indexed by a
+    // loop counter compiles to an indexable one, which some drivers keep in
+    // memory rather than registers, and then every rung is a round trip to it.
+    // Named, the run stays in registers. Rungs past `keep` cannot change the
+    // answer, so a smaller window skips them.
+    let pad = vec4<f32>(PAD, PAD, PAD, PAD);
+    var s0 = pad;
+    var s1 = pad;
+    var s2 = pad;
+    var s3 = pad;
+    var s4 = pad;
+    var s5 = pad;
+    var s6 = pad;
+    var s7 = pad;
+    var s8 = pad;
+    var s9 = pad;
+    var s10 = pad;
+    var s11 = pad;
+    var s12 = pad;
+    var s13 = pad;
+    var s14 = pad;
+    var s15 = pad;
+    var s16 = pad;
+    var s17 = pad;
+    var s18 = pad;
+    var s19 = pad;
+    var s20 = pad;
+    var s21 = pad;
+    var s22 = pad;
+    var s23 = pad;
+    var s24 = pad;
+    for (var dy = -r; dy <= r; dy++) {
+        for (var dx = -r; dx <= r; dx++) {
+            let s = clamp(xy + vec2<i32>(dx, dy), vec2<i32>(0, 0), size - vec2<i32>(1, 1));
+            let c = textureLoad(src, s, 0);
+            var v = vec4<f32>(unpremult(c), c.a);
+            ce(&s0, &v);
+            ce(&s1, &v);
+            ce(&s2, &v);
+            ce(&s3, &v);
+            ce(&s4, &v);
+            if (keep > 5) {
+                ce(&s5, &v);
+                ce(&s6, &v);
+                ce(&s7, &v);
+                ce(&s8, &v);
+                ce(&s9, &v);
+                ce(&s10, &v);
+                ce(&s11, &v);
+                ce(&s12, &v);
             }
-            // The bubble: each rung keeps the smaller of what it held and what
-            // is passing through, and hands the larger on.
-            for (var j = 0; j < keep; j++) {
-                let lo = min(sorted[j], v);
-                let hi = max(sorted[j], v);
-                sorted[j] = lo;
-                v = hi;
+            if (keep > 13) {
+                ce(&s13, &v);
+                ce(&s14, &v);
+                ce(&s15, &v);
+                ce(&s16, &v);
+                ce(&s17, &v);
+                ce(&s18, &v);
+                ce(&s19, &v);
+                ce(&s20, &v);
+                ce(&s21, &v);
+                ce(&s22, &v);
+                ce(&s23, &v);
+                ce(&s24, &v);
             }
         }
     }
-    let med = sorted[keep - 1];
+    // keep is 5, 13 or 25: the middle of a 3, 5 or 7 pixel square.
+    var med = s4;
+    if (keep == 13) {
+        med = s12;
+    } else if (keep == 25) {
+        med = s24;
+    }
     // `select`, not a lerp: the CPU reference chooses one of the two values
     // outright, and `a + (b - a)·1` is not bit-exactly `b`.
     let out_a = select(o.a, med.a, p.alpha_on > 0.5);
