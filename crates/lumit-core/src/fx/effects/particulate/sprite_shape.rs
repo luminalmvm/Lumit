@@ -190,3 +190,27 @@ fn value_noise(x: f32, y: f32) -> f32 {
     let bot = h(x0, y0 + 1.0) + (h(x0 + 1.0, y0 + 1.0) - h(x0, y0 + 1.0)) * sx;
     top + (bot - top) * sy
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// Every shape draws something in its middle and nothing in its corner,
+    /// and Layer draws nothing of its own.
+    #[test]
+    fn layer_has_no_picture_and_the_others_do() {
+        assert!(key(SpriteShape::Layer, 5).is_none());
+        for code in 1..SpriteShape::OPTIONS.len() as u32 {
+            let shape = SpriteShape::from_code(code);
+            let p = picture(key(shape, 5).unwrap());
+            let alpha = |x: u32, y: u32| p[((y * SIZE + x) * 4 + 3) as usize];
+            assert_eq!(p.len(), (SIZE * SIZE * 4) as usize);
+            assert!(
+                alpha(SIZE / 2, SIZE / 2) > 0.5,
+                "code {code} is empty in the middle"
+            );
+            assert_eq!(alpha(0, 0), 0.0, "code {code} fills its corner");
+        }
+    }
+}
