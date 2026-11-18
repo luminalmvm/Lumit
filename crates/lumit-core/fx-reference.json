@@ -11028,21 +11028,6 @@
       "category_slug": "generate",
       "params": [
         {
-          "id": "noise_type",
-          "label": "Noise type",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 1,
-          "options": [
-            "Value",
-            "Perlin",
-            "Block",
-            "Linear",
-            "Spline"
-          ],
-          "dividers_after": []
-        },
-        {
           "id": "fractal_type",
           "label": "Fractal type",
           "kind": "choice",
@@ -11064,6 +11049,21 @@
             "Terrain",
             "Subscale",
             "Strings"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "noise_type",
+          "label": "Noise type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Value",
+            "Perlin",
+            "Block",
+            "Linear",
+            "Spline"
           ],
           "dividers_after": []
         },

@@ -11612,14 +11612,14 @@ fn time_loop_moments_follow_the_type() {
     );
 }
 
-/// The two types and two bases Fractal noise shipped with come out of the typed
-/// fractal bit for bit as they did out of `noise::fractal`, so no saved project
-/// changes its picture.
+/// The two types and two bases Fractal noise shipped with keep their first
+/// octave bit for bit as it came out of `noise::fractal`; only the finer
+/// octaves move (see the next test).
 #[test]
-fn typed_fractal_keeps_basic_and_turbulent_bit_identical() {
+fn typed_fractal_keeps_basic_and_turbulent_first_octave() {
     use super::noise::{fractal, fractal_typed, FractalField};
     for (perlin, turbulent) in [(false, false), (false, true), (true, false), (true, true)] {
-        for (octaves, cycle) in [(1u32, 0i32), (6, 0), (10, 3)] {
+        for (octaves, cycle) in [(1u32, 0i32), (1, 3)] {
             let f = FractalField {
                 seed: 4242,
                 octaves,
@@ -11642,6 +11642,49 @@ fn typed_fractal_keeps_basic_and_turbulent_bit_identical() {
                 );
             }
         }
+    }
+}
+
+/// Every octave scales about the origin, so unshifted their lattice lines all
+/// meet on x = 0 and draw a thin line there (half of a cross through the
+/// layer's centre). Measured as the mean crease across the column: on x = 0 it
+/// must look like any other column.
+#[test]
+fn typed_fractal_draws_no_cross_at_the_origin() {
+    use super::noise::{fractal, fractal_typed, FractalField};
+    fn crease(g: &dyn Fn(f32, f32) -> f32, x: f32) -> f32 {
+        let h = 0.003;
+        (0..4000)
+            .map(|i| {
+                let y = i as f32 * 0.0137 - 27.0;
+                (g(x, y) - 0.5 * (g(x - h, y) + g(x + h, y))).abs()
+            })
+            .sum::<f32>()
+            / 4000.0
+    }
+    fn ratio(g: &dyn Fn(f32, f32) -> f32) -> f32 {
+        let others = (1..30)
+            .map(|k| crease(g, k as f32 * 0.377 + 0.05))
+            .sum::<f32>()
+            / 29.0;
+        crease(g, 0.0) / others
+    }
+    for perlin in [false, true] {
+        let f = FractalField {
+            seed: 7,
+            octaves: 8,
+            gain: 0.6,
+            lacunarity: 1.87,
+            perlin,
+            turbulent: true,
+            cycle: 0,
+        };
+        let old = ratio(&|x, y| fractal(&f, x, y, 0.3));
+        let new = ratio(&|x, y| fractal_typed(&f, u32::from(perlin), 1, x, y, 0.3));
+        // The probe sees the cross where it is (the unshifted sum)...
+        assert!((old - 1.0).abs() > 0.25, "perlin {perlin}: old {old}");
+        // ...and none in Fractal noise.
+        assert!((new - 1.0).abs() < 0.15, "perlin {perlin}: new {new}");
     }
 }
 

@@ -441,6 +441,9 @@ fn nc_fractal_typed(f: FractalField, base: u32, kind: u32, x: f32, y: f32, z: f3
             sx = (x + wx) * freq;
             sy = (y + wy) * freq;
         }
+        // == OCTAVE_SHIFT: the octaves' lattices must not meet at the origin.
+        sx = sx + f32(o) * 0.7548777;
+        sy = sy + f32(o) * 0.5698403;
         var zz = z;
         var cycle = f.cycle;
         if (kind == NC_DYNAMIC_PROGRESSIVE) {

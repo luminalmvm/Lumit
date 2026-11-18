@@ -108,19 +108,6 @@ pub const FRACTAL_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = FRACTAL_NOISE_ENABLED_WHEN,
 )]
 pub struct FractalNoise {
-    /// Value interpolates the lattice values themselves with a smoothstep — cheap,
-    /// and slightly blocky (AE's Soft linear). Perlin interpolates the lattice
-    /// *slopes*, which is the shape everyone means by "clouds". Block holds each
-    /// cell's value, Linear blends the values in a straight line (the crosses
-    /// and stars AE's Linear shows), Spline runs a Catmull-Rom curve through
-    /// sixteen of them, the softest of the five and the dearest.
-    #[choice(
-        label = "Noise type",
-        options = ["Value", "Perlin", "Block", "Linear", "Spline"],
-        default = 1
-    )]
-    pub noise_type: u32,
-
     /// Basic sums the signed octaves — soft and cloud-like. Turbulent folds each
     /// octave about zero first — ridged and smoke-like, and what a displacement
     /// map usually wants, which is why it is the default (as it is in AE). The
@@ -150,6 +137,19 @@ pub struct FractalNoise {
         default = 1
     )]
     pub fractal_type: u32,
+
+    /// Value interpolates the lattice values themselves with a smoothstep — cheap,
+    /// and slightly blocky (AE's Soft linear). Perlin interpolates the lattice
+    /// *slopes*, which is the shape everyone means by "clouds". Block holds each
+    /// cell's value, Linear blends the values in a straight line (the crosses
+    /// and stars AE's Linear shows), Spline runs a Catmull-Rom curve through
+    /// sixteen of them, the softest of the five and the dearest.
+    #[choice(
+        label = "Noise type",
+        options = ["Value", "Perlin", "Block", "Linear", "Spline"],
+        default = 1
+    )]
+    pub noise_type: u32,
 
     /// Flip the finished field, after contrast and brightness.
     ///

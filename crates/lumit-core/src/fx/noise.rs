@@ -215,8 +215,9 @@ pub fn fractal(f: &FractalField, x: f32, y: f32, z: f32) -> f32 {
 //
 // Everything above stays exactly as it was: Turbulent displace, Roughen edges,
 // Lightning and the rest read [`fractal`] and see no change. Fractal noise reads
-// [`fractal_typed`], which gives the same bits for the two types and two bases
-// it shipped with (pinned by a test) and adds the rest.
+// [`fractal_typed`], which gives the same first octave for the two types and two
+// bases it shipped with (pinned by a test), shifts the finer octaves so they do
+// not draw a cross at the origin, and adds the rest.
 //
 // A type changes one of three things:
 // 1. how each octave is shaped before it is added (folded, sharpened, ridged);
@@ -479,9 +480,14 @@ pub fn octave(
     (n, 2.0 * du * ex, 2.0 * dv * ey)
 }
 
+/// How far each octave after the first is moved, in its own lattice cells:
+/// the R2 low-discrepancy step, so the octaves' lattices never line up.
+const OCTAVE_SHIFT: [f32; 2] = [0.754_877_7, 0.569_840_3];
+
 /// The fractal sum of one of the fifteen types over one of the five bases, in
-/// about `−1..=1`. Basic and Turbulent over Value and Perlin are bit-identical
-/// to [`fractal`]; `f.perlin` and `f.turbulent` are not read, `base` and `kind`
+/// about `−1..=1`. One octave of Basic or Turbulent over Value or Perlin is
+/// bit-identical to [`fractal`]; the finer octaves are shifted so their
+/// lattices do not all meet at the origin. `f.perlin` and `f.turbulent` are not read, `base` and `kind`
 /// say it all.
 #[must_use]
 pub fn fractal_typed(f: &FractalField, base: u32, kind: u32, x: f32, y: f32, z: f32) -> f32 {
@@ -500,6 +506,11 @@ pub fn fractal_typed(f: &FractalField, base: u32, kind: u32, x: f32, y: f32, z: 
         } else {
             (x * freq, y * freq)
         };
+        // Every octave scales about the same origin, so unshifted their lattice
+        // lines all meet there and stack into a thin cross. Each octave after
+        // the first moves by an irrational step, so no two share a line.
+        let k = o as f32;
+        let (sx, sy) = (sx + k * OCTAVE_SHIFT[0], sy + k * OCTAVE_SHIFT[1]);
         // Dynamic progressive: the finer octaves evolve faster, by whole
         // multiples so Cycle evolution still closes exactly.
         let (zz, cycle) = if kind == FRACTAL_DYNAMIC_PROGRESSIVE {
