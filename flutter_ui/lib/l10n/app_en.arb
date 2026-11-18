@@ -6421,6 +6421,62 @@
   "@fxTurbulent": {
     "description": "Effect controls — a Fractal type option on Fractal noise."
   },
+  "fxBlock": "Block",
+  "@fxBlock": {
+    "description": "Effect controls — a Noise type option on Fractal noise."
+  },
+  "fxSpline": "Spline",
+  "@fxSpline": {
+    "description": "Effect controls — a Noise type option on Fractal noise."
+  },
+  "fxTurbulentSmooth": "Turbulent smooth",
+  "@fxTurbulentSmooth": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxTurbulentSharp": "Turbulent sharp",
+  "@fxTurbulentSharp": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxDynamic": "Dynamic",
+  "@fxDynamic": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxDynamicProgressive": "Dynamic progressive",
+  "@fxDynamicProgressive": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxDynamicTwist": "Dynamic twist",
+  "@fxDynamicTwist": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxSmeary": "Smeary",
+  "@fxSmeary": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxSwirly": "Swirly",
+  "@fxSwirly": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxRocky": "Rocky",
+  "@fxRocky": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxCloudy": "Cloudy",
+  "@fxCloudy": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxTerrain": "Terrain",
+  "@fxTerrain": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxSubscale": "Subscale",
+  "@fxSubscale": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
+  "fxStrings": "Strings",
+  "@fxStrings": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
   "fxTurbulentDisplace": "Turbulent displace",
   "@fxTurbulentDisplace": {
     "description": "Effect name in the Add effect menu — the fractal-driven warp."

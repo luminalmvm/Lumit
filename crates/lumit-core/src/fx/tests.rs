@@ -11611,3 +11611,115 @@ fn time_loop_moments_follow_the_type() {
         "round again, the next lap shows in full"
     );
 }
+
+/// The two types and two bases Fractal noise shipped with come out of the typed
+/// fractal bit for bit as they did out of `noise::fractal`, so no saved project
+/// changes its picture.
+#[test]
+fn typed_fractal_keeps_basic_and_turbulent_bit_identical() {
+    use super::noise::{fractal, fractal_typed, FractalField};
+    for (perlin, turbulent) in [(false, false), (false, true), (true, false), (true, true)] {
+        for (octaves, cycle) in [(1u32, 0i32), (6, 0), (10, 3)] {
+            let f = FractalField {
+                seed: 4242,
+                octaves,
+                gain: 0.6,
+                lacunarity: 1.8,
+                perlin,
+                turbulent,
+                cycle,
+            };
+            for i in 0..400 {
+                let x = (i as f32) * 0.173 - 31.0;
+                let y = (i as f32) * -0.291 + 7.5;
+                let z = (i % 37) as f32 * 0.083;
+                let old = fractal(&f, x, y, z);
+                let new = fractal_typed(&f, u32::from(perlin), u32::from(turbulent), x, y, z);
+                assert_eq!(
+                    old.to_bits(),
+                    new.to_bits(),
+                    "{perlin} {turbulent} {octaves} at {x},{y},{z}"
+                );
+            }
+        }
+    }
+}
+
+/// Each octave's slope is the derivative of its value: the warping types move
+/// the next octave along it, so a wrong slope would be a wrong picture.
+#[test]
+fn octave_slope_matches_the_values_own_derivative() {
+    use super::noise::{octave, NOISE_PERLIN, NOISE_SPLINE, NOISE_VALUE};
+    let e = 1.0 / 512.0;
+    for base in [NOISE_VALUE, NOISE_PERLIN, NOISE_SPLINE] {
+        for i in 0..200 {
+            // Keep clear of cell edges, where a central difference straddles two cells.
+            let x = (i / 20) as f32 * 1.37 + 0.31 + (i % 7) as f32 * 0.05;
+            let y = (i % 20) as f32 * 0.91 + 0.27;
+            let z = 0.4;
+            let (_, dx, dy) = octave(base, 9, 2, x, y, z, 0, true);
+            let fdx = (octave(base, 9, 2, x + e, y, z, 0, false).0
+                - octave(base, 9, 2, x - e, y, z, 0, false).0)
+                / (2.0 * e);
+            let fdy = (octave(base, 9, 2, x, y + e, z, 0, false).0
+                - octave(base, 9, 2, x, y - e, z, 0, false).0)
+                / (2.0 * e);
+            assert!(
+                (dx - fdx).abs() < 2e-2,
+                "base {base} dx {dx} vs {fdx} at {x},{y}"
+            );
+            assert!(
+                (dy - fdy).abs() < 2e-2,
+                "base {base} dy {dy} vs {fdy} at {x},{y}"
+            );
+        }
+    }
+}
+
+/// Every fractal type over every base is its own picture, stays in range, and
+/// closes its Cycle evolution exactly (Dynamic progressive evolves its fine
+/// octaves faster, by whole multiples, so it must close too).
+#[test]
+fn every_fractal_type_is_distinct_bounded_and_loops() {
+    use super::noise::{fractal_typed, FractalField, FRACTAL_STRINGS, NOISE_SPLINE};
+    let field = |cycle| FractalField {
+        seed: 77,
+        octaves: 6,
+        gain: 0.7,
+        lacunarity: 1.0 / 0.56,
+        perlin: false,
+        turbulent: false,
+        cycle,
+    };
+    let sample = |base, kind, cycle, z: f32| -> Vec<f32> {
+        let f = field(cycle);
+        (0..256)
+            .map(|i| {
+                let (x, y) = ((i % 16) as f32 * 0.37, (i / 16) as f32 * 0.41);
+                fractal_typed(&f, base, kind, x, y, z)
+            })
+            .collect()
+    };
+    for base in 0..=NOISE_SPLINE {
+        let mut seen: Vec<Vec<f32>> = Vec::new();
+        for kind in 0..=FRACTAL_STRINGS {
+            let a = sample(base, kind, 0, 0.3);
+            for v in &a {
+                assert!(
+                    v.is_finite() && (-1.6..=1.6).contains(v),
+                    "base {base} kind {kind}: {v}"
+                );
+            }
+            assert!(
+                seen.iter().all(|s| s != &a),
+                "base {base} kind {kind} draws the same picture as another type"
+            );
+            seen.push(a);
+            assert_eq!(
+                sample(base, kind, 2, 0.25),
+                sample(base, kind, 2, 2.25),
+                "base {base} kind {kind}: the cycle must close"
+            );
+        }
+    }
+}

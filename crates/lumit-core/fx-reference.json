@@ -11035,7 +11035,10 @@
           "default": 1,
           "options": [
             "Value",
-            "Perlin"
+            "Perlin",
+            "Block",
+            "Linear",
+            "Spline"
           ],
           "dividers_after": []
         },
@@ -11047,7 +11050,20 @@
           "default": 1,
           "options": [
             "Basic",
-            "Turbulent"
+            "Turbulent",
+            "Turbulent smooth",
+            "Turbulent sharp",
+            "Dynamic",
+            "Dynamic progressive",
+            "Dynamic twist",
+            "Max",
+            "Smeary",
+            "Swirly",
+            "Rocky",
+            "Cloudy",
+            "Terrain",
+            "Subscale",
+            "Strings"
           ],
           "dividers_after": []
         },

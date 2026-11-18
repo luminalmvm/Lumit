@@ -210,3 +210,391 @@ pub fn fractal(f: &FractalField, x: f32, y: f32, z: f32) -> f32 {
     }
     sum / norm.max(1e-6)
 }
+
+// ── Typed fractals: AE's fifteen fractal types and five noise bases ─────────
+//
+// Everything above stays exactly as it was: Turbulent displace, Roughen edges,
+// Lightning and the rest read [`fractal`] and see no change. Fractal noise reads
+// [`fractal_typed`], which gives the same bits for the two types and two bases
+// it shipped with (pinned by a test) and adds the rest.
+//
+// A type changes one of three things:
+// 1. how each octave is shaped before it is added (folded, sharpened, ridged);
+// 2. how the octaves are combined (summed, or the brightest kept);
+// 3. where the next octave samples: the Dynamic family and its relatives move
+//    each octave along the slope of the one before (a domain warp), and the
+//    Twist variants move it across the slope instead, which curls it.
+//
+// The slope comes from the octave's own interpolation, worked out alongside
+// the value from the same corners, so a warped octave costs a handful of
+// multiply-adds and no extra lattice lookups. The lattice hash is also folded
+// one coordinate at a time with the shared prefixes reused, which is the same
+// integer arithmetic as `lattice_hash` in fewer steps.
+
+/// Noise type options, in the panel's order. The first two are the bases
+/// Fractal noise shipped with; the rest are AE's other interpolations.
+pub const NOISE_VALUE: u32 = 0;
+pub const NOISE_PERLIN: u32 = 1;
+pub const NOISE_BLOCK: u32 = 2;
+pub const NOISE_LINEAR: u32 = 3;
+pub const NOISE_SPLINE: u32 = 4;
+
+/// Fractal type options, in the panel's order.
+pub const FRACTAL_BASIC: u32 = 0;
+pub const FRACTAL_TURBULENT: u32 = 1;
+pub const FRACTAL_TURBULENT_SMOOTH: u32 = 2;
+pub const FRACTAL_TURBULENT_SHARP: u32 = 3;
+pub const FRACTAL_DYNAMIC: u32 = 4;
+pub const FRACTAL_DYNAMIC_PROGRESSIVE: u32 = 5;
+pub const FRACTAL_DYNAMIC_TWIST: u32 = 6;
+pub const FRACTAL_MAX: u32 = 7;
+pub const FRACTAL_SMEARY: u32 = 8;
+pub const FRACTAL_SWIRLY: u32 = 9;
+pub const FRACTAL_ROCKY: u32 = 10;
+pub const FRACTAL_CLOUDY: u32 = 11;
+pub const FRACTAL_TERRAIN: u32 = 12;
+pub const FRACTAL_SUBSCALE: u32 = 13;
+pub const FRACTAL_STRINGS: u32 = 14;
+
+/// How far a warping type moves the next octave, per unit of slope, in cells of
+/// the base octave.
+const WARP_DYNAMIC: f32 = 0.12;
+const WARP_TWIST: f32 = 0.2;
+const WARP_SMEARY: f32 = 0.35;
+const WARP_SWIRLY: f32 = 0.3;
+
+/// Whether a fractal type needs each octave's slope.
+#[must_use]
+pub const fn warps(kind: u32) -> bool {
+    matches!(
+        kind,
+        FRACTAL_DYNAMIC
+            | FRACTAL_DYNAMIC_PROGRESSIVE
+            | FRACTAL_DYNAMIC_TWIST
+            | FRACTAL_SMEARY
+            | FRACTAL_SWIRLY
+    )
+}
+
+fn fold(h: u32, v: i32) -> u32 {
+    super::maths::splitmix32(h ^ (v as u32))
+}
+
+fn unit(h: u32) -> f32 {
+    (h >> 8) as f32 / 16_777_216.0
+}
+
+fn smooth_d(t: f32) -> f32 {
+    6.0 * t * (1.0 - t)
+}
+
+fn fade_d(t: f32) -> f32 {
+    30.0 * t * t * (t * (t - 2.0) + 1.0)
+}
+
+/// The Perlin gradient's x and y components for an index (see [`grad_dot`]).
+fn grad_xy(idx: u32) -> (f32, f32) {
+    let s0 = if idx & 1 == 0 { 1.0 } else { -1.0 };
+    let s1 = if idx & 2 == 0 { 1.0 } else { -1.0 };
+    match idx / 4 {
+        0 => (s0, s1),
+        1 => (s0, 0.0),
+        _ => (0.0, s0),
+    }
+}
+
+/// Catmull-Rom through four lattice values.
+fn spline(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+    p1 + 0.5
+        * t
+        * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)))
+}
+
+/// The slope of [`spline`] along `t`.
+fn spline_d(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+    0.5 * (p2 - p0)
+        + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3)
+        + 1.5 * t * t * (3.0 * (p1 - p2) + p3 - p0)
+}
+
+/// One octave of any noise base: the value in about `−1..=1` and, when `slope`
+/// is asked for, its x and y derivatives in the octave's own cells (zero
+/// otherwise). For Value and Perlin the value is bit-identical to [`value3`] and
+/// [`perlin3`].
+#[must_use]
+#[allow(clippy::too_many_arguments, clippy::many_single_char_names)]
+pub fn octave(
+    base: u32,
+    seed: u32,
+    channel: u32,
+    x: f32,
+    y: f32,
+    z: f32,
+    cycle: i32,
+    slope: bool,
+) -> (f32, f32, f32) {
+    let (xf, yf, zf) = (x.floor(), y.floor(), z.floor());
+    let (ix, iy, iz) = (xf as i32, yf as i32, zf as i32);
+    let (fx, fy, fz) = (x - xf, y - yf, z - zf);
+    let z0 = wrap_z(iz, cycle);
+    let z1 = wrap_z(iz.wrapping_add(1), cycle);
+    let h0 = super::maths::splitmix32(seed ^ channel);
+    if base == NOISE_SPLINE {
+        // A 4×4 Catmull-Rom patch on each of the two depth slices, the slices
+        // blended with the value base's smoothstep. The x and y hash prefixes
+        // are shared by both slices.
+        let w = smooth(fz);
+        let mut hxy = [[0u32; 4]; 4];
+        for (i, cx) in (-1..=2).enumerate() {
+            let hx = fold(h0, ix.wrapping_add(cx));
+            for (j, cy) in (-1..=2).enumerate() {
+                hxy[j][i] = fold(hx, iy.wrapping_add(cy));
+            }
+        }
+        let mut slice = [(0.0f32, 0.0f32, 0.0f32); 2];
+        for (s, zz) in [z0, z1].into_iter().enumerate() {
+            let mut rows = [0.0f32; 4];
+            let mut drows = [0.0f32; 4];
+            for j in 0..4 {
+                let r = hxy[j].map(|h| unit(fold(h, zz)) * 2.0 - 1.0);
+                rows[j] = spline(r[0], r[1], r[2], r[3], fx);
+                if slope {
+                    drows[j] = spline_d(r[0], r[1], r[2], r[3], fx);
+                }
+            }
+            let v = spline(rows[0], rows[1], rows[2], rows[3], fy);
+            let (dx, dy) = if slope {
+                (
+                    spline(drows[0], drows[1], drows[2], drows[3], fy),
+                    spline_d(rows[0], rows[1], rows[2], rows[3], fy),
+                )
+            } else {
+                (0.0, 0.0)
+            };
+            slice[s] = (v, dx, dy);
+        }
+        return (
+            lerp(slice[0].0, slice[1].0, w),
+            lerp(slice[0].1, slice[1].1, w),
+            lerp(slice[0].2, slice[1].2, w),
+        );
+    }
+    // The eight corner hashes, x folded first and shared.
+    let hx0 = fold(h0, ix);
+    let hx1 = fold(h0, ix.wrapping_add(1));
+    let (h00, h01) = (fold(hx0, iy), fold(hx0, iy.wrapping_add(1)));
+    let (h10, h11) = (fold(hx1, iy), fold(hx1, iy.wrapping_add(1)));
+    let (c000, c001) = (fold(h00, z0), fold(h00, z1));
+    let (c010, c011) = (fold(h01, z0), fold(h01, z1));
+    let (c100, c101) = (fold(h10, z0), fold(h10, z1));
+    let (c110, c111) = (fold(h11, z0), fold(h11, z1));
+    if base == NOISE_PERLIN {
+        let (u, v, w) = (fade(fx), fade(fy), fade(fz));
+        let corner = |h: u32, dx: f32, dy: f32, dz: f32| {
+            let idx = h % 12;
+            (grad_dot(idx, fx - dx, fy - dy, fz - dz), grad_xy(idx))
+        };
+        let (a000, g000) = corner(c000, 0.0, 0.0, 0.0);
+        let (a100, g100) = corner(c100, 1.0, 0.0, 0.0);
+        let (a010, g010) = corner(c010, 0.0, 1.0, 0.0);
+        let (a110, g110) = corner(c110, 1.0, 1.0, 0.0);
+        let (a001, g001) = corner(c001, 0.0, 0.0, 1.0);
+        let (a101, g101) = corner(c101, 1.0, 0.0, 1.0);
+        let (a011, g011) = corner(c011, 0.0, 1.0, 1.0);
+        let (a111, g111) = corner(c111, 1.0, 1.0, 1.0);
+        let x00 = lerp(a000, a100, u);
+        let x10 = lerp(a010, a110, u);
+        let x01 = lerp(a001, a101, u);
+        let x11 = lerp(a011, a111, u);
+        let y0 = lerp(x00, x10, v);
+        let y1 = lerp(x01, x11, v);
+        let n = lerp(y0, y1, w) * PERLIN_NORM;
+        if !slope {
+            return (n, 0.0, 0.0);
+        }
+        let tri = |a: [f32; 8]| {
+            lerp(
+                lerp(lerp(a[0], a[1], u), lerp(a[2], a[3], u), v),
+                lerp(lerp(a[4], a[5], u), lerp(a[6], a[7], u), v),
+                w,
+            )
+        };
+        let gx = tri([
+            g000.0, g100.0, g010.0, g110.0, g001.0, g101.0, g011.0, g111.0,
+        ]);
+        let gy = tri([
+            g000.1, g100.1, g010.1, g110.1, g001.1, g101.1, g011.1, g111.1,
+        ]);
+        let (du, dv) = (fade_d(fx), fade_d(fy));
+        let ex = lerp(
+            lerp(a100 - a000, a110 - a010, v),
+            lerp(a101 - a001, a111 - a011, v),
+            w,
+        );
+        let ey = lerp(x10 - x00, x11 - x01, w);
+        return (
+            n,
+            (gx + du * ex) * PERLIN_NORM,
+            (gy + dv * ey) * PERLIN_NORM,
+        );
+    }
+    // The value family: Value (smoothstep), Linear and Block, all blended in
+    // depth with the smoothstep so Evolution glides on every one of them.
+    let w = smooth(fz);
+    let ((u, du), (v, dv)) = match base {
+        NOISE_BLOCK => ((0.0, 0.0), (0.0, 0.0)),
+        NOISE_LINEAR => ((fx, 1.0), (fy, 1.0)),
+        _ => ((smooth(fx), smooth_d(fx)), (smooth(fy), smooth_d(fy))),
+    };
+    let (v000, v100, v010, v110) = (unit(c000), unit(c100), unit(c010), unit(c110));
+    let (v001, v101, v011, v111) = (unit(c001), unit(c101), unit(c011), unit(c111));
+    let x00 = lerp(v000, v100, u);
+    let x10 = lerp(v010, v110, u);
+    let x01 = lerp(v001, v101, u);
+    let x11 = lerp(v011, v111, u);
+    let y0 = lerp(x00, x10, v);
+    let y1 = lerp(x01, x11, v);
+    let n = lerp(y0, y1, w) * 2.0 - 1.0;
+    if !slope {
+        return (n, 0.0, 0.0);
+    }
+    // Block's slope is zero and Linear's jumps at every cell edge, either of
+    // which would tear a warp into tiles; both take the smoothstep's slope of
+    // the same corners, the field's shape without its steps.
+    let ((u, du), (v, dv)) = if base == NOISE_VALUE {
+        ((u, du), (v, dv))
+    } else {
+        ((smooth(fx), smooth_d(fx)), (smooth(fy), smooth_d(fy)))
+    };
+    let ex = lerp(
+        lerp(v100 - v000, v110 - v010, v),
+        lerp(v101 - v001, v111 - v011, v),
+        w,
+    );
+    let ey = lerp(
+        lerp(v010, v110, u) - lerp(v000, v100, u),
+        lerp(v011, v111, u) - lerp(v001, v101, u),
+        w,
+    );
+    (n, 2.0 * du * ex, 2.0 * dv * ey)
+}
+
+/// The fractal sum of one of the fifteen types over one of the five bases, in
+/// about `−1..=1`. Basic and Turbulent over Value and Perlin are bit-identical
+/// to [`fractal`]; `f.perlin` and `f.turbulent` are not read, `base` and `kind`
+/// say it all.
+#[must_use]
+pub fn fractal_typed(f: &FractalField, base: u32, kind: u32, x: f32, y: f32, z: f32) -> f32 {
+    let mut amp = 1.0f32;
+    let mut freq = 1.0f32;
+    let mut sum = 0.0f32;
+    let mut norm = 0.0f32;
+    let mut peak = 0.0f32;
+    let mut weight = 1.0f32;
+    let (mut wx, mut wy) = (0.0f32, 0.0f32);
+    let warping = warps(kind);
+    let octaves = f.octaves.clamp(1, MAX_OCTAVES);
+    for o in 0..octaves {
+        let (sx, sy) = if warping {
+            ((x + wx) * freq, (y + wy) * freq)
+        } else {
+            (x * freq, y * freq)
+        };
+        // Dynamic progressive: the finer octaves evolve faster, by whole
+        // multiples so Cycle evolution still closes exactly.
+        let (zz, cycle) = if kind == FRACTAL_DYNAMIC_PROGRESSIVE {
+            let m = (o / 2 + 1) as i32;
+            (z * m as f32, f.cycle * m)
+        } else {
+            (z, f.cycle)
+        };
+        let (n, gx, gy) = octave(base, f.seed, o, sx, sy, zz, cycle, warping);
+        let t = n.abs();
+        let shaped = match kind {
+            FRACTAL_BASIC | FRACTAL_DYNAMIC_TWIST => n,
+            // Squared: the fold's crease rounds off into a soft dark valley.
+            FRACTAL_TURBULENT_SMOOTH => t * t * 2.0 - 1.0,
+            // Lifted: puffs with dark veins between them.
+            FRACTAL_DYNAMIC | FRACTAL_DYNAMIC_PROGRESSIVE | FRACTAL_SMEARY => {
+                let c = (1.0 - t).max(0.0);
+                (1.0 - c * c) * 2.0 - 1.0
+            }
+            FRACTAL_TURBULENT_SHARP => {
+                let c = (1.0 - t).max(0.0);
+                (1.0 - c * c * c) * 2.0 - 1.0
+            }
+            FRACTAL_ROCKY => (n * 2.5).clamp(-1.0, 1.0),
+            FRACTAL_CLOUDY => {
+                // Soft and bright: the signed octave lifted, no fold, no crease.
+                let c = (0.5 - n * 0.5).clamp(0.0, 1.0);
+                (1.0 - c * c) * 2.0 - 1.0
+            }
+            FRACTAL_TERRAIN => {
+                // Musgrave's ridged multifractal: sharp ridges where the octave
+                // crosses zero, each octave weighted by the ridge above it.
+                let r = (1.0 - t).max(0.0);
+                let r = r * r * weight;
+                weight = (r * 2.0).clamp(0.0, 1.0);
+                r * 2.0 - 1.0
+            }
+            FRACTAL_SUBSCALE => {
+                // Fine detail where the coarse field is bright.
+                let lift = if norm > 0.0 {
+                    (sum / norm) * 0.5 + 0.5
+                } else {
+                    1.0
+                };
+                n * (0.4 + 1.2 * lift)
+            }
+            FRACTAL_STRINGS => {
+                let r = (1.0 - t).max(0.0);
+                let r2 = r * r;
+                r2 * r2 * 2.0 - 1.0
+            }
+            // Turbulent, Max, Swirly.
+            _ => t * 2.0 - 1.0,
+        };
+        // Strings lets the fine octaves fade twice as fast, so the lines stay the
+        // coarse octave's and do not dissolve into a lattice of fine ones.
+        let a = if kind == FRACTAL_STRINGS {
+            amp * amp
+        } else {
+            amp
+        };
+        if kind == FRACTAL_MAX {
+            peak = peak.max(t * a);
+        } else {
+            sum += shaped * a;
+        }
+        norm += a;
+        if warping {
+            let s = amp / freq;
+            match kind {
+                FRACTAL_DYNAMIC_TWIST => {
+                    wx -= WARP_TWIST * gy * s;
+                    wy += WARP_TWIST * gx * s;
+                }
+                FRACTAL_SWIRLY => {
+                    wx -= WARP_SWIRLY * gy * s;
+                    wy += WARP_SWIRLY * gx * s;
+                }
+                FRACTAL_SMEARY => {
+                    if o == 0 {
+                        wx += WARP_SMEARY * gx;
+                        wy += WARP_SMEARY * gy;
+                    }
+                }
+                _ => {
+                    wx += WARP_DYNAMIC * gx * s;
+                    wy += WARP_DYNAMIC * gy * s;
+                }
+            }
+        }
+        amp *= f.gain;
+        freq *= f.lacunarity;
+    }
+    if kind == FRACTAL_MAX {
+        return peak * 2.0 - 1.0;
+    }
+    sum / norm.max(1e-6)
+}
