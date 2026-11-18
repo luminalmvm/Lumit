@@ -3338,6 +3338,123 @@ class _MarkerFlagState extends State<MarkerFlag> {
   }
 }
 
+/// The **comp marker bin**: the flag in the corner above the lanes' scrollbar,
+/// where After Effects keeps its own. A click drops a composition marker at
+/// the playhead.
+///
+/// It makes the marker through [addMarkerFrb], the same call `Shift+M` and the
+/// Composition menu make, so the bin cannot drift into its own idea of what
+/// dropping a marker means (the one-per-frame rule included).
+class CompMarkerBin extends StatefulWidget {
+  final CompositionReference comp;
+
+  /// Where the playhead stands, read at the moment of the click rather than
+  /// when the bin was built.
+  final ValueListenable<int> playhead;
+
+  /// The marker has been written; the panel redraws its ruler and lanes.
+  final VoidCallback onAdded;
+
+  /// The tag's size. It stands on the ruler's floor, level with the markers it
+  /// makes, and takes nearly the corner's whole width.
+  static const double width = 10;
+  static const double height = 13;
+
+  const CompMarkerBin({
+    super.key,
+    required this.comp,
+    required this.playhead,
+    required this.onAdded,
+  });
+
+  @override
+  State<CompMarkerBin> createState() => _CompMarkerBinState();
+}
+
+class _CompMarkerBinState extends State<CompMarkerBin> {
+  bool _hover = false;
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // A solid tag, as After Effects draws its bin: grey at rest, bright under
+    // the pointer, dimmer while pressed, the way the panel's other buttons
+    // answer. The corner is too narrow for a frame round it.
+    final mark = _down
+        ? t.textMuted
+        : _hover
+            ? t.textPrimary
+            : t.textSecondary;
+    return LumitTooltip(
+      message: l10n.menuAddMarkerAtPlayhead,
+      action: 'marker.add',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() {
+          _hover = false;
+          _down = false;
+        }),
+        child: GestureDetector(
+          key: const ValueKey('tl-marker-bin'),
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _down = true),
+          onTapCancel: () => setState(() => _down = false),
+          onTap: () {
+            setState(() => _down = false);
+            addMarkerFrb(widget.comp, frame: widget.playhead.value);
+            widget.onAdded();
+          },
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: SizedBox(
+                width: CompMarkerBin.width,
+                height: CompMarkerBin.height,
+                child: CustomPaint(painter: _MarkerBinPainter(fill: mark)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The bin's tag: After Effects' marker shape, square-shouldered and pointing
+/// down at the time it would mark, filling the box it is given.
+class _MarkerBinPainter extends CustomPainter {
+  final Color fill;
+
+  const _MarkerBinPainter({required this.fill});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    // The sides run straight for most of the height, then turn in to the
+    // point, so it reads as a tag rather than an arrow.
+    final shoulder = h * 0.62;
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, 0)
+        ..lineTo(w, 0)
+        ..lineTo(w, shoulder)
+        ..lineTo(w / 2, h)
+        ..lineTo(0, shoulder)
+        ..close(),
+      Paint()
+        ..color = fill
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MarkerBinPainter old) => old.fill != fill;
+}
+
 class _MarkerFlagPainter extends CustomPainter {
   final Color fill;
   final bool dot;
