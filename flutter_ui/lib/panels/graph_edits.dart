@@ -147,7 +147,11 @@ BridgeScalar keptUnderExpression(BridgeScalar was, BridgeScalar next) =>
       _ => next,
     };
 
-void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
+/// [replace] writes each edit over an expression rather than under it, and to
+/// its own row alone: the expression editor's, whose keys or number take the
+/// expression off.
+void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits,
+    {bool replace = false}) {
   // Transform channels, grouped by layer.
   final transforms = <String,
       (LayerReference, List<BridgeTransformProp>, List<BridgeScalar>)>{};
@@ -157,8 +161,9 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   // one layer go in the one write.
   final shapes = <String,
       (LayerReference, List<(String, ShapeValue, int, BridgeScalar)>)>{};
-  withLinkedPartners(edits).forEach((channel, edited) {
-    final next = keptUnderExpression(channel.scalar, edited);
+  (replace ? edits : withLinkedPartners(edits)).forEach((channel, edited) {
+    final next =
+        replace ? edited : keptUnderExpression(channel.scalar, edited);
     final layerId = channel.entry.layer.internallayerId.toString();
     if (channel.prop != null) {
       final slot = transforms[layerId] ??= (channel.entry.layer, [], []);

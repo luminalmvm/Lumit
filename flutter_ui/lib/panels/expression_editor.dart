@@ -479,7 +479,7 @@ class ExpressionLane extends StatelessWidget {
                     row: channel.expressionRow,
                     decimals: expressionDecimals(channel),
                     onCommit: (next) {
-                      commitChannelEdits({channel: next});
+                      commitChannelEdits({channel: next}, replace: true);
                       onChanged();
                     },
                   );
