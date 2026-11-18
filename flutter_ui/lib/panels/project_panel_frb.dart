@@ -1130,12 +1130,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       child: DragTarget<TemplateDragData>(
         onAcceptWithDetails: (d) => _bringTemplate(d.data.path),
         builder: (context, templates, _) => Container(
-        foregroundDecoration: !_dropHover && templates.isEmpty
-            ? null
-            : BoxDecoration(
-                border: Border.all(color: t.accent, width: 1.5),
-                color: t.accent.withValues(alpha: 0.1),
-              ),
+        // Always a decoration, only its look changing: one that appears adds
+        // a box above the list, which rebuilds it and scrolls it to the top.
+        foregroundDecoration: BoxDecoration(
+          border: !_dropHover && templates.isEmpty
+              ? null
+              : Border.all(color: t.accent, width: 1.5),
+          color: !_dropHover && templates.isEmpty
+              ? null
+              : t.accent.withValues(alpha: 0.1),
+        ),
         child: LayoutBuilder(
           builder: (context, box) => _build(context, box.maxWidth, box.maxHeight),
         ),
