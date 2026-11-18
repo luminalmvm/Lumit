@@ -41388,6 +41388,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeScalar_Expression(
           dco_decode_String(raw[1]),
           dco_decode_bridge_expression_language(raw[2]),
+          dco_decode_opt_list_bridge_keyframe(raw[3]),
         );
       default:
         throw Exception("unreachable");
@@ -45572,6 +45573,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   List<BridgeFrameSpan>? dco_decode_opt_list_bridge_frame_span(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_bridge_frame_span(raw);
+  }
+
+  @protected
+  List<BridgeKeyframe>? dco_decode_opt_list_bridge_keyframe(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_bridge_keyframe(raw);
   }
 
   @protected
@@ -52166,7 +52173,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case 2:
         var var_field0 = sse_decode_String(deserializer);
         var var_field1 = sse_decode_bridge_expression_language(deserializer);
-        return BridgeScalar_Expression(var_field0, var_field1);
+        var var_field2 = sse_decode_opt_list_bridge_keyframe(deserializer);
+        return BridgeScalar_Expression(var_field0, var_field1, var_field2);
       default:
         throw UnimplementedError('');
     }
@@ -58129,6 +58137,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  List<BridgeKeyframe>? sse_decode_opt_list_bridge_keyframe(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_bridge_keyframe(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   List<BridgeScenePart>? sse_decode_opt_list_bridge_scene_part(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -63515,10 +63535,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case BridgeScalar_Keyframed(field0: final field0):
         sse_encode_i_32(1, serializer);
         sse_encode_list_bridge_keyframe(field0, serializer);
-      case BridgeScalar_Expression(field0: final field0, field1: final field1):
+      case BridgeScalar_Expression(
+          field0: final field0,
+          field1: final field1,
+          field2: final field2
+        ):
         sse_encode_i_32(2, serializer);
         sse_encode_String(field0, serializer);
         sse_encode_bridge_expression_language(field1, serializer);
+        sse_encode_opt_list_bridge_keyframe(field2, serializer);
     }
   }
 
@@ -68255,6 +68280,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_list_bridge_frame_span(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_bridge_keyframe(
+      List<BridgeKeyframe>? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_bridge_keyframe(self, serializer);
     }
   }
 

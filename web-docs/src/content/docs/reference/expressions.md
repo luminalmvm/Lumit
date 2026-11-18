@@ -129,7 +129,7 @@ Arithmetic on arrays works as it does in After Effects: `[10, 20] + [1, 2]` is `
 | Name | Is |
 | --- | --- |
 | `time` | The composition's time, in seconds. |
-| `value` | What the property held before the expression was put on it. Both halves of a point, as an array. |
+| `value` | What the property held before the expression was put on it, or the value of the keyframes under the expression at `time`. Both halves of a point, as an array. |
 | `thisComp` | The composition. |
 | `thisLayer` | The layer the expression is on. |
 | `thisProperty` | The property the expression is on. |
@@ -223,7 +223,8 @@ A transform property, an effect's row, or `thisProperty`.
 | `.smooth()` | The value, unchanged. |
 
 `valueAtTime`, `velocityAtTime`, `speedAtTime`, `key`, `nearestKey`, `wiggle` and the four
-loops can also be called with no dot in front, on the property the expression is on.
+loops can also be called with no dot in front, on the property the expression is on. Its
+keyframes are the ones [under the expression](/use/expressions/#keyframes-under-an-expression).
 
 The loop `type` is `"cycle"`, `"pingpong"`, `"offset"` or `"continue"`. With none given it
 is `"cycle"`.

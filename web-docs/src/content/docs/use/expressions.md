@@ -32,19 +32,43 @@ The row then shows the value it gives, and a click on it, or **Edit expression**
 right-click menu, opens the editor again. In the Timeline the expression is written along
 the property's lane, and a click there opens the editor across the lane.
 
-**Remove expression**, in the editor and in the row's right-click menu, goes back to a
-plain value. The property keeps the number it was showing. **Convert to keyframes**, beside
-it, puts a keyframe on every frame of the layer in place of the expression, each holding
-the number it came to. The same menu lists
+`Alt`+click on a row's stopwatch opens the editor too, on a Transform row, an effect
+parameter of one number and the [Retime](/use/retime/#retime-on-a-layer) row. A row with
+several axes asks which axis first.
+
+**Remove expression**, in the editor and in the row's right-click menu, takes the
+expression off. The property keeps the number it was showing, or goes back to the
+[keyframes under the expression](#keyframes-under-an-expression). **Convert to keyframes**,
+beside it, puts a keyframe on every frame of the layer in place of the expression and any
+keyframes under it, each holding the number it came to. The same menu lists
 **JavaScript** and **Rhai**, with the expression's language marked.
 
 **Animation ▸ Add expression**, `Alt+Shift+=`, opens the same editor for the property rows
-selected in the Timeline, and puts the expression on every one of them, in place of what
-each held. A mask's **Path** row is left out.
+selected in the Timeline, and puts the expression on every one of them. A mask's **Path**
+row is left out.
 
-Transform properties and effect parameters both take one. An effect's point takes one on
-each half, and is then drawn as two rows. On a row with several axes, **Add expression ▸**
-names the axis. A colour does not yet, and the menu does not offer it there.
+Transform properties, effect parameters and a layer's Retime take one. An effect's point
+takes one on each half, and is then drawn as two rows. On a row with several axes,
+**Add expression ▸** names the axis. A linked Scale takes one expression on both axes. A
+colour does not yet, and the menu does not offer it there.
+
+## Keyframes under an expression
+
+An expression put on a keyframed property keeps the keyframes under it.
+
+- A JavaScript expression reads them: `value` is their value at `time`, and `valueAtTime`,
+  `numKeys`, `key`, `nearestKey`, `velocity`, `speed`, `wiggle` and the loops work from
+  them. `loopOut("cycle")` repeats them after the last. A Rhai expression does not read
+  them.
+- In the Timeline the keyframes stay on the row's lane, and the expression is written on an
+  **Expression** line under the row. A click on that line's lane opens the editor.
+- The keyframes drag along the lane and take `F9` as any others do.
+- On a row with an expression, the stopwatch and the keyframe button write keyframes under
+  it. Turning the stopwatch off removes them and leaves the expression.
+- **Remove expression** brings the keyframes back as the property's animation. **Reset**
+  replaces the expression and its keyframes.
+
+See [Looping keyframes](/tutorials/looping-keyframes/).
 
 ## Follow another property
 
@@ -119,7 +143,7 @@ on arrays adds and scales them as it does in After Effects.
 | **A layer** | `thisLayer`, or one from `thisComp.layer(…)` — `.name`, `.index`, `.inPoint`, `.outPoint`, `.startTime`, `.hasParent`, `.parent`, `.transform`, `.position`, `.anchorPoint`, `.scale`, `.rotation`, `.xRotation`, `.yRotation`, `.zRotation`, `.orientation`, `.opacity`, `.effect("Name")`, `.sourceRectAtTime(t)`, and a camera's `.pointOfInterest` and `.zoom` |
 | **3D** | `toComp(p, t)`, `fromComp(p, t)`, `toWorld(p, t)`, `fromWorld(p, t)`, `toCompVec(v, t)`, `fromCompVec(v, t)`, `toWorldVec(v, t)`, `fromWorldVec(v, t)`, `fromCompToSurface(p, t)` on a layer |
 | **An effect's row** | `effect("Name")("Row")` — `.value`, `.valueAtTime(t)`, `.numKeys`, `.key(n)`, `.nearestKey(t)`, `.velocity`, `.speed`, `.wiggle(…)`, `.loopIn(…)`, `.loopOut(…)` |
-| **Motion** | `wiggle(freq, amp, octaves, amp_mult, t)`, `valueAtTime(t)`, `posterizeTime(fps)` |
+| **Motion** | `wiggle(freq, amp, octaves, amp_mult, t)`, `valueAtTime(t)`, `loopIn(…)`, `loopOut(…)`, `key(n)`, `nearestKey(t)`, `posterizeTime(fps)` |
 | **Random** | `seedRandom(seed, timeless)`, `random()`, `gaussRandom()`, `noise()` |
 | **Interpolation** | `linear`, `ease`, `easeIn`, `easeOut`, `clamp` |
 | **Vectors** | `add`, `sub`, `mul`, `div`, `length`, `normalize`, `dot`, `cross`, `lookAt` |
@@ -137,16 +161,17 @@ wiggle(3, 20)                              // wander twenty either side, three t
 value + [effect("Shake")("Amount"), 0]     // push a position sideways by a slider
 seedRandom(index, true); random(0, 360)    // one fixed angle for each layer
 thisComp.layer("Marker").toComp([0, 0, 0]) // on Position X and Y, pin a 2D layer to a 3D null
+loopOut("cycle")                           // repeat the keyframes under the expression
 ```
 
-- **`value`** is the number the property held when the expression was put on it. On half
-  of a combined point, a transform's or an effect's, it is the whole point. On a separated
-  row it is that row's number. A list the expression answers with gives each half its own
-  number. One saved by an older Lumit reads one number, and a list gives every half its
-  first.
-- **A property holds keyframes or an expression, not both.** `loopOut()` repeats another
-  row's keyframes, as in `effect("Shake")("Amount").loopOut()`, and returns `value` on the
-  property it is written on.
+- **`value`** is the number the property held when the expression was put on it, or the
+  value of the keyframes under it at `time`. On half of a combined point, a transform's or
+  an effect's, it is the whole point. On a separated row it is that row's number. A list
+  the expression answers with gives each half its own number. One saved by an older Lumit
+  reads one number, and a list gives every half its first.
+- **`loopOut()` and `loopIn()`** repeat the keyframes under the expression, or another
+  row's, as in `effect("Shake")("Amount").loopOut()`. With fewer than two keyframes they
+  return `value`.
 - **`wiggle` and `random` are not After Effects' own numbers.** The same settings give the
   same amount of movement along a different path, and the same path on every machine.
 - **`sourceRectAtTime`** measures as [Measure](/effects/drivers/measure/) does, in the
@@ -219,12 +244,14 @@ back to following.
 
 ## In the graph editor
 
-An expression draws as a curve like anything else, sampled across the view. It has no
-keyframes to take hold of — to change the shape, change the script.
+An expression draws as a curve like anything else, sampled across the view. Keyframes
+under it are still there to select, move and ease. With none, the script is the only way
+to change the shape.
 
 ## Related
 
 - [Expression reference](/reference/expressions/)
+- [Looping keyframes](/tutorials/looping-keyframes/)
 - [Keyframes](/use/keyframes/)
 - [Custom controls](/effects/controls/custom-controls/)
 - [The graph editor](/use/graph-editor/)

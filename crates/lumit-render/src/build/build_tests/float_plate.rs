@@ -131,6 +131,7 @@ fn float_layer_comp(
         shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
+        blend: None,
     };
     (comp, layer.id, lp)
 }

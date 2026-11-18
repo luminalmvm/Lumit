@@ -68,7 +68,7 @@ pub struct RadialBlur {
     #[choice(
         label = "Edges",
         options = *crate::fx::builtins::EDGE_OPTIONS,
-        // Repeat: full-frame game footage never darkens along the border.
+        // Edge repeat: full-frame game footage never darkens along the border.
         default = 1
     )]
     pub edge: u32,

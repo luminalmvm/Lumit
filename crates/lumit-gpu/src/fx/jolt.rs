@@ -73,16 +73,7 @@ impl FxEngine {
                 _pad0: 0.0,
                 field: [[0.0; 4]; 3],
             };
-            self.dispatch(
-                ctx,
-                &self.blur,
-                from,
-                from,
-                &to,
-                w,
-                h,
-                bytemuck::bytes_of(&p),
-            );
+            self.gaussian_pass(ctx, from, from, None, &to, w, h, &p);
             if let Some(spent) = blurred.replace(to) {
                 ctx.recycle(spent);
             }

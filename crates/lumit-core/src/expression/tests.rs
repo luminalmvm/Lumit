@@ -908,3 +908,8 @@ fn a_point_crosses_a_layers_spaces_and_back_in_both_languages() {
     assert_eq!(rhai("comp().active_camera.point_of_interest[1]"), 540.0);
     assert_eq!(rhai("layer(\"Card\").zoom"), -1.0, "a card has no zoom");
 }
+
+/// Keys under an expression: a keyed property keeps its keys when an
+/// expression goes on, `value` reads them at the expression's time,
+/// `loopOut` repeats them, and Remove expression writes them back as keys.
+mod keys_under_expression;

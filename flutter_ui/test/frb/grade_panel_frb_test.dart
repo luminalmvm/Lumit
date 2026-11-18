@@ -49,6 +49,11 @@ void main() {
     expect(seq.getEffects(), isEmpty,
         reason: 'the Sequence layer itself is left alone');
 
+    await tester.tap(find.byKey(const ValueKey('grade-wheel-lift-0')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(clipEffects(), ['correction'],
+        reason: 'a click on a number keeps the drag before it');
+
     project.undo();
     expect(clipEffects(), isEmpty,
         reason: 'the drag and the node it added are one undo step');

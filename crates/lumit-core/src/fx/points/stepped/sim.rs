@@ -45,6 +45,8 @@ pub const LOOK_ROWS: &[&str] = &[
     "mode",
     "feather",
     "sprite_layer",
+    "sprite_shape",
+    "sprite_star_points",
     "streak_length",
     "particle_blend",
     "mix",

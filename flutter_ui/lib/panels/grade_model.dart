@@ -425,7 +425,10 @@ mixin _GradeModel on State<GradePanelFrb> {
   /// A gesture that ends with nothing written: the preview it staged goes,
   /// and the Viewer is asked for the document again. A node it added to
   /// preview on is undone with its step, so nothing is left in the history.
+  /// With no gesture open there is nothing to take back: a click on a number
+  /// cancels a drag that never began, and must not undo the step before it.
   void _touchCancel() {
+    if (_touches == 0) return;
     _editor.clear();
     _touchEnd();
     if (_touches == 0 && _touchAdded) {
@@ -1058,7 +1061,8 @@ mixin _GradeModel on State<GradePanelFrb> {
       removeExpression: expression == null
           ? null
           : () => write(
-              (_) => BridgeEffectValue.float(BridgeScalar.static_(
+              (_) => BridgeEffectValue.float(expressionTakenOff(
+                  expression,
                   sampleScalarWithContext(
                       scalar: expression,
                       time: timeOfFrame(comp, ui.playheadFrame.value),

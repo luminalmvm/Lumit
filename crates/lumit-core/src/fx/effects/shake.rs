@@ -510,7 +510,7 @@ pub struct Shake {
     pub scale: f32,
 
     /// How the resample treats the border the wobble reveals (P3).
-    /// Default Mirror (owner, 2026-07-19; was Repeat): the reflected border
+    /// Default Mirror repeat (owner, 2026-07-19; was Edge repeat): the reflected border
     /// reads more naturally under the shake's own motion blur than a smeared
     /// repeat edge. What the kernel reads is [`Shake::DERIVED_EDGE`], not this
     /// row: a project saved before FX-11 carries an `auto_scale` bool instead.
@@ -521,7 +521,7 @@ pub struct Shake {
     /// follows Edges.
     #[choice(
         label = "Y edges",
-        options = ["Same", "Transparent", "Repeat", "Mirror"],
+        options = ["Same", "None", "Edge repeat", "Mirror repeat"],
         default = 0
     )]
     pub y_edge: u32,

@@ -2105,6 +2105,13 @@ impl HeadlessRenderer {
         self.gpu.reclaim();
     }
 
+    /// Whether this renderer draws on a CPU rasteriser (WARP, lavapipe)
+    /// rather than on a graphics card.
+    #[must_use]
+    pub fn software(&self) -> bool {
+        self.gpu.software
+    }
+
     /// Has the graphics device under this renderer been lost?
     ///
     /// Nothing here can be mended once it is true — every texture, pipeline and

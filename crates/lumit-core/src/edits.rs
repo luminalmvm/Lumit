@@ -1277,20 +1277,40 @@ pub fn transform_ops(
     animation: lumit_core::anim::Animation,
     language: Option<lumit_core::expression::script::Language>,
 ) -> Vec<Op> {
+    transform_ops_with_keys(comp, layer, prop, animation, language, None)
+}
+
+/// [`transform_ops`], with the keys to keep under an expression that was
+/// already on the property (`None` leaves the ones it has).
+pub fn transform_ops_with_keys(
+    comp: Uuid,
+    layer: &Layer,
+    prop: lumit_core::model::TransformProp,
+    animation: lumit_core::anim::Animation,
+    language: Option<lumit_core::expression::script::Language>,
+    keys: Option<Vec<lumit_core::anim::Keyframe>>,
+) -> Vec<Op> {
     use lumit_core::expression::script::SLOT_KEY;
 
+    let next = layer.prop(prop).map(|held| {
+        let was_expression = matches!(held.animation, lumit_core::anim::Animation::Expression(_));
+        let mut next = held.clone();
+        next.set_animation(animation.clone());
+        if let Some(language) = language {
+            next.set_expression_language(language);
+        }
+        if let (true, Some(keys)) = (was_expression, &keys) {
+            next.set_keys_under_expression(keys);
+        }
+        next
+    });
     let mut ops = vec![Op::SetTransformProperty {
         comp,
         layer: layer.id,
         prop,
-        animation: animation.clone(),
+        animation: next.as_ref().map_or(animation, |n| n.animation.clone()),
     }];
-    if let Some(held) = layer.prop(prop) {
-        let mut next = held.clone();
-        next.set_animation(animation);
-        if let Some(language) = language {
-            next.set_expression_language(language);
-        }
+    if let (Some(held), Some(mut next)) = (layer.prop(prop), next) {
         // A new expression on half of a point reads the whole point, as one
         // imported from After Effects does.
         if !held.extra.contains_key(SLOT_KEY) {
