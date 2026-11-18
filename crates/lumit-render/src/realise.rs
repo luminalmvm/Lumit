@@ -852,7 +852,13 @@ impl Realiser<'_> {
         layers: &[CompLayerDraw],
     ) -> wgpu::Texture {
         let Some(key) = key else {
-            return self.realise(camera, width, height, background, layers);
+            let made = self.realise(camera, width, height, background, layers);
+            // Unnamed, so made again every time it is asked for (a rebuild at
+            // another moment, as Time loop's next lap): what it made on the way
+            // is let go now, or a comp with many such Precomps holds every one
+            // of their working pictures until the whole frame is submitted.
+            self.ctx.flush();
+            return made;
         };
         let key = crate::fxops::nested_texture_key(key, self.render_scale, self.samples);
         // A measured walk (docs/13 §7.1) wants a number on every row inside
@@ -864,6 +870,12 @@ impl Realiser<'_> {
             }
         }
         let made = self.realise(camera, width, height, background, layers);
+        // Handed to the card now rather than with the rest of the frame: a
+        // frame of heavy Precomps recorded as one batch is one job seconds long,
+        // and Windows resets a card whose job runs past its limit (TDR), taking
+        // the renderer with it. Each Precomp is a job of its own instead, and
+        // the card is kept close behind so what it finishes with is freed.
+        self.ctx.flush_paced();
         // A frame asked to stop may have drawn this short.
         if !crate::cancel::requested() {
             self.fx_cache.borrow_mut().put_nested(key, made.clone());

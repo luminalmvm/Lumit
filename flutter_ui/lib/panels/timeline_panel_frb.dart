@@ -3688,8 +3688,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Layers the last `U` or `UU` opened. A fresh `U` on them shuts them again,
   /// as in After Effects. A layer leaves the set when its own twirl turns or
-  /// another reveal opens it.
-  final Set<String> _cycleOpened = {};
+  /// another reveal opens it. Held with the folds, as [_open] is, so a
+  /// workspace change between two presses does not forget it.
+  late final Set<String> _cycleOpened = _folds.revealCycle;
 
   /// One press of the reveal key: `U` opens the **keyed rows**, `UU` opens
   /// every modified property whole, `UUU` shuts the layer again. A `U` after

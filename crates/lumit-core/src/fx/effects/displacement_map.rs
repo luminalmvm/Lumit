@@ -88,7 +88,7 @@ pub struct DisplacementMap {
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub matte_placement: u32,
 
-    /// What a sample pushed off the frame reads. **Repeat by default**, which is
+    /// What a sample pushed off the frame reads. **Edge repeat by default**, which is
     /// AE's behaviour with "Wrap Pixels Around" off and the one that keeps a
     /// rippled frame full rather than eating holes in its border.
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 1)]

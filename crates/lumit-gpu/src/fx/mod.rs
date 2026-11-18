@@ -28,6 +28,7 @@ mod engine;
 pub mod environment;
 /// Film's passes, built on first use.
 pub mod film;
+mod gaussian;
 pub mod generate;
 /// CDL and the colour warper, built on first use.
 pub mod grade_fx;
@@ -610,6 +611,24 @@ impl FxEngine {
         h: u32,
         params: &[u8],
     ) {
+        let groups = [w.div_ceil(8), h.div_ceil(8)];
+        self.dispatch_groups(ctx, pipeline, src, orig, matte, dst, groups, params);
+    }
+
+    /// [`Self::dispatch_matted`] with the workgroup counts given, for a kernel
+    /// whose workgroup is not the usual 8×8 square.
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_groups(
+        &self,
+        ctx: &GpuContext,
+        pipeline: &wgpu::ComputePipeline,
+        src: &wgpu::Texture,
+        orig: &wgpu::Texture,
+        matte: Option<&wgpu::Texture>,
+        dst: &wgpu::Texture,
+        groups: [u32; 2],
+        params: &[u8],
+    ) {
         use wgpu::util::DeviceExt;
         let ubuf = ctx
             .device
@@ -660,7 +679,7 @@ impl FxEngine {
             });
             cpass.set_pipeline(pipeline);
             cpass.set_bind_group(0, &bind, &[]);
-            cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+            cpass.dispatch_workgroups(groups[0], groups[1], 1);
         }
         drop(enc);
     }

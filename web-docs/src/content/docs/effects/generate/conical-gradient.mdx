@@ -18,7 +18,7 @@ a radial gradient. Where no circle between the two reaches, the result is clear.
 | **Start radius** | Slider | 0 to 2000; any value by typing | 0 | Pixels at composition size |
 | **End centre** | Point | Any position | 960, 540 | Pixels at composition size |
 | **End radius** | Slider | 0 to 4000; any value by typing | 800 | Pixels at composition size |
-| **Spread** | Dropdown | Pad · Repeat · Mirror | Pad | - |
+| **Spread** | Dropdown | Edge repeat · Repeat · Mirror repeat | Edge repeat | - |
 | **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
 | **Scatter** | Slider | 0 to 100; any value by typing | 0 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
@@ -31,8 +31,8 @@ a radial gradient. Where no circle between the two reaches, the result is clear.
 
 - **Start centre** and **Start radius**: the circle the ramp starts from.
 - **End centre** and **End radius**: the circle the ramp ends on.
-- **Spread**: past the ends of the ramp, **Pad** holds the end colours, **Repeat** starts
-  the ramp again and **Mirror** runs it back.
+- **Spread**: past the ends of the ramp, **Edge repeat** holds the end colours, **Repeat**
+  starts the ramp again and **Mirror repeat** runs it back.
 - **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
   the whole of the layer's picture.
 - **Scatter**: how far each pixel's place on the ramp is moved at random, as a per cent of

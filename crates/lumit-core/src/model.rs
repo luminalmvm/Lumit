@@ -3431,8 +3431,18 @@ impl Layer {
     ///
     /// The one place the mapping is decided, so the render plan and the frame
     /// cache key can never disagree about which source frame a layer shows.
+    ///
+    /// An expression on the map runs with `time` the comp's time, and reads
+    /// the keys kept under it (`value`, `loopOut`, `valueAtTime`): a looped
+    /// retime is `loopOut("cycle")`. It has no comp or layer to ask about,
+    /// because this is asked from places that hold only the layer.
     pub fn source_time_at(&self, lt: f64) -> f64 {
         match &self.retime {
+            Some(retime) if matches!(retime.animation, crate::anim::Animation::Expression(_)) => {
+                let mut at = crate::expression::ExpressionContext::detached();
+                at.comp_time = lt + self.start_offset.0.to_f64();
+                retime.value_at_with_context(lt, std::sync::Arc::new(at))
+            }
             Some(retime) => retime.value_at(lt),
             None => lt,
         }

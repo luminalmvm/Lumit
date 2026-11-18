@@ -141,7 +141,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   @override
   void initState() {
     super.initState();
-    HardwareKeyboard.instance.addHandler(_onKey);
+    widget.uiState.penKeys.add(_onKey);
     _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
   }
 
@@ -262,7 +262,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_onKey);
+    widget.uiState.penKeys.remove(_onKey);
     _escapeRelease?.call();
     _escapeRelease = null;
     super.dispose();
@@ -279,26 +279,46 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// sail past every point placed and undo whatever the user had done *before*
   /// picking up the Pen, which is never what was meant. It goes back to the
   /// document's own undo the moment the path is empty.
+  ///
+  /// The shell asks this first ([LumitUiState.penKeys]), because a handler on
+  /// [HardwareKeyboard] cannot stop the shell's own: the same press then also
+  /// undid the document, and `Backspace` deleted the selected layer. Redo is
+  /// taken too, and a held key's repeats are, so the press that empties the
+  /// path does not go on to the document while the key is still down.
   bool _onKey(KeyEvent event) {
+    if (event is KeyDownEvent) _held = null;
+    if (event is KeyRepeatEvent && event.logicalKey == _held) return true;
     if (!widget.active || !_isPen || _draft.isEmpty) return false;
     if (event is! KeyDownEvent) return false;
-    final undo = event.logicalKey == LogicalKeyboardKey.keyZ &&
-        (HardwareKeyboard.instance.isControlPressed ||
-            HardwareKeyboard.instance.isMetaPressed);
-    if (undo || event.logicalKey == LogicalKeyboardKey.backspace) {
+    final key = event.logicalKey;
+    final keys = HardwareKeyboard.instance;
+    final command = keys.isControlPressed || keys.isMetaPressed;
+    final undo = key == LogicalKeyboardKey.keyZ && command;
+    final redo = (undo && keys.isShiftPressed) ||
+        (key == LogicalKeyboardKey.keyY && command);
+    if (redo) {
+      _held = key;
+      return true;
+    }
+    if (undo || key == LogicalKeyboardKey.backspace) {
+      _held = key;
       // A carried path gives back the points added to it, then lets go.
       setState(() => _draft.vertices.length == _carrying?.had
           ? _clearDraft()
           : _draft = _draft.withoutLast());
       return true;
     }
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _held = key;
       _finishOpen();
       return true;
     }
     return false;
   }
+
+  /// The key whose press the Pen took last, so its repeats are the Pen's too.
+  LogicalKeyboardKey? _held;
 
   /// Whether a click where the pointer is would **close** the path.
   ///

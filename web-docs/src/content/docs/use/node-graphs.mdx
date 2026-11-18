@@ -120,9 +120,10 @@ canvas have the [right-click menus](/use/nodes/#boxes) they have there, and
 [ties and reroute points](/use/nodes/#ties-and-reroute-points) work the same way.
 
 Each box carries a tick and a twirl. The tick bypasses the box, which then hands on the
-picture it was given. The twirl opens the box: it draws the rows Effect controls would draw
-for the same effect, each with its own control and the parameter's socket beside it. A row
-whose socket is wired shows its name alone. A new box arrives open, and a box in a saved
+picture it was given. The twirl opens the box: it lists every row Effect controls lists for
+the same effect, in the same order, each with its own control and the parameter's socket
+beside it. A group's rows sit under its heading, and no group is shut. A row whose socket
+is wired shows its name alone. A new box arrives open, and a box in a saved
 project keeps the state it was saved with. The Node panel shows the same rows for the
 picked box.
 
@@ -199,7 +200,7 @@ The **Node graph** effect applies a graph to a layer. Add it from the layer's co
 where every node graph in the project is listed under **Node graphs**.
 
 Its card is headed by the graph's name and carries an **Open graph** button, then the graph's
-Input rows, then **Mix** and the **Matte** row. The layer's picture at that point in the
+Input rows, then the **Compositing** fold. The layer's picture at that point in the
 stack is the graph's first picture Input, and the graph's Output is what the effect hands
 on.
 

@@ -39,7 +39,7 @@ two pictures and sets **Completion**, **Side** and **Fade** itself.
 | **Split colours** | Checkbox | On or off | Off | - |
 | **Crossfade** | Slider | 0 to 100 | 0 | Per cent |
 | **Fade** | Checkbox | On or off | On | - |
-| **Edges** | Dropdown | Transparent · Repeat · Mirror | Transparent | - |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | None | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -76,7 +76,8 @@ In the Effect Controls panel:
 - **Crossfade** is how much of the move, about its middle, the two pictures fade across.
   At 0 there is no fade.
 - **Fade** has this picture fade across the Crossfade.
-- **Edges** sets what shows where a picture has moved away: Transparent, Repeat or Mirror.
+- **Edges** sets what shows where a picture has moved away. **None** leaves it clear,
+  **Edge repeat** holds the border pixel and **Mirror repeat** reflects the picture back.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
@@ -95,7 +96,7 @@ leaves **Completion**, **Side** and **Fade** as they are.
 - **Cover left** and **Cover right**: the incoming picture slides in over the outgoing one,
   which stays still.
 - **Whip left**, **Whip right**, **Whip up** and **Whip down**: a push on the Sharp ease
-  with **Smear** at 60, mirrored edges and a short crossfade.
+  with **Smear** at 60, **Edges** on Mirror repeat and a short crossfade.
 - **RGB whip** is Whip left with **Split colours** on.
 - **Zoom in** and **Zoom out**: the outgoing picture grows to 400%, or shrinks to 25%, and
   the incoming one arrives the same way.

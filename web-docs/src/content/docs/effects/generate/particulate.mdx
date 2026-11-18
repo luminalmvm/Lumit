@@ -109,6 +109,8 @@ A particle system.
 | **Turn** | Slider | -360 to 360; any value by typing | 0 | Degrees |
 | **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Sprite shape** | Dropdown | Layer · Circle · Square · Triangle · Star · Cloudy | Layer | - |
+| **Star points** | Slider, whole numbers | 4 to 8 | 5 | - |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
 | **Streak length** | Slider | 0 to 0.1; higher | 0.02 | Seconds |
 | **Particle blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -135,9 +137,13 @@ In the Effect Controls panel:
 - **Flock** groups **Separation**, **Alignment**, **Cohesion**, **Flock radius**.
 - **Sparks** groups **Sparks**, **Sparks from**, **Spark speed**, **Spark inherit**, **Spark life**, **Spark size**.
 - **Trails** groups **Persistence**, **Zoom**, **Turn**.
-- **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
+- **Render** groups **Mode**, **Feather**, **Sprite shape**, **Star points**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
+- **Sprite layer** is editable while **Sprite shape** is set to Layer.
+- **Sprite shape** is editable while **Mode** is set to Sprite.
+- **Star points** is editable while **Mode** is set to Sprite.
+- **Star points** is editable while **Sprite shape** is set to Star.
 - **Streak length** is editable while **Mode** is set to Streak.
 - **Emitter layer** is editable while **Shape** is set to Layer.
 - **Density layer** is editable while **Shape** is anything but Layer.
@@ -380,9 +386,14 @@ The **Render** group, how they are drawn:
 - **Mode**: Disc, Sprite or Streak. In the scene, motion blur draws a disc across the open
   shutter. Sprites, model copies and the layer's and camera's own moves do not blur.
 - **Feather**: how soft a disc's edge is. Disc mode only.
-- **Sprite layer**: the layer stamped at each particle. Sprite mode only, and discs are
-  drawn until you set it. In the scene, a Model layer as the Sprite layer draws its model at
-  up to 20,000 particles, sized, turned and tinted by each.
+- **Sprite shape**: what is stamped at each particle. **Layer** is the Sprite layer's
+  picture. **Circle**, **Square**, **Triangle**, **Star** and **Cloudy** are ready-made
+  white pictures, tinted by the particle's colour as a layer's picture is. Cloudy is a soft
+  puff. Sprite mode only.
+- **Star points**: how many points a Star has.
+- **Sprite layer**: the layer stamped at each particle while Sprite shape is Layer. Sprite
+  mode only, and discs are drawn until you set it. In the scene, a Model layer as the
+  Sprite layer draws its model at up to 20,000 particles, sized, turned and tinted by each.
 - **Streak length**: how long the tail is, in seconds.
 - **Particle blend**: how particles combine with each other where they overlap, by the layer
   blend modes. They then go over the picture together, as Normal particles do. In the

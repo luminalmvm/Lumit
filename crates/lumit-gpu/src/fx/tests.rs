@@ -68,7 +68,9 @@ fn wgsl_blur_matches_the_cpu_oracle() {
         return;
     };
     let fx = ctx.fx();
-    let (w, h) = (32u32, 24u32);
+    // Wider than the kernel's 128-pixel tile, and rows that leave a part
+    // group of four, so the tiles' edges are held to the oracle too.
+    let (w, h) = (150u32, 27u32);
     // Corpus (docs/08 §1.6): a diagonal gradient, a hard alpha edge down
     // the middle, and an HDR spike.
     let mut img = vec![0.0f32; (w * h * 4) as usize];
@@ -87,7 +89,8 @@ fn wgsl_blur_matches_the_cpu_oracle() {
     img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 1.0]);
 
     for edge in [0u32, 1, 2] {
-        for (radius, mix) in [(3.0f32, 1.0f32), (7.5, 0.6), (0.0, 1.0)] {
+        // Radius 40 reads more of the window than the kernel holds at once.
+        for (radius, mix) in [(3.0f32, 1.0f32), (7.5, 0.6), (0.0, 1.0), (40.0, 1.0)] {
             // fp16 quantise the input exactly as the GPU sees it, so the
             // comparison isolates the blur maths from upload rounding.
             let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();

@@ -43,6 +43,7 @@ import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
+import 'keyframe_controls_frb.dart' show asKeyed, keysOfScalar, withKeys;
 
 /// One row of a layer's fold-out.
 sealed class LayerFoldRow {
@@ -77,6 +78,11 @@ final class FoldGroupRow extends LayerFoldRow {
   /// Whether the Audio heading's waveform lane is open, for the tick on its
   /// menu. Null on every other heading.
   final bool? waveform;
+
+  /// The rows a shut group of an effect's rows holds, so its lane can draw
+  /// their keys as a shut layer's bar does ([keysOfRows]). Empty everywhere
+  /// else.
+  final List<LayerFoldRow> inside;
   const FoldGroupRow({
     required this.path,
     required this.label,
@@ -86,6 +92,7 @@ final class FoldGroupRow extends LayerFoldRow {
     this.named = false,
     this.shown,
     this.waveform,
+    this.inside = const [],
   }) : super(depth);
 }
 
@@ -912,6 +919,15 @@ final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
 
+/// The expression on [parent], on a line of its own under a row whose keys it
+/// is written over: the lane shows the text, and pressing it opens it.
+final class FoldExpressionRow extends LayerFoldRow {
+  const FoldExpressionRow(this.parent, {required int depth}) : super(depth);
+
+  /// The row the expression is on.
+  final LayerFoldRow parent;
+}
+
 /// The channel a multi-channel effect value is read by: the first keyed one,
 /// else the first with an expression, else the first.
 BridgeScalar leadScalar(List<BridgeScalar> channels) =>
@@ -924,13 +940,10 @@ BridgeScalar leadScalar(List<BridgeScalar> channels) =>
 /// empty for rows with nothing keyed. A multi-axis transform row has one key
 /// for each time any of its axes does ([rowKeysOf]).
 List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
-      FoldTransformRow(:final group, :final transform) =>
-        rowKeysOf([for (final axis in group.axes) read(transform, axis.prop)]),
-      FoldRetimeRow(:final scalar) => switch (scalar) {
-          BridgeScalar_Keyframed(:final field0) => field0,
-          BridgeScalar_Static() => const [],
-          BridgeScalar_Expression() => const [],
-        },
+      // Keys kept under an expression are drawn as any others.
+      FoldTransformRow(:final group, :final transform) => rowKeysOf(
+          [for (final axis in group.axes) asKeyed(read(transform, axis.prop))]),
+      FoldRetimeRow(:final scalar) => keysOfScalar(scalar) ?? const [],
       // The Volume's keys are lane diamonds like any other property's:
       // the rubber band draws them on the wave, and the
       // Volume row's own lane drags them.
@@ -951,16 +964,14 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           _ => const [],
         },
       FoldEffectParamRow(:final value) => switch (value) {
-          BridgeEffectValue_Float(
-            field0: BridgeScalar_Keyframed(:final field0)
-          ) =>
-            field0,
+          BridgeEffectValue_Float(:final field0) =>
+            keysOfScalar(field0) ?? const [],
           // A Colour's and a Point's channels key together, from one
           // stopwatch, so the first keyed channel's times are the row's.
           BridgeEffectValue_Colour(:final field0) =>
-            rowKeysOf([field0.r, field0.g, field0.b, field0.a]),
+            rowKeysOf([field0.r, field0.g, field0.b, field0.a].map(asKeyed)),
           BridgeEffectValue_Point(:final field0) =>
-            rowKeysOf([field0.x, field0.y]),
+            rowKeysOf([field0.x, field0.y].map(asKeyed)),
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
@@ -1281,7 +1292,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       FoldShapeGroupRow() ||
       FoldShapePaintRow() =>
         true,
-      FoldWaveformRow() || FoldSettingRow() => false,
+      FoldWaveformRow() || FoldSettingRow() || FoldExpressionRow() => false,
     };
 
 /// Whether [scalar] reads other than [fresh], the value it is made with. A
@@ -1562,16 +1573,20 @@ List<BridgeKeyframe> layerKeys({
   required BridgeLayerEntry entry,
   BridgeFlowParams? flowParams,
   BridgeScalar? volumeDb,
-}) {
-  final seen = <double>{};
-  return [
-    for (final row in layerFoldRows(
+}) =>
+    keysOfRows(layerFoldRows(
       entry: entry,
       open: everyFoldPath,
       hasAudio: volumeDb != null,
       flowParams: flowParams,
       volumeDb: volumeDb,
-    ))
+    ));
+
+/// Every key on [rows], one for each instant, for a summary of them.
+List<BridgeKeyframe> keysOfRows(Iterable<LayerFoldRow> rows) {
+  final seen = <double>{};
+  return [
+    for (final row in rows)
       for (final key in laneKeysOf(row))
         // By seconds rather than by the rational itself: one instant can arrive
         // as 1/25 from one property and 2/50 from another, and both land on the
@@ -2183,8 +2198,9 @@ bool moveLaneKeys({
       for (final axis in group.axes) {
         final scalar = read(transform, axis.prop);
         // An axis with no keys, or none at these times, has nothing to move.
-        if (scalar is! BridgeScalar_Keyframed) continue;
-        final keys = scalar.field0;
+        // Keys under an expression move, and the expression stays.
+        final keys = keysOfScalar(scalar);
+        if (keys == null) continue;
         final own = {
           for (final MapEntry(key: i, value: time) in times.entries)
             if (axisKeyIndex(rowKeys, i, keys) case final j?) j: time,
@@ -2195,7 +2211,7 @@ bool moveLaneKeys({
         // sat together.
         if (next == null) return false;
         props.add(axis.prop);
-        values.add(BridgeScalar.keyframed(next));
+        values.add(withKeys(scalar, next, 0));
       }
       if (props.isEmpty) return false;
       entry.layer.setTransforms(props: props, values: values);
@@ -2237,14 +2253,15 @@ bool moveLaneKeys({
       // its own key by time: the Graph can key one channel alone.
       final rowKeys = laneKeysOf(row);
       BridgeScalar? movedChannel(BridgeScalar s) {
-        if (s is! BridgeScalar_Keyframed) return s;
+        final keys = keysOfScalar(s);
+        if (keys == null) return s;
         final own = {
           for (final MapEntry(key: i, value: time) in times.entries)
-            if (axisKeyIndex(rowKeys, i, s.field0) case final j?) j: time,
+            if (axisKeyIndex(rowKeys, i, keys) case final j?) j: time,
         };
         if (own.isEmpty) return s;
-        final next = movedBy(own, s.field0);
-        return next == null ? null : BridgeScalar.keyframed(next);
+        final next = movedBy(own, keys);
+        return next == null ? null : withKeys(s, next, 0);
       }
 
       for (final instance in stack) {
@@ -2273,12 +2290,13 @@ bool moveLaneKeys({
         }
         if (value is! BridgeEffectValue_Float) return false;
         final scalar = value.field0;
-        if (scalar is! BridgeScalar_Keyframed) return false;
-        final next = moved(scalar.field0);
+        final keys = keysOfScalar(scalar);
+        if (keys == null) return false;
+        final next = moved(keys);
         if (next == null) return false;
         instance.setValue(
           id: param.id,
-          value: BridgeEffectValue.float(BridgeScalar.keyframed(next)),
+          value: BridgeEffectValue.float(withKeys(scalar, next, 0)),
         );
         entry.layer.setEffects(effects: stack);
         return true;
@@ -2286,10 +2304,11 @@ bool moveLaneKeys({
       return false;
 
     case FoldRetimeRow(:final scalar):
-      if (scalar is! BridgeScalar_Keyframed) return false;
-      final next = moved(scalar.field0);
+      final keys = keysOfScalar(scalar);
+      if (keys == null) return false;
+      final next = moved(keys);
       if (next == null) return false;
-      entry.layer.setRetimeProperty(value: BridgeScalar.keyframed(next));
+      entry.layer.setRetimeProperty(value: withKeys(scalar, next, 0));
       return true;
 
     case FoldVolumeRow(:final scalar):
@@ -2468,6 +2487,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
+      FoldExpressionRow(:final parent) =>
+        '${foldRowPath(layerId, parent)}/expression',
       FoldSettingRow(:final setting) =>
         '${transformPath(layerId)}/${setting.name}',
       FoldAnimatorSettingRow(:final index, :final setting) =>
@@ -2574,12 +2595,13 @@ List<LayerFoldRow> groupHeaderFoldRows({
         named: fx.customName != null));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
-      for (final param in [
-        ...foldEffectParams(fx, values),
-      ]) {
-        rows.add(FoldEffectParamRow(fx, param, values[param.id],
-            depth: 2, group: group.id));
-      }
+      rows.addAll(effectFoldRows(fx, values,
+          path: path,
+          depth: 2,
+          open: open,
+          row: (param, depth) => FoldEffectParamRow(
+              fx, param, values[param.id],
+              depth: depth, group: group.id)));
     }
   }
   return rows;
@@ -2612,6 +2634,100 @@ List<BridgeParamInfo> foldEffectParams(
     for (final p in instanceParameters(fx))
       if (!meshRowHidden(fx, p) && !hidden.contains(p.id)) p,
   ];
+}
+
+/// The path of one of an effect's **groups** in the Timeline, under the
+/// effect's own [effect] path: a schema group by its place among the effect's
+/// groups, and `compositing` for the fold its Mix and Matte rows sit in.
+String effectGroupPath(String effect, String group) => '$effect/group:$group';
+
+/// An effect's rows as the Effect controls panel lays them out: each labelled
+/// group of the schema a heading with its rows under it, and the Mix and Matte
+/// rows nearly every effect ends with in a **Compositing** fold at the foot.
+///
+/// A group the schema folds shut starts shut and comes after the effect's
+/// loose rows, and Compositing starts shut after those, as in the panel; any
+/// other group starts open, where the schema has it. An open set only ever names what
+/// somebody opened, so a group that starts open is named by the path that
+/// shuts it instead ([effectGroupPath] with `:shut` after it), and
+/// [everyFoldPath], which answers yes to everything, still reads as open.
+///
+/// Blend, Invert and Channel are rows of their own in the fold, after the Mix
+/// and the Matte they go with, as in the panel ([compositingRowsOf]).
+List<LayerFoldRow> effectFoldRows(
+  BridgeEffectInstanceInfo fx,
+  Map<String, BridgeEffectValue> values, {
+  required String path,
+  required int depth,
+  required Set<String> open,
+  required FoldEffectParamRow Function(BridgeParamInfo param, int depth) row,
+}) {
+  final params = foldEffectParams(fx, values);
+  final groups = cachedListParameterGroups(fx.name);
+  final groupOf = <String, int>{
+    for (var i = 0; i < groups.length; i++)
+      if (groups[i].label.isNotEmpty)
+        for (final id in groups[i].params) id: i,
+  };
+  final grouped = {
+    for (final g in groups) ...g.params,
+  };
+  // The Compositing fold's rows, by the panel's own rule.
+  final inFold = {
+    for (final p in compositingRowsOf(params, grouped)) p.id,
+  };
+  final every = identical(open, everyFoldPath);
+  final rows = <LayerFoldRow>[];
+  // The groups that start shut go after the loose rows, as in the panel, so
+  // what follows one never reads as what is inside it.
+  final tucked = <LayerFoldRow>[];
+  final headed = <int, bool>{};
+  for (final p in params) {
+    if (inFold.contains(p.id)) continue;
+    final g = groupOf[p.id];
+    if (g == null) {
+      rows.add(row(p, depth));
+      continue;
+    }
+    final startsShut = groups[g].collapsed;
+    final into = startsShut ? tucked : rows;
+    final groupOpen = headed.putIfAbsent(g, () {
+      final at = effectGroupPath(path, startsShut ? '$g' : '$g:shut');
+      final isOpen =
+          every || (startsShut ? open.contains(at) : !open.contains(at));
+      into.add(FoldGroupRow(
+          path: at,
+          label: groups[g].label,
+          open: isOpen,
+          depth: depth,
+          inside: isOpen
+              ? const []
+              : [
+                  for (final q in params)
+                    if (groupOf[q.id] == g && !inFold.contains(q.id))
+                      row(q, depth + 1),
+                ]));
+      return isOpen;
+    });
+    if (groupOpen) into.add(row(p, depth + 1));
+  }
+  rows.addAll(tucked);
+  if (inFold.isNotEmpty) {
+    final at = effectGroupPath(path, 'compositing');
+    final isOpen = open.contains(at);
+    final inside = [
+      for (final p in params)
+        if (inFold.contains(p.id)) row(p, depth + 1),
+    ];
+    rows.add(FoldGroupRow(
+        path: at,
+        label: l10n.fxFoldCompositing,
+        open: isOpen,
+        depth: depth,
+        inside: isOpen ? const [] : inside));
+    if (isOpen) rows.addAll(inside);
+  }
+  return rows;
 }
 
 /// The rows a clip's twirl shows (docs/impl/audio-timeline.md §5): a heading
@@ -2649,12 +2765,13 @@ List<LayerFoldRow> clipFoldRows({
     ));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
-      for (final param in [
-        ...foldEffectParams(fx, values),
-      ]) {
-        rows.add(FoldEffectParamRow(fx, param, values[param.id],
-            depth: 3, clip: clip.id));
-      }
+      rows.addAll(effectFoldRows(fx, values,
+          path: path,
+          depth: 3,
+          open: open,
+          row: (param, depth) => FoldEffectParamRow(
+              fx, param, values[param.id],
+              depth: depth, clip: clip.id)));
     }
   }
   return rows;
@@ -3304,12 +3421,13 @@ List<LayerFoldRow> layerFoldRows({
         ));
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
-          for (final param in [
-            ...foldEffectParams(fx, values),
-          ]) {
-            rows.add(FoldEffectParamRow(fx, param, values[param.id],
-                depth: 3, driven: driven['${fx.id}/${param.id}']));
-          }
+          rows.addAll(effectFoldRows(fx, values,
+              path: path,
+              depth: 3,
+              open: open,
+              row: (param, depth) => FoldEffectParamRow(
+                  fx, param, values[param.id],
+                  depth: depth, driven: driven['${fx.id}/${param.id}'])));
         }
       }
     }
@@ -3442,5 +3560,15 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
-  return rows;
+  // A row with keys under its expression shows the expression on a line of
+  // its own beneath it, as After Effects does: the lane above draws the
+  // keys, and this one the text, pressed to open it.
+  return [
+    for (final row in rows) ...[
+      row,
+      if (foldRowScalar(row) is BridgeScalar_Expression &&
+          laneKeysOf(row).isNotEmpty)
+        FoldExpressionRow(row, depth: row.depth + 1),
+    ],
+  ];
 }

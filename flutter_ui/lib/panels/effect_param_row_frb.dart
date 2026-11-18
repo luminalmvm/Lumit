@@ -421,6 +421,8 @@ class EffectParamRowFrb extends StatelessWidget {
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: fixed,
                 navigatorApart: valueColumn != null,
+                // Alt+click: the expression editor over the row.
+                onExpression: () => _altExpression(context, scalars),
                 onWrite: (next) => _set(next.length == 4
                     ? BridgeEffectValue.colour(BridgeColour(
                         r: next[0], g: next[1], b: next[2], a: next[3]))
@@ -697,6 +699,40 @@ class EffectParamRowFrb extends StatelessWidget {
     }
   }
 
+  /// Alt+click on the stopwatch: the expression editor over the row. A new
+  /// expression opens holding the number showing, its keys kept under it, and
+  /// is written only when the editor is closed with a change.
+  void _altExpression(BuildContext context, List<BridgeScalar> scalars) {
+    final owner = currentLayer;
+    if (owner == null || scalars.length != 1) return;
+    if (param.kind is BridgeParamKind_Colour) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached) return;
+    final held = scalars.single;
+    final fresh = held is! BridgeScalar_Expression;
+    final frame =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
+    showExpressionEditor(
+      context: context,
+      over: box.localToGlobal(Offset.zero) & box.size,
+      value: held is BridgeScalar_Expression
+          ? held
+          : BridgeScalar_Expression(
+              sampledScalar(held, timeOfFrame(comp, frame)).toString(),
+              newExpressionLanguage(context)),
+      fresh: fresh,
+      held: held,
+      comp: comp,
+      layer: owner,
+      row: BridgeExpressionRow.effect(effect: effectId, param: param.id),
+      decimals: param.kind is BridgeParamKind_Int ? 0 : 2,
+      // A new one is not previewed: a cancel would write it back.
+      onLive:
+          fresh ? null : (draft) => _setLive(BridgeEffectValue.float(draft)),
+      onCommit: (next) => _set(BridgeEffectValue.float(next)),
+    );
+  }
+
   /// What this row's right-click menu offers.
   ParamMenu _menu(BuildContext context, KeyframeControlsFrb? keys) {
     final fallback = defaultEffectValue(param.kind);
@@ -770,8 +806,9 @@ class EffectParamRowFrb extends StatelessWidget {
           : null,
       removeExpression: expression == null
           ? null
-          : () => _set(BridgeEffectValue.float(
-              BridgeScalar.static_(sampleScalarWithContext(
+          : () => _set(BridgeEffectValue.float(expressionTakenOff(
+              expression,
+              sampleScalarWithContext(
                   scalar: expression,
                   time: timeOfFrame(comp, playhead.value),
                   layer: currentLayer!)))),
@@ -3149,11 +3186,11 @@ List<BridgeParamInfo> cachedListParameters(String effect) =>
 /// ([BridgeEffectInstanceInfo.rowLabels]: Type fill's rows read as columns
 /// when its Direction is Columns).
 ///
-/// A gradient's compositing rows come after its own rows ([blendInView]):
-/// an extension's effect declares them before the rows its shader derives.
+/// An extension's compositing rows come after its own rows: it declares them
+/// before the rows its shader derives.
 List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
   var rows = [...cachedListParameters(info.name), ...info.derivedParams];
-  if (blendInView(info.name)) rows = blendAfterOwnRows(rows);
+  if (info.name.startsWith('lfx:')) rows = blendAfterOwnRows(rows);
   if (info.rowLabels.isEmpty) return rows;
   final names = {for (final l in info.rowLabels) l.id: l.label};
   return [
@@ -3170,20 +3207,10 @@ List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
   ];
 }
 
-/// Whether [effect]'s compositing rows (Mix, Blend, Matte, Invert, Channel)
-/// stay in view, each a row of its own as the Timeline lists them, rather than
-/// in the Compositing fold, which starts shut and takes no room at its
-/// defaults, with Blend, Invert and Channel riding beside their hosts. A
-/// gradient is mostly laid over its layer in Multiply, Screen or Overlay and
-/// gated by another layer, so these are its own controls: the built-in
-/// Gradient, and every extension gradient (Conical, Sweep and Multi-point
-/// gradient, Gradient map).
-bool blendInView(String effect) =>
-    effect == 'gradient' ||
-    (effect.startsWith('lfx:') && effect.contains('gradient'));
-
-/// The compositing rows [blendInView] keeps in view, in the order they are
-/// listed: after the effect's own rows.
+/// The compositing rows nearly every effect ends with, in the order they are
+/// listed: Mix, its Blend, the Matte, its Invert and Channel. Each is a row of
+/// its own in the Compositing fold, in the Effect controls panel, the Timeline
+/// and a node box alike.
 const compositingRowIds = [
   'mix',
   'blend',
@@ -3204,6 +3231,44 @@ List<BridgeParamInfo> blendAfterOwnRows(List<BridgeParamInfo> rows) {
     rest.addAll(rows.where((p) => p.id == id));
   }
   return rest;
+}
+
+/// The rows of [params] the **Compositing** fold holds: a Mix slider and a
+/// Matte picker no group of the schema holds ([grouped]), each with the rows
+/// the schema places right after it for it (`mix` + `blend`, `matte` +
+/// `matte_invert` + `matte_channel`), in the schema's order.
+///
+/// One the schema keeps in a group of its own (the Lens flare's source matte)
+/// stays there, and a `blend` that is not right after the Mix (the Lens
+/// flare's own, before it) is that effect's own row.
+List<BridgeParamInfo> compositingRowsOf(
+  List<BridgeParamInfo> params,
+  Set<String> grouped,
+) {
+  final out = <BridgeParamInfo>[];
+  for (var i = 0; i < params.length; i++) {
+    final host = params[i];
+    if (grouped.contains(host.id)) continue;
+    final names = switch (host.kind) {
+      BridgeParamKind_Float() when host.id == 'mix' => const {'blend'},
+      BridgeParamKind_Layer() when host.id == 'matte' => const {
+          'matte_invert',
+          'matte_channel'
+        },
+      _ => null,
+    };
+    if (names == null) continue;
+    final beside = <BridgeParamInfo>[];
+    for (var j = i + 1;
+        j < params.length && names.contains(params[j].id);
+        j++) {
+      beside.add(params[j]);
+    }
+    out
+      ..add(host)
+      ..addAll(beside);
+  }
+  return out;
 }
 
 /// An effect's parameter groups (docs/08 §1.2), memoised like
@@ -3231,38 +3296,31 @@ bool paramGroupVisible(
   };
 }
 
-/// **The uniform Matte row** and **the Mix row**: which of [params] ride beside
-/// [host] rather than taking a row of their own.
+/// Which of [params] ride beside [host] rather than taking a row of their own.
 ///
 /// A Layer picker carries its Channel choice and Invert switch beside it on one
-/// row, a Mix slider its Blend choice. A rider is found by id convention among
-/// the parameters the schema places RIGHT AFTER its host - `matte` +
-/// `matte_invert` + `matte_channel`, Depth of field's older `depth` +
-/// `depth_invert`, whose stored ids are kept, and `mix` + `blend` - so the
-/// injected rows and the effects that predate them fold the same way without a
-/// table here naming them, and a channel an effect declares elsewhere for
-/// itself (Depth of field's `depth_channel`, three twirls down) stays the row
-/// it always was, as does the Lens flare's own `blend`, which sits BEFORE its
-/// Mix. Choices come before switches so the row reads picker, Channel, Invert.
+/// row, and a Bake button its Cancel. A rider is found by id convention among
+/// the parameters the schema places RIGHT AFTER its host (Depth of field's
+/// older `depth` + `depth_invert`, whose stored ids are kept), so no table here
+/// names them, and a channel an effect declares elsewhere for itself (Depth of
+/// field's `depth_channel`, three twirls down) stays the row it always was.
+/// Choices come before switches so the row reads picker, Channel, Invert.
 ///
-/// A gradient's Blend ([blendInView], the effect named by [effect]) is one of
-/// its own controls and takes a row of its own, as it does in the Timeline.
+/// The Mix and the Matte carry nothing beside them: their Blend, Invert and
+/// Channel are rows of their own in the Compositing fold
+/// ([compositingRowsOf]), as the Timeline lists them.
 ///
 /// It costs no bridge call: [params] is the cached schema the caller already
 /// read.
 List<BridgeParamInfo> paramRidersFor(
   List<BridgeParamInfo> params,
-  BridgeParamInfo host, {
-  String? effect,
-}) {
-  // A gradient's compositing rows are each a row of their own.
-  final inView = effect != null && blendInView(effect);
+  BridgeParamInfo host,
+) {
   final names = switch (host.kind) {
-    BridgeParamKind_Layer() when !(inView && host.id == 'matte') => {
+    BridgeParamKind_Layer() when host.id != 'matte' => {
         '${host.id}_invert',
         '${host.id}_channel'
       },
-    BridgeParamKind_Float() when host.id == 'mix' && !inView => {'blend'},
     // A bake's two buttons sit on the one row, by the line that says how it goes.
     BridgeParamKind_Action() when host.id == 'bake' => {'cancel'},
     _ => const <String>{},
@@ -4481,7 +4539,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
           ),
           MenuRow(
             onPressed: () {
-              widget.set(BridgeEffectValue.float(BridgeScalar_Static(_value)));
+              widget.set(BridgeEffectValue.float(
+                  expressionTakenOff(widget.value, _value)));
               close();
             },
             child: MenuLabel(l10n.removeExpression, ticked: false),

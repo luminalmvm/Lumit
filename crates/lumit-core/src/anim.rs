@@ -583,7 +583,7 @@ impl Property {
             Animation::Static(v) => *v,
             Animation::Keyframed(keys) => evaluate(keys, t).unwrap_or(0.0),
             Animation::Expression(expression) => {
-                crate::expression::evaluate_property(expression, None, &self.extra)
+                crate::expression::evaluate_property_at(expression, None, &self.extra, t)
             }
         }
     }
@@ -593,7 +593,7 @@ impl Property {
             Animation::Static(v) => *v,
             Animation::Keyframed(keys) => evaluate(keys, t).unwrap_or(0.0),
             Animation::Expression(expression) => {
-                crate::expression::evaluate_property(expression, Some(context), &self.extra)
+                crate::expression::evaluate_property_at(expression, Some(context), &self.extra, t)
             }
         }
     }
@@ -606,21 +606,73 @@ impl Property {
     /// moment an expression is put on a property is the moment to write the
     /// number down. Editing the text afterwards leaves the note alone, and
     /// taking the expression off removes it.
+    ///
+    /// **Keys under an expression.** A keyed property keeps its keys when an
+    /// expression is put on it, as After Effects does: they are kept beside the
+    /// expression ([`KEYS_UNDER_EXPRESSION`]), `value` reads them at the
+    /// expression's time, and `loopOut` repeats them. New keys written while
+    /// the expression is on go under it through
+    /// [`Self::set_keys_under_expression`]. Anything else written over an
+    /// expression replaces both: Remove expression writes the kept keys back as
+    /// a keyed animation, and a plain number leaves only the number.
     pub fn set_animation(&mut self, animation: Animation) {
         use crate::expression::{script::Slot, script::SLOT_KEY};
         match (&self.animation, &animation) {
             (Animation::Expression(_), Animation::Expression(_)) => {}
-            (_, Animation::Expression(_)) => {
+            (was, Animation::Expression(_)) => {
                 // A seed of its own, so two properties given the same text
                 // do not wander in step.
                 let seed = (uuid::Uuid::now_v7().as_u128() as u32).max(1);
                 Slot::new(&[self.value_at(0.0)], 0, seed).write(&mut self.extra);
+                let keys = match was {
+                    Animation::Keyframed(keys) => keys.clone(),
+                    _ => Vec::new(),
+                };
+                self.put_keys_under(&keys);
             }
             _ => {
                 self.extra.remove(SLOT_KEY);
             }
         }
         self.animation = animation;
+    }
+
+    /// The keys kept under this property's expression, if it has one and
+    /// keys were kept. Times are in the property's own timebase, as a keyed
+    /// animation's are.
+    #[must_use]
+    pub fn keys_under_expression(&self) -> Option<Vec<Keyframe>> {
+        if !matches!(self.animation, Animation::Expression(_)) {
+            return None;
+        }
+        keys_kept_in(&self.extra)
+    }
+
+    /// Replace the keys under this property's expression; an empty list takes
+    /// them away. Nothing happens to a property with no expression.
+    pub fn set_keys_under_expression(&mut self, keys: &[Keyframe]) {
+        if matches!(self.animation, Animation::Expression(_)) {
+            self.put_keys_under(keys);
+        }
+    }
+
+    fn put_keys_under(&mut self, keys: &[Keyframe]) {
+        use crate::expression::script::SLOT_KEY;
+        let value = serde_json::to_value(keys).ok().filter(|_| !keys.is_empty());
+        let note = self
+            .extra
+            .entry(SLOT_KEY)
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        if let Some(note) = note.as_object_mut() {
+            match value {
+                Some(value) => {
+                    note.insert(KEYS_UNDER_EXPRESSION.into(), value);
+                }
+                None => {
+                    note.remove(KEYS_UNDER_EXPRESSION);
+                }
+            }
+        }
     }
 
     /// The language this property's expression is written in. Rhai when
@@ -856,3 +908,22 @@ impl FadeShape {
 
 #[cfg(test)]
 mod tests;
+
+/// Where a property's keys are kept while an expression drives it
+/// ([`Property::keys_under_expression`]): in the note the expression reads
+/// its property from (`extra["expr"]`), so every op that carries the note
+/// (and its undo) carries the keys, and taking the expression off takes them
+/// with it. In `extra`, so a project from a build that does not know the field
+/// still opens, and keeps it when saved again.
+pub const KEYS_UNDER_EXPRESSION: &str = "keys";
+
+/// The keys kept under an expression in a property's `extra`, or `None` when
+/// there are none.
+#[must_use]
+pub fn keys_kept_in(extra: &serde_json::Map<String, serde_json::Value>) -> Option<Vec<Keyframe>> {
+    let kept = extra
+        .get(crate::expression::script::SLOT_KEY)?
+        .get(KEYS_UNDER_EXPRESSION)?;
+    let keys: Vec<Keyframe> = serde_json::from_value(kept.clone()).ok()?;
+    (!keys.is_empty()).then_some(keys)
+}

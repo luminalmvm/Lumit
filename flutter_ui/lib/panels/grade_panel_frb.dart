@@ -60,6 +60,7 @@ import 'effect_param_row_frb.dart'
         defaultEffectValue,
         newExpressionLanguage,
         scalarValueAt;
+import 'expression_editor.dart' show expressionTakenOff;
 import 'grade_actions.dart';
 import 'grade_bars.dart';
 import 'grade_clipboard.dart';

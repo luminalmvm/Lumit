@@ -1521,7 +1521,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tapAt(fitted.center + const Offset(80, 60));
       await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      // Handed to the Pen the way the shell hands it, as there is no shell here.
+      p.uiState.penKeys.any((takes) => takes(const KeyDownEvent(
+          physicalKey: PhysicalKeyboardKey.enter,
+          logicalKey: LogicalKeyboardKey.enter,
+          timeStamp: Duration.zero)));
       await tester.pumpAndSettle();
       final open = p.layer.getMasks().last;
       expect(open.vertices, hasLength(2));

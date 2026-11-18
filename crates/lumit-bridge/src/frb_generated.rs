@@ -44815,7 +44815,11 @@ impl SseDecode for crate::api::effect::BridgeScalar {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 let mut var_field1 =
                     <crate::api::effect::BridgeExpressionLanguage>::sse_decode(deserializer);
-                return crate::api::effect::BridgeScalar::Expression(var_field0, var_field1);
+                let mut var_field2 =
+                    <Option<Vec<crate::api::effect::BridgeKeyframe>>>::sse_decode(deserializer);
+                return crate::api::effect::BridgeScalar::Expression(
+                    var_field0, var_field1, var_field2,
+                );
             }
             _ => {
                 unimplemented!("");
@@ -51701,6 +51705,19 @@ impl SseDecode for Option<Vec<crate::api::cut::transcript::BridgeFrameSpan>> {
             return Some(
                 <Vec<crate::api::cut::transcript::BridgeFrameSpan>>::sse_decode(deserializer),
             );
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<Vec<crate::api::effect::BridgeKeyframe>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<crate::api::effect::BridgeKeyframe>>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -62192,10 +62209,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeScalar {
             crate::api::effect::BridgeScalar::Keyframed(field0) => {
                 [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::effect::BridgeScalar::Expression(field0, field1) => [
+            crate::api::effect::BridgeScalar::Expression(field0, field1, field2) => [
                 2.into_dart(),
                 field0.into_into_dart().into_dart(),
                 field1.into_into_dart().into_dart(),
+                field2.into_into_dart().into_dart(),
             ]
             .into_dart(),
             _ => {
@@ -71390,10 +71408,11 @@ impl SseEncode for crate::api::effect::BridgeScalar {
                 <i32>::sse_encode(1, serializer);
                 <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(field0, serializer);
             }
-            crate::api::effect::BridgeScalar::Expression(field0, field1) => {
+            crate::api::effect::BridgeScalar::Expression(field0, field1, field2) => {
                 <i32>::sse_encode(2, serializer);
                 <String>::sse_encode(field0, serializer);
                 <crate::api::effect::BridgeExpressionLanguage>::sse_encode(field1, serializer);
+                <Option<Vec<crate::api::effect::BridgeKeyframe>>>::sse_encode(field2, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -76639,6 +76658,16 @@ impl SseEncode for Option<Vec<crate::api::cut::transcript::BridgeFrameSpan>> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <Vec<crate::api::cut::transcript::BridgeFrameSpan>>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<Vec<crate::api::effect::BridgeKeyframe>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(value, serializer);
         }
     }
 }
