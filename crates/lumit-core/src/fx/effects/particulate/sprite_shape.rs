@@ -5,7 +5,7 @@
 //! alpha is the same picture premultiplied or not), and the particle's own
 //! colour tints it exactly as it tints a layer's picture. The renderer uploads
 //! each once a device, keeps it, and hands it to both render paths as a
-//! sprite, so the CPU reference and the card stamp the very same pixels.
+//! sprite.
 
 /// What Sprite mode stamps: the Sprite layer's picture, or one of these.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
