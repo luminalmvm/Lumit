@@ -4361,6 +4361,10 @@
   "@fxEdges": {
     "description": "Effect controls — a control on Radial blur. Also a row on Stabilise: what is done with the empty edges steadying drags into view."
   },
+  "fxEdgeRepeat": "Edge repeat",
+  "@fxEdgeRepeat": {
+    "description": "Effect controls — an edge option: past the border, the border pixel is held outward."
+  },
   "fxEllipse": "Ellipse",
   "@fxEllipse": {
     "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
@@ -5136,6 +5140,10 @@
   "fxMirrorEdges": "Mirror edges",
   "@fxMirrorEdges": {
     "description": "Effect controls — a control on Tile."
+  },
+  "fxMirrorRepeat": "Mirror repeat",
+  "@fxMirrorRepeat": {
+    "description": "Effect controls — an edge option: past the border, the picture repeats reflected."
   },
   "fxMix": "Mix",
   "@fxMix": {

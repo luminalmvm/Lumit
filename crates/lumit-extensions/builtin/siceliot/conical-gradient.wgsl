@@ -12,7 +12,7 @@ struct Params {
     end_centre: vec2<f32>,
     /// @slider(0, 4000) @default(800) @unit(px) End radius
     end_radius: f32,
-    /// @choice("Pad", "Repeat", "Mirror") @default("Pad") Spread
+    /// @choice("Edge repeat", "Repeat", "Mirror repeat") @default("Edge repeat") Spread
     spread: u32,
     /// @choice("Inside layer", "Whole frame") @default("Inside layer") Paint
     paint: u32,
@@ -81,7 +81,7 @@ fn cg_cone(q: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(0.0, 0.0);
 }
 
-// Pad holds the end colours, Repeat starts again, Mirror runs back.
+// Edge repeat holds the end colours, Repeat starts again, Mirror repeat runs back.
 fn sc_spread(t: f32) -> f32 {
     if (p.spread == 1u) {
         return fract(t);

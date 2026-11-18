@@ -261,7 +261,7 @@ fn dx_fold(x: f32, lo: f32, hi: f32) -> f32 {
     if (p.edge == 2u) {
         return lo + fract(t) * span;
     }
-    // Mirror: a triangle wave across the span.
+    // Mirror repeat: a triangle wave across the span.
     let m = abs(fract(t * 0.5) * 2.0 - 1.0);
     return lo + (1.0 - m) * span;
 }

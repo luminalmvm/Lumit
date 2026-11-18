@@ -345,9 +345,9 @@
           "unit": "raw",
           "default": 1,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -5115,9 +5115,9 @@
           "unit": "raw",
           "default": 1,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -6392,9 +6392,9 @@
           "unit": "raw",
           "default": 2,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -6406,9 +6406,9 @@
           "default": 0,
           "options": [
             "Same",
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -6720,9 +6720,9 @@
           "unit": "raw",
           "default": 2,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -8209,9 +8209,9 @@
           "unit": "raw",
           "default": 0,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -8386,9 +8386,9 @@
           "unit": "raw",
           "default": 0,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -8552,9 +8552,9 @@
           "unit": "raw",
           "default": 1,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -35460,9 +35460,9 @@
           "unit": "raw",
           "default": 0,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },

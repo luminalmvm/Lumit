@@ -63,8 +63,8 @@ Wobbles the layer as though the camera were handheld.
 | **Shutter** | Slider | 0 to 1; up to 4 | 0.5 | - |
 | **Samples** | Slider | 2 to 64 | 9 | - |
 | **Scale** | Slider | 100 to 200; down to 1 and up to 1000 | 100 | Per cent |
-| **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
-| **Y edges** | Dropdown | Same · Transparent · Repeat · Mirror | Same | - |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | Mirror repeat | - |
+| **Y edges** | Dropdown | Same · None · Edge repeat · Mirror repeat | Same | - |
 | **Crop left** | Slider | 0 to 50; up to 100 | 0 | Per cent |
 | **Crop right** | Slider | 0 to 50; up to 100 | 0 | Per cent |
 | **Crop top** | Slider | 0 to 50; up to 100 | 0 | Per cent |
@@ -104,8 +104,8 @@ In the Effect Controls panel:
 - **Rotation amount**: how much the frame rotates as it moves, at the default amplitude.
 - **Rotation frequency**: a multiplier on **Frequency** for the rotation alone.
 - **Scale**: a steady zoom on top of the shake. 100% is natural size.
-- **Edges**: what fills the border. Mirror reflects the
-  picture back. Repeat holds the edge pixel. Transparent leaves it clear.
+- **Edges**: what fills the border. **Mirror repeat** reflects the picture back.
+  **Edge repeat** holds the border pixel. **None** leaves it clear.
 - **Y edges**: the top and bottom border on its own. Same follows **Edges**.
 - **Seed**: generates which random shake occurs.
 - **Mix**: how much of the result replaces the original.

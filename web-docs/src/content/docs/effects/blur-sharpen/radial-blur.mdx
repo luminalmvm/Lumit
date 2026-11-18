@@ -28,7 +28,7 @@ centre point, both ways or as one-way rays that fade.
 | **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Type** | Dropdown | Spin · Zoom · Rays | Spin | - |
-| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | Edge repeat | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -48,8 +48,8 @@ In the Effect Controls panel:
 - **Centre X** and **Centre Y** place where the spin or zoom originates.
 - **Type**: Spin revolves the centre. Zoom extends out from the centre point. Rays streak
   the picture away from the centre point only, and fade as they go.
-- **Edges**: what the blur reads past the frame. Mirror reflects the picture at
-  the edges.
+- **Edges**: what the blur reads past the frame. **None** reads nothing, **Edge repeat**
+  holds the border pixel outward and **Mirror repeat** reflects the picture at the border.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte** and **Invert** scale **Amount** per pixel from another layer's brightness; see

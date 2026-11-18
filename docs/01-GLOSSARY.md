@@ -147,6 +147,7 @@ Not interchangeable.
 | **Roto brush** | Builds a matte from painted strokes, carried by optical flow. **Refine edge** is its soft boundary |
 | **Blend mode** | How a layer composites over what's below |
 | **Effect** | One operation in a layer's **effect stack**, or one box in a node graph |
+| **Edge behaviour** | What an effect shows past the picture's border: **None** (transparent), **Edge repeat** (the border pixel held outward), **Repeat** (the picture tiles) or **Mirror repeat** (the picture reflected) |
 | **Source layer** | Another layer an effect reads as an input, such as the one Emit from image takes its points from |
 | **Scene pass** | What a 3D precomp knows about its pixels, handed to effects: **Normals**, **Position**, **Part id** and **Depth** |
 | **Part** | A node of a 3D model, each material of a node with more than one, or a whole 3D layer, as a scene pass counts them. Its number comes from its layer and its names. **Part matte** keeps the parts picked |
