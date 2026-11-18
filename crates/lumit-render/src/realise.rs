@@ -864,6 +864,12 @@ impl Realiser<'_> {
             }
         }
         let made = self.realise(camera, width, height, background, layers);
+        // Handed to the card now rather than with the rest of the frame: a
+        // frame of heavy Precomps recorded as one batch is one job seconds long,
+        // and Windows resets a card whose job runs past its limit (TDR), taking
+        // the renderer with it. Each Precomp is a job of its own instead, and
+        // the card is kept close behind so what it finishes with is freed.
+        self.ctx.flush_paced();
         // A frame asked to stop may have drawn this short.
         if !crate::cancel::requested() {
             self.fx_cache.borrow_mut().put_nested(key, made.clone());
