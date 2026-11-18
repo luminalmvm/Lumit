@@ -37,6 +37,7 @@ fn flat(job: &CompJob, frame: usize) -> CompLayerPixels {
         shutter: Vec::new(),
         source_key: frame as u128,
         source_frame: frame as i64,
+        blend: None,
     }
 }
 

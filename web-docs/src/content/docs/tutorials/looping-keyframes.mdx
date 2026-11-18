@@ -1,0 +1,71 @@
+---
+title: Looping keyframes
+description: Key a move once, repeat it with loopOut, and keep editing the keyframes under the expression.
+sidebar:
+  order: 18
+---
+
+An [expression](/use/expressions/) put on a keyframed property keeps the keyframes under
+it. `loopOut("cycle")` repeats them for the rest of the layer.
+
+**1. Show the property.** Select the layer in the Timeline and press `R`. The **Rotation**
+row opens under it.
+
+**2. Key the move once.** With the playhead on the layer's first frame, turn on the
+stopwatch beside **Rotation**. Move the playhead one second on and set **Rotation** to
+`1x +0°`.
+
+**3. Open the expression editor.** `Alt`+click the stopwatch. The editor opens over the
+row.
+
+**4. Check the language.** The dropdown under the text reads **JavaScript**. A Rhai
+expression does not read keyframes.
+
+**5. Type the loop.** Type `loopOut("cycle")`.
+
+**6. Keep it.** Click away, or press `Ctrl+Enter`. The two keyframes stay on the row's
+lane, and an **Expression** line appears under the row.
+
+**7. Play it.** Press `Space`. The turn repeats after the second keyframe.
+
+**8. Change the lap.** Drag the second keyframe along the lane. Every lap takes the new
+length.
+
+**9. Ease it.** Select a keyframe and press `F9`.
+
+**10. Open the expression again.** Click the text on the **Expression** line.
+
+## Other loops
+
+| Expression | After the last keyframe |
+| --- | --- |
+| `loopOut("cycle")` | Starts again from the first keyframe. |
+| `loopOut("pingpong")` | Runs back and forth. |
+| `loopOut("offset")` | Starts again from where the last lap ended. |
+| `loopOut("continue")` | Carries on at the speed it had at the last keyframe. |
+| `loopOut("cycle", 1)` | Repeats only the stretch between the last two keyframes. |
+
+`loopIn` does the same before the first keyframe.
+
+## Loop a layer's Retime
+
+**1. Give the layer a Retime.** Select a Footage or Precomp layer and press `Ctrl+Alt+T`.
+The **Retime** row has a keyframe at the layer's in point and one at its out point.
+
+**2. Put the loop on it.** `Alt`+click the Retime row's stopwatch, type
+`loopOut("cycle")` and press `Ctrl+Enter`.
+
+**3. Make the layer longer.** Drag the end of the layer's bar to the right. After the second
+keyframe the layer plays again from the first.
+
+## Take the expression off
+
+Right-click the row and choose **Remove expression**. The keyframes are the property's
+animation again.
+
+## Related
+
+- [Expressions](/use/expressions/)
+- [Expression reference](/reference/expressions/#a-property)
+- [Keyframes](/use/keyframes/)
+- [Retiming and speed](/use/retime/)

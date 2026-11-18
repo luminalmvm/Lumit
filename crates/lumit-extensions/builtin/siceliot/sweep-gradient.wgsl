@@ -10,7 +10,7 @@ struct Params {
     arc: f32,
     /// @counter(1, 64) @default(1) Repetitions
     repetitions: i32,
-    /// @choice("Pad", "Repeat", "Mirror") @default("Pad") Spread
+    /// @choice("Edge repeat", "Repeat", "Mirror repeat") @default("Edge repeat") Spread
     spread: u32,
     /// @choice("Inside layer", "Whole frame") @default("Inside layer") Paint
     paint: u32,
@@ -44,7 +44,7 @@ struct Params {
     position_5: f32,
 };
 
-// Pad holds the end colours, Repeat starts again, Mirror runs back.
+// Edge repeat holds the end colours, Repeat starts again, Mirror repeat runs back.
 fn sc_spread(t: f32) -> f32 {
     if (p.spread == 1u) {
         return fract(t);

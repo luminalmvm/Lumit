@@ -32,6 +32,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -75,6 +76,13 @@ BridgeScalar scalarWithValueAt(
   CompositionReference comp,
   int frame,
 ) {
+  // Under an expression the value goes into the keys, and the expression stays.
+  if (scalar case BridgeScalar_Expression(:final field2?) when field2.isNotEmpty) {
+    final under =
+        scalarWithValueAt(BridgeScalar.keyframed(field2), value, comp, frame);
+    return withKeys(
+        scalar, under is BridgeScalar_Keyframed ? under.field0 : const [], value);
+  }
   if (scalar is! BridgeScalar_Keyframed) return BridgeScalar.static_(value);
   if (Zone.current[_picked] case (keys: Set<int> picked, typed: bool typed)) {
     final keys = scalar.field0;
@@ -408,6 +416,11 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   /// keeps the diamond alone.
   final bool steps;
 
+  /// Alt+click on the stopwatch: open this row's expression, as Add expression
+  /// or Edit expression in its menu does. Null where the row cannot hold one,
+  /// and the click is then an ordinary one.
+  final VoidCallback? onExpression;
+
   const KeyframeControlsFrb({
     super.key,
     required this.scalars,
@@ -420,6 +433,7 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
     this.navigatorApart = false,
     this.valuesAt,
     this.steps = true,
+    this.onExpression,
   });
 
   /// This row's navigator as a widget of its own. [fold] keeps the fold's
@@ -468,12 +482,20 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   List<BridgeKeyframe> _keysOf(BridgeScalar scalar) => switch (scalar) {
         BridgeScalar_Keyframed(:final field0) => field0,
         BridgeScalar_Static() => const [],
-        BridgeScalar_Expression() => const [],
+        // Keys kept under an expression are the row's keys too.
+        BridgeScalar_Expression(:final field2) => field2 ?? const [],
       };
 
   /// Where the row has keys, which is what the navigator reads: the same
   /// times its lane draws, whichever axes hold them.
-  List<BridgeKeyframe> get _keys => rowKeysOf(scalars);
+  List<BridgeKeyframe> get _keys => rowKeysOf([
+        for (final s in scalars)
+          switch (s) {
+            BridgeScalar_Expression(:final field2?) when field2.isNotEmpty =>
+              BridgeScalar.keyframed(field2),
+            _ => s,
+          }
+      ]);
 
   /// True when *any* axis is animated. A row half-animated by the graph editor
   /// still shows its stopwatch lit, because turning it off is then the useful
@@ -485,7 +507,16 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   List<double> _valuesNow(int frame) {
     final time = timeOfFrame(comp, frame);
     return valuesAt?.call(time) ??
-        [for (final s in scalars) sampledScalar(s, time)];
+        [
+          for (final s in scalars)
+            // Under an expression a key holds what the keys say, not what the
+            // expression makes of them.
+            switch (s) {
+              BridgeScalar_Expression(:final field2?) when field2.isNotEmpty =>
+                sampledScalar(BridgeScalar.keyframed(field2), time),
+              _ => sampledScalar(s, time),
+            }
+        ];
   }
 
   /// The key sitting exactly on `frame`, if there is one.
@@ -536,7 +567,13 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
         // which the redesign spends on the filled action and the playhead.
         child: LumitIcon(stopwatchGlyph(t),
             size: iconSize, colour: _animated ? t.animated : t.textMuted),
-        onPressed: () => _toggleAnimated(playhead.value),
+        onPressed: () {
+          if (onExpression != null && HardwareKeyboard.instance.isAltPressed) {
+            onExpression!();
+            return;
+          }
+          _toggleAnimated(playhead.value);
+        },
       ),
     );
 
@@ -634,12 +671,14 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   void _toggleAnimated(int frame) {
     final values = _valuesNow(frame);
     if (_animated) {
-      onWrite([for (final v in values) BridgeScalar.static_(v)]);
+      onWrite([
+        for (final (i, s) in scalars.indexed) withKeys(s, const [], values[i])
+      ]);
       return;
     }
     onWrite([
-      for (final v in values)
-        BridgeScalar.keyframed([_newKeyAt(const [], frame, v)])
+      for (final (i, s) in scalars.indexed)
+        withKeys(s, [_newKeyAt(const [], frame, values[i])], values[i])
     ]);
   }
 
@@ -662,9 +701,7 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
         ];
         // A curve with no keys is not something the engine can evaluate, so the
         // last one removed leaves a static value holding what it held.
-        next.add(rest.isEmpty
-            ? BridgeScalar.static_(values[axis])
-            : BridgeScalar.keyframed(rest));
+        next.add(withKeys(scalars[axis], rest, values[axis]));
         continue;
       }
       // A key on a curve cuts the span in two and leaves the curve as it was
@@ -673,7 +710,7 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
       final added = keys.isEmpty
           ? [_newKeyAt(keys, frame, values[axis])]
           : keysWithKeyOnCurve(keys, comp.timeOfFrame(frame: frame));
-      next.add(BridgeScalar.keyframed(added));
+      next.add(withKeys(scalars[axis], added, values[axis]));
     }
     onWrite(next);
   }
@@ -905,3 +942,29 @@ class PathKeyframesFrb extends StatelessWidget implements RowKeys {
     );
   }
 }
+
+/// [was] with its keys now [keys]: the keys under an expression when [was] is
+/// one, which stays; otherwise a keyed curve, or [value] held still when no
+/// key is left.
+BridgeScalar withKeys(BridgeScalar was, List<BridgeKeyframe> keys, double value) =>
+    switch (was) {
+      BridgeScalar_Expression(:final field0, :final field1) =>
+        BridgeScalar.expression(field0, field1, keys),
+      _ => keys.isEmpty ? BridgeScalar.static_(value) : BridgeScalar.keyframed(keys),
+    };
+
+/// The keys of [scalar]: its curve's, or those kept under its expression.
+/// Null when it has none.
+List<BridgeKeyframe>? keysOfScalar(BridgeScalar scalar) => switch (scalar) {
+      BridgeScalar_Keyframed(:final field0) => field0,
+      BridgeScalar_Expression(:final field2?) when field2.isNotEmpty => field2,
+      _ => null,
+    };
+
+/// [scalar] as the curve its keys draw: an expression with keys under it
+/// reads as those keys, for the lanes that draw diamonds.
+BridgeScalar asKeyed(BridgeScalar scalar) => switch (keysOfScalar(scalar)) {
+      final keys? when scalar is BridgeScalar_Expression =>
+        BridgeScalar.keyframed(keys),
+      _ => scalar,
+    };

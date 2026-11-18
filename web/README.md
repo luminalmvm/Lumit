@@ -195,7 +195,7 @@ checked in.
 of. Each one is three files under one name: the project in `public/projects/` as a
 `.lum`, and in `src/assets/projects/` a PNG of one frame at 1920 by 1080 with an MP4
 of the whole piece at half that size, 30 frames a second, and no sound. The card's
-words, its layer count, and the fonts it names are in `src/pages/projects.astro`, and
+words, its length and layer count, and the fonts it names are in `src/pages/projects.astro`, and
 the size beside the download is read off the file when the site is built.
 
 To replace a project, save it over its `.lum`, export the piece again for the MP4, and

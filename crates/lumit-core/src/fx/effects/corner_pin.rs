@@ -81,8 +81,8 @@ pub struct CornerPin {
     #[slider(label = "Lower right y", min = -1080.0, max = 2160.0, default = 1026.0, unit = Px)]
     pub lower_right_y: f32,
 
-    /// What a sample that lands outside the frame reads. **Transparent by
-    /// default, which is AE's only behaviour** (§3.48 decision 5); Repeat is
+    /// What a sample that lands outside the frame reads. **None by
+    /// default, which is AE's only behaviour** (§3.48 decision 5); Edge repeat is
     /// here because a corner pin is also how a camera tilt is faked on an
     /// over-scanned plate, and there the smear is wanted rather than a hole.
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 0)]

@@ -905,6 +905,21 @@ fn seconds_of(time: BridgeRational) -> f64 {
     }
 }
 
+/// The keys an expression carries, on the comp's clock as they crossed, or
+/// `None` for none.
+fn keys_of(keys: Option<&[BridgeKeyframe]>) -> Option<Vec<Keyframe>> {
+    let keys: Vec<Keyframe> = keys?
+        .iter()
+        .map(|k| Keyframe {
+            time: Rational::new(k.time.num, k.time.den).unwrap_or(Rational::ZERO),
+            value: k.value,
+            interp_in: k.interp_in.write(),
+            interp_out: k.interp_out.write(),
+        })
+        .collect();
+    (!keys.is_empty()).then_some(keys)
+}
+
 /// The shared body of the two samplers above: what one scalar reads at
 /// `seconds`, with no expression context.
 fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
@@ -922,7 +937,28 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr, language) => {
+        BridgeScalar::Expression(expr, language, keys) => {
+            // With its keys in hand it reads them as a render does, at this
+            // time: a looped Retime shows the moment it is showing.
+            if let Some(keys) = keys_of(keys.as_deref()) {
+                let mut at = ExpressionContext::detached();
+                at.comp_time = seconds;
+                let slot =
+                    lumit_core::expression::script::Slot::default().in_language(language.read());
+                return lumit_core::expression::within_steps(
+                    lumit_core::expression::INTERFACE_STEPS,
+                    || {
+                        lumit_core::expression::evaluate_with_keys(
+                            language.read(),
+                            &expr,
+                            Some(Arc::new(at)),
+                            slot,
+                            keys,
+                            seconds,
+                        )
+                    },
+                );
+            }
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
                 lumit_core::expression::evaluate_in(language.read(), &expr, None)
             })
@@ -1023,7 +1059,7 @@ pub fn sample_scalar_with_context(
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr, language) => {
+        BridgeScalar::Expression(expr, language, keys) => {
             let Some(doc) = document_for(&layer) else {
                 return 0.0;
             };
@@ -1041,7 +1077,22 @@ pub fn sample_scalar_with_context(
             let slot = own_slot(&context, &expr, held, seconds, row.as_ref());
             // This runs on the interface's thread, for every row on screen.
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
-                lumit_core::expression::evaluate_with(language.read(), &expr, Some(context), slot)
+                match keys_of(keys.as_deref()) {
+                    Some(keys) => lumit_core::expression::evaluate_with_keys(
+                        language.read(),
+                        &expr,
+                        Some(context),
+                        slot,
+                        keys,
+                        seconds,
+                    ),
+                    None => lumit_core::expression::evaluate_with(
+                        language.read(),
+                        &expr,
+                        Some(context),
+                        slot,
+                    ),
+                }
             })
         }
     }
@@ -1098,7 +1149,7 @@ fn own_slot(
     }
     match (held, own) {
         (_, Some(own)) => Slot::new(&[own], 0, 0),
-        (Some(BridgeScalar::Expression(text, _)), None) => slot_on_layer(context, &text),
+        (Some(BridgeScalar::Expression(text, _, _)), None) => slot_on_layer(context, &text),
         _ => slot_on_layer(context, expression),
     }
 }
@@ -1128,7 +1179,7 @@ pub fn sample_scalar_range_with_context(
     row: Option<BridgeExpressionRow>,
 ) -> Vec<f64> {
     match scalar {
-        BridgeScalar::Expression(expr, language) => {
+        BridgeScalar::Expression(expr, language, _) => {
             let Some(doc) = document_for(&layer) else {
                 return Vec::new();
             };
@@ -1149,9 +1200,6 @@ pub fn sample_scalar_range_with_context(
                 current_depth: 0,
                 inputs: None,
             };
-            let slot = row
-                .as_ref()
-                .map(|row| lumit_core::expression::slot_of_row(&context, row.core(), None));
             // The whole curve shares what one frame of a render may spend, so
             // a loop that never ends costs one repaint a fixed amount.
             lumit_core::expression::within_steps(
@@ -1164,7 +1212,7 @@ pub fn sample_scalar_range_with_context(
                         start,
                         end,
                         samples,
-                        slot,
+                        row.as_ref().map(BridgeExpressionRow::core),
                     )
                 },
             )
@@ -1938,8 +1986,16 @@ pub enum BridgeScalar {
     /// At least one key, strictly ascending in time — the invariant the
     /// engine's keyframe ops maintain, enforced here on the way in.
     Keyframed(Vec<BridgeKeyframe>),
-    /// The text, and the language it is written in.
-    Expression(String, BridgeExpressionLanguage),
+    /// The text, the language it is written in, and the keys kept under it
+    /// (`value` reads them, `loopOut` repeats them). Read, `None` is no keys.
+    /// Written, `None` leaves whatever keys the property
+    /// has, so a caller that only changes the text need not carry them, and a
+    /// list replaces them.
+    Expression(
+        String,
+        BridgeExpressionLanguage,
+        Option<Vec<BridgeKeyframe>>,
+    ),
 }
 
 impl BridgeScalar {
@@ -1967,6 +2023,11 @@ impl BridgeScalar {
             Animation::Expression(expr) => BridgeScalar::Expression(
                 expr.clone(),
                 BridgeExpressionLanguage::of(property.expression_language()),
+                property.keys_under_expression().map(|keys| {
+                    keys.iter()
+                        .map(|k| BridgeKeyframe::read_at(k, offset))
+                        .collect()
+                }),
             ),
         }
     }
@@ -1988,7 +2049,29 @@ impl BridgeScalar {
                     .collect::<Result<Vec<_>, _>>()?;
                 lumit_core::edits::keyframed(keys).ok_or(BridgeError::InvalidKeyframes)
             }
-            BridgeScalar::Expression(expr, _) => Ok(Animation::Expression(expr.clone())),
+            BridgeScalar::Expression(expr, ..) => Ok(Animation::Expression(expr.clone())),
+        }
+    }
+
+    /// The keys this expression carries, on the layer's clock, when it carries
+    /// a list and the list is a curve the engine can evaluate (an empty list
+    /// is no keys). `None` for anything else, which leaves a property's keys.
+    #[frb(ignore)]
+    pub(crate) fn keys_under_at(&self, offset: Rational) -> Option<Vec<Keyframe>> {
+        let BridgeScalar::Expression(_, _, Some(keys)) = self else {
+            return None;
+        };
+        let keys: Vec<Keyframe> = keys
+            .iter()
+            .map(|k| k.write_at(offset))
+            .collect::<Result<_, _>>()
+            .ok()?;
+        if keys.is_empty() {
+            return Some(keys);
+        }
+        match lumit_core::edits::keyframed(keys) {
+            Some(Animation::Keyframed(keys)) => Some(keys),
+            _ => None,
         }
     }
 
@@ -1999,11 +2082,20 @@ impl BridgeScalar {
     /// because an expression is two things: its text, which is the animation,
     /// and its language, which is written beside it. A caller that assigned
     /// the animation alone would hand a JavaScript expression to Rhai.
+    ///
+    /// The keys an expression carries go under it when it was already an
+    /// expression: a new one keeps the keys the property had, which
+    /// [`Property::set_animation`] puts there itself. Keys that are not a curve
+    /// the engine can evaluate are left as they were.
     #[frb(ignore)]
-    pub(crate) fn put(&self, property: &mut Property, animation: Animation) {
+    pub(crate) fn put(&self, property: &mut Property, animation: Animation, offset: Rational) {
+        let was_expression = matches!(property.animation, Animation::Expression(_));
         property.set_animation(animation);
-        if let BridgeScalar::Expression(_, language) = self {
+        if let BridgeScalar::Expression(_, language, _) = self {
             property.set_expression_language(language.read());
+            if let (true, Some(keys)) = (was_expression, self.keys_under_at(offset)) {
+                property.set_keys_under_expression(&keys);
+            }
         }
     }
 }
@@ -2140,13 +2232,13 @@ impl BridgeEffectValue {
         match (self, target) {
             (BridgeEffectValue::Float(scalar), EffectValue::Float(property)) => {
                 let animation = clamp_animation(scalar.animation_at(offset)?, bounds);
-                scalar.put(property, animation);
+                scalar.put(property, animation, offset);
                 Ok(())
             }
             (BridgeEffectValue::Point(point), EffectValue::Point(x, y)) => {
                 let (ax, ay) = (point.x.animation_at(offset)?, point.y.animation_at(offset)?);
-                point.x.put(x, clamp_animation(ax, bounds));
-                point.y.put(y, clamp_animation(ay, bounds));
+                point.x.put(x, clamp_animation(ax, bounds), offset);
+                point.y.put(y, clamp_animation(ay, bounds), offset);
                 Ok(())
             }
             (BridgeEffectValue::Colour(colour), EffectValue::Colour(channels)) => {
@@ -2160,7 +2252,7 @@ impl BridgeEffectValue {
                 for ((property, animation), scalar) in
                     channels.iter_mut().zip(animations).zip(scalars)
                 {
-                    scalar.put(property, clamp_animation(animation, bounds));
+                    scalar.put(property, clamp_animation(animation, bounds), offset);
                 }
                 Ok(())
             }

@@ -424,10 +424,15 @@ pub(crate) fn draw(
         .position(|row| row == "sprite_layer")
         .and_then(|at| aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex))
         .filter(|_| style.mode == RenderMode::Sprite);
+    // A ready-made Sprite shape stands in for the layer, and names the walk by
+    // which shape it is.
+    let (preset, ready_made) = crate::gpufx_particulate::Particulate::preset_sprite(fx, ctx, p);
+    let sprite = if ready_made { preset.as_ref() } else { sprite };
+    let preset_name = ready_made.then_some([inst.sprite_shape, inst.sprite_star_points as u32]);
     // A walk that started late is not the walk from the in point. Every frame
     // is stamped with the sprite as it is now, so a sprite walk is named by
     // that picture, and keeps nothing when the picture has no name.
-    let keeps = from == 0 && (sprite.is_none() || trails.sprite.is_some());
+    let keeps = from == 0 && (sprite.is_none() || ready_made || trails.sprite.is_some());
 
     // The walk's name: what it reads, the raster it is drawn at, and the
     // camera a 3D layer is seen through.
@@ -443,7 +448,12 @@ pub(crate) fn draw(
         }
         h_.update(&trails.clone.0.to_le_bytes());
         h_.update(&trails.clone.1.to_le_bytes());
-        if let Some(name) = trails.sprite.filter(|_| sprite.is_some()) {
+        if let Some(name) = preset_name {
+            h_.update(b"sprite shape/");
+            for v in name {
+                h_.update(&v.to_le_bytes());
+            }
+        } else if let Some(name) = trails.sprite.filter(|_| sprite.is_some()) {
             h_.update(&name.to_le_bytes());
         }
         if layer.switches.three_d {

@@ -124,7 +124,7 @@ shows while its value differs from its default, and never on a keyed one.
 | **Point** | X and Y on one row, and a dropper that picks the point on the Viewer. |
 | **Link** | The chain between the x and y boxes of some pairs. Linked, editing one scales the other by the same factor. Click it again to **Unlink**. |
 | **Curve** | A plot. Click it to add a point, or press and drag to add one and place it. Drag a point to move it, and drag one out of the plot to remove it. The two end points slide along their edges and are never removed. A curve holds 32 points at most. Neighbouring curves share one plot with a button per channel. Right-click the plot for **Add point** or **Delete point**, **Reset curve**, **Copy curve**, **Paste curve**, and the plot's size: **Small**, **Medium** or **Large**. |
-| **Layer** | A picker of the composition's layers. A row that reads a picture leaves out the layers with none. The effect's own layer is marked *(this layer)*. A **Matte** row carries its **Channel** and **Invert** beside it. |
+| **Layer** | A picker of the composition's layers. A row that reads a picture leaves out the layers with none. The effect's own layer is marked *(this layer)*. |
 | **Mask path** | A picker of the layer's masks. **First mask** follows whichever mask is first. |
 | **Clip** | A picker of the clips on the layer named by the effect's layer row. It reads **Choose a layer first** until that row names a layer. |
 | **Points** | The row at the top of an effect with a Points input. It lists **None** and every effect above that hands out points, and picking one rewires it. Merge points has one for each of its four inputs. |
@@ -135,8 +135,9 @@ shows while its value differs from its default, and never on a keyed one.
 A picker naming something since deleted reads **Missing layer**, **Missing mask** or
 **Missing clip**.
 
-Some rows are folded into named groups with a twirl of their own. A row another parameter
-has taken over is greyed, and its tooltip names the control it waits on.
+Some rows are folded into named groups with a twirl of their own. A group that starts shut
+sits after the effect's other rows. A row another parameter has taken over is greyed, and
+its tooltip names the control it waits on.
 
 Some effects draw a display of their own above their rows.
 [Levels](/effects/colour/levels/) draws the frame's histogram, with its input black, gamma
@@ -151,7 +152,8 @@ names the driver, and a click on the word opens the driver in the Node panel. A 
 a points effect with nothing wired into it reads **No stream**.
 
 A row holding an [expression](/use/expressions/) shows the expression's text and the value
-it works out in place of the value box, and a click opens the expression's editor.
+it works out in place of the value box, and a click opens the expression's editor. So does
+`Alt`+click on the stopwatch of a parameter of one number, with or without an expression.
 
 ### A row's menu
 
@@ -209,9 +211,9 @@ Right-click a swatch for **Reset**, **Copy colour**, **Paste colour** and **Copy
 
 ## Compositing
 
-The fold at the foot of each effect holds its **Mix**, **Blend** and **Matte**.
-**Compositing** in the heading's menu opens it. Shut, it reads whatever is off its
-default. See [Effects](/use/effects/#matte).
+The fold at the foot of each effect holds its **Mix**, **Blend**, **Matte**, **Invert** and
+**Channel**, each on a row of its own. It starts shut, and shut it reads whatever is off
+its default. See [Effects](/use/effects/#matte).
 
 ## The keyframe strip
 

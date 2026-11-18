@@ -36,7 +36,7 @@ A blur that streaks each pixel along a direction read from a map. The map is the
 | **Falloff** | Slider | 0 to 100 | 0 | Per cent |
 | **Map softness** | Slider | 0 to 100; higher | 0 | Pixels at composition size |
 | **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
-| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | Edge repeat | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -72,7 +72,8 @@ In the Effect Controls panel:
 - **Map placement**: where the map sits on this layer. **As placed in comp** reads it
   where the Matte layer sits in the composition. **Stretch to fit** stretches it over
   this layer. **Centre** centres it at its own size.
-- **Edges**: what a streak reads past the frame.
+- **Edges**: what a streak reads past the frame. **None** reads nothing, **Edge repeat**
+  holds the border pixel outward and **Mirror repeat** reflects the picture at the border.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Matte**: the map. With none picked, the layer's own picture is the map.

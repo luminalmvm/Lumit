@@ -130,7 +130,7 @@ pub struct Jolt {
     pub seed: u32,
 
     /// What shows where a scale or a slide pulls the picture off its edge.
-    /// Mirror reads as more picture rather than as a border.
+    /// Mirror repeat reads as more picture rather than as a border.
     #[choice(label = "Edges", options = *EDGE_OPTIONS, default = 2)]
     pub edge: u32,
 
