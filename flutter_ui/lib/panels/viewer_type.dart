@@ -997,14 +997,13 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         // The layer was deleted while it was being typed into.
       }
     }
-    final x = tf == null ? null : staticValueOf(tf.anchorX);
-    final y = tf == null ? null : staticValueOf(tf.anchorY);
+    final x = tf == null ? null : _shifted(tf.anchorX, shift.dx);
+    final y = tf == null ? null : _shifted(tf.anchorY, shift.dy);
     if (tf != null && x != null && y != null) {
-      final moved = writeScalar(
-          tf, BridgeTransformProp.anchorX, BridgeScalar.static_(x + shift.dx));
+      final moved = writeScalar(tf, BridgeTransformProp.anchorX, x);
       widget.uiState.liveTransforms.value = {
-        layer.internallayerId: writeScalar(moved, BridgeTransformProp.anchorY,
-            BridgeScalar.static_(y + shift.dy)),
+        layer.internallayerId:
+            writeScalar(moved, BridgeTransformProp.anchorY, y),
       };
       _movedLive = true;
     } else {
@@ -1168,6 +1167,21 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     );
   }
 }
+
+/// [scalar] moved by [by], every key of a keyed one, as the engine moves the
+/// anchor when the words are written. Null for one an expression drives.
+BridgeScalar? _shifted(BridgeScalar scalar, double by) => switch (scalar) {
+      BridgeScalar_Static(:final field0) => BridgeScalar.static_(field0 + by),
+      BridgeScalar_Keyframed(:final field0) => BridgeScalar.keyframed([
+          for (final k in field0)
+            BridgeKeyframe(
+                time: k.time,
+                value: k.value + by,
+                interpIn: k.interpIn,
+                interpOut: k.interpOut),
+        ]),
+      _ => null,
+    };
 
 /// A transform channel's plain value, or null when it is keyframed and so has
 /// no one value to read.
