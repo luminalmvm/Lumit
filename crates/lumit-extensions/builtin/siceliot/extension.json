@@ -2,7 +2,7 @@
   "format": 1,
   "id": "siceliot",
   "name": "Siceliot",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "summary": "Cavalry-style, non-destructive falloffs, gradients, patterns, filters and warps.",
   "author": "andrea68git",
   "requires": "0.10.0",
@@ -32,6 +32,10 @@
       "passes": [{ "name": "map_h", "scale": 0.5 }, { "name": "map_v", "scale": 0.5 }, { "name": "shade" }],
       "input": { "label": "Map layer", "kind": "image" } },
     { "id": "colorama", "name": "Colorama", "category": "Colour", "version": 1, "api": 1, "shader": "colorama.wgsl",
-      "input": { "label": "Add phase", "kind": "image" } }
+      "input": { "label": "Add phase", "kind": "image" } },
+    { "id": "linear-colour-key", "name": "Linear colour key", "category": "Utility", "version": 1, "api": 1, "shader": "linear-colour-key.wgsl" },
+    { "id": "colour-neutraliser", "name": "Colour neutraliser", "category": "Colour", "version": 1, "api": 1, "shader": "colour-neutraliser.wgsl" },
+    { "id": "sphere", "name": "Sphere", "category": "Distortion", "version": 1, "api": 1, "shader": "sphere.wgsl",
+      "input": { "label": "Reflection map", "kind": "image" } }
   ]
 }
