@@ -1400,6 +1400,22 @@ class LayerArea extends StatelessWidget {
         ),
       );
     }
+    // A shut heading among an effect's rows draws the keys of what it holds,
+    // as a shut layer's bar does.
+    if (row is FoldGroupRow) {
+      final keys = keysOfRows(row.inside);
+      if (keys.isEmpty) return null;
+      return ValueListenableBuilder<BarDragPreview?>(
+        valueListenable: dragPreview,
+        builder: (context, preview, _) => KeySummary(
+          key: ValueKey<String>('tl-key-summary-${foldRowPath(id, row)}'),
+          keys: keys,
+          fps: fps,
+          shift: keyShiftOf(preview, id),
+          axis: axis,
+        ),
+      );
+    }
     final rowKeys = laneKeysOf(row);
     final rowId = foldRowPath(id, row);
     if (rowKeys.isEmpty) {

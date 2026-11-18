@@ -2976,25 +2976,17 @@ class _EffectSection extends StatelessWidget {
     return it >= 0 && me >= 0 && it < me;
   }
 
-  /// The Mix and Matte rows nearly every effect ends with: what the Compositing
-  /// fold holds. One the schema keeps in a group of its own (the Lens flare's
-  /// source matte) stays where it is, and so do a gradient's Mix and Matte,
-  /// each listed on rows of its own with Blend, Invert and Channel
-  /// ([blendInView]).
+  /// What the Compositing fold holds: the Mix and Matte rows nearly every
+  /// effect ends with, and the Blend, Invert and Channel that go with them,
+  /// each a row of its own ([compositingRowsOf]).
   List<BridgeParamInfo> get _compositingRows {
-    final grouped = {
-      for (final g in cachedListParameterGroups(info.name)) ...g.params,
-      if (blendInView(info.name)) ...['mix', 'matte'],
-    };
     final hidden = info.hiddenRows.toSet();
-    return [
+    return compositingRowsOf([
       for (final p in _rows)
-        if (!hidden.contains(p.id) &&
-            !grouped.contains(p.id) &&
-            ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
-                (p.id == 'matte' && p.kind is BridgeParamKind_Layer)))
-          p,
-    ];
+        if (!hidden.contains(p.id)) p,
+    ], {
+      for (final g in cachedListParameterGroups(info.name)) ...g.params,
+    });
   }
 
   /// Where the Compositing fold's open state is kept.
@@ -3402,12 +3394,12 @@ class _EffectSection extends StatelessWidget {
     };
     final whyDisabled = disabledReasons(info.name, shown);
 
-    // The uniform Matte row and the Mix row: a Layer picker carries its Channel
-    // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
-    // its own. [paramRidersFor] holds the rule, so the box on the node graph
-    // canvas folds by the same one.
+    // A Layer picker carries its Channel and Invert beside it, and no rider
+    // gets a row of its own. The Mix and the Matte carry nothing: their rows
+    // are in the Compositing fold. [paramRidersFor] holds the rule, so the box
+    // on the node graph canvas folds by the same one.
     List<BridgeParamInfo> ridersFor(BridgeParamInfo p) =>
-        paramRidersFor(params, p, effect: info.name);
+        paramRidersFor(params, p);
 
     final compositing = _compositingRows;
 
@@ -3662,13 +3654,13 @@ class _EffectSection extends StatelessWidget {
     if (compositing.isNotEmpty) {
       final path = _compositingPath;
       final open = isGroupOpen(path, true);
-      // Shut, what is off its default still shows, so a mix or a matte is never
-      // hidden. At its defaults, shut, the fold takes no room at all: the
-      // heading's menu opens it.
+      // Always there, shut or open, as the Timeline and a node box list it:
+      // an effect's Mix and Matte are found in the same place in all three.
+      // Shut, what is off its default is said beside the heading, so a mix or
+      // a matte is never hidden.
       final summary =
           open ? null : _compositingSummary(compositing, ridersFor, shown);
-      if (open || summary != null) {
-        rows.add(_ParamGroupSection(
+      rows.add(_ParamGroupSection(
           headerKey: ValueKey<String>(path),
           label: l10n.fxFoldCompositing,
           open: open,
@@ -3678,8 +3670,7 @@ class _EffectSection extends StatelessWidget {
           ]),
           summary: summary,
           rows: [for (final p in compositing) rowFor(p)],
-        ));
-      }
+      ));
     }
     return rows;
   }
@@ -3715,16 +3706,14 @@ class _EffectSection extends StatelessWidget {
           default:
         }
       }
-      // The blend rides on the Mix row, so it reads straight after the mix.
-      if (host.id != 'mix') continue;
-      for (final rider in ridersFor(host)) {
-        if ((rider.kind, shown[rider.id])
-            case (
-              BridgeParamKind_Choice(:final options, :final default_),
-              BridgeEffectValue_Choice(:final field0)
-            ) when field0 != default_ && field0 < options.length) {
-          parts.add(engineLabel(options[field0]));
-        }
+      // The blend reads straight after the mix.
+      if (host.id != 'blend') continue;
+      if ((host.kind, shown[host.id])
+          case (
+            BridgeParamKind_Choice(:final options, :final default_),
+            BridgeEffectValue_Choice(:final field0)
+          ) when field0 != default_ && field0 < options.length) {
+        parts.add(engineLabel(options[field0]));
       }
     }
     return parts.isEmpty ? null : parts.join(' · ');

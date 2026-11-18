@@ -77,6 +77,11 @@ final class FoldGroupRow extends LayerFoldRow {
   /// Whether the Audio heading's waveform lane is open, for the tick on its
   /// menu. Null on every other heading.
   final bool? waveform;
+
+  /// The rows a shut group of an effect's rows holds, so its lane can draw
+  /// their keys as a shut layer's bar does ([keysOfRows]). Empty everywhere
+  /// else.
+  final List<LayerFoldRow> inside;
   const FoldGroupRow({
     required this.path,
     required this.label,
@@ -86,6 +91,7 @@ final class FoldGroupRow extends LayerFoldRow {
     this.named = false,
     this.shown,
     this.waveform,
+    this.inside = const [],
   }) : super(depth);
 }
 
@@ -1562,16 +1568,20 @@ List<BridgeKeyframe> layerKeys({
   required BridgeLayerEntry entry,
   BridgeFlowParams? flowParams,
   BridgeScalar? volumeDb,
-}) {
-  final seen = <double>{};
-  return [
-    for (final row in layerFoldRows(
+}) =>
+    keysOfRows(layerFoldRows(
       entry: entry,
       open: everyFoldPath,
       hasAudio: volumeDb != null,
       flowParams: flowParams,
       volumeDb: volumeDb,
-    ))
+    ));
+
+/// Every key on [rows], one for each instant, for a summary of them.
+List<BridgeKeyframe> keysOfRows(Iterable<LayerFoldRow> rows) {
+  final seen = <double>{};
+  return [
+    for (final row in rows)
       for (final key in laneKeysOf(row))
         // By seconds rather than by the rational itself: one instant can arrive
         // as 1/25 from one property and 2/50 from another, and both land on the
@@ -2574,12 +2584,13 @@ List<LayerFoldRow> groupHeaderFoldRows({
         named: fx.customName != null));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
-      for (final param in [
-        ...foldEffectParams(fx, values),
-      ]) {
-        rows.add(FoldEffectParamRow(fx, param, values[param.id],
-            depth: 2, group: group.id));
-      }
+      rows.addAll(effectFoldRows(fx, values,
+          path: path,
+          depth: 2,
+          open: open,
+          row: (param, depth) => FoldEffectParamRow(
+              fx, param, values[param.id],
+              depth: depth, group: group.id)));
     }
   }
   return rows;
@@ -2612,6 +2623,100 @@ List<BridgeParamInfo> foldEffectParams(
     for (final p in instanceParameters(fx))
       if (!meshRowHidden(fx, p) && !hidden.contains(p.id)) p,
   ];
+}
+
+/// The path of one of an effect's **groups** in the Timeline, under the
+/// effect's own [effect] path: a schema group by its place among the effect's
+/// groups, and `compositing` for the fold its Mix and Matte rows sit in.
+String effectGroupPath(String effect, String group) => '$effect/group:$group';
+
+/// An effect's rows as the Effect controls panel lays them out: each labelled
+/// group of the schema a heading with its rows under it, and the Mix and Matte
+/// rows nearly every effect ends with in a **Compositing** fold at the foot.
+///
+/// A group the schema folds shut starts shut and comes after the effect's
+/// loose rows, and Compositing starts shut after those, as in the panel; any
+/// other group starts open, where the schema has it. An open set only ever names what
+/// somebody opened, so a group that starts open is named by the path that
+/// shuts it instead ([effectGroupPath] with `:shut` after it), and
+/// [everyFoldPath], which answers yes to everything, still reads as open.
+///
+/// Blend, Invert and Channel are rows of their own in the fold, after the Mix
+/// and the Matte they go with, as in the panel ([compositingRowsOf]).
+List<LayerFoldRow> effectFoldRows(
+  BridgeEffectInstanceInfo fx,
+  Map<String, BridgeEffectValue> values, {
+  required String path,
+  required int depth,
+  required Set<String> open,
+  required FoldEffectParamRow Function(BridgeParamInfo param, int depth) row,
+}) {
+  final params = foldEffectParams(fx, values);
+  final groups = cachedListParameterGroups(fx.name);
+  final groupOf = <String, int>{
+    for (var i = 0; i < groups.length; i++)
+      if (groups[i].label.isNotEmpty)
+        for (final id in groups[i].params) id: i,
+  };
+  final grouped = {
+    for (final g in groups) ...g.params,
+  };
+  // The Compositing fold's rows, by the panel's own rule.
+  final inFold = {
+    for (final p in compositingRowsOf(params, grouped)) p.id,
+  };
+  final every = identical(open, everyFoldPath);
+  final rows = <LayerFoldRow>[];
+  // The groups that start shut go after the loose rows, as in the panel, so
+  // what follows one never reads as what is inside it.
+  final tucked = <LayerFoldRow>[];
+  final headed = <int, bool>{};
+  for (final p in params) {
+    if (inFold.contains(p.id)) continue;
+    final g = groupOf[p.id];
+    if (g == null) {
+      rows.add(row(p, depth));
+      continue;
+    }
+    final startsShut = groups[g].collapsed;
+    final into = startsShut ? tucked : rows;
+    final groupOpen = headed.putIfAbsent(g, () {
+      final at = effectGroupPath(path, startsShut ? '$g' : '$g:shut');
+      final isOpen =
+          every || (startsShut ? open.contains(at) : !open.contains(at));
+      into.add(FoldGroupRow(
+          path: at,
+          label: groups[g].label,
+          open: isOpen,
+          depth: depth,
+          inside: isOpen
+              ? const []
+              : [
+                  for (final q in params)
+                    if (groupOf[q.id] == g && !inFold.contains(q.id))
+                      row(q, depth + 1),
+                ]));
+      return isOpen;
+    });
+    if (groupOpen) into.add(row(p, depth + 1));
+  }
+  rows.addAll(tucked);
+  if (inFold.isNotEmpty) {
+    final at = effectGroupPath(path, 'compositing');
+    final isOpen = open.contains(at);
+    final inside = [
+      for (final p in params)
+        if (inFold.contains(p.id)) row(p, depth + 1),
+    ];
+    rows.add(FoldGroupRow(
+        path: at,
+        label: l10n.fxFoldCompositing,
+        open: isOpen,
+        depth: depth,
+        inside: isOpen ? const [] : inside));
+    if (isOpen) rows.addAll(inside);
+  }
+  return rows;
 }
 
 /// The rows a clip's twirl shows (docs/impl/audio-timeline.md §5): a heading
@@ -2649,12 +2754,13 @@ List<LayerFoldRow> clipFoldRows({
     ));
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
-      for (final param in [
-        ...foldEffectParams(fx, values),
-      ]) {
-        rows.add(FoldEffectParamRow(fx, param, values[param.id],
-            depth: 3, clip: clip.id));
-      }
+      rows.addAll(effectFoldRows(fx, values,
+          path: path,
+          depth: 3,
+          open: open,
+          row: (param, depth) => FoldEffectParamRow(
+              fx, param, values[param.id],
+              depth: depth, clip: clip.id)));
     }
   }
   return rows;
@@ -3304,12 +3410,13 @@ List<LayerFoldRow> layerFoldRows({
         ));
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
-          for (final param in [
-            ...foldEffectParams(fx, values),
-          ]) {
-            rows.add(FoldEffectParamRow(fx, param, values[param.id],
-                depth: 3, driven: driven['${fx.id}/${param.id}']));
-          }
+          rows.addAll(effectFoldRows(fx, values,
+              path: path,
+              depth: 3,
+              open: open,
+              row: (param, depth) => FoldEffectParamRow(
+                  fx, param, values[param.id],
+                  depth: depth, driven: driven['${fx.id}/${param.id}'])));
         }
       }
     }

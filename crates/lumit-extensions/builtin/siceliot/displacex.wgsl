@@ -85,7 +85,7 @@ struct Params {
     right: f32,
     /// @slider(0, 2000) @default(0) @unit(px) Bottom
     bottom: f32,
-    /// @choice("Off", "2x", "4x") @default("Off") Anti-aliasing
+    /// @choice("Off", "2x", "4x", "8x") @default("Off") Anti-aliasing
     antialias: u32,
     /// @choice("Result", "Map") @default("Result") View
     view: u32,
@@ -346,6 +346,8 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         grid = 2;
     } else if (p.antialias == 2u) {
         grid = 4;
+    } else if (p.antialias == 3u) {
+        grid = 8;
     }
     let frame = dx_frame();
     // One raster pixel, in comp pixels.

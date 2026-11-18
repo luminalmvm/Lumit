@@ -43,7 +43,7 @@ effect draws. With the defaults it changes nothing.
 | **Red**, **Green**, **Blue** | Slider | -5 to 5; any value by typing | 1 | - |
 | **Edge behaviour** | Dropdown | None · Edge repeat · Repeat · Mirror repeat | None | - |
 | **Left**, **Top**, **Right**, **Bottom** | Slider | 0 to 2000; any value by typing | 0 | Pixels at composition size |
-| **Anti-aliasing** | Dropdown | Off · 2x · 4x | Off | - |
+| **Anti-aliasing** | Dropdown | Off · 2x · 4x · 8x | Off | - |
 | **View** | Dropdown | Result · Map | Result | - |
 
 In the Effect Controls panel:
@@ -91,11 +91,12 @@ In the Effect Controls panel:
 - **Iterations**: how many copies are averaged, from the full amount back toward none.
 - **Shutter duration (%)**: how far back toward none the iterations reach.
 - **Red**, **Green** and **Blue**: each colour channel's share of the transform.
-- **Edge behaviour**: what is read past the picture's edges. **None** reads nothing,
-  **Edge repeat** holds the edge pixels, **Repeat** starts the picture again and
-  **Mirror repeat** runs it back.
+- **Edge behaviour**: what is read past the picture's edges. **None** reads nothing, **Edge
+  repeat** holds the edge pixels, **Repeat** starts the picture again and **Mirror repeat**
+  runs it back.
 - **Left**, **Top**, **Right** and **Bottom**: move each of those edges in.
-- **Anti-aliasing**: **2x** and **4x** read each pixel at 4 or 16 places and average them.
+- **Anti-aliasing**: **2x**, **4x** and **8x** read each pixel at 4, 16 or 64 places and
+  average them.
 - **View**: **Map** shows the map after softness, gamma and easing, in grey.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.

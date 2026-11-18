@@ -1,0 +1,60 @@
+---
+title: Colour neutraliser
+description: "Takes a colour cast out of the shadows, the midtones and the highlights, each on its own."
+---
+
+Colour neutraliser is a **Colour** effect.
+
+## What it does
+
+Takes a colour cast out of the shadows, the midtones and the highlights, as After Effects'
+CC Color Neutralizer does. Each range has an unbalance colour: a colour in the picture
+that should be grey. The effect moves that colour to the grey of the same brightness, and
+the rest of the range with it. With the defaults it changes nothing.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **View** | Dropdown | Final result · Correction black to white · Correction stair | Final result | - |
+| **Shadows unbalance** | Colour | Each channel 0 to 1 | Black | - |
+| **Shadows (%)** | Slider | 0 to 200 | 100 | - |
+| **Red - shadows**, **Green - shadows**, **Blue - shadows** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Midtones unbalance** | Colour | Each channel 0 to 1 | Mid grey | - |
+| **Midtones (%)** | Slider | 0 to 200 | 100 | - |
+| **Red - midtones**, **Green - midtones**, **Blue - midtones** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Highlights unbalance** | Colour | Each channel 0 to 1 | White | - |
+| **Highlights (%)** | Slider | 0 to 200 | 100 | - |
+| **Red - highlights**, **Green - highlights**, **Blue - highlights** | Slider | -100 to 100; any value by typing | 0 | - |
+| **Pinning (%)** | Slider | 0 to 100 | 0 | - |
+| **Blend with original (%)** | Slider | 0 to 100 | 0 | - |
+| **Black point (%)** | Slider | 0 to 100 | 0 | - |
+| **White point (%)** | Slider | 0 to 100 | 100 | - |
+
+## What each control does
+
+- **View**: **Correction black to white** shows the correction on a ramp from black at the
+  left to white at the right, in place of the picture. **Correction stair** shows the same
+  ramp in eleven steps.
+- **Shadows unbalance**, **Midtones unbalance** and **Highlights unbalance**: the colour in
+  each range that should be grey.
+- **Shadows (%)**, **Midtones (%)** and **Highlights (%)**: how much of the way to grey each
+  range is moved.
+- **Red**, **Green** and **Blue**, for each range: add to that channel above 0 and take
+  from it below.
+- **Pinning (%)**: fades the correction out towards pure black and pure white.
+- **Blend with original (%)**: how much of the original is mixed back in.
+- **Black point (%)** and **White point (%)**: the brightnesses the three ranges run
+  between. At Black point and below a pixel is all shadows, and at White point and above
+  all highlights.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Colour balance](/effects/colour/colour-balance/)
+- [Shadow highlight](/effects/colour/shadow-highlight/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)
