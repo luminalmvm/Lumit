@@ -7,7 +7,7 @@
 // toward orange adds red and takes away blue and green by the same amount, so
 // the brightness does not move; the bar moves all three together. The two
 // readings are exact: the three channel angles sit 120 degrees apart, so the
-// dot's position is a plain linear map of the colour and back.
+// lean is a plain linear map of the colour and back.
 
 import 'dart:math' as math;
 
@@ -49,13 +49,26 @@ List<double> wheelRgb(double master, Offset chroma) => [
 /// The master of a colour: its mean channel.
 double wheelMaster(List<double> rgb) => (rgb[0] + rgb[1] + rgb[2]) / 3;
 
+/// The soft middle: the dot [u] of the way to the rim leans this much of the
+/// rim's reach. A quarter as strong as a straight line at the middle, where
+/// most leans are made, and still the whole reach at the rim.
+double _soft(double u) => u * (0.25 + 0.75 * u);
+
+/// Where the dot sits for a lean [v] of the rim's reach: [_soft] backwards.
+double _unsoft(double v) => (math.sqrt(0.0625 + 3 * v) - 0.25) / 1.5;
+
+/// The pixels of drag that cross one radius at full rate, whatever the
+/// wheel's size, so a small wheel is no stronger than a large one.
+const double _dragRadius = 48;
+
 /// One wheel: the disc, its dot, and the master bar at its right.
 ///
 /// A drag on the disc is relative and free in both directions. The dot moves
-/// with the pointer at a fifth of its speed, a twentieth with Shift or Ctrl,
-/// so a precise lean is a matter of moving slowly, not of hitting a pixel. A
-/// double-click puts the dot back in the middle. The bar works the same way
-/// up and down.
+/// a fifth of the pointer's travel on the largest wheel, a twentieth with
+/// Shift or Ctrl, and a pixel moves the colour as far on a smaller one. The
+/// lean grows gently near the middle and faster towards the rim, so a precise
+/// lean is a matter of moving slowly, not of hitting a pixel. A double-click
+/// puts the dot back in the middle. The bar works the same way up and down.
 class GradeWheel extends StatefulWidget {
   /// The three channels as the document holds them, at the playhead.
   final List<double> rgb;
@@ -113,16 +126,30 @@ class GradeWheel extends StatefulWidget {
 }
 
 class _GradeWheelState extends State<GradeWheel> {
-  /// The colour in hand while a drag is in flight, as master and chroma.
+  /// The colour in hand while a drag is in flight, as master and where the
+  /// dot sits, a fraction of the radius with y up.
   double? _master;
-  Offset? _chroma;
+  Offset? _dot;
   bool _onBar = false;
 
   /// Where the pointer was at the last tick, in the wheel's own space.
   Offset _at = Offset.zero;
 
   double get _liveMaster => _master ?? wheelMaster(widget.rgb);
-  Offset get _liveChroma => _chroma ?? wheelChroma(widget.rgb);
+  Offset get _liveDot => _dot ?? _dotFor(wheelChroma(widget.rgb));
+  Offset get _liveChroma => _chromaFor(_liveDot);
+
+  /// Not held to the rim: a colour typed past it keeps its lean while the
+  /// bar is dragged, and a drag on the disc brings the dot back to the rim.
+  Offset _dotFor(Offset chroma) {
+    final v = chroma.distance / widget.reach;
+    return v < 1e-9 ? Offset.zero : chroma / chroma.distance * _unsoft(v);
+  }
+
+  Offset _chromaFor(Offset dot) {
+    final u = dot.distance;
+    return u < 1e-9 ? Offset.zero : dot / u * _soft(u) * widget.reach;
+  }
 
   /// A fifth of the pointer's speed, a twentieth with Shift or Ctrl: the disc
   /// is a control, not a target.
@@ -135,26 +162,22 @@ class _GradeWheelState extends State<GradeWheel> {
     _onBar = bar;
     _at = at;
     _master = wheelMaster(widget.rgb);
-    _chroma = wheelChroma(widget.rgb);
+    _dot = _dotFor(wheelChroma(widget.rgb));
     widget.onStart();
   }
 
   void _move(Offset at) {
     final delta = at - _at;
     _at = at;
-    final radius = widget.size / 2;
     if (_onBar) {
-      final per = widget.masterSpan * 2 / widget.size;
+      final per = widget.masterSpan / _dragRadius;
       _master = (_liveMaster - delta.dy * per * _rate).clamp(
           widget.neutral - widget.masterSpan,
           widget.neutral + widget.masterSpan);
     } else {
-      final per = widget.reach / radius;
-      var next = _liveChroma + Offset(delta.dx, -delta.dy) * per * _rate;
-      if (next.distance > widget.reach) {
-        next = next / next.distance * widget.reach;
-      }
-      _chroma = next;
+      var next = _liveDot + Offset(delta.dx, -delta.dy) / _dragRadius * _rate;
+      if (next.distance > 1) next = next / next.distance;
+      _dot = next;
     }
     setState(() {});
     widget.onLive(wheelRgb(_liveMaster, _liveChroma));
@@ -164,7 +187,7 @@ class _GradeWheelState extends State<GradeWheel> {
     final rgb = wheelRgb(_liveMaster, _liveChroma);
     setState(() {
       _master = null;
-      _chroma = null;
+      _dot = null;
     });
     widget.onCommit(rgb);
   }
@@ -177,7 +200,7 @@ class _GradeWheelState extends State<GradeWheel> {
     if (_master == null) return;
     setState(() {
       _master = null;
-      _chroma = null;
+      _dot = null;
     });
     widget.onCancel();
   }
@@ -203,6 +226,7 @@ class _GradeWheelState extends State<GradeWheel> {
     final chroma = _liveChroma;
     final master = _liveMaster;
     final leaning = chroma.distance > 1e-6;
+    final at = _liveDot;
     final lifted = (master - widget.neutral).abs() > 1e-6;
     final dot =
         widget.keyed ? t.animated : (leaning ? t.accent : t.textPrimary);
@@ -218,7 +242,7 @@ class _GradeWheelState extends State<GradeWheel> {
           child: CustomPaint(
             size: Size(size, size),
             painter: _WheelPainter(
-              chroma: chroma / widget.reach,
+              chroma: at,
               dot: dot,
               ring: t.hairlineStrong,
               cross: t.hairline,

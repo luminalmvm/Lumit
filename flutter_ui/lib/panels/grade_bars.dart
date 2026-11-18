@@ -80,7 +80,8 @@ class _GradeBarsState extends State<GradeBars> {
   void _move(double dy) {
     final live = _live;
     if (live == null) return;
-    final by = -dy * widget.span * 2 / widget.height * _rate;
+    // A pixel moves a bar as far at every height, as on the wheels.
+    final by = -dy * widget.span / 48 * _rate;
     final lo = widget.min, hi = widget.max;
     setState(() {
       if (_bar == 0) {
