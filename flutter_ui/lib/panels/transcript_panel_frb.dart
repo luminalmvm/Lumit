@@ -1877,7 +1877,8 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   /// The page's coordinates for a pointer position in the list.
   Offset _pageOffset(Offset local) =>
-      Offset(local.dx - _pagePad, local.dy + _scroll.offset - _pagePad);
+      Offset(local.dx - _pagePad,
+          local.dy + (_scroll.hasClients ? _scroll.offset : 0) - _pagePad);
 
   ({int token, bool after})? _hitAt(Offset local) {
     final layout = _layout;
