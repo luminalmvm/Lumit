@@ -265,8 +265,15 @@ pub const NOISE_DISPLACED_TURBULENCE: u32 = 24;
 pub const NOISE_WAVY_TURBULENCE: u32 = 25;
 pub const NOISE_DISPLACED_VORONOI: u32 = 26;
 pub const NOISE_VL: u32 = 27;
+pub const NOISE_STUCCI: u32 = 28;
+pub const NOISE_STUCCI_WALL_IN: u32 = 29;
+pub const NOISE_STUCCI_WALL_OUT: u32 = 30;
+pub const NOISE_WINDY: u32 = 31;
 /// The last noise type.
-pub const NOISE_LAST: u32 = NOISE_VL;
+pub const NOISE_LAST: u32 = NOISE_WINDY;
+/// How far over the Stucci bases read their field a second time, in cells:
+/// the difference is the relief, lit from the top left.
+const STUCCI_STEP: f32 = 0.12;
 
 /// Fractal type options, in the panel's order.
 pub const FRACTAL_BASIC: u32 = 0;
@@ -542,6 +549,32 @@ fn shaped_octave(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i
             let dy = g(2, x, y);
             let (f1, _, _) = cells(seed, ch, x + 0.6 * dx, y + 0.6 * dy, z, cycle);
             f1.min(1.0) * 2.0 - 1.0
+        }
+        NOISE_STUCCI => {
+            // Blender's Stucci, Plastic: soft blobs in relief, the field read
+            // a little over again and the difference taken as the light.
+            let n = g(0, x, y);
+            let e = n - g(0, x + STUCCI_STEP, y + STUCCI_STEP);
+            (0.4 * n + 4.0 * e).clamp(-1.0, 1.0)
+        }
+        NOISE_STUCCI_WALL_IN | NOISE_STUCCI_WALL_OUT => {
+            // The fold's crease as a wall standing out of the plaster (Wall
+            // out) or cut into it (Wall in), in the same relief light.
+            let h0 = 1.0 - g(0, x, y).abs();
+            let h1 = 1.0 - g(0, x + STUCCI_STEP, y + STUCCI_STEP).abs();
+            let e = 2.5 * (h0 - h1);
+            let r = 0.3 * (2.0 * h0 - 1.0) + e;
+            if base == NOISE_STUCCI_WALL_IN {
+                (-r).clamp(-1.0, 1.0)
+            } else {
+                r.clamp(-1.0, 1.0)
+            }
+        }
+        NOISE_WINDY => {
+            // LuxCore's Windy: fine waves whose height a broad, slow wind
+            // field sets, calm where the wind drops.
+            let wind = g(1, x * 0.2, y * 0.2).abs();
+            g(0, x, y) * (wind * 2.5).min(1.0)
         }
         // VL noise: Musgrave's variable lacunarity, the octave read where a
         // coarser one pushes it.

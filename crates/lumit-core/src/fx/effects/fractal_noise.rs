@@ -174,7 +174,11 @@ pub struct FractalNoise {
             "Displaced turbulence",
             "Wavy turbulence",
             "Displaced Voronoi",
-            "VL noise"
+            "VL noise",
+            "Stucci",
+            "Stucci wall in",
+            "Stucci wall out",
+            "Windy"
         ],
         default = 1
     )]

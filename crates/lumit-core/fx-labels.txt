@@ -1659,6 +1659,9 @@ Stroke emboss
 Stroke width
 Strokes
 Strong
+Stucci
+Stucci wall in
+Stucci wall out
 Stupl
 Style
 Stylise
@@ -1900,6 +1903,7 @@ Window 1
 Window 2
 Window 3
 Window 4
+Windy
 Wipe
 Wipe angle
 Wipe centre x

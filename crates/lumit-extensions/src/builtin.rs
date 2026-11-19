@@ -41,6 +41,7 @@ const BUILTIN: &[(&str, &[(&str, &str)])] = &[
             shader!("siceliot", "matrix-effect"),
             shader!("siceliot", "pixel-flow"),
             shader!("siceliot", "sine-wave-fan"),
+            shader!("siceliot", "bombing"),
             shader!("siceliot", "halftone"),
             shader!("siceliot", "dithering"),
             shader!("siceliot", "inner-shadow"),
@@ -93,7 +94,7 @@ mod tests {
     #[test]
     fn every_built_in_effect_loads_and_compiles() {
         let effects = super::effects();
-        assert_eq!(effects.len(), 32);
+        assert_eq!(effects.len(), 33);
         for effect in effects {
             lumit_core::fx::lfx::check(&effect)
                 .unwrap_or_else(|why| panic!("{}: {why}", effect.id));

@@ -386,7 +386,7 @@ fn nc_cells(seed: u32, channel: u32, x: f32, y: f32, z: f32, cycle: i32) -> NcCe
 fn nc_needs(base: u32) -> u32 {
     switch base {
         case 5u, 6u, 7u, 13u: { return 0u; }
-        case 11u, 14u, 22u, 23u, 25u: { return 3u; }
+        case 11u, 14u, 22u, 23u, 25u, 28u, 29u, 30u, 31u: { return 3u; }
         case 24u, 27u: { return 7u; }
         case 26u: { return 6u; }
         default: { return 1u; }
@@ -416,6 +416,8 @@ fn nc_sample_at(base: u32, c: u32, x: f32, y: f32, g1: f32, g2: f32) -> vec2<f32
         case 22u: { return vec2<f32>(x * 0.7, y * 0.7); }
         case 23u: { return vec2<f32>(x * 3.1, y * 3.1); }
         case 27u: { return vec2<f32>(x * 0.5, y * 0.5); }
+        case 28u, 29u, 30u: { return vec2<f32>(x + 0.12, y + 0.12); }
+        case 31u: { return vec2<f32>(x * 0.2, y * 0.2); }
         default: { return vec2<f32>(x, y); }
     }
 }
@@ -436,7 +438,9 @@ fn nc_shaped(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i32) 
             continue;
         }
         let at = nc_sample_at(base, u32(c), x, y, g[1], g[2]);
-        g[c] = nc_grad(seed, ch, u32(c), at.x, at.y, z, cycle);
+        // The Stucci bases read their own field again, a little over.
+        let chn = select(u32(c), 0u, base >= 28u && base <= 30u);
+        g[c] = nc_grad(seed, ch, chn, at.x, at.y, z, cycle);
     }
     let n = g[0];
     let m = g[1];
@@ -505,6 +509,14 @@ fn nc_shaped(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i32) 
         case 24u: { return n * 0.7; }
         case 25u: { return (abs(n) * 2.0 - 1.0) * 0.7; }
         case 26u: { return min(cl.f1, 1.0) * 2.0 - 1.0; }
+        case 28u: { return clamp(0.4 * n + 4.0 * (n - m), -1.0, 1.0); }
+        case 29u, 30u: {
+            let h0 = 1.0 - abs(n);
+            let h1 = 1.0 - abs(m);
+            let r = 0.3 * (2.0 * h0 - 1.0) + 2.5 * (h0 - h1);
+            return clamp(select(r, -r, base == 29u), -1.0, 1.0);
+        }
+        case 31u: { return n * min(abs(m) * 2.5, 1.0); }
         default: { return n; }
     }
 }

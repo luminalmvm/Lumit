@@ -6557,6 +6557,22 @@
   "@fxVlNoise": {
     "description": "Effect controls — a Noise type option on Fractal noise: Musgrave's variable-lacunarity noise, after Cinema 4D's VL noise."
   },
+  "fxStucci": "Stucci",
+  "@fxStucci": {
+    "description": "Effect controls — a Noise type option on Fractal noise: soft plaster blobs in relief, after Blender's Stucci (Plastic). Stucci is the Italian word for plasterwork; keep it as a name."
+  },
+  "fxStucciWallIn": "Stucci wall in",
+  "@fxStucciWallIn": {
+    "description": "Effect controls — a Noise type option on Fractal noise: plaster with grooves cut into it, after Blender's Stucci Wall In."
+  },
+  "fxStucciWallOut": "Stucci wall out",
+  "@fxStucciWallOut": {
+    "description": "Effect controls — a Noise type option on Fractal noise: plaster with walls standing out of it, after Blender's Stucci Wall Out."
+  },
+  "fxWindy": "Windy",
+  "@fxWindy": {
+    "description": "Effect controls — a Noise type option on Fractal noise: fine waves whose height a broad wind field sets, after LuxCore's Windy texture."
+  },
   "fxTurbulentDisplace": "Turbulent displace",
   "@fxTurbulentDisplace": {
     "description": "Effect name in the Add effect menu — the fractal-driven warp."

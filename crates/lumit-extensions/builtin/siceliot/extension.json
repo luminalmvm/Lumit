@@ -25,6 +25,8 @@
     { "id": "matrix-effect", "name": "Matrix effect", "category": "Textures", "version": 1, "api": 1, "shader": "matrix-effect.wgsl" },
     { "id": "pixel-flow", "name": "Pixel flow", "category": "Textures", "version": 1, "api": 1, "shader": "pixel-flow.wgsl" },
     { "id": "sine-wave-fan", "name": "Sine wave fan", "category": "Textures", "version": 1, "api": 1, "shader": "sine-wave-fan.wgsl" },
+    { "id": "bombing", "name": "Bombing", "category": "Textures", "version": 1, "api": 1, "shader": "bombing.wgsl",
+      "input": { "label": "Bullet layer", "kind": "image" } },
     { "id": "halftone", "name": "Halftone", "category": "Stylise", "version": 1, "api": 1, "shader": "halftone.wgsl" },
     { "id": "dithering", "name": "Dithering", "category": "Stylise", "version": 1, "api": 1, "shader": "dithering.wgsl" },
     { "id": "inner-shadow", "name": "Inner shadow", "category": "Stylise", "version": 1, "api": 1, "shader": "inner-shadow.wgsl",

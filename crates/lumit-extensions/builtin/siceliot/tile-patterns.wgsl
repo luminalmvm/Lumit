@@ -1,16 +1,18 @@
-// Tile patterns: tiles laid in one of five patterns with a line between
+// Tile patterns: tiles laid in one of ten patterns with a line between
 // them, as Octane's Tile patterns and Blender's Brick texture. Each tile
 // takes a colour between Tile colour 1 and Tile colour 2 at random; the line
 // is Line width wide and its edge is softened by Line softness. Bricks has
 // Blender's row offset and squash: every Offset frequency-th row is shifted,
-// every Squash frequency-th row is narrowed.
+// every Squash frequency-th row is narrowed. The brick bonds (Flemish, English,
+// Chain link, Herringbone, Basket weave) are LuxCore's: bricks Tile width long
+// and Row height high, headers half a brick long.
 
 struct Params {
-    /// @choice("Bricks", "Fancy tiles", "Hexagons", "Scales", "Triangles") @default("Bricks") Type
+    /// @choice("Bricks", "Fancy tiles", "Hexagons", "Scales", "Triangles", "Flemish bond", "English bond", "Chain link", "Herringbone", "Basket weave") @default("Bricks") Type
     kind: u32,
     /// @slider(4, 1000) @default(120) @unit(px) Tile width
     tile_width: f32,
-    /// @slider(4, 1000) @default(60) @unit(px) @enabled_if(kind=0) Row height
+    /// @slider(4, 1000) @default(60) @unit(px) @enabled_if(kind=0, kind=5, kind=6, kind=7, kind=8, kind=9) Row height
     row_height: f32,
     /// @bounded(0, 100) @default(50) @enabled_if(kind=0) Row offset
     row_offset: f32,
@@ -208,6 +210,86 @@ fn tp_fancy(q: vec2<f32>) -> Tile {
     return Tile(id * 2 + vec2<i32>(side, 0), to_line);
 }
 
+// A row of bricks laid in a repeating run: Flemish bond is one stretcher and
+// one header, Chain link two stretchers and a header; each row slides by
+// Shift so the headers sit over the stretchers below.
+fn tp_run(q: vec2<f32>, whole: i32, shift: f32) -> Tile {
+    let h = max(p.row_height, 1.0);
+    let w = max(p.tile_width, 1.0);
+    let row = floor(q.y / h);
+    let period = (f32(whole) + 0.5) * w;
+    let x = q.x + row * shift * w;
+    let cell = floor(x / period);
+    let fx = x - cell * period;
+    let seg = min(floor(fx / w), f32(whole));
+    let start = seg * w;
+    let end = select(start + w, period, seg >= f32(whole));
+    let fy = q.y - row * h;
+    let inset = min(min(fx - start, end - fx), min(fy, h - fy));
+    return Tile(vec2<i32>(i32(cell) * 3 + i32(seg), i32(row)), inset);
+}
+
+// English bond: a row of stretchers, then a row of headers a quarter brick over.
+fn tp_english(q: vec2<f32>) -> Tile {
+    let h = max(p.row_height, 1.0);
+    let row = floor(q.y / h);
+    let headers = (i32(row) & 1) != 0;
+    let w = max(p.tile_width, 1.0) * select(1.0, 0.5, headers);
+    let x = q.x + select(0.0, w * 0.5, headers);
+    let col = floor(x / w);
+    let fx = x - col * w;
+    let fy = q.y - row * h;
+    let inset = min(min(fx, w - fx), min(fy, h - fy));
+    return Tile(vec2<i32>(i32(col), i32(row)), inset);
+}
+
+// Herringbone: a brick lying (Tile width by Row height) and a brick standing on
+// its left end, the pair repeated one brick-height up and over, and a brick
+// length over and down. The nearest few repeats are searched.
+fn tp_herringbone(q: vec2<f32>) -> Tile {
+    let bw = max(p.row_height, 1.0);
+    let bl = max(p.tile_width, bw * 1.05);
+    let ic = floor((q.x + q.y) / (2.0 * bw));
+    let jc = floor((q.x - q.y) / (2.0 * bl));
+    var best = Tile(vec2<i32>(0), -1e9);
+    for (var dj = -1; dj <= 1; dj += 1) {
+        for (var di = -2; di <= 2; di += 1) {
+            let i = ic + f32(di);
+            let j = jc + f32(dj);
+            let r = q - vec2<f32>(i * bw + j * bl, i * bw - j * bl);
+            // Lying brick: [0, bl] by [0, bw].
+            let a = min(min(r.x, bl - r.x), min(r.y, bw - r.y));
+            if (a > best.inset) {
+                best = Tile(vec2<i32>(i32(i) * 2, i32(j)), a);
+            }
+            // Standing brick: [0, bw] by [bw, bw + bl].
+            let b = min(min(r.x, bw - r.x), min(r.y - bw, bw + bl - r.y));
+            if (b > best.inset) {
+                best = Tile(vec2<i32>(i32(i) * 2 + 1, i32(j)), b);
+            }
+        }
+    }
+    return best;
+}
+
+// Basket weave: squares a brick long, each holding as many bricks side by side
+// as Row height fits, lying and standing by turns like a chequerboard.
+fn tp_basket(q: vec2<f32>) -> Tile {
+    let s = max(p.tile_width, 1.0);
+    let k = max(floor(s / max(p.row_height, 1.0)), 1.0);
+    let b = floor(q / s);
+    var f = q - b * s;
+    let standing = ((i32(b.x) + i32(b.y)) & 1) != 0;
+    if (standing) {
+        f = f.yx;
+    }
+    let sw = s / k;
+    let si = floor(f.y / sw);
+    let fy = f.y - si * sw;
+    let inset = min(min(f.x, s - f.x), min(fy, sw - fy));
+    return Tile(vec2<i32>(i32(b.x) * 16 + i32(si), i32(b.y)), inset);
+}
+
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let q = sx_turn(lumit_px(uv), p.centre, p.rotation);
     var t: Tile;
@@ -216,6 +298,11 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         case 2u: { t = tp_hexagons(q); }
         case 3u: { t = tp_scales(q); }
         case 4u: { t = tp_triangles(q); }
+        case 5u: { t = tp_run(q, 1, 0.75); }
+        case 6u: { t = tp_english(q); }
+        case 7u: { t = tp_run(q, 2, 1.25); }
+        case 8u: { t = tp_herringbone(q); }
+        case 9u: { t = tp_basket(q); }
         default: { t = tp_bricks(q); }
     }
     let tile = mix(lumit_premult(p.colour_1), lumit_premult(p.colour_2), sx_hash(t.id, 3u));
