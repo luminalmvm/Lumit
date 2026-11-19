@@ -3,7 +3,8 @@
 // takes a colour between Tile colour 1 and Tile colour 2 at random; the line
 // is Line width wide and its edge is softened by Line softness. Bricks has
 // Blender's row offset and squash: every Offset frequency-th row is shifted,
-// every Squash frequency-th row is narrowed. The brick bonds (Flemish, English,
+// every Squash frequency-th row is narrowed. Holes leaves tiles out and Edge
+// roughness frays their edges, as 3ds Max's Tiles. The brick bonds (Flemish, English,
 // Chain link, Herringbone, Basket weave) are LuxCore's: bricks Tile width long
 // and Row height high, headers half a brick long.
 
@@ -26,6 +27,10 @@ struct Params {
     line_width: f32,
     /// @bounded(0, 100) @default(0) Line softness
     line_softness: f32,
+    /// @bounded(0, 100) @default(0) Holes
+    holes: f32,
+    /// @bounded(0, 100) @default(0) Edge roughness
+    edge_roughness: f32,
     /// @default(0.45, 0.12, 0.06, 1) Tile colour 1
     colour_1: vec4<f32>,
     /// @default(0.30, 0.07, 0.035, 1) Tile colour 2
@@ -306,10 +311,20 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         default: { t = tp_bricks(q); }
     }
     let tile = mix(lumit_premult(p.colour_1), lumit_premult(p.colour_2), sx_hash(t.id, 3u));
+    // Edge roughness frays each tile's edge with noise a few line widths
+    // long; Holes leaves a share of the tiles out, showing the line colour.
+    var inset = t.inset;
+    if (p.edge_roughness > 0.0) {
+        let grain = max(p.line_width, 2.0) * 3.0;
+        inset -= abs(sx_perlin(q / grain, 17u)) * grain * p.edge_roughness / 100.0;
+    }
+    if (sx_hash(t.id, 19u) * 100.0 < p.holes) {
+        inset = -1e9;
+    }
     // The line covers the first half Line width in from each edge; Line
     // softness widens the fade from one pixel to the whole half width.
     let half = p.line_width * 0.5;
     let soft = max(half * p.line_softness / 100.0, 1.0 / max(lumit.comp_scale, 1e-3));
-    let k = smoothstep(half - soft * 0.5, half + soft * 0.5, t.inset);
+    let k = smoothstep(half - soft * 0.5, half + soft * 0.5, inset);
     return sx_paint(mix(lumit_premult(p.line_colour), tile, k), uv);
 }

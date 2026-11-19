@@ -1948,6 +1948,7 @@ Map<String, String> get _built => {
       "Stucci wall in": l10n.fxStucciWallIn,
       "Stucci wall out": l10n.fxStucciWallOut,
       "Windy": l10n.fxWindy,
+      "Billow": l10n.fxBillow,
       "Turbulent displace": l10n.fxTurbulentDisplace,
       "Twitch frequency": l10n.fxTwitchFrequency,
       "Twitchy": l10n.fxTwitchy,

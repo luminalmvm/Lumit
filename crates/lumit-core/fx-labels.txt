@@ -150,6 +150,7 @@ Bevel style
 Bezier warp
 BiRefNet
 Bias
+Billow
 Black and white
 Black balance
 Black clip

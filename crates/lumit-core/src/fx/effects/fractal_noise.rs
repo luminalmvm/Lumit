@@ -178,7 +178,9 @@ pub struct FractalNoise {
             "Stucci",
             "Stucci wall in",
             "Stucci wall out",
-            "Windy"
+            "Windy",
+            "Billow",
+            "Waves"
         ],
         default = 1
     )]

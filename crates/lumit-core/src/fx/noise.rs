@@ -269,8 +269,10 @@ pub const NOISE_STUCCI: u32 = 28;
 pub const NOISE_STUCCI_WALL_IN: u32 = 29;
 pub const NOISE_STUCCI_WALL_OUT: u32 = 30;
 pub const NOISE_WINDY: u32 = 31;
+pub const NOISE_BILLOW: u32 = 32;
+pub const NOISE_WAVES: u32 = 33;
 /// The last noise type.
-pub const NOISE_LAST: u32 = NOISE_WINDY;
+pub const NOISE_LAST: u32 = NOISE_WAVES;
 /// How far over the Stucci bases read their field a second time, in cells:
 /// the difference is the relief, lit from the top left.
 const STUCCI_STEP: f32 = 0.12;
@@ -575,6 +577,26 @@ fn shaped_octave(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i
             // field sets, calm where the wind drops.
             let wind = g(1, x * 0.2, y * 0.2).abs();
             g(0, x, y) * (wind * 2.5).min(1.0)
+        }
+        NOISE_BILLOW => {
+            // Maya's Billow: round puffs of their own size, crowded and
+            // pushed about so they read as heaped cloud.
+            let dx = g(1, x, y);
+            let dy = g(2, x, y);
+            let (f1, _, h) = cells(seed, ch, x + 0.35 * dx, y + 0.35 * dy, z, cycle);
+            let r = 0.45 + 0.35 * unit(fold(h, 7));
+            let t = ramp(1.0 - f1 / r);
+            t * (2.0 - t) * 2.0 - 1.0
+        }
+        NOISE_WAVES => {
+            // Maya's Wave: three wave trains a third of a turn apart,
+            // each bent by the noise, crossing into a choppy weave.
+            let n = g(0, x, y);
+            let m = g(1, x, y);
+            let a = wave(0.7 * x + 0.6 * n);
+            let b = wave(0.7 * (-0.5 * x + 0.866_025_4 * y) + 0.6 * m);
+            let c = wave(0.7 * (-0.5 * x - 0.866_025_4 * y) + 0.6 * (n - m));
+            ((a + b + c) * 0.45).clamp(-1.0, 1.0)
         }
         // VL noise: Musgrave's variable lacunarity, the octave read where a
         // coarser one pushes it.

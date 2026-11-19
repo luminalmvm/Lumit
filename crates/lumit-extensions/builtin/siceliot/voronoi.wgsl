@@ -5,11 +5,13 @@
 // borders between cells. F2 shades from the second nearest point, Smooth F1
 // blends the nearest few so the creases round off, Distance to edge is the
 // true distance to the nearest border, N-sphere radius is half the gap from
-// a cell's point to its nearest neighbour. Evolution moves the points round,
+// a cell's point to its nearest neighbour. Flagstone sets each cell in a line
+// as stones (or leather, with a soft line), Chess cells splits each cell in
+// four by turns, Plasma is F1 over F2. Evolution moves the points round,
 // so it loops every 360 degrees.
 
 struct Params {
-    /// @choice("Cells", "Distance", "Edges", "F2", "Smooth F1", "Distance to edge", "N-sphere radius") @default("Cells") Mode
+    /// @choice("Cells", "Distance", "Edges", "F2", "Smooth F1", "Distance to edge", "N-sphere radius", "Flagstone", "Chess cells", "Plasma") @default("Cells") Mode
     mode: u32,
     /// @slider(4, 1000) @default(160) @unit(px) Cell size
     cell_size: f32,
@@ -19,13 +21,15 @@ struct Params {
     evolution: f32,
     /// @point @default(0, 0) Offset
     offset: vec2<f32>,
-    /// @slider(0, 100) @default(4) @unit(px) @enabled_if(mode=2) Edge width
+    /// @slider(0, 100) @default(4) @unit(px) @enabled_if(mode=2, mode=7) Edge width
     edge_width: f32,
+    /// @default(0.08, 0.075, 0.07, 1) @enabled_if(mode=7) Line colour
+    line_colour: vec4<f32>,
     /// @choice("Euclidean", "Manhattan", "Chebychev", "Minkowski") @default("Euclidean") Distance metric
     metric: u32,
     /// @slider(0.1, 10) @default(0.5) @enabled_if(metric=3) Exponent
     exponent: f32,
-    /// @bounded(0, 100) @default(100) @enabled_if(mode=4) Smoothness
+    /// @bounded(0, 100) @default(100) @enabled_if(mode=4, mode=7) Smoothness
     smoothness: f32,
     /// @counter(0, 8) @default(0) @enabled_if(mode=1, mode=3, mode=4) Detail
     detail: i32,
@@ -282,9 +286,31 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         case 6u: {
             t = clamp(vo_radius(q) * 2.0, 0.0, 1.0);
         }
+        case 8u: {
+            // Chess cells: each cell split in four through its own point,
+            // the quarters dark and light by turns.
+            let d = q - vo_point(first.near);
+            let flip = vo_hash(first.near, 11u) < 0.5;
+            t = select(0.0, 1.0, (d.x * d.y > 0.0) != flip);
+        }
+        case 9u: {
+            // Plasma: the nearest distance over the second, soft everywhere.
+            t = clamp(first.f1 / max(first.f2, 1e-6), 0.0, 1.0);
+        }
         default: {}
     }
     var c = sc_ramp(t);
+    if (p.mode == 7u) {
+        // Flagstone: each cell a stone of its own colour, bevelled toward
+        // its edge, set in a line Edge width wide; Smoothness softens the
+        // line into a crease, as leather.
+        let edge = vo_edge(q) * size;
+        let half = p.edge_width * 0.5;
+        let soft = max(half * p.smoothness / 100.0, 1.0 / max(lumit.comp_scale, 1e-3));
+        let k = smoothstep(half - soft * 0.5, half + soft * 0.5, edge);
+        let bevel = mix(0.7, 1.0, smoothstep(half, half + size * 0.15, edge));
+        c = mix(lumit_premult(p.line_colour), vec4<f32>(c.rgb * bevel, c.a), k);
+    }
     if (p.paint == 0u) {
         c *= lumit_sample(uv).a;
     }

@@ -386,9 +386,9 @@ fn nc_cells(seed: u32, channel: u32, x: f32, y: f32, z: f32, cycle: i32) -> NcCe
 fn nc_needs(base: u32) -> u32 {
     switch base {
         case 5u, 6u, 7u, 13u: { return 0u; }
-        case 11u, 14u, 22u, 23u, 25u, 28u, 29u, 30u, 31u: { return 3u; }
+        case 11u, 14u, 22u, 23u, 25u, 28u, 29u, 30u, 31u, 33u: { return 3u; }
         case 24u, 27u: { return 7u; }
-        case 26u: { return 6u; }
+        case 26u, 32u: { return 6u; }
         default: { return 1u; }
     }
 }
@@ -445,12 +445,16 @@ fn nc_shaped(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i32) 
     let n = g[0];
     let m = g[1];
     var cl = NcCells(0.0, 0.0, 0u);
-    if (base == 5u || base == 6u || base == 9u || base == 13u || base == 26u) {
+    if (base == 5u || base == 6u || base == 9u || base == 13u || base == 26u || base == 32u) {
         var cx = x;
         var cy = y;
         if (base == 26u) {
             cx = x + 0.6 * g[1];
             cy = y + 0.6 * g[2];
+        }
+        if (base == 32u) {
+            cx = x + 0.35 * g[1];
+            cy = y + 0.35 * g[2];
         }
         cl = nc_cells(seed, ch, cx, cy, z, cycle);
     }
@@ -517,6 +521,17 @@ fn nc_shaped(base: u32, seed: u32, ch: u32, x: f32, y: f32, z: f32, cycle: i32) 
             return clamp(select(r, -r, base == 29u), -1.0, 1.0);
         }
         case 31u: { return n * min(abs(m) * 2.5, 1.0); }
+        case 32u: {
+            let r = 0.45 + 0.35 * nc_unit(nc_fold(cl.near, 7));
+            let t = nc_ramp(1.0 - cl.f1 / r);
+            return t * (2.0 - t) * 2.0 - 1.0;
+        }
+        case 33u: {
+            let a = nc_wave(0.7 * x + 0.6 * n);
+            let b = nc_wave(0.7 * (-0.5 * x + 0.8660254 * y) + 0.6 * m);
+            let c = nc_wave(0.7 * (-0.5 * x - 0.8660254 * y) + 0.6 * (n - m));
+            return clamp((a + b + c) * 0.45, -1.0, 1.0);
+        }
         default: { return n; }
     }
 }

@@ -6573,6 +6573,10 @@
   "@fxWindy": {
     "description": "Effect controls — a Noise type option on Fractal noise: fine waves whose height a broad wind field sets, after LuxCore's Windy texture."
   },
+  "fxBillow": "Billow",
+  "@fxBillow": {
+    "description": "Effect controls — a Noise type option on Fractal noise: heaped round puffs, after Maya's Billow noise."
+  },
   "fxTurbulentDisplace": "Turbulent displace",
   "@fxTurbulentDisplace": {
     "description": "Effect name in the Add effect menu — the fractal-driven warp."
