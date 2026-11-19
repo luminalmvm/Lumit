@@ -1329,8 +1329,8 @@ const AE_FRACTAL_SCALE_BASE: f64 = 2.0;
 
 /// "Fractal Noise" → **Fractal noise** (docs/08 §3.37). Contrast, brightness,
 /// the transform, the sub settings and the evolution cycle convert directly;
-/// Scale converts through AE's own base, and AE's dozen fractal types and four
-/// noise types collapse onto the two apiece Lumit ships.
+/// Scale converts through AE's own base. Every one of AE's fifteen fractal types
+/// and four noise types has its own entry in Lumit, under the same name.
 fn fractal_noise(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -1338,23 +1338,30 @@ fn fractal_noise(
     row: &'static Row,
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
-    // 1 is Basic on both sides; every other fold is the turbulent sum.
-    fx.choice(conv, "ADBE Fractal Noise-0001", "fractal_type", |v| {
-        if v == 1 {
-            (0, None)
-        } else {
-            (
-                1,
-                Some("Turbulent, the folded sum being the nearer of the two Lumit ships"),
-            )
-        }
-    });
-    // 1 Block, 2 Linear, 3 Soft Linear, 4 Spline — Block is the lattice's own
-    // value, everything smoother is Perlin.
+    // AE's menu, 1-based: Basic, Turbulent Smooth, Turbulent Basic, Turbulent
+    // Sharp, Dynamic, Dynamic Progressive, Dynamic Twist, Max, Smeary, Swirly,
+    // Rocky, Cloudy, Terrain, Subscale, Strings. Lumit keeps Basic and Turbulent
+    // (AE's Turbulent Basic) first and the rest in AE's order after them.
+    fx.choice(
+        conv,
+        "ADBE Fractal Noise-0001",
+        "fractal_type",
+        |v| match v {
+            1 => (0, None),
+            2 => (2, None),
+            3 => (1, None),
+            4..=15 => ((v - 1) as u32, None),
+            _ => (1, Some("Turbulent, the type this one is nearest to")),
+        },
+    );
+    // 1 Block, 2 Linear, 3 Soft Linear, 4 Spline. Soft Linear is Lumit's Value:
+    // the lattice values blended with a smoothstep.
     fx.choice(conv, "ADBE Fractal Noise-0002", "noise_type", |v| match v {
-        1 => (0, None),
-        3 => (1, None),
-        _ => (1, Some("Perlin, the smoother of the two bases Lumit ships")),
+        1 => (2, None),
+        2 => (3, None),
+        3 => (0, None),
+        4 => (4, None),
+        _ => (1, Some("Perlin, the smoothest of the bases")),
     });
     fx.toggle(conv, "ADBE Fractal Noise-0003", "invert");
     fx.float(conv, "ADBE Fractal Noise-0004", "contrast", 1.0, 0.0);

@@ -1,5 +1,5 @@
 use super::maths::lattice_hash;
-use super::noise::{fractal, hash01, value3, FractalField};
+use super::noise::{fractal, fractal_typed, hash01, value3, FractalField};
 use super::{maths::MAX_BLADES, resolved::MatteKeyParams, resolved::MbQuality, resolved::MbView};
 
 mod path_draw;
@@ -2367,6 +2367,10 @@ fn noise_draw(seed: u32, channel: u32, x: i32, y: i32, tick: i32, gaussian: bool
 pub struct FractalNoiseParams {
     /// The field's own shape: seed, octaves, gain, lacunarity, type, cycle.
     pub field: FractalField,
+    /// Noise type: one of `noise::NOISE_*`. `field.perlin` is not read here.
+    pub base: u32,
+    /// Fractal type: one of `noise::FRACTAL_*`. `field.turbulent` is not read here.
+    pub kind: u32,
     /// `(cos, sin)` of the Rotation control, host-computed.
     pub cos_sin: [f32; 2],
     /// The field origin in raster pixels (the §2.3 preview factor applied).
@@ -2399,7 +2403,14 @@ pub fn fractal_noise(rgba: &mut [f32], w: u32, h: u32, p: &FractalNoiseParams) {
             // the frame.
             let qx = px * p.cos_sin[0] + py * p.cos_sin[1];
             let qy = py * p.cos_sin[0] - px * p.cos_sin[1];
-            let n = fractal(&p.field, qx * p.inv_scale[0], qy * p.inv_scale[1], p.z);
+            let n = fractal_typed(
+                &p.field,
+                p.base,
+                p.kind,
+                qx * p.inv_scale[0],
+                qy * p.inv_scale[1],
+                p.z,
+            );
             let n01 = n * 0.5 + 0.5;
             let mut v = ((n01 - 0.5) * p.contrast + 0.5 + p.brightness).clamp(0.0, 1.0);
             if p.invert {

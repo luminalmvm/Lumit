@@ -160,6 +160,7 @@ Black saturation
 Blades
 Blend
 Blobs
+Block
 Block glitch
 Block size
 Blocks
@@ -285,6 +286,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Cloudy
 Coarse
 Coat
 Coat roughness
@@ -479,6 +481,9 @@ Droplets
 Dry
 Duration
 Dust
+Dynamic
+Dynamic progressive
+Dynamic twist
 Each path
 Each point
 Ease
@@ -1369,6 +1374,7 @@ Rings
 Ripple
 Rise
 Robust Video Matting
+Rocky
 Roll
 Roll speed
 Rolling shutter
@@ -1522,6 +1528,7 @@ Slope
 Slope channel
 Slow motion with blur
 Smear
+Smeary
 Smoke
 Smoke and fire
 Smoke colour
@@ -1579,6 +1586,7 @@ Spiky
 Spin
 Spin blur
 Spiral
+Spline
 Split
 Split channels
 Split colours
@@ -1626,6 +1634,7 @@ Stretch to fit
 Stretch x
 Stretch y
 Strike
+Strings
 Stripes
 Strobe
 Stroke
@@ -1640,6 +1649,7 @@ Sub influence
 Sub scaling
 Sub settings
 Sub-steps
+Subscale
 Subtract
 Subtract from layer
 Super 16
@@ -1648,6 +1658,7 @@ Super 8
 Superia X-TRA 400
 Surface
 Swing
+Swirly
 Switch
 Symmetric
 Sync
@@ -1658,6 +1669,7 @@ Tele lens width
 Temperature
 Temporal
 Temporal strength
+Terrain
 Text
 Text layer
 Text step
@@ -1737,6 +1749,8 @@ Turbulence scale
 Turbulence speed
 Turbulent
 Turbulent displace
+Turbulent sharp
+Turbulent smooth
 Turn
 Turn points
 Turns
