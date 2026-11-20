@@ -677,9 +677,15 @@ pub enum FxCategory {
     Colour,
     Distortion,
     /// The effects that **make** pixels rather than change them: Fill,
-    /// Gradient, Noise, Fractal noise. Three of the four never read the incoming
-    /// picture at all, which is why none of the other six describes them.
+    /// Gradient, Noise, Beam, Lightning. Most never read the incoming picture at
+    /// all, which is why none of the other families describes them.
     Generate,
+    /// The **procedural textures**: a pattern worked out at every pixel and
+    /// filling the layer, never a drawn thing: Fractal noise, Voronoi,
+    /// Checkerboard, Tile patterns, Woodgrain and their kin. Filed under Generate
+    /// they were half of it, and a hand looking for a wood or a noise looks for
+    /// the textures, as Blender and Octane keep them together.
+    Textures,
     /// The effects that make, change or use a **stream of points**: Grid,
     /// Scatter, Pick points, Sort distribution, Clone to points, Label points
     /// and their kin. Filed under Generate they were most of that heading;
@@ -752,6 +758,7 @@ impl FxCategory {
             FxCategory::Colour => "Colour",
             FxCategory::Distortion => "Distortion",
             FxCategory::Generate => "Generate",
+            FxCategory::Textures => "Textures",
             FxCategory::Points => "Points",
             FxCategory::Stylise => "Stylise",
             FxCategory::Temporal => "Temporal",
@@ -790,11 +797,12 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 14] = [
+    pub const ALL: [FxCategory; 15] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
         FxCategory::Generate,
+        FxCategory::Textures,
         FxCategory::Points,
         FxCategory::Stylise,
         FxCategory::Temporal,

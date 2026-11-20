@@ -164,7 +164,13 @@ impl CornerPin {
         }
         // Sign-normalised so the horizon test in the kernel is a plain `w > 0`
         // on both paths, whichever way round the four points were dragged.
-        if inv[2][2] < 0.0 {
+        // The sign is taken at the quad's own centre, which is always in front:
+        // `m` takes the unit square's centre to (X, Y, W), and `inv` takes that
+        // point back to `det` times the centre over `W`, so its `w` is
+        // `det / W`. The frame's top-left pixel would not do: when the horizon
+        // ran between it and the quad, the whole quad came out transparent.
+        let centre_w = 0.5 * g + 0.5 * h + 1.0;
+        if det * centre_w < 0.0 {
             for row in &mut inv {
                 for v in row.iter_mut() {
                     *v = -*v;
@@ -334,5 +340,27 @@ mod tests {
             .map(|(a, b)| (a - b).abs())
             .fold(0.0, f32::max);
         assert!(worst < 1e-3, "{worst}");
+    }
+
+    /// A floor pinned in perspective, its horizon below the frame's top-left
+    /// corner: the quad is drawn, and only past its horizon is transparent.
+    #[test]
+    fn a_pin_whose_horizon_passes_the_top_left_corner_still_draws() {
+        let n = 64u32;
+        // Narrow at the top, wide at the bottom: the horizon is at about
+        // y = 27, under the top-left pixel.
+        let floor = pin(
+            [28.0, 32.0, 36.0, 32.0, 0.0, 64.0, 64.0, 64.0],
+            [0.0, 0.0, 64.0, 64.0],
+        );
+        let c = CornerPin::read(Params::new(&floor)).packed();
+        let w_at = |x: f32, y: f32| c.inv[2][0] * x + c.inv[2][1] * y + c.inv[2][2];
+        assert!(w_at(32.0, 48.0) > 0.0, "{:?}", c.inv);
+        assert!(w_at(0.5, 0.5) < 0.0, "{:?}", c.inv);
+        let mut rgba = vec![1.0f32; (n * n * 4) as usize];
+        CornerPinDef.apply_cpu(&mut rgba, n, n, Params::new(&floor));
+        let alpha = |x: u32, y: u32| rgba[((y * n + x) * 4 + 3) as usize];
+        assert!(alpha(32, 48) > 0.99, "{}", alpha(32, 48));
+        assert!(alpha(1, 1) < 0.01, "{}", alpha(1, 1));
     }
 }

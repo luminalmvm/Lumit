@@ -30,6 +30,21 @@ const BUILTIN: &[(&str, &[(&str, &str)])] = &[
             shader!("siceliot", "gradient-map"),
             shader!("siceliot", "voronoi"),
             shader!("siceliot", "checkerboard"),
+            shader!("siceliot", "wave-pattern"),
+            shader!("siceliot", "tile-patterns"),
+            shader!("siceliot", "chainmail"),
+            shader!("siceliot", "woodgrain"),
+            shader!("siceliot", "scratches"),
+            shader!("siceliot", "flakes"),
+            shader!("siceliot", "gabor"),
+            shader!("siceliot", "magic"),
+            shader!("siceliot", "matrix-effect"),
+            shader!("siceliot", "pixel-flow"),
+            shader!("siceliot", "sine-wave-fan"),
+            shader!("siceliot", "bombing"),
+            shader!("siceliot", "weave"),
+            shader!("siceliot", "water-drop"),
+            shader!("siceliot", "softbox"),
             shader!("siceliot", "halftone"),
             shader!("siceliot", "dithering"),
             shader!("siceliot", "inner-shadow"),
@@ -43,6 +58,7 @@ const BUILTIN: &[(&str, &[(&str, &str)])] = &[
             shader!("siceliot", "four-point-warp"),
             shader!("siceliot", "displacex"),
             shader!("siceliot", "colorama"),
+            shader!("siceliot", "cylinder"),
         ],
     ),
     (
@@ -82,7 +98,7 @@ mod tests {
     #[test]
     fn every_built_in_effect_loads_and_compiles() {
         let effects = super::effects();
-        assert_eq!(effects.len(), 21);
+        assert_eq!(effects.len(), 37);
         for effect in effects {
             lumit_core::fx::lfx::check(&effect)
                 .unwrap_or_else(|why| panic!("{}: {why}", effect.id));

@@ -95,7 +95,7 @@ pub const FRACTAL_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "fractal_noise",
     label = "Fractal noise",
     version = 1,
-    category = Generate,
+    category = Textures,
     // Up to ten octaves of 3-D noise a pixel — no neighbour taps, but far from
     // pointwise.
     cost = Moderate,
@@ -108,17 +108,89 @@ pub const FRACTAL_NOISE_ENABLED_WHEN: &[EnabledWhen] = &[
     enabled_when = FRACTAL_NOISE_ENABLED_WHEN,
 )]
 pub struct FractalNoise {
-    /// Value interpolates the lattice values themselves — cheap, and slightly
-    /// blocky. Perlin interpolates the lattice *slopes*, which is the shape
-    /// everyone means by "clouds".
-    #[choice(label = "Noise type", options = ["Value", "Perlin"], default = 1)]
-    pub noise_type: u32,
-
     /// Basic sums the signed octaves — soft and cloud-like. Turbulent folds each
     /// octave about zero first — ridged and smoke-like, and what a displacement
-    /// map usually wants, which is why it is the default (as it is in AE).
-    #[choice(label = "Fractal type", options = ["Basic", "Turbulent"], default = 1)]
+    /// map usually wants, which is why it is the default (as it is in AE). The
+    /// rest are AE's other types, in `noise::FRACTAL_*` order: the Turbulent
+    /// variants shape the fold, the Dynamic family moves each octave along the
+    /// slope of the one before (Twist across it), Max keeps the brightest
+    /// octave, Terrain is a ridged multifractal.
+    #[choice(
+        label = "Fractal type",
+        options = [
+            "Basic",
+            "Turbulent",
+            "Turbulent smooth",
+            "Turbulent sharp",
+            "Dynamic",
+            "Dynamic progressive",
+            "Dynamic twist",
+            "Max",
+            "Smeary",
+            "Swirly",
+            "Rocky",
+            "Cloudy",
+            "Terrain",
+            "Subscale",
+            "Strings"
+        ],
+        default = 1
+    )]
     pub fractal_type: u32,
+
+    /// Value interpolates the lattice values themselves with a smoothstep — cheap,
+    /// and slightly blocky (AE's Soft linear). Perlin interpolates the lattice
+    /// *slopes*, which is the shape everyone means by "clouds". Block holds each
+    /// cell's value, Linear blends the values in a straight line (the crosses
+    /// and stars AE's Linear shows), Spline runs a Catmull-Rom curve through
+    /// sixteen of them, the softest of the five and the dearest.
+    #[choice(
+        label = "Noise type",
+        options = [
+            "Value",
+            "Perlin",
+            "Block",
+            "Linear",
+            "Spline",
+            "Chips",
+            "Circular",
+            "Box",
+            "Buya",
+            "Cranal",
+            "Dents",
+            "Electric",
+            "Fire",
+            "Hama",
+            "Luka",
+            "Naki",
+            "Nutous",
+            "Ober",
+            "Pezo",
+            "Poxo",
+            "Sema",
+            "Stupl",
+            "Zada",
+            "Blistered turbulence",
+            "Displaced turbulence",
+            "Wavy turbulence",
+            "Displaced Voronoi",
+            "VL noise",
+            "Stucci",
+            "Stucci wall in",
+            "Stucci wall out",
+            "Windy",
+            "Billow",
+            "Waves"
+        ],
+        default = 1
+    )]
+    pub noise_type: u32,
+
+    /// Blender's Distortion: every point is pushed by a second noise before the
+    /// field is read, so the pattern swirls and runs. In cells of the base
+    /// octave; nought leaves the field exactly as it was.
+    #[slider(label = "Distortion", min = 0.0, max = 4.0, default = 0.0, hard_min = 0.0, unit = Raw)]
+    pub distortion: f32,
 
     /// Flip the finished field, after contrast and brightness.
     ///
@@ -291,6 +363,9 @@ impl FractalNoise {
                 turbulent: self.fractal_type == 1,
                 cycle,
             },
+            base: self.noise_type.min(noise::NOISE_LAST),
+            kind: self.fractal_type.min(noise::FRACTAL_LAST),
+            distortion: self.distortion.max(0.0),
             cos_sin: [rad.cos(), rad.sin()],
             offset: [self.offset_x, self.offset_y],
             inv_scale: [1.0 / sx.max(1e-3), 1.0 / sy.max(1e-3)],

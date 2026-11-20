@@ -7584,6 +7584,9 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
             lacunarity: p.field.lacunarity,
             perlin: p.field.perlin,
             turbulent: p.field.turbulent,
+            base: p.base,
+            kind: p.kind,
+            distortion: p.distortion,
             cycle: p.field.cycle,
             cos_sin: p.cos_sin,
             offset: p.offset,
@@ -7625,6 +7628,98 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
         let out2 = fx.fractal_noise(&ctx, &tex, w, h, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU fractal noise must be bit-stable");
+    }
+}
+
+/// The typed fractal on the GPU against its CPU oracle: every one of the fifteen
+/// fractal types over Perlin, and a spread of types over the three AE bases
+/// (Block, Linear, Spline). The warping types move each octave by the slope of
+/// the last, so a slope that drifted would show here first.
+#[test]
+fn wgsl_fractal_types_match_the_cpu_oracle() {
+    use lumit_core::fx::effects::fractal_noise::FractalNoise;
+    use lumit_core::fx::{params::Params, registry::EffectMetadata};
+
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (32u32, 24u32);
+    let img = alpha_corpus(w, h);
+    let mut cases = Vec::new();
+    for kind in 0..=lumit_core::fx::noise::FRACTAL_LAST {
+        cases.push((1u32, kind, 0.0f32));
+    }
+    for base in [2u32, 3, 4] {
+        for kind in [0u32, 3, 4, 6, 7, 12, 14] {
+            cases.push((base, kind, 0.0));
+        }
+    }
+    // Every shaped base plainly; a cell base, a cell-and-noise base and a
+    // noise base under a warping type (its slope is a central difference)
+    // and under Terrain; Distortion on a few.
+    for base in 5..=lumit_core::fx::noise::NOISE_LAST {
+        cases.push((base, 0, 0.0));
+    }
+    for base in [6u32, 13, 27] {
+        for kind in [1u32, 4, 12] {
+            cases.push((base, kind, 0.0));
+        }
+    }
+    for base in [1u32, 9, 27] {
+        cases.push((base, 0, 1.5));
+    }
+    for (base, kind, distortion) in cases {
+        let mut f = FractalNoise::read(Params::EMPTY);
+        f.distortion = distortion;
+        f.scale = 12.0;
+        f.scale_width = 12.0;
+        f.scale_height = 12.0;
+        f.offset_x = 16.0;
+        f.offset_y = 12.0;
+        f.seed = 4242;
+        f.evolution = 130.0;
+        f.noise_type = base;
+        f.fractal_type = kind;
+        let p = f.packed();
+        let op = FractalNoiseOp {
+            seed: p.field.seed,
+            octaves: p.field.octaves,
+            gain: p.field.gain,
+            lacunarity: p.field.lacunarity,
+            perlin: p.field.perlin,
+            turbulent: p.field.turbulent,
+            base: p.base,
+            kind: p.kind,
+            distortion: p.distortion,
+            cycle: p.field.cycle,
+            cos_sin: p.cos_sin,
+            offset: p.offset,
+            inv_scale: p.inv_scale,
+            z: p.z,
+            contrast: p.contrast,
+            brightness: p.brightness,
+            invert: p.invert,
+            mix: p.mix,
+        };
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::fractal_noise(&mut cpu, w, h, &p);
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let out = fx.fractal_noise(&ctx, &tex, w, h, &op);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("fractal type {kind} over base {base}: worst {worst} ulp");
+        assert!(
+            worst <= 4,
+            "type {kind} base {base}: worst {worst} fp16 ULP"
+        );
+        let lo = gpu.chunks_exact(4).map(|p| p[0]).fold(f32::MAX, f32::min);
+        let hi = gpu.chunks_exact(4).map(|p| p[0]).fold(f32::MIN, f32::max);
+        assert!(
+            hi - lo > 0.05,
+            "type {kind} base {base}: the field is flat ({lo}..{hi})"
+        );
     }
 }
 

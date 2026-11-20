@@ -344,6 +344,7 @@ const PICTURE_CATEGORIES: &[FxCategory] = &[
     FxCategory::Colour,
     FxCategory::Distortion,
     FxCategory::Generate,
+    FxCategory::Textures,
     FxCategory::Stylise,
     FxCategory::Temporal,
     FxCategory::Transition,

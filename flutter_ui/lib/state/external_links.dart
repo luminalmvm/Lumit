@@ -36,6 +36,9 @@ String? effectManualUrl({
   if (namespace != 'builtin') return null;
   final folder = switch (category) {
     'blur_sharpen' => 'blur-sharpen',
+    // Fractal noise, the one built-in texture, kept its page when the
+    // Textures family was split out of Generate.
+    'textures' => 'generate',
     'siceliot_drivers' => 'siceliot',
     // The one category that fills two folders.
     'controls' => const {

@@ -11611,3 +11611,165 @@ fn time_loop_moments_follow_the_type() {
         "round again, the next lap shows in full"
     );
 }
+
+/// The two types and two bases Fractal noise shipped with keep their first
+/// octave bit for bit as it came out of `noise::fractal`; only the finer
+/// octaves move (see the next test).
+#[test]
+fn typed_fractal_keeps_basic_and_turbulent_first_octave() {
+    use super::noise::{fractal, fractal_typed, FractalField};
+    for (perlin, turbulent) in [(false, false), (false, true), (true, false), (true, true)] {
+        for (octaves, cycle) in [(1u32, 0i32), (1, 3)] {
+            let f = FractalField {
+                seed: 4242,
+                octaves,
+                gain: 0.6,
+                lacunarity: 1.8,
+                perlin,
+                turbulent,
+                cycle,
+            };
+            for i in 0..400 {
+                let x = (i as f32) * 0.173 - 31.0;
+                let y = (i as f32) * -0.291 + 7.5;
+                let z = (i % 37) as f32 * 0.083;
+                let old = fractal(&f, x, y, z);
+                let new = fractal_typed(&f, u32::from(perlin), u32::from(turbulent), x, y, z);
+                assert_eq!(
+                    old.to_bits(),
+                    new.to_bits(),
+                    "{perlin} {turbulent} {octaves} at {x},{y},{z}"
+                );
+            }
+        }
+    }
+}
+
+/// Every octave scales about the origin, so unshifted their lattice lines all
+/// meet on x = 0 and draw a thin line there (half of a cross through the
+/// layer's centre). Measured as the mean crease across the column: on x = 0 it
+/// must look like any other column.
+#[test]
+fn typed_fractal_draws_no_cross_at_the_origin() {
+    use super::noise::{fractal, fractal_typed, FractalField};
+    fn crease(g: &dyn Fn(f32, f32) -> f32, x: f32) -> f32 {
+        let h = 0.003;
+        (0..4000)
+            .map(|i| {
+                let y = i as f32 * 0.0137 - 27.0;
+                (g(x, y) - 0.5 * (g(x - h, y) + g(x + h, y))).abs()
+            })
+            .sum::<f32>()
+            / 4000.0
+    }
+    fn ratio(g: &dyn Fn(f32, f32) -> f32) -> f32 {
+        let others = (1..30)
+            .map(|k| crease(g, k as f32 * 0.377 + 0.05))
+            .sum::<f32>()
+            / 29.0;
+        crease(g, 0.0) / others
+    }
+    for perlin in [false, true] {
+        let f = FractalField {
+            seed: 7,
+            octaves: 8,
+            gain: 0.6,
+            lacunarity: 1.87,
+            perlin,
+            turbulent: true,
+            cycle: 0,
+        };
+        let old = ratio(&|x, y| fractal(&f, x, y, 0.3));
+        let new = ratio(&|x, y| fractal_typed(&f, u32::from(perlin), 1, x, y, 0.3));
+        // The probe sees the cross where it is (the unshifted sum)...
+        assert!((old - 1.0).abs() > 0.25, "perlin {perlin}: old {old}");
+        // ...and none in Fractal noise.
+        assert!((new - 1.0).abs() < 0.15, "perlin {perlin}: new {new}");
+    }
+}
+
+/// Each octave's slope is the derivative of its value: the warping types move
+/// the next octave along it, so a wrong slope would be a wrong picture.
+#[test]
+fn octave_slope_matches_the_values_own_derivative() {
+    use super::noise::{octave, NOISE_PERLIN, NOISE_SPLINE, NOISE_VALUE};
+    let e = 1.0 / 512.0;
+    for base in [NOISE_VALUE, NOISE_PERLIN, NOISE_SPLINE] {
+        for i in 0..200 {
+            // Keep clear of cell edges, where a central difference straddles two cells.
+            let x = (i / 20) as f32 * 1.37 + 0.31 + (i % 7) as f32 * 0.05;
+            let y = (i % 20) as f32 * 0.91 + 0.27;
+            let z = 0.4;
+            let (_, dx, dy) = octave(base, 9, 2, x, y, z, 0, true);
+            let fdx = (octave(base, 9, 2, x + e, y, z, 0, false).0
+                - octave(base, 9, 2, x - e, y, z, 0, false).0)
+                / (2.0 * e);
+            let fdy = (octave(base, 9, 2, x, y + e, z, 0, false).0
+                - octave(base, 9, 2, x, y - e, z, 0, false).0)
+                / (2.0 * e);
+            assert!(
+                (dx - fdx).abs() < 2e-2,
+                "base {base} dx {dx} vs {fdx} at {x},{y}"
+            );
+            assert!(
+                (dy - fdy).abs() < 2e-2,
+                "base {base} dy {dy} vs {fdy} at {x},{y}"
+            );
+        }
+    }
+}
+
+/// Every fractal type over every base is its own picture, stays in range, and
+/// closes its Cycle evolution exactly (Dynamic progressive evolves its fine
+/// octaves faster, by whole multiples, so it must close too).
+#[test]
+fn every_fractal_type_is_distinct_bounded_and_loops() {
+    use super::noise::{fractal_typed, FractalField, FRACTAL_LAST, NOISE_LAST};
+    let field = |cycle| FractalField {
+        seed: 77,
+        octaves: 6,
+        gain: 0.7,
+        lacunarity: 1.0 / 0.56,
+        perlin: false,
+        turbulent: false,
+        cycle,
+    };
+    let sample = |base, kind, cycle, z: f32| -> Vec<f32> {
+        let f = field(cycle);
+        (0..256)
+            .map(|i| {
+                let (x, y) = ((i % 16) as f32 * 0.37, (i / 16) as f32 * 0.41);
+                fractal_typed(&f, base, kind, x, y, z)
+            })
+            .collect()
+    };
+    let mut bases: Vec<Vec<f32>> = Vec::new();
+    for base in 0..=NOISE_LAST {
+        let plain = sample(base, 0, 0, 0.3);
+        assert!(
+            bases.iter().all(|s| s != &plain),
+            "base {base} draws the same picture as another base"
+        );
+        bases.push(plain);
+        let mut seen: Vec<Vec<f32>> = Vec::new();
+        for kind in 0..=FRACTAL_LAST {
+            let a = sample(base, kind, 0, 0.3);
+            for v in &a {
+                assert!(
+                    v.is_finite() && (-1.6..=1.6).contains(v),
+                    "base {base} kind {kind}: {v}"
+                );
+            }
+            assert!(
+                seen.iter().all(|s| s != &a),
+                "base {base} kind {kind} draws the same picture as another type"
+            );
+            seen.push(a);
+            assert_eq!(
+                sample(base, kind, 2, 0.25),
+                sample(base, kind, 2, 2.25),
+                "base {base} kind {kind}: the cycle must close"
+            );
+        }
+    }
+}

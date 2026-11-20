@@ -150,6 +150,7 @@ Bevel style
 Bezier warp
 BiRefNet
 Bias
+Billow
 Black and white
 Black balance
 Black clip
@@ -159,7 +160,9 @@ Black range
 Black saturation
 Blades
 Blend
+Blistered turbulence
 Blobs
+Block
 Block glitch
 Block size
 Blocks
@@ -218,6 +221,7 @@ Burst
 Burst count
 Burst interval
 Bursts
+Buya
 By strength
 Bypass
 CDL
@@ -245,6 +249,7 @@ Character
 Checkbox
 Checkbox control
 Checker
+Chips
 Chisel hard
 Chisel soft
 Choke
@@ -259,6 +264,7 @@ Chroma noise
 Chromatic aberration
 Chrome
 Circle
+Circular
 Clamp
 Clean black
 Clean white
@@ -285,6 +291,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Cloudy
 Coarse
 Coat
 Coat roughness
@@ -375,6 +382,7 @@ Count nested inputs
 Cover left
 Cover right
 Crackle
+Cranal
 Create corner pin
 Create transform keys
 Crop
@@ -422,6 +430,7 @@ Denoise
 Denominator
 Density
 Density layer
+Dents
 Depth
 Depth Anything V2 Small
 Depth channel
@@ -454,6 +463,8 @@ Dirt alone
 Dirt scale
 Disc
 Dispersion
+Displaced Voronoi
+Displaced turbulence
 Displacement
 Displacement map
 Display
@@ -479,6 +490,9 @@ Droplets
 Dry
 Duration
 Dust
+Dynamic
+Dynamic progressive
+Dynamic twist
 Each path
 Each point
 Ease
@@ -744,6 +758,7 @@ Halation
 Half
 Half speed
 Halo
+Hama
 Hard
 Hard colour
 Hard hide
@@ -954,6 +969,7 @@ Lower left x
 Lower left y
 Lower right x
 Lower right y
+Luka
 Lum mix
 Lum v sat
 Luma
@@ -1055,6 +1071,7 @@ Move
 Moves
 Multiply
 NTSC
+Naki
 Name
 Native
 Near blur
@@ -1092,11 +1109,13 @@ Number from
 Number of echoes
 Number range
 Number to
+Nutous
 OCIO colour space transform
 OCIO configuration
 OCIO display transform
 OCIO file transform
 OCIO look transform
+Ober
 Off
 Offset
 Offset forward
@@ -1178,6 +1197,7 @@ Perlin
 Persistence
 Perspective
 Petals
+Pezo
 Phase
 Phase from
 Phase offset
@@ -1249,6 +1269,7 @@ Post
 Posterize
 Posterize time
 Power
+Poxo
 Pre
 Pre-delay
 Preserve luminance
@@ -1369,6 +1390,7 @@ Rings
 Ripple
 Rise
 Robust Video Matting
+Rocky
 Roll
 Roll speed
 Rolling shutter
@@ -1446,6 +1468,7 @@ Seed from
 Segment
 Segment length
 Segments
+Sema
 Semicircle
 Sensitivity
 Sensor
@@ -1522,6 +1545,7 @@ Slope
 Slope channel
 Slow motion with blur
 Smear
+Smeary
 Smoke
 Smoke and fire
 Smoke colour
@@ -1579,6 +1603,7 @@ Spiky
 Spin
 Spin blur
 Spiral
+Spline
 Split
 Split channels
 Split colours
@@ -1626,6 +1651,7 @@ Stretch to fit
 Stretch x
 Stretch y
 Strike
+Strings
 Stripes
 Strobe
 Stroke
@@ -1634,12 +1660,17 @@ Stroke emboss
 Stroke width
 Strokes
 Strong
+Stucci
+Stucci wall in
+Stucci wall out
+Stupl
 Style
 Stylise
 Sub influence
 Sub scaling
 Sub settings
 Sub-steps
+Subscale
 Subtract
 Subtract from layer
 Super 16
@@ -1648,6 +1679,7 @@ Super 8
 Superia X-TRA 400
 Surface
 Swing
+Swirly
 Switch
 Symmetric
 Sync
@@ -1658,6 +1690,7 @@ Tele lens width
 Temperature
 Temporal
 Temporal strength
+Terrain
 Text
 Text layer
 Text step
@@ -1737,6 +1770,8 @@ Turbulence scale
 Turbulence speed
 Turbulent
 Turbulent displace
+Turbulent sharp
+Turbulent smooth
 Turn
 Turn points
 Turns
@@ -1782,6 +1817,7 @@ Use source colour
 Use this frame
 Utility
 V line rel width
+VL noise
 Value
 Value noise
 Variation
@@ -1839,6 +1875,7 @@ Wave y
 Waveform
 Wavelength
 Waves
+Wavy turbulence
 Weak
 Wet
 Wheels
@@ -1867,6 +1904,7 @@ Window 1
 Window 2
 Window 3
 Window 4
+Windy
 Wipe
 Wipe angle
 Wipe centre x
@@ -1898,6 +1936,7 @@ Z frequency
 Z wave
 Z wave frequency
 Z wave phase
+Zada
 Zebra
 Zoom
 Zoom blur

@@ -389,6 +389,7 @@ fn category_keys_are_distinct_snake_case() {
         Colour,
         Distortion,
         Generate,
+        Textures,
         Stylise,
         Temporal,
         Transition,

@@ -1950,31 +1950,36 @@ class EffectParamRowFrb extends StatelessWidget {
                 setExpression: setExpression,
               ),
             )
-          : box.maxWidth < TurnsAndDegreesField.width + 6 + dial
-          ? fields
+          // One Row whether the dial fits or not, with the numbers always its
+          // first child. The first drag off the default brings in the reset
+          // arrow, which can take the dial's room; swapping the Row for the
+          // bare numbers then rebuilt them mid-drag and dropped the drag.
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 fields,
-                const SizedBox(width: 6),
-                AngleDial(
-                  key: ValueKey<String>('fx-dial-$keyName'),
-                  // Row height, not the standalone 34: it is a grip beside a
-                  // number.
-                  size: dial,
-                  degrees: shown,
-                  step: step,
-                  enabled: !_off,
-                  // A dial drag is a drag like any other: preview each tick,
-                  // commit the release. On a curve there is no live preview,
-                  // for the same reason the numbers have none: the value
-                  // being previewed is not the one that will be stored.
-                  onChanged: (v) => animated
-                      ? null
-                      : _setLive(
-                          BridgeEffectValue.float(BridgeScalar.static_(v))),
-                  onChangeEnd: write,
-                ),
+                if (box.maxWidth >= TurnsAndDegreesField.width + 6 + dial) ...[
+                  const SizedBox(width: 6),
+                  AngleDial(
+                    key: ValueKey<String>('fx-dial-$keyName'),
+                    // Row height, not the standalone 34: it is a grip beside
+                    // a number.
+                    size: dial,
+                    degrees: shown,
+                    step: step,
+                    enabled: !_off,
+                    // A dial drag is a drag like any other: preview each
+                    // tick, commit the release. On a curve there is no live
+                    // preview, for the same reason the numbers have none: the
+                    // value being previewed is not the one that will be
+                    // stored.
+                    onChanged: (v) => animated
+                        ? null
+                        : _setLive(
+                            BridgeEffectValue.float(BridgeScalar.static_(v))),
+                    onChangeEnd: write,
+                  ),
+                ],
               ],
             ),
     );
