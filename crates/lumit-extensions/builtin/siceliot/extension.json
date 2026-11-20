@@ -48,6 +48,7 @@
       "passes": [{ "name": "map_h", "scale": 0.5 }, { "name": "map_v", "scale": 0.5 }, { "name": "shade" }],
       "input": { "label": "Map layer", "kind": "image" } },
     { "id": "colorama", "name": "Colorama", "category": "Colour", "version": 1, "api": 1, "shader": "colorama.wgsl",
-      "input": { "label": "Add phase", "kind": "image" } }
+      "input": { "label": "Add phase", "kind": "image" } },
+    { "id": "cylinder", "name": "Cylinder", "category": "Distortion", "version": 1, "api": 1, "shader": "cylinder.wgsl" }
   ]
 }
