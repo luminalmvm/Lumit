@@ -180,4 +180,9 @@ impl EffectDef for TileDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         cpu::tile(rgba, w, h, &Tile::read(p).packed(w as f32, h as f32));
     }
+
+    fn grows(&self, p: Params<'_>, w: u32, h: u32) -> [u32; 2] {
+        let (ow, oh) = cpu::tile_raster(w, h, &Tile::read(p).packed(w as f32, h as f32));
+        [ow.saturating_sub(w), oh.saturating_sub(h)]
+    }
 }

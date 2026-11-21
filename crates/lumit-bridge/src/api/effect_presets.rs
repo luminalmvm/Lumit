@@ -5,7 +5,9 @@ use flutter_rust_bridge::frb;
 use lumit_core::preset_parts::PresetParts;
 
 use crate::api::{
-    effect::{BridgeEffectInstance, BridgePresetInfo},
+    effect::{
+        BridgeEffectInstance, BridgeEffectValue, BridgeParamValue, BridgePresetInfo, BridgeScalar,
+    },
     layer::LayerReference,
     BridgeError,
 };
@@ -116,6 +118,42 @@ impl LayerReference {
             }
             Ok(())
         })
+    }
+
+    /// The rows a new `name` on this layer starts somewhere other than its
+    /// schema says: the points it centres on the picture its stack runs on,
+    /// as a Transform's anchor and position. Reset puts them back there.
+    #[frb(sync)]
+    pub fn seeded_defaults(&self, name: String) -> Result<Vec<BridgeParamValue>, BridgeError> {
+        let (w, h) =
+            crate::api::denoise::seed_size(&*self.document()?, &self.composition()?, &self.item()?);
+        let plain = lumit_core::fx::builtins::instantiate(&name);
+        let seeded =
+            lumit_core::fx::builtins::instantiate_for_raster(&name, f64::from(w), f64::from(h));
+        let (Some(plain), Some(seeded)) = (plain, seeded) else {
+            return Ok(Vec::new());
+        };
+        let fixed = |e: &lumit_core::model::EffectInstance, id: &str| {
+            e.params
+                .iter()
+                .find(|p| p.id == id)
+                .and_then(|p| match &p.value {
+                    lumit_core::model::EffectValue::Float(prop) => match prop.animation {
+                        lumit_core::anim::Animation::Static(v) => Some(v),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+        };
+        Ok((seeded.params.iter())
+            .filter_map(|p| {
+                let v = fixed(&seeded, &p.id).filter(|v| fixed(&plain, &p.id) != Some(*v))?;
+                Some(BridgeParamValue {
+                    id: p.id.clone(),
+                    value: BridgeEffectValue::Float(BridgeScalar::Static(v)),
+                })
+            })
+            .collect())
     }
 
     /// A `.lumfx` document of the chosen parts of this layer: the effects named
