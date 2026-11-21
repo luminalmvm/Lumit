@@ -2425,7 +2425,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final held = _press;
     if (held == null || !_escape.running) return;
     final at = event.localPosition;
-    final moved = held.moved || (at - held.from).distance > _clickSlop;
+    // A trackpad or Magic Mouse click drifts a few pixels. The razor still
+    // cuts where it was pressed. A real drag cuts nothing.
+    final slop = held.tool == CutTool.razor ? kTouchSlop : _clickSlop;
+    final moved = held.moved || (at - held.from).distance > slop;
     _press = (
       from: held.from,
       at: at,
@@ -2481,7 +2484,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     if (held.tool == CutTool.razor) {
       if (held.moved || held.track == null) return;
-      _razorCut(_tracks[held.track!].entry, _razorFrameAt(held.at.dx).round());
+      _razorCut(
+          _tracks[held.track!].entry, _razorFrameAt(held.from.dx).round());
       return;
     }
     // A second click on the same clip opens it, and one on a Precomp

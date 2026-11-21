@@ -442,7 +442,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
         // Only in the Boundary view: the edge is a scan of the whole matte,
         // and running it for a picture nobody is showing would be work for
         // nothing.
-        if (brush.view == rotoViewBoundary) {
+        if (brush.view == rotoViewBoundary && base != null) {
           boundary = (widget.boundaryOf ?? _boundaryFromEngine)(
               brush.effect, frame);
         }
@@ -513,7 +513,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
         frame = source.frame;
         if (frame != null) {
           file = Size(source.width.toDouble(), source.height.toDouble());
-          if (view == rotoViewBoundary) {
+          if (view == rotoViewBoundary && base != null) {
             boundary =
                 (widget.boundaryOf ?? _boundaryFromEngine)(info.id, frame);
           }
