@@ -38115,6 +38115,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           dco_decode_list_list_prim_f_32_strict(raw[1]),
         );
       case 12:
+        return BridgeEffectValue_Gradient(
+          dco_decode_list_bridge_gradient_stop(raw[1]),
+        );
+      case 13:
         return BridgeEffectValue_Text(
           dco_decode_String(raw[1]),
         );
@@ -40659,13 +40663,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case 14:
         return BridgeParamKind_Shape();
       case 15:
+        return BridgeParamKind_Gradient(
+          from: dco_decode_String(raw[1]),
+          to: dco_decode_String(raw[2]),
+        );
+      case 16:
         return BridgeParamKind_Slider(
           default_: dco_decode_f_64(raw[1]),
           min: dco_decode_f_64(raw[2]),
           max: dco_decode_f_64(raw[3]),
           log: dco_decode_bool(raw[4]),
         );
-      case 16:
+      case 17:
         return BridgeParamKind_Action();
       default:
         throw Exception("unreachable");
@@ -48661,6 +48670,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         var var_field0 = sse_decode_list_list_prim_f_32_strict(deserializer);
         return BridgeEffectValue_Shape(var_field0);
       case 12:
+        var var_field0 = sse_decode_list_bridge_gradient_stop(deserializer);
+        return BridgeEffectValue_Gradient(var_field0);
+      case 13:
         var var_field0 = sse_decode_String(deserializer);
         return BridgeEffectValue_Text(var_field0);
       default:
@@ -51432,13 +51444,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case 14:
         return BridgeParamKind_Shape();
       case 15:
+        var var_from = sse_decode_String(deserializer);
+        var var_to = sse_decode_String(deserializer);
+        return BridgeParamKind_Gradient(from: var_from, to: var_to);
+      case 16:
         var var_default_ = sse_decode_f_64(deserializer);
         var var_min = sse_decode_f_64(deserializer);
         var var_max = sse_decode_f_64(deserializer);
         var var_log = sse_decode_bool(deserializer);
         return BridgeParamKind_Slider(
             default_: var_default_, min: var_min, max: var_max, log: var_log);
-      case 16:
+      case 17:
         return BridgeParamKind_Action();
       default:
         throw UnimplementedError('');
@@ -60902,8 +60918,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case BridgeEffectValue_Shape(field0: final field0):
         sse_encode_i_32(11, serializer);
         sse_encode_list_list_prim_f_32_strict(field0, serializer);
-      case BridgeEffectValue_Text(field0: final field0):
+      case BridgeEffectValue_Gradient(field0: final field0):
         sse_encode_i_32(12, serializer);
+        sse_encode_list_bridge_gradient_stop(field0, serializer);
+      case BridgeEffectValue_Text(field0: final field0):
+        sse_encode_i_32(13, serializer);
         sse_encode_String(field0, serializer);
     }
   }
@@ -62984,19 +63003,23 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_list_list_prim_f_32_strict(default_, serializer);
       case BridgeParamKind_Shape():
         sse_encode_i_32(14, serializer);
+      case BridgeParamKind_Gradient(from: final from, to: final to):
+        sse_encode_i_32(15, serializer);
+        sse_encode_String(from, serializer);
+        sse_encode_String(to, serializer);
       case BridgeParamKind_Slider(
           default_: final default_,
           min: final min,
           max: final max,
           log: final log
         ):
-        sse_encode_i_32(15, serializer);
+        sse_encode_i_32(16, serializer);
         sse_encode_f_64(default_, serializer);
         sse_encode_f_64(min, serializer);
         sse_encode_f_64(max, serializer);
         sse_encode_bool(log, serializer);
       case BridgeParamKind_Action():
-        sse_encode_i_32(16, serializer);
+        sse_encode_i_32(17, serializer);
     }
   }
 

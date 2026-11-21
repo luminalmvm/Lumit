@@ -1425,36 +1425,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   }
 }
 
-/// A gradient drawn small, as the button that opens its editor.
-class _RampChip extends StatelessWidget {
-  final GradientRamp ramp;
-
-  /// Called with where the editor should open, in window coordinates.
-  final ValueChanged<Offset> onOpen;
-
-  const _RampChip({super.key, required this.ramp, required this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        final box = context.findRenderObject();
-        if (box is! RenderBox) return;
-        onOpen(box.localToGlobal(Offset(0, box.size.height + 4)));
-      },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: CustomPaint(
-          size: const Size(96, 18),
-          painter: GradientRampPainter(ramp: ramp, theme: t),
-        ),
-      ),
-    );
-  }
-}
-
 /// A shape item's gradient choice or the gradient's second colour, and the
 /// other choices an item has, or a deform entry's Displace or Scale. None of
 /// them is a number, so this row carries a swatch or a dropdown where the
@@ -1608,7 +1578,7 @@ class ShapePaintRow extends StatelessWidget {
   /// gradient's numbers is keyed, as a still one has nothing to follow.
   Widget _rampChip(BuildContext context, String key) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    Widget chip() => _RampChip(
+    Widget chip() => RampChip(
           key: ValueKey<String>(key),
           ramp: _rampOf(item, ui),
           onOpen: (at) => _editStops(context, at),

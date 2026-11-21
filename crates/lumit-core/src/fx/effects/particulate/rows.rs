@@ -58,6 +58,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "opacity_over_life",
             "colour",
             "end_colour",
+            "colour_over_life",
             "rotation",
             "rotation_jitter",
             "spin",

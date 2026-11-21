@@ -162,6 +162,9 @@ struct Params {
     pair_max: u32,
     scan_len: u32,
     tile_scale: u32,
+    // Whether `curves` carries Colour over life's red, green, blue and alpha
+    // tables after its two.
+    ramp: u32,
 };
 
 const DRIVE_SPEED: u32 = 1u;
@@ -228,7 +231,7 @@ const SCAN_BLOCK: u32 = 256u;
 // first particle, low word then high. The steady flow's frames come first,
 // then the bursts'.
 @group(0) @binding(1) var<storage, read> frames_buf: array<vec4<u32>>;
-// The two baked over-life curves, size then opacity, 257 entries each.
+// The baked tables, 257 entries each: size, opacity, then any colour ramp.
 @group(0) @binding(2) var<storage, read> curves: array<f32>;
 // The mask path: `(x, y, arc length, unused)` per vertex.
 @group(0) @binding(3) var<storage, read> path: array<vec4<f32>>;
@@ -768,11 +771,20 @@ fn pt_write(
     let fast = length(speed_out);
     let size = scale * pt_jitter(p.size, p.size_jitter, pt_die(lo, hi, A_SIZE))
         * pt_curve(pt_drive(p.size_by, u, fast, lo, hi, A_RANDOM_SIZE), 0u);
-    let alpha = p.colour.a
+    var alpha = p.colour.a
         * pt_curve(pt_drive(p.opacity_by, u, fast, lo, hi, A_RANDOM_OPACITY), CURVE_TABLE);
     // Premultiplied, and the blend to End colour is in working space.
+    // == lumit_core::fx::points::colour::tint.
     let toward = pt_drive(p.colour_by, u, fast, lo, hi, A_RANDOM_COLOUR);
-    let tint = p.colour.rgb + (p.end_colour.rgb - p.colour.rgb) * toward;
+    var tint = p.colour.rgb + (p.end_colour.rgb - p.colour.rgb) * toward;
+    if (p.ramp != 0u) {
+        alpha = alpha * pt_curve(toward, 5u * CURVE_TABLE);
+        tint = vec3<f32>(
+            pt_curve(toward, 2u * CURVE_TABLE),
+            pt_curve(toward, 3u * CURVE_TABLE),
+            pt_curve(toward, 4u * CURVE_TABLE),
+        );
+    }
     let colour = vec4<f32>(tint * alpha, alpha);
 
     var rot = radians(p.rotation);

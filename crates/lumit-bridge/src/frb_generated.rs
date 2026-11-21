@@ -40327,6 +40327,11 @@ impl SseDecode for crate::api::effect::BridgeEffectValue {
                 return crate::api::effect::BridgeEffectValue::Shape(var_field0);
             }
             12 => {
+                let mut var_field0 =
+                    <Vec<crate::api::layer::BridgeGradientStop>>::sse_decode(deserializer);
+                return crate::api::effect::BridgeEffectValue::Gradient(var_field0);
+            }
+            13 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::api::effect::BridgeEffectValue::Text(var_field0);
             }
@@ -43848,6 +43853,14 @@ impl SseDecode for crate::api::effect::BridgeParamKind {
                 return crate::api::effect::BridgeParamKind::Shape;
             }
             15 => {
+                let mut var_from = <String>::sse_decode(deserializer);
+                let mut var_to = <String>::sse_decode(deserializer);
+                return crate::api::effect::BridgeParamKind::Gradient {
+                    from: var_from,
+                    to: var_to,
+                };
+            }
+            16 => {
                 let mut var_default_ = <f64>::sse_decode(deserializer);
                 let mut var_min = <f64>::sse_decode(deserializer);
                 let mut var_max = <f64>::sse_decode(deserializer);
@@ -43859,7 +43872,7 @@ impl SseDecode for crate::api::effect::BridgeParamKind {
                     log: var_log,
                 };
             }
-            16 => {
+            17 => {
                 return crate::api::effect::BridgeParamKind::Action;
             }
             _ => {
@@ -56449,8 +56462,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEffectValue {
             crate::api::effect::BridgeEffectValue::Shape(field0) => {
                 [11.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::effect::BridgeEffectValue::Text(field0) => {
+            crate::api::effect::BridgeEffectValue::Gradient(field0) => {
                 [12.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::effect::BridgeEffectValue::Text(field0) => {
+                [13.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -60874,20 +60890,26 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeParamKind {
                 [13.into_dart(), default.into_into_dart().into_dart()].into_dart()
             }
             crate::api::effect::BridgeParamKind::Shape => [14.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Gradient { from, to } => [
+                15.into_dart(),
+                from.into_into_dart().into_dart(),
+                to.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             crate::api::effect::BridgeParamKind::Slider {
                 default,
                 min,
                 max,
                 log,
             } => [
-                15.into_dart(),
+                16.into_dart(),
                 default.into_into_dart().into_dart(),
                 min.into_into_dart().into_dart(),
                 max.into_into_dart().into_dart(),
                 log.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            crate::api::effect::BridgeParamKind::Action => [16.into_dart()].into_dart(),
+            crate::api::effect::BridgeParamKind::Action => [17.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -68016,8 +68038,12 @@ impl SseEncode for crate::api::effect::BridgeEffectValue {
                 <i32>::sse_encode(11, serializer);
                 <Vec<Vec<f32>>>::sse_encode(field0, serializer);
             }
-            crate::api::effect::BridgeEffectValue::Text(field0) => {
+            crate::api::effect::BridgeEffectValue::Gradient(field0) => {
                 <i32>::sse_encode(12, serializer);
+                <Vec<crate::api::layer::BridgeGradientStop>>::sse_encode(field0, serializer);
+            }
+            crate::api::effect::BridgeEffectValue::Text(field0) => {
+                <i32>::sse_encode(13, serializer);
                 <String>::sse_encode(field0, serializer);
             }
             _ => {
@@ -70676,20 +70702,25 @@ impl SseEncode for crate::api::effect::BridgeParamKind {
             crate::api::effect::BridgeParamKind::Shape => {
                 <i32>::sse_encode(14, serializer);
             }
+            crate::api::effect::BridgeParamKind::Gradient { from, to } => {
+                <i32>::sse_encode(15, serializer);
+                <String>::sse_encode(from, serializer);
+                <String>::sse_encode(to, serializer);
+            }
             crate::api::effect::BridgeParamKind::Slider {
                 default,
                 min,
                 max,
                 log,
             } => {
-                <i32>::sse_encode(15, serializer);
+                <i32>::sse_encode(16, serializer);
                 <f64>::sse_encode(default, serializer);
                 <f64>::sse_encode(min, serializer);
                 <f64>::sse_encode(max, serializer);
                 <bool>::sse_encode(log, serializer);
             }
             crate::api::effect::BridgeParamKind::Action => {
-                <i32>::sse_encode(16, serializer);
+                <i32>::sse_encode(17, serializer);
             }
             _ => {
                 unimplemented!("");

@@ -57,6 +57,7 @@ use crate::fx::noise::{hash01, value3};
 use crate::mask::MaskPolyline;
 use emitter::{birth_point, outline_polyline, Emitter};
 
+mod colour;
 pub mod emitter;
 pub mod stepped;
 pub mod trails;
@@ -384,6 +385,9 @@ pub struct ParticleLook {
     pub colour: [f32; 4],
     /// Scene-linear RGBA at death, blended to over normalised age.
     pub end_colour: [f32; 4],
+    /// Colour over life baked to red, green, blue and alpha tables, or none
+    /// for the plain blend from `colour` to `end_colour`.
+    pub colour_ramp: Vec<[f32; CURVE_TABLE]>,
     /// Rotation, degrees.
     pub rotation_deg: f32,
     /// The per-particle spread of `rotation_deg`, **degrees**: each particle
@@ -1959,17 +1963,7 @@ fn look_of(p: &PointsParams, b: u64, age: f32, life: f32, speed: [f32; 3]) -> (f
             drive(look.opacity_by, attr::RANDOM_OPACITY),
             &look.opacity_curve,
         );
-    let toward = drive(look.colour_by, attr::RANDOM_COLOUR);
-    // Premultiplied, and the blend to End colour is in working space —
-    // which is what "in working space" costs: one lerp, no encode.
-    let mut colour = [alpha; 4];
-    for (c, (from, to)) in colour
-        .iter_mut()
-        .zip(look.colour.iter().zip(look.end_colour.iter()))
-        .take(3)
-    {
-        *c = (from + (to - from) * toward) * alpha;
-    }
+    let colour = colour::tint(look, drive(look.colour_by, attr::RANDOM_COLOUR), alpha);
     // The per-particle rotation spread: a uniform draw of ±half the
     // dial about Rotation, from the seed hash like every other die, so two
     // sprites born together do not point the same way.

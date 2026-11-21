@@ -193,6 +193,7 @@ fn for_each_property(effects: &[EffectInstance], visit: &mut impl FnMut(&crate::
                 | crate::model::EffectValue::MaskPath(_)
                 | crate::model::EffectValue::Curve(_)
                 | crate::model::EffectValue::Shape(_)
+                | crate::model::EffectValue::Gradient(_)
                 | crate::model::EffectValue::Text(_) => {}
             }
         }
@@ -226,6 +227,7 @@ fn for_each_property_mut(
                 | crate::model::EffectValue::MaskPath(_)
                 | crate::model::EffectValue::Curve(_)
                 | crate::model::EffectValue::Shape(_)
+                | crate::model::EffectValue::Gradient(_)
                 | crate::model::EffectValue::Text(_) => {}
             }
         }

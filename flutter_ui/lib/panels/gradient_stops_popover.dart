@@ -125,16 +125,49 @@ class GradientRampPainter extends CustomPainter {
       old.ramp != ramp || old.theme != theme || old.bar != bar;
 }
 
+/// A gradient drawn small, as the button that opens its editor.
+class RampChip extends StatelessWidget {
+  final GradientRamp ramp;
+
+  /// Called with where the editor should open, in window coordinates.
+  final ValueChanged<Offset> onOpen;
+
+  const RampChip({super.key, required this.ramp, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        final box = context.findRenderObject();
+        if (box is! RenderBox) return;
+        onOpen(box.localToGlobal(Offset(0, box.size.height + 4)));
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: CustomPaint(
+          size: const Size(96, 18),
+          painter: GradientRampPainter(ramp: ramp, theme: t),
+        ),
+      ),
+    );
+  }
+}
+
 /// Open the gradient editor at [position].
 ///
 /// [onPreview] is called while a handle or a number is being dragged, and
-/// [onCommit] once it is let go, so a drag is one step to undo.
+/// [onCommit] once it is let go, so a drag is one step to undo. With
+/// [fixedEnds] the two ends are rows of their own and only the stops between
+/// them are edited here.
 Future<void> showGradientStopsPopover({
   required BuildContext context,
   required Offset position,
   required GradientRamp ramp,
   required ValueChanged<GradientRamp> onPreview,
   required ValueChanged<GradientRamp> onCommit,
+  bool fixedEnds = false,
 }) =>
     showLumitPopup<void>(
       context: context,
@@ -143,6 +176,7 @@ Future<void> showGradientStopsPopover({
         ramp: ramp,
         onPreview: onPreview,
         onCommit: onCommit,
+        fixedEnds: fixedEnds,
       ),
     );
 
@@ -172,11 +206,13 @@ class _GradientStopsPopover extends StatefulWidget {
   final GradientRamp ramp;
   final ValueChanged<GradientRamp> onPreview;
   final ValueChanged<GradientRamp> onCommit;
+  final bool fixedEnds;
 
   const _GradientStopsPopover({
     required this.ramp,
     required this.onPreview,
     required this.onCommit,
+    required this.fixedEnds,
   });
 
   @override
@@ -351,12 +387,14 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
   void _reverse() {
     setState(() {
       final colour = _start.colour, opacity = _start.opacity;
-      _start
-        ..colour = _end.colour
-        ..opacity = _end.opacity;
-      _end
-        ..colour = colour
-        ..opacity = opacity;
+      if (!widget.fixedEnds) {
+        _start
+          ..colour = _end.colour
+          ..opacity = _end.opacity;
+        _end
+          ..colour = colour
+          ..opacity = opacity;
+      }
       for (final s in _between) {
         s.position = 100 - s.position;
       }
@@ -515,6 +553,7 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
   Widget _controls(LumitTheme t) {
     final stop = _selected;
     final end = _isEnd(stop);
+    final fixed = end && widget.fixedEnds;
     // A column as wide as its control, so a longer word in another language
     // is cut short rather than pushing the row out of the popover.
     Widget under(String label, double width, Widget child) => SizedBox(
@@ -541,17 +580,20 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
         under(
           l10n.shapeGradientStopColour,
           52,
-          ColourSwatchButton(
-            key: const ValueKey<String>('grad-stop-colour'),
-            colour: _shown(stop.colour, 100),
-            // A shape's colours are scene-linear, so the picker counts in 0-1.
-            linear: true,
-            scale: ColourScale.unit,
-            onPicked: (p) {
-              setState(() => stop.colour =
-                  BridgeColourRgba(r: p.r, g: p.g, b: p.b, a: stop.colour.a));
-              widget.onCommit(_ramp);
-            },
+          IgnorePointer(
+            ignoring: fixed,
+            child: ColourSwatchButton(
+              key: const ValueKey<String>('grad-stop-colour'),
+              colour: _shown(stop.colour, 100),
+              // A shape's colours are scene-linear, so the picker counts in 0-1.
+              linear: true,
+              scale: ColourScale.unit,
+              onPicked: (p) {
+                setState(() => stop.colour =
+                    BridgeColourRgba(r: p.r, g: p.g, b: p.b, a: stop.colour.a));
+                widget.onCommit(_ramp);
+              },
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -560,22 +602,28 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
           68,
           SizedBox(
             width: 68,
-            child: DragValueField(
-              key: const ValueKey<String>('grad-stop-opacity'),
-              value: stop.opacity,
-              min: 0,
-              max: 100,
-              decimals: 1,
-              suffix: '%',
-              onChanged: (v) {
-                setState(() => stop.opacity = v.toDouble());
-                widget.onCommit(_ramp);
-              },
-              onChangeLive: (v) {
-                setState(() => stop.opacity = v.toDouble());
-                widget.onPreview(_ramp);
-              },
-            ),
+            child: fixed
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('${stop.opacity.round()}%',
+                        style: t.mono.copyWith(color: t.textDisabled)),
+                  )
+                : DragValueField(
+                    key: const ValueKey<String>('grad-stop-opacity'),
+                    value: stop.opacity,
+                    min: 0,
+                    max: 100,
+                    decimals: 1,
+                    suffix: '%',
+                    onChanged: (v) {
+                      setState(() => stop.opacity = v.toDouble());
+                      widget.onCommit(_ramp);
+                    },
+                    onChangeLive: (v) {
+                      setState(() => stop.opacity = v.toDouble());
+                      widget.onPreview(_ramp);
+                    },
+                  ),
           ),
         ),
         const SizedBox(width: 12),

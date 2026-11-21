@@ -72,6 +72,7 @@ use syn::{
         mask_path,
         curve,
         shape,
+        gradient,
         action
     )
 )]
@@ -507,6 +508,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         "mask_path",
         "curve",
         "shape",
+        "gradient",
         "action",
     ];
     let attr = field
@@ -518,7 +520,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 field.span(),
                 "every field is a parameter and needs one of #[slider] #[bounded] #[counter] \
                  #[dial] #[toggle] #[choice] #[colour] #[seed] #[file] #[text] #[layer] #[clip] \
-                 #[mask_path] #[curve] #[shape] #[action]",
+                 #[mask_path] #[curve] #[shape] #[gradient] #[action]",
             )
         })?;
 
@@ -781,6 +783,19 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             quote! { ::lumit_core::fx::schema::ParamKind::Shape },
             quote! { p.shape(#idc) },
         ),
+        // A ramp's stops, between the two colour rows it names.
+        "gradient" => {
+            let (Some(from), Some(to)) = (get("from"), get("to")) else {
+                return Err(syn::Error::new(
+                    attr.span(),
+                    "#[gradient] needs from = \"…\" and to = \"…\"",
+                ));
+            };
+            (
+                quote! { ::lumit_core::fx::schema::ParamKind::Gradient { from: #from, to: #to } },
+                quote! { p.gradient(#idc) },
+            )
+        }
         // A button. It carries no value, so the field it declares is
         // the unit type and `read` fills it with `()`: there is nothing in the
         // bag to read back, and there never will be — an Action crosses the

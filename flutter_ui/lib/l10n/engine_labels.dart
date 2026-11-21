@@ -1159,6 +1159,7 @@ Map<String, String> get _built => {
       "Clockwise": l10n.fxClockwise,
       "Colour": l10n.fxColour,
       "Colour by": l10n.fxColourBy,
+      "Colour over life": l10n.fxColourOverLife,
       "Colour 1": l10n.fxColour1,
       "Colour 2": l10n.fxColour2,
       "Colour 3": l10n.fxColour3,

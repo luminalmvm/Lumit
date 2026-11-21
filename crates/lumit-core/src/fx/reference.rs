@@ -344,6 +344,8 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
         }
         // An outline starts empty, so there is no default to print.
         ParamKind::Shape => p.kind = "shape",
+        // Stops start empty too.
+        ParamKind::Gradient { .. } => p.kind = "gradient",
         // A button: no default, no range, no options — the label and
         // the kind are the whole of what the manual's table can say about it.
         ParamKind::Action => p.kind = "action",

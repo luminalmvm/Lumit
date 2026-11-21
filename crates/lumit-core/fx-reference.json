@@ -14413,6 +14413,12 @@
           "slider_max": 4.0
         },
         {
+          "id": "colour_over_life",
+          "label": "Colour over life",
+          "kind": "gradient",
+          "unit": "raw"
+        },
+        {
           "id": "rotation",
           "label": "Rotation",
           "kind": "angle",
@@ -15151,6 +15157,7 @@
             "opacity_over_life",
             "colour",
             "end_colour",
+            "colour_over_life",
             "rotation",
             "rotation_jitter",
             "spin",

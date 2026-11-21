@@ -1427,6 +1427,14 @@ fn feed_effect_stack(
                         feed_f64(h, f64::from(xy[1]));
                     }
                 }
+                // The stops as the render reads them at this time.
+                EffectValue::Gradient(stops) => {
+                    lumit_core::fx::colour_stops::ColourStops::sanitised(stops, lt).feed_hash(
+                        &mut |b| {
+                            h.update(b);
+                        },
+                    );
+                }
             }
         }
         // A seeded effect (docs/08 §1.3 Randomness) draws from

@@ -119,7 +119,7 @@ pub struct ParticulateOp<'a> {
     pub frames: &'a [[u32; 4]],
     /// How many births the window records — the candidate count.
     pub candidates: u32,
-    /// The two baked over-life curves, size then opacity, 257 entries each.
+    /// The baked tables, 257 entries each: size, opacity, then any colour ramp.
     pub curves: &'a [f32],
     /// The mask path as `(x, y, arc length, unused)` per vertex, empty for any other shape.
     pub path: &'a [[f32; 4]],

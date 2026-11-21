@@ -102,7 +102,9 @@ pub(super) struct ParticulateParams {
 
     pub(super) scan_len: u32,
     pub(super) tile_scale: u32,
-    pub(super) _pad: [u32; 2],
+    /// Whether `curves` carries a colour ramp after its two tables.
+    pub(super) ramp: u32,
+    pub(super) _pad: u32,
 }
 
 impl ParticulateParams {
@@ -191,7 +193,8 @@ impl ParticulateParams {
             pair_max: pair_max(cap),
             scan_len: scan_len(cap, w, h),
             tile_scale: tile_scale(w, h),
-            _pad: [0; 2],
+            ramp: u32::from(op.curves.len() > 2 * super::colour::CURVE_TABLE),
+            _pad: 0,
         }
     }
 }
