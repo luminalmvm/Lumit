@@ -224,6 +224,26 @@ class CutTrackPainter extends CustomPainter {
             cutThroughEdit(track.clips[i], track.clips[i + 1]);
       }
 
+      // Copies being laid: the originals stay where they were.
+      if (held != null && held.copy && held.grab == BarGrab.move) {
+        for (var i = lo; i < hi; i++) {
+          final clip = track.clips[i];
+          if (!held.clips.contains(clip.id.toString())) continue;
+          final sound = _isSound(track, clip);
+          final (left, width) = _boxOf(
+              clip, (clip.startFrame.toInt(), clip.endFrame.toInt()), null,
+              sound: sound);
+          if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
+          _clipBox(
+              canvas,
+              clip,
+              Rect.fromLTWH(
+                  left, cutClipInset, width, size.height - cutClipInset * 2),
+              null,
+              mark,
+              sound: sound);
+        }
+      }
       for (var i = lo; i < hi; i++) {
         final clip = track.clips[i];
         final span = spans[i - lo];
@@ -252,6 +272,17 @@ class CutTrackPainter extends CustomPainter {
         final (_, end) = spans[i - lo] ?? (0, 0);
         final (next, _) = spans[i - lo + 1] ?? (0, 0);
         if (next >= end) continue;
+        // A dragged clip dropped over a neighbour overwrites it unless Auto
+        // crossfade is on, so there is no transition to draw.
+        if (held != null &&
+            held.grab == BarGrab.move &&
+            held.tool != CutTool.slip &&
+            (held.shift != 0 || held.trackShift != 0) &&
+            !held.overlap &&
+            held.clips.contains(track.clips[i].id.toString()) !=
+                held.clips.contains(track.clips[i + 1].id.toString())) {
+          continue;
+        }
         final a = axis.xOf(next);
         final b = axis.xOf(end);
         final out = track.clips[i].fadeOut.shape;
