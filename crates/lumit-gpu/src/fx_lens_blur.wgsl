@@ -240,7 +240,11 @@ fn lb_prep(@builtin(global_invocation_id) gid: vec3<u32>) {
     let scale = abs(dz) / abs(dz_centre(b));
     let o = offset_of(xy);
     let field = length(o) / p.px_per_mm / max(p.field_max_mm, 1e-6);
-    let fb = u32(clamp(round(field * f32(p.field_bins - 1u)), 0.0, f32(p.field_bins - 1u)));
+    // The place in the frame is chosen at random between the two nearest, in
+    // proportion, so the kernels blend from one to the next. Taken from the
+    // nearest alone, each place's kernel ends in a step, and the highlights add
+    // their light up unnormalised: the steps come out as rings round the middle.
+    let fb = u32(clamp(floor(field * f32(p.field_bins - 1u) + hash(xy)), 0.0, f32(p.field_bins - 1u)));
     // The iris's turn against this pixel's radial direction, folded into half
     // a blade: the other half is the mirror image.
     let sector = TAU / f32(max(p.blades, 3u));
