@@ -139,3 +139,79 @@ impl Default for ColourStops {
         Self::EMPTY
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::anim::Property;
+    use crate::model::LinearColour;
+
+    fn stop(at: f64, colour: [f32; 4], opacity: f64) -> GradientStop {
+        GradientStop {
+            position: Property::fixed(at),
+            colour: LinearColour(colour),
+            opacity: Property::fixed(opacity),
+        }
+    }
+
+    /// Stops are read in order of place, a place that is not a number is left
+    /// out, and a stop's alpha is its colour's times its opacity.
+    #[test]
+    fn stops_are_read_in_order_with_their_alpha() {
+        assert!(ColourStops::sanitised(&[], 0.0).is_empty());
+        assert_eq!(ColourStops::default(), ColourStops::EMPTY);
+        let read = ColourStops::sanitised(
+            &[
+                stop(80.0, [0.0, 0.0, 1.0, 1.0], 100.0),
+                stop(f64::NAN, [1.0, 1.0, 1.0, 1.0], 100.0),
+                stop(20.0, [1.0, f32::NAN, 0.0, 0.5], 50.0),
+            ],
+            0.0,
+        );
+        assert_eq!(read.len(), 2);
+        let got: Vec<_> = read.stops().collect();
+        assert!((got[0].0 - 0.2).abs() < 1e-4 && (got[1].0 - 0.8).abs() < 1e-4);
+        assert_eq!(got[0].1[..3], [1.0, 0.0, 0.0]);
+        assert!((got[0].1[3] - 0.25).abs() < 1e-4, "alpha is 0.5 times 50%");
+        assert_eq!(got[1].1[..3], [0.0, 0.0, 1.0]);
+        // Padding never feeds a key, and a different ramp does.
+        let hash = |s: &ColourStops| {
+            let mut bytes = Vec::new();
+            s.feed_hash(&mut |b| bytes.extend_from_slice(b));
+            bytes
+        };
+        assert_ne!(hash(&read), hash(&ColourStops::EMPTY));
+        let one = ColourStops::sanitised(&[stop(20.0, [1.0, 0.0, 0.0, 1.0], 100.0)], 0.0);
+        assert_ne!(hash(&read), hash(&one));
+    }
+
+    /// The baked ramp runs from one end to the other through the stops, with
+    /// opaque ends and a hard edge where two stops share a place.
+    #[test]
+    fn the_ramp_runs_through_its_stops() {
+        let from = [1.0, 0.0, 0.0, 0.2];
+        let to = [0.0, 0.0, 1.0, 0.2];
+        assert!(ColourStops::EMPTY.tables(from, to).is_empty());
+        let mid = ColourStops::sanitised(&[stop(50.0, [0.0, 1.0, 0.0, 1.0], 100.0)], 0.0);
+        let t = mid.tables(from, to);
+        assert_eq!(t.len(), 4);
+        let last = CURVE_TABLE - 1;
+        assert_eq!([t[0][0], t[1][0], t[2][0], t[3][0]], [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(
+            [t[0][last], t[1][last], t[2][last], t[3][last]],
+            [0.0, 0.0, 1.0, 1.0]
+        );
+        let half = last / 2;
+        assert!(t[1][half] > 0.99, "green at the stop");
+        assert!((t[0][half / 2] - 0.5).abs() < 0.02, "half way to it");
+        let hard = ColourStops::sanitised(
+            &[
+                stop(50.0, [0.0, 1.0, 0.0, 1.0], 100.0),
+                stop(50.0, [1.0, 1.0, 0.0, 1.0], 100.0),
+            ],
+            0.0,
+        );
+        let h = hard.tables(from, to);
+        assert!(h[0][half - 4] < 0.1 && h[0][half + 4] > 0.9, "a hard edge");
+    }
+}
