@@ -464,7 +464,10 @@ class ViewerStage extends StatelessWidget {
                     ? shapeContentsBounds(art, t: playheadSeconds)
                     : null) ??
                 uiState.layerBounds.boundsOf(entry,
-                    compSize: compSize, revision: revision, t: playheadSeconds),
+                    compSize: compSize,
+                    revision: revision,
+                    t: playheadSeconds,
+                    frame: uiState.playheadFrame.value),
         // A keyed position is dragged by its body from wherever it is
         // grabbed, as in After Effects, and takes a key at the playhead; its
         // keys can still be dragged on the motion path. Only an expression

@@ -148,6 +148,7 @@ class _AnimatorSection extends StatelessWidget {
         document: BridgeTextDocument(
           text: document.text,
           expression: document.expression,
+          keys: document.keys,
           size: document.size,
           fill: document.fill,
           path: document.path,
@@ -808,6 +809,7 @@ bool addTextAnimator(LayerReference layer,
     document: BridgeTextDocument(
       text: document.text,
       expression: document.expression,
+      keys: document.keys,
       size: document.size,
       fill: document.fill,
       path: document.path,
@@ -1307,6 +1309,7 @@ void writeTextAnimatorScalar({
     document: BridgeTextDocument(
       text: document.text,
       expression: document.expression,
+      keys: document.keys,
       size: document.size,
       fill: document.fill,
       path: document.path,
@@ -1589,6 +1592,7 @@ void removeTextAnimators(LayerReference layer, {int? index}) {
     document: BridgeTextDocument(
       text: document.text,
       expression: document.expression,
+      keys: document.keys,
       size: document.size,
       fill: document.fill,
       path: document.path,
@@ -1628,6 +1632,7 @@ bool removeTextAnimatorValue(
     document: BridgeTextDocument(
       text: document.text,
       expression: document.expression,
+      keys: document.keys,
       size: document.size,
       fill: document.fill,
       path: document.path,
@@ -1653,6 +1658,7 @@ void writeTextAnimator(
     document: BridgeTextDocument(
       text: document.text,
       expression: document.expression,
+      keys: document.keys,
       size: document.size,
       fill: document.fill,
       path: document.path,

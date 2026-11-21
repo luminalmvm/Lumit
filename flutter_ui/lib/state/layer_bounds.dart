@@ -34,6 +34,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:uuid/uuid.dart';
 
+import 'text_documents.dart';
+
 /// What Geometry options are known by: a Text or Shape layer's, then each
 /// 3D shape's.
 const geometryOptionsNames = {
@@ -401,6 +403,10 @@ class LayerBoundsCache extends ChangeNotifier {
   /// Sizes by layer id, good for as long as [_revision] is.
   final Map<UuidValue, Size> _byLayer = {};
 
+  /// The text layers whose words are keyed. Their box follows the playhead,
+  /// so they are measured again each frame, as a moving shape is.
+  final Set<UuidValue> _keyedText = {};
+
   /// Model boxes by layer id, the same. Only kept once the model is read.
   final Map<UuidValue, List<double>> _boxes = {};
   final Map<UuidValue, int> _boxFrames = {};
@@ -439,6 +445,7 @@ class LayerBoundsCache extends ChangeNotifier {
     if (revision == _revision) return;
     _revision = revision;
     _byLayer.clear();
+    _keyedText.clear();
     _boxes.clear();
   }
 
@@ -482,6 +489,7 @@ class LayerBoundsCache extends ChangeNotifier {
     required BridgeCompSize compSize,
     required int? revision,
     double t = 0,
+    int? frame,
   }) {
     _atRevision(revision);
     final id = entry.layer.internallayerId;
@@ -490,12 +498,14 @@ class LayerBoundsCache extends ChangeNotifier {
     // revision alone would hand back yesterday's box while a keyed repeater
     // played. Measuring one is a walk over its own points, which is what this
     // cache exists to keep media probes out of, not arithmetic.
-    if (entry.info.kind == BridgeLayerKind.shape) {
-      return _measure(entry, compSize, t);
+    if (entry.info.kind == BridgeLayerKind.shape ||
+        _keyedText.contains(id)) {
+      return _measure(entry, compSize, t, frame);
     }
     final held = _byLayer[id];
     if (held != null) return held;
-    final measured = _measure(entry, compSize, t);
+    final measured = _measure(entry, compSize, t, frame);
+    if (_keyedText.contains(id)) return measured;
     _byLayer[id] = measured;
     return measured;
   }
@@ -503,7 +513,8 @@ class LayerBoundsCache extends ChangeNotifier {
   Size _compSize(BridgeCompSize s) =>
       Size(s.width.toDouble(), s.height.toDouble());
 
-  Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize, double t) {
+  Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize, double t,
+      [int? frame]) {
     // A Null never draws, so its box is the convention above rather than
     // anything read from the document. A Model layer borrows it until its box
     // comes from the model's own bounds.
@@ -528,6 +539,14 @@ class LayerBoundsCache extends ChangeNotifier {
       try {
         final document = entry.layer.getText();
         if (document != null) {
+          // Keyed words are measured as the words shown at the playhead.
+          if (document.keys != null) {
+            _keyedText.add(entry.layer.internallayerId);
+            if (frame != null) {
+              return textLayerBounds(document.copyWith(
+                  text: entry.layer.textAt(frame: frame), clearKeys: true));
+            }
+          }
           return textLayerBounds(document);
         }
       } catch (_) {

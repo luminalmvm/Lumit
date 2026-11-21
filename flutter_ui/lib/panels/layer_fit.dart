@@ -101,7 +101,10 @@ void _fit(
   );
   final size = comp.getSize();
   final bounds = ui.layerBounds.boundsOf(entry,
-      compSize: size, revision: revision, t: frame / ui.model.heldFps);
+      compSize: size,
+      revision: revision,
+      t: frame / ui.model.heldFps,
+      frame: frame);
   final corners = [
     map.toScreen(0, 0),
     map.toScreen(bounds.width, 0),

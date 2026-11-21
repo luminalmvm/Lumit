@@ -449,7 +449,8 @@ Map<BridgeTransformProp, double> freshTransform(
           .boundsOf(entry,
               compSize: comp.getSize(),
               revision: ui.model.heldRevision,
-              t: ui.playheadFrame.value / ui.model.heldFps)
+              t: ui.playheadFrame.value / ui.model.heldFps,
+              frame: ui.playheadFrame.value)
           .center(Offset.zero)
       : Offset.zero;
   return {
@@ -567,7 +568,8 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
                     .boundsOf(entry,
                         compSize: comp.getSize(),
                         revision: ui.model.heldRevision,
-                        t: frame / ui.model.heldFps)
+                        t: frame / ui.model.heldFps,
+                        frame: frame)
                     .center(Offset.zero);
                 final position = panBehindPosition(
                   oldAnchor: Offset(still(tf.anchorX), still(tf.anchorY)),
