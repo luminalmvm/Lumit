@@ -582,3 +582,287 @@ fn a_stagger_bounces_past_its_last_key_and_settles() {
     // Before the last key nothing is added.
     assert!((w(0.5) - 0.5).abs() < 1e-6, "{}", w(0.5));
 }
+
+// ---- Engine changes 104 on: more selectors, the eye, Amount, Follow -------
+
+/// A Range selector over the whole run, square, with its window.
+fn window(start: f64, end: f64) -> super::selector::RangeSelector {
+    super::selector::RangeSelector {
+        start: Property::fixed(start),
+        end: Property::fixed(end),
+        ..super::selector::RangeSelector::default()
+    }
+}
+
+/// An animator that fades its letters out entirely.
+fn fader(name: &str) -> TextAnimator {
+    TextAnimator {
+        opacity: Property::fixed(0.0),
+        ..TextAnimator::new(name)
+    }
+}
+
+fn opacities(animators: &[TextAnimator], text: &str, lt: f64) -> Vec<f32> {
+    glyph_xforms(animators, text, lt, &[])
+        .iter()
+        .map(|x| x.opacity)
+        .collect()
+}
+
+/// **Selectors put together top to bottom, as After Effects' Modes**: the
+/// first selector reaches the first three of six letters, the second the
+/// middle three, under each mode.
+#[test]
+fn a_second_selector_is_put_together_by_its_mode() {
+    use super::selector::SelectorCombine;
+    let first = window(0.0, 50.0);
+    let both = |combine: SelectorCombine, invert: bool| {
+        let mut second = window(100.0 / 3.0, 250.0 / 3.0);
+        second.combine = combine;
+        second.invert = invert;
+        let a = TextAnimator {
+            selector: first.clone(),
+            selectors: vec![second],
+            ..fader("A")
+        };
+        // Faded by the weight: opacity 1 − w.
+        opacities(&[a], "abcdef", 0.0)
+            .iter()
+            .map(|o| 1.0 - o)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(both(SelectorCombine::Add, false), [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]);
+    assert_eq!(both(SelectorCombine::Add, true), [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
+    assert_eq!(both(SelectorCombine::Intersect, false), [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]);
+    assert_eq!(both(SelectorCombine::Min, false), [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]);
+    assert_eq!(both(SelectorCombine::Max, false), [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]);
+    assert_eq!(both(SelectorCombine::Difference, false), [1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
+}
+
+/// **The eye and solo**: a switched-off animator counts for nothing, and
+/// while one is soloed the others do not count.
+#[test]
+fn the_eye_and_solo_decide_which_animators_count() {
+    let mut a = fader("A");
+    let mut b = TextAnimator {
+        position_y: Property::fixed(10.0),
+        ..TextAnimator::new("B")
+    };
+    a.enabled = false;
+    let x = glyph_xforms(&[a.clone(), b.clone()], "ab", 0.0, &[]);
+    assert_eq!(x[0].opacity, 1.0);
+    assert_eq!(x[0].position[1], 10.0);
+    a.enabled = true;
+    b.solo = true;
+    let x = glyph_xforms(&[a.clone(), b.clone()], "ab", 0.0, &[]);
+    assert_eq!(x[0].opacity, 1.0, "a soloed B leaves A out");
+    assert_eq!(x[0].position[1], 10.0);
+    // A soloed animator that is switched off does not silence the rest.
+    b.enabled = false;
+    let x = glyph_xforms(&[a, b], "ab", 0.0, &[]);
+    assert_eq!(x[0].opacity, 0.0);
+    assert_eq!(x[0].position[1], 0.0);
+}
+
+/// **An animator's own Amount scales its whole effect.**
+#[test]
+fn an_animators_amount_scales_every_letter() {
+    let a = TextAnimator {
+        amount: Property::fixed(25.0),
+        position_y: Property::fixed(40.0),
+        ..TextAnimator::new("A")
+    };
+    let x = glyph_xforms(&[a], "ab", 0.0, &[]);
+    assert!((x[1].position[1] - 10.0).abs() < 1e-5);
+}
+
+/// **Follow**: an animator following another reads that one's selection,
+/// the offset later, and a pair following each other reaches nothing.
+#[test]
+fn an_animator_follows_another_ones_selection() {
+    use super::selector::{RangeSelector, SelectorKind};
+    let lead = TextAnimator {
+        selector: RangeSelector {
+            kind: SelectorKind::Stagger,
+            amount: falling_amount(),
+            delay: Property::fixed(0.25),
+            ..RangeSelector::default()
+        },
+        position_y: Property::fixed(100.0),
+        ..TextAnimator::new("Drop")
+    };
+    let fade = TextAnimator {
+        follow: Some("Drop".into()),
+        follow_offset: 0.5,
+        ..fader("Fade")
+    };
+    // At 0.75 s the follower reads the lead's selection at 0.25 s.
+    let both = glyph_xforms(&[lead.clone(), fade.clone()], "ab", 0.75, &[]);
+    let lead_then = glyph_xforms(std::slice::from_ref(&lead), "ab", 0.25, &[]);
+    for (x, then) in both.iter().zip(&lead_then) {
+        let w = then.position[1] / 100.0;
+        assert!((x.opacity - (1.0 - w)).abs() < 1e-5, "{x:?} {then:?}");
+    }
+    // Following each other: neither reaches a letter.
+    let a = TextAnimator {
+        follow: Some("B".into()),
+        ..fader("A")
+    };
+    let b = TextAnimator {
+        follow: Some("A".into()),
+        ..fader("B")
+    };
+    assert!(opacities(&[a, b], "ab", 0.0).iter().all(|o| *o == 1.0));
+}
+
+/// **Characters excluding spaces and lines**: a space is not a unit of its
+/// own, and a line break ends a line.
+#[test]
+fn spaces_are_left_out_and_lines_are_counted() {
+    let (units, n) = unit_indices("ab c", SelectorBasis::CharactersExcludingSpaces);
+    assert_eq!((units, n), (vec![0, 1, 1, 2], 3));
+    let (units, n) = unit_indices("ab\ncd\ne", SelectorBasis::Lines);
+    assert_eq!((units, n), (vec![0, 0, 0, 1, 1, 1, 2], 3));
+    assert_eq!(unit_indices("", SelectorBasis::Lines), (vec![], 0));
+}
+
+/// **Index units** count letters: 1 to 3 reaches the second and third.
+#[test]
+fn index_units_count_letters() {
+    let mut s = window(1.0, 3.0);
+    s.units = super::selector::SelectorUnits::Index;
+    assert_eq!(s.weights_at(5, 0.0), [0.0, 1.0, 1.0, 0.0, 0.0]);
+}
+
+/// **Randomize order** moves the same window over the letters in another
+/// order: as many letters reached, not the same ones, the same for a seed.
+#[test]
+fn randomize_order_reaches_the_same_number_in_another_order() {
+    let mut s = window(0.0, 50.0);
+    let plain = s.weights_at(10, 0.0);
+    s.randomize = true;
+    s.seed = 3;
+    let shuffled = s.weights_at(10, 0.0);
+    assert_eq!(shuffled.iter().sum::<f32>(), plain.iter().sum::<f32>());
+    assert_ne!(shuffled, plain);
+    assert_eq!(shuffled, s.weights_at(10, 0.0));
+}
+
+/// **Total duration**: the spread stays the Delay however many units.
+#[test]
+fn total_duration_keeps_the_spread_whatever_the_length() {
+    use super::selector::{RangeSelector, SelectorKind};
+    let s = RangeSelector {
+        kind: SelectorKind::Stagger,
+        amount: falling_amount(),
+        delay: Property::fixed(0.5),
+        total: true,
+        ..RangeSelector::default()
+    };
+    // The last unit starts 0.5 s after the first, for 3 units or 11.
+    for units in [3, 11] {
+        let w = s.stagger_weights(units, 0.5);
+        assert!((w[units - 1] - 1.0).abs() < 1e-6);
+        assert!((w[0] - 0.5).abs() < 1e-6);
+    }
+}
+
+/// **Loop and ping-pong**: after Amount's last key a Loop starts again from
+/// the first, a Ping-pong plays back.
+#[test]
+fn a_stagger_loops_and_ping_pongs_after_the_last_key() {
+    use super::selector::{RangeSelector, SelectorKind, StaggerRepeat};
+    let mut s = RangeSelector {
+        kind: SelectorKind::Stagger,
+        amount: falling_amount(),
+        ..RangeSelector::default()
+    };
+    assert!((s.repeated(1.25) - 1.25).abs() < 1e-9);
+    s.repeat = StaggerRepeat::Loop;
+    assert!((s.repeated(1.25) - 0.25).abs() < 1e-9);
+    assert!((s.repeated(2.5) - 0.5).abs() < 1e-9);
+    s.repeat = StaggerRepeat::PingPong;
+    assert!((s.repeated(1.25) - 0.75).abs() < 1e-9);
+    assert!((s.repeated(2.25) - 0.25).abs() < 1e-9);
+    assert!((s.repeated(0.5) - 0.5).abs() < 1e-9, "before the last key, as it is");
+}
+
+/// **Bounce on the last key only** leaves the keys before it unbounced.
+#[test]
+fn bounce_on_the_last_key_only() {
+    use super::selector::{RangeSelector, SelectorKind};
+    use crate::anim::{Animation, Keyframe, SideInterp};
+    use crate::time::Rational;
+    let key = |s: i64, value: f64| Keyframe {
+        time: Rational::new(s, 1).unwrap(),
+        value,
+        interp_in: SideInterp::Linear,
+        interp_out: SideInterp::Linear,
+    };
+    let mut s = RangeSelector {
+        kind: SelectorKind::Stagger,
+        amount: Property {
+            animation: Animation::Keyframed(vec![
+                key(0, 0.0),
+                key(1, 100.0),
+                key(2, 50.0),
+                key(3, 0.0),
+            ]),
+            extra: serde_json::Map::new(),
+        },
+        bounce_amplitude: Property::fixed(20.0),
+        ..RangeSelector::default()
+    };
+    // Just after the second key the bounce is there, then not.
+    let at = |s: &RangeSelector| s.stagger_weights(1, 1.1)[0];
+    let bounced = at(&s);
+    s.bounce_last = true;
+    let plain = at(&s);
+    assert!((bounced - plain).abs() > 0.01);
+    assert!((plain - 0.95).abs() < 1e-6);
+}
+
+/// **Skew, tracking, blur and character offset** are carried to the letters
+/// by the weight, and none of them is there at their defaults.
+#[test]
+fn the_new_properties_reach_the_letters_by_weight() {
+    let a = TextAnimator {
+        selector: window(0.0, 50.0),
+        skew: Property::fixed(20.0),
+        skew_axis: Property::fixed(30.0),
+        tracking: Property::fixed(100.0),
+        blur: Property::fixed(4.0),
+        character_offset: Property::fixed(1.0),
+        ..TextAnimator::new("A")
+    };
+    let x = glyph_xforms(std::slice::from_ref(&a), "ab", 0.0, &[]);
+    assert_eq!(
+        (x[0].skew, x[0].skew_axis, x[0].tracking, x[0].blur, x[0].char_offset),
+        (20.0, 30.0, 100.0, 4.0, 1.0)
+    );
+    assert!(x[1].is_identity());
+    assert_eq!(offset_text("ab", &x).as_deref(), Some("bb"));
+    assert!(glyph_xforms(&[TextAnimator::new("B")], "ab", 0.0, &[])
+        .iter()
+        .all(GlyphXform::is_identity));
+}
+
+/// **Character offset** goes round its own run, and leaves the rest.
+#[test]
+fn character_offset_goes_round_its_run() {
+    assert_eq!(offset_char('z', 1), 'a');
+    assert_eq!(offset_char('A', -1), 'Z');
+    assert_eq!(offset_char('9', 2), '1');
+    assert_eq!(offset_char(' ', 5), ' ');
+    assert_eq!(offset_char('!', 5), '!');
+}
+
+/// **Old files read the same, and new rows at their defaults write nothing.**
+#[test]
+fn an_animator_at_its_defaults_writes_none_of_the_new_rows() {
+    let a = TextAnimator::new("A");
+    assert_eq!(serde_json::to_string(&a).unwrap(), "{\"name\":\"A\"}");
+    let back: TextAnimator = serde_json::from_str("{\"name\":\"A\"}").unwrap();
+    assert_eq!(back, a);
+    assert!(back.enabled);
+}

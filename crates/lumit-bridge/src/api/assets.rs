@@ -209,6 +209,37 @@ pub fn text_font_faces(family: String) -> Vec<String> {
 pub enum BridgeSelectorBasis {
     Characters,
     Words,
+    CharactersExcludingSpaces,
+    Lines,
+}
+
+/// How a selector after the first is put together with the ones above it;
+/// Subtract is the selector's `invert`.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorCombine {
+    Add,
+    Intersect,
+    Min,
+    Max,
+    Difference,
+}
+
+/// What a Range selector's Start, End and Offset count in.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorUnits {
+    Percentage,
+    Indexed,
+}
+
+/// What a Stagger selector does after Amount's last key.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeStaggerRepeat {
+    Once,
+    Loop,
+    PingPong,
 }
 
 /// How a range selector's weight falls off across its range.
@@ -297,6 +328,19 @@ pub struct BridgeRangeSelector {
     pub wiggles: BridgeScalar,
     pub correlation: BridgeScalar,
     pub seed: u32,
+    /// How the selector is put together with the ones above it.
+    pub combine: BridgeSelectorCombine,
+    /// Per cent or units, for a Range's Start, End and Offset.
+    pub units: BridgeSelectorUnits,
+    /// A Range's Randomize order, by `seed`.
+    pub randomize: bool,
+    /// A Stagger's Delay shown in frames; it is seconds either way.
+    pub delay_frames: bool,
+    /// A Stagger's Delay is the whole spread.
+    pub total: bool,
+    pub repeat: BridgeStaggerRepeat,
+    /// Bounce after Amount's last key only.
+    pub bounce_last: bool,
 }
 
 /// One font axis an animator moves its letters along: a tag such as `wght`
@@ -381,6 +425,24 @@ pub fn text_variable_font_families() -> Vec<String> {
 pub struct BridgeTextAnimator {
     pub name: String,
     pub selector: BridgeRangeSelector,
+    /// More selectors after the first, top to bottom.
+    pub selectors: Vec<BridgeRangeSelector>,
+    /// The eye, and solo.
+    pub enabled: bool,
+    pub solo: bool,
+    /// Per cent: the whole animator's strength.
+    pub amount: BridgeScalar,
+    /// Another animator whose selection this one follows, by name, and the
+    /// seconds it is read later.
+    pub follow: Option<String>,
+    pub follow_offset: f64,
+    /// Degrees of slant and of its axis, thousandths of an em of tracking,
+    /// px of blur, and places a character is moved on.
+    pub skew: BridgeScalar,
+    pub skew_axis: BridgeScalar,
+    pub tracking: BridgeScalar,
+    pub blur: BridgeScalar,
+    pub character_offset: BridgeScalar,
     pub position_x: BridgeScalar,
     pub position_y: BridgeScalar,
     pub rotation: BridgeScalar,
@@ -404,6 +466,44 @@ pub struct BridgeTextAnimator {
     /// The property groups the animator lists, in the order added; `None`
     /// lists them all.
     pub properties: Option<Vec<String>>,
+}
+
+/// Animators as a user preset's text, their keys moved back by `from` so the
+/// first one lands where the preset is later put.
+///
+/// # Errors
+/// A time or key the document cannot hold.
+#[allow(clippy::needless_pass_by_value)]
+pub fn text_animators_to_json(
+    animators: Vec<BridgeTextAnimator>,
+    from: crate::api::effect::BridgeRational,
+) -> Result<String, BridgeError> {
+    let offset = lumit_core::time::Rational::new(from.num, from.den)
+        .map_err(|_| BridgeError::InvalidTime)?;
+    let core = animators
+        .into_iter()
+        .map(|a| animators::animator_from(a, offset))
+        .collect::<Result<Vec<_>, _>>()?;
+    serde_json::to_string_pretty(&core).map_err(|_| BridgeError::InvalidPreset)
+}
+
+/// A user preset's animators, their keys moved on by `at`.
+///
+/// # Errors
+/// Text that is not a list of animators.
+#[allow(clippy::needless_pass_by_value)]
+pub fn text_animators_from_json(
+    json: String,
+    at: crate::api::effect::BridgeRational,
+) -> Result<Vec<BridgeTextAnimator>, BridgeError> {
+    let offset = lumit_core::time::Rational::new(at.num, at.den)
+        .map_err(|_| BridgeError::InvalidTime)?;
+    let core: Vec<lumit_core::text::TextAnimator> =
+        serde_json::from_str(&json).map_err(|_| BridgeError::InvalidPreset)?;
+    Ok(core
+        .iter()
+        .map(|a| animators::read_animator(a, offset))
+        .collect())
 }
 
 /// A solid asset's definition.

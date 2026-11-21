@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 497678571;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 2028890931;
 
 // Section: executor
 
@@ -37202,6 +37202,76 @@ fn wire__crate__api__template__library__templates_folder_impl(
         },
     )
 }
+fn wire__crate__api__assets__text_animators_from_json_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "text_animators_from_json",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_json = <String>::sse_decode(&mut deserializer);
+            let api_at = <crate::api::effect::BridgeRational>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, BridgeError>((move || {
+                    let output_ok = crate::api::assets::text_animators_from_json(api_json, api_at)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__assets__text_animators_to_json_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "text_animators_to_json",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_animators =
+                <Vec<crate::api::assets::BridgeTextAnimator>>::sse_decode(&mut deserializer);
+            let api_from = <crate::api::effect::BridgeRational>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, BridgeError>((move || {
+                    let output_ok =
+                        crate::api::assets::text_animators_to_json(api_animators, api_from)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__assets__text_font_axes_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -44193,6 +44263,13 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
         let mut var_wiggles = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_correlation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_seed = <u32>::sse_decode(deserializer);
+        let mut var_combine = <crate::api::assets::BridgeSelectorCombine>::sse_decode(deserializer);
+        let mut var_units = <crate::api::assets::BridgeSelectorUnits>::sse_decode(deserializer);
+        let mut var_randomize = <bool>::sse_decode(deserializer);
+        let mut var_delayFrames = <bool>::sse_decode(deserializer);
+        let mut var_total = <bool>::sse_decode(deserializer);
+        let mut var_repeat = <crate::api::assets::BridgeStaggerRepeat>::sse_decode(deserializer);
+        let mut var_bounceLast = <bool>::sse_decode(deserializer);
         return crate::api::assets::BridgeRangeSelector {
             start: var_start,
             end: var_end,
@@ -44219,6 +44296,13 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
             wiggles: var_wiggles,
             correlation: var_correlation,
             seed: var_seed,
+            combine: var_combine,
+            units: var_units,
+            randomize: var_randomize,
+            delay_frames: var_delayFrames,
+            total: var_total,
+            repeat: var_repeat,
+            bounce_last: var_bounceLast,
         };
     }
 }
@@ -45003,7 +45087,24 @@ impl SseDecode for crate::api::assets::BridgeSelectorBasis {
         return match inner {
             0 => crate::api::assets::BridgeSelectorBasis::Characters,
             1 => crate::api::assets::BridgeSelectorBasis::Words,
+            2 => crate::api::assets::BridgeSelectorBasis::CharactersExcludingSpaces,
+            3 => crate::api::assets::BridgeSelectorBasis::Lines,
             _ => unreachable!("Invalid variant for BridgeSelectorBasis: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::assets::BridgeSelectorCombine {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::assets::BridgeSelectorCombine::Add,
+            1 => crate::api::assets::BridgeSelectorCombine::Intersect,
+            2 => crate::api::assets::BridgeSelectorCombine::Min,
+            3 => crate::api::assets::BridgeSelectorCombine::Max,
+            4 => crate::api::assets::BridgeSelectorCombine::Difference,
+            _ => unreachable!("Invalid variant for BridgeSelectorCombine: {}", inner),
         };
     }
 }
@@ -45047,6 +45148,18 @@ impl SseDecode for crate::api::assets::BridgeSelectorShape {
             2 => crate::api::assets::BridgeSelectorShape::Smooth,
             3 => crate::api::assets::BridgeSelectorShape::Bounce,
             _ => unreachable!("Invalid variant for BridgeSelectorShape: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::assets::BridgeSelectorUnits {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::assets::BridgeSelectorUnits::Percentage,
+            1 => crate::api::assets::BridgeSelectorUnits::Indexed,
+            _ => unreachable!("Invalid variant for BridgeSelectorUnits: {}", inner),
         };
     }
 }
@@ -46457,6 +46570,19 @@ impl SseDecode for crate::api::assets::BridgeStaggerOrder {
     }
 }
 
+impl SseDecode for crate::api::assets::BridgeStaggerRepeat {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::assets::BridgeStaggerRepeat::Once,
+            1 => crate::api::assets::BridgeStaggerRepeat::Loop,
+            2 => crate::api::assets::BridgeStaggerRepeat::PingPong,
+            _ => unreachable!("Invalid variant for BridgeStaggerRepeat: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::stills::BridgeStill {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -46846,6 +46972,18 @@ impl SseDecode for crate::api::assets::BridgeTextAnimator {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_selector = <crate::api::assets::BridgeRangeSelector>::sse_decode(deserializer);
+        let mut var_selectors =
+            <Vec<crate::api::assets::BridgeRangeSelector>>::sse_decode(deserializer);
+        let mut var_enabled = <bool>::sse_decode(deserializer);
+        let mut var_solo = <bool>::sse_decode(deserializer);
+        let mut var_amount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_follow = <Option<String>>::sse_decode(deserializer);
+        let mut var_followOffset = <f64>::sse_decode(deserializer);
+        let mut var_skew = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_skewAxis = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_tracking = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_blur = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_characterOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_positionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_positionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_rotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -46867,6 +47005,17 @@ impl SseDecode for crate::api::assets::BridgeTextAnimator {
         return crate::api::assets::BridgeTextAnimator {
             name: var_name,
             selector: var_selector,
+            selectors: var_selectors,
+            enabled: var_enabled,
+            solo: var_solo,
+            amount: var_amount,
+            follow: var_follow,
+            follow_offset: var_followOffset,
+            skew: var_skew,
+            skew_axis: var_skewAxis,
+            tracking: var_tracking,
+            blur: var_blur,
+            character_offset: var_characterOffset,
             position_x: var_positionX,
             position_y: var_positionY,
             rotation: var_rotation,
@@ -49338,6 +49487,20 @@ impl SseDecode for Vec<crate::api::layer::BridgePuppetPin> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::layer::BridgePuppetPin>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::assets::BridgeRangeSelector> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::assets::BridgeRangeSelector>::sse_decode(
                 deserializer,
             ));
         }
@@ -52705,12 +52868,21 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        1068 => wire__crate__api__assets__text_font_axes_impl(port, ptr, rust_vec_len, data_len),
-        1069 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
-        1070 => {
+        1068 => wire__crate__api__assets__text_animators_from_json_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        1069 => {
+            wire__crate__api__assets__text_animators_to_json_impl(port, ptr, rust_vec_len, data_len)
+        }
+        1070 => wire__crate__api__assets__text_font_axes_impl(port, ptr, rust_vec_len, data_len),
+        1071 => wire__crate__api__assets__text_font_faces_impl(port, ptr, rust_vec_len, data_len),
+        1072 => {
             wire__crate__api__assets__text_font_families_impl(port, ptr, rust_vec_len, data_len)
         }
-        1071 => wire__crate__api__assets__text_variable_font_families_impl(
+        1073 => wire__crate__api__assets__text_variable_font_families_impl(
             port,
             ptr,
             rust_vec_len,
@@ -53634,23 +53806,23 @@ fn pde_ffi_dispatcher_sync_impl(
 1063 => wire__crate__api__surface__tangent_status_impl(ptr, rust_vec_len, data_len),
 1064 => wire__crate__api__template__library__template_at_impl(ptr, rust_vec_len, data_len),
 1067 => wire__crate__api__template__library__templates_folder_impl(ptr, rust_vec_len, data_len),
-1072 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-1073 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
-1074 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
-1075 => wire__crate__api__transcript__transcription_languages_impl(ptr, rust_vec_len, data_len),
-1076 => wire__crate__api__lens__user_lenses_impl(ptr, rust_vec_len, data_len),
-1077 => wire__crate__api__vector__vector_extension_impl(ptr, rust_vec_len, data_len),
-1078 => wire__crate__api__vector__vector_settings_default_impl(ptr, rust_vec_len, data_len),
-1079 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-1080 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-1081 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
-1082 => wire__crate__api__web_files__web_file_list_impl(ptr, rust_vec_len, data_len),
-1083 => wire__crate__api__web_files__web_file_make_folder_impl(ptr, rust_vec_len, data_len),
-1084 => wire__crate__api__web_files__web_file_read_impl(ptr, rust_vec_len, data_len),
-1085 => wire__crate__api__web_files__web_file_remove_impl(ptr, rust_vec_len, data_len),
-1086 => wire__crate__api__web_files__web_file_stat_impl(ptr, rust_vec_len, data_len),
-1087 => wire__crate__api__web_files__web_file_write_impl(ptr, rust_vec_len, data_len),
-1088 => wire__crate__api__colour__white_balance_for_impl(ptr, rust_vec_len, data_len),
+1074 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+1075 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
+1076 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
+1077 => wire__crate__api__transcript__transcription_languages_impl(ptr, rust_vec_len, data_len),
+1078 => wire__crate__api__lens__user_lenses_impl(ptr, rust_vec_len, data_len),
+1079 => wire__crate__api__vector__vector_extension_impl(ptr, rust_vec_len, data_len),
+1080 => wire__crate__api__vector__vector_settings_default_impl(ptr, rust_vec_len, data_len),
+1081 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+1082 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+1083 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+1084 => wire__crate__api__web_files__web_file_list_impl(ptr, rust_vec_len, data_len),
+1085 => wire__crate__api__web_files__web_file_make_folder_impl(ptr, rust_vec_len, data_len),
+1086 => wire__crate__api__web_files__web_file_read_impl(ptr, rust_vec_len, data_len),
+1087 => wire__crate__api__web_files__web_file_remove_impl(ptr, rust_vec_len, data_len),
+1088 => wire__crate__api__web_files__web_file_stat_impl(ptr, rust_vec_len, data_len),
+1089 => wire__crate__api__web_files__web_file_write_impl(ptr, rust_vec_len, data_len),
+1090 => wire__crate__api__colour__white_balance_for_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }
@@ -61437,6 +61609,13 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeRangeSelector {
             self.wiggles.into_into_dart().into_dart(),
             self.correlation.into_into_dart().into_dart(),
             self.seed.into_into_dart().into_dart(),
+            self.combine.into_into_dart().into_dart(),
+            self.units.into_into_dart().into_dart(),
+            self.randomize.into_into_dart().into_dart(),
+            self.delay_frames.into_into_dart().into_dart(),
+            self.total.into_into_dart().into_dart(),
+            self.repeat.into_into_dart().into_dart(),
+            self.bounce_last.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -62487,6 +62666,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeSelectorBasis {
         match self {
             Self::Characters => 0.into_dart(),
             Self::Words => 1.into_dart(),
+            Self::CharactersExcludingSpaces => 2.into_dart(),
+            Self::Lines => 3.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -62499,6 +62680,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeSelectorBasis>
     for crate::api::assets::BridgeSelectorBasis
 {
     fn into_into_dart(self) -> crate::api::assets::BridgeSelectorBasis {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeSelectorCombine {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Add => 0.into_dart(),
+            Self::Intersect => 1.into_dart(),
+            Self::Min => 2.into_dart(),
+            Self::Max => 3.into_dart(),
+            Self::Difference => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeSelectorCombine
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeSelectorCombine>
+    for crate::api::assets::BridgeSelectorCombine
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeSelectorCombine {
         self
     }
 }
@@ -62569,6 +62774,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeSelectorShape>
     for crate::api::assets::BridgeSelectorShape
 {
     fn into_into_dart(self) -> crate::api::assets::BridgeSelectorShape {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeSelectorUnits {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Percentage => 0.into_dart(),
+            Self::Indexed => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeSelectorUnits
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeSelectorUnits>
+    for crate::api::assets::BridgeSelectorUnits
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeSelectorUnits {
         self
     }
 }
@@ -64242,6 +64468,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeStaggerOrder>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeStaggerRepeat {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Once => 0.into_dart(),
+            Self::Loop => 1.into_dart(),
+            Self::PingPong => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeStaggerRepeat
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeStaggerRepeat>
+    for crate::api::assets::BridgeStaggerRepeat
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeStaggerRepeat {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::stills::BridgeStill {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -64708,6 +64956,17 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextAnimator {
         [
             self.name.into_into_dart().into_dart(),
             self.selector.into_into_dart().into_dart(),
+            self.selectors.into_into_dart().into_dart(),
+            self.enabled.into_into_dart().into_dart(),
+            self.solo.into_into_dart().into_dart(),
+            self.amount.into_into_dart().into_dart(),
+            self.follow.into_into_dart().into_dart(),
+            self.follow_offset.into_into_dart().into_dart(),
+            self.skew.into_into_dart().into_dart(),
+            self.skew_axis.into_into_dart().into_dart(),
+            self.tracking.into_into_dart().into_dart(),
+            self.blur.into_into_dart().into_dart(),
+            self.character_offset.into_into_dart().into_dart(),
             self.position_x.into_into_dart().into_dart(),
             self.position_y.into_into_dart().into_dart(),
             self.rotation.into_into_dart().into_dart(),
@@ -71002,6 +71261,13 @@ impl SseEncode for crate::api::assets::BridgeRangeSelector {
         <crate::api::effect::BridgeScalar>::sse_encode(self.wiggles, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.correlation, serializer);
         <u32>::sse_encode(self.seed, serializer);
+        <crate::api::assets::BridgeSelectorCombine>::sse_encode(self.combine, serializer);
+        <crate::api::assets::BridgeSelectorUnits>::sse_encode(self.units, serializer);
+        <bool>::sse_encode(self.randomize, serializer);
+        <bool>::sse_encode(self.delay_frames, serializer);
+        <bool>::sse_encode(self.total, serializer);
+        <crate::api::assets::BridgeStaggerRepeat>::sse_encode(self.repeat, serializer);
+        <bool>::sse_encode(self.bounce_last, serializer);
     }
 }
 
@@ -71628,6 +71894,27 @@ impl SseEncode for crate::api::assets::BridgeSelectorBasis {
             match self {
                 crate::api::assets::BridgeSelectorBasis::Characters => 0,
                 crate::api::assets::BridgeSelectorBasis::Words => 1,
+                crate::api::assets::BridgeSelectorBasis::CharactersExcludingSpaces => 2,
+                crate::api::assets::BridgeSelectorBasis::Lines => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::assets::BridgeSelectorCombine {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::assets::BridgeSelectorCombine::Add => 0,
+                crate::api::assets::BridgeSelectorCombine::Intersect => 1,
+                crate::api::assets::BridgeSelectorCombine::Min => 2,
+                crate::api::assets::BridgeSelectorCombine::Max => 3,
+                crate::api::assets::BridgeSelectorCombine::Difference => 4,
                 _ => {
                     unimplemented!("");
                 }
@@ -71683,6 +71970,22 @@ impl SseEncode for crate::api::assets::BridgeSelectorShape {
                 crate::api::assets::BridgeSelectorShape::Ramp => 1,
                 crate::api::assets::BridgeSelectorShape::Smooth => 2,
                 crate::api::assets::BridgeSelectorShape::Bounce => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::assets::BridgeSelectorUnits {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::assets::BridgeSelectorUnits::Percentage => 0,
+                crate::api::assets::BridgeSelectorUnits::Indexed => 1,
                 _ => {
                     unimplemented!("");
                 }
@@ -72700,6 +73003,23 @@ impl SseEncode for crate::api::assets::BridgeStaggerOrder {
     }
 }
 
+impl SseEncode for crate::api::assets::BridgeStaggerRepeat {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::assets::BridgeStaggerRepeat::Once => 0,
+                crate::api::assets::BridgeStaggerRepeat::Loop => 1,
+                crate::api::assets::BridgeStaggerRepeat::PingPong => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::stills::BridgeStill {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -72994,6 +73314,17 @@ impl SseEncode for crate::api::assets::BridgeTextAnimator {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.name, serializer);
         <crate::api::assets::BridgeRangeSelector>::sse_encode(self.selector, serializer);
+        <Vec<crate::api::assets::BridgeRangeSelector>>::sse_encode(self.selectors, serializer);
+        <bool>::sse_encode(self.enabled, serializer);
+        <bool>::sse_encode(self.solo, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.amount, serializer);
+        <Option<String>>::sse_encode(self.follow, serializer);
+        <f64>::sse_encode(self.follow_offset, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.skew, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.skew_axis, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.tracking, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.blur, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.character_offset, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.position_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.position_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.rotation, serializer);
@@ -74865,6 +75196,16 @@ impl SseEncode for Vec<crate::api::layer::BridgePuppetPin> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::layer::BridgePuppetPin>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::assets::BridgeRangeSelector> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::assets::BridgeRangeSelector>::sse_encode(item, serializer);
         }
     }
 }

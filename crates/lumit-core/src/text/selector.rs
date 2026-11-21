@@ -15,6 +15,56 @@ pub enum SelectorBasis {
     #[default]
     Characters,
     Words,
+    /// Every letter but the spaces, as After Effects' Characters Excluding
+    /// Spaces: a space is not counted, so the cascade does not pause on it,
+    /// and it goes with the letter before it.
+    CharactersExcludingSpaces,
+    /// Whole lines, broken where the words were broken by hand.
+    Lines,
+}
+
+/// How a selector after the first is put together with the ones above it,
+/// After Effects' Mode. The first selector's Add is its own weight and its
+/// Subtract is that turned over; Subtract is stored as
+/// [`RangeSelector::invert`], so a file from before there were more modes
+/// reads the same.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SelectorCombine {
+    /// The weights add, held to the whole way.
+    #[default]
+    Add,
+    /// Each letter moved as far as both selectors agree on: one times the
+    /// other.
+    Intersect,
+    /// The smaller of the two.
+    Min,
+    /// The larger of the two.
+    Max,
+    /// How far apart the two are.
+    Difference,
+}
+
+/// What a Range selector's Start, End and Offset count in, After Effects'
+/// Units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SelectorUnits {
+    /// Per cent of the run.
+    #[default]
+    Percentage,
+    /// Units: from 0 to 2 is the first two letters (or words, or lines).
+    Index,
+}
+
+/// How a Stagger selector plays Amount's keys once it reaches the last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum StaggerRepeat {
+    /// Once, holding the last key.
+    #[default]
+    Once,
+    /// From the first key again.
+    Loop,
+    /// Back to the first key, then forwards again.
+    PingPong,
 }
 
 /// How the weight falls off across the range.
@@ -312,6 +362,32 @@ pub struct RangeSelector {
     /// Picks another wander for the same settings.
     #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub seed: u32,
+    /// How this selector is put together with the ones above it; see
+    /// [`SelectorCombine`].
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub combine: SelectorCombine,
+    /// What a Range selector's Start, End and Offset count in.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub units: SelectorUnits,
+    /// A Range selector's Randomize order: the units are reached in an order
+    /// of their own for each Seed, rather than first to last.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub randomize: bool,
+    /// Show a Stagger's Delay in frames rather than seconds. Only the panels
+    /// read it: Delay is kept in seconds either way.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub delay_frames: bool,
+    /// A Stagger's **Total duration**: Delay is the time from the first unit's
+    /// start to the last one's, however many units there are, rather than the
+    /// time between two.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub total: bool,
+    /// What a Stagger does after Amount's last key: hold, loop or ping-pong.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub repeat: StaggerRepeat,
+    /// Bounce only after Amount's last key, rather than after every key.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bounce_last: bool,
 }
 
 fn is_default_kind(k: &SelectorKind) -> bool {
@@ -354,6 +430,13 @@ impl Default for RangeSelector {
             wiggles: two(),
             correlation: fifty(),
             seed: 0,
+            combine: SelectorCombine::Add,
+            units: SelectorUnits::Percentage,
+            randomize: false,
+            delay_frames: false,
+            total: false,
+            repeat: StaggerRepeat::Once,
+            bounce_last: false,
         }
     }
 }
@@ -405,6 +488,12 @@ impl RangeSelector {
         let ranks = self.stagger_ranks(units);
         #[allow(clippy::cast_precision_loss)] // a line is short
         let last = ranks.iter().copied().max().unwrap_or(0) as f64;
+        // Total duration: Delay is the whole spread, shared between the gaps.
+        let delay = match (self.total, last > 0.0) {
+            (false, _) => delay,
+            (true, true) => delay / last,
+            (true, false) => 0.0,
+        };
         ranks
             .iter()
             .map(|&rank| {
@@ -418,7 +507,7 @@ impl RangeSelector {
                 } else {
                     1.0 - (1.0 - s).powf(1.0 - 3.0 * ease)
                 };
-                let at = lt - s * last * delay;
+                let at = self.repeated(lt - s * last * delay);
                 let w = (self.amount.value_at(at) + self.bounce_at(at, lt)) / 100.0;
                 let w = if w.is_finite() { w } else { 0.0 };
                 #[allow(clippy::cast_possible_truncation)] // a weight
@@ -434,6 +523,36 @@ impl RangeSelector {
     /// sine of the frequency and dying away by the decay. Nothing before the
     /// first key, nothing at an amplitude of 0, nothing on an Amount that is
     /// not keyed. The three settings are read at the layer's own time `lt`.
+    /// `at` folded back into Amount's keys by [`Self::repeat`]: after the
+    /// last key a Loop starts again from the first, a Ping-pong plays back to
+    /// it. Before the last key, or on an Amount with fewer than two keys, `at`
+    /// as it is.
+    #[must_use]
+    pub fn repeated(&self, at: f64) -> f64 {
+        if self.repeat == StaggerRepeat::Once {
+            return at;
+        }
+        let crate::anim::Animation::Keyframed(keys) = &self.amount.animation else {
+            return at;
+        };
+        let (Some(first), Some(last)) = (keys.first(), keys.last()) else {
+            return at;
+        };
+        let (k0, k1) = (first.time.to_f64(), last.time.to_f64());
+        let len = k1 - k0;
+        if at <= k1 || len <= 0.0 || !at.is_finite() {
+            return at;
+        }
+        let u = at - k0;
+        let lap = (u / len).floor();
+        let r = u - lap * len;
+        match self.repeat {
+            // An odd lap of a Ping-pong runs backwards.
+            StaggerRepeat::PingPong if lap.rem_euclid(2.0) >= 1.0 => k1 - r,
+            _ => k0 + r,
+        }
+    }
+
     fn bounce_at(&self, at: f64, lt: f64) -> f64 {
         let amp = self.bounce_amplitude.value_at(lt);
         if amp == 0.0 || !amp.is_finite() {
@@ -442,9 +561,13 @@ impl RangeSelector {
         let crate::anim::Animation::Keyframed(keys) = &self.amount.animation else {
             return 0.0;
         };
-        let Some(key) = keys.iter().rev().find(|k| k.time.to_f64() <= at) else {
+        let Some(at_key) = keys.iter().rposition(|k| k.time.to_f64() <= at) else {
             return 0.0;
         };
+        if self.bounce_last && at_key + 1 != keys.len() {
+            return 0.0;
+        }
+        let key = &keys[at_key];
         let k = key.time.to_f64();
         let t = at - k;
         // The speed just before the key, per cent a second, as the
@@ -476,23 +599,26 @@ impl RangeSelector {
             StaggerOrder::Backward => (0..units).map(|i| units - 1 - i).collect(),
             StaggerOrder::FromCentre => (0..units).map(from_mid).collect(),
             StaggerOrder::FromEdges => (0..units).map(|i| half - from_mid(i).min(half)).collect(),
-            StaggerOrder::Random => {
-                let mut by: Vec<(f64, usize)> = (0..units)
-                    .map(|i| {
-                        #[allow(clippy::cast_possible_truncation)] // a line is short
-                        let channel = 7 + i as u32;
-                        (crate::fx::maths::value_noise_1d(self.seed, channel, 0.0), i)
-                    })
-                    .collect();
-                by.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                let mut ranks = vec![0; units];
-                for (rank, (_, i)) in by.into_iter().enumerate() {
-                    ranks[i] = rank;
-                }
-                ranks
-            }
+            StaggerOrder::Random => random_ranks(self.seed, units),
         }
     }
+}
+
+/// An order of `units` of their own for `seed`: each unit's place in it.
+fn random_ranks(seed: u32, units: usize) -> Vec<usize> {
+    let mut by: Vec<(f64, usize)> = (0..units)
+        .map(|i| {
+            #[allow(clippy::cast_possible_truncation)] // a line is short
+            let channel = 7 + i as u32;
+            (crate::fx::maths::value_noise_1d(seed, channel, 0.0), i)
+        })
+        .collect();
+    by.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let mut ranks = vec![0; units];
+    for (rank, (_, i)) in by.into_iter().enumerate() {
+        ranks[i] = rank;
+    }
+    ranks
 }
 
 impl RangeSelector {
@@ -506,9 +632,15 @@ impl RangeSelector {
             return Vec::new();
         }
         let offset = self.offset.value_at(lt);
+        // Index counts units, so the whole run is `units` of them.
+        #[allow(clippy::cast_precision_loss)] // a line is short
+        let whole = match self.units {
+            SelectorUnits::Percentage => 100.0,
+            SelectorUnits::Index => units as f64,
+        };
         let (mut lo, mut hi) = (
-            (self.start.value_at(lt) + offset) / 100.0,
-            (self.end.value_at(lt) + offset) / 100.0,
+            (self.start.value_at(lt) + offset) / whole,
+            (self.end.value_at(lt) + offset) / whole,
         );
         // A range dragged inside out still means the stretch between its ends.
         if lo > hi {
@@ -519,8 +651,11 @@ impl RangeSelector {
             high: (self.ease_high.value_at(lt) / 100.0).clamp(-1.0, 1.0),
             low: (self.ease_low.value_at(lt) / 100.0).clamp(-1.0, 1.0),
         };
+        // Randomize order: each unit stands in the run where the seed puts it.
+        let places = self.randomize.then(|| random_ranks(self.seed, units));
         (0..units)
             .map(|i| {
+                let i = places.as_ref().map_or(i, |p| p[i]);
                 // The middle of the unit's own share of the run, so the first
                 // and last units are treated the same way as the ones between
                 // them — a selector at 0 % has not reached the first letter's
@@ -690,8 +825,9 @@ pub fn near_of(
     let mut ids: Vec<uuid::Uuid> = document
         .animators
         .iter()
-        .filter(|a| a.selector.kind == SelectorKind::Proximity)
-        .filter_map(|a| a.selector.target)
+        .flat_map(super::TextAnimator::all_selectors)
+        .filter(|s| s.kind == SelectorKind::Proximity)
+        .filter_map(|s| s.target)
         .collect();
     ids.sort_unstable();
     ids.dedup();

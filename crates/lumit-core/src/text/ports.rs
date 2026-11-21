@@ -56,10 +56,13 @@ impl TextAnimator {
                 add("bounce_decay", "Bounce decay");
             }
         }
-        let shows = |group: &str| {
-            self.properties
-                .as_ref()
-                .is_none_or(|list| list.iter().any(|p| p == group))
+        // The groups that came later are listed only once added, even on an
+        // animator from before the list, so an old animator shows no more
+        // than it did.
+        let late = ["skew", "tracking", "blur", "character_offset"];
+        let shows = |group: &str| match &self.properties {
+            None => !late.contains(&group),
+            Some(list) => list.iter().any(|p| p == group),
         };
         for (group, numbers) in [
             (
@@ -72,6 +75,16 @@ impl TextAnimator {
                 &[("scale_x", "Scale x"), ("scale_y", "Scale y")][..],
             ),
             ("opacity", &[("opacity", "Opacity")][..]),
+            (
+                "skew",
+                &[("skew", "Skew"), ("skew_axis", "Skew axis")][..],
+            ),
+            ("tracking", &[("tracking", "Tracking amount")][..]),
+            ("blur", &[("blur", "Blur")][..]),
+            (
+                "character_offset",
+                &[("character_offset", "Character offset")][..],
+            ),
             (
                 "fill",
                 &[
@@ -87,6 +100,7 @@ impl TextAnimator {
                 }
             }
         }
+        out.push(("animator_amount".to_owned(), "Animator amount".to_owned()));
         for axis in &self.axes {
             out.push((
                 format!("axis.{}", axis.tag),
@@ -134,6 +148,12 @@ impl TextAnimator {
             "fill_r" => &mut self.fill_r,
             "fill_g" => &mut self.fill_g,
             "fill_b" => &mut self.fill_b,
+            "skew" => &mut self.skew,
+            "skew_axis" => &mut self.skew_axis,
+            "tracking" => &mut self.tracking,
+            "blur" => &mut self.blur,
+            "character_offset" => &mut self.character_offset,
+            "animator_amount" => &mut self.amount,
             _ => return None,
         })
     }

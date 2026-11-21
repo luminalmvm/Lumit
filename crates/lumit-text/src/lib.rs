@@ -15,6 +15,7 @@ use lumit_core::model::{LinearColour, TextDocument};
 use lumit_core::text::{GlyphXform, ParagraphStyle, TextAnimator, TextStyle};
 
 mod block_key;
+mod blur;
 pub mod fonts;
 mod styled;
 
@@ -720,14 +721,16 @@ fn stamp_glyph(
     nrm: [f32; 2],
     x: &GlyphXform,
     rgb8: [u8; 3],
-) {
+) -> Option<[u32; 4]> {
     if metrics.width == 0 || metrics.height == 0 {
-        return; // a space carries advance and no ink
+        return None; // a space carries advance and no ink
     }
     let (sx, sy) = (x.scale[0], x.scale[1]);
     if x.opacity <= 0.0 || sx.abs() < 1e-4 || sy.abs() < 1e-4 || !x.opacity.is_finite() {
-        return; // scaled or faded to nothing
+        return None; // scaled or faded to nothing
     }
+    // Skew, about the same middle, before the turn; its inverse undoes it.
+    let [kxx, kyx, kxy, kyy] = blur::skew_matrix(x.skew, x.skew_axis).unwrap_or([1.0, 0.0, 0.0, 1.0]);
     #[allow(clippy::cast_precision_loss)]
     let (gw, gh) = (metrics.width as f32, metrics.height as f32);
     let lx0 = metrics.xmin as f32;
@@ -744,6 +747,7 @@ fn stamp_glyph(
     ];
     let to_world = |lx: f32, ly: f32| {
         let (ax, ay) = ((lx - anchor[0]) * sx, (ly - anchor[1]) * sy);
+        let (ax, ay) = (kxx * ax + kxy * ay, kyx * ax + kyy * ay);
         [
             origin[0] + ax * along[0] + ay * down[0],
             origin[1] + ax * along[1] + ay * down[1],
@@ -763,7 +767,7 @@ fn stamp_glyph(
         y1 = y1.max(c[1]);
     }
     if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
-        return;
+        return None;
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let (px0, py0, px1, py1) = (
@@ -778,8 +782,11 @@ fn stamp_glyph(
         for px in px0..px1 {
             #[allow(clippy::cast_precision_loss)]
             let (dx, dy) = (px as f32 + 0.5 - origin[0], py as f32 + 0.5 - origin[1]);
-            let u = (dx * along[0] + dy * along[1]) / sx + anchor[0];
-            let v = (dx * down[0] + dy * down[1]) / sy + anchor[1];
+            let (ax, ay) = (dx * along[0] + dy * along[1], dx * down[0] + dy * down[1]);
+            // The skew's inverse: its determinant is one.
+            let (ax, ay) = (kyy * ax - kxy * ay, -kyx * ax + kxx * ay);
+            let u = ax / sx + anchor[0];
+            let v = ay / sy + anchor[1];
             let cov = sample_coverage(bitmap, metrics.width, metrics.height, u - lx0, v - ly0);
             if cov == 0 {
                 continue;
@@ -802,6 +809,7 @@ fn stamp_glyph(
             }
         }
     }
+    Some([px0, py0, px1, py1])
 }
 
 /// This letter's fill: the layer's own, plus whatever the animators added,
@@ -862,22 +870,35 @@ pub fn rasterise_line_animated(
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let height = ((max_y - min_y).ceil().max(1.0) + 2.0 * margin).min(MAX_PATH_BOX_PX) as u32;
     let mut rgba = vec![0u8; (width as usize) * (height as usize) * 4];
+    let mut scratch: Vec<u8> = Vec::new();
+    // Tracking an animator adds pushes on the letters after.
+    let mut tracked = 0.0f32;
 
     for (i, (ch, x0, metrics)) in glyphs.into_iter().enumerate() {
         let (_, bitmap) = font.rasterize(ch, size);
         let x = xforms.get(i).copied().unwrap_or_default();
-        stamp_glyph(
-            &mut rgba,
+        let blurred = x.blur.is_finite() && x.blur >= 0.5;
+        if blurred && scratch.is_empty() {
+            scratch = vec![0u8; rgba.len()];
+        }
+        let rect = stamp_glyph(
+            if blurred { &mut scratch } else { &mut rgba },
             width,
             height,
             &bitmap,
             &metrics,
-            [x0 + margin, -min_y + margin],
+            [x0 + tracked + margin, -min_y + margin],
             [1.0, 0.0],
             [0.0, 1.0],
             &x,
             tinted(fill, &x),
         );
+        if let (true, Some(rect)) = (blurred, rect) {
+            blur::blur_over(&mut scratch, &mut rgba, (width, height), rect, x.blur);
+        }
+        if x.tracking.is_finite() {
+            tracked += x.tracking * size / 1000.0;
+        }
     }
     RasterText {
         width,
@@ -924,10 +945,15 @@ pub fn rasterise_on_path_animated(
     }
 
     let mut pen = 0.0f32;
+    let mut scratch: Vec<u8> = Vec::new();
     for (i, ch) in text.chars().enumerate() {
         let (metrics, bitmap) = font.rasterize(ch, size);
+        let x = xforms.get(i).copied().unwrap_or_default();
         let wanted = offset + pen;
         pen += metrics.advance_width;
+        if x.tracking.is_finite() {
+            pen += x.tracking * size / 1000.0;
+        }
         let s = if path.closed {
             if total > 0.0 {
                 wanted.rem_euclid(total)
@@ -940,9 +966,12 @@ pub fn rasterise_on_path_animated(
             wanted
         };
         let tan = path.tangent_at(s);
-        let x = xforms.get(i).copied().unwrap_or_default();
-        stamp_glyph(
-            &mut rgba,
+        let blurred = x.blur.is_finite() && x.blur >= 0.5;
+        if blurred && scratch.is_empty() {
+            scratch = vec![0u8; rgba.len()];
+        }
+        let rect = stamp_glyph(
+            if blurred { &mut scratch } else { &mut rgba },
             w,
             h,
             &bitmap,
@@ -953,6 +982,9 @@ pub fn rasterise_on_path_animated(
             &x,
             tinted(fill, &x),
         );
+        if let (true, Some(rect)) = (blurred, rect) {
+            blur::blur_over(&mut scratch, &mut rgba, (w, h), rect, x.blur);
+        }
     }
     RasterText {
         width: w,
@@ -1540,6 +1572,49 @@ mit",
             x0 > wx0 + width / 3,
             "the wrong half faded (ink {x0}..{x1}, whole {wx0}..{wx1})"
         );
+    }
+
+    /// **Blur, skew and tracking reach the picture**, on the plain line and on
+    /// the styled one: a blurred letter spreads its ink wider, a skewed one
+    /// leans it, tracking pushes the letters after it along.
+    #[test]
+    fn blur_skew_and_tracking_reach_the_letters() {
+        use lumit_core::text::GlyphXform;
+        let all = |x: GlyphXform| vec![x; 4];
+        let still = vec![GlyphXform::default(); 4];
+        let plain = |x: &[GlyphXform]| rasterise_line_animated("IIII", 48.0, white(), x);
+        let (bx0, _, bx1, _) = ink_box(&plain(&still)).expect("ink");
+        let blurred = plain(&all(GlyphXform { blur: 6.0, ..GlyphXform::default() }));
+        let (x0, _, x1, _) = ink_box(&blurred).expect("ink");
+        assert!(x0 < bx0 && x1 > bx1, "blur did not spread the ink");
+        let tracked = plain(&all(GlyphXform { tracking: 500.0, ..GlyphXform::default() }));
+        let (_, _, tx1, _) = ink_box(&tracked).expect("ink");
+        // Pushed along, as far as the animated margin of one text size lets it.
+        assert!(tx1 > bx1 + 30, "tracking did not push the letters along");
+        let skewed = plain(&all(GlyphXform { skew: 30.0, ..GlyphXform::default() }));
+        assert_ne!(skewed.rgba, plain(&still).rgba, "skew changed nothing");
+
+        // The styled path: a block with a style of its own.
+        let style = TextStyle {
+            tracking: 1.0,
+            ..TextStyle::default()
+        };
+        let paragraph = ParagraphStyle::default();
+        let block = TextBlock {
+            text: "IIII",
+            size: 48.0,
+            fill: white(),
+            style: &style,
+            paragraph: &paragraph,
+            boxed: false,
+        };
+        let base = rasterise(&block, &still);
+        let blurred = rasterise(&block, &all(GlyphXform { blur: 6.0, ..GlyphXform::default() }));
+        let skewed = rasterise(&block, &all(GlyphXform { skew: 30.0, ..GlyphXform::default() }));
+        let (sx0, _, sx1, _) = ink_box(&base).expect("ink");
+        let (b0, _, b1, _) = ink_box(&blurred).expect("ink");
+        assert!(b0 < sx0 && b1 > sx1, "styled blur did not spread the ink");
+        assert_ne!(skewed.rgba, base.rgba, "styled skew changed nothing");
     }
 
     /// Same document, same frame, same bytes — the rule the frame cache lives

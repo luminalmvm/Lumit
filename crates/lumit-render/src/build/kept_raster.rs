@@ -104,9 +104,23 @@ fn text_name(
             turn,
             plate,
             axes,
+            skew,
+            skew_axis,
+            tracking,
+            blur,
+            char_offset,
         } = *x;
         let pairs = position.into_iter().chain(scale).chain(turn);
-        let lone = [rotation, opacity, depth];
+        let lone = [
+            rotation,
+            opacity,
+            depth,
+            skew,
+            skew_axis,
+            tracking,
+            blur,
+            char_offset,
+        ];
         for v in pairs.chain(lone).chain(fill).chain(plate) {
             h.update(&v.to_le_bytes());
         }
@@ -218,6 +232,8 @@ pub(super) fn text(
     );
     // An unstyled single line draws the way it always has. A
     // styled one, or one with a line break, is set by the shaper.
+    // Character offset sets a reached letter as another character.
+    let line = lumit_core::text::offset_text(&line, &xforms).map_or(line, std::borrow::Cow::Owned);
     let block = lumit_text::TextBlock::of(document, &line);
     let offset = document.path_offset.value_at(lt) as f32;
     // **Continuously rasterised**, as a shape layer is: the words
