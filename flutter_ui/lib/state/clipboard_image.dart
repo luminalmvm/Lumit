@@ -57,6 +57,12 @@ Future<List<String>> clipboardPictureFiles() async {
 Future<Uint8List?> clipboardPicturePng() async {
   final Uint8List? raw;
   try {
+    // Finder puts a copied file's icon beside the file. A copy of files is
+    // answered by its files alone, so the icon never pastes.
+    if (Platform.isMacOS &&
+        (await Pasteboard.files()).any((path) => File(path).existsSync())) {
+      return null;
+    }
     raw = await Pasteboard.image;
   } catch (_) {
     return null;
