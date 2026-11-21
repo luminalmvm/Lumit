@@ -36623,12 +36623,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeAnimatedMaskPath dco_decode_bridge_animated_mask_path(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeAnimatedMaskPath(
       layer: dco_decode_Uuid(arr[0]),
       mask: dco_decode_Uuid(arr[1]),
       vertices: dco_decode_list_bridge_vertex(arr[2]),
+      artShift: dco_decode_record_f_64_f_64(arr[3]),
     );
   }
 
@@ -45624,6 +45625,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  (double, double) dco_decode_record_f_64_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (
+      dco_decode_f_64(arr[0]),
+      dco_decode_f_64(arr[1]),
+    );
+  }
+
+  @protected
   (String, String) dco_decode_record_string_string(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -47104,8 +47118,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_layer = sse_decode_Uuid(deserializer);
     var var_mask = sse_decode_Uuid(deserializer);
     var var_vertices = sse_decode_list_bridge_vertex(deserializer);
+    var var_artShift = sse_decode_record_f_64_f_64(deserializer);
     return BridgeAnimatedMaskPath(
-        layer: var_layer, mask: var_mask, vertices: var_vertices);
+        layer: var_layer,
+        mask: var_mask,
+        vertices: var_vertices,
+        artShift: var_artShift);
   }
 
   @protected
@@ -58215,6 +58233,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  (double, double) sse_decode_record_f_64_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_f_64(deserializer);
+    var var_field1 = sse_decode_f_64(deserializer);
+    return (var_field0, var_field1);
+  }
+
+  @protected
   (String, String) sse_decode_record_string_string(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -59728,6 +59754,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_Uuid(self.layer, serializer);
     sse_encode_Uuid(self.mask, serializer);
     sse_encode_list_bridge_vertex(self.vertices, serializer);
+    sse_encode_record_f_64_f_64(self.artShift, serializer);
   }
 
   @protected
@@ -68354,6 +68381,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       ProjectReference self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_Uuid(self.internalid, serializer);
+  }
+
+  @protected
+  void sse_encode_record_f_64_f_64(
+      (double, double) self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self.$1, serializer);
+    sse_encode_f_64(self.$2, serializer);
   }
 
   @protected

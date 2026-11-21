@@ -28,6 +28,10 @@ class AnimatedMaskPaths {
   /// meaning no mask on the composition is animated.
   Map<UuidValue, Map<UuidValue, List<BridgeVertex>>> _byLayer = const {};
 
+  /// How far each keyed shape layer's picture sits from where it is at the
+  /// head of the layer, px.
+  Map<UuidValue, (double, double)> _shifts = const {};
+
   int? _revision;
   int? _frame;
   UuidValue? _comp;
@@ -42,6 +46,10 @@ class AnimatedMaskPaths {
   /// in which case the mask's own vertices are already right.
   List<BridgeVertex>? pathOf(UuidValue layer, UuidValue mask) =>
       _byLayer[layer]?[mask];
+
+  /// How far [layer]'s picture has moved from where it is at the head of the
+  /// layer, px. Nought when none of its shapes is keyed.
+  (double, double) shiftOf(UuidValue layer) => _shifts[layer] ?? (0, 0);
 
   /// Bring the held answer up to date for [comp] at [frame] and document
   /// [revision]. Cheap and call-free when none of the three has moved.
@@ -76,24 +84,30 @@ class AnimatedMaskPaths {
     _animated = anyAnimated;
     if (!anyAnimated) {
       _byLayer = const {};
+      _shifts = const {};
       return;
     }
     try {
       final rows = comp.animatedMaskPathsAt(frame: frame);
       if (rows.isEmpty) {
         _byLayer = const {};
+        _shifts = const {};
         return;
       }
       final next = <UuidValue, Map<UuidValue, List<BridgeVertex>>>{};
+      final shifts = <UuidValue, (double, double)>{};
       for (final row in rows) {
         (next[row.layer] ??= {})[row.mask] = row.vertices;
+        if (row.artShift != (0.0, 0.0)) shifts[row.layer] = row.artShift;
       }
       _byLayer = next;
+      _shifts = shifts;
     } catch (_) {
       // The comp went away, or the frame is one the rate cannot name. The
       // wireframe falls back to the stored path, which is where it was before
       // any of this existed.
       _byLayer = const {};
+      _shifts = const {};
     }
   }
 }
