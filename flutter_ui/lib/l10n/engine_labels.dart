@@ -1196,7 +1196,7 @@ Map<String, String> get _built => {
       "Density": l10n.fxDensity,
       "Density layer": l10n.fxDensityLayer,
       "Depth": l10n.fxDepth,
-      "Depth Anything V2 Small": l10n.fxDepthAnythingV2Small,
+      "Depth Anything V3 Small": l10n.fxDepthAnythingV3Small,
       "Depth channel": l10n.fxDepthChannel,
       "Depth invert": l10n.fxDepthInvert,
       "Depth layer": l10n.fxDepthLayer,

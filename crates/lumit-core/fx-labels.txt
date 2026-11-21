@@ -424,7 +424,7 @@ Denominator
 Density
 Density layer
 Depth
-Depth Anything V2 Small
+Depth Anything V3 Small
 Depth channel
 Depth layer
 Depth map
