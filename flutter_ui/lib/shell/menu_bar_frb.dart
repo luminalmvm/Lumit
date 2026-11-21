@@ -967,7 +967,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       // The primary layer only: the ring is aimed at one layer.
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
-      ui.addEffect(layer, name);
+      ui.addEffect(layer, name, onPickedClip: true);
       app.notifyDocumentChanged();
     }
 
@@ -2440,7 +2440,7 @@ void addEffectToLayers(LumitState app, LumitUiState ui,
     Iterable<LayerReference> layers, String name) {
   asOneUndoStep(app.project, () {
     for (final layer in layers) {
-      ui.addEffect(layer, name);
+      ui.addEffect(layer, name, onPickedClip: true);
     }
   });
   app.notifyDocumentChanged();
