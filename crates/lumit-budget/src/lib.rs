@@ -201,6 +201,30 @@ pub fn budgets_for(reported_vram: u64, physical_ram: u64, unified: bool) -> (u64
     )
 }
 
+static MACHINE_VRAM: AtomicU64 = AtomicU64::new(0);
+static MACHINE_RAM: AtomicU64 = AtomicU64::new(0);
+
+/// Record what the machine reports, for every renderer opened from here on.
+///
+/// A graphics context cannot ask what the machine has, so a renderer that is
+/// not the Viewer's (an export's own) opened on the fallbacks above: a 16 GB
+/// card held to 2 GB, which turned work away every frame of a deep stack. The
+/// layer that can ask says so here once, and [`machine`] hands it on. Either
+/// figure is 0 where it was not known.
+pub fn set_machine(reported_vram: u64, physical_ram: u64) {
+    MACHINE_VRAM.store(reported_vram, Ordering::Relaxed);
+    MACHINE_RAM.store(physical_ram, Ordering::Relaxed);
+}
+
+/// What [`set_machine`] last recorded, as `(reported_vram, physical_ram)`.
+#[must_use]
+pub fn machine() -> (u64, u64) {
+    (
+        MACHINE_VRAM.load(Ordering::Relaxed),
+        MACHINE_RAM.load(Ordering::Relaxed),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // The meter
 // ---------------------------------------------------------------------------

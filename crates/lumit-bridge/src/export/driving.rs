@@ -210,13 +210,16 @@ fn launch(
     #[cfg(target_arch = "wasm32")]
     let handle = super::web::start(doc.clone(), comp, &inputs.audio, out_path, spec, &codec)?;
     #[cfg(not(target_arch = "wasm32"))]
-    let handle = lumit_render::export::start(
-        doc.clone(),
-        comp,
-        inputs.audio,
-        std::path::PathBuf::from(out_path),
-        spec,
-    );
+    let handle = {
+        crate::framecache::governor::publish_machine();
+        lumit_render::export::start(
+            doc.clone(),
+            comp,
+            inputs.audio,
+            std::path::PathBuf::from(out_path),
+            spec,
+        )
+    };
 
     run.state = State::Running {
         frame: 0,
