@@ -37,6 +37,7 @@ import 'state.dart';
 import 'streams.dart';
 import 'template.dart';
 import 'template/copy.dart';
+import 'text_keys.dart';
 import 'track.dart';
 import 'transcript.dart';
 import 'wire_tie.dart';
@@ -5307,6 +5308,12 @@ class LayerReference {
   void setText({required BridgeTextDocument document}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetText(that: this, document: document);
 
+  /// Type `text` at comp frame `frame`: a held key there when the words are
+  /// keyed, otherwise the words themselves. One undo step.
+  void setTextKeyAt({required int frame, required String text}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetTextKeyAt(
+          that: this, frame: frame, text: text);
+
   /// Replace a text layer's document **and its anchor and position
   /// together**, as one op.
   ///
@@ -5463,6 +5470,10 @@ class LayerReference {
   void splitCueAt({required BridgeRational at}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSplitCueAt(that: this, at: at);
 
+  /// The stopwatch on: the words held from comp frame `frame`.
+  void startTextKeys({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceStartTextKeys(that: this, frame: frame);
+
   /// This shot's stack with the still at `path` graded on it in place of
   /// its own grade, to preview and never to write: the old grade stays in
   /// the list switched off, and the still's comes right after it. The list
@@ -5472,6 +5483,10 @@ class LayerReference {
           {UuidValue? clip, required String path}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceStillGradePreview(
           that: this, clip: clip, path: path);
+
+  /// The stopwatch off: the words shown at comp frame `frame` are kept.
+  void stopTextKeys({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceStopTextKeys(that: this, frame: frame);
 
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half
@@ -5528,6 +5543,11 @@ class LayerReference {
   void switchGradeVersion({UuidValue? clip, required UuidValue version}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSwitchGradeVersion(
           that: this, clip: clip, version: version);
+
+  /// The words typed or keyed at comp frame `frame`. During a fade, the word
+  /// with more of the weight.
+  String textAt({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceTextAt(that: this, frame: frame);
 
   /// Key this mask's **shape** at `time`, or take the key already there away —
   /// the ◆ on the mask's Path row.

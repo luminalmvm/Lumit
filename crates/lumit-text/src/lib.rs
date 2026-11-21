@@ -14,6 +14,7 @@ use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
 use lumit_core::model::{LinearColour, TextDocument};
 use lumit_core::text::{GlyphXform, ParagraphStyle, TextAnimator, TextStyle};
 
+pub mod blend;
 mod block_key;
 pub mod fonts;
 mod styled;

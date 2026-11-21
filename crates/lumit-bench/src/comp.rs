@@ -79,6 +79,7 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
             document: TextDocument {
                 text: "Lumit reference comp".into(),
                 expression: None,
+                keys: None,
                 size: 96.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,

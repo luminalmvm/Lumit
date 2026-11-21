@@ -389,6 +389,7 @@ mod tests {
                     document: lumit_core::model::TextDocument {
                         text: String::new(),
                         expression: None,
+                        keys: None,
                         size: 24.0,
                         fill: lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
                         path: None,

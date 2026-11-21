@@ -216,6 +216,7 @@ fn a_text_draws_and_an_empty_one_is_nothing() {
     let document = |text: &str| TextDocument {
         text: text.into(),
         expression: None,
+        keys: None,
         size: 120.0,
         fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
         path: None,
@@ -296,6 +297,7 @@ fn an_animated_title_stays_put_when_it_gains_depth() {
         document: TextDocument {
             text: "Hold".into(),
             expression: None,
+            keys: None,
             size: 100.0,
             fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
             path: None,

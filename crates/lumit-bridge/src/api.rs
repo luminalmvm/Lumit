@@ -85,6 +85,7 @@ pub mod styles;
 pub mod surface;
 pub mod system;
 pub mod template;
+pub mod text_keys;
 pub mod track;
 pub mod transcript;
 pub mod transitions;

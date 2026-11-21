@@ -37,10 +37,10 @@ impl Svg<'_> {
     ) -> Result<(), LottieError> {
         let clock = Svg::layer_clock(scope, layer);
         // The words at every frame, through the one resolver the renderer
-        // reads, when an expression writes them.
-        let words: Vec<String> = match &document.expression {
-            None => vec![document.text.clone()],
-            Some(_) => self
+        // reads, when an expression or keys write them.
+        let words: Vec<String> = match (&document.expression, &document.keys) {
+            (None, None) => vec![document.text.clone()],
+            _ => self
                 .span
                 .grid
                 .iter()

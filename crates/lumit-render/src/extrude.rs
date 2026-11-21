@@ -559,6 +559,7 @@ pub(crate) fn may_change(layer: &Layer, lt: f64, context: &Arc<ExpressionContext
             LayerKind::Text { document } => {
                 !document.animators.is_empty()
                     || document.expression.is_some()
+                    || document.keys.is_some()
                     || document.captions.is_some()
             }
             LayerKind::Shape { contents } => matches!(

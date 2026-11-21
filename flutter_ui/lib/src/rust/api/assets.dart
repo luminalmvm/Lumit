@@ -7,6 +7,7 @@ import '../frb_generated.dart';
 import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
+import 'text_keys.dart';
 
 // These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `shift_property`, `text_document_of`, `with_camera_at`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
@@ -651,6 +652,7 @@ class BridgeTextDocument {
   /// rather than from `text`, which is kept so switching the expression off
   /// restores what was typed.
   final String? expression;
+  final BridgeTextKeys? keys;
 
   /// Pixel size at natural scale.
   final double size;
@@ -677,6 +679,7 @@ class BridgeTextDocument {
   const BridgeTextDocument({
     required this.text,
     this.expression,
+    this.keys,
     required this.size,
     required this.fill,
     this.path,
@@ -690,6 +693,7 @@ class BridgeTextDocument {
   int get hashCode =>
       text.hashCode ^
       expression.hashCode ^
+      keys.hashCode ^
       size.hashCode ^
       fill.hashCode ^
       path.hashCode ^
@@ -705,6 +709,7 @@ class BridgeTextDocument {
           runtimeType == other.runtimeType &&
           text == other.text &&
           expression == other.expression &&
+          keys == other.keys &&
           size == other.size &&
           fill == other.fill &&
           path == other.path &&

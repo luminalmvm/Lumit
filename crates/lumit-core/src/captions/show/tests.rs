@@ -98,6 +98,7 @@ fn caption_layer(captions: Captions) -> Layer {
             document: TextDocument {
                 text: String::new(),
                 expression: None,
+                keys: None,
                 size: 60.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,
@@ -207,6 +208,7 @@ fn edit(item: Uuid) -> (Arc<Document>, Uuid, Uuid) {
             document: TextDocument {
                 text: String::new(),
                 expression: None,
+                keys: None,
                 size: 60.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,
