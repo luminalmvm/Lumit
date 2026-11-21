@@ -294,13 +294,13 @@ fn optics_compensation(fx: &mut Fx<'_, '_>) {
 
 /// AE `ADBE Turbulent Displace` → Turbulent displace (docs/11 §5).
 fn turbulent_displace(fx: &mut Fx<'_, '_>) {
-    // Turbulent, Vertical and Horizontal Displacement are the three Lumit
-    // ships; Bulge, Twist, the three Smoother variants and Cross Displacement
+    // Turbulent, Bulge, Vertical and Horizontal Displacement are the four
+    // Lumit ships; Twist, the three Smoother variants and Cross Displacement
     // are reported.
     fx.choice(
         1,
         "displacement",
-        &[0, -1, -1, -1, -1, -1, 2, 1, -1],
+        &[0, 3, -1, -1, -1, -1, 2, 1, -1],
         "Turbulent",
     );
     fx.carry(2, "amount", Unit::Px);

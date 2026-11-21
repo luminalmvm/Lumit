@@ -24,7 +24,7 @@ struct Params {
     mix_amt: f32,             // 0..1, blended against the unprocessed input
     matte_on: f32,            // 1 = scale the displacement by the matte's luma
     _pad1: f32,               // was Invert; now applied once at the seam
-    _pad0: f32,
+    bulge: f32,               // 1 = the vector is the x field's slope (Bulge)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -82,8 +82,18 @@ fn turbulent_displace(@builtin(global_invocation_id) gid: vec3<u32>) {
     let qy = (py - p.offset_axes.y) * p.inv_size;
     let field_x = FractalField(p.seed_x, p.octaves, p.gain, p.lacunarity, 3u, p.cycle);
     let field_y = FractalField(p.seed_y, p.octaves, p.gain, p.lacunarity, 3u, p.cycle);
-    let nx = nc_fractal(field_x, qx, qy, p.z);
-    let ny = nc_fractal(field_y, qx, qy, p.z);
+    var nx: f32;
+    var ny: f32;
+    if (p.bulge > 0.5) {
+        // == cpu::turbulent_bulge: the slope by central differences.
+        let e = 0.05;
+        let k = 0.25 / (2.0 * e);
+        nx = (nc_fractal(field_x, qx + e, qy, p.z) - nc_fractal(field_x, qx - e, qy, p.z)) * k;
+        ny = (nc_fractal(field_x, qx, qy + e, p.z) - nc_fractal(field_x, qx, qy - e, p.z)) * k;
+    } else {
+        nx = nc_fractal(field_x, qx, qy, p.z);
+        ny = nc_fractal(field_y, qx, qy, p.z);
+    }
 
     // Pinning ramps the WHOLE vector to zero across the last |Amount| pixels
     // before a pinned edge, measured to the OUTERMOST PIXEL CENTRE so the border

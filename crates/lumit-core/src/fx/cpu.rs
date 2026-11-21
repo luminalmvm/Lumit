@@ -2458,7 +2458,7 @@ fn matte_toward(value: f32, neutral: f32, k: f32) -> f32 {
 /// One resolved Turbulent displace (docs/08 §3.38), reduced to what both paths
 /// read. The size and the pin band arrive as reciprocals and the Displacement
 /// choice as a pair of axis multipliers, so the kernel runs no division and no
-/// branch on the mode (§1.6).
+/// branch on the mode (§1.6) but one: Bulge, which reads a slope instead.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TurbulentDisplaceParams {
     /// The x field's shape (§3.37's core), seed included.
@@ -2482,6 +2482,9 @@ pub struct TurbulentDisplaceParams {
     pub inv_pin_band: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// 1 for Bulge: the vector is the slope of the x field rather than the
+    /// two fields' values, so pixels are drawn toward its peaks.
+    pub bulge: f32,
 }
 
 /// Turbulent displace (docs/08 §3.38): the fractal-driven warp — each pixel is
@@ -2516,8 +2519,14 @@ pub fn turbulent_displace(
             let py = y as f32 + 0.5;
             let qx = (px - p.offset[0]) * p.inv_size;
             let qy = (py - p.offset[1]) * p.inv_size;
-            let nx = fractal(&p.field, qx, qy, p.z);
-            let ny = fractal(&field_y, qx, qy, p.z);
+            let (nx, ny) = if p.bulge > 0.5 {
+                turbulent_bulge(&p.field, qx, qy, p.z)
+            } else {
+                (
+                    fractal(&p.field, qx, qy, p.z),
+                    fractal(&field_y, qx, qy, p.z),
+                )
+            };
             // Pinning ramps the WHOLE vector to zero across the last |Amount|
             // pixels before a pinned edge, so a pinned corner cannot be reached
             // from outside the frame. Distance is measured to the OUTERMOST
@@ -2543,6 +2552,24 @@ pub fn turbulent_displace(
         }
     }
 }
+
+/// Bulge's vector: the slope of the field at `(qx, qy)`, by central
+/// differences [`TURBULENT_BULGE_STEP`] of a cell apart, times
+/// [`TURBULENT_BULGE_GAIN`] so an Amount pulls about as far as Turbulent's.
+/// Sampling up the slope draws each pixel from nearer a peak, which magnifies
+/// the picture there: the lenses After Effects' Bulge makes.
+fn turbulent_bulge(field: &FractalField, qx: f32, qy: f32, z: f32) -> (f32, f32) {
+    let e = TURBULENT_BULGE_STEP;
+    let k = TURBULENT_BULGE_GAIN / (2.0 * e);
+    let gx = fractal(field, qx + e, qy, z) - fractal(field, qx - e, qy, z);
+    let gy = fractal(field, qx, qy + e, z) - fractal(field, qx, qy - e, z);
+    (gx * k, gy * k)
+}
+
+/// How far apart, in cells, Bulge's slope is measured.
+pub const TURBULENT_BULGE_STEP: f32 = 0.05;
+/// Bulge's slope scaled to a pull of the same order as Turbulent's.
+pub const TURBULENT_BULGE_GAIN: f32 = 0.25;
 
 /// One resolved Tile (docs/08 §3.39). The four per cents stay *fractions of the
 /// raster* rather than lengths: the kernel already knows the raster, and a

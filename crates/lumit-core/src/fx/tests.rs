@@ -11611,3 +11611,32 @@ fn time_loop_moments_follow_the_type() {
         "round again, the next lap shows in full"
     );
 }
+
+/// **Bulge** pulls each pixel up the slope of the field rather than by its
+/// value: the picture moves, and not as Turbulent moves it.
+#[test]
+fn turbulent_displace_bulge_warps_unlike_turbulent() {
+    use super::effects::turbulent_displace::TurbulentDisplace;
+    let (w, h) = (48u32, 48u32);
+    let picture: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let (x, y) = (i % w, i / w);
+            let v = if (x / 4 + y / 4) % 2 == 0 { 1.0 } else { 0.0 };
+            [v, v, v, 1.0]
+        })
+        .collect();
+    let mut t = TurbulentDisplace::read(super::params::Params::EMPTY);
+    t.amount = 12.0;
+    t.size = 20.0;
+    let mut turbulent = picture.clone();
+    cpu::turbulent_displace(&mut turbulent, w, h, &t.packed(), &[]);
+    t.displacement = 3;
+    let p = t.packed();
+    assert!(p.bulge > 0.5);
+    let mut bulge = picture.clone();
+    cpu::turbulent_displace(&mut bulge, w, h, &p, &[]);
+    let moved = bulge.iter().zip(&picture).filter(|(a, b)| (*a - *b).abs() > 1e-3).count();
+    let unlike = bulge.iter().zip(&turbulent).filter(|(a, b)| (*a - *b).abs() > 1e-3).count();
+    assert!(moved > 100, "{moved}");
+    assert!(unlike > 100, "{unlike}");
+}

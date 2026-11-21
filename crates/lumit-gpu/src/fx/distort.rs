@@ -42,6 +42,8 @@ pub struct TurbulentDisplaceOp {
     pub inv_pin_band: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// 1 for Bulge: the vector is the x field's slope.
+    pub bulge: f32,
 }
 
 #[repr(C)]
@@ -61,7 +63,7 @@ struct TurbulentDisplaceParams {
     matte_on: f32,
     /// Was Invert; the seam applies it once instead. Always 0.
     _pad1: f32,
-    _pad0: f32,
+    bulge: f32,
 }
 
 /// One resolved Tile (docs/08 §3.39). Mirrors `lumit_core::fx::cpu::TileParams`.
@@ -920,7 +922,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
                 _pad1: 0.0,
-                _pad0: 0.0,
+                bulge: op.bulge,
             }),
         );
         out
