@@ -79,8 +79,8 @@ class CutTrack {
   /// Whether the row stands below the dividing line.
   bool get below => sound || bus || kind == CutTrackKind.layerSound;
 
-  /// Whether clips can land on the row.
-  bool get takesClips => kind != CutTrackKind.layerSound && !bus;
+  /// Whether clips can land on the row. A plain bar is not a Sequence layer.
+  bool get takesClips => kind == CutTrackKind.picture || sound;
 
   /// The index range `[lo, hi)` of the clips touching `[from, to]` in comp
   /// frames. Both ends by binary search: the starts are sorted, and the
