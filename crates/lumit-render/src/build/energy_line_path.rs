@@ -62,10 +62,12 @@ pub(super) fn path(
             let mut run = lumit_core::shape::outline_at(&items, lt);
             // The outline is measured from the letters' own corner, and the
             // layer draws them from its origin.
+            // Words an expression gives sit where the typed words' side was.
+            let [dx, dy] = lumit_core::captions::show::typed_side(document, &words);
             if let Some((x0, y0, ..)) = lumit_core::shape::contents_bounds(&items, lt) {
                 for p in &mut run.points {
-                    p[0] += x0 as f32;
-                    p[1] += y0 as f32;
+                    p[0] += (x0 + dx) as f32;
+                    p[1] += (y0 + dy) as f32;
                 }
             }
             run
