@@ -463,6 +463,30 @@ class PathDraft {
       : PathDraft(vertices: vertices.sublist(0, vertices.length - 1));
 }
 
+/// [at] pulled onto the nearest of the eight lines through [from]: horizontal,
+/// vertical or 45 degrees. This is Shift on the Pen, for a new vertex and for a
+/// handle being pulled out of one. The point stays as far along the line as the
+/// pointer is, so it slides rather than jumps.
+Offset constrainToAxis(Offset from, Offset at) {
+  final d = at - from;
+  if (d == Offset.zero) return at;
+  const r = 0.7071067811865476;
+  const units = [
+    Offset(1, 0),
+    Offset(r, r),
+    Offset(0, 1),
+    Offset(-r, r),
+    Offset(-1, 0),
+    Offset(-r, -r),
+    Offset(0, -1),
+    Offset(r, -r),
+  ];
+  final step = (d.direction / (math.pi / 4)).round() % 8;
+  final unit = units[step];
+  final along = d.dx * unit.dx + d.dy * unit.dy;
+  return from + unit * along;
+}
+
 /// Whether [at] is close enough to [target] to count as clicking it, measured
 /// in layer pixels at the given magnification.
 ///
