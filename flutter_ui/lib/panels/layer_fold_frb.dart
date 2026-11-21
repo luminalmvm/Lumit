@@ -2907,8 +2907,14 @@ List<LayerFoldRow> layerFoldRows({
     light: info.light,
     material: info.material,
   );
-  final soloed = !transformOpen &&
-      groups.any((g) => open.contains(transformGroupPath(id, g)));
+  // A pair split after it was revealed keeps the reveal: its other axis has no
+  // path of its own in [open], but its sibling's is.
+  bool picked(TransformGroup g) =>
+      open.contains(transformGroupPath(id, g)) ||
+      (g.mode == BridgeAxisMode.separated &&
+          groups.any((o) =>
+              o.pair == g.pair && open.contains(transformGroupPath(id, o))));
+  final soloed = !transformOpen && groups.any(picked);
 
   // Retime first, above everything (docs/07 §4.3): it decides *which* frame of
   // the source the rest of the fold-out then transforms. A layer that has not
@@ -2960,7 +2966,7 @@ List<LayerFoldRow> layerFoldRows({
   }
   for (final group in groups) {
     if (group.section != TransformSection.transform) continue;
-    if (transformOpen || open.contains(transformGroupPath(id, group))) {
+    if (transformOpen || picked(group)) {
       rows.add(FoldTransformRow(group, info.transform, depth: 2));
     }
   }
@@ -2994,7 +3000,7 @@ List<LayerFoldRow> layerFoldRows({
       }
     }
     for (final group in options) {
-      if (optionsOpen || open.contains(transformGroupPath(id, group))) {
+      if (optionsOpen || picked(group)) {
         rows.add(FoldTransformRow(group, info.transform, depth: 3));
       }
     }
@@ -3024,7 +3030,7 @@ List<LayerFoldRow> layerFoldRows({
       }
     }
     for (final group in material) {
-      if (materialOpen || open.contains(transformGroupPath(id, group))) {
+      if (materialOpen || picked(group)) {
         rows.add(FoldTransformRow(group, info.transform, depth: 2));
       }
     }
@@ -3545,7 +3551,7 @@ List<LayerFoldRow> layerFoldRows({
           }
         }
       }
-      if (!bus) {
+      if (!bus && info.kind != BridgeLayerKind.sequence) {
         // The waveform behind its own twirl, so a busy comp only pays
         // for the lanes actually being looked at.
         final waveOpen = open.contains(waveformPath(id));

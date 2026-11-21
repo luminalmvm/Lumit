@@ -323,6 +323,7 @@ impl Headless {
             .comp(comp)
             .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
             .unwrap_or_default();
+        crate::framecache::governor::publish_machine();
         lumit_render::export::start(doc, comp, audio, out, spec)
     }
 

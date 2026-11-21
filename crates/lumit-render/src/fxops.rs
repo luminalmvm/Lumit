@@ -853,10 +853,9 @@ pub fn run_ops(
     // The caller reads the finished size off the texture; a caller that cannot
     // take a wider one crops it back through `lumit_gpu::fx::fit_centred`.
     let (mut w, mut h) = (w, h);
-    // How many texels of room the spreading ops so far have put on the left
-    // and top of the picture, and its size counting only that room. A later
-    // op's places are measured from the layer's own corner, so they are moved
-    // this far to stay on the picture where they were.
+    // How many texels the ops so far have spread or grown the picture by on
+    // the left and top, and its size counting that. A later op's places are
+    // moved this far in to stay on the picture where they were.
     let mut moved = [0u32; 2];
     let (mut spread_w, mut spread_h) = (w, h);
     // The name of each op's output, before anything runs: the input's
@@ -1174,12 +1173,17 @@ pub fn run_ops(
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
             }
-            // The room a held op spread into is in the held picture, and
-            // the ops after it are still that far in.
+            // What a held op spread or grew into is in its picture; later ops are that far in.
             let [across, down] = spread_room(resolved.def, resolved.params, spread_w, spread_h);
-            moved = [moved[0] + across, moved[1] + down];
-            spread_w += across * 2;
-            spread_h += down * 2;
+            let slid = places_moved(resolved.def.schema(), resolved.params, moved);
+            let [gw, gh] = resolved.def.grows(
+                lumit_core::fx::params::Params::new(&slid),
+                spread_w,
+                spread_h,
+            );
+            moved = [moved[0] + across + gw / 2, moved[1] + down + gh / 2];
+            spread_w += across * 2 + gw;
+            spread_h += down * 2 + gh;
             // A picture held from inside a run was made with its room.
             unroomed = asks.map(|[across, down]| {
                 unroomed.unwrap_or((
@@ -1453,16 +1457,17 @@ pub fn run_ops(
                 }
             }
             tex = gpu.run(fx, ctx, &tex, w, h, params, aux);
-            // A grown raster. The two passes below and every op after
-            // this one read texel by texel, so the pictures they compare against
-            // — the input the Blend row lerps from, the input the generic matte
-            // dissolves back to, the matte itself — are grown into the same
-            // margin, transparently. `fit_centred` returns its argument when the
-            // size already matches, so nothing at all happens on the ordinary
-            // path and the picture stays byte for byte what it was.
+            // A raster grown about its middle. The passes below and every op
+            // after this one read texel by texel, so what they compare against
+            // (the Blend row's input, the generic matte's input, the matte) is
+            // grown into the same margin, and the places later ops name go in by
+            // half the growth. `fit_centred` returns its argument when the size
+            // already matches, so the ordinary path is byte for byte what it was.
             if tex.width() != w || tex.height() != h {
-                w = tex.width();
-                h = tex.height();
+                let (gw, gh) = (tex.width().max(w) - w, tex.height().max(h) - h);
+                moved = [moved[0] + gw / 2, moved[1] + gh / 2];
+                (spread_w, spread_h) = (spread_w + gw, spread_h + gh);
+                (w, h) = (tex.width(), tex.height());
                 blend_input = blend_input.map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
                 unmatted_input = unmatted_input.map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
                 grown_matte = matte

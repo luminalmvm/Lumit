@@ -141,66 +141,89 @@ class RazorOverlay extends StatefulWidget {
 
 class _RazorOverlayState extends State<RazorOverlay> {
   Offset? _pointer;
+  bool _pressed = false;
+
+  /// Only an armed razor has a pointer to draw.
+  void _follow(Offset? at) {
+    if (widget.active || _pointer != null) setState(() => _pointer = at);
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.active) return widget.child;
-    return MouseRegion(
-      // Hidden and replaced, for the same reason the Rotation tool's is:
-      // no platform ships a razor, and a system arrow inside the drawn
-      // blade would read as two pointers.
-      cursor: SystemMouseCursors.none,
-      onEnter: (event) => setState(() => _pointer = event.localPosition),
-      onHover: (event) => setState(() => _pointer = event.localPosition),
-      onExit: (_) => setState(() => _pointer = null),
-      child: Stack(
-        children: [
-          widget.child,
-          Positioned.fill(
-            child: RepaintBoundary(
-              child: IgnorePointer(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _RazorCutLinePainter(
-                          at: _pointer,
-                          // The line marks where the edge bites, not where the
-                          // pointer is; the blade above still follows the hand.
-                          lineX: _pointer == null
-                              ? null
-                              : (widget.snapX?.call(_pointer!.dx) ??
-                                  _pointer!.dx),
-                          mark: widget.mark,
-                        ),
-                      ),
-                    ),
-                    if (_pointer != null)
-                      Positioned(
-                        left: _pointer!.dx - razorCursorSize / 2,
-                        top: _pointer!.dy - razorCursorSize / 2,
-                        // The application's own scissors, drawn twice: the halo
-                        // copy a pixel down and across, then the ink over it, so
-                        // it is legible on a bar of any label colour. The same
-                        // trick the badged tool pointers use.
-                        child: Stack(
-                          children: [
-                            Transform.translate(
-                              offset: const Offset(1, 1),
-                              child: lumitIcon(LumitIcon.razor,
-                                  size: razorCursorSize, color: widget.outline),
+    final active = widget.active;
+    // The same widgets whether armed or not, so arming the tool never rebuilds
+    // the lanes underneath: a rebuilt scroll view starts back at the top.
+    return Listener(
+      // A held button sends moves, not hovers. Follow them, and drop the line
+      // while one is down: a drag does not cut, so the line would only lie.
+      onPointerDown: (_) => active ? setState(() => _pressed = true) : null,
+      onPointerMove: (event) => active && _pointer != null
+          ? setState(() => _pointer = event.localPosition)
+          : null,
+      onPointerUp: (_) => _pressed ? setState(() => _pressed = false) : null,
+      onPointerCancel: (_) =>
+          _pressed ? setState(() => _pressed = false) : null,
+      child: MouseRegion(
+        // Hidden and replaced, for the same reason the Rotation tool's is:
+        // no platform ships a razor, and a system arrow inside the drawn
+        // blade would read as two pointers.
+        cursor: active ? SystemMouseCursors.none : MouseCursor.defer,
+        onEnter: (event) => _follow(event.localPosition),
+        onHover: (event) => _follow(event.localPosition),
+        onExit: (_) => _follow(null),
+        child: Stack(
+          children: [
+            widget.child,
+            if (active)
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: IgnorePointer(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _RazorCutLinePainter(
+                              at: _pointer,
+                              // The line marks where the edge bites, not where
+                              // the pointer is; the blade above still follows
+                              // the hand.
+                              lineX: _pointer == null || _pressed
+                                  ? null
+                                  : (widget.snapX?.call(_pointer!.dx) ??
+                                      _pointer!.dx),
+                              mark: widget.mark,
                             ),
-                            lumitIcon(LumitIcon.razor,
-                                size: razorCursorSize, color: widget.mark),
-                          ],
+                          ),
                         ),
-                      ),
-                  ],
+                        if (_pointer != null)
+                          Positioned(
+                            left: _pointer!.dx - razorCursorSize / 2,
+                            top: _pointer!.dy - razorCursorSize / 2,
+                            // The application's own scissors, drawn twice:
+                            // the halo copy a pixel down and across, then the
+                            // ink over it, so it is legible on a bar of any
+                            // label colour. The same trick the badged tool
+                            // pointers use.
+                            child: Stack(
+                              children: [
+                                Transform.translate(
+                                  offset: const Offset(1, 1),
+                                  child: lumitIcon(LumitIcon.razor,
+                                      size: razorCursorSize,
+                                      color: widget.outline),
+                                ),
+                                lumitIcon(LumitIcon.razor,
+                                    size: razorCursorSize, color: widget.mark),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

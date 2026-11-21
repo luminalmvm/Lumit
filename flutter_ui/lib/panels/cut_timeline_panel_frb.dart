@@ -2698,6 +2698,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         others: const {},
         fade: into,
         sub: 0,
+        copy: false,
+        overlap: false,
       );
     }
     // A slip moves frames inside the box, so nothing on the axis is a place
@@ -2794,6 +2796,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       others: others.isEmpty ? const {} : others,
       fade: null,
       sub: sub,
+      copy: _duplicating,
+      overlap: _autoCrossfade,
     );
   }
 

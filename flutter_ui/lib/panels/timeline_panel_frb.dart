@@ -3602,6 +3602,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       return pasted;
     }
     if (graphKeyClipboard.isEmpty && !ui.clipboard.isEmpty) return false;
+    final app = Provider.of<LumitState>(context, listen: false);
+    final fromText = graphKeyClipboard.isEmpty;
     pasteKeysAtPlayhead(
       channels: channels,
       playheadFrame: ui.playheadFrame.value,
@@ -3613,6 +3615,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       onPasted: _selectPasted,
     ).then((pasted) {
       if (pasted && mounted) ui.model.refresh();
+      // The system clipboard held no keyframe text, so Paste goes on as if no
+      // row were picked: a picture, or a copy from another window.
+      if (!pasted && fromText && mounted) {
+        pasteSelectionFrb(app, ui, ui.selectedComp, ui.selectedLayer.value,
+            claims: false);
+      }
     });
     return true;
   }

@@ -682,7 +682,8 @@ String defaultPlatformKey() {
 ///
 /// Null when it is not that shape at all, which the page reports as a
 /// catalogue this build cannot read. Entries with nothing for [platformKey] are
-/// left out rather than listed with a button that could not work.
+/// left out rather than listed with a button that could not work, and so are
+/// the ones a listed entry supersedes.
 List<Addon>? parseCatalogue(
   String text, {
   required String platformKey,
@@ -706,7 +707,18 @@ List<Addon>? parseCatalogue(
     if (accepts != null && !accepts(jsonEncode(addon.manifest))) continue;
     out.add(addon);
   }
-  return out;
+  // A pack that names others in `supersedes` takes their place for every
+  // build that can read it, so only older builds keep being offered the old
+  // ones. An installed pack is untouched: this only trims the offer.
+  final replaced = <String>{
+    for (final addon in out)
+      if (addon.manifest!['supersedes'] case final List old)
+        ...old.whereType<String>(),
+  };
+  return [
+    for (final addon in out)
+      if (!replaced.contains(addon.id)) addon,
+  ];
 }
 
 /// The downloads a manifest lists for [platformKey], falling back to its `any`

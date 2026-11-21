@@ -1196,7 +1196,7 @@ Map<String, String> get _built => {
       "Density": l10n.fxDensity,
       "Density layer": l10n.fxDensityLayer,
       "Depth": l10n.fxDepth,
-      "Depth Anything V2 Small": l10n.fxDepthAnythingV2Small,
+      "Depth Anything V3 Small": l10n.fxDepthAnythingV3Small,
       "Depth channel": l10n.fxDepthChannel,
       "Depth invert": l10n.fxDepthInvert,
       "Depth layer": l10n.fxDepthLayer,
@@ -2106,6 +2106,11 @@ Map<String, String> get _built => {
       // Light leak, and its looks.
       "Light leak": l10n.fxLightLeak,
       "Film burn": l10n.fxFilmBurn,
+      // Flicker's looks.
+      "Neon tube": l10n.fxNeonTube,
+      "Failing light": l10n.fxFailingLight,
+      "Film projector": l10n.fxFilmProjector,
+      "CRT": l10n.fxCrt,
       // Slices, and its looks.
       "Slices": l10n.fxSlices,
       "Slice glitch": l10n.fxSliceGlitch,

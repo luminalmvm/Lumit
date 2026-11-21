@@ -70,19 +70,26 @@ List<String> listBlendModes() =>
 /// One animated mask's shape at a moment: which mask, on which layer,
 /// and the path it is showing there. A keyed shape item comes the same way,
 /// its id in `mask`.
+///
+/// `art_shift` is how far a shape layer's picture has moved from where it is
+/// at the head of the layer, px, which the points are drawn with. Nought for a
+/// mask.
 class BridgeAnimatedMaskPath {
   final UuidValue layer;
   final UuidValue mask;
   final List<BridgeVertex> vertices;
+  final (double, double) artShift;
 
   const BridgeAnimatedMaskPath({
     required this.layer,
     required this.mask,
     required this.vertices,
+    required this.artShift,
   });
 
   @override
-  int get hashCode => layer.hashCode ^ mask.hashCode ^ vertices.hashCode;
+  int get hashCode =>
+      layer.hashCode ^ mask.hashCode ^ vertices.hashCode ^ artShift.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -91,7 +98,8 @@ class BridgeAnimatedMaskPath {
           runtimeType == other.runtimeType &&
           layer == other.layer &&
           mask == other.mask &&
-          vertices == other.vertices;
+          vertices == other.vertices &&
+          artShift == other.artShift;
 }
 
 /// What the flowchart draws round one composition: the comps that place it

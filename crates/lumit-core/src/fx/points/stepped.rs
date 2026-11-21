@@ -193,8 +193,8 @@ impl Inputs {
 /// `layer` is the layer Particulate is on and `target` the one it collides
 /// with, if any. Their tracks, masks, shapes, wires and parents are read
 /// whole, and so are the effects above `inst`, which can feed its Points, so
-/// an edit at any time renames every frame. What an expression or a tap reads
-/// from somewhere else is not, as the frame keys already treat it.
+/// an edit at any time renames every frame. So does any layer an expression
+/// or a node could read.
 #[must_use]
 pub fn definition(
     doc: &Document,
@@ -216,6 +216,7 @@ pub fn definition(
     let _ = serde_json::to_writer(&mut h, &layer.masks);
     let _ = serde_json::to_writer(&mut h, &layer.kind);
     let _ = serde_json::to_writer(&mut h, &target);
+    sim::feed_expressed(comp, layer, inst, &mut h);
     for one in std::iter::once(layer).chain(target) {
         // A solid's size is the frame Edge acts at, and the rectangle a
         // layer with no shapes is hit at.

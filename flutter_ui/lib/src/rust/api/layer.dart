@@ -4693,6 +4693,13 @@ class LayerReference {
         that: this,
       );
 
+  /// The rows a new `name` on this layer starts somewhere other than its
+  /// schema says: the points it centres on the picture its stack runs on,
+  /// as a Transform's anchor and position. Reset puts them back there.
+  List<BridgeParamValue> seededDefaults({required String name}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSeededDefaults(that: this, name: name);
+
   /// The adjustment switch: set this layer's own picture aside and
   /// run its effect stack on the composite beneath it, or give it back.
   ///

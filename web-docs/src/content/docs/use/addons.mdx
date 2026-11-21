@@ -21,7 +21,7 @@ machine. Lumit works without any of them.
 | --- | --- | --- | --- |
 | **Model runtime** | | Nothing on its own. Every pack needs it. | All of them |
 | **RIFE 4.9** | 20 MB | The frame between two real ones. | [Flow](#flow-rife) |
-| **Depth Anything V2 Small** | 94 MB | A depth map from a single frame. | [Depth](#depth) |
+| **Depth Anything V3 Small** | 100 MB | A depth map from a single frame. | [Depth](#depth) |
 | **Robust Video Matting** | 14 MB | A matte for a person, carried frame to frame. | [Remove background](#remove-background) |
 | **BiRefNet Lite** | 214 MB | A matte for the main subject of a frame. | [Remove background](#remove-background) |
 | **SAM 2.1 Hiera Tiny** | 111 MB | The outline of the thing you click on. | [Roto brush](#roto-brush) |
@@ -111,6 +111,10 @@ once, in the background, and nearer is brighter.
 
 Point a [Depth of field](/effects/blur-sharpen/depth-of-field/)'s Matte row, a **Set matte**
 or a track matte at the layer to use it.
+
+Depth Anything V3 Small replaces Depth Anything V2 Small in the list. A V2 pack already
+installed stays, and the V3 pack runs first when both are. A build older than V3 is
+offered V2 instead.
 
 ### Remove background
 

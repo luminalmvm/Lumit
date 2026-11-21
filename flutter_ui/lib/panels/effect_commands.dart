@@ -162,8 +162,8 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// Every parameter back to what its schema declares with any curve dropped,
-  /// as one op. A material goes back to its file.
+  /// Every parameter back to where a new effect on this layer starts, with any
+  /// curve dropped, as one op. A material goes back to its file.
   void reset(BuildContext context) {
     if (material) {
       for (final e in instances().where((e) => e.id() == info.id)) {
@@ -176,12 +176,17 @@ class EffectCommands {
     final stack = instances();
     for (final instance in stack) {
       if (!run.contains(instance.id())) continue;
-      final params = instance.id() == info.id
-          ? rows
-          : cachedListParameters(instance.getInfo().name);
+      final name = instance.getInfo().name;
+      final params =
+          instance.id() == info.id ? rows : cachedListParameters(name);
+      // A point a new effect centres on its layer goes back to that centre.
+      final seeded = onStack
+          ? {for (final v in layer.seededDefaults(name: name)) v.id: v.value}
+          : const <String, BridgeEffectValue>{};
       for (final param in params) {
         // A button has no value to put back.
-        if (defaultEffectValue(param.kind) case final value?) {
+        if (seeded[param.id] ?? defaultEffectValue(param.kind)
+            case final value?) {
           instance.setValue(id: param.id, value: value);
         }
       }

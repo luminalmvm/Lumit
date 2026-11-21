@@ -104,6 +104,7 @@ One component owns memory. `lumit-budget` is the ledger.
 
 - Defaults: VRAM 70% of a dedicated card, 40% of RAM for shared-memory GPUs. RAM 60% for
   caches, queues and buffers. Both can be changed in settings.
+- Every renderer takes its ceilings from the machine, an export's own included.
 - Every frame-sized allocation registers its size, tier and owner. A request is granted or
   denied, and a deny starts the ladder.
 - Every queue is bounded.

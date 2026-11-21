@@ -773,6 +773,16 @@ pub(crate) mod governor {
         OVERDRAWN.store(overdrawn, Ordering::Relaxed);
     }
 
+    /// Tell the ledger what the machine has, so a renderer opened after this
+    /// (an export's own) takes its ceilings from the card and the memory
+    /// rather than from the fallbacks.
+    pub(crate) fn publish_machine() {
+        lumit_budget::set_machine(
+            crate::api::system::video_memory_bytes(),
+            crate::api::system::system_memory_bytes(),
+        );
+    }
+
     /// `(VRAM's numbers, RAM's numbers, overdrawn bytes)`.
     pub(crate) fn stats() -> (TierNumbers, TierNumbers, u64) {
         (VRAM.load(), RAM.load(), OVERDRAWN.load(Ordering::Relaxed))

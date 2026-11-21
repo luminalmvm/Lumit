@@ -67,6 +67,7 @@ pub mod fill;
 pub mod film;
 pub mod find_edges;
 pub mod flash;
+pub mod flicker;
 pub mod flow_points;
 pub mod fractal_noise;
 pub mod gamma;

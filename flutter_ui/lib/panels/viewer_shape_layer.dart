@@ -6,7 +6,8 @@
 // rectangle, an ellipse, a polygon or a star, between the two corners you
 // dragged, with Shift keeping it square. The **Pen** is different: it builds a
 // path a point at a time, and clicking its first point again closes and applies
-// it. Enter, Esc, a click outside the Viewer or another tool applies it open.
+// it. Shift holds a new point, or a handle being pulled out, to a horizontal,
+// vertical or 45 degree line. Enter, Esc, a click outside the Viewer or another tool applies it open.
 // A click on either end of the selected layer's open path carries that path
 // on, and a click on its other end closes it.
 // (That gesture was briefly on the polygon tool; it is After Effects' pen, and
@@ -343,6 +344,22 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     );
   }
 
+  /// Shift holds a new vertex, or a handle, to a horizontal, vertical or 45
+  /// degree line from [anchor] (After Effects does the same). Nothing to hold
+  /// it against yet when [anchor] is null.
+  Offset _locked(Offset at, Offset? anchor) =>
+      anchor != null && HardwareKeyboard.instance.isShiftPressed
+          ? constrainToAxis(anchor, at)
+          : at;
+
+  /// The last vertex of the path in progress, on screen: what a new vertex is
+  /// held against.
+  Offset? get _lastPoint {
+    if (_draft.isEmpty) return null;
+    final last = _draft.vertices.last;
+    return _space.toScreen(last.x, last.y);
+  }
+
   /// The layer a shape would be drawn on: the primary selection.
   LayerBox? get _target =>
       primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
@@ -431,9 +448,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                       to: _to,
                       square: HardwareKeyboard.instance.isShiftPressed,
                       draft: _draft,
-                      penPointer: _penPointer,
+                      penPointer: _penPointer == null
+                          ? null
+                          : _locked(_penPointer!, _lastPoint),
                       handleFrom: _handleFrom,
-                      handleTo: _handleTo,
+                      handleTo: _handleTo == null
+                          ? null
+                          : _locked(_handleTo!, _handleFrom),
                       closing: _wouldClose,
                       accent: widget.accent,
                     ),
@@ -463,7 +484,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       // A click that became a drag: the vertex lands where the press was, and
       // the drag pulls its handles out.
       setState(() {
-        _handleFrom = at;
+        _handleFrom = _locked(at, _lastPoint);
         _handleTo = details.localPosition;
       });
       return;
@@ -545,11 +566,12 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     // in the composition's when there is not — the same path either way, and
     // the difference is only which thing it will belong to.
     final space = _space;
-    final at = space.ofScreen(details.localPosition);
     final start = _draft.first;
+    // Closing is judged on where the pointer is, not where Shift would hold it.
     if (start != null &&
         _draft.canClose &&
-        withinClosingDistance(at, start, screenScale: space.screenScale)) {
+        withinClosingDistance(space.ofScreen(details.localPosition), start,
+            screenScale: space.screenScale)) {
       final path = _draft.vertices;
       final carrying = _carrying;
       setState(_clearDraft);
@@ -557,6 +579,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       return;
     }
     if (_draft.isEmpty && _startCarrying(details.localPosition)) return;
+    final at =
+        space.ofScreen(_locked(details.localPosition, _lastPoint));
     setState(() => _draft = _draft.withCorner(at));
   }
 
@@ -587,12 +611,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   /// and its handles are pulled out to the pointer.
   void _finishHandleDrag() {
     final from = _handleFrom;
-    final to = _handleTo;
+    final raw = _handleTo;
     setState(() {
       _handleFrom = null;
       _handleTo = null;
     });
-    if (from == null || to == null) return;
+    if (from == null || raw == null) return;
+    final to = _locked(raw, from);
     final space = _space;
     setState(() => _draft = _draft.withBezier(
           space.ofScreen(from),

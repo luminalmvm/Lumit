@@ -3121,6 +3121,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   ProjectReference dco_decode_project_reference(dynamic raw);
 
   @protected
+  (double, double) dco_decode_record_f_64_f_64(dynamic raw);
+
+  @protected
   (String, String) dco_decode_record_string_string(dynamic raw);
 
   @protected
@@ -6692,6 +6695,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   ProjectReference sse_decode_project_reference(SseDeserializer deserializer);
+
+  @protected
+  (double, double) sse_decode_record_f_64_f_64(SseDeserializer deserializer);
 
   @protected
   (String, String) sse_decode_record_string_string(
@@ -10475,6 +10481,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_project_reference(
       ProjectReference self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_f_64_f_64(
+      (double, double) self, SseSerializer serializer);
 
   @protected
   void sse_encode_record_string_string(

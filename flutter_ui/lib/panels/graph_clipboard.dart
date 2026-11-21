@@ -411,7 +411,9 @@ Future<bool> pasteKeysAtPlayhead({
         [for (final k in clip.keys) (keyFrame(k, fps), k)],
     ];
   } else {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    // Windows refuses a read while another program holds the clipboard.
+    final text = await Clipboard.getData(Clipboard.kTextPlain)
+        .then((data) => data?.text, onError: (Object _) => null);
     final parsed = text == null ? null : parseClipboardText(text);
     if (parsed == null) return false;
     // The table's frames are in whatever rate it was written at; carry them
