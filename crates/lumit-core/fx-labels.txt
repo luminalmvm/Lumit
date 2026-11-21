@@ -221,6 +221,7 @@ Bursts
 By strength
 Bypass
 CDL
+CRT
 Camera
 Camera kick
 Camera track
@@ -574,6 +575,7 @@ Fade in
 Fade length
 Fade out
 Fade power
+Failing light
 Falloff
 Far blur
 Farthest (m)
@@ -597,6 +599,7 @@ Fill from
 Film
 Film burn
 Film colour
+Film projector
 Filter
 Final
 Final result
@@ -1067,6 +1070,7 @@ Nearest (m)
 Nearest distance
 Negative
 Neon
+Neon tube
 No motion
 Node
 Node graph
