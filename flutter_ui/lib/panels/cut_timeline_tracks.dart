@@ -441,7 +441,10 @@ Set<String> cutClipsBetween(CutTrack track, int from, int to) {
 /// in hand, the start's when [fade] is true, the end's when it is false, with
 /// the travel in [shift] and no box moving at all. [sub] is the part of a
 /// frame a move of sound alone carries past [shift] while Frames is off, and
-/// nought for everything else.
+/// nought for everything else. [copy] is a move laying copies, so the originals
+/// stay where they were, and [overlap] is whether a clip dropped over a
+/// neighbour keeps the overlap as a transition (Auto crossfade) rather than
+/// overwriting it.
 typedef CutDrag = ({
   CutTool tool,
   Set<String> clips,
@@ -454,6 +457,8 @@ typedef CutDrag = ({
   Map<String, (int, int)> others,
   bool? fade,
   double sub,
+  bool copy,
+  bool overlap,
 });
 
 /// How far a ripple moves what follows: the engine's rule. Everything from a
