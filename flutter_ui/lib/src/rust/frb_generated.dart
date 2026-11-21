@@ -40881,8 +40881,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeRangeSelector dco_decode_bridge_range_selector(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 16)
-      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
+    if (arr.length != 18)
+      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
     return BridgeRangeSelector(
       start: dco_decode_bridge_scalar(arr[0]),
       end: dco_decode_bridge_scalar(arr[1]),
@@ -40895,11 +40895,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       target: dco_decode_opt_Uuid(arr[8]),
       radius: dco_decode_bridge_scalar(arr[9]),
       invert: dco_decode_bool(arr[10]),
-      minAmount: dco_decode_bridge_scalar(arr[11]),
-      maxAmount: dco_decode_bridge_scalar(arr[12]),
-      wiggles: dco_decode_bridge_scalar(arr[13]),
-      correlation: dco_decode_bridge_scalar(arr[14]),
-      seed: dco_decode_u_32(arr[15]),
+      easeHigh: dco_decode_bridge_scalar(arr[11]),
+      easeLow: dco_decode_bridge_scalar(arr[12]),
+      minAmount: dco_decode_bridge_scalar(arr[13]),
+      maxAmount: dco_decode_bridge_scalar(arr[14]),
+      wiggles: dco_decode_bridge_scalar(arr[15]),
+      correlation: dco_decode_bridge_scalar(arr[16]),
+      seed: dco_decode_u_32(arr[17]),
     );
   }
 
@@ -51633,6 +51635,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_target = sse_decode_opt_Uuid(deserializer);
     var var_radius = sse_decode_bridge_scalar(deserializer);
     var var_invert = sse_decode_bool(deserializer);
+    var var_easeHigh = sse_decode_bridge_scalar(deserializer);
+    var var_easeLow = sse_decode_bridge_scalar(deserializer);
     var var_minAmount = sse_decode_bridge_scalar(deserializer);
     var var_maxAmount = sse_decode_bridge_scalar(deserializer);
     var var_wiggles = sse_decode_bridge_scalar(deserializer);
@@ -51650,6 +51654,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         target: var_target,
         radius: var_radius,
         invert: var_invert,
+        easeHigh: var_easeHigh,
+        easeLow: var_easeLow,
         minAmount: var_minAmount,
         maxAmount: var_maxAmount,
         wiggles: var_wiggles,
@@ -63124,6 +63130,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_Uuid(self.target, serializer);
     sse_encode_bridge_scalar(self.radius, serializer);
     sse_encode_bool(self.invert, serializer);
+    sse_encode_bridge_scalar(self.easeHigh, serializer);
+    sse_encode_bridge_scalar(self.easeLow, serializer);
     sse_encode_bridge_scalar(self.minAmount, serializer);
     sse_encode_bridge_scalar(self.maxAmount, serializer);
     sse_encode_bridge_scalar(self.wiggles, serializer);

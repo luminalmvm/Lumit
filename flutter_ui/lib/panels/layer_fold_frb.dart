@@ -831,8 +831,9 @@ final class FoldAnimatorValueRow extends LayerFoldRow {
 
 /// A text animator's selector choices, which have no curve: what picks the
 /// letters, the target a Proximity selector measures from, what it counts,
-/// the shape of its edge, whether it is turned over, and a Wiggly's seed.
-enum AnimatorSetting { selector, target, basis, shape, invert, seed }
+/// the shape of its edge, whether it is turned over, a Range selector's Mode
+/// (Add or Subtract), and a Wiggly's seed.
+enum AnimatorSetting { selector, target, basis, mode, shape, invert, seed }
 
 /// One of [AnimatorSetting] on animator [index], as the Effect controls panel
 /// shows it, so the Timeline has the whole selector too.
@@ -854,6 +855,7 @@ List<AnimatorSetting> animatorSettingsOf(BridgeTextAnimator a) => [
       ],
       if (a.selector.kind == BridgeSelectorKind.wiggly) AnimatorSetting.seed,
       AnimatorSetting.basis,
+      if (a.selector.kind == BridgeSelectorKind.range) AnimatorSetting.mode,
       if (a.selector.kind != BridgeSelectorKind.wiggly) AnimatorSetting.shape,
     ];
 
@@ -1273,6 +1275,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
           AnimatorSetting.target => animator.selector.target != null,
           AnimatorSetting.invert => animator.selector.invert,
           AnimatorSetting.seed => animator.selector.seed != 0,
+          AnimatorSetting.mode => animator.selector.invert,
           AnimatorSetting.basis =>
             animator.selector.basis != BridgeSelectorBasis.characters,
           AnimatorSetting.shape =>

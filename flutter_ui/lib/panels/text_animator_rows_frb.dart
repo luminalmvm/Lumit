@@ -506,6 +506,43 @@ class _AnimatorSection extends StatelessWidget {
           onChanged: (s) => putSelector(selectorWith(a.selector, shape: s)),
         ),
       ),
+      // A Range selector's Mode and the eases of its ramp, as After Effects'
+      // Advanced rows: Subtract moves the letters the range does not reach.
+      if (a.selector.mode == BridgeSelectorMode.range &&
+          a.selector.kind == BridgeSelectorKind.range) ...[
+        _plainRow(
+          context,
+          l10n.textAnimatorMode,
+          BareDropdown<bool>(
+            key: ValueKey<String>('text-animator-subtract-$index'),
+            value: a.selector.invert,
+            options: const [false, true],
+            label: (subtract) => subtract
+                ? l10n.textAnimatorModeSubtract
+                : l10n.textAnimatorModeAdd,
+            onChanged: (subtract) =>
+                putSelector(selectorWith(a.selector, invert: subtract)),
+          ),
+        ),
+        _numberRow(
+            context,
+            l10n.textAnimatorEaseHigh,
+            'range-ease-high-$index',
+            [a.selector.easeHigh],
+            -100,
+            100,
+            0,
+            (s) => putSelector(selectorWith(a.selector, easeHigh: s.first))),
+        _numberRow(
+            context,
+            l10n.textAnimatorEaseLow,
+            'range-ease-low-$index',
+            [a.selector.easeLow],
+            -100,
+            100,
+            0,
+            (s) => putSelector(selectorWith(a.selector, easeLow: s.first))),
+      ],
       // The property groups the animator shows: those Add ▸ Property put on
       // it and any whose numbers have been moved.
       if (animatorShowsProperty(a, AnimatorProperty.position))
@@ -841,6 +878,8 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
         kind: BridgeSelectorKind.range,
         radius: BridgeScalar.static_(200),
         invert: false,
+        easeHigh: BridgeScalar.static_(0),
+        easeLow: BridgeScalar.static_(0),
         minAmount: BridgeScalar.static_(0),
         maxAmount: BridgeScalar.static_(100),
         wiggles: BridgeScalar.static_(2),
@@ -956,6 +995,8 @@ enum TextAnimatorValue {
   rangeStart,
   rangeEnd,
   rangeOffset,
+  easeHigh,
+  easeLow,
   positionX,
   positionY,
   positionZ,
@@ -1018,7 +1059,9 @@ List<TextAnimatorValue> textAnimatorValuesOf(BridgeTextAnimator a,
       if (switch (value) {
         TextAnimatorValue.rangeStart ||
         TextAnimatorValue.rangeEnd ||
-        TextAnimatorValue.rangeOffset =>
+        TextAnimatorValue.rangeOffset ||
+        TextAnimatorValue.easeHigh ||
+        TextAnimatorValue.easeLow =>
           kind == BridgeSelectorKind.range,
         TextAnimatorValue.radius => kind == BridgeSelectorKind.proximity,
         TextAnimatorValue.minAmount ||
@@ -1163,6 +1206,8 @@ String textAnimatorValueLabel(TextAnimatorValue value,
       TextAnimatorValue.rangeStart => l10n.textAnimatorRangeStart,
       TextAnimatorValue.rangeEnd => l10n.textAnimatorRangeEnd,
       TextAnimatorValue.rangeOffset => l10n.textAnimatorRangeOffset,
+      TextAnimatorValue.easeHigh => l10n.textAnimatorEaseHigh,
+      TextAnimatorValue.easeLow => l10n.textAnimatorEaseLow,
       TextAnimatorValue.positionX => '${l10n.transformPosition} x',
       TextAnimatorValue.positionY => '${l10n.transformPosition} y',
       TextAnimatorValue.positionZ => '${l10n.transformPosition} z',
@@ -1214,6 +1259,8 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.rangeStart => a.selector.start,
       TextAnimatorValue.rangeEnd => a.selector.end,
       TextAnimatorValue.rangeOffset => a.selector.offset,
+      TextAnimatorValue.easeHigh => a.selector.easeHigh,
+      TextAnimatorValue.easeLow => a.selector.easeLow,
       TextAnimatorValue.positionX => a.positionX,
       TextAnimatorValue.positionY => a.positionY,
       TextAnimatorValue.positionZ => a.positionZ,
@@ -1251,6 +1298,10 @@ BridgeTextAnimator animatorWithScalar(
         animatorWith(a, selector: selectorWith(a.selector, end: to)),
       TextAnimatorValue.rangeOffset =>
         animatorWith(a, selector: selectorWith(a.selector, offset: to)),
+      TextAnimatorValue.easeHigh =>
+        animatorWith(a, selector: selectorWith(a.selector, easeHigh: to)),
+      TextAnimatorValue.easeLow =>
+        animatorWith(a, selector: selectorWith(a.selector, easeLow: to)),
       TextAnimatorValue.positionX => animatorWith(a, positionX: to),
       TextAnimatorValue.positionY => animatorWith(a, positionY: to),
       TextAnimatorValue.positionZ => animatorWith(a, positionZ: to),
@@ -1339,6 +1390,8 @@ BridgeRangeSelector selectorWith(
   bool clearTarget = false,
   BridgeScalar? radius,
   bool? invert,
+  BridgeScalar? easeHigh,
+  BridgeScalar? easeLow,
   BridgeScalar? minAmount,
   BridgeScalar? maxAmount,
   BridgeScalar? wiggles,
@@ -1362,6 +1415,8 @@ BridgeRangeSelector selectorWith(
       target: clearTarget ? null : (target ?? s.target),
       radius: radius ?? s.radius,
       invert: invert ?? s.invert,
+      easeHigh: easeHigh ?? s.easeHigh,
+      easeLow: easeLow ?? s.easeLow,
     );
 
 /// How many font axes one Text layer's animators can move, as many as After

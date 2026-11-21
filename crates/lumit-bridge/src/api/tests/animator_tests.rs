@@ -61,6 +61,8 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
             target: None,
             radius: BridgeScalar::Static(200.0),
             invert: false,
+            ease_high: zero(),
+            ease_low: zero(),
             min_amount: zero(),
             max_amount: BridgeScalar::Static(100.0),
             wiggles: BridgeScalar::Static(2.0),

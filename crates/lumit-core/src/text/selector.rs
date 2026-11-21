@@ -163,9 +163,27 @@ pub struct RangeSelector {
     )]
     pub radius: Property,
     /// Turns the weights over: the letters far from the target are moved and
-    /// the near ones are left alone.
+    /// the near ones are left alone. On a Range selector this is After
+    /// Effects' Mode **Subtract**: the letters the range reaches are left
+    /// alone and the others are moved.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub invert: bool,
+    /// Per cent, −100 to 100: how a Range selector's ramp eases into the
+    /// whole way (High) and out of nothing (Low), as After Effects' Ease High
+    /// and Ease Low. 0 is the even ramp; 100 flattens that end of the slope;
+    /// −100 steepens it.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub ease_high: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub ease_low: Property,
     /// A Wiggly selector's range of weights, per cent: each letter wanders
     /// between the two.
     #[serde(
@@ -225,6 +243,8 @@ impl Default for RangeSelector {
             target: None,
             radius: two_hundred(),
             invert: false,
+            ease_high: Property::zero(),
+            ease_low: Property::zero(),
             min_amount: Property::zero(),
             max_amount: hundred_wiggly(),
             wiggles: two(),
@@ -283,6 +303,10 @@ impl RangeSelector {
             std::mem::swap(&mut lo, &mut hi);
         }
         let shape = self.shape;
+        let ease = Ease {
+            high: (self.ease_high.value_at(lt) / 100.0).clamp(-1.0, 1.0),
+            low: (self.ease_low.value_at(lt) / 100.0).clamp(-1.0, 1.0),
+        };
         (0..units)
             .map(|i| {
                 // The middle of the unit's own share of the run, so the first
@@ -291,7 +315,14 @@ impl RangeSelector {
                 // middle yet, and one at 100 % has passed the last letter's.
                 #[allow(clippy::cast_precision_loss)] // a run of 2^24 letters is not a line
                 let p = (i as f64 + 0.5) / units as f64;
-                weight(shape, lo, hi, p)
+                let w = weight(shape, lo, hi, p, ease);
+                // Subtract: the letters the range reaches are the ones left
+                // alone.
+                if self.invert {
+                    1.0 - w
+                } else {
+                    w
+                }
             })
             .collect()
     }
@@ -352,13 +383,37 @@ pub(super) fn near_weight(shape: SelectorShape, d: f32, radius: f32) -> f32 {
 
 /// One unit's weight for a range `lo`–`hi` at position `p`, all in 0–1.
 #[must_use]
-fn weight(shape: SelectorShape, lo: f64, hi: f64, p: f64) -> f32 {
+/// Ease High and Ease Low as fractions, −1 to 1.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Ease {
+    high: f64,
+    low: f64,
+}
+
+impl Ease {
+    /// `t` (0–1 across the slope) bent by the two eases: a cubic that leaves
+    /// 0 with the slope `1 − low` and reaches 1 with the slope `1 − high`, so
+    /// 0 % keeps the even ramp, 100 % lands flat and −100 % lands at twice the
+    /// pace. A curve that would overshoot is held to 0–1.
+    fn bend(self, t: f64) -> f64 {
+        if self.high == 0.0 && self.low == 0.0 {
+            return t;
+        }
+        let t = t.clamp(0.0, 1.0);
+        let (m0, m1) = (1.0 - self.low, 1.0 - self.high);
+        let (t2, t3) = (t * t, t * t * t);
+        let v = (t3 - 2.0 * t2 + t) * m0 + (-2.0 * t3 + 3.0 * t2) + (t3 - t2) * m1;
+        v.clamp(0.0, 1.0)
+    }
+}
+
+fn weight(shape: SelectorShape, lo: f64, hi: f64, p: f64, ease: Ease) -> f32 {
     let w = match shape {
         SelectorShape::Square => f64::from(u8::from(p >= lo && p < hi)),
         // A zero-width ramp is a step, which is the honest limit of the ramp
         // rather than a division by nothing.
         _ if hi <= lo => f64::from(u8::from(p >= hi)),
-        _ => super::spoken::curve(shape, (p - lo) / (hi - lo)),
+        _ => super::spoken::curve(shape, ease.bend((p - lo) / (hi - lo))),
     };
     #[allow(clippy::cast_possible_truncation)] // 0–1
     let w = w as f32;

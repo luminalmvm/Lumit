@@ -300,6 +300,11 @@ class BridgeRangeSelector {
   final BridgeScalar radius;
   final bool invert;
 
+  /// Per cent, −100 to 100: After Effects' Ease High and Ease Low on a
+  /// Range selector's ramp.
+  final BridgeScalar easeHigh;
+  final BridgeScalar easeLow;
+
   /// A Wiggly selector: the range of weights, per cent, how often they
   /// change course a second, how much the letters wander together, per
   /// cent, and which wander.
@@ -321,6 +326,8 @@ class BridgeRangeSelector {
     this.target,
     required this.radius,
     required this.invert,
+    required this.easeHigh,
+    required this.easeLow,
     required this.minAmount,
     required this.maxAmount,
     required this.wiggles,
@@ -341,6 +348,8 @@ class BridgeRangeSelector {
       target.hashCode ^
       radius.hashCode ^
       invert.hashCode ^
+      easeHigh.hashCode ^
+      easeLow.hashCode ^
       minAmount.hashCode ^
       maxAmount.hashCode ^
       wiggles.hashCode ^
@@ -363,6 +372,8 @@ class BridgeRangeSelector {
           target == other.target &&
           radius == other.radius &&
           invert == other.invert &&
+          easeHigh == other.easeHigh &&
+          easeLow == other.easeLow &&
           minAmount == other.minAmount &&
           maxAmount == other.maxAmount &&
           wiggles == other.wiggles &&

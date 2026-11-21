@@ -44179,6 +44179,8 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
         let mut var_target = <Option<uuid::Uuid>>::sse_decode(deserializer);
         let mut var_radius = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_invert = <bool>::sse_decode(deserializer);
+        let mut var_easeHigh = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_easeLow = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_minAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_maxAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_wiggles = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -44196,6 +44198,8 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
             target: var_target,
             radius: var_radius,
             invert: var_invert,
+            ease_high: var_easeHigh,
+            ease_low: var_easeLow,
             min_amount: var_minAmount,
             max_amount: var_maxAmount,
             wiggles: var_wiggles,
@@ -61389,6 +61393,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeRangeSelector {
             self.target.into_into_dart().into_dart(),
             self.radius.into_into_dart().into_dart(),
             self.invert.into_into_dart().into_dart(),
+            self.ease_high.into_into_dart().into_dart(),
+            self.ease_low.into_into_dart().into_dart(),
             self.min_amount.into_into_dart().into_dart(),
             self.max_amount.into_into_dart().into_dart(),
             self.wiggles.into_into_dart().into_dart(),
@@ -70920,6 +70926,8 @@ impl SseEncode for crate::api::assets::BridgeRangeSelector {
         <Option<uuid::Uuid>>::sse_encode(self.target, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.radius, serializer);
         <bool>::sse_encode(self.invert, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.ease_high, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.ease_low, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.min_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.max_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.wiggles, serializer);

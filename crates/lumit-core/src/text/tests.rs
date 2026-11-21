@@ -116,6 +116,45 @@ fn a_half_weighted_letter_is_moved_half_as_far() {
     assert!((x[0].scale[0] - 1.25).abs() < 1e-6, "{x:?}");
 }
 
+/// **Subtract** turns a Range selector over: the letters its range reaches
+/// are left alone and the others are moved, as After Effects' Mode Subtract.
+#[test]
+fn a_subtracting_range_moves_the_letters_it_does_not_reach() {
+    let mut s = RangeSelector {
+        shape: SelectorShape::Ramp,
+        ..selector(0.0, 100.0, 0.0)
+    };
+    let add = s.weights_at(4, 0.0);
+    s.invert = true;
+    let subtract = s.weights_at(4, 0.0);
+    for (a, b) in add.iter().zip(&subtract) {
+        assert!((a + b - 1.0).abs() < 1e-6, "{add:?} {subtract:?}");
+    }
+    assert!(subtract[0] > subtract[3], "{subtract:?}");
+}
+
+/// **Ease High and Ease Low** bend a ramp: 0 % keeps it even, 100 % flattens
+/// that end, −100 % steepens it; the ends stay at nothing and the whole way.
+#[test]
+fn ease_high_and_low_bend_the_ramp() {
+    let mut s = RangeSelector {
+        shape: SelectorShape::Ramp,
+        ..selector(0.0, 100.0, 0.0)
+    };
+    let even = s.weights_at(10, 0.0);
+    s.ease_low = Property::fixed(100.0);
+    let eased_in = s.weights_at(10, 0.0);
+    assert!(eased_in[1] < even[1], "{even:?} {eased_in:?}");
+    s.ease_low = Property::zero();
+    s.ease_high = Property::fixed(-50.0);
+    let steep_top = s.weights_at(10, 0.0);
+    assert!(steep_top[8] > even[8] - 0.2 && steep_top[8] <= 1.0, "{steep_top:?}");
+    assert!(steep_top.iter().all(|w| (0.0..=1.0).contains(w)), "{steep_top:?}");
+    // Past the range the letters are moved the whole way, eased or not.
+    s.offset = Property::fixed(-100.0);
+    assert!(s.weights_at(4, 0.0).iter().all(|w| (*w - 1.0).abs() < 1e-6));
+}
+
 /// **Spoken selectors follow the words as they are said.** Each mode weighs
 /// a word by its own times: the one being said, the ones said, the ones to
 /// come, the emphasised ones, letter by letter across a word, and eased in

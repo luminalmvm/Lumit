@@ -261,6 +261,10 @@ pub struct BridgeRangeSelector {
     /// Px in the text layer's own pixels.
     pub radius: BridgeScalar,
     pub invert: bool,
+    /// Per cent, −100 to 100: After Effects' Ease High and Ease Low on a
+    /// Range selector's ramp.
+    pub ease_high: BridgeScalar,
+    pub ease_low: BridgeScalar,
     /// A Wiggly selector: the range of weights, per cent, how often they
     /// change course a second, how much the letters wander together, per
     /// cent, and which wander.

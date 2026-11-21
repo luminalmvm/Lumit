@@ -1837,6 +1837,7 @@ class AnimatorSettingRow extends StatelessWidget {
         AnimatorSetting.shape => l10n.textAnimatorShape,
         AnimatorSetting.invert => l10n.textAnimatorInvert,
         AnimatorSetting.seed => l10n.textAnimatorSeed,
+        AnimatorSetting.mode => l10n.textAnimatorMode,
       };
 
   Widget _control(BuildContext context) {
@@ -1900,6 +1901,16 @@ class AnimatorSettingRow extends StatelessWidget {
             value: s.invert,
             onChanged: (on) => _put(selectorWith(s, invert: on)),
           ),
+        ),
+      AnimatorSetting.mode => BareDropdown<bool>(
+          key: key,
+          dense: true,
+          value: s.invert,
+          options: const [false, true],
+          label: (subtract) => subtract
+              ? l10n.textAnimatorModeSubtract
+              : l10n.textAnimatorModeAdd,
+          onChanged: (subtract) => _put(selectorWith(s, invert: subtract)),
         ),
       AnimatorSetting.seed => SizedBox(
           width: 72,

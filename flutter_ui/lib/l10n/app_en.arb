@@ -11075,6 +11075,26 @@
   "@textAnimatorInvert": {
     "description": "Label of a Proximity selector's checkbox: the letters far from the target are moved and the near ones are left alone."
   },
+  "textAnimatorMode": "Mode",
+  "@textAnimatorMode": {
+    "description": "Row label for a Range selector's mode, as After Effects' Mode: Add moves the letters the range reaches, Subtract moves the others."
+  },
+  "textAnimatorModeAdd": "Add",
+  "@textAnimatorModeAdd": {
+    "description": "Option in a Range selector's Mode picker: the letters the range reaches are moved."
+  },
+  "textAnimatorModeSubtract": "Subtract",
+  "@textAnimatorModeSubtract": {
+    "description": "Option in a Range selector's Mode picker: the letters the range reaches are left alone and the others are moved."
+  },
+  "textAnimatorEaseHigh": "Ease high",
+  "@textAnimatorEaseHigh": {
+    "description": "Row label for a Range selector's ease into the whole way, a per cent from -100 to 100, as After Effects' Ease High: 100 flattens the top of the ramp, -100 steepens it."
+  },
+  "textAnimatorEaseLow": "Ease low",
+  "@textAnimatorEaseLow": {
+    "description": "Row label for a Range selector's ease out of nothing, a per cent from -100 to 100, as After Effects' Ease Low: 100 flattens the bottom of the ramp, -100 steepens it."
+  },
   "textAnimatorAddAxis": "Add font axis",
   "@textAnimatorAddAxis": {
     "description": "Menu in the Animators section listing the variable font's axes (Weight, Width and so on) an animator can move the letters along."
