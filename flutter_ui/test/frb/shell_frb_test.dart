@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -594,7 +595,8 @@ void main() {
       picked = path;
       state.newProject();
       await tester.pumpAndSettle();
-      await tester.tap(question);
+      // S is Save's key.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
       await settleFrb(tester, until: () => !identical(state.project, kept));
       expect(identical(state.project, kept), isFalse);
       expect(File(path).existsSync(), isTrue);
@@ -603,7 +605,8 @@ void main() {
       state.project!.newComposition(name: 'Scratch');
       tester.binding.handleRequestAppExit().then((a) => answer = a);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('unsaved-discard')));
+      // D is Discard's key.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyD);
       await tester.pumpAndSettle();
       expect(answer, AppExitResponse.exit);
     });

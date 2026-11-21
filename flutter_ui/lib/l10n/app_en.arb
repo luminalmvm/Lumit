@@ -12978,6 +12978,14 @@
   "@unsavedQuestion": {
     "description": "The one sentence in the question asked before a project with unsaved changes is closed, replaced by another, or quit out of. Answered with Save, Discard or Cancel."
   },
+  "unsavedKeySave": "S",
+  "@unsavedKeySave": {
+    "description": "The key that presses Save in the question asked before unsaved changes are lost. One letter from the translated Save button, shown underlined there."
+  },
+  "unsavedKeyDiscard": "D",
+  "@unsavedKeyDiscard": {
+    "description": "The key that presses Discard in the question asked before unsaved changes are lost. One letter from the translated Discard button, shown underlined there. Never the same letter as the Save key."
+  },
   "updateAvailable": "{installed}. Lumit {version} is available.",
   "@updateAvailable": {
     "description": "Settings window: a newer version exists but has not been downloaded.",
