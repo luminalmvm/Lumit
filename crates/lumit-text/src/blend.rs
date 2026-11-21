@@ -55,3 +55,35 @@ pub fn crossfade(a: &RasterText, b: &RasterText, w: f32) -> RasterText {
         rgba,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn word(width: u32, height: u32, alpha: u8) -> RasterText {
+        RasterText {
+            width,
+            height,
+            rgba: [200, 100, 50, alpha]
+                .into_iter()
+                .cycle()
+                .take((width * height * 4) as usize)
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn a_fade_mixes_two_words_from_the_top_left_of_the_wider_one() {
+        let (a, b) = (word(2, 1, 255), word(4, 2, 255));
+        let mixed = crossfade(&a, &b, 0.5);
+        assert_eq!((mixed.width, mixed.height), (4, 2));
+        let at = |x: usize, y: usize| &mixed.rgba[(y * 4 + x) * 4..][..4];
+        // Both words cover the first two pixels of the top row, so it is whole.
+        assert_eq!(at(1, 0)[3], 255);
+        // Only the wider word reaches the rest, so it is half as solid and
+        // keeps its own colour.
+        assert_eq!(at(3, 1), &[200, 100, 50, 128]);
+        // A fade at nought is the first word alone.
+        assert_eq!(crossfade(&a, &b, 0.0).rgba[..8], a.rgba[..8]);
+    }
+}
