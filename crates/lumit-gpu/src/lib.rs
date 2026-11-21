@@ -1546,8 +1546,16 @@ impl GpuContext {
         // has no business asking what the machine has — and the frontend sets
         // it from the figure it already reads (`set_budget`).
         let ledger = lumit_budget::Ledger::new();
-        let (vram_budget, _) = lumit_budget::budgets_for(video_memory_bytes(), 0, unified_memory);
+        let (known_vram, known_ram) = lumit_budget::machine();
+        let reported = if known_vram == 0 {
+            video_memory_bytes()
+        } else {
+            known_vram
+        };
+        let (vram_budget, ram_budget) =
+            lumit_budget::budgets_for(reported, known_ram, unified_memory);
         ledger.set_budget(lumit_budget::Tier::Vram, vram_budget);
+        ledger.set_budget(lumit_budget::Tier::Ram, ram_budget);
 
         Ok(Self {
             device,
