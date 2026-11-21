@@ -14020,6 +14020,22 @@
   "@fxFilmBurn": {
     "description": "Cut timeline, Transition menu, and a Light leak preset: a hot, fast light leak that burns the picture towards yellow in the middle of the cut."
   },
+  "fxNeonTube": "Neon tube",
+  "@fxNeonTube": {
+    "description": "Flicker preset: a fast flicker that jumps and mostly dips, like a neon tube on the blink."
+  },
+  "fxFailingLight": "Failing light",
+  "@fxFailingLight": {
+    "description": "Flicker preset: slow, deep dips in the light, like a bulb about to go."
+  },
+  "fxFilmProjector": "Film projector",
+  "@fxFilmProjector": {
+    "description": "Flicker preset: a small, smooth flicker at 24 a second with a little contrast, like film through a projector."
+  },
+  "fxCrt": "CRT",
+  "@fxCrt": {
+    "description": "Flicker preset: a small, fast flicker that jumps, with the colour wandering a little, like an old tube television. CRT is short for cathode ray tube."
+  },
   "fxSlices": "Slices",
   "@fxSlices": {
     "description": "Effect name in the Effects list, and a look in the cut timeline's Transition menu. The outgoing picture is cut into strips that slide out one after another, with the incoming picture's strips right behind them."
@@ -28474,7 +28490,7 @@
   },
   "fxFlicker": "Flicker",
   "@fxFlicker": {
-    "description": "Effect controls, Sprite flare: the twirl of rows that make the flare's brightness dip at random."
+    "description": "Effect name in the Effects list: the layer's light wavers at random over time. Also, in Effect controls for Sprite flare and Energy line, the twirl of rows that make the light dip at random."
   },
   "fxHideBehind": "Hide behind",
   "@fxHideBehind": {
