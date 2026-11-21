@@ -2815,21 +2815,33 @@ class LumitUiState extends ChangeNotifier {
 
   /// Put [name] on [layer]'s stack and pick it, as After Effects does, so its
   /// points are on the picture to drag straight away. The one road every
-  /// add from a menu takes. False when the engine refused it.
-  bool addEffect(LayerReference layer, String name) {
+  /// add from a menu takes. False when the engine refused it. [onPickedClip]
+  /// sends it to the picked Cut clip when that clip is on [layer].
+  bool addEffect(LayerReference layer, String name,
+      {bool onPickedClip = false}) {
     final before = {
       for (final fx
           in model.byId(layer.internallayerId)?.info.effects ?? const [])
         fx.id
     };
+    // Effect controls shows the picked Cut clip, so the add lands on that clip.
+    final pick = cutClip.value;
+    final onClip = onPickedClip &&
+        pick != null &&
+        pick.layer.internallayerId == layer.internallayerId;
     try {
-      asOneUndoStep(_app.project, () => layer.addEffect(name: name),
+      asOneUndoStep(
+          _app.project,
+          () => onClip
+              ? layer.addClipEffect(clip: pick.clip, name: name)
+              : layer.addEffect(name: name),
           name: l10n.histAddNamed(effectLabelOf(name)));
     } catch (_) {
       return false;
     }
     EffectDragData.last = name;
     model.refresh();
+    if (onClip) return true;
     final added = model
         .byId(layer.internallayerId)
         ?.info
