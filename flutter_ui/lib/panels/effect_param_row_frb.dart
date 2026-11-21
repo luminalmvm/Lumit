@@ -481,7 +481,7 @@ class EffectParamRowFrb extends StatelessWidget {
     final menu = _menu(context, keyframes is KeyframeControlsFrb ? keyframes : null);
     final drawn = _control(context, t, id, value, frame);
     final noRider = param.kind is BridgeParamKind_Angle;
-    final greyed = _greyed(_withReset(t, id, _withRiders(t, id,
+    final greyed = _greyed(_withReset(context, t, id, _withRiders(t, id,
         noRider ? drawn : withUnitRider(t, param.unit, drawn))));
     // A driven row shows the number the wire carries at this frame, dimmed:
     // it can be read, not edited.
@@ -767,7 +767,7 @@ class EffectParamRowFrb extends StatelessWidget {
       keys: numeric ? keys : null,
       reset: driven != null || fallback == null
           ? null
-          : onReset ?? () => _set(fallback),
+          : onReset ?? () => _resetTo(context, fallback),
       canReset: onReset != null ||
           fallback == null ||
           !isDefaultEffectValue(value, fallback, owner: ownerLayerId),
@@ -989,7 +989,8 @@ class EffectParamRowFrb extends StatelessWidget {
   ///
   /// Always a row, with the control first, so the arrow arriving in the middle
   /// of a drag on the number leaves the number's gesture alone.
-  Widget _withReset(LumitTheme t, UuidValue id, Widget control) {
+  Widget _withReset(
+      BuildContext context, LumitTheme t, UuidValue id, Widget control) {
     final fallback = defaultEffectValue(param.kind);
     final keyed = _animatableScalarsOf(value)
             ?.any((s) => s is BridgeScalar_Keyframed) ??
@@ -1003,7 +1004,7 @@ class EffectParamRowFrb extends StatelessWidget {
               frameless: true,
               small: true,
               padding: const EdgeInsets.all(1),
-              onPressed: onReset ?? () => _set(fallback),
+              onPressed: onReset ?? () => _resetTo(context, fallback),
               // A step under the row's other glyphs: the arrow rides beside a
               // 10px unit rider and is an undo, not a control.
               child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
@@ -1029,6 +1030,13 @@ class EffectParamRowFrb extends StatelessWidget {
   /// written into an instance here: the owner of the stack mints fresh handles
   /// for the one call that consumes them.
   void _set(BridgeEffectValue value) => onWrite(effectId, param.id, value);
+
+  /// Write where the row starts: where a new effect on this layer puts it when
+  /// that is not the schema's default, else the default [fallback].
+  void _resetTo(BuildContext context, BridgeEffectValue fallback) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _set(seededStart(ui, ownerLayerId, effectId, param.id) ?? fallback);
+  }
 
   /// A dropdown's pick. Picking Hold holds where the playhead is, as one write,
   /// rather than jumping to the comp's first frame.
@@ -2911,7 +2919,15 @@ class EffectPointRowFrb extends StatelessWidget {
       keys: keyframes is KeyframeControlsFrb ? keyframes : null,
       reset: fallbacks.$1 == null || fallbacks.$2 == null
           ? null
-          : () => writeBoth(fallbacks.$1!, fallbacks.$2!),
+          : () {
+              // A new Transform centres its anchor and position, so Reset
+              // goes back there and not to 0, 0.
+              final ui = Provider.of<LumitUiState>(context, listen: false);
+              writeBoth(
+                seededStart(ui, ownerLayerId, id, xParam.id) ?? fallbacks.$1!,
+                seededStart(ui, ownerLayerId, id, yParam.id) ?? fallbacks.$2!,
+              );
+            },
       canReset: fallbacks.$1 == null ||
           fallbacks.$2 == null ||
           !isDefaultEffectValue(xValue, fallbacks.$1!) ||
@@ -3607,6 +3623,24 @@ String effectLabelOf(String name) {
     if (style.name == name) return engineLabel(style.label);
   }
   return name;
+}
+
+/// What Reset writes for [param] on the effect [effect] of [owner]'s own stack:
+/// where a new effect of that kind starts it, when that is not the schema's
+/// default. A Transform's anchor and position start at the layer's middle. Null
+/// for anything else, and for an effect the layer's stack does not hold, a
+/// clip's say. Asks the engine, so call it from a gesture, never while drawing.
+BridgeEffectValue? seededStart(
+    LumitUiState ui, UuidValue? owner, UuidValue effect, String param) {
+  final entry = owner == null ? null : ui.model.byId(owner);
+  if (entry == null) return null;
+  for (final fx in entry.info.effects) {
+    if (fx.id != effect) continue;
+    for (final seeded in entry.layer.seededDefaults(name: fx.name)) {
+      if (seeded.id == param) return seeded.value;
+    }
+  }
+  return null;
 }
 
 /// What a parameter holds before anything touches it — what Reset writes.
