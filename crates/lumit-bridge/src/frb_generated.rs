@@ -44185,6 +44185,9 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
         let mut var_delay = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_delayEase = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_order = <crate::api::assets::BridgeStaggerOrder>::sse_decode(deserializer);
+        let mut var_bounceAmplitude = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_bounceFrequency = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_bounceDecay = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_minAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_maxAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_wiggles = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -44208,6 +44211,9 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
             delay: var_delay,
             delay_ease: var_delayEase,
             order: var_order,
+            bounce_amplitude: var_bounceAmplitude,
+            bounce_frequency: var_bounceFrequency,
+            bounce_decay: var_bounceDecay,
             min_amount: var_minAmount,
             max_amount: var_maxAmount,
             wiggles: var_wiggles,
@@ -61423,6 +61429,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeRangeSelector {
             self.delay.into_into_dart().into_dart(),
             self.delay_ease.into_into_dart().into_dart(),
             self.order.into_into_dart().into_dart(),
+            self.bounce_amplitude.into_into_dart().into_dart(),
+            self.bounce_frequency.into_into_dart().into_dart(),
+            self.bounce_decay.into_into_dart().into_dart(),
             self.min_amount.into_into_dart().into_dart(),
             self.max_amount.into_into_dart().into_dart(),
             self.wiggles.into_into_dart().into_dart(),
@@ -70985,6 +70994,9 @@ impl SseEncode for crate::api::assets::BridgeRangeSelector {
         <crate::api::effect::BridgeScalar>::sse_encode(self.delay, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.delay_ease, serializer);
         <crate::api::assets::BridgeStaggerOrder>::sse_encode(self.order, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.bounce_amplitude, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.bounce_frequency, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.bounce_decay, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.min_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.max_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.wiggles, serializer);

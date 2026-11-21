@@ -313,6 +313,12 @@ class BridgeRangeSelector {
   final BridgeScalar delayEase;
   final BridgeStaggerOrder order;
 
+  /// A Stagger selector's bounce: amplitude (0 is none), swings a second
+  /// and how fast it dies away.
+  final BridgeScalar bounceAmplitude;
+  final BridgeScalar bounceFrequency;
+  final BridgeScalar bounceDecay;
+
   /// A Wiggly selector: the range of weights, per cent, how often they
   /// change course a second, how much the letters wander together, per
   /// cent, and which wander.
@@ -340,6 +346,9 @@ class BridgeRangeSelector {
     required this.delay,
     required this.delayEase,
     required this.order,
+    required this.bounceAmplitude,
+    required this.bounceFrequency,
+    required this.bounceDecay,
     required this.minAmount,
     required this.maxAmount,
     required this.wiggles,
@@ -366,6 +375,9 @@ class BridgeRangeSelector {
       delay.hashCode ^
       delayEase.hashCode ^
       order.hashCode ^
+      bounceAmplitude.hashCode ^
+      bounceFrequency.hashCode ^
+      bounceDecay.hashCode ^
       minAmount.hashCode ^
       maxAmount.hashCode ^
       wiggles.hashCode ^
@@ -394,6 +406,9 @@ class BridgeRangeSelector {
           delay == other.delay &&
           delayEase == other.delayEase &&
           order == other.order &&
+          bounceAmplitude == other.bounceAmplitude &&
+          bounceFrequency == other.bounceFrequency &&
+          bounceDecay == other.bounceDecay &&
           minAmount == other.minAmount &&
           maxAmount == other.maxAmount &&
           wiggles == other.wiggles &&

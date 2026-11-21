@@ -97,6 +97,14 @@ pub enum StaggerOrder {
     Random,
 }
 
+fn three() -> Property {
+    Property::fixed(3.0)
+}
+
+fn is_static_three(p: &Property) -> bool {
+    matches!(p.animation, crate::anim::Animation::Static(v) if v == 3.0) && p.extra.is_empty()
+}
+
 fn is_default_order(o: &StaggerOrder) -> bool {
     *o == StaggerOrder::Forward
 }
@@ -250,6 +258,29 @@ pub struct RangeSelector {
     /// The order the units start in. Random uses `seed`.
     #[serde(default, skip_serializing_if = "is_default_order")]
     pub order: StaggerOrder,
+    /// A Stagger selector's **bounce**, the inertial bounce of After Effects'
+    /// well-known expression, on every unit: after each of Amount's keys the
+    /// unit swings on past it by the speed it arrived with, times
+    /// `bounce_amplitude`, `bounce_frequency` times a second, dying away by
+    /// `bounce_decay`. An amplitude of 0 is no bounce.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub bounce_amplitude: Property,
+    #[serde(
+        default = "two",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_two"
+    )]
+    pub bounce_frequency: Property,
+    #[serde(
+        default = "three",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_three"
+    )]
+    pub bounce_decay: Property,
     /// A Wiggly selector's range of weights, per cent: each letter wanders
     /// between the two.
     #[serde(
@@ -315,6 +346,9 @@ impl Default for RangeSelector {
             delay: tenth(),
             delay_ease: Property::zero(),
             order: StaggerOrder::default(),
+            bounce_amplitude: Property::zero(),
+            bounce_frequency: two(),
+            bounce_decay: three(),
             min_amount: Property::zero(),
             max_amount: hundred_wiggly(),
             wiggles: two(),
@@ -384,13 +418,47 @@ impl RangeSelector {
                 } else {
                     1.0 - (1.0 - s).powf(1.0 - 3.0 * ease)
                 };
-                let w = self.amount.value_at(lt - s * last * delay) / 100.0;
+                let at = lt - s * last * delay;
+                let w = (self.amount.value_at(at) + self.bounce_at(at, lt)) / 100.0;
                 let w = if w.is_finite() { w } else { 0.0 };
                 #[allow(clippy::cast_possible_truncation)] // a weight
                 let w = if self.invert { 1.0 - w } else { w } as f32;
                 w
             })
             .collect()
+    }
+
+    /// The bounce on Amount at `at`, per cent, as the inertial-bounce
+    /// expression reads it: from the last of Amount's keys at or before `at`,
+    /// the speed Amount arrived at it with, times the amplitude, swung on a
+    /// sine of the frequency and dying away by the decay. Nothing before the
+    /// first key, nothing at an amplitude of 0, nothing on an Amount that is
+    /// not keyed. The three settings are read at the layer's own time `lt`.
+    fn bounce_at(&self, at: f64, lt: f64) -> f64 {
+        let amp = self.bounce_amplitude.value_at(lt);
+        if amp == 0.0 || !amp.is_finite() {
+            return 0.0;
+        }
+        let crate::anim::Animation::Keyframed(keys) = &self.amount.animation else {
+            return 0.0;
+        };
+        let Some(key) = keys.iter().rev().find(|k| k.time.to_f64() <= at) else {
+            return 0.0;
+        };
+        let k = key.time.to_f64();
+        let t = at - k;
+        // The speed just before the key, per cent a second, as the
+        // expression's velocityAtTime a tenth of a frame before it.
+        let h = 1.0 / 250.0;
+        let v = (self.amount.value_at(k - h) - self.amount.value_at(k - 2.0 * h)) / h;
+        let freq = self.bounce_frequency.value_at(lt);
+        let decay = self.bounce_decay.value_at(lt);
+        let b = v / 100.0 * amp * (freq * t * std::f64::consts::TAU).sin() / (decay * t).exp();
+        if b.is_finite() {
+            b
+        } else {
+            0.0
+        }
     }
 
     /// Each unit's place in a Stagger selector's order, 0 for the first to

@@ -40881,8 +40881,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeRangeSelector dco_decode_bridge_range_selector(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 22)
-      throw Exception('unexpected arr length: expect 22 but see ${arr.length}');
+    if (arr.length != 25)
+      throw Exception('unexpected arr length: expect 25 but see ${arr.length}');
     return BridgeRangeSelector(
       start: dco_decode_bridge_scalar(arr[0]),
       end: dco_decode_bridge_scalar(arr[1]),
@@ -40901,11 +40901,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       delay: dco_decode_bridge_scalar(arr[14]),
       delayEase: dco_decode_bridge_scalar(arr[15]),
       order: dco_decode_bridge_stagger_order(arr[16]),
-      minAmount: dco_decode_bridge_scalar(arr[17]),
-      maxAmount: dco_decode_bridge_scalar(arr[18]),
-      wiggles: dco_decode_bridge_scalar(arr[19]),
-      correlation: dco_decode_bridge_scalar(arr[20]),
-      seed: dco_decode_u_32(arr[21]),
+      bounceAmplitude: dco_decode_bridge_scalar(arr[17]),
+      bounceFrequency: dco_decode_bridge_scalar(arr[18]),
+      bounceDecay: dco_decode_bridge_scalar(arr[19]),
+      minAmount: dco_decode_bridge_scalar(arr[20]),
+      maxAmount: dco_decode_bridge_scalar(arr[21]),
+      wiggles: dco_decode_bridge_scalar(arr[22]),
+      correlation: dco_decode_bridge_scalar(arr[23]),
+      seed: dco_decode_u_32(arr[24]),
     );
   }
 
@@ -51651,6 +51654,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_delay = sse_decode_bridge_scalar(deserializer);
     var var_delayEase = sse_decode_bridge_scalar(deserializer);
     var var_order = sse_decode_bridge_stagger_order(deserializer);
+    var var_bounceAmplitude = sse_decode_bridge_scalar(deserializer);
+    var var_bounceFrequency = sse_decode_bridge_scalar(deserializer);
+    var var_bounceDecay = sse_decode_bridge_scalar(deserializer);
     var var_minAmount = sse_decode_bridge_scalar(deserializer);
     var var_maxAmount = sse_decode_bridge_scalar(deserializer);
     var var_wiggles = sse_decode_bridge_scalar(deserializer);
@@ -51674,6 +51680,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         delay: var_delay,
         delayEase: var_delayEase,
         order: var_order,
+        bounceAmplitude: var_bounceAmplitude,
+        bounceFrequency: var_bounceFrequency,
+        bounceDecay: var_bounceDecay,
         minAmount: var_minAmount,
         maxAmount: var_maxAmount,
         wiggles: var_wiggles,
@@ -63162,6 +63171,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.delay, serializer);
     sse_encode_bridge_scalar(self.delayEase, serializer);
     sse_encode_bridge_stagger_order(self.order, serializer);
+    sse_encode_bridge_scalar(self.bounceAmplitude, serializer);
+    sse_encode_bridge_scalar(self.bounceFrequency, serializer);
+    sse_encode_bridge_scalar(self.bounceDecay, serializer);
     sse_encode_bridge_scalar(self.minAmount, serializer);
     sse_encode_bridge_scalar(self.maxAmount, serializer);
     sse_encode_bridge_scalar(self.wiggles, serializer);

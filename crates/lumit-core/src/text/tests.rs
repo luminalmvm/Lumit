@@ -558,3 +558,27 @@ fn delay_ease_bunches_the_first_starts() {
     // The last still starts the whole spread after the first.
     assert!((eased[3] - even[3]).abs() < 1e-6, "{even:?} {eased:?}");
 }
+
+/// **A Stagger's bounce** swings each unit on past Amount's last key by the
+/// speed it arrived with, as the inertial-bounce expression does, and dies
+/// away; an amplitude of 0 leaves Amount as it is.
+#[test]
+fn a_stagger_bounces_past_its_last_key_and_settles() {
+    use super::selector::{RangeSelector, SelectorKind};
+    let mut s = RangeSelector {
+        kind: SelectorKind::Stagger,
+        amount: falling_amount(),
+        delay: Property::fixed(0.0),
+        ..RangeSelector::default()
+    };
+    assert_eq!(s.stagger_weights(1, 1.125), vec![0.0]);
+    s.bounce_amplitude = Property::fixed(3.0);
+    // Falling at 100 % a second, it swings on below 0 a quarter swing after
+    // the key, back above it at three quarters, and is still by 3 s.
+    let w = |t: f64| s.stagger_weights(1, t)[0];
+    assert!(w(1.125) < -0.015, "{}", w(1.125));
+    assert!(w(1.375) > 0.005, "{}", w(1.375));
+    assert!(w(3.0).abs() < 1e-3, "{}", w(3.0));
+    // Before the last key nothing is added.
+    assert!((w(0.5) - 0.5).abs() < 1e-6, "{}", w(0.5));
+}

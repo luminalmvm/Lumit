@@ -11055,6 +11055,18 @@
   "@textAnimatorDelayEase": {
     "description": "Row label for a Stagger selector, a per cent from -100 to 100: how the delays are shared out. 0 keeps them even; above 0 the first start close together and the later ones further apart."
   },
+  "textAnimatorBounceAmplitude": "Bounce amplitude",
+  "@textAnimatorBounceAmplitude": {
+    "description": "Row label for a Stagger selector: how far each word or letter swings on past each of Amount's keys, by the speed it arrived with, as After Effects' inertial-bounce expression. 0 is no bounce."
+  },
+  "textAnimatorBounceFrequency": "Bounce frequency",
+  "@textAnimatorBounceFrequency": {
+    "description": "Row label for a Stagger selector: how many times a second the bounce swings."
+  },
+  "textAnimatorBounceDecay": "Bounce decay",
+  "@textAnimatorBounceDecay": {
+    "description": "Row label for a Stagger selector: how fast the bounce dies away; higher settles sooner."
+  },
   "textAnimatorOrder": "Order",
   "@textAnimatorOrder": {
     "description": "Row label for the order a Stagger selector starts its words or letters in."

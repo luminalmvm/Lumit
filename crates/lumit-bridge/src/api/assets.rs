@@ -284,6 +284,11 @@ pub struct BridgeRangeSelector {
     pub delay: BridgeScalar,
     pub delay_ease: BridgeScalar,
     pub order: BridgeStaggerOrder,
+    /// A Stagger selector's bounce: amplitude (0 is none), swings a second
+    /// and how fast it dies away.
+    pub bounce_amplitude: BridgeScalar,
+    pub bounce_frequency: BridgeScalar,
+    pub bounce_decay: BridgeScalar,
     /// A Wiggly selector: the range of weights, per cent, how often they
     /// change course a second, how much the letters wander together, per
     /// cent, and which wander.

@@ -57,6 +57,9 @@ pub(crate) fn read_animator(
             amount: read(&s.amount),
             delay: read(&s.delay),
             delay_ease: read(&s.delay_ease),
+            bounce_amplitude: read(&s.bounce_amplitude),
+            bounce_frequency: read(&s.bounce_frequency),
+            bounce_decay: read(&s.bounce_decay),
             order: match s.order {
                 StaggerOrder::Forward => BridgeStaggerOrder::Forward,
                 StaggerOrder::Backward => BridgeStaggerOrder::Backward,
@@ -170,6 +173,9 @@ pub(super) fn animator_from(
             amount: write(&s.amount)?,
             delay: write(&s.delay)?,
             delay_ease: write(&s.delay_ease)?,
+            bounce_amplitude: write(&s.bounce_amplitude)?,
+            bounce_frequency: write(&s.bounce_frequency)?,
+            bounce_decay: write(&s.bounce_decay)?,
             order: match s.order {
                 BridgeStaggerOrder::Forward => StaggerOrder::Forward,
                 BridgeStaggerOrder::Backward => StaggerOrder::Backward,

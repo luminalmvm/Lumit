@@ -51,6 +51,9 @@ impl TextAnimator {
                 add("amount", "Amount");
                 add("delay", "Delay");
                 add("delay_ease", "Delay ease");
+                add("bounce_amplitude", "Bounce amplitude");
+                add("bounce_frequency", "Bounce frequency");
+                add("bounce_decay", "Bounce decay");
             }
         }
         let shows = |group: &str| {
@@ -114,6 +117,9 @@ impl TextAnimator {
             "amount" => &mut s.amount,
             "delay" => &mut s.delay,
             "delay_ease" => &mut s.delay_ease,
+            "bounce_amplitude" => &mut s.bounce_amplitude,
+            "bounce_frequency" => &mut s.bounce_frequency,
+            "bounce_decay" => &mut s.bounce_decay,
             "wiggles" => &mut s.wiggles,
             "correlation" => &mut s.correlation,
             "position_x" => &mut self.position_x,

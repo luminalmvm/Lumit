@@ -365,6 +365,41 @@ class _AnimatorSection extends StatelessWidget {
               0,
               (s) =>
                   putSelector(selectorWith(a.selector, delayEase: s.first))),
+          // The inertial bounce after each of Amount's keys, as the
+          // well-known After Effects expression gives it.
+          _numberRow(
+              context,
+              l10n.textAnimatorBounceAmplitude,
+              'stagger-bounce-amp-$index',
+              [a.selector.bounceAmplitude],
+              0,
+              20,
+              0,
+              (s) => putSelector(
+                  selectorWith(a.selector, bounceAmplitude: s.first)),
+              decimals: 2),
+          _numberRow(
+              context,
+              l10n.textAnimatorBounceFrequency,
+              'stagger-bounce-freq-$index',
+              [a.selector.bounceFrequency],
+              0,
+              20,
+              2,
+              (s) => putSelector(
+                  selectorWith(a.selector, bounceFrequency: s.first)),
+              decimals: 2),
+          _numberRow(
+              context,
+              l10n.textAnimatorBounceDecay,
+              'stagger-bounce-decay-$index',
+              [a.selector.bounceDecay],
+              0,
+              20,
+              3,
+              (s) => putSelector(
+                  selectorWith(a.selector, bounceDecay: s.first)),
+              decimals: 2),
           _plainRow(
             context,
             l10n.textAnimatorOrder,
@@ -954,6 +989,9 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
         delay: BridgeScalar.static_(0.1),
         delayEase: BridgeScalar.static_(0),
         order: BridgeStaggerOrder.forward,
+        bounceAmplitude: BridgeScalar.static_(0),
+        bounceFrequency: BridgeScalar.static_(2),
+        bounceDecay: BridgeScalar.static_(3),
         minAmount: BridgeScalar.static_(0),
         maxAmount: BridgeScalar.static_(100),
         wiggles: BridgeScalar.static_(2),
@@ -1097,6 +1135,9 @@ enum TextAnimatorValue {
   staggerAmount,
   staggerDelay,
   staggerDelayEase,
+  staggerBounceAmplitude,
+  staggerBounceFrequency,
+  staggerBounceDecay,
   axis0,
   axis1,
   axis2,
@@ -1148,7 +1189,10 @@ List<TextAnimatorValue> textAnimatorValuesOf(BridgeTextAnimator a,
           kind == BridgeSelectorKind.wiggly,
         TextAnimatorValue.staggerAmount ||
         TextAnimatorValue.staggerDelay ||
-        TextAnimatorValue.staggerDelayEase =>
+        TextAnimatorValue.staggerDelayEase ||
+        TextAnimatorValue.staggerBounceAmplitude ||
+        TextAnimatorValue.staggerBounceFrequency ||
+        TextAnimatorValue.staggerBounceDecay =>
           kind == BridgeSelectorKind.stagger,
         _ when textAnimatorAxisIndex(value) != null =>
           textAnimatorAxisIndex(value)! < a.axes.length,
@@ -1285,6 +1329,11 @@ String textAnimatorValueLabel(TextAnimatorValue value,
       TextAnimatorValue.staggerAmount => l10n.textAnimatorAmount,
       TextAnimatorValue.staggerDelay => l10n.textAnimatorDelay,
       TextAnimatorValue.staggerDelayEase => l10n.textAnimatorDelayEase,
+      TextAnimatorValue.staggerBounceAmplitude =>
+        l10n.textAnimatorBounceAmplitude,
+      TextAnimatorValue.staggerBounceFrequency =>
+        l10n.textAnimatorBounceFrequency,
+      TextAnimatorValue.staggerBounceDecay => l10n.textAnimatorBounceDecay,
       _ when textAnimatorAxisIndex(value) != null =>
         l10n.textAnimatorAxisLabel(fontAxisName('', '', _axisTag(a, value))),
       TextAnimatorValue.rangeStart => l10n.textAnimatorRangeStart,
@@ -1325,6 +1374,8 @@ double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.correlation => 50,
       TextAnimatorValue.staggerAmount => 100,
       TextAnimatorValue.staggerDelay => 0.1,
+      TextAnimatorValue.staggerBounceFrequency => 2,
+      TextAnimatorValue.staggerBounceDecay => 3,
       TextAnimatorValue.maxAmount ||
       TextAnimatorValue.rangeEnd ||
       TextAnimatorValue.scaleX ||
@@ -1371,6 +1422,9 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.staggerAmount => a.selector.amount,
       TextAnimatorValue.staggerDelay => a.selector.delay,
       TextAnimatorValue.staggerDelayEase => a.selector.delayEase,
+      TextAnimatorValue.staggerBounceAmplitude => a.selector.bounceAmplitude,
+      TextAnimatorValue.staggerBounceFrequency => a.selector.bounceFrequency,
+      TextAnimatorValue.staggerBounceDecay => a.selector.bounceDecay,
       _ => switch (textAnimatorAxisIndex(value)) {
           final i? when i < a.axes.length => a.axes[i].value,
           _ => const BridgeScalar.static_(0),
@@ -1423,6 +1477,12 @@ BridgeTextAnimator animatorWithScalar(
         animatorWith(a, selector: selectorWith(a.selector, delay: to)),
       TextAnimatorValue.staggerDelayEase =>
         animatorWith(a, selector: selectorWith(a.selector, delayEase: to)),
+      TextAnimatorValue.staggerBounceAmplitude => animatorWith(a,
+          selector: selectorWith(a.selector, bounceAmplitude: to)),
+      TextAnimatorValue.staggerBounceFrequency => animatorWith(a,
+          selector: selectorWith(a.selector, bounceFrequency: to)),
+      TextAnimatorValue.staggerBounceDecay =>
+        animatorWith(a, selector: selectorWith(a.selector, bounceDecay: to)),
       _ => switch (textAnimatorAxisIndex(value)) {
           final i? when i < a.axes.length => animatorWith(a, axes: [
               for (var k = 0; k < a.axes.length; k++)
@@ -1491,6 +1551,9 @@ BridgeRangeSelector selectorWith(
   BridgeScalar? delay,
   BridgeScalar? delayEase,
   BridgeStaggerOrder? order,
+  BridgeScalar? bounceAmplitude,
+  BridgeScalar? bounceFrequency,
+  BridgeScalar? bounceDecay,
   BridgeScalar? minAmount,
   BridgeScalar? maxAmount,
   BridgeScalar? wiggles,
@@ -1520,6 +1583,9 @@ BridgeRangeSelector selectorWith(
       delay: delay ?? s.delay,
       delayEase: delayEase ?? s.delayEase,
       order: order ?? s.order,
+      bounceAmplitude: bounceAmplitude ?? s.bounceAmplitude,
+      bounceFrequency: bounceFrequency ?? s.bounceFrequency,
+      bounceDecay: bounceDecay ?? s.bounceDecay,
     );
 
 /// What a Stagger selector's order is called.
