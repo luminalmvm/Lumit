@@ -68,6 +68,7 @@ const CONTROL = {
   mask_path: "Masks",
   curve: "Curve",
   shape: "Points",
+  gradient: "Gradient",
 };
 
 /** What a colour-name row lists, by the config list it draws from. */
@@ -139,6 +140,8 @@ function rangeCell(p) {
       return "2 to 32 points in the unit square";
     case "shape":
       return "Up to 32 points";
+    case "gradient":
+      return "Up to 16 stops";
     default:
       return "-";
   }
@@ -178,6 +181,7 @@ function defaultCell(p) {
         ? "A flat line across the middle"
         : "The identity diagonal";
     case "shape":
+    case "gradient":
       return "None";
     default:
       return "-";
