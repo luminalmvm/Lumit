@@ -47,6 +47,8 @@ pub struct Depth {
     /// What the pack's manifest calls the tensors, how big a frame it wants,
     /// and how to read what comes back.
     names: DepthAnything,
+    /// Depth Anything 3 takes a batch of views, so the frame goes in as one.
+    views: bool,
     identity: [u8; 32],
     pack: String,
 }
@@ -66,21 +68,23 @@ impl Depth {
             return Err(MlError::RuntimeMissing);
         }
         let installed = store::find(Task::Depth).ok_or(MlError::PackMissing(Task::Depth))?;
-        let Some(Arch::DepthAnything(names)) =
-            installed.manifest.model.as_ref().map(|model| &model.arch)
-        else {
-            // The manifest parser holds task and arch to each other, so this
-            // is a pack claiming depth with a family that does something else,
-            // which only a hand-written manifest can be.
-            return Err(MlError::PackUnreadable);
+        let (names, views) = match installed.manifest.model.as_ref().map(|model| &model.arch) {
+            Some(Arch::DepthAnything(names)) => (names.clone(), false),
+            Some(Arch::DepthAnything3(names)) => (names.clone(), true),
+            _ => {
+                // The manifest parser holds task and arch to each other, so this
+                // is a pack claiming depth with a family that does something else,
+                // which only a hand-written manifest can be.
+                return Err(MlError::PackUnreadable);
+            }
         };
-        let names = names.clone();
         let identity = store::identity(&installed.manifest);
         let pack = installed.manifest.id.clone();
         let session = Session::open(&installed.path, &names.file, Prefer::Platform)?;
         Ok(Depth {
             session,
             names,
+            views,
             identity,
             pack,
         })
@@ -128,11 +132,14 @@ impl Depth {
         );
         let small = tensor::resample_u8(rgba, width, height, fed_width, fed_height);
         let planes = tensor::pack_u8(&small, fed_width, fed_height, Some(self.names.normalise));
-        let outputs = self.session.run(&[(
-            self.names.input.as_str(),
-            &[1, 3, fed_height, fed_width],
-            planes.as_slice(),
-        )])?;
+        let (frame, views) = (
+            [1, 3, fed_height, fed_width],
+            [1, 1, 3, fed_height, fed_width],
+        );
+        let shape: &[usize] = if self.views { &views } else { &frame };
+        let outputs = self
+            .session
+            .run(&[(self.names.input.as_str(), shape, planes.as_slice())])?;
 
         let (_, shape, read) = outputs
             .iter()
@@ -174,6 +181,24 @@ pub fn installed_identity() -> Option<[u8; 32]> {
 /// all, both come back flat rather than as a full-range picture of rounding
 /// noise.
 fn quantise(read: &[f32], kind: DepthKind) -> Vec<u16> {
+    // A distance is taken as one over itself first, which makes nearer larger
+    // and spreads the plane the way an inverse relative one is spread.
+    let reciprocal: Vec<f32>;
+    let read = if kind == DepthKind::Distance {
+        reciprocal = read
+            .iter()
+            .map(|d| {
+                if *d > f32::EPSILON {
+                    d.recip()
+                } else {
+                    f32::NAN
+                }
+            })
+            .collect();
+        reciprocal.as_slice()
+    } else {
+        read
+    };
     let mut low = f32::INFINITY;
     let mut high = f32::NEG_INFINITY;
     for value in read.iter().copied().filter(|v| v.is_finite()) {
@@ -195,7 +220,7 @@ fn quantise(read: &[f32], kind: DepthKind) -> Vec<u16> {
             // measures the other way and is turned round here so a plane
             // always means the same thing to the draw.
             let at = match kind {
-                DepthKind::InverseRelative => at,
+                DepthKind::InverseRelative | DepthKind::Distance => at,
                 DepthKind::Metric => 1.0 - at,
             };
             (at.clamp(0.0, 1.0) * f32::from(u16::MAX) + 0.5) as u16
@@ -237,6 +262,10 @@ mod tests {
         // A metric model measures the other way round and is turned over.
         let far = quantise(&read, DepthKind::Metric);
         assert_eq!(far, [65535, 37449, 56173, 0]);
+
+        // A distance is read as one over itself, so the nearest is still top.
+        let seen = quantise(&[4.0, 1.0, 2.0, 0.5], DepthKind::Distance);
+        assert_eq!(seen, [0, 28086, 9362, 65535]);
     }
 
     /// Where the real Depth Anything file sits on the reference machine.

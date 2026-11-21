@@ -147,6 +147,10 @@ pub enum DepthKind {
     InverseRelative,
     /// Larger is further, in whatever unit the model was trained on.
     Metric,
+    /// Larger is further, and the plane is read as one over it, so a near
+    /// thing is spread out the way Depth Anything V2 spreads it. What Depth
+    /// Anything 3 emits.
+    Distance,
 }
 
 /// The mean and standard deviation a model's input is normalised by, after
@@ -203,7 +207,9 @@ impl Default for Rife {
     }
 }
 
-/// Depth Anything: one frame in, one plane of depth out (§4).
+/// Depth Anything: one frame in, one plane of depth out (§4). Depth Anything
+/// 3 uses the same names, but takes the frame as `[1, 1, 3, h, w]`, a batch of
+/// one view.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DepthAnything {
@@ -465,6 +471,9 @@ pub enum Arch {
     Rife(Rife),
     /// Depth, Depth Anything.
     DepthAnything(DepthAnything),
+    /// Depth, Depth Anything 3.
+    #[serde(rename = "depth-anything-3")]
+    DepthAnything3(DepthAnything),
     /// Matte, Robust Video Matting.
     Rvm(Rvm),
     /// Matte, BiRefNet.
@@ -484,7 +493,7 @@ impl Arch {
     pub fn task(&self) -> Task {
         match self {
             Arch::Rife(_) => Task::Synthesis,
-            Arch::DepthAnything(_) => Task::Depth,
+            Arch::DepthAnything(_) | Arch::DepthAnything3(_) => Task::Depth,
             Arch::Rvm(_) | Arch::Birefnet(_) => Task::Matte,
             Arch::Sam2(_) => Task::Segmentation,
             Arch::Whisper(_) => Task::Speech,
@@ -497,7 +506,7 @@ impl Arch {
     pub fn files(&self) -> Vec<&str> {
         match self {
             Arch::Rife(m) => vec![m.file.as_str()],
-            Arch::DepthAnything(m) => vec![m.file.as_str()],
+            Arch::DepthAnything(m) | Arch::DepthAnything3(m) => vec![m.file.as_str()],
             Arch::Rvm(m) => vec![m.file.as_str()],
             Arch::Birefnet(m) => vec![m.file.as_str()],
             Arch::Sam2(m) => vec![m.encoder.as_str(), m.decoder.as_str()],
