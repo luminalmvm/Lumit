@@ -668,6 +668,12 @@ pub trait EffectDef: Sync + Send + 'static {
         [0.0, 0.0]
     }
 
+    /// How many texels wider and taller this op makes a `w` x `h` picture,
+    /// grown about its middle. Only Tile grows one.
+    fn grows(&self, _p: super::params::Params<'_>, _w: u32, _h: u32) -> [u32; 2] {
+        [0, 0]
+    }
+
     /// Where this op's picture can reach, given where the picture it is
     /// handed reaches: `[left, top, right, bottom]` in the raster pixels its
     /// places are measured in. A node graph box gives its picture that much
