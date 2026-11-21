@@ -152,4 +152,12 @@ void main() {
     expect(trust, ReleaseTrust.badSignature);
     expect(manifest, isNull);
   });
+
+  // A pin that is not a key refuses every update, and only users find out.
+  test('every pinned key is a 32-byte public key', () {
+    expect(updateSigningKeys, isNotEmpty);
+    for (final key in updateSigningKeys) {
+      expect(base64.decode(key), hasLength(32), reason: key);
+    }
+  });
 }
