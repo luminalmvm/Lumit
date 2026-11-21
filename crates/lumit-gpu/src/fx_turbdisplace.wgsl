@@ -87,11 +87,11 @@ fn turbulent_displace(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.bulge > 0.5) {
         // == cpu::turbulent_bulge: the slope by central differences.
         // The plain Perlin sum (flags 1): a fold's crease would tear.
-        let smooth = FractalField(p.seed_x, p.octaves, p.gain, p.lacunarity, 1u, p.cycle);
+        let plain = FractalField(p.seed_x, p.octaves, p.gain, p.lacunarity, 1u, p.cycle);
         let e = 0.05;
         let k = 0.25 / (2.0 * e);
-        nx = (nc_fractal(smooth, qx + e, qy, p.z) - nc_fractal(smooth, qx - e, qy, p.z)) * k;
-        ny = (nc_fractal(smooth, qx, qy + e, p.z) - nc_fractal(smooth, qx, qy - e, p.z)) * k;
+        nx = (nc_fractal(plain, qx + e, qy, p.z) - nc_fractal(plain, qx - e, qy, p.z)) * k;
+        ny = (nc_fractal(plain, qx, qy + e, p.z) - nc_fractal(plain, qx, qy - e, p.z)) * k;
     } else {
         nx = nc_fractal(field_x, qx, qy, p.z);
         ny = nc_fractal(field_y, qx, qy, p.z);
