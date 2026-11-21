@@ -226,8 +226,31 @@ fn a_stored_keymap_keeps_the_defaults_for_actions_it_never_heard_of() {
     );
     // And one they deliberately took away.
     older.unbind_action(KeyContext::Global, &"marker.add".into());
+    // Written when Ctrl+D added the default transition in Cut, before Duplicate.
+    let old_d: Chord = "Mod+D".parse().unwrap();
+    older
+        .bindings
+        .retain(|b| !(b.context == KeyContext::Cut && b.action.0 == "cut.duplicate"));
+    older.rebind_action(
+        KeyContext::Cut,
+        &"cut.transition.default".into(),
+        old_d.clone(),
+    );
+    // A file that named Duplicate and left Ctrl+D elsewhere moved it on purpose.
+    let mut moved = older.clone();
+    moved.unbind_action(KeyContext::Cut, &"cut.duplicate".into());
 
     let restored = with_new_defaults(older);
+    assert_eq!(
+        restored.lookup(KeyContext::Cut, &old_d),
+        Some(&"cut.duplicate".into()),
+        "a retired default does not sit ahead of the key's new action"
+    );
+    assert_eq!(
+        with_new_defaults(moved).lookup(KeyContext::Cut, &old_d),
+        Some(&"cut.transition.default".into()),
+        "but a file that already knew Duplicate keeps its own choice"
+    );
     assert_eq!(
         restored.lookup(KeyContext::Global, &"Mod+C".parse().unwrap()),
         Some(&"edit.copy".into()),
