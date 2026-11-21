@@ -1,0 +1,88 @@
+---
+title: Flicker
+description: "Makes the layer's light waver over time, as a failing light or an old projector does."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Flicker is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Flicker" category="stylise" slug="flicker" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Raises and lowers the layer's brightness at random, frame by frame. The same flicker can move
+the contrast and the opacity with it, and wander each colour channel on its own. The pattern
+comes from the seed and the layer's time, and a frame draws the same flicker every time.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 100; up to 400 | 50 | Per cent |
+| **Speed** | Slider | 0 to 60; higher | 12 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Motion** | Dropdown | Smooth · Hold | Smooth | - |
+| **Time offset** | Slider | -10 to 10; any value by typing | 0 | Seconds |
+| **Bias** | Slider | -100 to 100 | 0 | - |
+| **Light** | Slider | 0 to 100; up to 400 | 100 | Per cent |
+| **Colour** | Slider | 0 to 100; up to 400 | 0 | Per cent |
+| **Contrast** | Slider | 0 to 100; up to 400 | 0 | Per cent |
+| **Opacity** | Slider | 0 to 100; up to 400 | 0 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** is how far the light moves. The four rows below it each take a share of it.
+- **Speed** is how many flickers there are a second.
+- **Seed** chooses which pattern of flicker is drawn.
+- **Motion**: **Smooth** eases from one flicker to the next. **Hold** keeps each one until
+  the next, then jumps.
+- **Time offset** moves the pattern earlier or later, in seconds.
+- **Bias** below 0 makes the flicker mostly dip below the layer's own light, and above 0 mostly
+  flash above it. At 0 it goes both ways evenly.
+- **Light** is how much the brightness flickers.
+- **Colour** is how much each colour channel flickers on its own.
+- **Contrast** is how much the contrast flickers, about a mid grey.
+- **Opacity** is how much the layer fades out on a dip. It never goes above the layer's own
+  opacity.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+Position and blur do not flicker.
+
+## Presets
+
+On the effect's menu, under **Presets**.
+
+- **Neon tube** sets **Amount** to 70, **Speed** to 20, **Motion** to **Hold** and **Bias**
+  to -70.
+- **Failing light** sets **Amount** to 100, **Speed** to 4 and **Bias** to -90.
+- **Film projector** sets **Amount** to 12, **Speed** to 24 and **Contrast** to 40.
+- **CRT** sets **Amount** to 10, **Speed** to 50, **Motion** to **Hold** and **Colour** to 30.
+
+## Related
+
+- [Flash](/effects/stylise/flash/)
+- [Film](/effects/stylise/film/)
+- [Jolt](/effects/distortion/jolt/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)
