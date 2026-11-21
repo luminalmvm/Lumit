@@ -346,8 +346,14 @@ class _CurveEditorState extends State<CurveEditor> {
 
   void _addAt(Offset local) {
     if (_nearest(local) >= 0) return; // a tap on a point is not a new point
+    if (_withPointAt(local) case (final next, _)) widget.onCommit(next);
+  }
+
+  /// The points with a new one at [local], and where it went; null where
+  /// the curve is full or a neighbour is too close.
+  (List<List<double>>, int)? _withPointAt(Offset local) {
     final points = _points;
-    if (points.length >= curveMaxPoints) return;
+    if (points.length >= curveMaxPoints) return null;
     final at = _toCurve(local);
     final next = [
       for (final p in points) [p[0], p[1]]
@@ -357,20 +363,24 @@ class _CurveEditorState extends State<CurveEditor> {
     while (i < next.length && next[i][0] < at[0]) {
       i++;
     }
-    if (i > 0 && (at[0] - next[i - 1][0]).abs() < _minGap) return;
-    if (i < next.length && (next[i][0] - at[0]).abs() < _minGap) return;
+    if (i > 0 && (at[0] - next[i - 1][0]).abs() < _minGap) return null;
+    if (i < next.length && (next[i][0] - at[0]).abs() < _minGap) return null;
     next.insert(i, at);
-    widget.onCommit(next);
+    return (next, i);
   }
 
+  /// A press on a point holds it; a press elsewhere puts a point there and
+  /// holds that, so one gesture adds and places it.
   void _onPanStart(DragStartDetails d) {
     final i = _nearest(d.localPosition);
-    if (i < 0) return;
+    final added = i < 0 ? _withPointAt(d.localPosition) : null;
+    if (i < 0 && added == null) return;
     setState(() {
-      _held = i;
-      _dragging = [
-        for (final p in _points) [p[0], p[1]]
-      ];
+      _held = added?.$2 ?? i;
+      _dragging = added?.$1 ??
+          [
+            for (final p in _points) [p[0], p[1]]
+          ];
     });
   }
 

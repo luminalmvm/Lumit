@@ -38,6 +38,7 @@ use crate::fx::{
 use lumit_fx_macros::Effect;
 
 pub mod rows;
+pub mod sprite_shape;
 
 /// Particulate's declared **data** output: the same particles it
 /// draws, offered as a stream. Teal, like every geometry socket, and drawn from
@@ -701,6 +702,23 @@ pub struct Particulate {
     )]
     pub feather: f32,
 
+    /// What Sprite mode stamps: the Sprite layer's picture, or a ready-made
+    /// shape tinted by the particle's colour ([`sprite_shape`]).
+    #[choice(label = "Sprite shape", options = *sprite_shape::SpriteShape::OPTIONS, default = 0)]
+    pub sprite_shape: u32,
+
+    /// How many points a Star sprite has.
+    #[counter(
+        label = "Star points",
+        min = 4,
+        max = 8,
+        default = 5,
+        hard_min = 4,
+        hard_max = 8,
+        unit = Raw
+    )]
+    pub sprite_star_points: i32,
+
     /// The layer drawn per particle in Sprite mode. **Unset
     /// draws discs** — a render mode must always draw something, which is this
     /// effect's documented deviation from the unset-is-identity convention.
@@ -858,6 +876,19 @@ impl Particulate {
         }
     }
 
+    /// The ready-made shape Sprite mode stamps, as a [`sprite_shape::key`], or
+    /// `None` when it stamps the Sprite layer (or is not in Sprite mode).
+    #[must_use]
+    pub fn sprite_shape_key(self) -> Option<(sprite_shape::SpriteShape, u32)> {
+        if points::RenderMode::from_code(self.mode) != points::RenderMode::Sprite {
+            return None;
+        }
+        sprite_shape::key(
+            sprite_shape::SpriteShape::from_code(self.sprite_shape),
+            self.sprite_star_points.clamp(4, 8) as u32,
+        )
+    }
+
     /// How the stream is drawn — the Render group, reduced.
     ///
     /// **Streak length is not scaled by the raster** and must not be: it is a
@@ -953,44 +984,5 @@ impl EffectDef for ParticulateDef {
     /// pixels this frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Particulate::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
-    }
-}
-
-/// The op that gives `layer` in `comp` the effect stack `effects`. An effect
-/// arriving that draws in the scene, by any route, puts a 2D layer in 3D in the
-/// same step, so its switch, gizmo and views agree with where it draws.
-#[must_use]
-pub fn set_effects(
-    comp: uuid::Uuid,
-    layer: &crate::model::Layer,
-    effects: Vec<crate::model::EffectInstance>,
-) -> crate::ops::Op {
-    use crate::ops::Op;
-    let before: Vec<_> = layer
-        .effects
-        .iter()
-        .filter(|e| rows::is_scene(e))
-        .map(|e| e.id)
-        .collect();
-    let into_3d = !layer.switches.three_d
-        && effects.iter().any(|e| {
-            (rows::is_scene(e) && !before.contains(&e.id))
-                || (super::smoke::is_smoke(e) && !layer.effects.iter().any(|b| b.id == e.id))
-        });
-    let set = Op::SetLayerEffects {
-        comp,
-        layer: layer.id,
-        effects,
-    };
-    if !into_3d {
-        return set;
-    }
-    let three_d = Op::SetLayerThreeD {
-        comp,
-        layer: layer.id,
-        three_d: true,
-    };
-    Op::Batch {
-        ops: vec![set, three_d],
     }
 }

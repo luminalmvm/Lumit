@@ -28,7 +28,7 @@ Warping/displacement of one layer scaled with the contents of another.
 | **Vertical channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Green | - |
 | **Vertical amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
 | **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
-| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Edges** | Dropdown | None · Edge repeat · Mirror repeat | Edge repeat | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -50,9 +50,9 @@ In the Effect Controls panel:
   this layer. **Centre** centres it at its own size. Outside the map nothing moves.
   An effect saved before this row existed stays on Stretch to fit.
 - **Horizontal amount** and **Vertical amount** adjust the scaling multiplier.
-- **Edges** adjusts what resulting transparent pixels are filled with. **Repeat** 
-  smears the border pixel and keeps the frame full. **Transparent** fills with 
-  nothing. **Mirror** reflects the picture back.
+- **Edges** adjusts what resulting transparent pixels are filled with. **Edge repeat**
+  smears the border pixel and keeps the frame full. **None** fills with
+  nothing. **Mirror repeat** reflects the picture back.
 - **Mix**: how much of the result replaces the original.
 - **Blend**: the blend mode the result is laid over the original with.
 - **Invert** reads the map the other way round.

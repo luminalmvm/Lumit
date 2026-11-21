@@ -138,6 +138,24 @@ impl Slot {
         }
     }
 
+    /// The same slot with this property's own number set to `own`: what `value`
+    /// reads when keys under the expression say what it is at this moment.
+    #[must_use]
+    pub fn with_own(mut self, own: f64) -> Slot {
+        if self.len == 0 {
+            self.len = 1;
+        }
+        let at = if self.len == 1 {
+            0
+        } else {
+            usize::from(self.axis)
+        };
+        if let Some(to) = self.value.get_mut(at) {
+            *to = own;
+        }
+        self
+    }
+
     /// Read a slot back out of a property's `extra`.
     #[must_use]
     pub fn read(extra: &serde_json::Map<String, serde_json::Value>) -> Slot {
@@ -174,6 +192,14 @@ impl Slot {
     /// Write this slot into a property's `extra`.
     pub fn write(&self, extra: &mut serde_json::Map<String, serde_json::Value>) {
         let mut kept = serde_json::Map::new();
+        // The keys kept under the expression live in the same note, and are
+        // not this slot's to drop.
+        if let Some(keys) = extra
+            .get(SLOT_KEY)
+            .and_then(|note| note.get(crate::anim::KEYS_UNDER_EXPRESSION))
+        {
+            kept.insert(crate::anim::KEYS_UNDER_EXPRESSION.into(), keys.clone());
+        }
         match self.values() {
             [] => {}
             [one] => {
@@ -257,3 +283,40 @@ pub(crate) fn run(
 
 #[cfg(test)]
 mod tests;
+
+/// The keys under the expression being evaluated on this thread, and how far
+/// comp time is ahead of their timebase: what `loopOut`, `valueAtTime` and
+/// `value` read on the property an expression is written on. Set around one
+/// evaluation by [`with_own_keys`], so an expression that reads another
+/// property, whose own expression runs inside it, gets its own and hands this
+/// one back.
+#[derive(Clone)]
+pub(crate) struct OwnKeys {
+    pub keys: Vec<crate::anim::Keyframe>,
+    pub offset: f64,
+}
+
+thread_local! {
+    static OWN_KEYS: std::cell::RefCell<Option<std::rc::Rc<OwnKeys>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `work` with `own` as the evaluated property's keys.
+pub(crate) fn with_own_keys<T>(own: Option<OwnKeys>, work: impl FnOnce() -> T) -> T {
+    struct Restore(Option<std::rc::Rc<OwnKeys>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let was = self.0.take();
+            OWN_KEYS.with(|k| *k.borrow_mut() = was);
+        }
+    }
+    let was = OWN_KEYS.with(|k| k.replace(own.map(std::rc::Rc::new)));
+    let _restore = Restore(was);
+    work()
+}
+
+/// The keys of the property being evaluated, if it has any under its
+/// expression.
+pub(crate) fn own_keys() -> Option<std::rc::Rc<OwnKeys>> {
+    OWN_KEYS.with(|k| k.borrow().clone())
+}

@@ -203,13 +203,36 @@ pub struct GpuContext {
     /// tag, so a lost device can be blamed on what was running. Shared with
     /// every handle, as `lost` is.
     in_flight: InFlight,
+    /// The batches handed to the card within a frame by [`Self::flush_paced`]
+    /// and not yet waited for, oldest first. Shared with every handle, as
+    /// `in_flight` is: a nested comp is drawn through a handle of its own, and
+    /// it is the one card that falls behind.
+    batches_in_flight: BatchesInFlight,
     /// Tags noted on this handle whose work is not submitted yet. They join
     /// `in_flight` at [`Self::submit`], so another handle seeing the queue
     /// empty before then can't clear them.
     noted: std::cell::RefCell<Vec<u64>>,
+    /// The last command buffer this handle submitted, for [`Self::end_frame`]
+    /// to name the frame it closes by.
+    last_submission: std::cell::RefCell<Option<wgpu::SubmissionIndex>>,
+    /// The frames submitted to this device and not yet waited for, oldest
+    /// first, each by its last submission. Never longer than
+    /// [`FRAMES_IN_FLIGHT`]: see [`Self::end_frame`]. Shared with every
+    /// handle, as `in_flight` is: a nested comp and the frame after this one
+    /// are each drawn through a handle of their own, and it is the one card
+    /// that falls behind.
+    frames_in_flight: FramesInFlight,
 }
 
 type InFlight = std::sync::Arc<std::sync::Mutex<Vec<u64>>>;
+type FramesInFlight =
+    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
+
+/// How many frames a device is left with before it waits for the
+/// oldest ([`GpuContext::end_frame`]). Two keeps the card fed while the CPU
+/// records the next frame, and holds at most two frames of intermediates more
+/// than the one being made.
+const FRAMES_IN_FLIGHT: usize = 2;
 
 /// The multisample counts the composite is willing to use, highest first.
 /// Nothing outside this list is ever asked for.
@@ -363,6 +386,41 @@ pub fn video_memory_bytes() -> u64 {
     {
         0
     }
+}
+
+/// Where the device's own reports are written: its errors and its loss. The
+/// bridge sets it, so they reach the diagnostics file a bug report is asked
+/// for; the console [`note!`] writes to does not exist in a windowed build.
+static DIAGNOSTICS: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
+
+/// How many uncaptured errors a session writes to the diagnostics file. The
+/// first ones say what went wrong; a fault that repeats every frame would
+/// otherwise fill the file with the same line.
+const ERRORS_RECORDED: u32 = 20;
+static ERRORS_SEEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Send the device's errors and its loss to `record` as well as the console.
+pub fn diagnostics_to(record: fn(&str)) {
+    let _ = DIAGNOSTICS.set(record);
+}
+
+fn diagnose(line: &str) {
+    if let Some(record) = DIAGNOSTICS.get() {
+        record(line);
+    }
+}
+
+/// An error and every cause under it, on one line: wgpu's own `Display` says
+/// only "Validation Error", and the reason is in the sources.
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut said = error.to_string();
+    let mut next = error.source();
+    while let Some(cause) = next {
+        said.push_str(": ");
+        said.push_str(&cause.to_string());
+        next = cause.source();
+    }
+    said
 }
 
 /// Which adapter was picked, as one line, published the first time a context
@@ -531,6 +589,74 @@ fn adapter_is_required(value: Option<&str>) -> bool {
     matches!(value, Some(v) if !v.is_empty() && v != "0")
 }
 
+/// The instance every engine device is made from, on the platform's pinned
+/// backend.
+#[cfg(not(target_arch = "wasm32"))]
+fn engine_instance() -> wgpu::Instance {
+    // `from_env_or_default` supplies the rest of the descriptor (flags, the
+    // DX12 shader compiler, the GLES minor version) from `WGPU_*`, so those
+    // stay tunable — but `backends` is set explicitly *after* it, so the pin
+    // wins and `WGPU_BACKEND` cannot move it. That is intended: an
+    // environment variable must not be able to break the Viewer.
+    #[cfg(windows)]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::DX12,
+        ..wgpu::InstanceDescriptor::from_env_or_default()
+    });
+    // On a hybrid iGPU+dGPU box (e.g. AMD + Nvidia) mixing GL and Vulkan into one
+    // enumeration makes PowerPreference::HighPerformance pick unreliably (commonly
+    // picking the AMD iGPU driving the display), which can cause VRAM exhaustion
+    // during command submission. Pinning Vulkan prevents that.
+    #[cfg(target_os = "linux")]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::VULKAN,
+        ..wgpu::InstanceDescriptor::from_env_or_default()
+    });
+    #[cfg(target_os = "macos")]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::METAL,
+        ..wgpu::InstanceDescriptor::from_env_or_default()
+    });
+    #[cfg(not(any(
+        windows,
+        target_os = "linux",
+        target_os = "macos",
+        target_arch = "wasm32"
+    )))]
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+    instance
+}
+
+/// Whether the adapter a new engine device would be made on is real hardware
+/// rather than a CPU rasteriser (WARP, lavapipe). False while the card a
+/// faulted device was on is still being reset by its driver, which is when a
+/// rebuild lands on the rasteriser: the render worker asks again later, and
+/// goes back to the card once it answers.
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub fn hardware_adapter_ready() -> bool {
+    let power = wgpu::PowerPreference::from_env();
+    pollster::block_on(
+        engine_instance().request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: power.unwrap_or(wgpu::PowerPreference::HighPerformance),
+            ..Default::default()
+        }),
+    )
+    .is_some_and(|adapter| {
+        !matches!(
+            adapter.get_info().device_type,
+            wgpu::DeviceType::Cpu | wgpu::DeviceType::Other
+        )
+    })
+}
+
+type BatchesInFlight =
+    std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<wgpu::SubmissionIndex>>>;
+
+/// How many batches inside one frame a device is left with before
+/// [`GpuContext::flush_paced`] waits for the oldest.
+const BATCHES_IN_FLIGHT: usize = 2;
+
 impl GpuContext {
     /// Wrap an existing device/queue (eframe's render state — wgpu handles
     /// are internally reference-counted, so cloning shares the one device).
@@ -566,7 +692,10 @@ impl GpuContext {
             // device goes, and never claims to.
             lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             in_flight: InFlight::default(),
+            batches_in_flight: BatchesInFlight::default(),
             noted: std::cell::RefCell::new(Vec::new()),
+            last_submission: std::cell::RefCell::new(None),
+            frames_in_flight: FramesInFlight::default(),
         }
     }
 
@@ -669,7 +798,10 @@ impl GpuContext {
             submits: std::sync::Arc::clone(&self.submits),
             lost: std::sync::Arc::clone(&self.lost),
             in_flight: std::sync::Arc::clone(&self.in_flight),
+            batches_in_flight: std::sync::Arc::clone(&self.batches_in_flight),
             noted: std::cell::RefCell::new(Vec::new()),
+            last_submission: std::cell::RefCell::new(None),
+            frames_in_flight: std::sync::Arc::clone(&self.frames_in_flight),
         }
     }
 
@@ -712,6 +844,7 @@ impl GpuContext {
     ) -> wgpu::SubmissionIndex {
         let mut n = 0u64;
         let index = self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
+        *self.last_submission.borrow_mut() = Some(index.clone());
         self.submits
             .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
         let noted = std::mem::take(&mut *self.noted.borrow_mut());
@@ -1039,13 +1172,67 @@ impl GpuContext {
 
     /// Close one [`Self::begin_frame`]. On the outermost one, submit whatever
     /// the batch holds and empty the work-texture pool.
+    ///
+    /// **And wait for the card when it has fallen behind.** Recording a frame
+    /// takes the CPU a few milliseconds; running it can take the card far
+    /// longer, and a texture the frame dropped cannot be freed until the card
+    /// has run the commands that use it. A caller that makes frames back to
+    /// back, a cache fill or a playback run, therefore held every frame it was
+    /// ahead of the card by: a comp whose frames each take 200 MB of
+    /// intermediates filled a 12 GB card and then the system memory the driver
+    /// spills into, and the device was lost. So no more than
+    /// [`FRAMES_IN_FLIGHT`] frames are left with the card: closing one more
+    /// waits for the oldest. A card that keeps up never waits here, and one
+    /// that does not is the limit on how fast frames come either way.
     pub fn end_frame(&self) {
         let depth = self.frame_depth.get().saturating_sub(1);
         self.frame_depth.set(depth);
         if depth == 0 {
             self.flush();
             self.release_frame_memory();
+            // The frame's last submission comes after every batch it paced.
+            if let Ok(mut batches) = self.batches_in_flight.lock() {
+                batches.clear();
+            }
+            self.wait_for_frames_behind();
         }
+    }
+
+    /// See [`Self::end_frame`].
+    fn wait_for_frames_behind(&self) {
+        let Some(closed) = self.last_submission.borrow_mut().take() else {
+            return;
+        };
+        // The lock is let go before the wait: another handle closing a frame
+        // meanwhile waits for its own oldest, not for this one.
+        let oldest = {
+            let Ok(mut frames) = self.frames_in_flight.lock() else {
+                return;
+            };
+            frames.push_back(closed);
+            if frames.len() <= FRAMES_IN_FLIGHT {
+                return;
+            }
+            frames.pop_front()
+        };
+        if let Some(oldest) = oldest {
+            // A lost device answers no wait.
+            if self.device_lost() {
+                return;
+            }
+            let done = self
+                .device
+                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
+            self.forget_finished(done);
+        }
+    }
+
+    /// How many frames this device has been left with and not waited for. The test of [`Self::end_frame`] reads it; nothing else does.
+    #[must_use]
+    pub fn frames_in_flight(&self) -> usize {
+        self.frames_in_flight
+            .lock()
+            .map_or(0, |frames| frames.len())
     }
 
     /// Offer a work texture back to the frame's pool, for a later pass in the
@@ -1113,6 +1300,44 @@ impl GpuContext {
         }
     }
 
+    /// Submit whatever the batch holds, as [`Self::flush`] does, and keep the
+    /// card no more than [`BATCHES_IN_FLIGHT`] batches behind.
+    ///
+    /// **Why the wait.** A texture dropped while a frame is recorded is freed
+    /// only once the card has run the commands that use it. Handing a batch
+    /// over is not running it: a frame of heavy Precomps recorded each
+    /// Precomp, handed it over and went on to the next while the card was
+    /// still on the first, so every one of their working pictures was alive at
+    /// once. One frame of a test project reached 10 GB on a 12 GB card, and
+    /// the card ran out. Waiting for the oldest batch here holds at most a few
+    /// Precomps' worth; a card that keeps up never waits.
+    pub fn flush_paced(&self) {
+        let held = self.frame.borrow_mut().take();
+        let Some(enc) = held else {
+            return;
+        };
+        let index = self.submit([enc.finish()]);
+        let oldest = {
+            let Ok(mut batches) = self.batches_in_flight.lock() else {
+                return;
+            };
+            batches.push_back(index);
+            if batches.len() <= BATCHES_IN_FLIGHT {
+                return;
+            }
+            batches.pop_front()
+        };
+        if let Some(oldest) = oldest {
+            if self.device_lost() {
+                return;
+            }
+            let done = self
+                .device
+                .poll(wgpu::Maintain::WaitForSubmissionIndex(oldest));
+            self.forget_finished(done);
+        }
+    }
+
     /// An encoder to record into.
     ///
     /// Inside a batch this is the frame's shared encoder and the returned guard
@@ -1155,37 +1380,8 @@ impl GpuContext {
         // gone there is no build left that wants a mixed-backend instance.
         // Pinning also fixes the hybrid iGPU+dGPU case described below.
         //
-        // `from_env_or_default` supplies the rest of the descriptor (flags, the
-        // DX12 shader compiler, the GLES minor version) from `WGPU_*`, so those
-        // stay tunable — but `backends` is set explicitly *after* it, so the pin
-        // wins and `WGPU_BACKEND` cannot move it. That is intended: an
-        // environment variable must not be able to break the Viewer.
-        #[cfg(windows)]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
-        // On a hybrid iGPU+dGPU box (e.g. AMD + Nvidia) mixing GL and Vulkan into one
-        // enumeration makes PowerPreference::HighPerformance pick unreliably (commonly
-        // picking the AMD iGPU driving the display), which can cause VRAM exhaustion
-        // during command submission. Pinning Vulkan prevents that.
-        #[cfg(target_os = "linux")]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
-        #[cfg(target_os = "macos")]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
-        #[cfg(not(any(
-            windows,
-            target_os = "linux",
-            target_os = "macos",
-            target_arch = "wasm32"
-        )))]
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+        #[cfg(not(target_arch = "wasm32"))]
+        let instance = engine_instance();
         // `WGPU_POWER_PREF=low` puts the engine on the integrated card of a
         // two-card machine, so it can be timed as a laptop without one.
         #[cfg(not(target_arch = "wasm32"))]
@@ -1294,7 +1490,14 @@ impl GpuContext {
         // report and carry on, in the same shape as the rest of the workspace's
         // diagnostics, rather than to take the process down mid-edit.
         device.on_uncaptured_error(Box::new(|e| {
-            note!("lumit-gpu: uncaptured wgpu error: {e}");
+            let said = format!("lumit-gpu: uncaptured wgpu error: {}", error_chain(&e));
+            note!("{said}");
+            let seen = ERRORS_SEEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if seen < ERRORS_RECORDED {
+                diagnose(&said);
+            } else if seen == ERRORS_RECORDED {
+                diagnose("lumit-gpu: further wgpu errors this session are not recorded");
+            }
         }));
         // A lost device is survivable, but only if somebody hears about it. The
         // driver calls this on a thread and at a moment of its own choosing, so
@@ -1303,7 +1506,9 @@ impl GpuContext {
         let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let raise = std::sync::Arc::clone(&lost);
         device.set_device_lost_callback(move |reason, msg| {
-            note!("lumit-gpu: device lost ({reason:?}): {msg}");
+            let said = format!("lumit-gpu: device lost ({reason:?}): {msg}");
+            note!("{said}");
+            diagnose(&said);
             raise.store(true, std::sync::atomic::Ordering::Relaxed);
         });
 
@@ -1363,7 +1568,10 @@ impl GpuContext {
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
             in_flight: InFlight::default(),
+            batches_in_flight: BatchesInFlight::default(),
             noted: std::cell::RefCell::new(Vec::new()),
+            last_submission: std::cell::RefCell::new(None),
+            frames_in_flight: FramesInFlight::default(),
         })
     }
 }
@@ -3254,6 +3462,36 @@ mod counter_tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// **Frames made back to back wait for the card.** A fill that recorded
+    /// frames faster than the card ran them held every one of them: the
+    /// textures a frame drops are freed only once its commands have run. No
+    /// more than [`FRAMES_IN_FLIGHT`] may be left behind, however many are
+    /// made.
+    #[test]
+    fn frames_made_back_to_back_leave_at_most_two_with_the_card() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        // A frame that submits nothing leaves nothing behind.
+        ctx.begin_frame();
+        ctx.end_frame();
+        assert_eq!(ctx.frames_in_flight(), 0);
+        for made in 1..=8usize {
+            ctx.begin_frame();
+            drop(ctx.encoder("a frame"));
+            ctx.end_frame();
+            assert_eq!(ctx.frames_in_flight(), made.min(FRAMES_IN_FLIGHT));
+        }
+        // A nested comp and the next frame are drawn through handles of their
+        // own: they count against the same card.
+        let other = ctx.clone_handle();
+        other.begin_frame();
+        drop(other.encoder("a frame on another handle"));
+        other.end_frame();
+        assert_eq!(other.frames_in_flight(), FRAMES_IN_FLIGHT);
+        assert_eq!(ctx.frames_in_flight(), FRAMES_IN_FLIGHT);
+    }
 
     /// **A machine that is supposed to have an adapter must fail, not skip.**
     ///

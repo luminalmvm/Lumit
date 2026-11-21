@@ -5266,6 +5266,11 @@ class LumitUiState extends ChangeNotifier {
   bool _cameraFlying = false;
   bool flyKeysArmed = false;
 
+  /// The Pen's claim on the keys while a path is under way, one per Viewer.
+  /// The shell asks them first, and a key one takes goes no further, so
+  /// `Ctrl+Z` takes back a point and does not also undo the document.
+  final penKeys = <bool Function(KeyEvent event)>[];
+
   /// The view drawn at half its scale while it moves, because a picture
   /// asked during this move came slower than [_slowPicture], and how long
   /// each picture asked during the move took from the ask to the engine

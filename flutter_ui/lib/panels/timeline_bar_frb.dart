@@ -1161,32 +1161,11 @@ class _BarState extends State<Bar> {
             Positioned.fill(
               key: ValueKey<String>(
                   'tl-bar-keys-${widget.entry.layer.internallayerId}'),
-              child: IgnorePointer(
-                child: CustomPaint(
-                  // Lantern draws the marks as outlined diamonds in the
-                  // secondary text colour. Desk's were the same, and too
-                  // faint on its bar to find, so it fills them as Studio does.
-                  painter: t.shape != ThemeShape.lantern
-                      ? LaneKeysPainter(
-                          frames: [
-                            for (final k in widget.summaryKeys)
-                              laneKeyFrame(k, widget.fps) + shift,
-                          ],
-                          selected: const {},
-                          axis: widget.axis,
-                          colour: t.animated,
-                          chosen: t.textPrimary,
-                          half: _summaryKeyHalf,
-                        )
-                      : OutlinedKeysPainter(
-                          frames: [
-                            for (final k in widget.summaryKeys)
-                              laneKeyFrame(k, widget.fps) + shift,
-                          ],
-                          axis: widget.axis,
-                          colour: t.textSecondary,
-                        ),
-                ),
+              child: KeySummary(
+                keys: widget.summaryKeys,
+                fps: widget.fps,
+                shift: shift,
+                axis: widget.axis,
               ),
             ),
           // Someone else in a shared project is changing this layer: its
@@ -1444,6 +1423,49 @@ class _BarState extends State<Bar> {
 
 /// Which part of a bar a drag grabbed: its middle, or one of its two ends.
 enum BarGrab { move, trimIn, trimOut }
+
+/// What is keyed under a shut row, at half scale (§12A.1): a shut layer's
+/// bar, and a shut heading among an effect's rows. A summary, not a target.
+class KeySummary extends StatelessWidget {
+  final List<BridgeKeyframe> keys;
+  final double fps;
+
+  /// How far the keys are drawn along, in frames: a bar being moved.
+  final int shift;
+  final TimelineAxis axis;
+
+  const KeySummary({
+    super.key,
+    required this.keys,
+    required this.fps,
+    required this.shift,
+    required this.axis,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final frames = [for (final k in keys) laneKeyFrame(k, fps) + shift];
+    return IgnorePointer(
+      child: CustomPaint(
+        // Lantern draws the marks as outlined diamonds in the secondary
+        // text colour. Desk's were the same, and too faint on its bar to
+        // find, so it fills them as Studio does.
+        painter: t.shape != ThemeShape.lantern
+            ? LaneKeysPainter(
+                frames: frames,
+                selected: const {},
+                axis: axis,
+                colour: t.animated,
+                chosen: t.textPrimary,
+                half: _summaryKeyHalf,
+              )
+            : OutlinedKeysPainter(
+                frames: frames, axis: axis, colour: t.textSecondary),
+      ),
+    );
+  }
+}
 
 /// A shut layer's keys as outlined diamonds on its bar, Lantern's mark: 7px
 /// across, a 1px stroke, one per frame.

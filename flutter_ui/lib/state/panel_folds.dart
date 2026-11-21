@@ -16,6 +16,10 @@ class PanelFolds {
   /// Timeline group headers with their effect lanes open, by group id.
   final Set<String> groupFxOpen = {};
 
+  /// Timeline layers the last `U` opened, so a later `U` still shuts them once
+  /// the panel has been built again. Not saved.
+  final Set<String> revealCycle = {};
+
   /// Effect Controls sections twirled shut, by path.
   final Set<String> effectsShut = {};
 
@@ -35,6 +39,7 @@ class PanelFolds {
     timelineOpen.clear();
     foldedGroups.clear();
     groupFxOpen.clear();
+    revealCycle.clear();
     effectsShut.clear();
     paramGroupsOpen.clear();
   }

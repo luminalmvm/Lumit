@@ -1,0 +1,47 @@
+---
+title: Linear colour key
+description: "Makes the pixels near one colour clear, compared by RGB, hue or chroma."
+---
+
+Linear colour key is a **Utility** effect.
+
+## What it does
+
+Compares each pixel with **Key colour** and makes the near ones clear, as After Effects'
+Linear Color Key does.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **View** | Dropdown | Final output · Source only · Matte only | Final output | - |
+| **Key colour** | Colour | Each channel 0 to 1 | Blue | - |
+| **Match colours** | Dropdown | Using RGB · Using hue · Using chroma | Using RGB | - |
+| **Matching tolerance (%)** | Slider | 0 to 100 | 0 | - |
+| **Matching softness (%)** | Slider | 0 to 100 | 10 | - |
+| **Key operation** | Dropdown | Key colours · Keep colours | Key colours | - |
+
+## What each control does
+
+- **View**: **Source only** shows the layer unkeyed. **Matte only** shows the key in grey,
+  white where the layer stays and black where it is keyed.
+- **Key colour**: the colour pixels are compared with.
+- **Match colours**: what of the two colours is compared. **Using RGB** compares all three
+  channels, **Using hue** the hue alone and **Using chroma** the colour without its
+  brightness. Using hue, a grey is as far from a colour as a pixel can be, and matches
+  only a grey Key colour.
+- **Matching tolerance (%)**: how far from Key colour a pixel may be and be keyed in full.
+- **Matching softness (%)**: how far past the tolerance the key fades out.
+- **Key operation**: **Keep colours** turns the key round, and only the pixels near Key
+  colour stay.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Matte key](/effects/utility/matte-key/)
+- [Set matte](/effects/utility/set-matte/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

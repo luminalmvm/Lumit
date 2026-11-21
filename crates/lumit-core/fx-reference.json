@@ -345,9 +345,9 @@
           "unit": "raw",
           "default": 1,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -5115,9 +5115,9 @@
           "unit": "raw",
           "default": 1,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -6392,9 +6392,9 @@
           "unit": "raw",
           "default": 2,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -6406,9 +6406,9 @@
           "default": 0,
           "options": [
             "Same",
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -6720,9 +6720,9 @@
           "unit": "raw",
           "default": 2,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -8209,9 +8209,9 @@
           "unit": "raw",
           "default": 0,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -8386,9 +8386,9 @@
           "unit": "raw",
           "default": 0,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -8552,9 +8552,9 @@
           "unit": "raw",
           "default": 1,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },
@@ -14721,6 +14721,33 @@
           "hard_max": 100.0
         },
         {
+          "id": "sprite_shape",
+          "label": "Sprite shape",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Layer",
+            "Circle",
+            "Square",
+            "Triangle",
+            "Star",
+            "Cloudy"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "sprite_star_points",
+          "label": "Star points",
+          "kind": "int",
+          "unit": "raw",
+          "default": 5,
+          "slider_min": 4.0,
+          "slider_max": 8.0,
+          "hard_min": 4.0,
+          "hard_max": 8.0
+        },
+        {
           "id": "sprite_layer",
           "label": "Sprite layer",
           "kind": "layer",
@@ -15036,6 +15063,8 @@
           "params": [
             "mode",
             "feather",
+            "sprite_shape",
+            "sprite_star_points",
             "sprite_layer",
             "streak_length",
             "particle_blend",
@@ -15056,6 +15085,30 @@
           "on": "mode",
           "cond": "choice_is",
           "value": 1
+        },
+        {
+          "param": "sprite_layer",
+          "on": "sprite_shape",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "sprite_shape",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "sprite_star_points",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "sprite_star_points",
+          "on": "sprite_shape",
+          "cond": "choice_is",
+          "value": 4
         },
         {
           "param": "streak_length",
@@ -35460,9 +35513,9 @@
           "unit": "raw",
           "default": 0,
           "options": [
-            "Transparent",
-            "Repeat",
-            "Mirror"
+            "None",
+            "Edge repeat",
+            "Mirror repeat"
           ],
           "dividers_after": []
         },

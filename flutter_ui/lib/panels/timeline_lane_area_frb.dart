@@ -1400,6 +1400,42 @@ class LayerArea extends StatelessWidget {
         ),
       );
     }
+    // The line under a keyed row with an expression over its keys: the text,
+    // pressed to open it, as a row with no keys shows it in its own lane.
+    if (row case FoldExpressionRow(:final parent)) {
+      final channels =
+          graphChannels(layers: [entry], selected: [foldRowPath(id, parent)]);
+      final driven = [
+        for (final channel in channels)
+          if (channel.scalar is BridgeScalar_Expression) channel,
+      ];
+      if (driven.isEmpty) return null;
+      return ExpressionLane(
+        key: ValueKey<String>('tl-expression-lane-${foldRowPath(id, row)}'),
+        channels: driven,
+        named: channels.length > 1,
+        comp: comp,
+        hScroll: hScroll,
+        locked: entry.info.switches.locked,
+        onChanged: onChanged,
+      );
+    }
+    // A shut heading among an effect's rows draws the keys of what it holds,
+    // as a shut layer's bar does.
+    if (row is FoldGroupRow) {
+      final keys = keysOfRows(row.inside);
+      if (keys.isEmpty) return null;
+      return ValueListenableBuilder<BarDragPreview?>(
+        valueListenable: dragPreview,
+        builder: (context, preview, _) => KeySummary(
+          key: ValueKey<String>('tl-key-summary-${foldRowPath(id, row)}'),
+          keys: keys,
+          fps: fps,
+          shift: keyShiftOf(preview, id),
+          axis: axis,
+        ),
+      );
+    }
     final rowKeys = laneKeysOf(row);
     final rowId = foldRowPath(id, row);
     if (rowKeys.isEmpty) {

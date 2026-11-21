@@ -52,9 +52,11 @@ import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show transformGroupPath;
 import 'light_rows_frb.dart';
 import 'param_row_menu.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 import '../state/expression_language.dart' show PropertyRef;
-import 'expression_editor.dart' show expressionAsKeys, showExpressionEditor;
+import 'expression_editor.dart'
+    show expressionAsKeys, expressionTakenOff, showExpressionEditor;
 import 'property_link.dart';
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
@@ -817,6 +819,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // `setTransforms` commits them as a batch.
     final keyframes = KeyframeControlsFrb(
       scalars: [for (final axis in group.axes) read(transform, axis.prop)],
+      // Alt+click: the expression editor, on a picked axis where several.
+      onExpression: () => _altExpression(group, cells, transform),
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
@@ -1445,6 +1449,37 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       for (final p in props)
         if (read(widget.transform, p) is BridgeScalar_Expression) p,
     ];
+    // A linked row's axes take one expression together, so its menu speaks of
+    // the lead's and writes to them all.
+    final picked = group.isLinked && expression.contains(props.first)
+        ? [props.first]
+        : expression;
+    List<BridgeTransformProp> along(BridgeTransformProp p) =>
+        group.isLinked && p == props.first ? props : [p];
+    // Taken off, each axis keeps the number it was showing (and its keys).
+    void unexpress(BridgeTransformProp p) {
+      final targets = along(p);
+      final values = [
+        for (final q in targets)
+          switch (read(widget.transform, q)) {
+            final BridgeScalar_Expression e => expressionTakenOff(
+                e,
+                sampleScalarWithContext(
+                    scalar: e,
+                    time: timeOfFrame(widget.comp, playhead.value),
+                    layer: widget.layer,
+                    row: BridgeExpressionRow.transform(q))),
+            final other => other,
+          },
+      ];
+      if (values case [BridgeScalar_Static(:final field0)]) {
+        _commit(p, field0);
+        return;
+      }
+      widget.layer.setTransforms(props: targets, values: values);
+      setState(() => _staged = null);
+      widget.onChanged();
+    }
     void writeAll(List<double> values) {
       writeTransforms(widget.layer, widget.transform,
         props: props,
@@ -1458,8 +1493,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     }
 
     // Seeded with the number showing, so turning one on moves nothing.
-    void seed(BridgeTransformProp p) => _commitExpression(
-        p,
+    void seed(BridgeTransformProp p) => _commitExpressions(
+        p == props.first && group.isLinked ? props : [p],
         BridgeScalar.expression(
             shown(p).toString(), newExpressionLanguage(context)));
 
@@ -1524,18 +1559,12 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                 if (!expression.contains(axis.prop))
                   (axis: axisName(i), set: () => seed(axis.prop)),
             ],
-      removeExpression: expression.length != 1
-          ? null
-          : () => _commit(
-              expression.first,
-              sampleScalarWithContext(
-                  scalar: read(widget.transform, expression.first),
-                  time: timeOfFrame(widget.comp, playhead.value),
-                  layer: widget.layer)),
-      editExpression: expression.length != 1
+      removeExpression:
+          picked.length != 1 ? null : () => unexpress(picked.first),
+      editExpression: picked.length != 1
           ? null
           : () {
-              final prop = expression.first;
+              final prop = picked.first;
               final box = context.findRenderObject();
               if (box is! RenderBox || !box.attached) return;
               showExpressionEditor(
@@ -1547,16 +1576,15 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                 row: BridgeExpressionRow.transform(prop),
                 decimals: cells.firstWhere((c) => c.prop == prop).decimals,
                 onLive: (draft) => _liveExpression(prop, draft),
-                // Removed in the editor, it leaves the number it read.
-                onCommit: (next) => next is BridgeScalar_Static
-                    ? _commit(prop, next.field0)
-                    : _commitExpression(prop, next),
+                // Removed in the editor, it leaves what the menu's Remove does.
+                onRemove: () => unexpress(prop),
+                onCommit: (next) => _commitExpressions(along(prop), next),
               );
             },
-      convertExpression: expression.length != 1
+      convertExpression: picked.length != 1
           ? null
           : () {
-              final prop = expression.first;
+              final prop = picked.first;
               final keys = expressionAsKeys(_ui,
                   expression:
                       read(widget.transform, prop) as BridgeScalar_Expression,
@@ -1699,6 +1727,103 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         widget.onChanged();
       },
     );
+  }
+
+  /// Alt+click on the stopwatch: the expression editor, on the row's one
+  /// axis or on the axis picked from a small menu. Nothing is written until
+  /// the editor is closed with a change; a new expression opens holding the
+  /// number showing, its keys kept under it.
+  void _altExpression(TransformGroup group, List<TransformAxis> cells,
+      BridgeTransform transform) {
+    if (group.colour) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached) return;
+    final over = box.localToGlobal(Offset.zero) & box.size;
+    void open(TransformAxis axis) {
+      final prop = axis.prop;
+      final held = read(transform, prop);
+      final fresh = held is! BridgeScalar_Expression;
+      showExpressionEditor(
+        context: context,
+        over: over,
+        value: held is BridgeScalar_Expression
+            ? held
+            : BridgeScalar_Expression(
+                sampledScalar(
+                        held, timeOfFrame(widget.comp, _ui.playheadFrame.value))
+                    .toString(),
+                newExpressionLanguage(context)),
+        fresh: fresh,
+        held: held,
+        comp: widget.comp,
+        layer: widget.layer,
+        row: BridgeExpressionRow.transform(prop),
+        decimals: axis.decimals,
+        // A new one is not previewed: a cancel would write it back.
+        onLive: fresh ? null : (draft) => _liveExpression(prop, draft),
+        onCommit: (next) {
+          final targets = group.isLinked
+              ? [for (final a in group.axes) a.prop]
+              : [prop];
+          if (next is! BridgeScalar_Static) {
+            _commitExpressions(targets, next);
+          } else if (targets.length == 1) {
+            _commit(prop, next.field0);
+          } else {
+            // Taken off, each axis keeps the number it was showing.
+            _commitExpressions(targets, next, values: [
+              for (final q in targets)
+                switch (read(transform, q)) {
+                  final BridgeScalar_Expression e => BridgeScalar.static_(
+                      sampleScalarWithContext(
+                          scalar: e,
+                          time: timeOfFrame(
+                              widget.comp, _ui.playheadFrame.value),
+                          layer: widget.layer,
+                          row: BridgeExpressionRow.transform(q))),
+                  final other => other,
+                },
+            ]);
+          }
+        },
+      );
+    }
+
+    if (cells.length == 1) {
+      open(cells.single);
+      return;
+    }
+    showMenuAt<void>(
+      context: context,
+      position: over.topLeft,
+      width: 110,
+      rows: (close) => [
+        for (final (i, axis) in cells.indexed)
+          MenuRow(
+            key: ValueKey<String>('alt-expression-$i'),
+            onPressed: () {
+              close(null);
+              open(axis);
+            },
+            child: MenuLabel(axisName(i)),
+          ),
+      ],
+    );
+  }
+
+  /// [value] on every one of [props] in one step: a linked row's axes all
+  /// take the expression, each over its own keys.
+  void _commitExpressions(List<BridgeTransformProp> props, BridgeScalar value,
+      {List<BridgeScalar>? values}) {
+    if (props.length == 1 && values == null) {
+      return _commitExpression(props.single, value);
+    }
+    _throttle.cancel();
+    _clearLive();
+    widget.layer.setTransforms(
+        props: props, values: values ?? [for (final _ in props) value]);
+    setState(() => _staged = null);
+    widget.onChanged();
   }
 
   void _commitExpression(BridgeTransformProp prop, BridgeScalar value) {

@@ -738,6 +738,9 @@ class _LumitAppViewState extends State<LumitAppView> {
       return KeyEventResult.ignored;
     }
 
+    // A path under way with the Pen keeps undo, redo, Backspace and Enter.
+    if (ui.penKeys.any((takes) => takes(event))) return KeyEventResult.handled;
+
     // The Transcript panel's caret and text-size keys are its own.
     if (ui.activePanel == Panel.transcript && transcriptKeyOf(event) != null) {
       return KeyEventResult.ignored;

@@ -3940,7 +3940,8 @@ extension BridgeScalarPatterns on BridgeScalar {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(double field0)? static_,
     TResult Function(List<BridgeKeyframe> field0)? keyframed,
-    TResult Function(String field0, BridgeExpressionLanguage field1)?
+    TResult Function(String field0, BridgeExpressionLanguage field1,
+            List<BridgeKeyframe>? field2)?
         expression,
     required TResult orElse(),
   }) {
@@ -3951,7 +3952,7 @@ extension BridgeScalarPatterns on BridgeScalar {
       case BridgeScalar_Keyframed() when keyframed != null:
         return keyframed(_that.field0);
       case BridgeScalar_Expression() when expression != null:
-        return expression(_that.field0, _that.field1);
+        return expression(_that.field0, _that.field1, _that.field2);
       case _:
         return orElse();
     }
@@ -3974,7 +3975,8 @@ extension BridgeScalarPatterns on BridgeScalar {
   TResult when<TResult extends Object?>({
     required TResult Function(double field0) static_,
     required TResult Function(List<BridgeKeyframe> field0) keyframed,
-    required TResult Function(String field0, BridgeExpressionLanguage field1)
+    required TResult Function(String field0, BridgeExpressionLanguage field1,
+            List<BridgeKeyframe>? field2)
         expression,
   }) {
     final _that = this;
@@ -3984,7 +3986,7 @@ extension BridgeScalarPatterns on BridgeScalar {
       case BridgeScalar_Keyframed():
         return keyframed(_that.field0);
       case BridgeScalar_Expression():
-        return expression(_that.field0, _that.field1);
+        return expression(_that.field0, _that.field1, _that.field2);
     }
   }
 
@@ -4004,7 +4006,8 @@ extension BridgeScalarPatterns on BridgeScalar {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(double field0)? static_,
     TResult? Function(List<BridgeKeyframe> field0)? keyframed,
-    TResult? Function(String field0, BridgeExpressionLanguage field1)?
+    TResult? Function(String field0, BridgeExpressionLanguage field1,
+            List<BridgeKeyframe>? field2)?
         expression,
   }) {
     final _that = this;
@@ -4014,7 +4017,7 @@ extension BridgeScalarPatterns on BridgeScalar {
       case BridgeScalar_Keyframed() when keyframed != null:
         return keyframed(_that.field0);
       case BridgeScalar_Expression() when expression != null:
-        return expression(_that.field0, _that.field1);
+        return expression(_that.field0, _that.field1, _that.field2);
       case _:
         return null;
     }
@@ -4163,11 +4166,22 @@ class _$BridgeScalar_KeyframedCopyWithImpl<$Res>
 /// @nodoc
 
 class BridgeScalar_Expression extends BridgeScalar {
-  const BridgeScalar_Expression(this.field0, this.field1) : super._();
+  const BridgeScalar_Expression(this.field0, this.field1,
+      [final List<BridgeKeyframe>? field2])
+      : _field2 = field2,
+        super._();
 
   @override
   final String field0;
   final BridgeExpressionLanguage field1;
+  final List<BridgeKeyframe>? _field2;
+  List<BridgeKeyframe>? get field2 {
+    final value = _field2;
+    if (value == null) return null;
+    if (_field2 is EqualUnmodifiableListView) return _field2;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(value);
+  }
 
   /// Create a copy of BridgeScalar
   /// with the given fields replaced by the non-null parameter values.
@@ -4183,15 +4197,17 @@ class BridgeScalar_Expression extends BridgeScalar {
         (other.runtimeType == runtimeType &&
             other is BridgeScalar_Expression &&
             (identical(other.field0, field0) || other.field0 == field0) &&
-            (identical(other.field1, field1) || other.field1 == field1));
+            (identical(other.field1, field1) || other.field1 == field1) &&
+            const DeepCollectionEquality().equals(other._field2, _field2));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, field0, field1);
+  int get hashCode => Object.hash(runtimeType, field0, field1,
+      const DeepCollectionEquality().hash(_field2));
 
   @override
   String toString() {
-    return 'BridgeScalar.expression(field0: $field0, field1: $field1)';
+    return 'BridgeScalar.expression(field0: $field0, field1: $field1, field2: $field2)';
   }
 }
 
@@ -4202,7 +4218,10 @@ abstract mixin class $BridgeScalar_ExpressionCopyWith<$Res>
           $Res Function(BridgeScalar_Expression) _then) =
       _$BridgeScalar_ExpressionCopyWithImpl;
   @useResult
-  $Res call({String field0, BridgeExpressionLanguage field1});
+  $Res call(
+      {String field0,
+      BridgeExpressionLanguage field1,
+      List<BridgeKeyframe>? field2});
 }
 
 /// @nodoc
@@ -4219,6 +4238,7 @@ class _$BridgeScalar_ExpressionCopyWithImpl<$Res>
   $Res call({
     Object? field0 = null,
     Object? field1 = null,
+    Object? field2 = freezed,
   }) {
     return _then(BridgeScalar_Expression(
       null == field0
@@ -4229,6 +4249,10 @@ class _$BridgeScalar_ExpressionCopyWithImpl<$Res>
           ? _self.field1
           : field1 // ignore: cast_nullable_to_non_nullable
               as BridgeExpressionLanguage,
+      freezed == field2
+          ? _self._field2
+          : field2 // ignore: cast_nullable_to_non_nullable
+              as List<BridgeKeyframe>?,
     ));
   }
 }

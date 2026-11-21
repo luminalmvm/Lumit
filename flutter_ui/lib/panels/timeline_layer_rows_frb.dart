@@ -243,7 +243,9 @@ class FoldRow extends StatelessWidget {
     // and with it the graph channel — exists before the first drag tick. A
     // modified press is left to the label's own Ctrl/Shift semantics, and a
     // group heading keeps its pick-and-twirl click.
-    final picks = row is! FoldGroupRow && row is! FoldWaveformRow;
+    final picks = row is! FoldGroupRow &&
+        row is! FoldWaveformRow &&
+        row is! FoldExpressionRow;
     // A locked layer's rows are read-only, not hidden: the numbers
     // are still the document's and the curves still draw, but nothing on the
     // row can be touched. The engine refuses the edit anyway, this is what
@@ -696,6 +698,19 @@ class FoldRow extends StatelessWidget {
   Widget _control(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return switch (row) {
+      // The expression over a keyed row, named beneath it; its lane holds
+      // the text.
+      FoldExpressionRow() => Padding(
+          padding: const EdgeInsets.only(left: 22),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              t.propertyCase(l10n.fxExpression),
+              style: t.body.copyWith(color: t.textMuted),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
       // The lane-mode chip (the board's per-layer Wave / Spectral
       // chips): which of the three pictures this layer's lane draws. On the
       // lane's own outline row, listening to the session store itself, so a

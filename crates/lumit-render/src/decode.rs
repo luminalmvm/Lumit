@@ -211,6 +211,10 @@ pub struct CompLayerPixels {
     /// rate for a media item and this is the one place the plan's answer is
     /// already in hand.
     pub source_frame: i64,
+    /// The second source frame and its weight when the picture is a Blend or
+    /// Flow in-between of `source_frame` and it, so a plane read for the layer
+    /// is mixed by the same fraction. `None` for every other layer.
+    pub blend: Option<(i64, f32)>,
 }
 
 pub struct CompFrame {
@@ -1595,6 +1599,7 @@ fn decode_comp(
                         // frame-time output.
                         source_key: moment_key(source_key, s.offset),
                         source_frame: i64::try_from(s.source_frame).unwrap_or(0),
+                        blend: s.blend.map(|(b, w)| (i64::try_from(b).unwrap_or(0), w)),
                     })),
                 ))
             })
@@ -1708,6 +1713,7 @@ fn decode_comp(
             shutter,
             source_key,
             source_frame: i64::try_from(job.source_frame).unwrap_or(0),
+            blend: job.blend.map(|(b, w)| (i64::try_from(b).unwrap_or(0), w)),
         });
         // One more source frame in hand. Reported after the layer is filed, so
         // "n of m done" is true of what has actually been decoded.
@@ -1756,6 +1762,7 @@ mod tests {
             shutter: Vec::new(),
             source_key: 0,
             source_frame: 0,
+            blend: None,
         }
     }
 

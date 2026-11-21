@@ -360,16 +360,15 @@ impl FxEngine {
         // matte and the two halves must agree on this pixel's kernel width.
         let matte_on = f32::from(matte.is_some());
         // Horizontal into tmp (mix 1: the blend happens once, at the end).
-        self.dispatch_matted(
+        self.gaussian_pass(
             ctx,
-            &self.blur,
             src,
             src,
             matte,
             &tmp,
             w,
             h,
-            bytemuck::bytes_of(&BlurParams {
+            &BlurParams {
                 dir: [1.0, 0.0],
                 radius: op.radius_px,
                 sigma,
@@ -378,19 +377,18 @@ impl FxEngine {
                 matte_on,
                 _pad0: 0.0,
                 field: [[0.0; 4]; 3],
-            }),
+            },
         );
         // Vertical into out, blending against the original input.
-        self.dispatch_matted(
+        self.gaussian_pass(
             ctx,
-            &self.blur,
             &tmp,
             src,
             matte,
             &out,
             w,
             h,
-            bytemuck::bytes_of(&BlurParams {
+            &BlurParams {
                 dir: [0.0, 1.0],
                 radius: op.radius_px,
                 sigma,
@@ -399,8 +397,12 @@ impl FxEngine {
                 matte_on,
                 _pad0: 0.0,
                 field: [[0.0; 4]; 3],
-            }),
+            },
         );
+        // The horizontal half is read by nothing after this: back to the
+        // frame's pool, so the next pass reuses it rather than the card
+        // holding one more frame-sized texture until the frame is done.
+        ctx.recycle(tmp);
         out
     }
 
@@ -486,10 +488,9 @@ impl FxEngine {
             field,
         };
         for (from, to, dir) in [(src, &tmp, [1.0, 0.0]), (&tmp, &out, [0.0, 1.0])] {
-            let p = params(dir);
-            let p = bytemuck::bytes_of(&p);
-            self.dispatch_matted(ctx, &self.blur, from, src, None, to, w, h, p);
+            self.gaussian_pass(ctx, from, src, None, to, w, h, &params(dir));
         }
+        ctx.recycle(tmp);
         out
     }
 
@@ -656,15 +657,15 @@ impl FxEngine {
         );
         let sigma = (op.radius_px * 0.5).max(1e-3);
         for (pass_src, pass_dst, dir) in [(&un, &tmp, [1.0, 0.0]), (&tmp, &blurred, [0.0, 1.0])] {
-            self.dispatch(
+            self.gaussian_pass(
                 ctx,
-                &self.blur,
                 pass_src,
                 pass_src,
+                None,
                 pass_dst,
                 w,
                 h,
-                bytemuck::bytes_of(&BlurParams {
+                &BlurParams {
                     dir,
                     radius: op.radius_px,
                     sigma,
@@ -673,7 +674,7 @@ impl FxEngine {
                     matte_on: 0.0,
                     _pad0: 0.0,
                     field: [[0.0; 4]; 3],
-                }),
+                },
             );
         }
         self.dispatch_matted(
@@ -895,28 +896,8 @@ impl FxEngine {
         if g.step <= 1.0 {
             let tmp = work_texture(ctx, w, h, "fx-glow-tmp");
             let halo = work_texture(ctx, w, h, "fx-glow-halo");
-            let p = blur([1.0, 0.0]);
-            self.dispatch(
-                ctx,
-                &self.blur,
-                bright,
-                bright,
-                &tmp,
-                w,
-                h,
-                bytemuck::bytes_of(&p),
-            );
-            let p = blur([0.0, 1.0]);
-            self.dispatch(
-                ctx,
-                &self.blur,
-                &tmp,
-                &tmp,
-                &halo,
-                w,
-                h,
-                bytemuck::bytes_of(&p),
-            );
+            self.gaussian_pass(ctx, bright, bright, None, &tmp, w, h, &blur([1.0, 0.0]));
+            self.gaussian_pass(ctx, &tmp, &tmp, None, &halo, w, h, &blur([0.0, 1.0]));
             ctx.recycle(tmp);
             return halo;
         }
@@ -956,26 +937,8 @@ impl FxEngine {
             ch,
             bytemuck::bytes_of(&coarse_p),
         );
-        self.dispatch(
-            ctx,
-            &self.blur,
-            &coarse,
-            &coarse,
-            &tmp,
-            cw,
-            ch,
-            bytemuck::bytes_of(&tmp_p),
-        );
-        self.dispatch(
-            ctx,
-            &self.blur,
-            &tmp,
-            &tmp,
-            &lit,
-            cw,
-            ch,
-            bytemuck::bytes_of(&lit_p),
-        );
+        self.gaussian_pass(ctx, &coarse, &coarse, None, &tmp, cw, ch, &tmp_p);
+        self.gaussian_pass(ctx, &tmp, &tmp, None, &lit, cw, ch, &lit_p);
         let up = &self.glow_exp_up;
         self.dispatch(
             ctx,
