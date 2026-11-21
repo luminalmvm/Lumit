@@ -3,6 +3,7 @@
 // graph_editor_frb.dart, which re-exports it.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart' show BridgeSelectorKind;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -157,6 +158,15 @@ class GraphChannel {
   final int animator;
   final TextAnimatorValue? animatorValue;
 
+  /// Which of the animator's selectors a selector's number is on.
+  final int animatorSelector;
+
+  /// For a Stagger's Amount: how many seconds after the first each unit of
+  /// the words starts, so the graph editor draws every unit's copy of the
+  /// curve, faint, and the cascade's spread can be seen. Empty for any other
+  /// channel.
+  final List<double> staggerCopies;
+
   /// Set for one of a shape item's numbers: the item, which number, and
   /// which gradient stop when it is a stop's. A modifier entry's number
   /// names the modifier instead.
@@ -212,6 +222,8 @@ class GraphChannel {
     this.maskVertex = -1,
     this.animator = -1,
     this.animatorValue,
+    this.animatorSelector = 0,
+    this.staggerCopies = const [],
     this.shape,
     this.shapeModifier,
     this.shapeValue,
@@ -518,23 +530,46 @@ List<GraphChannel> graphChannels({
       final slash = rest.indexOf('/');
       if (slash <= 0) continue;
       final index = int.tryParse(rest.substring(0, slash));
-      final valueName = rest.substring(slash + 1);
+      var valueName = rest.substring(slash + 1);
       if (index == null || index >= entry.info.textAnimators.length) continue;
+      // A later selector's numbers sit under `s<k>/`.
+      var selector = 0;
+      if (RegExp(r'^s(\d+)/').firstMatch(valueName) case final m?) {
+        selector = int.parse(m.group(1)!);
+        valueName = valueName.substring(m.end);
+      }
       final value = TextAnimatorValue.values
           .where((v) => v.name == valueName)
           .firstOrNull;
       if (value == null) continue;
       final animator = entry.info.textAnimators[index];
+      if (selector >= selectorCount(animator)) continue;
+      final s = selectorAt(animator, selector);
+      var copies = const <double>[];
+      if (value == TextAnimatorValue.staggerAmount &&
+          s.kind == BridgeSelectorKind.stagger) {
+        try {
+          final text = entry.layer.getText()?.text ?? '';
+          copies = staggerOffsets(s, unitCount(text, s.basis), 0)
+              .where((o) => o > 0)
+              .take(60)
+              .toList();
+        } catch (_) {
+          // The layer went away; no copies to draw.
+        }
+      }
       out.add(GraphChannel(
         path: path,
         id: path,
         label: '${entry.info.name} · ${animator.name} · '
             '${textAnimatorValueLabel(value, animator)}',
         colourIndex: out.length,
-        scalar: textAnimatorScalarOf(animator, value),
+        scalar: textAnimatorScalarOf(animator, value, selector: selector),
         entry: entry,
         animator: index,
         animatorValue: value,
+        animatorSelector: selector,
+        staggerCopies: copies,
       ));
       continue;
     }

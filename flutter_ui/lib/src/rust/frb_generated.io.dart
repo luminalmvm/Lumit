@@ -1734,6 +1734,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSelectorBasis dco_decode_bridge_selector_basis(dynamic raw);
 
   @protected
+  BridgeSelectorCombine dco_decode_bridge_selector_combine(dynamic raw);
+
+  @protected
   BridgeSelectorKind dco_decode_bridge_selector_kind(dynamic raw);
 
   @protected
@@ -1741,6 +1744,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSelectorShape dco_decode_bridge_selector_shape(dynamic raw);
+
+  @protected
+  BridgeSelectorUnits dco_decode_bridge_selector_units(dynamic raw);
 
   @protected
   BridgeSend dco_decode_bridge_send(dynamic raw);
@@ -1931,6 +1937,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeStaggerOrder dco_decode_bridge_stagger_order(dynamic raw);
+
+  @protected
+  BridgeStaggerRepeat dco_decode_bridge_stagger_repeat(dynamic raw);
 
   @protected
   BridgeStill dco_decode_bridge_still(dynamic raw);
@@ -2483,6 +2492,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgePuppetPin> dco_decode_list_bridge_puppet_pin(dynamic raw);
+
+  @protected
+  List<BridgeRangeSelector> dco_decode_list_bridge_range_selector(dynamic raw);
 
   @protected
   List<BridgeRational> dco_decode_list_bridge_rational(dynamic raw);
@@ -5027,6 +5039,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeSelectorCombine sse_decode_bridge_selector_combine(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeSelectorKind sse_decode_bridge_selector_kind(
       SseDeserializer deserializer);
 
@@ -5036,6 +5052,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSelectorShape sse_decode_bridge_selector_shape(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeSelectorUnits sse_decode_bridge_selector_units(
       SseDeserializer deserializer);
 
   @protected
@@ -5261,6 +5281,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeStaggerOrder sse_decode_bridge_stagger_order(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeStaggerRepeat sse_decode_bridge_stagger_repeat(
       SseDeserializer deserializer);
 
   @protected
@@ -5932,6 +5956,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgePuppetPin> sse_decode_list_bridge_puppet_pin(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeRangeSelector> sse_decode_list_bridge_range_selector(
       SseDeserializer deserializer);
 
   @protected
@@ -8748,6 +8776,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSelectorBasis self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_selector_combine(
+      BridgeSelectorCombine self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_selector_kind(
       BridgeSelectorKind self, SseSerializer serializer);
 
@@ -8758,6 +8790,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_selector_shape(
       BridgeSelectorShape self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_selector_units(
+      BridgeSelectorUnits self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_send(BridgeSend self, SseSerializer serializer);
@@ -9004,6 +9040,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_stagger_order(
       BridgeStaggerOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_stagger_repeat(
+      BridgeStaggerRepeat self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_still(BridgeStill self, SseSerializer serializer);
@@ -9702,6 +9742,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_puppet_pin(
       List<BridgePuppetPin> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_range_selector(
+      List<BridgeRangeSelector> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_rational(

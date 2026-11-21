@@ -824,49 +824,30 @@ final class FoldAnimatorValueRow extends LayerFoldRow {
   final int index;
   final BridgeTextAnimator animator;
   final TextAnimatorValue value;
+
+  /// Which of the animator's selectors a selector's number is on.
+  final int selector;
   const FoldAnimatorValueRow(this.index, this.animator, this.value,
-      {required int depth})
+      {required int depth, this.selector = 0})
       : super(depth);
 }
 
-/// A text animator's selector choices, which have no curve: what picks the
-/// letters, the target a Proximity selector measures from, what it counts,
-/// the shape of its edge, whether it is turned over, a Range selector's Mode
-/// (Add or Subtract), a Stagger's order, and a Wiggly's or a random
-/// Stagger's seed.
-enum AnimatorSetting { selector, target, order, basis, mode, shape, invert, seed }
-
-/// One of [AnimatorSetting] on animator [index], as the Effect controls panel
-/// shows it, so the Timeline has the whole selector too.
+/// One of [AnimatorSetting] on selector [selector] of animator [index], as
+/// the Effect controls panel shows it, so the Timeline has the whole
+/// selector too.
 final class FoldAnimatorSettingRow extends LayerFoldRow {
   final int index;
   final BridgeTextAnimator animator;
   final AnimatorSetting setting;
+  final int selector;
   const FoldAnimatorSettingRow(this.index, this.animator, this.setting,
-      {required int depth})
+      {required int depth, this.selector = 0})
       : super(depth);
 }
 
-/// The selector choices [a] has rows for.
-List<AnimatorSetting> animatorSettingsOf(BridgeTextAnimator a) => [
-      AnimatorSetting.selector,
-      if (a.selector.kind == BridgeSelectorKind.proximity) ...[
-        AnimatorSetting.target,
-        AnimatorSetting.invert,
-      ],
-      if (a.selector.kind == BridgeSelectorKind.stagger) AnimatorSetting.order,
-      if (a.selector.kind == BridgeSelectorKind.wiggly ||
-          (a.selector.kind == BridgeSelectorKind.stagger &&
-              a.selector.order == BridgeStaggerOrder.random))
-        AnimatorSetting.seed,
-      AnimatorSetting.basis,
-      if (a.selector.kind == BridgeSelectorKind.range ||
-          a.selector.kind == BridgeSelectorKind.stagger)
-        AnimatorSetting.mode,
-      if (a.selector.kind != BridgeSelectorKind.wiggly &&
-          a.selector.kind != BridgeSelectorKind.stagger)
-        AnimatorSetting.shape,
-    ];
+/// The path segment of selector [k]'s rows under its animator: none for the
+/// first, so a file's rows keep the paths they had.
+String animatorSelectorSegment(int k) => k == 0 ? '' : 's$k/';
 
 /// One control of a footage layer's Flow group. Which control
 /// is the [kind]; all of them read and write the whole group in one op, so a
@@ -1006,8 +987,8 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
-      FoldAnimatorValueRow(:final animator, :final value) => switch (
-            textAnimatorScalarOf(animator, value)) {
+      FoldAnimatorValueRow(:final animator, :final value, :final selector) =>
+        switch (textAnimatorScalarOf(animator, value, selector: selector)) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
@@ -1212,8 +1193,8 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
       FoldStrokeValueRow(:final stroke, :final value) =>
         strokeScalarOf(stroke, value),
       FoldPuppetValueRow(:final pin, :final value) => puppetScalarOf(pin, value),
-      FoldAnimatorValueRow(:final animator, :final value) =>
-        textAnimatorScalarOf(animator, value),
+      FoldAnimatorValueRow(:final animator, :final value, :final selector) =>
+        textAnimatorScalarOf(animator, value, selector: selector),
       FoldShapeValueRow(:final value) =>
         value == ShapeValue.path ? null : row.scalar,
       _ => null,
@@ -1277,23 +1258,12 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
             _ => null,
           }),
       // A selector's choice is a change when it is not the fresh one.
-      FoldAnimatorSettingRow(:final animator, :final setting) => switch (
-            setting) {
-          AnimatorSetting.selector =>
-            animator.selector.kind != BridgeSelectorKind.range,
-          AnimatorSetting.target => animator.selector.target != null,
-          AnimatorSetting.invert => animator.selector.invert,
-          AnimatorSetting.seed => animator.selector.seed != 0,
-          AnimatorSetting.mode => animator.selector.invert,
-          AnimatorSetting.order =>
-            animator.selector.order != BridgeStaggerOrder.forward,
-          AnimatorSetting.basis =>
-            animator.selector.basis != BridgeSelectorBasis.characters,
-          AnimatorSetting.shape =>
-            animator.selector.shape != BridgeSelectorShape.square,
-        },
-      FoldAnimatorValueRow(:final animator, :final value) => _differs(
-          textAnimatorScalarOf(animator, value), textAnimatorDefault(value)),
+      FoldAnimatorSettingRow(:final animator, :final setting, :final selector) =>
+        selector > 0 ||
+            animatorSettingChanged(selectorAt(animator, selector), setting),
+      FoldAnimatorValueRow(:final animator, :final value, :final selector) =>
+        _differs(textAnimatorScalarOf(animator, value, selector: selector),
+            textAnimatorDefault(value)),
       FoldShapeValueRow(:final value) => value == ShapeValue.path ||
           _differs(row.scalar, shapeValueDefault(value)),
       FoldRetimeRow() ||
@@ -2426,8 +2396,13 @@ bool moveLaneKeys({
       );
       return true;
 
-    case FoldAnimatorValueRow(:final index, :final animator, :final value):
-      final scalar = textAnimatorScalarOf(animator, value);
+    case FoldAnimatorValueRow(
+        :final index,
+        :final animator,
+        :final value,
+        :final selector
+      ):
+      final scalar = textAnimatorScalarOf(animator, value, selector: selector);
       if (scalar is! BridgeScalar_Keyframed) return false;
       final next = moved(scalar.field0);
       if (next == null) return false;
@@ -2436,6 +2411,7 @@ bool moveLaneKeys({
         index: index,
         value: value,
         to: BridgeScalar.keyframed(next),
+        selector: selector,
       );
       return true;
 
@@ -2505,10 +2481,12 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${foldRowPath(layerId, parent)}/expression',
       FoldSettingRow(:final setting) =>
         '${transformPath(layerId)}/${setting.name}',
-      FoldAnimatorSettingRow(:final index, :final setting) =>
-        '${animatorPath(layerId, index)}/${setting.name}',
-      FoldAnimatorValueRow(:final index, :final value) =>
-        '${animatorPath(layerId, index)}/${value.name}',
+      FoldAnimatorSettingRow(:final index, :final setting, :final selector) =>
+        '${animatorPath(layerId, index)}/'
+            '${animatorSelectorSegment(selector)}${setting.name}',
+      FoldAnimatorValueRow(:final index, :final value, :final selector) =>
+        '${animatorPath(layerId, index)}/'
+            '${animatorSelectorSegment(selector)}${value.name}',
       FoldMaskRow(:final mask) => '${masksPath(layerId)}/${mask.id}',
       FoldMaskValueRow(:final mask, :final value, :final vertex) =>
         '${masksPath(layerId)}/${mask.id}/${value.name}'
@@ -3270,8 +3248,47 @@ List<LayerFoldRow> layerFoldRows({
         ));
         if (!animatorOpen) continue;
         final solid = meshKindOf(info) == BridgeLayerKind.model;
-        for (final setting in animatorSettingsOf(animator)) {
-          rows.add(FoldAnimatorSettingRow(i, animator, setting, depth: 3));
+        // Each selector's rows, under a heading of its own once there are
+        // more than one, its Advanced rows under a twirl of their own.
+        final many = selectorCount(animator) > 1;
+        for (var k = 0; k < selectorCount(animator); k++) {
+          final depth = many ? 4 : 3;
+          final selectorHead = '$path/${animatorSelectorSegment(k)}selector';
+          if (many) {
+            rows.add(FoldGroupRow(
+              path: selectorHead,
+              label: l10n.textAnimatorSelectorNumber(k + 1),
+              open: open.contains(selectorHead),
+              depth: 3,
+            ));
+            if (!open.contains(selectorHead)) continue;
+          }
+          final items = selectorItemsOf(selectorAt(animator, k), k);
+          void add(SelectorItem item, int depth) => rows.add(switch (item) {
+                SelectorSettingItem(:final setting) => FoldAnimatorSettingRow(
+                    i, animator, setting,
+                    depth: depth, selector: k),
+                SelectorValueItem(:final value) => FoldAnimatorValueRow(
+                    i, animator, value,
+                    depth: depth, selector: k),
+              });
+          for (final item in items) {
+            if (!item.advanced) add(item, depth);
+          }
+          if (items.any((item) => item.advanced)) {
+            final advanced = '$path/${animatorSelectorSegment(k)}advanced';
+            rows.add(FoldGroupRow(
+              path: advanced,
+              label: l10n.textAnimatorAdvanced,
+              open: open.contains(advanced),
+              depth: depth,
+            ));
+            if (open.contains(advanced)) {
+              for (final item in items) {
+                if (item.advanced) add(item, depth + 1);
+              }
+            }
+          }
         }
         for (final value in textAnimatorValuesOf(animator, solid: solid)) {
           rows.add(FoldAnimatorValueRow(i, animator, value, depth: 3));

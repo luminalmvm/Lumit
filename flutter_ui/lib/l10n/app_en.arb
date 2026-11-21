@@ -32585,5 +32585,223 @@
   "pasteImageFailed": "Couldn't save the picture on the clipboard",
   "@pasteImageFailed": {
     "description": "Status-line error after Paste found a picture on the system clipboard and could not write it to disk, so nothing was imported."
+  },
+  "textAnimatorEnabled": "Show animator",
+  "@textAnimatorEnabled": {
+    "description": "Tooltip of the eye beside a text animator's name: off leaves every letter as if the animator were not there."
+  },
+  "textAnimatorSolo": "Solo animator",
+  "@textAnimatorSolo": {
+    "description": "Tooltip of the solo switch beside a text animator's name: while any animator of the layer is soloed, only the soloed ones count."
+  },
+  "textAnimatorMore": "More",
+  "@textAnimatorMore": {
+    "description": "Button beside a text animator's name opening a menu of what can be done with the whole animator: duplicate, copy, make an out animation, save as preset, move, remove."
+  },
+  "textAnimatorDuplicate": "Duplicate",
+  "@textAnimatorDuplicate": {
+    "description": "Menu row: adds a copy of the text animator right after it."
+  },
+  "textAnimatorCopy": "Copy animator",
+  "@textAnimatorCopy": {
+    "description": "Menu row: keeps the text animator to paste on another Text layer."
+  },
+  "textAnimatorCopyAll": "Copy all animators",
+  "@textAnimatorCopyAll": {
+    "description": "Menu row on the Animators heading: keeps every animator of the layer to paste on another Text layer."
+  },
+  "textAnimatorPaste": "Paste animators",
+  "@textAnimatorPaste": {
+    "description": "Menu row: adds the text animators copied last to this Text layer, after its own."
+  },
+  "textAnimatorMakeOut": "Make out animation",
+  "@textAnimatorMakeOut": {
+    "description": "Menu row: adds a copy of the text animator played backwards, its keys moved to start at the playhead, so the letters leave the way they came in."
+  },
+  "textAnimatorOutName": "{name} out",
+  "@textAnimatorOutName": {
+    "description": "Name given to the animator Make out animation adds.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "textAnimatorSavePreset": "Save as preset…",
+  "@textAnimatorSavePreset": {
+    "description": "Menu row: saves the text animator as a preset of its own, listed under My presets in Add animator."
+  },
+  "textAnimatorSaveAllPreset": "Save all as preset…",
+  "@textAnimatorSaveAllPreset": {
+    "description": "Menu row on the Animators heading: saves every animator of the layer as one preset, listed under My presets in Add animator."
+  },
+  "textAnimatorPresetName": "Animator preset name",
+  "@textAnimatorPresetName": {
+    "description": "Title of the dialog asking what to call a saved text animator preset."
+  },
+  "textAnimatorMyPresets": "My presets",
+  "@textAnimatorMyPresets": {
+    "description": "Submenu of Add animator listing the text animator presets the user saved."
+  },
+  "textAnimatorRename": "Double-click to rename",
+  "@textAnimatorRename": {
+    "description": "Tooltip on a text animator's name: double-clicking it edits the name; Enter keeps it, Esc goes back."
+  },
+  "textAnimatorLink": "Link to",
+  "@textAnimatorLink": {
+    "description": "Row label: another animator of the same layer whose selectors pick this animator's letters too, so one curve drives both. None uses the animator's own selectors."
+  },
+  "textAnimatorLinkOffset": "Link offset",
+  "@textAnimatorLinkOffset": {
+    "description": "Row label: seconds later this animator reads the linked animator's selection; negative reads ahead."
+  },
+  "textAnimatorSelectorNumber": "Selector {number}",
+  "@textAnimatorSelectorNumber": {
+    "description": "Heading over one of a text animator's selectors, counted from 1 top to bottom.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "textAnimatorRemoveSelector": "Remove selector",
+  "@textAnimatorRemoveSelector": {
+    "description": "Button on a text animator's second or later selector: takes that selector off."
+  },
+  "textAnimatorAdvanced": "Advanced",
+  "@textAnimatorAdvanced": {
+    "description": "Twirl over a selector's less used rows: Based on, Mode, Shape, the eases, Units and Randomize order."
+  },
+  "textAnimatorModeIntersect": "Intersect",
+  "@textAnimatorModeIntersect": {
+    "description": "Option in a selector's Mode picker: each letter is moved as far as this selector and the ones above agree on."
+  },
+  "textAnimatorModeMin": "Min",
+  "@textAnimatorModeMin": {
+    "description": "Option in a selector's Mode picker: the smaller of this selector's weight and the ones above."
+  },
+  "textAnimatorModeMax": "Max",
+  "@textAnimatorModeMax": {
+    "description": "Option in a selector's Mode picker: the larger of this selector's weight and the ones above."
+  },
+  "textAnimatorModeDifference": "Difference",
+  "@textAnimatorModeDifference": {
+    "description": "Option in a selector's Mode picker: how far apart this selector's weight and the ones above are."
+  },
+  "textAnimatorBasisCharactersExcludingSpaces": "Characters excluding spaces",
+  "@textAnimatorBasisCharactersExcludingSpaces": {
+    "description": "Option in a selector's Based on picker: letters are counted one by one, spaces left out."
+  },
+  "textAnimatorBasisLines": "Lines",
+  "@textAnimatorBasisLines": {
+    "description": "Option in a selector's Based on picker: whole lines, broken where the text was broken with Enter."
+  },
+  "textAnimatorUnits": "Units",
+  "@textAnimatorUnits": {
+    "description": "Row label: what a Range selector's Start, End and Offset count in."
+  },
+  "textAnimatorUnitsPercentage": "Percentage",
+  "@textAnimatorUnitsPercentage": {
+    "description": "Option in a Range selector's Units: per cent of the text."
+  },
+  "textAnimatorUnitsIndex": "Index",
+  "@textAnimatorUnitsIndex": {
+    "description": "Option in a Range selector's Units: letters (or words, or lines) counted from 0."
+  },
+  "textAnimatorRandomize": "Randomize order",
+  "@textAnimatorRandomize": {
+    "description": "Row label of a checkbox: a Range selector reaches the letters in an order of their own for each Seed."
+  },
+  "textAnimatorDelayIn": "Delay in",
+  "@textAnimatorDelayIn": {
+    "description": "Row label: whether a Stagger's Delay is shown in seconds or in frames."
+  },
+  "textAnimatorDelaySeconds": "Seconds",
+  "@textAnimatorDelaySeconds": {
+    "description": "Option of a Stagger's Delay in: the delay is shown in seconds."
+  },
+  "textAnimatorDelayFrames": "Frames",
+  "@textAnimatorDelayFrames": {
+    "description": "Option of a Stagger's Delay in: the delay is shown in frames of the composition."
+  },
+  "textAnimatorTotal": "Total duration",
+  "@textAnimatorTotal": {
+    "description": "Row label of a checkbox: a Stagger's Delay is the time from the first unit's start to the last one's, whatever the length of the text."
+  },
+  "textAnimatorRepeat": "After last key",
+  "@textAnimatorRepeat": {
+    "description": "Row label: what a Stagger does after Amount's last key: hold it, loop, or ping-pong."
+  },
+  "textAnimatorRepeatOnce": "Hold",
+  "@textAnimatorRepeatOnce": {
+    "description": "Option of a Stagger's After last key: Amount stays at its last key."
+  },
+  "textAnimatorRepeatLoop": "Loop",
+  "@textAnimatorRepeatLoop": {
+    "description": "Option of a Stagger's After last key: Amount plays again from its first key."
+  },
+  "textAnimatorRepeatPingPong": "Ping-pong",
+  "@textAnimatorRepeatPingPong": {
+    "description": "Option of a Stagger's After last key: Amount plays back to its first key, then forwards again."
+  },
+  "textAnimatorBouncePreset": "Bounce preset",
+  "@textAnimatorBouncePreset": {
+    "description": "Row label: sets a Stagger's three bounce numbers at once."
+  },
+  "textAnimatorBounceNone": "None",
+  "@textAnimatorBounceNone": {
+    "description": "Bounce preset: no bounce (amplitude 0)."
+  },
+  "textAnimatorBounceSoft": "Soft",
+  "@textAnimatorBounceSoft": {
+    "description": "Bounce preset: a small, quickly settling bounce."
+  },
+  "textAnimatorBounceMedium": "Medium",
+  "@textAnimatorBounceMedium": {
+    "description": "Bounce preset: the inertial bounce expression's usual numbers."
+  },
+  "textAnimatorBounceElastic": "Elastic",
+  "@textAnimatorBounceElastic": {
+    "description": "Bounce preset: a wide, fast, slowly dying bounce."
+  },
+  "textAnimatorBounceCustom": "Custom",
+  "@textAnimatorBounceCustom": {
+    "description": "Bounce preset shown when the three bounce numbers match no preset."
+  },
+  "textAnimatorBounceOn": "Bounce after",
+  "@textAnimatorBounceOn": {
+    "description": "Row label: whether a Stagger bounces after every key of Amount or after the last only."
+  },
+  "textAnimatorBounceEveryKey": "Every key",
+  "@textAnimatorBounceEveryKey": {
+    "description": "Option of Bounce after: the units bounce after each of Amount's keys."
+  },
+  "textAnimatorBounceLastKey": "Last key only",
+  "@textAnimatorBounceLastKey": {
+    "description": "Option of Bounce after: the units bounce after Amount's last key only."
+  },
+  "textAnimatorSkew": "Skew",
+  "@textAnimatorSkew": {
+    "description": "Text animator property: degrees a reached letter is slanted, about its middle on the baseline."
+  },
+  "textAnimatorSkewAxis": "Skew axis",
+  "@textAnimatorSkewAxis": {
+    "description": "Text animator property: degrees of the line a letter is slanted along; 0 leans it sideways."
+  },
+  "textAnimatorTracking": "Tracking amount",
+  "@textAnimatorTracking": {
+    "description": "Text animator property: extra room after a reached letter, in thousandths of an em."
+  },
+  "textAnimatorBlur": "Blur",
+  "@textAnimatorBlur": {
+    "description": "Text animator property: pixels a reached letter is blurred by."
+  },
+  "textAnimatorCharacterOffset": "Character offset",
+  "@textAnimatorCharacterOffset": {
+    "description": "Text animator property: a reached letter is set as the character this many further on (1 turns a into b)."
+  },
+  "textAnimatorAnimatorAmount": "Animator amount",
+  "@textAnimatorAnimatorAmount": {
+    "description": "Row label: per cent of the whole text animator's effect; 50 moves every letter half as far as its selectors say."
   }
 }

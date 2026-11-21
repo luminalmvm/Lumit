@@ -3,13 +3,14 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../api.dart';
 import '../frb_generated.dart';
 import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `shift_property`, `text_document_of`, `with_camera_at`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The style a text layer has before anything is styled.
 BridgeTextStyle defaultTextStyle() =>
@@ -40,6 +41,26 @@ Future<List<BridgeFontAxis>> textFontAxes(
 /// Variable fonts only filter.
 Future<List<String>> textVariableFontFamilies() =>
     BridgeLib.instance.api.crateApiAssetsTextVariableFontFamilies();
+
+/// Animators as a user preset's text, their keys moved back by `from` so the
+/// first one lands where the preset is later put.
+///
+/// # Errors
+/// A time or key the document cannot hold.
+Future<String> textAnimatorsToJson(
+        {required List<BridgeTextAnimator> animators,
+        required BridgeRational from}) =>
+    BridgeLib.instance.api
+        .crateApiAssetsTextAnimatorsToJson(animators: animators, from: from);
+
+/// A user preset's animators, their keys moved on by `at`.
+///
+/// # Errors
+/// Text that is not a list of animators.
+Future<List<BridgeTextAnimator>> textAnimatorsFromJson(
+        {required String json, required BridgeRational at}) =>
+    BridgeLib.instance.api
+        .crateApiAssetsTextAnimatorsFromJson(json: json, at: at);
 
 /// Lay out `text` the way the engine draws it in this style, with or without
 /// the room animators get round it, and `boxed` when an animator draws boxes.
@@ -328,6 +349,25 @@ class BridgeRangeSelector {
   final BridgeScalar correlation;
   final int seed;
 
+  /// How the selector is put together with the ones above it.
+  final BridgeSelectorCombine combine;
+
+  /// Per cent or units, for a Range's Start, End and Offset.
+  final BridgeSelectorUnits units;
+
+  /// A Range's Randomize order, by `seed`.
+  final bool randomize;
+
+  /// A Stagger's Delay shown in frames; it is seconds either way.
+  final bool delayFrames;
+
+  /// A Stagger's Delay is the whole spread.
+  final bool total;
+  final BridgeStaggerRepeat repeat;
+
+  /// Bounce after Amount's last key only.
+  final bool bounceLast;
+
   const BridgeRangeSelector({
     required this.start,
     required this.end,
@@ -354,6 +394,13 @@ class BridgeRangeSelector {
     required this.wiggles,
     required this.correlation,
     required this.seed,
+    required this.combine,
+    required this.units,
+    required this.randomize,
+    required this.delayFrames,
+    required this.total,
+    required this.repeat,
+    required this.bounceLast,
   });
 
   @override
@@ -382,7 +429,14 @@ class BridgeRangeSelector {
       maxAmount.hashCode ^
       wiggles.hashCode ^
       correlation.hashCode ^
-      seed.hashCode;
+      seed.hashCode ^
+      combine.hashCode ^
+      units.hashCode ^
+      randomize.hashCode ^
+      delayFrames.hashCode ^
+      total.hashCode ^
+      repeat.hashCode ^
+      bounceLast.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -413,7 +467,14 @@ class BridgeRangeSelector {
           maxAmount == other.maxAmount &&
           wiggles == other.wiggles &&
           correlation == other.correlation &&
-          seed == other.seed;
+          seed == other.seed &&
+          combine == other.combine &&
+          units == other.units &&
+          randomize == other.randomize &&
+          delayFrames == other.delayFrames &&
+          total == other.total &&
+          repeat == other.repeat &&
+          bounceLast == other.bounceLast;
 }
 
 /// Where the letters sit against the baseline.
@@ -428,6 +489,19 @@ enum BridgeScript {
 enum BridgeSelectorBasis {
   characters,
   words,
+  charactersExcludingSpaces,
+  lines,
+  ;
+}
+
+/// How a selector after the first is put together with the ones above it;
+/// Subtract is the selector's `invert`.
+enum BridgeSelectorCombine {
+  add,
+  intersect,
+  min,
+  max,
+  difference,
   ;
 }
 
@@ -457,6 +531,13 @@ enum BridgeSelectorShape {
   ramp,
   smooth,
   bounce,
+  ;
+}
+
+/// What a Range selector's Start, End and Offset count in.
+enum BridgeSelectorUnits {
+  percentage,
+  indexed,
   ;
 }
 
@@ -499,6 +580,14 @@ enum BridgeStaggerOrder {
   ;
 }
 
+/// What a Stagger selector does after Amount's last key.
+enum BridgeStaggerRepeat {
+  once,
+  loop,
+  pingPong,
+  ;
+}
+
 /// Which side the lines of a block line up on.
 enum BridgeTextAlign {
   left,
@@ -516,6 +605,29 @@ enum BridgeTextAlign {
 class BridgeTextAnimator {
   final String name;
   final BridgeRangeSelector selector;
+
+  /// More selectors after the first, top to bottom.
+  final List<BridgeRangeSelector> selectors;
+
+  /// The eye, and solo.
+  final bool enabled;
+  final bool solo;
+
+  /// Per cent: the whole animator's strength.
+  final BridgeScalar amount;
+
+  /// Another animator whose selection this one follows, by name, and the
+  /// seconds it is read later.
+  final String? follow;
+  final double followOffset;
+
+  /// Degrees of slant and of its axis, thousandths of an em of tracking,
+  /// px of blur, and places a character is moved on.
+  final BridgeScalar skew;
+  final BridgeScalar skewAxis;
+  final BridgeScalar tracking;
+  final BridgeScalar blur;
+  final BridgeScalar characterOffset;
   final BridgeScalar positionX;
   final BridgeScalar positionY;
   final BridgeScalar rotation;
@@ -546,6 +658,17 @@ class BridgeTextAnimator {
   const BridgeTextAnimator({
     required this.name,
     required this.selector,
+    required this.selectors,
+    required this.enabled,
+    required this.solo,
+    required this.amount,
+    this.follow,
+    required this.followOffset,
+    required this.skew,
+    required this.skewAxis,
+    required this.tracking,
+    required this.blur,
+    required this.characterOffset,
     required this.positionX,
     required this.positionY,
     required this.rotation,
@@ -570,6 +693,17 @@ class BridgeTextAnimator {
   int get hashCode =>
       name.hashCode ^
       selector.hashCode ^
+      selectors.hashCode ^
+      enabled.hashCode ^
+      solo.hashCode ^
+      amount.hashCode ^
+      follow.hashCode ^
+      followOffset.hashCode ^
+      skew.hashCode ^
+      skewAxis.hashCode ^
+      tracking.hashCode ^
+      blur.hashCode ^
+      characterOffset.hashCode ^
       positionX.hashCode ^
       positionY.hashCode ^
       rotation.hashCode ^
@@ -596,6 +730,17 @@ class BridgeTextAnimator {
           runtimeType == other.runtimeType &&
           name == other.name &&
           selector == other.selector &&
+          selectors == other.selectors &&
+          enabled == other.enabled &&
+          solo == other.solo &&
+          amount == other.amount &&
+          follow == other.follow &&
+          followOffset == other.followOffset &&
+          skew == other.skew &&
+          skewAxis == other.skewAxis &&
+          tracking == other.tracking &&
+          blur == other.blur &&
+          characterOffset == other.characterOffset &&
           positionX == other.positionX &&
           positionY == other.positionY &&
           rotation == other.rotation &&

@@ -91,6 +91,13 @@ List<BridgeTextAnimator> textPresetAnimators(
         wiggles: const BridgeScalar.static_(2),
         correlation: const BridgeScalar.static_(50),
         seed: 0,
+        combine: BridgeSelectorCombine.add,
+        units: BridgeSelectorUnits.percentage,
+        randomize: false,
+        delayFrames: false,
+        total: false,
+        repeat: BridgeStaggerRepeat.once,
+        bounceLast: false,
       );
 
   final fresh = freshTextAnimator(preset.title);
@@ -132,6 +139,13 @@ List<BridgeTextAnimator> textPresetAnimators(
             wiggles: const BridgeScalar.static_(2),
             correlation: const BridgeScalar.static_(50),
             seed: 0,
+            combine: BridgeSelectorCombine.add,
+            units: BridgeSelectorUnits.percentage,
+            randomize: false,
+            delayFrames: false,
+            total: false,
+            repeat: BridgeStaggerRepeat.once,
+            bounceLast: false,
           ),
           opacity: hidden,
         )
@@ -185,6 +199,13 @@ List<BridgeTextAnimator> textPresetAnimators(
             wiggles: const BridgeScalar.static_(2),
             correlation: const BridgeScalar.static_(50),
             seed: 0,
+            combine: BridgeSelectorCombine.add,
+            units: BridgeSelectorUnits.percentage,
+            randomize: false,
+            delayFrames: false,
+            total: false,
+            repeat: BridgeStaggerRepeat.once,
+            bounceLast: false,
           ),
           positionX: sweep(_spread, 0),
         ),
@@ -398,55 +419,21 @@ BridgeScalar reversedScalar(BridgeScalar scalar) {
 
 /// [a] played backwards, so an in becomes an out.
 BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
-  final s = a.selector;
-  return animatorWith(
-    a,
-    selector: BridgeRangeSelector(
+  // A selector's timing (Delay, its ease, the bounce) plays the same way
+  // backwards; its range and amounts run the other way round.
+  BridgeRangeSelector sel(BridgeRangeSelector s) => selectorWith(s,
       start: reversedScalar(s.start),
       end: reversedScalar(s.end),
       offset: reversedScalar(s.offset),
-      basis: s.basis,
-      shape: s.shape,
-      mode: s.mode,
-      ease: s.ease,
-      kind: s.kind,
-      target: s.target,
       radius: reversedScalar(s.radius),
-      invert: s.invert,
       easeHigh: reversedScalar(s.easeHigh),
       easeLow: reversedScalar(s.easeLow),
       amount: reversedScalar(s.amount),
-      delay: s.delay,
-      delayEase: s.delayEase,
-      order: s.order,
-      bounceAmplitude: s.bounceAmplitude,
-      bounceFrequency: s.bounceFrequency,
-      bounceDecay: s.bounceDecay,
       minAmount: reversedScalar(s.minAmount),
       maxAmount: reversedScalar(s.maxAmount),
       wiggles: reversedScalar(s.wiggles),
-      correlation: reversedScalar(s.correlation),
-      seed: s.seed,
-    ),
-    positionX: reversedScalar(a.positionX),
-    positionY: reversedScalar(a.positionY),
-    rotation: reversedScalar(a.rotation),
-    positionZ: reversedScalar(a.positionZ),
-    rotationX: reversedScalar(a.rotationX),
-    rotationY: reversedScalar(a.rotationY),
-    scaleX: reversedScalar(a.scaleX),
-    scaleY: reversedScalar(a.scaleY),
-    opacity: reversedScalar(a.opacity),
-    fillR: reversedScalar(a.fillR),
-    fillG: reversedScalar(a.fillG),
-    fillB: reversedScalar(a.fillB),
-    boxOpacity: reversedScalar(a.boxOpacity),
-    boxR: reversedScalar(a.boxR),
-    boxG: reversedScalar(a.boxG),
-    boxB: reversedScalar(a.boxB),
-    axes: [
-      for (final x in a.axes)
-        BridgeAnimatorAxis(tag: x.tag, value: reversedScalar(x.value)),
-    ],
-  );
+      correlation: reversedScalar(s.correlation));
+  return animatorWith(animatorMapped(a, reversedScalar),
+      selector: sel(a.selector),
+      selectors: [for (final s in a.selectors) sel(s)]);
 }

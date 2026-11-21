@@ -94,6 +94,11 @@ void main() {
       await tester
           .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/0')));
       await tester.pumpAndSettle();
+      // Based on and Shape fold under the selector's Advanced.
+      expect(find.byKey(const ValueKey<String>('tl-anim-0-basis')), findsNothing);
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-group-$id/animators/0/advanced')));
+      await tester.pumpAndSettle();
       for (final setting in ['selector', 'basis', 'shape']) {
         expect(
             find.byKey(ValueKey<String>('tl-anim-0-$setting')), findsOneWidget,

@@ -1,0 +1,1284 @@
+// What a text animator's rows share between the Effect controls panel and
+// the Timeline: its selectors (more than one, each with its Mode), the rows
+// each selector shows and which of them fold away under Advanced, the choice
+// controls, copy and paste, the user's own presets, and the small curve
+// beside Shape, the eases and a Stagger's Amount.
+//
+// The weights themselves are the engine's; the curve preview only sketches
+// the same formula so the row can show it without a bridge call per frame.
+
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
+import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
+
+import '../l10n/strings.dart';
+import '../shell/theme_name_dialog.dart' show askThemeName;
+import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
+import 'graph_maths.dart' show evaluateScalar, keysOf, rationalSeconds;
+import '../state/font_axes.dart' show fontAxesReady;
+import 'fx_section.dart' show FxRenameField, fxTwoColumnRow;
+import 'text_animation_presets.dart' show reversedAnimator, reversedScalar;
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'timeline_mask_rows_frb.dart' show RowButton;
+import 'text_animator_rows_frb.dart';
+
+// ---- Selectors ------------------------------------------------------------
+
+/// A fresh selector of [kind]: every number where it changes nothing.
+BridgeRangeSelector freshSelector(
+        [BridgeSelectorKind kind = BridgeSelectorKind.range]) =>
+    BridgeRangeSelector(
+      start: const BridgeScalar.static_(0),
+      end: const BridgeScalar.static_(100),
+      offset: const BridgeScalar.static_(0),
+      basis: BridgeSelectorBasis.characters,
+      // A Proximity selector starts Smooth, as [animatorWithSelectorKind].
+      shape: kind == BridgeSelectorKind.proximity
+          ? BridgeSelectorShape.smooth
+          : BridgeSelectorShape.square,
+      mode: BridgeSelectorMode.range,
+      ease: 0,
+      kind: kind,
+      radius: const BridgeScalar.static_(200),
+      invert: false,
+      easeHigh: const BridgeScalar.static_(0),
+      easeLow: const BridgeScalar.static_(0),
+      amount: const BridgeScalar.static_(100),
+      delay: const BridgeScalar.static_(0.1),
+      delayEase: const BridgeScalar.static_(0),
+      order: BridgeStaggerOrder.forward,
+      bounceAmplitude: const BridgeScalar.static_(0),
+      bounceFrequency: const BridgeScalar.static_(2),
+      bounceDecay: const BridgeScalar.static_(3),
+      minAmount: const BridgeScalar.static_(0),
+      maxAmount: const BridgeScalar.static_(100),
+      wiggles: const BridgeScalar.static_(2),
+      correlation: const BridgeScalar.static_(50),
+      seed: 0,
+      combine: BridgeSelectorCombine.add,
+      units: BridgeSelectorUnits.percentage,
+      randomize: false,
+      delayFrames: false,
+      total: false,
+      repeat: BridgeStaggerRepeat.once,
+      bounceLast: false,
+    );
+
+/// How many selectors [a] has, the first counted.
+int selectorCount(BridgeTextAnimator a) => 1 + a.selectors.length;
+
+/// [a]'s selector [k], the first being 0.
+BridgeRangeSelector selectorAt(BridgeTextAnimator a, int k) =>
+    k <= 0 || k > a.selectors.length ? a.selector : a.selectors[k - 1];
+
+/// [a] with its selector [k] replaced.
+BridgeTextAnimator animatorWithSelectorAt(
+        BridgeTextAnimator a, int k, BridgeRangeSelector s) =>
+    k <= 0
+        ? animatorWith(a, selector: s)
+        : animatorWith(a, selectors: [
+            for (var i = 0; i < a.selectors.length; i++)
+              if (i == k - 1) s else a.selectors[i],
+          ]);
+
+/// [a] without its selector [k]; the first one stays, since an animator is
+/// never without a selector.
+BridgeTextAnimator animatorWithoutSelector(BridgeTextAnimator a, int k) =>
+    k <= 0
+        ? a
+        : animatorWith(a, selectors: [
+            for (var i = 0; i < a.selectors.length; i++)
+              if (i != k - 1) a.selectors[i],
+          ]);
+
+/// [s] made [kind], Square going Smooth for a Proximity selector.
+BridgeRangeSelector selectorWithKind(
+        BridgeRangeSelector s, BridgeSelectorKind kind) =>
+    selectorWith(s,
+        kind: kind,
+        shape: kind == BridgeSelectorKind.proximity &&
+                s.shape == BridgeSelectorShape.square
+            ? BridgeSelectorShape.smooth
+            : null);
+
+/// A selector's Mode, as After Effects lists it: how it is put together with
+/// the selectors above it. Subtract is the selector's `invert`.
+enum SelectorModeChoice { add, subtract, intersect, min, max, difference }
+
+SelectorModeChoice selectorModeOf(BridgeRangeSelector s) => s.invert
+    ? SelectorModeChoice.subtract
+    : switch (s.combine) {
+        BridgeSelectorCombine.add => SelectorModeChoice.add,
+        BridgeSelectorCombine.intersect => SelectorModeChoice.intersect,
+        BridgeSelectorCombine.min => SelectorModeChoice.min,
+        BridgeSelectorCombine.max => SelectorModeChoice.max,
+        BridgeSelectorCombine.difference => SelectorModeChoice.difference,
+      };
+
+BridgeRangeSelector selectorWithMode(
+        BridgeRangeSelector s, SelectorModeChoice m) =>
+    selectorWith(s,
+        invert: m == SelectorModeChoice.subtract,
+        combine: switch (m) {
+          SelectorModeChoice.intersect => BridgeSelectorCombine.intersect,
+          SelectorModeChoice.min => BridgeSelectorCombine.min,
+          SelectorModeChoice.max => BridgeSelectorCombine.max,
+          SelectorModeChoice.difference => BridgeSelectorCombine.difference,
+          _ => BridgeSelectorCombine.add,
+        });
+
+String selectorModeLabel(SelectorModeChoice m) => switch (m) {
+      SelectorModeChoice.add => l10n.textAnimatorModeAdd,
+      SelectorModeChoice.subtract => l10n.textAnimatorModeSubtract,
+      SelectorModeChoice.intersect => l10n.textAnimatorModeIntersect,
+      SelectorModeChoice.min => l10n.textAnimatorModeMin,
+      SelectorModeChoice.max => l10n.textAnimatorModeMax,
+      SelectorModeChoice.difference => l10n.textAnimatorModeDifference,
+    };
+
+/// The modes selector [k] offers: the first has nothing above it to meet,
+/// so only Add and Subtract mean anything there.
+List<SelectorModeChoice> selectorModesFor(int k) => k == 0
+    ? const [SelectorModeChoice.add, SelectorModeChoice.subtract]
+    : SelectorModeChoice.values;
+
+String selectorBasisLabel(BridgeSelectorBasis b) => switch (b) {
+      BridgeSelectorBasis.characters => l10n.textAnimatorBasisCharacters,
+      BridgeSelectorBasis.charactersExcludingSpaces =>
+        l10n.textAnimatorBasisCharactersExcludingSpaces,
+      BridgeSelectorBasis.words => l10n.textAnimatorBasisWords,
+      BridgeSelectorBasis.lines => l10n.textAnimatorBasisLines,
+    };
+
+String selectorShapeLabel(BridgeSelectorShape s) => switch (s) {
+      BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
+      BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
+      BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
+      BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
+    };
+
+String selectorKindLabel(BridgeSelectorKind k) => switch (k) {
+      BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
+      BridgeSelectorKind.proximity => l10n.textAnimatorSelectorProximity,
+      BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
+      BridgeSelectorKind.stagger => l10n.textAnimatorSelectorStagger,
+    };
+
+// ---- Bounce presets -------------------------------------------------------
+
+/// A Stagger's bounce in one pick: amplitude, frequency and decay.
+enum BouncePreset {
+  none(0, 2, 3),
+  soft(2, 2, 6),
+  medium(5, 2.5, 4),
+  elastic(12, 4, 2),
+  custom(0, 0, 0);
+
+  final double amplitude, frequency, decay;
+  const BouncePreset(this.amplitude, this.frequency, this.decay);
+
+  String get label => switch (this) {
+        none => l10n.textAnimatorBounceNone,
+        soft => l10n.textAnimatorBounceSoft,
+        medium => l10n.textAnimatorBounceMedium,
+        elastic => l10n.textAnimatorBounceElastic,
+        custom => l10n.textAnimatorBounceCustom,
+      };
+}
+
+/// The preset [s]'s three bounce numbers make, Custom when they are keyed or
+/// match none. Any amplitude of 0 is None.
+BouncePreset bouncePresetOf(BridgeRangeSelector s) {
+  double? still(BridgeScalar v) =>
+      v is BridgeScalar_Static ? v.field0 : null;
+  final (a, f, d) = (
+    still(s.bounceAmplitude),
+    still(s.bounceFrequency),
+    still(s.bounceDecay)
+  );
+  if (a == 0) return BouncePreset.none;
+  for (final p in BouncePreset.values) {
+    if (p != BouncePreset.custom &&
+        p.amplitude == a &&
+        p.frequency == f &&
+        p.decay == d) {
+      return p;
+    }
+  }
+  return BouncePreset.custom;
+}
+
+BridgeRangeSelector selectorWithBounce(
+        BridgeRangeSelector s, BouncePreset p) =>
+    p == BouncePreset.custom
+        ? s
+        : selectorWith(s,
+            bounceAmplitude: BridgeScalar.static_(p.amplitude),
+            bounceFrequency: BridgeScalar.static_(p.frequency),
+            bounceDecay: BridgeScalar.static_(p.decay));
+
+// ---- A selector's rows ----------------------------------------------------
+
+/// A text animator's selector choices, which have no curve.
+enum AnimatorSetting {
+  selector,
+  target,
+  invert,
+  mode,
+  units,
+  basis,
+  shape,
+  randomize,
+  seed,
+  order,
+  delayUnit,
+  total,
+  repeat,
+  bouncePreset,
+  bounceLast,
+}
+
+String animatorSettingLabel(AnimatorSetting setting) => switch (setting) {
+      AnimatorSetting.selector => l10n.textAnimatorSelector,
+      AnimatorSetting.target => l10n.textAnimatorTarget,
+      AnimatorSetting.invert => l10n.textAnimatorInvert,
+      AnimatorSetting.mode => l10n.textAnimatorMode,
+      AnimatorSetting.units => l10n.textAnimatorUnits,
+      AnimatorSetting.basis => l10n.textAnimatorBasis,
+      AnimatorSetting.shape => l10n.textAnimatorShape,
+      AnimatorSetting.randomize => l10n.textAnimatorRandomize,
+      AnimatorSetting.seed => l10n.textAnimatorSeed,
+      AnimatorSetting.order => l10n.textAnimatorOrder,
+      AnimatorSetting.delayUnit => l10n.textAnimatorDelayIn,
+      AnimatorSetting.total => l10n.textAnimatorTotal,
+      AnimatorSetting.repeat => l10n.textAnimatorRepeat,
+      AnimatorSetting.bouncePreset => l10n.textAnimatorBouncePreset,
+      AnimatorSetting.bounceLast => l10n.textAnimatorBounceOn,
+    };
+
+/// One row of a selector: a choice or a number, and whether it folds away
+/// under Advanced.
+sealed class SelectorItem {
+  final bool advanced;
+  const SelectorItem(this.advanced);
+}
+
+final class SelectorSettingItem extends SelectorItem {
+  final AnimatorSetting setting;
+  const SelectorSettingItem(this.setting, [super.advanced = false]);
+}
+
+final class SelectorValueItem extends SelectorItem {
+  final TextAnimatorValue value;
+  const SelectorValueItem(this.value, [super.advanced = false]);
+}
+
+/// The rows selector [k] shows, in order. A Range's Start, End and Offset
+/// stay open; Based on, Mode, Shape, the eases, Units and Randomize fold
+/// under Advanced. Rows that would do nothing are left out: Seed only with a
+/// random order, Mode only where there is something to meet.
+List<SelectorItem> selectorItemsOf(BridgeRangeSelector s, int k) {
+  const advanced = true;
+  final mode = SelectorSettingItem(AnimatorSetting.mode, advanced);
+  final basis = SelectorSettingItem(AnimatorSetting.basis, advanced);
+  final shape = SelectorSettingItem(AnimatorSetting.shape, advanced);
+  if (s.mode != BridgeSelectorMode.range) {
+    // The spoken words pick the letters: what is counted and how a word
+    // changes.
+    return [
+      const SelectorSettingItem(AnimatorSetting.basis),
+      const SelectorSettingItem(AnimatorSetting.shape),
+      if (k > 0) const SelectorSettingItem(AnimatorSetting.mode),
+    ];
+  }
+  return switch (s.kind) {
+    BridgeSelectorKind.range => [
+        const SelectorSettingItem(AnimatorSetting.selector),
+        const SelectorValueItem(TextAnimatorValue.rangeStart),
+        const SelectorValueItem(TextAnimatorValue.rangeEnd),
+        const SelectorValueItem(TextAnimatorValue.rangeOffset),
+        const SelectorSettingItem(AnimatorSetting.units, advanced),
+        basis,
+        mode,
+        shape,
+        const SelectorValueItem(TextAnimatorValue.easeHigh, advanced),
+        const SelectorValueItem(TextAnimatorValue.easeLow, advanced),
+        const SelectorSettingItem(AnimatorSetting.randomize, advanced),
+        if (s.randomize) const SelectorSettingItem(AnimatorSetting.seed, advanced),
+      ],
+    BridgeSelectorKind.stagger => [
+        const SelectorSettingItem(AnimatorSetting.selector),
+        const SelectorValueItem(TextAnimatorValue.staggerAmount),
+        const SelectorValueItem(TextAnimatorValue.staggerDelay),
+        const SelectorSettingItem(AnimatorSetting.delayUnit),
+        const SelectorSettingItem(AnimatorSetting.total),
+        const SelectorValueItem(TextAnimatorValue.staggerDelayEase),
+        const SelectorSettingItem(AnimatorSetting.order),
+        if (s.order == BridgeStaggerOrder.random)
+          const SelectorSettingItem(AnimatorSetting.seed),
+        const SelectorSettingItem(AnimatorSetting.repeat),
+        const SelectorSettingItem(AnimatorSetting.bouncePreset),
+        const SelectorValueItem(TextAnimatorValue.staggerBounceAmplitude),
+        const SelectorValueItem(TextAnimatorValue.staggerBounceFrequency),
+        const SelectorValueItem(TextAnimatorValue.staggerBounceDecay),
+        const SelectorSettingItem(AnimatorSetting.bounceLast),
+        basis,
+        mode,
+      ],
+    BridgeSelectorKind.wiggly => [
+        const SelectorSettingItem(AnimatorSetting.selector),
+        const SelectorValueItem(TextAnimatorValue.maxAmount),
+        const SelectorValueItem(TextAnimatorValue.minAmount),
+        const SelectorValueItem(TextAnimatorValue.wiggles),
+        const SelectorValueItem(TextAnimatorValue.correlation),
+        const SelectorSettingItem(AnimatorSetting.seed),
+        basis,
+        if (k > 0) mode,
+      ],
+    BridgeSelectorKind.proximity => [
+        const SelectorSettingItem(AnimatorSetting.selector),
+        const SelectorSettingItem(AnimatorSetting.target),
+        const SelectorValueItem(TextAnimatorValue.radius),
+        if (k == 0) const SelectorSettingItem(AnimatorSetting.invert),
+        basis,
+        shape,
+        if (k > 0) mode,
+      ],
+  };
+}
+
+/// Whether [item] does nothing as [s] stands, so its row is drawn faint: the
+/// bounce's frequency, decay and Bounce after while there is no bounce, the
+/// eases on a Square shape.
+bool selectorItemIdle(BridgeRangeSelector s, SelectorItem item) {
+  final noBounce = s.bounceAmplitude == const BridgeScalar.static_(0);
+  return switch (item) {
+    SelectorValueItem(
+      value: TextAnimatorValue.staggerBounceFrequency ||
+          TextAnimatorValue.staggerBounceDecay
+    ) =>
+      noBounce,
+    SelectorSettingItem(setting: AnimatorSetting.bounceLast) => noBounce,
+    SelectorValueItem(
+      value: TextAnimatorValue.easeHigh || TextAnimatorValue.easeLow
+    ) =>
+      s.shape == BridgeSelectorShape.square,
+    _ => false,
+  };
+}
+
+/// The choice control of [setting] on selector [s] (number [k]), writing
+/// through [put]. [fps] turns a Delay shown in frames.
+Widget animatorSettingControl(
+  BuildContext context, {
+  required LayerReference layer,
+  required BridgeRangeSelector s,
+  required int k,
+  required AnimatorSetting setting,
+  required ValueChanged<BridgeRangeSelector> put,
+  required String keyName,
+  bool dense = false,
+}) {
+  final key = ValueKey<String>(keyName);
+  Widget check(bool value, ValueChanged<bool> onChanged) => Align(
+        alignment: Alignment.centerLeft,
+        child: HouseCheckbox(key: key, value: value, onChanged: onChanged),
+      );
+  Widget seed() => DragValueField(
+        key: key,
+        value: s.seed,
+        min: 0,
+        max: 99999,
+        resetTo: 0,
+        decimals: 0,
+        onChanged: (v) =>
+            put(selectorWith(s, seed: v.round().clamp(0, 99999).toInt())),
+      );
+  return switch (setting) {
+    AnimatorSetting.selector => BareDropdown<BridgeSelectorKind>(
+        key: key,
+        dense: dense,
+        value: s.kind,
+        options: BridgeSelectorKind.values,
+        label: selectorKindLabel,
+        onChanged: (v) => put(selectorWithKind(s, v)),
+      ),
+    AnimatorSetting.target => LayerPicker(
+        key: key,
+        dense: dense,
+        layers: Provider.of<LumitUiState>(context, listen: false).model.layers,
+        value: s.target,
+        empty: l10n.none,
+        missing: l10n.missingLayer,
+        offered: (l) => l.layer.internallayerId != layer.internallayerId,
+        onChanged: (picked) => put(picked == null
+            ? selectorWith(s, clearTarget: true)
+            : selectorWith(s, target: picked)),
+      ),
+    AnimatorSetting.invert =>
+      check(s.invert, (on) => put(selectorWith(s, invert: on))),
+    AnimatorSetting.mode => BareDropdown<SelectorModeChoice>(
+        key: key,
+        dense: dense,
+        value: selectorModeOf(s),
+        options: selectorModesFor(k),
+        label: selectorModeLabel,
+        onChanged: (m) => put(selectorWithMode(s, m)),
+      ),
+    AnimatorSetting.units => BareDropdown<BridgeSelectorUnits>(
+        key: key,
+        dense: dense,
+        value: s.units,
+        options: BridgeSelectorUnits.values,
+        label: (u) => switch (u) {
+          BridgeSelectorUnits.percentage => l10n.textAnimatorUnitsPercentage,
+          BridgeSelectorUnits.indexed => l10n.textAnimatorUnitsIndex,
+        },
+        onChanged: (u) => put(selectorWith(s, units: u)),
+      ),
+    AnimatorSetting.basis => BareDropdown<BridgeSelectorBasis>(
+        key: key,
+        dense: dense,
+        value: s.basis,
+        options: BridgeSelectorBasis.values,
+        label: selectorBasisLabel,
+        onChanged: (b) => put(selectorWith(s, basis: b)),
+      ),
+    AnimatorSetting.shape => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: BareDropdown<BridgeSelectorShape>(
+              key: key,
+              dense: dense,
+              value: s.shape,
+              options: BridgeSelectorShape.values,
+              label: selectorShapeLabel,
+              onChanged: (v) => put(selectorWith(s, shape: v)),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SelectorCurvePreview(selector: s),
+        ],
+      ),
+    AnimatorSetting.randomize =>
+      check(s.randomize, (on) => put(selectorWith(s, randomize: on))),
+    AnimatorSetting.seed => dense ? SizedBox(width: 72, child: seed()) : seed(),
+    AnimatorSetting.order => BareDropdown<BridgeStaggerOrder>(
+        key: key,
+        dense: dense,
+        value: s.order,
+        options: BridgeStaggerOrder.values,
+        label: staggerOrderLabel,
+        onChanged: (o) => put(selectorWith(s, order: o)),
+      ),
+    AnimatorSetting.delayUnit => BareDropdown<bool>(
+        key: key,
+        dense: dense,
+        value: s.delayFrames,
+        options: const [false, true],
+        label: (frames) => frames
+            ? l10n.textAnimatorDelayFrames
+            : l10n.textAnimatorDelaySeconds,
+        onChanged: (frames) => put(selectorWith(s, delayFrames: frames)),
+      ),
+    AnimatorSetting.total =>
+      check(s.total, (on) => put(selectorWith(s, total: on))),
+    AnimatorSetting.repeat => BareDropdown<BridgeStaggerRepeat>(
+        key: key,
+        dense: dense,
+        value: s.repeat,
+        options: BridgeStaggerRepeat.values,
+        label: (r) => switch (r) {
+          BridgeStaggerRepeat.once => l10n.textAnimatorRepeatOnce,
+          BridgeStaggerRepeat.loop => l10n.textAnimatorRepeatLoop,
+          BridgeStaggerRepeat.pingPong => l10n.textAnimatorRepeatPingPong,
+        },
+        onChanged: (r) => put(selectorWith(s, repeat: r)),
+      ),
+    AnimatorSetting.bouncePreset => BareDropdown<BouncePreset>(
+        key: key,
+        dense: dense,
+        value: bouncePresetOf(s),
+        // Custom is what the numbers say, not something to pick.
+        options: [
+          for (final p in BouncePreset.values)
+            if (p != BouncePreset.custom || bouncePresetOf(s) == p) p,
+        ],
+        label: (p) => p.label,
+        onChanged: (p) => put(selectorWithBounce(s, p)),
+      ),
+    AnimatorSetting.bounceLast => BareDropdown<bool>(
+        key: key,
+        dense: dense,
+        value: s.bounceLast,
+        options: const [false, true],
+        label: (last) => last
+            ? l10n.textAnimatorBounceLastKey
+            : l10n.textAnimatorBounceEveryKey,
+        onChanged: (last) => put(selectorWith(s, bounceLast: last)),
+      ),
+  };
+}
+
+/// Whether [setting] on [s] differs from a fresh selector, for the
+/// Timeline's Modified filter.
+bool animatorSettingChanged(BridgeRangeSelector s, AnimatorSetting setting) =>
+    switch (setting) {
+      AnimatorSetting.selector => s.kind != BridgeSelectorKind.range,
+      AnimatorSetting.target => s.target != null,
+      AnimatorSetting.invert => s.invert,
+      AnimatorSetting.mode =>
+        selectorModeOf(s) != SelectorModeChoice.add,
+      AnimatorSetting.units => s.units != BridgeSelectorUnits.percentage,
+      AnimatorSetting.basis => s.basis != BridgeSelectorBasis.characters,
+      AnimatorSetting.shape => s.shape != BridgeSelectorShape.square,
+      AnimatorSetting.randomize => s.randomize,
+      AnimatorSetting.seed => s.seed != 0,
+      AnimatorSetting.order => s.order != BridgeStaggerOrder.forward,
+      AnimatorSetting.delayUnit => s.delayFrames,
+      AnimatorSetting.total => s.total,
+      AnimatorSetting.repeat => s.repeat != BridgeStaggerRepeat.once,
+      AnimatorSetting.bouncePreset =>
+        bouncePresetOf(s) != BouncePreset.none,
+      AnimatorSetting.bounceLast => s.bounceLast,
+    };
+
+/// How a Delay shown in frames is scaled: the comp's frames a second, or 1
+/// for seconds.
+double delayScale(BridgeRangeSelector s, CompositionReference comp) =>
+    s.delayFrames ? comp.fps() : 1.0;
+
+/// The Advanced twirls standing open, by row key, shared by both panels'
+/// selectors so a twirl stays open across a redraw.
+final ValueNotifier<Set<String>> advancedOpen = ValueNotifier(<String>{});
+
+void toggleAdvanced(String key) {
+  final next = {...advancedOpen.value};
+  if (!next.remove(key)) next.add(key);
+  advancedOpen.value = next;
+}
+
+// ---- The curve preview ----------------------------------------------------
+
+/// The per-letter curve a selector draws, small, beside its Shape (or a
+/// Stagger's Amount): weight up, the letters (or, for a Stagger, Amount's
+/// keys) along. Drawn at the playhead for a Range, whose window moves.
+class SelectorCurvePreview extends StatelessWidget {
+  final BridgeRangeSelector selector;
+  const SelectorCurvePreview({super.key, required this.selector});
+
+  @override
+  Widget build(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final t = ThemeScope.of(context).theme;
+    return ValueListenableBuilder<int>(
+      valueListenable: ui.playheadFrame,
+      builder: (context, frame, _) {
+        final comp = ui.selectedComp;
+        final seconds = comp == null
+            ? 0.0
+            : rationalSeconds(comp.timeOfFrame(frame: frame));
+        return CustomPaint(
+          size: const Size(36, 16),
+          painter: _CurvePainter(
+            weights: selectorPreviewWeights(selector, seconds),
+            ink: t.textSecondary,
+            ground: t.hairline,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 32 samples of [s]'s curve at [seconds]: for a Range the weight across
+/// the words (a run of ten units when it counts in Index), for a Stagger its
+/// Amount across its keys, for the rest the plain shape.
+List<double> selectorPreviewWeights(BridgeRangeSelector s, double seconds) {
+  const n = 32;
+  double at(BridgeScalar v) => evaluateScalar(v, seconds);
+  double shaped(double u) {
+    u = u.clamp(0.0, 1.0);
+    return switch (s.shape) {
+      BridgeSelectorShape.square => u >= 1 ? 1 : 0,
+      BridgeSelectorShape.ramp => u,
+      BridgeSelectorShape.smooth => u * u * (3 - 2 * u),
+      BridgeSelectorShape.bounce => () {
+          const k = 1.70158;
+          final v = u - 1;
+          return 1 + (k + 1) * v * v * v + k * v * v;
+        }(),
+    };
+  }
+
+  if (s.kind == BridgeSelectorKind.stagger) {
+    final keys = keysOf(s.amount);
+    if (keys.length < 2) {
+      return List.filled(n, at(s.amount) / 100);
+    }
+    final t0 = rationalSeconds(keys.first.time);
+    final t1 = rationalSeconds(keys.last.time);
+    return [
+      for (var i = 0; i < n; i++)
+        evaluateScalar(s.amount, t0 + (t1 - t0) * i / (n - 1)) / 100,
+    ];
+  }
+  if (s.kind != BridgeSelectorKind.range) {
+    return [for (var i = 0; i < n; i++) shaped(1 - i / (n - 1))];
+  }
+  final whole = s.units == BridgeSelectorUnits.indexed ? 10.0 : 100.0;
+  final offset = at(s.offset);
+  var lo = (at(s.start) + offset) / whole;
+  var hi = (at(s.end) + offset) / whole;
+  if (lo > hi) (lo, hi) = (hi, lo);
+  final high = (at(s.easeHigh) / 100).clamp(-1.0, 1.0);
+  final low = (at(s.easeLow) / 100).clamp(-1.0, 1.0);
+  return [
+    for (var i = 0; i < n; i++)
+      () {
+        final p = (i + 0.5) / n;
+        final w = switch (s.shape) {
+          BridgeSelectorShape.square => p >= lo && p < hi ? 1.0 : 0.0,
+          _ when hi <= lo => p >= hi ? 1.0 : 0.0,
+          _ => shaped(_bend((p - lo) / (hi - lo), high, low)),
+        };
+        return s.invert ? 1 - w : w;
+      }(),
+  ];
+}
+
+/// The eases' bend of `t`, as the engine's `Ease::bend`.
+double _bend(double t, double high, double low) {
+  if (high == 0 && low == 0) return t.clamp(0.0, 1.0);
+  t = t.clamp(0.0, 1.0);
+  final p1 = low >= 0 ? (low, 0.0) : (0.0, -low);
+  final p2 = high >= 0 ? (1 - high, 1.0) : (1.0, 1 + high);
+  double bez(double s, double a, double b) {
+    final r = 1 - s;
+    return 3 * r * r * s * a + 3 * r * s * s * b + s * s * s;
+  }
+
+  var (lo, hi) = (0.0, 1.0);
+  for (var i = 0; i < 30; i++) {
+    final mid = (lo + hi) / 2;
+    if (bez(mid, p1.$1, p2.$1) < t) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return bez((lo + hi) / 2, p1.$2, p2.$2).clamp(0.0, 1.0);
+}
+
+class _CurvePainter extends CustomPainter {
+  final List<double> weights;
+  final Color ink, ground;
+  _CurvePainter(
+      {required this.weights, required this.ink, required this.ground});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final frame = Paint()
+      ..color = ground
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawRect(Offset.zero & size, frame);
+    if (weights.isEmpty) return;
+    // Room for a curve that overshoots by a fifth either way.
+    final lo = math.min(0.0, weights.reduce(math.min));
+    final hi = math.max(1.0, weights.reduce(math.max));
+    final path = Path();
+    for (var i = 0; i < weights.length; i++) {
+      final x = 1 + (size.width - 2) * i / math.max(1, weights.length - 1);
+      final y =
+          size.height - 1 - (size.height - 2) * (weights[i] - lo) / (hi - lo);
+      i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+    }
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = ink
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2);
+  }
+
+  @override
+  bool shouldRepaint(_CurvePainter old) =>
+      old.ink != ink || !_same(old.weights, weights);
+
+  static bool _same(List<double> a, List<double> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
+// ---- The staggered copies in the graph editor -----------------------------
+
+/// The seconds each unit of a Stagger [s] starts after the first, distinct
+/// ones only, for a text of [units] units: the faint copies the graph
+/// editor draws of Amount's curve.
+List<double> staggerOffsets(BridgeRangeSelector s, int units, double seconds) {
+  if (units <= 1) return const [0];
+  final mid = (units - 1) / 2;
+  int fromMid(int i) => ((i - mid).abs() + 0.25).floor();
+  final half = (mid + 0.25).floor();
+  final ranks = <int>{
+    for (var i = 0; i < units; i++)
+      switch (s.order) {
+        BridgeStaggerOrder.fromCentre => fromMid(i),
+        BridgeStaggerOrder.fromEdges => half - math.min(fromMid(i), half),
+        _ => i,
+      },
+  };
+  final last = ranks.reduce(math.max).toDouble();
+  var delay = evaluateScalar(s.delay, seconds);
+  if (s.total) delay = last > 0 ? delay / last : 0;
+  final ease = (evaluateScalar(s.delayEase, seconds) / 100).clamp(-1.0, 1.0);
+  return [
+    for (final r in ranks)
+      () {
+        var p = last > 0 ? r / last : 0.0;
+        p = ease >= 0
+            ? math.pow(p, 1 + 3 * ease).toDouble()
+            : 1 - math.pow(1 - p, 1 - 3 * ease).toDouble();
+        return p * last * delay;
+      }(),
+  ];
+}
+
+/// How many units [text] has for [basis], as the engine counts them.
+int unitCount(String text, BridgeSelectorBasis basis) {
+  final chars = text.runes.toList();
+  bool space(int c) => String.fromCharCode(c).trim().isEmpty;
+  return switch (basis) {
+    BridgeSelectorBasis.characters => chars.length,
+    BridgeSelectorBasis.charactersExcludingSpaces =>
+      chars.where((c) => !space(c)).length,
+    BridgeSelectorBasis.lines =>
+      chars.isEmpty ? 0 : 1 + chars.where((c) => c == 10).length,
+    BridgeSelectorBasis.words => text
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .length,
+  };
+}
+
+// ---- Copy, paste, duplicate, out --------------------------------------------
+
+/// The animators Copy kept, for Paste on any Text layer.
+List<BridgeTextAnimator> copiedAnimators = const [];
+
+/// A name not yet used among [animators]: [name], or it with a number.
+String freeAnimatorName(List<BridgeTextAnimator> animators, String name) {
+  final taken = {for (final a in animators) a.name};
+  if (!taken.contains(name)) return name;
+  for (var n = 2;; n++) {
+    final next = '$name $n';
+    if (!taken.contains(next)) return next;
+  }
+}
+
+/// [a] with every key moved by [by] seconds' worth of [comp]'s frames.
+BridgeScalar shiftedScalar(BridgeScalar v, BridgeRational Function(BridgeRational) move) =>
+    switch (v) {
+      BridgeScalar_Keyframed(:final field0) => BridgeScalar.keyframed([
+          for (final k in field0)
+            BridgeKeyframe(
+                time: move(k.time),
+                value: k.value,
+                interpIn: k.interpIn,
+                interpOut: k.interpOut),
+        ]),
+      _ => v,
+    };
+
+/// [a]'s every number passed through [f], its selectors' too.
+BridgeTextAnimator animatorMapped(
+    BridgeTextAnimator a, BridgeScalar Function(BridgeScalar) f) {
+  BridgeRangeSelector sel(BridgeRangeSelector s) => selectorWith(s,
+      start: f(s.start),
+      end: f(s.end),
+      offset: f(s.offset),
+      radius: f(s.radius),
+      easeHigh: f(s.easeHigh),
+      easeLow: f(s.easeLow),
+      amount: f(s.amount),
+      delay: f(s.delay),
+      delayEase: f(s.delayEase),
+      bounceAmplitude: f(s.bounceAmplitude),
+      bounceFrequency: f(s.bounceFrequency),
+      bounceDecay: f(s.bounceDecay),
+      minAmount: f(s.minAmount),
+      maxAmount: f(s.maxAmount),
+      wiggles: f(s.wiggles),
+      correlation: f(s.correlation));
+  var out = animatorWith(a,
+      selector: sel(a.selector),
+      selectors: [for (final s in a.selectors) sel(s)],
+      axes: [
+        for (final x in a.axes) BridgeAnimatorAxis(tag: x.tag, value: f(x.value)),
+      ]);
+  for (final v in TextAnimatorValue.values) {
+    if (animatorPropertyOf(v) != null || v == TextAnimatorValue.animatorAmount) {
+      out = animatorWithScalar(out, v, f(textAnimatorScalarOf(out, v)));
+    }
+  }
+  return out;
+}
+
+/// The first key time among all of [animators]' numbers, seconds; null
+/// when none is keyed.
+double? firstKeySeconds(List<BridgeTextAnimator> animators) {
+  double? first;
+  for (final a in animators) {
+    animatorMapped(a, (v) {
+      for (final k in keysOf(v)) {
+        final s = rationalSeconds(k.time);
+        if (first == null || s < first!) first = s;
+      }
+      return v;
+    });
+  }
+  return first;
+}
+
+/// [a] played backwards and moved so its first key is at [frame]: the out
+/// animation of an in. Named "[name] out".
+BridgeTextAnimator outAnimator(
+    BridgeTextAnimator a, CompositionReference comp, int frame,
+    List<BridgeTextAnimator> others) {
+  final reversed = animatorMapped(a, reversedScalar);
+  final first = firstKeySeconds([reversed]);
+  final at = rationalSeconds(comp.timeOfFrame(frame: frame));
+  final by = first == null ? 0.0 : at - first;
+  final fps = comp.fps();
+  // Whole frames, so the keys stay on the comp's frames.
+  final frames = (by * fps).round();
+  BridgeRational move(BridgeRational t) {
+    final f = (rationalSeconds(t) * fps).round() + frames;
+    return comp.timeOfFrame(frame: f);
+  }
+
+  return animatorWith(animatorMapped(reversed, (v) => shiftedScalar(v, move)),
+      name: freeAnimatorName(others, l10n.textAnimatorOutName(a.name)));
+}
+
+// ---- User presets -----------------------------------------------------------
+
+/// Where the user's text animator presets are kept: a folder of `.json`
+/// files beside the effect presets.
+Directory? animatorPresetsDir() {
+  final library = presetsDirPath();
+  if (library == null) return null;
+  return Directory('$library${Platform.pathSeparator}text-animators');
+}
+
+/// The saved presets' names and files, by name.
+List<(String, File)> animatorPresets() {
+  final dir = animatorPresetsDir();
+  if (dir == null || !dir.existsSync()) return const [];
+  final files = dir
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.path.toLowerCase().endsWith('.json'))
+      .toList()
+    ..sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+  return [
+    for (final f in files)
+      (
+        f.uri.pathSegments.last.replaceAll(RegExp(r'\.json$'), ''),
+        f,
+      ),
+  ];
+}
+
+/// Save [animators] as a preset, asking its name. Keys are kept relative to
+/// the first one, so the preset lands at the playhead when it is put.
+Future<bool> saveAnimatorPreset(
+    BuildContext context, List<BridgeTextAnimator> animators) async {
+  final dir = animatorPresetsDir();
+  if (dir == null || animators.isEmpty) return false;
+  final name = await askThemeName(context,
+      title: l10n.textAnimatorPresetName, suggested: animators.first.name);
+  if (name == null || name.trim().isEmpty) return false;
+  final safe = name.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  final first = firstKeySeconds(animators) ?? 0;
+  // A thousandth of a second is finer than any frame.
+  final from = BridgeRational(num: (first * 1000).round(), den: 1000);
+  try {
+    final json = await textAnimatorsToJson(animators: animators, from: from);
+    dir.createSync(recursive: true);
+    File('${dir.path}${Platform.pathSeparator}$safe.json')
+        .writeAsStringSync(json);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// A saved preset's animators, their first key at [frame] of [comp].
+Future<List<BridgeTextAnimator>> loadAnimatorPreset(
+    File file, CompositionReference comp, int frame) async {
+  try {
+    final text = file.readAsStringSync();
+    // Checked as a list before the engine reads it.
+    if (jsonDecode(text) is! List) return const [];
+    return await textAnimatorsFromJson(
+        json: text, at: comp.timeOfFrame(frame: frame));
+  } catch (_) {
+    return const [];
+  }
+}
+
+// ---- An animator's heading ---------------------------------------------------
+
+/// Which animator's name is being edited, as `<layer id>/<index>`, shared so
+/// the Timeline and the Effect controls panel agree.
+final ValueNotifier<String?> animatorRenaming = ValueNotifier(null);
+
+/// [animators] with animator [index] called [name]; every animator linked
+/// to it by its old name follows the new one.
+List<BridgeTextAnimator> animatorsRenamed(
+    List<BridgeTextAnimator> animators, int index, String name) {
+  final was = animators[index].name;
+  final next = name.trim();
+  if (next.isEmpty || next == was) return animators;
+  return [
+    for (var i = 0; i < animators.length; i++)
+      if (i == index)
+        animatorWith(animators[i], name: next)
+      else if (animators[i].follow == was)
+        animatorWith(animators[i], follow: next)
+      else
+        animators[i],
+  ];
+}
+
+/// [animators] with [from] moved to stand at [to].
+List<BridgeTextAnimator> animatorsMoved(
+    List<BridgeTextAnimator> animators, int from, int to) {
+  if (from == to || from < 0 || from >= animators.length) return animators;
+  final out = [...animators];
+  final moving = out.removeAt(from);
+  out.insert(to.clamp(0, out.length), moving);
+  return out;
+}
+
+/// The rows of an animator's More menu: duplicate, copy, paste, make out,
+/// presets, move, remove.
+List<Widget> animatorMoreMenuRows({
+  required BuildContext context,
+  required VoidCallback close,
+  required CompositionReference comp,
+  required List<BridgeTextAnimator> animators,
+  required int index,
+  required ValueChanged<List<BridgeTextAnimator>> write,
+}) {
+  final a = animators[index];
+  void run(void Function() f) {
+    close();
+    f();
+  }
+
+  final frame =
+      Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
+  MenuRow row(String key, String label, VoidCallback? onPressed) => MenuRow(
+        key: ValueKey<String>('text-animator-$key-$index'),
+        enabled: onPressed != null,
+        onPressed: onPressed == null ? () {} : () => run(onPressed),
+        child: Text(label),
+      );
+  return [
+    row('duplicate', l10n.textAnimatorDuplicate, () {
+      write([
+        ...animators.sublist(0, index + 1),
+        animatorWith(a, name: freeAnimatorName(animators, a.name), solo: false),
+        ...animators.sublist(index + 1),
+      ]);
+    }),
+    row('copy', l10n.textAnimatorCopy, () => copiedAnimators = [a]),
+    row('copy-all', l10n.textAnimatorCopyAll,
+        () => copiedAnimators = [...animators]),
+    row(
+        'paste',
+        l10n.textAnimatorPaste,
+        copiedAnimators.isEmpty
+            ? null
+            : () {
+                final out = [...animators];
+                for (final c in copiedAnimators) {
+                  out.add(animatorWith(c, name: freeAnimatorName(out, c.name)));
+                }
+                write(out);
+              }),
+    const MenuDivider(),
+    row(
+        'make-out',
+        l10n.textAnimatorMakeOut,
+        animatorHasKeys(a)
+            ? () => write([
+                  ...animators,
+                  outAnimator(a, comp, frame, animators),
+                ])
+            : null),
+    row('save-preset', l10n.textAnimatorSavePreset,
+        () => saveAnimatorPreset(context, [a])),
+    row('save-all-preset', l10n.textAnimatorSaveAllPreset,
+        () => saveAnimatorPreset(context, animators)),
+    const MenuDivider(),
+    row('move-up', l10n.moveUp,
+        index == 0 ? null : () => write(animatorsMoved(animators, index, index - 1))),
+    row(
+        'move-down',
+        l10n.moveDown,
+        index + 1 >= animators.length
+            ? null
+            : () => write(animatorsMoved(animators, index, index + 1))),
+  ];
+}
+
+/// An animator's heading in the Effect controls panel: a grip to drag it
+/// above or below the others, its eye and solo, its name (double-click to
+/// rename, Enter keeps, Esc goes back), Add, More, Reverse and Remove.
+class AnimatorHeading extends StatelessWidget {
+  final LayerReference layer;
+  final CompositionReference comp;
+  final List<BridgeTextAnimator> animators;
+  final int index;
+  final ValueChanged<List<BridgeTextAnimator>> write;
+  final bool solid;
+
+  const AnimatorHeading({
+    super.key,
+    required this.layer,
+    required this.comp,
+    required this.animators,
+    required this.index,
+    required this.write,
+    required this.solid,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final a = animators[index];
+    void put(BridgeTextAnimator next) => write([
+          for (var i = 0; i < animators.length; i++)
+            if (i == index) next else animators[i],
+        ]);
+    final renameKey = '${layer.internallayerId}/$index';
+    Widget toggle(String key, String glyph, bool on, String tip,
+            VoidCallback onTap) =>
+        LumitTooltip(
+          message: tip,
+          child: GestureDetector(
+            key: ValueKey<String>('text-animator-$key-$index'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(glyph,
+                  style: on ? t.kickerOn : t.kicker.copyWith(color: t.textMuted)),
+            ),
+          ),
+        );
+    final name = ValueListenableBuilder<String?>(
+      valueListenable: animatorRenaming,
+      builder: (context, renaming, _) => renaming == renameKey
+          ? FxRenameField(
+              initial: a.name,
+              onDone: (next) {
+                animatorRenaming.value = null;
+                write(animatorsRenamed(animators, index, next));
+              },
+              onCancel: () => animatorRenaming.value = null,
+            )
+          : LumitTooltip(
+              message: l10n.textAnimatorRename,
+              child: DoubleClickListener(
+                key: ValueKey<String>('text-animator-name-$index'),
+                onDoubleClick: () => animatorRenaming.value = renameKey,
+                child: Text(t.kickerCase(a.name),
+                    style: a.enabled ? t.kickerOn : t.kicker,
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ),
+    );
+    final heading = fxTwoColumnRow(
+      context: context,
+      name: Row(
+        children: [
+          // Drag the grip onto another animator's heading to move it there.
+          Draggable<int>(
+            data: index,
+            feedback: Text(a.name, style: t.kickerOn),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.grab,
+              child: Text('⠿ ',
+                  key: ValueKey<String>('text-animator-grip-$index'),
+                  style: t.kicker),
+            ),
+          ),
+          toggle('eye', a.enabled ? '◉' : '○', a.enabled,
+              l10n.textAnimatorEnabled, () => put(animatorWith(a, enabled: !a.enabled))),
+          toggle('solo', 'S', a.solo, l10n.textAnimatorSolo,
+              () => put(animatorWith(a, solo: !a.solo))),
+          const SizedBox(width: 4),
+          Expanded(child: name),
+        ],
+      ),
+      control: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Add ▸ Property or Selector, as After Effects' Add beside an
+          // animator.
+          RowButton(
+            key: ValueKey<String>('text-animator-add-to-$index'),
+            label: l10n.shapeOpAdd,
+            arrow: true,
+            onTap: (at) async {
+              final style = layer.getText()?.style;
+              if (style != null) {
+                await fontAxesReady(style.family, style.face);
+              }
+              if (!context.mounted) return;
+              showMenuAt<void>(
+                context: context,
+                position: at,
+                width: 170,
+                rows: (close) => animatorAddMenuRows(
+                  close: () => close(null),
+                  animators: animators,
+                  index: index,
+                  style: style,
+                  solid: solid,
+                  put: put,
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 6),
+          RowButton(
+            key: ValueKey<String>('text-animator-more-$index'),
+            label: l10n.textAnimatorMore,
+            arrow: true,
+            onTap: (at) => showMenuAt<void>(
+              context: context,
+              position: at,
+              width: 200,
+              rows: (close) => animatorMoreMenuRows(
+                context: context,
+                close: () => close(null),
+                comp: comp,
+                animators: animators,
+                index: index,
+                write: write,
+              ),
+            ),
+          ),
+          if (animatorHasKeys(a))
+            HouseButton(
+              key: ValueKey<String>('text-animator-reverse-$index'),
+              small: true,
+              frameless: true,
+              // Every animator of this name, as Tracking in lays two.
+              onPressed: () => write([
+                for (final other in animators)
+                  if (other.name == a.name) reversedAnimator(other) else other,
+              ]),
+              child: Text(l10n.textAnimatorReverse),
+            ),
+          HouseButton(
+            key: ValueKey<String>('text-animator-remove-$index'),
+            small: true,
+            frameless: true,
+            onPressed: () => write([
+              for (var i = 0; i < animators.length; i++)
+                if (i != index) animators[i],
+            ]),
+            child: Text(l10n.textAnimatorRemove),
+          ),
+        ],
+      ),
+    );
+    return DragTarget<int>(
+      onWillAcceptWithDetails: (d) => d.data != index,
+      onAcceptWithDetails: (d) =>
+          write(animatorsMoved(animators, d.data, index)),
+      builder: (context, over, _) => over.isEmpty
+          ? heading
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: t.accent, width: 2))),
+              child: heading,
+            ),
+    );
+  }
+}
+
+/// Write [layer]'s animators back as [animators], the rest of the document
+/// as it is.
+void writeTextAnimatorList(
+    LayerReference layer, List<BridgeTextAnimator> animators) {
+  final document = layer.getText();
+  if (document == null) return;
+  layer.setText(
+    document: BridgeTextDocument(
+      text: document.text,
+      expression: document.expression,
+      size: document.size,
+      fill: document.fill,
+      path: document.path,
+      pathOffset: document.pathOffset,
+      style: document.style,
+      paragraph: document.paragraph,
+      animators: animators,
+    ),
+  );
+}
+
+/// Calls [onDoubleClick] on a second press within the double-tap time,
+/// without taking part in the gesture arena, so a single click on the same
+/// row (a twirl, a pick) still lands at once.
+class DoubleClickListener extends StatefulWidget {
+  final VoidCallback onDoubleClick;
+  final Widget child;
+  const DoubleClickListener(
+      {super.key, required this.onDoubleClick, required this.child});
+
+  @override
+  State<DoubleClickListener> createState() => _DoubleClickListenerState();
+}
+
+class _DoubleClickListenerState extends State<DoubleClickListener> {
+  Duration? _last;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (e) {
+          final last = _last;
+          if (last != null && e.timeStamp - last < kDoubleTapTimeout) {
+            _last = null;
+            widget.onDoubleClick();
+          } else {
+            _last = e.timeStamp;
+          }
+        },
+        child: widget.child,
+      );
+}

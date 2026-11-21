@@ -51,7 +51,14 @@ import 'timeline_mask_rows_frb.dart';
 import 'timeline_puppet_rows_frb.dart';
 import '../state/font_axes.dart' show fontAxesReady;
 import 'text_animator_rows_frb.dart'
-    show animateMenuRows, animatorAddMenuRows, writeTextAnimator;
+    show
+        animateMenuRows,
+        animatorAddMenuRows,
+        animatorRenaming,
+        DoubleClickListener,
+        animatorsRenamed,
+        writeTextAnimator,
+        writeTextAnimatorList;
 import 'timeline_shape_rows_frb.dart';
 import 'shape_entries.dart';
 import 'template_place.dart' show openTemplate;
@@ -653,6 +660,34 @@ class FoldRow extends StatelessWidget {
         style:
             t.body.copyWith(color: Color.lerp(t.body.color, t.textPrimary, lit)),
         overflow: TextOverflow.ellipsis);
+    // An animator's name: double-click to rename, Enter keeps, Esc goes back.
+    if (_animatorIndexOf(path) case final index?) {
+      final key = '${layer.internallayerId}/$index';
+      return ValueListenableBuilder<String?>(
+        valueListenable: animatorRenaming,
+        builder: (context, renaming, _) => renaming != key
+            ? DoubleClickListener(
+                key: ValueKey<String>('tl-anim-name-$index'),
+                onDoubleClick: () => animatorRenaming.value = key,
+                child: text,
+              )
+            : Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: FxRenameField(
+                  initial: label,
+                  onDone: (name) {
+                    animatorRenaming.value = null;
+                    final animators = layer.getText()?.animators;
+                    if (animators == null || index >= animators.length) return;
+                    writeTextAnimatorList(
+                        layer, animatorsRenamed(animators, index, name));
+                    onChanged();
+                  },
+                  onCancel: () => animatorRenaming.value = null,
+                ),
+              ),
+      );
+    }
     final id = effectIdOfPath(path) ?? styleIdOfPath(path);
     if (id == null) return text;
     return ValueListenableBuilder<String?>(
@@ -1191,12 +1226,18 @@ class FoldRow extends StatelessWidget {
           onSeek: onSeek,
           onChanged: onChanged,
         ),
-      FoldAnimatorSettingRow(:final index, :final animator, :final setting) =>
+      FoldAnimatorSettingRow(
+        :final index,
+        :final animator,
+        :final setting,
+        :final selector
+      ) =>
         AnimatorSettingRow(
           layer: layer,
           index: index,
           animator: animator,
           setting: setting,
+          selector: selector,
           valueColumn: valueColumn,
           onChanged: () {
             onEditProperty(path);
@@ -1204,13 +1245,19 @@ class FoldRow extends StatelessWidget {
           },
           onLabelTap: () => onSelectProperty(path),
         ),
-      FoldAnimatorValueRow(:final index, :final animator, :final value) =>
+      FoldAnimatorValueRow(
+        :final index,
+        :final animator,
+        :final value,
+        :final selector
+      ) =>
         AnimatorValueRow(
           comp: comp,
           layer: layer,
           index: index,
           animator: animator,
           value: value,
+          selector: selector,
           valueColumn: valueColumn,
           playheadFrame: playheadFrame,
           onSeek: onSeek,

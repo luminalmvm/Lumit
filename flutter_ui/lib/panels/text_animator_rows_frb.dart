@@ -31,12 +31,14 @@ import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
 import 'text_animation_presets.dart'
-    show TextAnimationPreset, reversedAnimator, textPresetAnimators;
+    show TextAnimationPreset, textPresetAnimators;
 import 'layer_fold_frb.dart' show animatorsPath;
 import '../state/font_axes.dart';
-import '../widgets/layer_picker.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_mask_rows_frb.dart' show RowButton;
+import 'text_animator_tools.dart';
+
+export 'text_animator_tools.dart';
 
 /// Matches the Effect controls panel's own cell width, so the values line up
 /// down the panel.
@@ -210,9 +212,9 @@ class _AnimatorSection extends StatelessWidget {
     );
   }
 
-  /// One animator: its heading, its range selector, then its five property
-  /// groups in the order they read — where the letter is, how it is turned,
-  /// how big, how faded, what colour.
+  /// One animator: its heading, its own Amount and Link, its selectors top
+  /// to bottom, then its property groups in the order they read — where the
+  /// letter is, how it is turned, how big, how faded, what colour.
   List<Widget> _animatorRows(
     BuildContext context,
     List<BridgeTextAnimator> animators,
@@ -220,86 +222,178 @@ class _AnimatorSection extends StatelessWidget {
     ValueChanged<List<BridgeTextAnimator>> write,
     BridgeTextStyle? style,
   ) {
-    final t = ThemeScope.of(context).theme;
     final a = animators[index];
 
     void put(BridgeTextAnimator next) => write([
           for (var i = 0; i < animators.length; i++)
             if (i == index) next else animators[i],
         ]);
-    void putSelector(BridgeRangeSelector next) =>
-        put(animatorWith(a, selector: next));
+    final others = [
+      for (var i = 0; i < animators.length; i++)
+        if (i != index) animators[i].name,
+    ];
 
     return [
-      fxTwoColumnRow(
-        context: context,
-        name: Text(t.kickerCase(a.name),
-            style: t.kickerOn, overflow: TextOverflow.ellipsis),
-        control: Row(
+      AnimatorHeading(
+        key: ValueKey<String>('text-animator-heading-$index'),
+        layer: layer,
+        comp: comp,
+        animators: animators,
+        index: index,
+        write: write,
+        solid: solid,
+      ),
+      // A switched-off animator keeps its rows, faint.
+      Opacity(
+        opacity: a.enabled ? 1 : 0.45,
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Add ▸ Property or Selector, as After Effects' Add beside an
-            // animator.
-            RowButton(
-              key: ValueKey<String>('text-animator-add-to-$index'),
-              label: l10n.shapeOpAdd,
-              arrow: true,
-              onTap: (at) async {
-                final style = layer.getText()?.style;
-                if (style != null) {
-                  await fontAxesReady(style.family, style.face);
-                }
-                if (!context.mounted) return;
-                showMenuAt<void>(
-                  context: context,
-                  position: at,
-                  width: 170,
-                  rows: (close) => animatorAddMenuRows(
-                    close: () => close(null),
-                    animators: animators,
-                    index: index,
-                    style: style,
-                    solid: solid,
-                    put: put,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 6),
-            if (animatorHasKeys(a))
-              HouseButton(
-                key: ValueKey<String>('text-animator-reverse-$index'),
-                small: true,
-                frameless: true,
-                // Every animator of this name, as Tracking in lays two.
-                onPressed: () => write([
-                  for (final other in animators)
-                    if (other.name == a.name)
-                      reversedAnimator(other)
-                    else
-                      other,
-                ]),
-                child: Text(l10n.textAnimatorReverse),
+            _numberRow(
+                context,
+                l10n.textAnimatorAnimatorAmount,
+                'anim-amount-$index',
+                [a.amount],
+                0,
+                100,
+                100,
+                (s) => put(animatorWith(a, amount: s.first))),
+            // Link: another animator's selectors pick these letters too.
+            if (others.isNotEmpty || a.follow != null)
+              _plainRow(
+                context,
+                l10n.textAnimatorLink,
+                BareDropdown<String?>(
+                  key: ValueKey<String>('text-animator-link-$index'),
+                  value: a.follow,
+                  options: [
+                    null,
+                    ...others.toSet(),
+                    if (a.follow != null && !others.contains(a.follow))
+                      a.follow,
+                  ],
+                  label: (name) => name ?? l10n.none,
+                  onChanged: (name) => put(name == null
+                      ? animatorWith(a, clearFollow: true)
+                      : animatorWith(a, follow: name)),
+                ),
               ),
-            HouseButton(
-              key: ValueKey<String>('text-animator-remove-$index'),
-              small: true,
-              frameless: true,
-              onPressed: () => write([
-                for (var i = 0; i < animators.length; i++)
-                  if (i != index) animators[i],
-              ]),
-              child: Text(l10n.textAnimatorRemove),
+            if (a.follow != null)
+              _plainRow(
+                context,
+                l10n.textAnimatorLinkOffset,
+                DragValueField(
+                  key: ValueKey<String>('text-animator-link-offset-$index'),
+                  value: a.followOffset,
+                  min: -60,
+                  max: 60,
+                  decimals: 2,
+                  speed: 0.01,
+                  suffix: ' s',
+                  resetTo: 0,
+                  onChanged: (v) =>
+                      put(animatorWith(a, followOffset: v.toDouble())),
+                ),
+              ),
+            // A linked animator reads the other's selectors, so its own are
+            // set aside, faint, rather than hidden.
+            Opacity(
+              opacity: a.follow == null ? 1 : 0.45,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var k = 0; k < selectorCount(a); k++)
+                    ..._selectorRows(context, a, index, k, put),
+                ],
+              ),
             ),
+            ..._propertyRows(context, animators, index, put, style),
           ],
         ),
       ),
+    ];
+  }
+
+  /// Selector [k] of animator [index]: a heading once there is more than
+  /// one, what it follows, its open rows, then its Advanced ones.
+  List<Widget> _selectorRows(
+    BuildContext context,
+    BridgeTextAnimator a,
+    int index,
+    int k,
+    ValueChanged<BridgeTextAnimator> put,
+  ) {
+    final t = ThemeScope.of(context).theme;
+    final s = selectorAt(a, k);
+    void putSelector(BridgeRangeSelector next) =>
+        put(animatorWithSelectorAt(a, k, next));
+    final tag = k == 0 ? '$index' : '$index-s$k';
+    final advancedKey = '${layer.internallayerId}/$index/$k';
+    final items = selectorItemsOf(s, k);
+    Widget item(SelectorItem item) {
+      final idle = selectorItemIdle(s, item);
+      final row = switch (item) {
+        SelectorSettingItem(:final setting) => _plainRow(
+            context,
+            animatorSettingLabel(setting),
+            animatorSettingControl(
+              context,
+              layer: layer,
+              s: s,
+              k: k,
+              setting: setting,
+              put: putSelector,
+              keyName: '${_settingKey(setting, s)}-$tag',
+            )),
+        SelectorValueItem(:final value) => _numberRow(
+            context,
+            textAnimatorValueLabel(value, a),
+            '${_valueKeys[value] ?? value.name}-$tag',
+            [selectorScalarOf(s, value)],
+            textAnimatorValueMin(value),
+            textAnimatorValueMax(value),
+            textAnimatorDefault(value),
+            (v) => putSelector(selectorWithScalar(s, value, v.first)),
+            decimals: textAnimatorValueDecimals(value),
+            scale: value == TextAnimatorValue.staggerDelay
+                ? delayScale(s, comp)
+                : 1,
+            trailing: value == TextAnimatorValue.staggerAmount ||
+                    value == TextAnimatorValue.easeHigh
+                ? SelectorCurvePreview(selector: s)
+                : null,
+          ),
+      };
+      return idle ? Opacity(opacity: 0.4, child: row) : row;
+    }
+
+    return [
+      if (selectorCount(a) > 1)
+        fxTwoColumnRow(
+          context: context,
+          name: Text(t.kickerCase(l10n.textAnimatorSelectorNumber(k + 1)),
+              style: t.kicker, overflow: TextOverflow.ellipsis),
+          control: k == 0
+              ? const SizedBox.shrink()
+              : Align(
+                  alignment: Alignment.centerLeft,
+                  child: HouseButton(
+                    key: ValueKey<String>('text-animator-remove-selector-$tag'),
+                    small: true,
+                    frameless: true,
+                    onPressed: () => put(animatorWithoutSelector(a, k)),
+                    child: Text(l10n.textAnimatorRemoveSelector),
+                  ),
+                ),
+        ),
       _plainRow(
         context,
         l10n.textAnimatorFollows,
         BareDropdown<BridgeSelectorMode>(
-          key: ValueKey<String>('text-animator-mode-$index'),
-          value: a.selector.mode,
+          key: ValueKey<String>('text-animator-mode-$tag'),
+          value: s.mode,
           options: BridgeSelectorMode.values,
           label: (m) => switch (m) {
             BridgeSelectorMode.range => l10n.textAnimatorFollowsRange,
@@ -308,463 +402,173 @@ class _AnimatorSection extends StatelessWidget {
             BridgeSelectorMode.unsaid => l10n.textAnimatorFollowsUnsaid,
             BridgeSelectorMode.emphasis => l10n.textAnimatorFollowsEmphasis,
           },
-          onChanged: (m) => putSelector(selectorWith(a.selector, mode: m)),
+          onChanged: (m) => putSelector(selectorWith(s, mode: m)),
         ),
       ),
-      // Spoken words pick the letters themselves, and take an ease instead.
-      if (a.selector.mode == BridgeSelectorMode.range) ...[
-        // Range picks letters by where they come in the words; Proximity by
-        // how near they are to another layer, so dragging a null across the
-        // words sweeps the change through them.
-        _plainRow(
-          context,
-          l10n.textAnimatorSelector,
-          BareDropdown<BridgeSelectorKind>(
-            key: ValueKey<String>('text-animator-kind-$index'),
-            value: a.selector.kind,
-            options: BridgeSelectorKind.values,
-            label: (k) => switch (k) {
-              BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
-              BridgeSelectorKind.proximity =>
-                l10n.textAnimatorSelectorProximity,
-              BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
-              BridgeSelectorKind.stagger => l10n.textAnimatorSelectorStagger,
-            },
-            onChanged: (k) => put(animatorWithSelectorKind(a, k)),
-          ),
-        ),
-        // Stagger: every unit plays Amount, a Delay after the one before,
-        // so the curve drawn on Amount is each word's own.
-        if (a.selector.kind == BridgeSelectorKind.stagger) ...[
-          _numberRow(
-              context,
-              l10n.textAnimatorAmount,
-              'stagger-amount-$index',
-              [a.selector.amount],
-              -200,
-              200,
-              100,
-              (s) => putSelector(selectorWith(a.selector, amount: s.first))),
-          _numberRow(
-              context,
-              l10n.textAnimatorDelay,
-              'stagger-delay-$index',
-              [a.selector.delay],
-              0,
-              10,
-              0.1,
-              (s) => putSelector(selectorWith(a.selector, delay: s.first)),
-              decimals: 2),
-          _numberRow(
-              context,
-              l10n.textAnimatorDelayEase,
-              'stagger-delay-ease-$index',
-              [a.selector.delayEase],
-              -100,
-              100,
-              0,
-              (s) =>
-                  putSelector(selectorWith(a.selector, delayEase: s.first))),
-          // The inertial bounce after each of Amount's keys, as the
-          // well-known After Effects expression gives it.
-          _numberRow(
-              context,
-              l10n.textAnimatorBounceAmplitude,
-              'stagger-bounce-amp-$index',
-              [a.selector.bounceAmplitude],
-              0,
-              20,
-              0,
-              (s) => putSelector(
-                  selectorWith(a.selector, bounceAmplitude: s.first)),
-              decimals: 2),
-          _numberRow(
-              context,
-              l10n.textAnimatorBounceFrequency,
-              'stagger-bounce-freq-$index',
-              [a.selector.bounceFrequency],
-              0,
-              20,
-              2,
-              (s) => putSelector(
-                  selectorWith(a.selector, bounceFrequency: s.first)),
-              decimals: 2),
-          _numberRow(
-              context,
-              l10n.textAnimatorBounceDecay,
-              'stagger-bounce-decay-$index',
-              [a.selector.bounceDecay],
-              0,
-              20,
-              3,
-              (s) => putSelector(
-                  selectorWith(a.selector, bounceDecay: s.first)),
-              decimals: 2),
-          _plainRow(
-            context,
-            l10n.textAnimatorOrder,
-            BareDropdown<BridgeStaggerOrder>(
-              key: ValueKey<String>('stagger-order-$index'),
-              value: a.selector.order,
-              options: BridgeStaggerOrder.values,
-              label: staggerOrderLabel,
-              onChanged: (o) =>
-                  putSelector(selectorWith(a.selector, order: o)),
-            ),
-          ),
-          if (a.selector.order == BridgeStaggerOrder.random)
-            _plainRow(
-              context,
-              l10n.textAnimatorSeed,
-              DragValueField(
-                key: ValueKey<String>('stagger-seed-$index'),
-                value: a.selector.seed,
-                min: 0,
-                max: 99999,
-                resetTo: 0,
-                decimals: 0,
-                onChanged: (v) => putSelector(selectorWith(a.selector,
-                    seed: v.round().clamp(0, 99999).toInt())),
-              ),
-            ),
-        ],
-        if (a.selector.kind == BridgeSelectorKind.wiggly) ...[
-          _numberRow(
-              context,
-              l10n.textAnimatorMaxAmount,
-              'wiggly-max-$index',
-              [a.selector.maxAmount],
-              -100,
-              100,
-              100,
-              (s) => putSelector(selectorWith(a.selector, maxAmount: s.first))),
-          _numberRow(
-              context,
-              l10n.textAnimatorMinAmount,
-              'wiggly-min-$index',
-              [a.selector.minAmount],
-              -100,
-              100,
-              0,
-              (s) => putSelector(selectorWith(a.selector, minAmount: s.first))),
-          _numberRow(
-              context,
-              l10n.textAnimatorWiggles,
-              'wiggly-rate-$index',
-              [a.selector.wiggles],
-              0,
-              1000,
-              2,
-              (s) => putSelector(selectorWith(a.selector, wiggles: s.first))),
-          _numberRow(
-              context,
-              l10n.textAnimatorCorrelation,
-              'wiggly-correlation-$index',
-              [a.selector.correlation],
-              0,
-              100,
-              50,
-              (s) => putSelector(
-                  selectorWith(a.selector, correlation: s.first))),
-          _plainRow(
-            context,
-            l10n.textAnimatorSeed,
-            DragValueField(
-              key: ValueKey<String>('wiggly-seed-$index'),
-              value: a.selector.seed,
-              min: 0,
-              max: 99999,
-              resetTo: 0,
-              decimals: 0,
-              onChanged: (v) => putSelector(selectorWith(a.selector,
-                  seed: v.round().clamp(0, 99999).toInt())),
-            ),
-          ),
-        ],
-        if (a.selector.kind == BridgeSelectorKind.proximity) ...[
-          _plainRow(
-            context,
-            l10n.textAnimatorTarget,
-            LayerPicker(
-              key: ValueKey<String>('text-animator-target-$index'),
-              layers: _layers(context),
-              value: a.selector.target,
-              empty: l10n.none,
-              missing: l10n.missingLayer,
-              // Any layer but the words themselves: what is measured is its
-              // anchor, so a null, a light or a camera serves as well as a
-              // picture.
-              offered: (l) => l.layer.internallayerId != layer.internallayerId,
-              onChanged: (picked) => putSelector(picked == null
-                  ? selectorWith(a.selector, clearTarget: true)
-                  : selectorWith(a.selector, target: picked)),
-            ),
-          ),
-          _numberRow(
-              context,
-              l10n.textAnimatorRadius,
-              'range-radius-$index',
-              [a.selector.radius],
-              0,
-              100000,
-              200,
-              (s) => putSelector(selectorWith(a.selector, radius: s.first))),
-          _plainRow(
-            context,
-            l10n.textAnimatorInvert,
-            Align(
-              alignment: Alignment.centerLeft,
-              child: HouseCheckbox(
-                key: ValueKey<String>('text-animator-invert-$index'),
-                value: a.selector.invert,
-                onChanged: (on) =>
-                    putSelector(selectorWith(a.selector, invert: on)),
-              ),
-            ),
-          ),
-        ],
-        // The range: which letters this animator reaches, in per cent of the
-        // words. Offset is the one a cascade is keyed on, which is why it is a
-        // number of its own rather than something the two ends share.
-        if (a.selector.kind == BridgeSelectorKind.range) ...[
-          _numberRow(
-              context,
-              l10n.textAnimatorRangeStart,
-              'range-start-$index',
-              [a.selector.start],
-              -1000,
-              1000,
-              0,
-              (s) => putSelector(selectorWith(a.selector, start: s.first))),
-          _numberRow(
-              context,
-              l10n.textAnimatorRangeEnd,
-              'range-end-$index',
-              [a.selector.end],
-              -1000,
-              1000,
-              100,
-              (s) => putSelector(selectorWith(a.selector, end: s.first))),
-          _numberRow(
-              context,
-              l10n.textAnimatorRangeOffset,
-              'range-offset-$index',
-              [a.selector.offset],
-              -1000,
-              1000,
-              0,
-              (s) => putSelector(selectorWith(a.selector, offset: s.first))),
-        ],
-      ] else if (a.selector.mode != BridgeSelectorMode.emphasis)
+      // Spoken words take an ease instead of a range.
+      if (s.mode != BridgeSelectorMode.range &&
+          s.mode != BridgeSelectorMode.emphasis)
         _plainRow(
           context,
           l10n.textAnimatorEase,
           DragValueField(
-            key: ValueKey<String>('text-animator-ease-$index'),
-            value: a.selector.ease,
+            key: ValueKey<String>('text-animator-ease-$tag'),
+            value: s.ease,
             min: 0,
             max: 10,
             decimals: 2,
             speed: 0.01,
             suffix: ' s',
             resetTo: 0,
-            onChanged: (v) => putSelector(
-                selectorWith(a.selector, ease: v.toDouble())),
+            onChanged: (v) =>
+                putSelector(selectorWith(s, ease: v.toDouble())),
           ),
         ),
-      _plainRow(
-        context,
-        l10n.textAnimatorBasis,
-        BareDropdown<BridgeSelectorBasis>(
-          key: ValueKey<String>('text-animator-basis-$index'),
-          value: a.selector.basis,
-          options: BridgeSelectorBasis.values,
-          label: (b) => switch (b) {
-            BridgeSelectorBasis.characters => l10n.textAnimatorBasisCharacters,
-            BridgeSelectorBasis.words => l10n.textAnimatorBasisWords,
+      for (final i in items)
+        if (!i.advanced) item(i),
+      if (items.any((i) => i.advanced))
+        ValueListenableBuilder<Set<String>>(
+          valueListenable: advancedOpen,
+          builder: (context, open, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              fxTwoColumnRow(
+                context: context,
+                name: GestureDetector(
+                  key: ValueKey<String>('text-animator-advanced-$tag'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => toggleAdvanced(advancedKey),
+                  child: Text(
+                      '${open.contains(advancedKey) ? '▾' : '▸'} '
+                      '${t.propertyCase(l10n.textAnimatorAdvanced)}',
+                      style: t.body,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                control: const SizedBox.shrink(),
+              ),
+              if (open.contains(advancedKey))
+                for (final i in items)
+                  if (i.advanced) item(i),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  /// The property groups the animator shows: those Add ▸ Property put on it
+  /// and any whose numbers have been moved, then its font axes.
+  List<Widget> _propertyRows(
+    BuildContext context,
+    List<BridgeTextAnimator> animators,
+    int index,
+    ValueChanged<BridgeTextAnimator> put,
+    BridgeTextStyle? style,
+  ) {
+    final a = animators[index];
+    Widget row(AnimatorProperty p, String label, String key) {
+      final values = p.numbers;
+      return _numberRow(
+          context,
+          label,
+          '$key-$index',
+          [for (final v in values) textAnimatorScalarOf(a, v)],
+          textAnimatorValueMin(values.first),
+          textAnimatorValueMax(values.first),
+          textAnimatorDefault(values.first),
+          (s) {
+            var next = a;
+            for (var i = 0; i < values.length; i++) {
+              next = animatorWithScalar(next, values[i], s[i]);
+            }
+            put(next);
           },
-          onChanged: (b) => putSelector(selectorWith(a.selector, basis: b)),
-        ),
-      ),
-      // A Stagger's curve is Amount's own, so it has no shape.
-      if (a.selector.kind != BridgeSelectorKind.stagger)
-        _plainRow(
-          context,
-          l10n.textAnimatorShape,
-          BareDropdown<BridgeSelectorShape>(
-            key: ValueKey<String>('text-animator-shape-$index'),
-            value: a.selector.shape,
-            options: BridgeSelectorShape.values,
-            label: (s) => switch (s) {
-              BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
-              BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
-              BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
-              BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
-            },
-            onChanged: (s) =>
-                putSelector(selectorWith(a.selector, shape: s)),
-          ),
-        ),
-      // A Range or Stagger selector's Mode, as After Effects' Advanced row:
-      // Subtract moves the letters the selector does not reach.
-      if (a.selector.mode == BridgeSelectorMode.range &&
-          (a.selector.kind == BridgeSelectorKind.range ||
-              a.selector.kind == BridgeSelectorKind.stagger))
-        _plainRow(
-          context,
-          l10n.textAnimatorMode,
-          BareDropdown<bool>(
-            key: ValueKey<String>('text-animator-subtract-$index'),
-            value: a.selector.invert,
-            options: const [false, true],
-            label: (subtract) => subtract
-                ? l10n.textAnimatorModeSubtract
-                : l10n.textAnimatorModeAdd,
-            onChanged: (subtract) =>
-                putSelector(selectorWith(a.selector, invert: subtract)),
-          ),
-        ),
-      // The eases of a Range selector's ramp.
-      if (a.selector.mode == BridgeSelectorMode.range &&
-          a.selector.kind == BridgeSelectorKind.range) ...[
-        _numberRow(
-            context,
-            l10n.textAnimatorEaseHigh,
-            'range-ease-high-$index',
-            [a.selector.easeHigh],
-            -100,
-            100,
-            0,
-            (s) => putSelector(selectorWith(a.selector, easeHigh: s.first))),
-        _numberRow(
-            context,
-            l10n.textAnimatorEaseLow,
-            'range-ease-low-$index',
-            [a.selector.easeLow],
-            -100,
-            100,
-            0,
-            (s) => putSelector(selectorWith(a.selector, easeLow: s.first))),
-      ],
-      // The property groups the animator shows: those Add ▸ Property put on
-      // it and any whose numbers have been moved.
-      if (animatorShowsProperty(a, AnimatorProperty.position))
-        _numberRow(
-            context,
-            l10n.transformPosition,
-            'anim-position-$index',
-            [a.positionX, a.positionY],
-            -100000,
-            100000,
-            0,
-            (s) => put(animatorWith(a, positionX: s[0], positionY: s[1]))),
-      if (solid && animatorShowsProperty(a, AnimatorProperty.positionZ))
-        _numberRow(
-            context,
-            '${l10n.transformPosition} z',
-            'anim-position-z-$index',
-            [a.positionZ],
-            -100000,
-            100000,
-            0,
-            (s) => put(animatorWith(a, positionZ: s.first))),
-      if (animatorShowsProperty(a, AnimatorProperty.rotation))
-        _numberRow(
-            context,
-            l10n.transformRotation,
-            'anim-rotation-$index',
-            [a.rotation],
-            -100000,
-            100000,
-            0,
-            (s) => put(animatorWith(a, rotation: s.first))),
-      if (solid && animatorShowsProperty(a, AnimatorProperty.rotationX))
-        _numberRow(
-            context,
-            '${l10n.transformRotation} x',
-            'anim-rotation-x-$index',
-            [a.rotationX],
-            -100000,
-            100000,
-            0,
-            (s) => put(animatorWith(a, rotationX: s.first))),
-      if (solid && animatorShowsProperty(a, AnimatorProperty.rotationY))
-        _numberRow(
-            context,
-            '${l10n.transformRotation} y',
-            'anim-rotation-y-$index',
-            [a.rotationY],
-            -100000,
-            100000,
-            0,
-            (s) => put(animatorWith(a, rotationY: s.first))),
-      if (animatorShowsProperty(a, AnimatorProperty.scale))
-        _numberRow(
-            context,
-            l10n.transformScale,
-            'anim-scale-$index',
-            [a.scaleX, a.scaleY],
-            -10000,
-            10000,
-            100,
-            (s) => put(animatorWith(a, scaleX: s[0], scaleY: s[1]))),
-      if (animatorShowsProperty(a, AnimatorProperty.opacity))
-        _numberRow(
-            context,
-            l10n.transformOpacity,
-            'anim-opacity-$index',
-            [a.opacity],
-            0,
-            100,
-            100,
-            (s) => put(animatorWith(a, opacity: s.first))),
-      // A fill **offset**, added to the layer's own colour in scene-linear —
-      // so it can be negative, and so two animators tinting the same letter
-      // add up. That is why it is three numbers rather than a swatch: a
-      // colour picker has no way to say "a bit less red than the layer".
-      if (animatorShowsProperty(a, AnimatorProperty.fill))
-        _numberRow(
-            context,
-            l10n.textAnimatorFillOffset,
-            'anim-fill-$index',
-            [a.fillR, a.fillG, a.fillB],
-            -10,
-            10,
-            0,
-            (s) => put(animatorWith(a, fillR: s[0], fillG: s[1], fillB: s[2]))),
-      // A box behind the letters reached, in a colour of its own rather than
-      // an offset, since there is no box underneath to offset.
-      if (animatorShowsProperty(a, AnimatorProperty.box)) ...[
-        _numberRow(
-            context,
-            l10n.textAnimatorBoxColour,
-            'anim-box-$index',
-            [a.boxR, a.boxG, a.boxB],
-            0,
-            10,
-            0,
-            (s) => put(animatorWith(a, boxR: s[0], boxG: s[1], boxB: s[2]))),
-        _numberRow(
-            context,
-            l10n.textAnimatorBoxOpacity,
-            'anim-box-opacity-$index',
-            [a.boxOpacity],
-            0,
-            100,
-            0,
-            (s) => put(animatorWith(a, boxOpacity: s.first))),
-      ],
+          decimals: textAnimatorValueDecimals(values.first));
+    }
+
+    return [
+      for (final p in AnimatorProperty.values)
+        if ((solid || !p.solidOnly) && animatorShowsProperty(a, p))
+          switch (p) {
+            AnimatorProperty.position =>
+              row(p, l10n.transformPosition, 'anim-position'),
+            AnimatorProperty.positionZ =>
+              row(p, '${l10n.transformPosition} z', 'anim-position-z'),
+            AnimatorProperty.rotation =>
+              row(p, l10n.transformRotation, 'anim-rotation'),
+            AnimatorProperty.rotationX =>
+              row(p, '${l10n.transformRotation} x', 'anim-rotation-x'),
+            AnimatorProperty.rotationY =>
+              row(p, '${l10n.transformRotation} y', 'anim-rotation-y'),
+            AnimatorProperty.scale => row(p, l10n.transformScale, 'anim-scale'),
+            AnimatorProperty.opacity =>
+              row(p, l10n.transformOpacity, 'anim-opacity'),
+            // A fill **offset**, added to the layer's own colour in
+            // scene-linear, so it can be negative and two animators add up.
+            AnimatorProperty.fill =>
+              row(p, l10n.textAnimatorFillOffset, 'anim-fill'),
+            // A box behind the letters reached, in a colour of its own.
+            AnimatorProperty.box => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _numberRow(
+                      context,
+                      l10n.textAnimatorBoxColour,
+                      'anim-box-$index',
+                      [a.boxR, a.boxG, a.boxB],
+                      0,
+                      10,
+                      0,
+                      (s) => put(animatorWith(a,
+                          boxR: s[0], boxG: s[1], boxB: s[2]))),
+                  _numberRow(
+                      context,
+                      l10n.textAnimatorBoxOpacity,
+                      'anim-box-opacity-$index',
+                      [a.boxOpacity],
+                      0,
+                      100,
+                      0,
+                      (s) => put(animatorWith(a, boxOpacity: s.first))),
+                ],
+              ),
+            AnimatorProperty.skew => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _numberRow(
+                      context,
+                      l10n.textAnimatorSkew,
+                      'anim-skew-$index',
+                      [a.skew],
+                      -85,
+                      85,
+                      0,
+                      (s) => put(animatorWith(a, skew: s.first))),
+                  _numberRow(
+                      context,
+                      l10n.textAnimatorSkewAxis,
+                      'anim-skew-axis-$index',
+                      [a.skewAxis],
+                      -100000,
+                      100000,
+                      0,
+                      (s) => put(animatorWith(a, skewAxis: s.first))),
+                ],
+              ),
+            AnimatorProperty.tracking =>
+              row(p, l10n.textAnimatorTracking, 'anim-tracking'),
+            AnimatorProperty.blur => row(p, l10n.textAnimatorBlur, 'anim-blur'),
+            AnimatorProperty.characterOffset => row(
+                p, l10n.textAnimatorCharacterOffset, 'anim-character-offset'),
+          },
       // Variable font axes: where a reached letter is set on the font's own
-      // axes, a place rather than an amount, so 900 is the heaviest weight
-      // whatever the layer is set at.
+      // axes, a place rather than an amount.
       for (var k = 0; k < a.axes.length; k++)
         _axisRow(context, animators, index, k, put, style),
     ];
   }
-
-  /// Every layer in the comp, for the Proximity target.
-  List<BridgeLayerEntry> _layers(BuildContext context) =>
-      Provider.of<LumitUiState>(context, listen: false).model.layers;
 
   /// One axis an animator moves the letters along: a keyable place, and a
   /// way to take it off.
@@ -828,6 +632,8 @@ class _AnimatorSection extends StatelessWidget {
     double resetTo,
     ValueChanged<List<BridgeScalar>> write, {
     int decimals = 1,
+    double scale = 1,
+    Widget? trailing,
   }) {
     // The playhead is listened to here, per row, rather than by the panel above
     // — and only where a channel can actually move under it. A card that
@@ -836,12 +642,12 @@ class _AnimatorSection extends StatelessWidget {
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
     if (scalars.every((s) => s is BridgeScalar_Static)) {
       return _numberRowAt(context, label, keyName, scalars, min, max, resetTo,
-          write, playhead.value, decimals);
+          write, playhead.value, decimals, scale, trailing);
     }
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
       builder: (context, at, _) => _numberRowAt(context, label, keyName,
-          scalars, min, max, resetTo, write, at, decimals),
+          scalars, min, max, resetTo, write, at, decimals, scale, trailing),
     );
   }
 
@@ -855,8 +661,10 @@ class _AnimatorSection extends StatelessWidget {
     double resetTo,
     ValueChanged<List<BridgeScalar>> write,
     int at,
-    int decimals,
-  ) {
+    int decimals, [
+    double scale = 1,
+    Widget? trailing,
+  ]) {
     final t = ThemeScope.of(context).theme;
     // An animated channel shows what its curve reads at the playhead, sampled
     // engine-side — the same answer the render will use, rather than a second
@@ -867,10 +675,12 @@ class _AnimatorSection extends StatelessWidget {
           BridgeScalar_Expression() =>
             sampledScalar(s, timeOfFrame(comp, at)),
         };
+    // A Delay shown in frames is kept in seconds: shown times [scale],
+    // written back divided by it.
     void commit(int axis, num value) => write([
           for (var i = 0; i < scalars.length; i++)
             if (i == axis)
-              scalarWithValueAt(scalars[i], value.toDouble(), comp, at)
+              scalarWithValueAt(scalars[i], value.toDouble() / scale, comp, at)
             else
               scalars[i],
         ]);
@@ -905,16 +715,17 @@ class _AnimatorSection extends StatelessWidget {
                   width: _cellWidth,
                   child: DragValueField(
                     key: ValueKey<String>('$keyName-$i'),
-                    value: shown(scalars[i]),
-                    min: min,
-                    max: max,
-                    resetTo: resetTo,
+                    value: shown(scalars[i]) * scale,
+                    min: min * scale,
+                    max: max * scale,
+                    resetTo: resetTo * scale,
                     decimals: decimals,
                     onChanged: (v) => commit(i, v),
                   ),
                 ),
               ),
             ],
+            if (trailing != null) ...[const SizedBox(width: 6), trailing],
           ],
         ),
       ),
@@ -933,6 +744,106 @@ class _AnimatorSection extends StatelessWidget {
     );
   }
 }
+
+/// The test keys the rows have always had, by number.
+const _valueKeys = {
+  TextAnimatorValue.rangeStart: 'range-start',
+  TextAnimatorValue.rangeEnd: 'range-end',
+  TextAnimatorValue.rangeOffset: 'range-offset',
+  TextAnimatorValue.easeHigh: 'range-ease-high',
+  TextAnimatorValue.easeLow: 'range-ease-low',
+  TextAnimatorValue.radius: 'range-radius',
+  TextAnimatorValue.maxAmount: 'wiggly-max',
+  TextAnimatorValue.minAmount: 'wiggly-min',
+  TextAnimatorValue.wiggles: 'wiggly-rate',
+  TextAnimatorValue.correlation: 'wiggly-correlation',
+  TextAnimatorValue.staggerAmount: 'stagger-amount',
+  TextAnimatorValue.staggerDelay: 'stagger-delay',
+  TextAnimatorValue.staggerDelayEase: 'stagger-delay-ease',
+  TextAnimatorValue.staggerBounceAmplitude: 'stagger-bounce-amp',
+  TextAnimatorValue.staggerBounceFrequency: 'stagger-bounce-freq',
+  TextAnimatorValue.staggerBounceDecay: 'stagger-bounce-decay',
+};
+
+/// The least one of an animator's numbers is dragged to.
+double textAnimatorValueMin(TextAnimatorValue v) => switch (v) {
+      TextAnimatorValue.easeHigh ||
+      TextAnimatorValue.easeLow ||
+      TextAnimatorValue.staggerDelayEase ||
+      TextAnimatorValue.minAmount ||
+      TextAnimatorValue.maxAmount =>
+        -100,
+      TextAnimatorValue.staggerAmount => -200,
+      TextAnimatorValue.rangeStart ||
+      TextAnimatorValue.rangeEnd ||
+      TextAnimatorValue.rangeOffset ||
+      TextAnimatorValue.characterOffset =>
+        -1000,
+      TextAnimatorValue.skew => -85,
+      TextAnimatorValue.scaleX || TextAnimatorValue.scaleY => -10000,
+      TextAnimatorValue.fillR ||
+      TextAnimatorValue.fillG ||
+      TextAnimatorValue.fillB =>
+        -10,
+      TextAnimatorValue.positionX ||
+      TextAnimatorValue.positionY ||
+      TextAnimatorValue.positionZ ||
+      TextAnimatorValue.rotation ||
+      TextAnimatorValue.rotationX ||
+      TextAnimatorValue.rotationY ||
+      TextAnimatorValue.skewAxis ||
+      TextAnimatorValue.tracking =>
+        -100000,
+      _ => 0,
+    };
+
+/// The most one of an animator's numbers is dragged to.
+double textAnimatorValueMax(TextAnimatorValue v) => switch (v) {
+      TextAnimatorValue.easeHigh ||
+      TextAnimatorValue.easeLow ||
+      TextAnimatorValue.staggerDelayEase ||
+      TextAnimatorValue.minAmount ||
+      TextAnimatorValue.maxAmount ||
+      TextAnimatorValue.correlation ||
+      TextAnimatorValue.opacity ||
+      TextAnimatorValue.boxOpacity ||
+      TextAnimatorValue.animatorAmount =>
+        100,
+      TextAnimatorValue.staggerAmount => 200,
+      TextAnimatorValue.staggerDelay => 10,
+      TextAnimatorValue.staggerBounceAmplitude ||
+      TextAnimatorValue.staggerBounceFrequency ||
+      TextAnimatorValue.staggerBounceDecay =>
+        20,
+      TextAnimatorValue.rangeStart ||
+      TextAnimatorValue.rangeEnd ||
+      TextAnimatorValue.rangeOffset ||
+      TextAnimatorValue.wiggles ||
+      TextAnimatorValue.characterOffset ||
+      TextAnimatorValue.blur =>
+        1000,
+      TextAnimatorValue.skew => 85,
+      TextAnimatorValue.scaleX || TextAnimatorValue.scaleY => 10000,
+      TextAnimatorValue.fillR ||
+      TextAnimatorValue.fillG ||
+      TextAnimatorValue.fillB ||
+      TextAnimatorValue.boxR ||
+      TextAnimatorValue.boxG ||
+      TextAnimatorValue.boxB =>
+        10,
+      _ => 100000,
+    };
+
+/// How many decimals one of an animator's numbers shows.
+int textAnimatorValueDecimals(TextAnimatorValue v) => switch (v) {
+      TextAnimatorValue.staggerDelay ||
+      TextAnimatorValue.staggerBounceAmplitude ||
+      TextAnimatorValue.staggerBounceFrequency ||
+      TextAnimatorValue.staggerBounceDecay =>
+        2,
+      TextAnimatorValue.characterOffset => 0,
+      _ => 1,
+    };
 
 /// Give a Text layer one more animator: the card's *Add animator*
 /// button, and Animation ▸ Animate text, which must mean the same thing.
@@ -972,32 +883,17 @@ bool addTextAnimator(LayerReference layer,
 /// that changes nothing until it is moved.
 BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       name: name,
-      selector: const BridgeRangeSelector(
-        start: BridgeScalar.static_(0),
-        end: BridgeScalar.static_(100),
-        offset: BridgeScalar.static_(0),
-        basis: BridgeSelectorBasis.characters,
-        shape: BridgeSelectorShape.square,
-        mode: BridgeSelectorMode.range,
-        ease: 0,
-        kind: BridgeSelectorKind.range,
-        radius: BridgeScalar.static_(200),
-        invert: false,
-        easeHigh: BridgeScalar.static_(0),
-        easeLow: BridgeScalar.static_(0),
-        amount: BridgeScalar.static_(100),
-        delay: BridgeScalar.static_(0.1),
-        delayEase: BridgeScalar.static_(0),
-        order: BridgeStaggerOrder.forward,
-        bounceAmplitude: BridgeScalar.static_(0),
-        bounceFrequency: BridgeScalar.static_(2),
-        bounceDecay: BridgeScalar.static_(3),
-        minAmount: BridgeScalar.static_(0),
-        maxAmount: BridgeScalar.static_(100),
-        wiggles: BridgeScalar.static_(2),
-        correlation: BridgeScalar.static_(50),
-        seed: 0,
-      ),
+      selector: freshSelector(),
+      selectors: const [],
+      enabled: true,
+      solo: false,
+      amount: const BridgeScalar.static_(100),
+      followOffset: 0,
+      skew: const BridgeScalar.static_(0),
+      skewAxis: const BridgeScalar.static_(0),
+      tracking: const BridgeScalar.static_(0),
+      blur: const BridgeScalar.static_(0),
+      characterOffset: const BridgeScalar.static_(0),
       positionX: const BridgeScalar.static_(0),
       positionY: const BridgeScalar.static_(0),
       rotation: const BridgeScalar.static_(0),
@@ -1020,34 +916,8 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       properties: const [],
     );
 
-/// Whether any of [a]'s rows are keyed.
-bool animatorHasKeys(BridgeTextAnimator a) => [
-      a.selector.start,
-      a.selector.end,
-      a.selector.offset,
-      a.positionX,
-      a.positionY,
-      a.rotation,
-      a.positionZ,
-      a.rotationX,
-      a.rotationY,
-      a.scaleX,
-      a.scaleY,
-      a.opacity,
-      a.fillR,
-      a.fillG,
-      a.fillB,
-      a.boxOpacity,
-      a.boxR,
-      a.boxG,
-      a.boxB,
-      a.selector.radius,
-      a.selector.minAmount,
-      a.selector.maxAmount,
-      a.selector.wiggles,
-      a.selector.correlation,
-      for (final x in a.axes) x.value,
-    ].any((s) => s is BridgeScalar_Keyframed);
+/// Whether any of [a]'s rows are keyed, any selector's included.
+bool animatorHasKeys(BridgeTextAnimator a) => firstKeySeconds([a]) != null;
 
 /// [animator] with one channel replaced — the generated struct is immutable and
 /// every field required, so there is one copy helper rather than eleven
@@ -1056,6 +926,18 @@ BridgeTextAnimator animatorWith(
   BridgeTextAnimator a, {
   String? name,
   BridgeRangeSelector? selector,
+  List<BridgeRangeSelector>? selectors,
+  bool? enabled,
+  bool? solo,
+  BridgeScalar? amount,
+  String? follow,
+  bool clearFollow = false,
+  double? followOffset,
+  BridgeScalar? skew,
+  BridgeScalar? skewAxis,
+  BridgeScalar? tracking,
+  BridgeScalar? blur,
+  BridgeScalar? characterOffset,
   BridgeScalar? positionX,
   BridgeScalar? positionY,
   BridgeScalar? rotation,
@@ -1078,6 +960,17 @@ BridgeTextAnimator animatorWith(
     BridgeTextAnimator(
       name: name ?? a.name,
       selector: selector ?? a.selector,
+      selectors: selectors ?? a.selectors,
+      enabled: enabled ?? a.enabled,
+      solo: solo ?? a.solo,
+      amount: amount ?? a.amount,
+      follow: clearFollow ? null : (follow ?? a.follow),
+      followOffset: followOffset ?? a.followOffset,
+      skew: skew ?? a.skew,
+      skewAxis: skewAxis ?? a.skewAxis,
+      tracking: tracking ?? a.tracking,
+      blur: blur ?? a.blur,
+      characterOffset: characterOffset ?? a.characterOffset,
       positionX: positionX ?? a.positionX,
       positionY: positionY ?? a.positionY,
       rotation: rotation ?? a.rotation,
@@ -1138,6 +1031,14 @@ enum TextAnimatorValue {
   staggerBounceAmplitude,
   staggerBounceFrequency,
   staggerBounceDecay,
+  // The whole animator's Amount, then the properties After Effects has that
+  // came later.
+  animatorAmount,
+  skew,
+  skewAxis,
+  tracking,
+  blur,
+  characterOffset,
   axis0,
   axis1,
   axis2,
@@ -1166,34 +1067,39 @@ int? textAnimatorAxisIndex(TextAnimatorValue value) {
   return i < 0 ? null : i;
 }
 
-/// The numbers [a] has rows for: its selector's own (a Range's three, a
-/// Proximity's radius, a Wiggly's four), the property groups it shows ([solid]
-/// adds the 3D ones) and one per font axis it moves.
+/// Whether [value] is one of a selector's own numbers rather than the
+/// animator's.
+bool isSelectorValue(TextAnimatorValue value) => switch (value) {
+      TextAnimatorValue.rangeStart ||
+      TextAnimatorValue.rangeEnd ||
+      TextAnimatorValue.rangeOffset ||
+      TextAnimatorValue.easeHigh ||
+      TextAnimatorValue.easeLow ||
+      TextAnimatorValue.radius ||
+      TextAnimatorValue.minAmount ||
+      TextAnimatorValue.maxAmount ||
+      TextAnimatorValue.wiggles ||
+      TextAnimatorValue.correlation ||
+      TextAnimatorValue.staggerAmount ||
+      TextAnimatorValue.staggerDelay ||
+      TextAnimatorValue.staggerDelayEase ||
+      TextAnimatorValue.staggerBounceAmplitude ||
+      TextAnimatorValue.staggerBounceFrequency ||
+      TextAnimatorValue.staggerBounceDecay =>
+        true,
+      _ => false,
+    };
+
+/// The animator's own numbers [a] has rows for, after its selectors': its
+/// Amount, the property groups it shows ([solid] adds the 3D ones) and one
+/// per font axis it moves. A selector's are [selectorItemsOf]'s.
 List<TextAnimatorValue> textAnimatorValuesOf(BridgeTextAnimator a,
     {required bool solid}) {
-  final kind = a.selector.kind;
   return [
     for (final value in TextAnimatorValue.values)
       if (switch (value) {
-        TextAnimatorValue.rangeStart ||
-        TextAnimatorValue.rangeEnd ||
-        TextAnimatorValue.rangeOffset ||
-        TextAnimatorValue.easeHigh ||
-        TextAnimatorValue.easeLow =>
-          kind == BridgeSelectorKind.range,
-        TextAnimatorValue.radius => kind == BridgeSelectorKind.proximity,
-        TextAnimatorValue.minAmount ||
-        TextAnimatorValue.maxAmount ||
-        TextAnimatorValue.wiggles ||
-        TextAnimatorValue.correlation =>
-          kind == BridgeSelectorKind.wiggly,
-        TextAnimatorValue.staggerAmount ||
-        TextAnimatorValue.staggerDelay ||
-        TextAnimatorValue.staggerDelayEase ||
-        TextAnimatorValue.staggerBounceAmplitude ||
-        TextAnimatorValue.staggerBounceFrequency ||
-        TextAnimatorValue.staggerBounceDecay =>
-          kind == BridgeSelectorKind.stagger,
+        _ when isSelectorValue(value) => false,
+        TextAnimatorValue.animatorAmount => true,
         _ when textAnimatorAxisIndex(value) != null =>
           textAnimatorAxisIndex(value)! < a.axes.length,
         _ => switch (animatorPropertyOf(value)) {
@@ -1216,7 +1122,11 @@ enum AnimatorProperty {
   box('box'),
   positionZ('position_z'),
   rotationX('rotation_x'),
-  rotationY('rotation_y');
+  rotationY('rotation_y'),
+  skew('skew'),
+  tracking('tracking'),
+  blur('blur'),
+  characterOffset('character_offset');
 
   /// How the document names it.
   final String key;
@@ -1225,6 +1135,15 @@ enum AnimatorProperty {
   /// Only a solid layer's letters move in depth and turn in 3D.
   bool get solidOnly =>
       this == positionZ || this == rotationX || this == rotationY;
+
+  /// A group that came after the list did: an animator from before the list
+  /// shows it only once it is added or moved, so it shows no more than it
+  /// did.
+  bool get late =>
+      this == skew ||
+      this == tracking ||
+      this == blur ||
+      this == characterOffset;
 
   /// The numbers in the group.
   List<TextAnimatorValue> get numbers => switch (this) {
@@ -1249,6 +1168,10 @@ enum AnimatorProperty {
         positionZ => const [TextAnimatorValue.positionZ],
         rotationX => const [TextAnimatorValue.rotationX],
         rotationY => const [TextAnimatorValue.rotationY],
+        skew => const [TextAnimatorValue.skew, TextAnimatorValue.skewAxis],
+        tracking => const [TextAnimatorValue.tracking],
+        blur => const [TextAnimatorValue.blur],
+        characterOffset => const [TextAnimatorValue.characterOffset],
       };
 
   /// What the Add ▸ Property menu calls it.
@@ -1262,6 +1185,10 @@ enum AnimatorProperty {
         positionZ => '${l10n.transformPosition} z',
         rotationX => '${l10n.transformRotation} x',
         rotationY => '${l10n.transformRotation} y',
+        skew => l10n.textAnimatorSkew,
+        tracking => l10n.textAnimatorTracking,
+        blur => l10n.textAnimatorBlur,
+        characterOffset => l10n.textAnimatorCharacterOffset,
       };
 }
 
@@ -1277,7 +1204,9 @@ AnimatorProperty? animatorPropertyOf(TextAnimatorValue value) {
 /// one Add ▸ Property put there, and one whose numbers have been moved.
 bool animatorShowsProperty(BridgeTextAnimator a, AnimatorProperty p) {
   final listed = a.properties;
-  if (listed == null || listed.contains(p.key)) return true;
+  if (listed == null && !p.late || (listed?.contains(p.key) ?? false)) {
+    return true;
+  }
   return p.numbers.any((v) =>
       textAnimatorScalarOf(a, v) !=
       BridgeScalar.static_(textAnimatorDefault(v)));
@@ -1287,8 +1216,17 @@ bool animatorShowsProperty(BridgeTextAnimator a, AnimatorProperty p) {
 BridgeTextAnimator animatorWithProperty(
     BridgeTextAnimator a, AnimatorProperty p) {
   final listed = a.properties;
-  if (listed == null || listed.contains(p.key)) return a;
-  return animatorWith(a, properties: [...listed, p.key]);
+  if (listed?.contains(p.key) ?? false) return a;
+  // An animator from before the list lists every older group already.
+  if (listed == null && !p.late) return a;
+  return animatorWith(a, properties: [
+    ...listed ??
+        [
+          for (final other in AnimatorProperty.values)
+            if (!other.late) other.key
+        ],
+    p.key,
+  ]);
 }
 
 /// [a] without [p]: its numbers back where they change nothing, and off the
@@ -1301,8 +1239,11 @@ BridgeTextAnimator animatorWithoutProperty(
     out = animatorWithScalar(
         out, v, BridgeScalar.static_(textAnimatorDefault(v)));
   }
-  final listed =
-      a.properties ?? [for (final other in AnimatorProperty.values) other.key];
+  final listed = a.properties ??
+      [
+        for (final other in AnimatorProperty.values)
+          if (!other.late) other.key
+      ];
   return animatorWith(out, properties: [
     for (final k in listed)
       if (k != p.key) k
@@ -1334,6 +1275,12 @@ String textAnimatorValueLabel(TextAnimatorValue value,
       TextAnimatorValue.staggerBounceFrequency =>
         l10n.textAnimatorBounceFrequency,
       TextAnimatorValue.staggerBounceDecay => l10n.textAnimatorBounceDecay,
+      TextAnimatorValue.animatorAmount => l10n.textAnimatorAnimatorAmount,
+      TextAnimatorValue.skew => l10n.textAnimatorSkew,
+      TextAnimatorValue.skewAxis => l10n.textAnimatorSkewAxis,
+      TextAnimatorValue.tracking => l10n.textAnimatorTracking,
+      TextAnimatorValue.blur => l10n.textAnimatorBlur,
+      TextAnimatorValue.characterOffset => l10n.textAnimatorCharacterOffset,
       _ when textAnimatorAxisIndex(value) != null =>
         l10n.textAnimatorAxisLabel(fontAxisName('', '', _axisTag(a, value))),
       TextAnimatorValue.rangeStart => l10n.textAnimatorRangeStart,
@@ -1376,6 +1323,7 @@ double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.staggerDelay => 0.1,
       TextAnimatorValue.staggerBounceFrequency => 2,
       TextAnimatorValue.staggerBounceDecay => 3,
+      TextAnimatorValue.animatorAmount ||
       TextAnimatorValue.maxAmount ||
       TextAnimatorValue.rangeEnd ||
       TextAnimatorValue.scaleX ||
@@ -1389,15 +1337,69 @@ double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       _ => 0,
     };
 
-/// Which of [a]'s numbers [value] names.
-BridgeScalar textAnimatorScalarOf(
-        BridgeTextAnimator a, TextAnimatorValue value) =>
+/// Which of selector [s]'s numbers [value] names; a number that is not a
+/// selector's reads nought.
+BridgeScalar selectorScalarOf(
+        BridgeRangeSelector s, TextAnimatorValue value) =>
     switch (value) {
-      TextAnimatorValue.rangeStart => a.selector.start,
-      TextAnimatorValue.rangeEnd => a.selector.end,
-      TextAnimatorValue.rangeOffset => a.selector.offset,
-      TextAnimatorValue.easeHigh => a.selector.easeHigh,
-      TextAnimatorValue.easeLow => a.selector.easeLow,
+      TextAnimatorValue.rangeStart => s.start,
+      TextAnimatorValue.rangeEnd => s.end,
+      TextAnimatorValue.rangeOffset => s.offset,
+      TextAnimatorValue.easeHigh => s.easeHigh,
+      TextAnimatorValue.easeLow => s.easeLow,
+      TextAnimatorValue.radius => s.radius,
+      TextAnimatorValue.minAmount => s.minAmount,
+      TextAnimatorValue.maxAmount => s.maxAmount,
+      TextAnimatorValue.wiggles => s.wiggles,
+      TextAnimatorValue.correlation => s.correlation,
+      TextAnimatorValue.staggerAmount => s.amount,
+      TextAnimatorValue.staggerDelay => s.delay,
+      TextAnimatorValue.staggerDelayEase => s.delayEase,
+      TextAnimatorValue.staggerBounceAmplitude => s.bounceAmplitude,
+      TextAnimatorValue.staggerBounceFrequency => s.bounceFrequency,
+      TextAnimatorValue.staggerBounceDecay => s.bounceDecay,
+      _ => const BridgeScalar.static_(0),
+    };
+
+/// [s] with the number [value] names replaced.
+BridgeRangeSelector selectorWithScalar(
+        BridgeRangeSelector s, TextAnimatorValue value, BridgeScalar to) =>
+    switch (value) {
+      TextAnimatorValue.rangeStart => selectorWith(s, start: to),
+      TextAnimatorValue.rangeEnd => selectorWith(s, end: to),
+      TextAnimatorValue.rangeOffset => selectorWith(s, offset: to),
+      TextAnimatorValue.easeHigh => selectorWith(s, easeHigh: to),
+      TextAnimatorValue.easeLow => selectorWith(s, easeLow: to),
+      TextAnimatorValue.radius => selectorWith(s, radius: to),
+      TextAnimatorValue.minAmount => selectorWith(s, minAmount: to),
+      TextAnimatorValue.maxAmount => selectorWith(s, maxAmount: to),
+      TextAnimatorValue.wiggles => selectorWith(s, wiggles: to),
+      TextAnimatorValue.correlation => selectorWith(s, correlation: to),
+      TextAnimatorValue.staggerAmount => selectorWith(s, amount: to),
+      TextAnimatorValue.staggerDelay => selectorWith(s, delay: to),
+      TextAnimatorValue.staggerDelayEase => selectorWith(s, delayEase: to),
+      TextAnimatorValue.staggerBounceAmplitude =>
+        selectorWith(s, bounceAmplitude: to),
+      TextAnimatorValue.staggerBounceFrequency =>
+        selectorWith(s, bounceFrequency: to),
+      TextAnimatorValue.staggerBounceDecay => selectorWith(s, bounceDecay: to),
+      _ => s,
+    };
+
+/// Which of [a]'s numbers [value] names; a selector's number is read off
+/// its selector [selector], the first by default.
+BridgeScalar textAnimatorScalarOf(
+        BridgeTextAnimator a, TextAnimatorValue value,
+        {int selector = 0}) =>
+    switch (value) {
+      _ when isSelectorValue(value) =>
+        selectorScalarOf(selectorAt(a, selector), value),
+      TextAnimatorValue.animatorAmount => a.amount,
+      TextAnimatorValue.skew => a.skew,
+      TextAnimatorValue.skewAxis => a.skewAxis,
+      TextAnimatorValue.tracking => a.tracking,
+      TextAnimatorValue.blur => a.blur,
+      TextAnimatorValue.characterOffset => a.characterOffset,
       TextAnimatorValue.positionX => a.positionX,
       TextAnimatorValue.positionY => a.positionY,
       TextAnimatorValue.positionZ => a.positionZ,
@@ -1414,37 +1416,27 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.boxR => a.boxR,
       TextAnimatorValue.boxG => a.boxG,
       TextAnimatorValue.boxB => a.boxB,
-      TextAnimatorValue.radius => a.selector.radius,
-      TextAnimatorValue.minAmount => a.selector.minAmount,
-      TextAnimatorValue.maxAmount => a.selector.maxAmount,
-      TextAnimatorValue.wiggles => a.selector.wiggles,
-      TextAnimatorValue.correlation => a.selector.correlation,
-      TextAnimatorValue.staggerAmount => a.selector.amount,
-      TextAnimatorValue.staggerDelay => a.selector.delay,
-      TextAnimatorValue.staggerDelayEase => a.selector.delayEase,
-      TextAnimatorValue.staggerBounceAmplitude => a.selector.bounceAmplitude,
-      TextAnimatorValue.staggerBounceFrequency => a.selector.bounceFrequency,
-      TextAnimatorValue.staggerBounceDecay => a.selector.bounceDecay,
       _ => switch (textAnimatorAxisIndex(value)) {
           final i? when i < a.axes.length => a.axes[i].value,
           _ => const BridgeScalar.static_(0),
         },
     };
 
-/// [a] with the one number [value] names replaced.
+/// [a] with the one number [value] names replaced, a selector's on its
+/// selector [selector].
 BridgeTextAnimator animatorWithScalar(
-        BridgeTextAnimator a, TextAnimatorValue value, BridgeScalar to) =>
+        BridgeTextAnimator a, TextAnimatorValue value, BridgeScalar to,
+        {int selector = 0}) =>
     switch (value) {
-      TextAnimatorValue.rangeStart =>
-        animatorWith(a, selector: selectorWith(a.selector, start: to)),
-      TextAnimatorValue.rangeEnd =>
-        animatorWith(a, selector: selectorWith(a.selector, end: to)),
-      TextAnimatorValue.rangeOffset =>
-        animatorWith(a, selector: selectorWith(a.selector, offset: to)),
-      TextAnimatorValue.easeHigh =>
-        animatorWith(a, selector: selectorWith(a.selector, easeHigh: to)),
-      TextAnimatorValue.easeLow =>
-        animatorWith(a, selector: selectorWith(a.selector, easeLow: to)),
+      _ when isSelectorValue(value) => animatorWithSelectorAt(a, selector,
+          selectorWithScalar(selectorAt(a, selector), value, to)),
+      TextAnimatorValue.animatorAmount => animatorWith(a, amount: to),
+      TextAnimatorValue.skew => animatorWith(a, skew: to),
+      TextAnimatorValue.skewAxis => animatorWith(a, skewAxis: to),
+      TextAnimatorValue.tracking => animatorWith(a, tracking: to),
+      TextAnimatorValue.blur => animatorWith(a, blur: to),
+      TextAnimatorValue.characterOffset =>
+        animatorWith(a, characterOffset: to),
       TextAnimatorValue.positionX => animatorWith(a, positionX: to),
       TextAnimatorValue.positionY => animatorWith(a, positionY: to),
       TextAnimatorValue.positionZ => animatorWith(a, positionZ: to),
@@ -1461,28 +1453,6 @@ BridgeTextAnimator animatorWithScalar(
       TextAnimatorValue.boxR => animatorWith(a, boxR: to),
       TextAnimatorValue.boxG => animatorWith(a, boxG: to),
       TextAnimatorValue.boxB => animatorWith(a, boxB: to),
-      TextAnimatorValue.radius =>
-        animatorWith(a, selector: selectorWith(a.selector, radius: to)),
-      TextAnimatorValue.minAmount =>
-        animatorWith(a, selector: selectorWith(a.selector, minAmount: to)),
-      TextAnimatorValue.maxAmount =>
-        animatorWith(a, selector: selectorWith(a.selector, maxAmount: to)),
-      TextAnimatorValue.wiggles =>
-        animatorWith(a, selector: selectorWith(a.selector, wiggles: to)),
-      TextAnimatorValue.correlation =>
-        animatorWith(a, selector: selectorWith(a.selector, correlation: to)),
-      TextAnimatorValue.staggerAmount =>
-        animatorWith(a, selector: selectorWith(a.selector, amount: to)),
-      TextAnimatorValue.staggerDelay =>
-        animatorWith(a, selector: selectorWith(a.selector, delay: to)),
-      TextAnimatorValue.staggerDelayEase =>
-        animatorWith(a, selector: selectorWith(a.selector, delayEase: to)),
-      TextAnimatorValue.staggerBounceAmplitude => animatorWith(a,
-          selector: selectorWith(a.selector, bounceAmplitude: to)),
-      TextAnimatorValue.staggerBounceFrequency => animatorWith(a,
-          selector: selectorWith(a.selector, bounceFrequency: to)),
-      TextAnimatorValue.staggerBounceDecay =>
-        animatorWith(a, selector: selectorWith(a.selector, bounceDecay: to)),
       _ => switch (textAnimatorAxisIndex(value)) {
           final i? when i < a.axes.length => animatorWith(a, axes: [
               for (var k = 0; k < a.axes.length; k++)
@@ -1506,6 +1476,7 @@ void writeTextAnimatorScalar({
   required int index,
   required TextAnimatorValue value,
   required BridgeScalar to,
+  int selector = 0,
 }) {
   final document = layer.getText();
   if (document == null || index >= document.animators.length) return;
@@ -1522,7 +1493,8 @@ void writeTextAnimatorScalar({
       animators: [
         for (var i = 0; i < document.animators.length; i++)
           if (i == index)
-            animatorWithScalar(document.animators[i], value, to)
+            animatorWithScalar(document.animators[i], value, to,
+                selector: selector)
           else
             document.animators[i],
       ],
@@ -1559,8 +1531,22 @@ BridgeRangeSelector selectorWith(
   BridgeScalar? wiggles,
   BridgeScalar? correlation,
   int? seed,
+  BridgeSelectorCombine? combine,
+  BridgeSelectorUnits? units,
+  bool? randomize,
+  bool? delayFrames,
+  bool? total,
+  BridgeStaggerRepeat? repeat,
+  bool? bounceLast,
 }) =>
     BridgeRangeSelector(
+      combine: combine ?? s.combine,
+      units: units ?? s.units,
+      randomize: randomize ?? s.randomize,
+      delayFrames: delayFrames ?? s.delayFrames,
+      total: total ?? s.total,
+      repeat: repeat ?? s.repeat,
+      bounceLast: bounceLast ?? s.bounceLast,
       minAmount: minAmount ?? s.minAmount,
       maxAmount: maxAmount ?? s.maxAmount,
       wiggles: wiggles ?? s.wiggles,
@@ -1703,24 +1689,18 @@ List<Widget> animatorAddMenuRows({
         'text-animator-add-selector-$index',
         l10n.textAnimatorSelector,
         (dismiss) => [
-              for (final (kind, label) in [
-                (BridgeSelectorKind.range, l10n.textAnimatorSelectorRange),
-                (
-                  BridgeSelectorKind.proximity,
-                  l10n.textAnimatorSelectorProximity
-                ),
-                (BridgeSelectorKind.wiggly, l10n.textAnimatorSelectorWiggly),
-                (BridgeSelectorKind.stagger, l10n.textAnimatorSelectorStagger),
-              ])
+              // Another selector under the ones the animator has, as After
+              // Effects' Add ▸ Selector; its Mode says how it meets them.
+              for (final kind in BridgeSelectorKind.values)
                 MenuRow(
                   key: ValueKey<String>(
                       'text-animator-selector-${kind.name}-$index'),
-                  enabled: a.selector.kind != kind,
                   onPressed: () {
                     dismiss();
-                    put(animatorWithSelectorKind(a, kind));
+                    put(animatorWith(a,
+                        selectors: [...a.selectors, freshSelector(kind)]));
                   },
-                  child: Text(label),
+                  child: Text(selectorKindLabel(kind)),
                 ),
             ]),
   ];
@@ -1810,6 +1790,46 @@ List<Widget> animateMenuRows({
           onPressed: () => add(textPresetAnimators(preset, comp, frame)),
           child: Text(preset.title),
         ),
+      // The user's own, saved from an animator's More menu, beside the
+      // built-in ones; their keys start at the playhead.
+      if (animatorPresets() case final saved when saved.isNotEmpty)
+        SubmenuRow(
+          key: const ValueKey<String>('text-animate-my-presets'),
+          closeParent: close,
+          submenu: (dismiss) => FloatSurface(
+            width: 190,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (name, file) in saved)
+                  MenuRow(
+                    key: ValueKey<String>('text-animate-my-preset-$name'),
+                    onPressed: () async {
+                      dismiss();
+                      final loaded = await loadAnimatorPreset(file, comp, frame);
+                      if (loaded.isNotEmpty) add(loaded);
+                    },
+                    child: Text(name),
+                  ),
+              ],
+            ),
+          ),
+          child: Text(l10n.textAnimatorMyPresets),
+        ),
+    ],
+    // What Copy animator kept, from this layer or another.
+    if (copiedAnimators.isNotEmpty) ...[
+      const MenuDivider(),
+      MenuRow(
+        key: const ValueKey<String>('text-animate-paste'),
+        onPressed: () => add([
+          for (final a in copiedAnimators)
+            animatorWith(a,
+                name: freeAnimatorName(document.animators, a.name)),
+        ]),
+        child: Text(l10n.textAnimatorPaste),
+      ),
     ],
   ];
 }
@@ -1900,3 +1920,16 @@ void writeTextAnimator(
     ),
   );
 }
+
+/// The test key a selector choice's control has always had.
+String _settingKey(AnimatorSetting setting, BridgeRangeSelector s) =>
+    switch (setting) {
+      AnimatorSetting.selector => 'text-animator-kind',
+      AnimatorSetting.mode => 'text-animator-subtract',
+      AnimatorSetting.order => 'stagger-order',
+      AnimatorSetting.seed when s.kind == BridgeSelectorKind.wiggly =>
+        'wiggly-seed',
+      AnimatorSetting.seed when s.kind == BridgeSelectorKind.stagger =>
+        'stagger-seed',
+      _ => 'text-animator-${setting.name}',
+    };

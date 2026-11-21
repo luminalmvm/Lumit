@@ -135,8 +135,13 @@ void main() {
       );
       expect(
         rows.whereType<FoldAnimatorValueRow>().map((r) => r.value).toSet(),
-        textAnimatorValuesOf(entry.info.textAnimators.single, solid: false)
-            .toSet(),
+        {
+          for (final item in selectorItemsOf(
+              entry.info.textAnimators.single.selector, 0))
+            if (item is SelectorValueItem) item.value,
+          ...textAnimatorValuesOf(entry.info.textAnimators.single,
+              solid: false),
+        },
         reason: 'every number an animator has needs a row to key it on',
       );
 
@@ -199,8 +204,11 @@ void main() {
           .getModel()
           .layers
           .firstWhere((e) => e.layer.internallayerId == text.internallayerId);
-      final values =
-          textAnimatorValuesOf(entry.info.textAnimators.single, solid: false);
+      final values = [
+        for (final item in selectorItemsOf(
+            entry.info.textAnimators.single.selector, 0))
+          if (item is SelectorValueItem) item.value,
+      ];
       expect(values, contains(TextAnimatorValue.radius));
       expect(values, isNot(contains(TextAnimatorValue.rangeStart)));
     });
