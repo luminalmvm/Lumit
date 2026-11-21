@@ -1334,6 +1334,7 @@ impl CompositionReference {
         let document = TextDocument {
             text: "Text".into(),
             expression: None,
+            keys: None,
             size: 72.0,
             fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
             path: None,

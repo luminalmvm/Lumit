@@ -112,6 +112,7 @@ pub fn kit() -> Kit {
     let mut document = TextDocument {
         text: "Hello".into(),
         expression: None,
+        keys: None,
         size: 72.0,
         fill: LinearColour([1.0; 4]),
         path: None,

@@ -7329,6 +7329,7 @@ mod render_below_at_tests {
                 document: TextDocument {
                     text: "hello".into(),
                     expression: None,
+                    keys: None,
                     size: 48.0,
                     fill: LinearColour([1.0, 0.5, 0.2, 1.0]),
                     path: None,

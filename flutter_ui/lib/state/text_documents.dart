@@ -66,6 +66,7 @@ extension TextDocumentCopy on BridgeTextDocument {
     BridgeColourRgba? fill,
     UuidValue? path,
     bool clearPath = false,
+    bool clearKeys = false,
     BridgeScalar? pathOffset,
     List<BridgeTextAnimator>? animators,
     BridgeTextStyle? style,
@@ -74,6 +75,7 @@ extension TextDocumentCopy on BridgeTextDocument {
       BridgeTextDocument(
         text: text ?? this.text,
         expression: expression ?? this.expression,
+        keys: clearKeys ? null : keys,
         size: size ?? this.size,
         fill: fill ?? this.fill,
         path: clearPath ? null : (path ?? this.path),

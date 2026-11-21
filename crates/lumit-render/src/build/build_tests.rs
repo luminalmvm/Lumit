@@ -141,6 +141,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
             document: TextDocument {
                 text: "hi".into(),
                 expression: None,
+                keys: None,
                 size: 24.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,

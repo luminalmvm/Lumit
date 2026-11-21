@@ -1727,6 +1727,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             'src-card-${layer.internallayerId}'),
                         layer: layer,
                         onChanged: ui.model.refresh,
+                        comp: comp,
                         open: _isOpen('source'),
                         onToggle: () => _toggle('source'),
                       ),

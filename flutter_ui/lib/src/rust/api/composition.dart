@@ -49,6 +49,7 @@ import 'template/copy.dart';
 import 'template/data.dart';
 import 'template/library.dart';
 import 'template/rows.dart';
+import 'text_keys.dart';
 import 'vector.dart';
 import 'wire_tie.dart';
 import 'wireframes.dart';

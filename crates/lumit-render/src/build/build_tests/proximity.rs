@@ -65,6 +65,7 @@ fn a_proximity_selector_follows_its_null() {
     let document = TextDocument {
         text: "WWWWWW".into(),
         expression: None,
+        keys: None,
         size: 72.0,
         fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
         path: None,

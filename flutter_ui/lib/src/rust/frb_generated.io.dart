@@ -82,6 +82,7 @@ import 'api/template/copy.dart';
 import 'api/template/data.dart';
 import 'api/template/library.dart';
 import 'api/template/rows.dart';
+import 'api/text_keys.dart';
 import 'api/track.dart';
 import 'api/transcript.dart';
 import 'api/vector.dart';
@@ -621,6 +622,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument dco_decode_box_autoadd_bridge_text_document(dynamic raw);
+
+  @protected
+  BridgeTextKeys dco_decode_box_autoadd_bridge_text_keys(dynamic raw);
 
   @protected
   BridgeTextStyle dco_decode_box_autoadd_bridge_text_style(dynamic raw);
@@ -1993,6 +1997,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeTextDocument dco_decode_bridge_text_document(dynamic raw);
 
   @protected
+  BridgeTextKeys dco_decode_bridge_text_keys(dynamic raw);
+
+  @protected
   BridgeTextStyle dco_decode_bridge_text_style(dynamic raw);
 
   @protected
@@ -3025,6 +3032,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeTextKeys? dco_decode_opt_box_autoadd_bridge_text_keys(dynamic raw);
+
+  @protected
   BridgeTrackFailure? dco_decode_opt_box_autoadd_bridge_track_failure(
       dynamic raw);
 
@@ -3745,6 +3755,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTextDocument sse_decode_box_autoadd_bridge_text_document(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeTextKeys sse_decode_box_autoadd_bridge_text_keys(
       SseDeserializer deserializer);
 
   @protected
@@ -5337,6 +5351,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeTextKeys sse_decode_bridge_text_keys(SseDeserializer deserializer);
+
+  @protected
   BridgeTextStyle sse_decode_bridge_text_style(SseDeserializer deserializer);
 
   @protected
@@ -6577,6 +6594,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeTextKeys? sse_decode_opt_box_autoadd_bridge_text_keys(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeTrackFailure? sse_decode_opt_box_autoadd_bridge_track_failure(
       SseDeserializer deserializer);
 
@@ -7315,6 +7336,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_text_document(
       BridgeTextDocument self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_text_keys(
+      BridgeTextKeys self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_text_style(
@@ -9082,6 +9107,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeTextDocument self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_text_keys(
+      BridgeTextKeys self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_text_style(
       BridgeTextStyle self, SseSerializer serializer);
 
@@ -10347,6 +10376,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_text_document(
       BridgeTextDocument? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_text_keys(
+      BridgeTextKeys? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_track_failure(

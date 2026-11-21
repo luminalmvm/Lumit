@@ -280,6 +280,7 @@ fn fixture() -> (Arc<Document>, Uuid) {
     let title_doc = TextDocument {
         text: "Lumit".into(),
         expression: None,
+        keys: None,
         size: 64.0,
         fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
         path: None,

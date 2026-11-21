@@ -3844,6 +3844,7 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     text.set_text(BridgeTextDocument {
         text: "Lumit".into(),
         expression: None,
+        keys: None,
         size: 72.0,
         fill: BridgeColourRgba {
             r: 1.0,
@@ -3894,6 +3895,7 @@ fn converting_a_text_layer_leaves_the_original_where_it_was() {
     text.set_text(BridgeTextDocument {
         text: "   ".into(),
         expression: None,
+        keys: None,
         size: 72.0,
         fill: BridgeColourRgba {
             r: 1.0,
@@ -3940,6 +3942,7 @@ fn a_text_layer_round_trips_its_document() {
     text.set_text(BridgeTextDocument {
         text: "Hello".into(),
         expression: None,
+        keys: None,
         size: 48.0,
         fill: BridgeColourRgba {
             r: 1.0,
@@ -3974,6 +3977,7 @@ fn a_text_layer_round_trips_its_document() {
         layer.set_text(BridgeTextDocument {
             text: "no".into(),
             expression: None,
+            keys: None,
             size: 1.0,
             fill: BridgeColourRgba {
                 r: 0.0,

@@ -3017,6 +3017,11 @@ pub struct TextDocument {
     /// the expression off restores the words that were typed there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expression: Option<String>,
+    /// Keyed words ([`crate::text::keys`]). `text` is left alone while they
+    /// exist, so an older Lumit shows the words typed before keying. Boxed,
+    /// as the style is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keys: Option<Box<crate::text::keys::TextKeys>>,
     /// Pixel size at natural scale.
     pub size: f64,
     pub fill: LinearColour,
@@ -3081,9 +3086,14 @@ impl TextDocument {
         if let Some(captions) = &self.captions {
             return std::borrow::Cow::Owned(crate::captions::show::at(captions, &context).text);
         }
-        match &self.expression {
-            None => std::borrow::Cow::Borrowed(&self.text),
-            Some(e) => std::borrow::Cow::Owned(crate::expression::evaluate_text(e, Some(context))),
+        match (&self.expression, &self.keys) {
+            (Some(e), _) => {
+                std::borrow::Cow::Owned(crate::expression::evaluate_text(e, Some(context)))
+            }
+            (None, Some(keys)) => {
+                std::borrow::Cow::Borrowed(keys.word_at(crate::text::keys::layer_time(&context)))
+            }
+            (None, None) => std::borrow::Cow::Borrowed(&self.text),
         }
     }
 }
@@ -5495,6 +5505,7 @@ mod tests {
             document: TextDocument {
                 text: "m".into(),
                 expression: None,
+                keys: None,
                 size: 12.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,
