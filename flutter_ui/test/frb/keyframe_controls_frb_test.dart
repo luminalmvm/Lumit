@@ -146,6 +146,38 @@ void main() {
       expect(p.comp.frameAtTime(time: keys.single.time), 0);
     });
 
+    testWidgets(
+        'keys under an expression: the diamond takes one away and keeps the '
+        'expression', (tester) async {
+      final p = withLayer();
+      p.uiState.playheadFrame.value = 0;
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
+      await tester.pump();
+      p.uiState.playheadFrame.value = 60;
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-opacity')));
+      await tester.pump();
+
+      p.layer.setTransform(
+          prop: BridgeTransformProp.opacity,
+          value: BridgeScalar.expression(
+              'loopOut("cycle")', BridgeExpressionLanguage.javaScript));
+      p.uiState.model.refresh();
+      await tester.pump();
+      var held = opacityOf(p.layer);
+      expect(held, isA<BridgeScalar_Expression>());
+      expect((held as BridgeScalar_Expression).field2, hasLength(2),
+          reason: 'the keys stay under the expression');
+
+      // The diamond on the key at 60 takes it away, and the expression stays.
+      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-opacity')));
+      await tester.pump();
+      held = opacityOf(p.layer);
+      expect(held, isA<BridgeScalar_Expression>());
+      expect((held as BridgeScalar_Expression).field2, hasLength(1));
+    });
+
     testWidgets('the arrows jump the playhead to the neighbouring keys',
         (tester) async {
       final p = withLayer();

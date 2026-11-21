@@ -50,6 +50,7 @@ pub mod import;
 pub mod interpret;
 pub mod keymap;
 pub mod layer;
+pub mod layer_solid;
 pub mod layer_source;
 pub mod lens;
 pub mod library;

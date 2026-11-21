@@ -265,7 +265,7 @@ fn moved_by(animation: &crate::anim::Animation, by: f64) -> crate::anim::Animati
 }
 
 /// The op that gives `layer` the effect stack `effects`, as
-/// [`super::particulate::set_effects`] makes it. Setting the Camera row also
+/// [`super::particulate::rows::set_effects`] makes it. Setting the Camera row also
 /// carries the layer on that camera, where it sat in the frame, and clearing it
 /// puts the layer back, all in one undo step. Switching the effect off leaves
 /// the layer riding the camera, which is how you compare it with the plate.
@@ -282,7 +282,7 @@ pub fn set_effects(
             .and_then(|e| e.layer_ref("camera"))
     };
     let (was, now) = (camera(&layer.effects), camera(&effects));
-    let set = super::particulate::set_effects(comp.id, layer, effects);
+    let set = super::particulate::rows::set_effects(comp.id, layer, effects);
     if was == now {
         return set;
     }

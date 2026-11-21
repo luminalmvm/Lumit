@@ -102,6 +102,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
+        blend: None,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
     map.insert(layer.id, &lp);
@@ -423,6 +424,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         shutter: Vec::new(),
         source_key: 0,
         source_frame: 0,
+        blend: None,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
     map.insert(layer.id, &lp);
@@ -989,3 +991,29 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
 // Effects on a layer group (docs/impl/group-effects.md §2): the wrap,
 // asserted on the draw list itself so it runs on CI machines with no GPU.
 // ---------------------------------------------------------------------------
+
+// Regression: a Blend or Flow in-between read the plane of its first source
+// frame alone, so Depth stepped while the picture moved smoothly.
+#[test]
+fn a_blended_frame_reads_the_mix_of_its_two_planes() {
+    use crate::planes::{PlaneKind, PlaneOut};
+    let depth = lumit_core::fx::builtins::instantiate("depth").unwrap();
+    let plane = |v: u16| PlaneOut {
+        width: 1,
+        height: 1,
+        kind: PlaneKind::Depth,
+        data: v.to_le_bytes().to_vec(),
+    };
+    let run =
+        crate::planes::run_from_planes(30.0, 2, "t", &[(0, plane(0)), (1, plane(1000))]).unwrap();
+    crate::planes::publish(depth.id, run);
+    let read = |blend| {
+        let p = crate::planes::blend::plane_blended(depth.id, 0, blend).unwrap();
+        (u16::from_le_bytes([p.3[0], p.3[1]]), p.4)
+    };
+    let (alone, c0) = read(None);
+    let (mixed, c1) = read(Some((1, 0.25)));
+    assert_eq!((alone, mixed), (0, 250));
+    assert_ne!(c0, c1, "the texture memo must tell the mix from the frame");
+    crate::planes::forget(&[depth.id]);
+}

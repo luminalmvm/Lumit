@@ -38,7 +38,8 @@ const double _minWidth = 460;
 ///
 /// [onLive] is handed each change as it is typed, for a row that can preview
 /// one. [onCommit] is handed what the property ends up holding: the new
-/// expression, or a plain number when the expression was taken off.
+/// expression, or what [expressionTakenOff] leaves when it was taken off,
+/// unless [onRemove] is given to do that.
 /// [fresh] is an expression that was only just put there, holding the number
 /// the property had, so it opens selected and the first key typed replaces it.
 /// [held] is what the property holds, when that is not [value]. [decimals]
@@ -51,6 +52,7 @@ Future<void> showExpressionEditor({
   required LayerReference layer,
   void Function(BridgeScalar_Expression draft)? onLive,
   required void Function(BridgeScalar next) onCommit,
+  VoidCallback? onRemove,
   bool fresh = false,
   BridgeScalar? held,
   BridgeExpressionRow? row,
@@ -115,14 +117,18 @@ Future<void> showExpressionEditor({
     final keys = expressionAsKeys(ui,
         expression: draft, comp: comp, layer: layer, held: held, row: row);
     if (keys != null) onCommit(keys);
+  } else if (removed && onRemove != null) {
+    onRemove();
   } else if (removed) {
     // The number the expression was showing, so the picture does not move.
-    onCommit(BridgeScalar.static_(sampleScalarWithContext(
-        scalar: draft,
-        time: time,
-        layer: layer,
-        held: held ?? value,
-        row: row)));
+    onCommit(expressionTakenOff(
+        value,
+        sampleScalarWithContext(
+            scalar: draft,
+            time: time,
+            layer: layer,
+            held: held ?? value,
+            row: row)));
   } else if (draft != value) {
     // A cancelled edit that was previewed has to be written back over it.
     if (!cancelled) {
@@ -389,6 +395,15 @@ BridgeScalar? expressionAsKeys(
   }
 }
 
+/// What Remove expression leaves on a row that held [expression]: the keys
+/// kept under it, or [number], the number it was showing, when it kept none.
+BridgeScalar expressionTakenOff(BridgeScalar expression, double number) =>
+    switch (expression) {
+      BridgeScalar_Expression(field2: final keys?) when keys.isNotEmpty =>
+        BridgeScalar.keyframed(keys),
+      _ => BridgeScalar.static_(number),
+    };
+
 /// How many decimals [channel]'s value field shows, which the number its
 /// expression comes to is shown with too.
 int expressionDecimals(GraphChannel channel) {
@@ -464,7 +479,7 @@ class ExpressionLane extends StatelessWidget {
                     row: channel.expressionRow,
                     decimals: expressionDecimals(channel),
                     onCommit: (next) {
-                      commitChannelEdits({channel: next});
+                      commitChannelEdits({channel: next}, replace: true);
                       onChanged();
                     },
                   );

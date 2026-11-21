@@ -406,9 +406,11 @@ MenuEntry addExpressionRow(
               onCommit: (next) {
                 // An expression goes on every picked row. Taking one off
                 // leaves a number, which is only the first row's to hold.
-                commitChannelEdits(next is BridgeScalar_Expression
-                    ? {for (final channel in channels) channel: next}
-                    : {first: next});
+                commitChannelEdits(
+                    next is BridgeScalar_Expression
+                        ? {for (final channel in channels) channel: next}
+                        : {first: next},
+                    replace: true);
                 app.notifyDocumentChanged();
               },
             );

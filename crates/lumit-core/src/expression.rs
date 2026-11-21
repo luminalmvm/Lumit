@@ -313,6 +313,54 @@ fn javascript_number(expression: &str, context: Option<&ExpressionContext>, slot
 /// came off: the panels, which sample a row to show its number and its curve.
 /// A point's two rows carry the same text, and the first is the one found.
 pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
+    carrier(context, expression)
+        .map_or_else(Slot::default, |(_, property)| Slot::read(&property.extra))
+}
+
+/// The keys kept under the expression `expression` on the context's layer,
+/// with how far comp time is ahead of their timebase: what the panels'
+/// samples hand [`script::with_own_keys`], as the render does.
+fn own_on_layer(context: &ExpressionContext, expression: &str) -> Option<script::OwnKeys> {
+    let (layer, property) = carrier(context, expression)?;
+    Some(script::OwnKeys {
+        keys: crate::anim::keys_kept_in(&property.extra)?,
+        offset: layer.start_offset.0.to_f64(),
+    })
+}
+
+/// [`own_on_layer`] for the row `row`, found by the row and not its text: a
+/// linked point's rows can carry the same text over different keys.
+fn own_of_row(context: &ExpressionContext, row: Row<'_>) -> Option<script::OwnKeys> {
+    let comp = context.document.comp(context.comp?)?;
+    let layer = comp.layers.iter().find(|l| Some(l.id) == context.layer)?;
+    let (props, axis) = point_row::point_of_row(layer, row)?;
+    Some(script::OwnKeys {
+        keys: crate::anim::keys_kept_in(&props.get(axis)?.extra)?,
+        offset: layer.start_offset.0.to_f64(),
+    })
+}
+
+/// A JavaScript expression's number with the keys under it in reach, and its
+/// `value` read off them at the context's time.
+fn javascript_owned(
+    expression: &str,
+    context: Option<&ExpressionContext>,
+    slot: Slot,
+    own: Option<script::OwnKeys>,
+) -> f64 {
+    let slot = match (&own, context) {
+        (Some(own), Some(c)) => crate::anim::evaluate(&own.keys, c.comp_time - own.offset)
+            .map_or(slot, |v| slot.with_own(v)),
+        _ => slot,
+    };
+    script::with_own_keys(own, || javascript_number(expression, context, slot))
+}
+
+/// The layer of the context and the property on it that carries `expression`.
+fn carrier<'c>(
+    context: &'c ExpressionContext,
+    expression: &str,
+) -> Option<(&'c crate::model::Layer, &'c crate::anim::Property)> {
     use crate::anim::{Animation, Property};
     use crate::model::EffectValue;
 
@@ -324,9 +372,7 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
         let comp = context.document.comp(comp)?;
         comp.layers.iter().find(|l| l.id == layer)
     });
-    let Some(layer) = layer else {
-        return Slot::default();
-    };
+    let layer = layer?;
     let tr = &layer.transform;
     let camera = match &layer.kind {
         crate::model::LayerKind::Camera { zoom, options, .. } => {
@@ -349,7 +395,9 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
         &tr.opacity,
     ]
     .into_iter()
-    .chain(camera);
+    .chain(camera)
+    // The Retime row is a property an expression can sit on too.
+    .chain(layer.retime.iter());
     let params = layer.effects.iter().flat_map(|effect| {
         effect.params.iter().flat_map(|param| {
             let parts: Vec<&Property> = match &param.value {
@@ -364,7 +412,7 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
     transform
         .chain(params)
         .find(|property| carries(property))
-        .map_or_else(Slot::default, |property| Slot::read(&property.extra))
+        .map(|property| (layer, property))
 }
 
 /// A row an expression can sit on: a transform property, or an effect
@@ -552,7 +600,8 @@ pub fn evaluate_in(
             let slot = context
                 .as_deref()
                 .map_or_else(Slot::default, |context| slot_on_layer(context, expression));
-            javascript_number(expression, context.as_deref(), slot)
+            let own = context.as_deref().and_then(|c| own_on_layer(c, expression));
+            javascript_owned(expression, context.as_deref(), slot, own)
         }
     }
 }
@@ -571,6 +620,28 @@ pub fn evaluate_with(
     }
 }
 
+/// [`evaluate_with`] for an expression with keys under it, given rather than
+/// looked up: `value` reads them at `t` and `loopOut` repeats them. `t` and
+/// the keys share a timebase; the context's `comp_time` is `time`. What the
+/// panels sample a row with, when the row carries its keys.
+pub fn evaluate_with_keys(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    slot: Slot,
+    keys: Vec<crate::anim::Keyframe>,
+    t: f64,
+) -> f64 {
+    if language != Language::JavaScript || keys.is_empty() {
+        return evaluate_with(language, expression, context, slot);
+    }
+    let slot = crate::anim::evaluate(&keys, t).map_or(slot, |v| slot.with_own(v));
+    let offset = context.as_deref().map_or(0.0, |c| c.comp_time - t);
+    script::with_own_keys(Some(script::OwnKeys { keys, offset }), || {
+        javascript_number(expression, context.as_deref(), slot)
+    })
+}
+
 /// [`evaluate`] for a property that is in hand, whose `extra` says which
 /// language its expression is in and what the expression may know about the
 /// property: its value before the expression, and which number of a point it
@@ -580,6 +651,33 @@ pub fn evaluate_property(
     context: Option<Arc<ExpressionContext>>,
     extra: &serde_json::Map<String, serde_json::Value>,
 ) -> f64 {
+    let t = context.as_deref().map_or(0.0, |c| c.comp_time);
+    evaluate_property_at(expression, context, extra, t)
+}
+
+/// [`evaluate_property`] for the property at `t` in its own timebase (layer
+/// time, for a layer's property). Keys kept under the expression
+/// ([`crate::anim::Property::keys_under_expression`]) are what `value` reads at `t`, and
+/// what `loopOut`, `valueAtTime` and `key()` see.
+pub fn evaluate_property_at(
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    extra: &serde_json::Map<String, serde_json::Value>,
+    t: f64,
+) -> f64 {
+    if Language::of(extra) == Language::JavaScript {
+        let mut slot = Slot::read(extra);
+        let own = crate::anim::keys_kept_in(extra).map(|keys| {
+            if let Some(v) = crate::anim::evaluate(&keys, t) {
+                slot = slot.with_own(v);
+            }
+            let offset = context.as_deref().map_or(0.0, |c| c.comp_time - t);
+            script::OwnKeys { keys, offset }
+        });
+        return script::with_own_keys(own, || {
+            javascript_number(expression, context.as_deref(), slot)
+        });
+    }
     match Language::of(extra) {
         Language::Rhai => evaluate(expression, context),
         Language::JavaScript => {
@@ -615,8 +713,9 @@ pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) 
 /// of zeroes: the graph has nothing truthful to draw for a line that is still
 /// being typed, and a flat curve at zero would read as a real answer.
 ///
-/// `slot` is what the row the curve is drawn for knows about its property
-/// ([`slot_of_row`]), and the one carrying the text is found when it is left out.
+/// `row` is the row the curve is drawn for, whose slot ([`slot_of_row`]) and
+/// keys the expression reads. The one carrying the text is found when it is
+/// left out.
 pub fn evaluate_range(
     language: Language,
     expression: &str,
@@ -624,7 +723,7 @@ pub fn evaluate_range(
     start: f64,
     end: f64,
     samples: i64,
-    slot: Option<Slot>,
+    row: Option<Row<'_>>,
 ) -> Vec<f64> {
     // A curve is a few hundred samples. More than a screen is wide draws
     // nothing new, and the number comes from outside.
@@ -633,15 +732,20 @@ pub fn evaluate_range(
         if program_for(expression).is_err() {
             return Vec::new();
         }
-        let slot = slot.unwrap_or_else(|| {
-            context.map_or_else(Slot::default, |context| slot_on_layer(context, expression))
+        let slot = context.map_or_else(Slot::default, |c| match row {
+            Some(row) => slot_of_row(c, row, None),
+            None => slot_on_layer(c, expression),
+        });
+        let own = context.and_then(|c| match row {
+            Some(row) => own_of_row(c, row),
+            None => own_on_layer(c, expression),
         });
         let delta = (end - start) / (samples as f64);
         return (0..samples)
             .map(|i| {
                 let mut at = context.cloned().unwrap_or_else(ExpressionContext::detached);
                 at.comp_time = start + (delta * (i as f64));
-                javascript_number(expression, Some(&at), slot)
+                javascript_owned(expression, Some(&at), slot, own.clone())
             })
             .collect();
     }

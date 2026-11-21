@@ -285,6 +285,7 @@ Clone layer 7
 Clone layer 8
 Clone to points
 Closed
+Cloudy
 Coarse
 Coat
 Coat roughness
@@ -491,6 +492,7 @@ Edge
 Edge colour
 Edge fade
 Edge margin
+Edge repeat
 Edge sharpness
 Edge type
 Edges
@@ -1036,6 +1038,7 @@ Minimum
 Minimum gap
 Mirror
 Mirror edges
+Mirror repeat
 Mix
 Mixer
 Mode
@@ -1336,7 +1339,6 @@ Removed
 Removed noise
 Render
 Rendered
-Repeat
 Repeat edge pixels
 Repeat end
 Repeat start
@@ -1587,6 +1589,7 @@ Spread z
 Sprite
 Sprite flare
 Sprite layer
+Sprite shape
 Square
 Squeeze
 Stabilise
@@ -1596,6 +1599,7 @@ Stagger
 Standard
 Star
 Star depth
+Star points
 Starburst intensity
 Start
 Start angle
@@ -1718,7 +1722,6 @@ Transform points
 Transition
 Transition width
 Transmission
-Transparent
 Travel
 Tremolo
 Triangle

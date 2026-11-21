@@ -13,11 +13,6 @@
 name: sign-runtime
 
 on:
-  # A manual run can't be started until this file is on main, so a push that
-  # changes the file on any other branch runs it too.
-  push:
-    branches-ignore: [main]
-    paths: [".github/workflows/sign-runtime.yml"]
   workflow_dispatch:
     inputs:
       url:
@@ -36,9 +31,11 @@ jobs:
   sign:
     name: Sign the macOS runtime
     runs-on: macos-latest
+    # The Apple Developer ID secrets live in this environment.
+    environment: release
     env:
-      # A push carries no inputs, so the defaults are here and not on the
-      # inputs. They match the runtime addon's manifest in lumit-addons.
+      # Empty inputs take these defaults, which match the runtime addon's
+      # manifest in lumit-addons.
       PACKAGE_URL: ${{ inputs.url || 'https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/1.24.4' }}
       PACKAGE_SHA256: ${{ inputs.sha256 || '4b978d5065b85e7004b6c6f60ca494bd978fbe6836cbf0a0b52d82b61ab99638' }}
       MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}

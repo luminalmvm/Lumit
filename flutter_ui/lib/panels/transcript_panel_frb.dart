@@ -275,6 +275,7 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     });
     HardwareKeyboard.instance.addHandler(_onKey);
     _onViews();
+    _claimKeys();
     _onActivePanel();
     _read();
   }
@@ -762,10 +763,8 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   void _onActivePanel() {
     if (_ui.activePanel == Panel.transcript) {
-      _claimKeys();
       _restartBlink();
     } else {
-      _releaseKeys();
       _blink?.cancel();
       _blink = null;
       if (!_caretOn) {
@@ -788,6 +787,9 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
     });
   }
 
+  /// Chained once, at mount, as every other panel chains them. Taken with
+  /// the focus instead, a second take kept a panel mounted meanwhile as what
+  /// it passes to, and the claims beneath it were lost.
   void _claimKeys() {
     if (_claimed) return;
     _claimed = true;
@@ -1875,7 +1877,8 @@ class _TranscriptPanelFrbState extends State<TranscriptPanelFrb> {
 
   /// The page's coordinates for a pointer position in the list.
   Offset _pageOffset(Offset local) =>
-      Offset(local.dx - _pagePad, local.dy + _scroll.offset - _pagePad);
+      Offset(local.dx - _pagePad,
+          local.dy + (_scroll.hasClients ? _scroll.offset : 0) - _pagePad);
 
   ({int token, bool after})? _hitAt(Offset local) {
     final layout = _layout;

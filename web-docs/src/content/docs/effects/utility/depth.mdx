@@ -86,6 +86,10 @@ DirectML, CoreML or CPU.
 
 Frames the analysis has not reached render untouched.
 
+On a layer whose Retime uses Blend or Flow, an in-between frame reads the mix of the two
+planes either side of it, by the same fraction as the picture. Nearest reads the plane of
+the frame it shows. A frame whose second plane was not analysed reads the first.
+
 ## Related
 
 - [Depth of field](/effects/blur-sharpen/depth-of-field/)

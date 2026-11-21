@@ -27,6 +27,8 @@ import decodeShot from "../assets/projects/decode.png";
 import decodeClip from "../assets/projects/decode.mp4";
 import booleansShot from "../assets/projects/booleans.png";
 import booleansClip from "../assets/projects/booleans.mp4";
+import stellaShot from "../assets/projects/stella.png";
+import stellaClip from "../assets/projects/stella.mp4";
 
 // A file's size is read off the file, from web/, which is where both
 // `astro dev` and `astro build` are run.
@@ -123,6 +125,7 @@ const projects = [
     tag: "Type fill",
     p: "Rows of words with one shape after another cut through them, the words inside set large in coral.",
     alt: "Rows of the words Flood the Grid in black on cream, framed by small captions, with the words set in coral inside a black diamond tilted across the middle",
+    seconds: 14,
     layers: 27,
     fonts: [font("Bebas Neue"), font("IBM Plex Mono")],
     credit: [
@@ -160,6 +163,23 @@ const projects = [
     ],
     c: "coral",
   },
+  {
+    slug: "stella",
+    shot: stellaShot,
+    clip: stellaClip,
+    name: "Stella",
+    tag: "Time loop and displacement",
+    p: "A star trailing colour through looped shockwaves, with Mesh warp, Particulate and a dither over it.",
+    alt: "A white star at the foot of a fan of cyan, pink and yellow light, over dark blue bands under a fine dot screen",
+    seconds: 8,
+    layers: 43,
+    fonts: [],
+    credit: [
+      { name: "andrea68", href: "https://www.youtube.com/channel/UCwXmbsHBQeg9gMWYX3pAO3Q" },
+      { pre: ", after ", name: "SeterMD" },
+    ],
+    c: "azure",
+  },
 ].map((project) => ({ ...project, file: file(project.slug) }));
 ---
 
@@ -171,7 +191,7 @@ const projects = [
     <div class="wrap flex flex-col gap-14">
       <SectionHead page kicker="Projects" title="Made in Lumit.">
         <Fragment slot="lede">
-          Nine projects to download and take apart.
+          Ten projects to download and take apart.
         </Fragment>
       </SectionHead>
 
@@ -199,7 +219,7 @@ const projects = [
                 <dl class="facts">
                   <div>
                     <dt>Length</dt>
-                    <dd>10 seconds, {project.layers} layers</dd>
+                    <dd>{project.seconds ?? 10} seconds, {project.layers} layers</dd>
                   </div>
                   {project.credit && (
                     <div>

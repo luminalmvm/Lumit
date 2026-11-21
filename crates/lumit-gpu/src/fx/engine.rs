@@ -285,10 +285,11 @@ impl FxEngine {
         // Compiling the kernels is nearly all of what building the engine
         // costs and no kernel waits on another, so each is started on the
         // thread pool here and collected where the engine is put together.
-        let pipeline_on = |layout: &wgpu::PipelineLayout,
-                           shader: &wgpu::ShaderModule,
-                           name: &'static str,
-                           entry: &'static str| {
+        let pipeline_zeroed = |layout: &wgpu::PipelineLayout,
+                               shader: &wgpu::ShaderModule,
+                               name: &'static str,
+                               entry: &'static str,
+                               zeroed: bool| {
             let (device, layout, shader) = (ctx.device.clone(), layout.clone(), shader.clone());
             crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -296,10 +297,19 @@ impl FxEngine {
                     layout: Some(&layout),
                     module: &shader,
                     entry_point: Some(entry),
-                    compilation_options: Default::default(),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        zero_initialize_workgroup_memory: zeroed,
+                        ..Default::default()
+                    },
                     cache: None,
                 })
             })
+        };
+        let pipeline_on = |layout: &wgpu::PipelineLayout,
+                           shader: &wgpu::ShaderModule,
+                           name: &'static str,
+                           entry: &'static str| {
+            pipeline_zeroed(layout, shader, name, entry, true)
         };
         let pipeline = |shader: &wgpu::ShaderModule, name: &'static str, entry: &'static str| {
             pipeline_on(&pipeline_layout, shader, name, entry)
@@ -488,7 +498,10 @@ impl FxEngine {
             ),
             "fx-ocio",
         );
-        let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
+        // wgpu zeroes workgroup memory first unless told not to: one thread
+        // stores all of it while the rest wait, and FXC takes seconds over it.
+        // The blur writes every slot before it reads one.
+        let blur = pipeline_zeroed(&pipeline_layout, &blur_mod, "fx-blur", "blur_pass", false);
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
         let vector_blur = pipeline(&vector_blur_mod, "fx-vector-blur", "vector_blur");
         let radial_blur = pipeline(&radial_blur_mod, "fx-radial-blur", "radial_blur");

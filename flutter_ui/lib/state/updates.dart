@@ -208,8 +208,12 @@ class UpdateRelease {
     // candidate, which is a rehearsal, and not a stable release either. A
     // stable 0.8.1 outranks 0.8.1-nightly but is cut from older code, so a
     // nightly that took it would lose a day's features until the next one.
+    // The stable channel refuses a nightly's tag too, even if it is not
+    // marked as a pre-release.
     if (json['draft'] == true) return null;
-    if (nightly ? !isNightlyVersion(tag) : json['prerelease'] == true) {
+    if (nightly
+        ? !isNightlyVersion(tag)
+        : (json['prerelease'] == true || isNightlyVersion(tag))) {
       return null;
     }
 
@@ -572,10 +576,10 @@ class UpdateService extends ChangeNotifier {
   /// write to.
   final Directory Function() _downloadFolder;
 
-  /// The release key a download must be signed with, or empty to trust the
-  /// digest alone. [updateSigningKey] in the shipped application; tests that
-  /// are not about signing pass an empty one.
-  final String _signingKey;
+  /// The release keys a download may be signed with, or empty to trust the
+  /// digest alone. [updateSigningKeys] in the shipped application; tests that
+  /// are not about signing pass an empty list.
+  final List<String> _signingKeys;
 
   UpdateService({
     required this.currentVersion,
@@ -592,8 +596,8 @@ class UpdateService extends ChangeNotifier {
     Quitter? quit,
     int Function()? now,
     Directory Function()? downloadFolder,
-    String signingKey = updateSigningKey,
-  })  : _signingKey = signingKey,
+    List<String> signingKeys = updateSigningKeys,
+  })  : _signingKeys = signingKeys,
         _nightlyChoice = nightly ?? _noChoice,
         platform = platform ?? Platform.operatingSystem,
         macArch = macArch ?? currentMacArch(),
@@ -882,7 +886,7 @@ class UpdateService extends ChangeNotifier {
       void Function(int received, int total) onProgress) async {
     final map = release.blockmapUrl;
     if (map == null || !base.existsSync()) return false;
-    if (release.sha256 == null && _signingKey.isEmpty) return false;
+    if (release.sha256 == null && _signingKeys.isEmpty) return false;
     try {
       final wanted =
           decodeBlockmap(utf8.decode(await _fetchBytes(map, blockmapMaxBytes)));
@@ -943,12 +947,12 @@ class UpdateService extends ChangeNotifier {
     // The strong check first, where this build has a key to make it with.
     //
     // A digest out of the GitHub API proves the file arrived as published; a
-    // signature made with a key that lives nowhere near GitHub proves who
-    // published it. Where both are available the second is the one that
-    // decides, and a release that cannot answer it is refused rather than
+    // signature made with a key whose private half never touches GitHub
+    // proves who published it. Where both are available the second is the one
+    // that decides, and a release that cannot answer it is refused rather than
     // fallen back on — falling back would mean anything able to publish a
     // release could also delete the manifest and be trusted again.
-    if (_signingKey.isNotEmpty) {
+    if (_signingKeys.isNotEmpty) {
       return _verifySignature(release,
           length: length, digest: await _digestOf(file));
     }
@@ -1006,8 +1010,14 @@ class UpdateService extends ChangeNotifier {
       return l10n.updateNotSigned;
     }
 
-    final (manifest, trust) =
-        await verifyManifestWithKey(manifestBytes, signature, _signingKey);
+    // Any pinned key will do. When none does, the last one's verdict says why.
+    VerifiedManifest? manifest;
+    var trust = ReleaseTrust.unsigned;
+    for (final key in _signingKeys) {
+      (manifest, trust) =
+          await verifyManifestWithKey(manifestBytes, signature, key);
+      if (trust == ReleaseTrust.trusted) break;
+    }
     switch (trust) {
       case ReleaseTrust.unsigned:
         return l10n.updateNotSigned;
@@ -1018,6 +1028,12 @@ class UpdateService extends ChangeNotifier {
         return l10n.updateNotInManifest;
       case ReleaseTrust.trusted:
         break;
+    }
+
+    // Stops an old signed release, or a nightly, being reposted under another
+    // tag.
+    if (manifest?.version != release.version) {
+      return l10n.updateNotInManifest;
     }
 
     // The signature held up. Now the file has to be one the manifest names,

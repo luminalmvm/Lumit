@@ -154,6 +154,9 @@ pub(crate) fn record_dmabuf_failure(err: &str) {
 /// worker's own call arms nothing and costs nothing.
 pub(crate) fn watch() {
     HOOK.call_once(|| {
+        // The device's errors and its loss, which the engine only says on the
+        // console otherwise.
+        lumit_gpu::diagnostics_to(record);
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             let thread = std::thread::current();

@@ -2423,7 +2423,8 @@ fn comp_walk(
     // No lock is held past this call: the store clones an `Arc` out from under
     // its own guard, and what lands here is that same allocation.
     let planes_for = |effects: &[lumit_core::model::EffectInstance],
-                      source_frame: i64|
+                      source_frame: i64,
+                      blend: Option<(i64, f32)>|
      -> Vec<Option<crate::draw::PlaneDraw>> {
         effects
             .iter()
@@ -2433,7 +2434,7 @@ fn comp_walk(
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
-            .map(|e| plane_of(e, source_frame))
+            .map(|e| plane_of(e, source_frame, blend))
             .collect()
     };
 
@@ -2864,7 +2865,11 @@ fn comp_walk(
             } else {
                 (
                     roto_mattes_for(&src.effects, src_frame),
-                    planes_for(&src.effects, src_frame),
+                    planes_for(
+                        &src.effects,
+                        src_frame,
+                        plane_blend(pixels_by_layer, src.id),
+                    ),
                 )
             };
             // Its own birth schedules, so a Particulate in its stack draws its
@@ -3205,7 +3210,11 @@ fn comp_walk(
             input.colour_tables = colour_tables(&shape.effects, slt);
             input.flare_lens_files = flare_lens_files(&shape.effects, slt);
             input.roto_mattes = roto_mattes_for(&shape.effects, src_frame);
-            input.planes = planes_for(&shape.effects, src_frame);
+            input.planes = planes_for(
+                &shape.effects,
+                src_frame,
+                plane_blend(pixels_by_layer, src.id),
+            );
             // Its birth schedules, so a Particulate above a Time loop or a
             // Timewarp draws its particles at the other moment too.
             input.points_schedules =
@@ -3827,7 +3836,7 @@ fn comp_walk(
                 // No source frames of a group's own, so nothing was ever
                 // propagated: a Roto brush on a header passes through.
                 roto_mattes: roto_mattes_for(&group.effects, 0),
-                planes: planes_for(&group.effects, 0),
+                planes: planes_for(&group.effects, 0, None),
                 points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t, None),
                 flare_lens_files: flare_lens_files(&group.effects, t_comp),
                 // A Node graph effect on a group header applies to the
@@ -4027,7 +4036,11 @@ fn comp_walk(
             } else {
                 (
                     roto_mattes_for(&src.effects, matte_frame),
-                    planes_for(&src.effects, matte_frame),
+                    planes_for(
+                        &src.effects,
+                        matte_frame,
+                        plane_blend(pixels_by_layer, src.id),
+                    ),
                 )
             };
             let placed = drawn(src, mlt, &context);
@@ -4120,7 +4133,7 @@ fn comp_walk(
                         mattes: mattes_for(tail.id, &tail.effects, &tail.graph),
                         mask_paths: mask_paths_for(&tail.effects, None, at),
                         roto_mattes: roto_mattes_for(&tail.effects, 0),
-                        planes: planes_for(&tail.effects, 0),
+                        planes: planes_for(&tail.effects, 0, None),
                         points_schedules: points_schedules_for(
                             None,
                             &tail.effects,
@@ -5123,7 +5136,11 @@ fn comp_walk(
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(&layer.effects, Some(layer), lt),
             roto_mattes: roto_mattes_for(&layer.effects, source_frame),
-            planes: planes_for(&layer.effects, source_frame),
+            planes: planes_for(
+                &layer.effects,
+                source_frame,
+                plane_blend(pixels_by_layer, layer.id),
+            ),
             points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt, room),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             // The graphs this layer's Node graph effects apply, lowered
@@ -5402,13 +5419,23 @@ fn analysed_frame(
         .map_or(0, |px| px.source_frame)
 }
 
-/// One Roto brush's matte for one **source** frame, or `None` outside the
-/// propagated span, with nothing propagated yet, or with the cache folder
-/// deleted - the effect's passthrough and never a fault (docs/impl/roto.md §5).
+/// The second source frame and its weight when `layer`'s picture is a Blend or
+/// Flow in-between, so a plane is mixed by the fraction the picture was.
+fn plane_blend(
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    layer: uuid::Uuid,
+) -> Option<(i64, f32)> {
+    pixels_by_layer.get(&layer)?.blend
+}
+
+/// One Roto brush's matte for one **source** frame, or `None` with no base
+/// frame, outside the span, with nothing propagated or the cache deleted: the
+/// effect's passthrough and never a fault (docs/impl/roto.md §5).
 fn roto_matte_of(
     brush: &lumit_core::model::EffectInstance,
     source_frame: i64,
 ) -> Option<crate::draw::RotoMatteDraw> {
+    brush.roto.as_ref()?.base_frame?;
     let (width, height, gray) = crate::roto::matte(brush.id, source_frame)?;
     Some(crate::draw::RotoMatteDraw {
         width,
@@ -5420,11 +5447,17 @@ fn roto_matte_of(
 /// One planes-tier effect's plane for one **source** frame, or `None` outside
 /// the analysed span, before any Analyse, and wherever no pack is installed
 /// (docs/impl/addons.md §6.1).
+///
+/// Where the picture is an in-between of two source frames, the plane is the
+/// same mix of their two planes. The partner missing from the analysis leaves
+/// the first plane as it was.
 fn plane_of(
     fx: &lumit_core::model::EffectInstance,
     source_frame: i64,
+    blend: Option<(i64, f32)>,
 ) -> Option<crate::draw::PlaneDraw> {
-    let (width, height, kind, data, content) = crate::planes::plane(fx.id, source_frame)?;
+    let (width, height, kind, data, content) =
+        crate::planes::blend::plane_blended(fx.id, source_frame, blend)?;
     Some(crate::draw::PlaneDraw {
         instance: fx.id,
         source_frame,
@@ -6024,15 +6057,15 @@ impl GraphLower<'_> {
                 .pixels_by_layer
                 .get(&read)
                 .map_or(0, |px| px.source_frame);
-            Some((step, frame))
+            Some((step, frame, plane_blend(self.pixels_by_layer, read)))
         });
-        let Some((step, frame)) = found else {
+        let Some((step, frame, blend)) = found else {
             return (None, None, None);
         };
         if brush {
             (roto_matte_of(inst, frame), None, Some(step))
         } else {
-            (None, plane_of(inst, frame), Some(step))
+            (None, plane_of(inst, frame, blend), Some(step))
         }
     }
 
@@ -8437,6 +8470,7 @@ mod render_below_at_tests {
             shutter: Vec::new(),
             source_key: 0,
             source_frame: 0,
+            blend: None,
         };
         let neighbour = || Arc::clone(&flat(ORANGE).rgba);
         let moment = || Some(Box::new(flat(ORANGE)));

@@ -421,7 +421,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _vLane.addListener(_queueRefresh);
     _ui = Provider.of<LumitUiState>(context, listen: false);
     _cacheRevision = Listenable.merge([_ui!.frameArrived, _ui!.cacheChanged]);
-    _ui!.activePane.addListener(_onActivePanel);
     _ui!.cutLinked.addListener(_onToolChanged);
     _ui!.workspace.addListener(_onToolChanged);
     _ui!.selectedLayer.addListener(_onLayerPicked);
@@ -431,7 +430,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // The playhead stays on screen while the transport runs, as it does in
     // the Timeline.
     _ui!.playheadFrame.addListener(_edgeFollow);
-    _onActivePanel();
+    _claimKeys();
     HardwareKeyboard.instance.addHandler(_onKey);
   }
 
@@ -441,7 +440,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _escapeRelease?.call();
     _escape.dispose();
     _boundTools?.removeListener(_onToolChanged);
-    _ui?.activePane.removeListener(_onActivePanel);
     _ui?.cutLinked.removeListener(_onToolChanged);
     _ui?.workspace.removeListener(_onToolChanged);
     _ui?.selectedLayer.removeListener(_onLayerPicked);
@@ -1233,16 +1231,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   // ------------------------------------------------------------- the claims
 
-  /// Take the shell's Delete while this is the focused panel, and give it
-  /// straight back when another panel takes the keys.
-  void _onActivePanel() {
-    if (_ui?.activePanel == Panel.cutTimeline) {
-      _claimKeys();
-    } else {
-      _releaseKeys();
-    }
-  }
-
+  /// Chain onto the shell's key claims once, at mount, as every other panel
+  /// does. Taken with the focus instead, a second take found the slot held by
+  /// a panel mounted meanwhile and kept that as what it passes to, so the
+  /// claims beneath were lost and Delete on an effect took the layer.
   void _claimKeys() {
     final ui = _ui;
     if (ui == null || _claimed) return;
@@ -2433,7 +2425,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final held = _press;
     if (held == null || !_escape.running) return;
     final at = event.localPosition;
-    final moved = held.moved || (at - held.from).distance > _clickSlop;
+    // A trackpad or Magic Mouse click drifts a few pixels. The razor still
+    // cuts where it was pressed. A real drag cuts nothing.
+    final slop = held.tool == CutTool.razor ? kTouchSlop : _clickSlop;
+    final moved = held.moved || (at - held.from).distance > slop;
     _press = (
       from: held.from,
       at: at,
@@ -2489,7 +2484,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     if (held.tool == CutTool.razor) {
       if (held.moved || held.track == null) return;
-      _razorCut(_tracks[held.track!].entry, _razorFrameAt(held.at.dx).round());
+      _razorCut(
+          _tracks[held.track!].entry, _razorFrameAt(held.from.dx).round());
       return;
     }
     // A second click on the same clip opens it, and one on a Precomp

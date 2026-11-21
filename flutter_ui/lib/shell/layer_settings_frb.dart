@@ -41,15 +41,18 @@ Future<bool> showLayerSettingsFrb({
   final name = layer.getName();
   SolidReference? solid;
   BridgeSolidDef? definition;
+  var sharedBy = 1;
   try {
     if (layer.getSourceItem() case ItemReference_Solid(:final field0)) {
       solid = field0;
       definition = field0.getDefinition();
+      sharedBy = layer.solidLayerCount();
     }
   } catch (_) {
     // A layer whose source has gone is still a layer with a name.
   }
 
+  final project = Provider.of<LumitState>(context, listen: false).project;
   final applied = await showLumitModal<bool>(
     context: context,
     id: 'layer-settings',
@@ -59,12 +62,17 @@ Future<bool> showLayerSettingsFrb({
     builder: (close) => _LayerSettingsBody(
       name: name,
       definition: definition,
-      onConfirm: (wanted, def) {
+      sharedBy: sharedBy,
+      onConfirm: (wanted, def, all) {
         try {
-          if (wanted.isNotEmpty && wanted != name) layer.rename(name: wanted);
-          if (solid != null && def != null && def != definition) {
-            solid.setDefinition(definition: def);
-          }
+          asOneUndoStep(project, () {
+            if (wanted.isNotEmpty && wanted != name) {
+              layer.rename(name: wanted);
+            }
+            if (solid != null && def != null && def != definition) {
+              layer.setSolidSettings(definition: def, allLayers: all);
+            }
+          });
         } catch (_) {
           // The layer went away while the dialogue was open. Nothing to say
           // that the shell will not already be saying.
@@ -110,7 +118,7 @@ Future<LayerReference?> newSolidFrb({
           colour: _lastColour,
           width: size.width,
           height: size.height),
-      onConfirm: (name, def) => close((name, def)),
+      onConfirm: (name, def, _) => close((name, def)),
       onCancel: () => close(null),
     ),
   );
@@ -148,8 +156,12 @@ String _solidName(String made, BridgeColourRgba colour) =>
 class _LayerSettingsBody extends StatefulWidget {
   final String name;
   final BridgeSolidDef? definition;
-  final void Function(String, BridgeSolidDef?) onConfirm;
+  final void Function(String, BridgeSolidDef?, bool) onConfirm;
   final VoidCallback onCancel;
+
+  /// How many layers use this solid. Above one, the window asks whether the
+  /// change is for this layer alone or for all of them.
+  final int sharedBy;
 
   /// A solid that does not exist yet: the window is New solid, not its settings.
   final bool fresh;
@@ -163,6 +175,7 @@ class _LayerSettingsBody extends StatefulWidget {
     required this.definition,
     required this.onConfirm,
     required this.onCancel,
+    this.sharedBy = 1,
     this.fresh = false,
     this.suggest,
   });
@@ -178,6 +191,9 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
   late BridgeColourRgba? _colour = widget.definition?.colour;
   late int _width = widget.definition?.width ?? 0;
   late int _height = widget.definition?.height ?? 0;
+
+  /// Whether the change reaches every layer using the solid.
+  bool _all = false;
 
   @override
   void dispose() {
@@ -198,6 +214,7 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
               width: _width < 1 ? 1 : _width,
               height: _height < 1 ? 1 : _height,
             ),
+      _all,
     );
   }
 
@@ -303,6 +320,17 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
                       ),
                     ),
                   ),
+                  if (widget.sharedBy > 1)
+                    _row(
+                      t,
+                      label: '',
+                      child: HouseCheckbox(
+                        key: const ValueKey('layer-settings-all'),
+                        value: _all,
+                        label: l10n.layerSettingsAllLayers,
+                        onChanged: (on) => setState(() => _all = on),
+                      ),
+                    ),
                 ],
               ],
             ),
