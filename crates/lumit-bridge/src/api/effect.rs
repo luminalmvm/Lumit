@@ -1355,6 +1355,12 @@ pub enum BridgeParamKind {
     /// An outline inside a box, as up to 32 points in `-1..1` of it. The
     /// row shows how many there are; the Viewer draws them.
     Shape,
+    /// A ramp's stops, drawn as the ramp. Its two ends are the colour rows
+    /// `from` and `to`.
+    Gradient {
+        from: String,
+        to: String,
+    },
     /// A closed range, drawn as a track and thumb with the value
     /// beside it. `min`/`max` are the travel *and* the hard bound — that is
     /// what closed means — so the row refuses a typed value outside them.
@@ -1521,6 +1527,10 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::schema::ParamSchema) -> Bridg
             default: default.iter().map(|xy| xy.to_vec()).collect(),
         },
         ParamKind::Shape => BridgeParamKind::Shape,
+        ParamKind::Gradient { from, to } => BridgeParamKind::Gradient {
+            from: from.to_owned(),
+            to: to.to_owned(),
+        },
         // A button. The row crosses so the panel can draw one;
         // the *value* never does, because there is none — the press
         // goes back as an event on the owning layer
@@ -2168,6 +2178,8 @@ pub enum BridgeEffectValue {
     /// An outline's points, `[x, y]` in `-1..1` of its box, in order. Crosses
     /// as written; the engine straightens what it reads.
     Shape(Vec<Vec<f32>>),
+    /// A ramp's stops between its two colour rows, as a shape gradient's.
+    Gradient(Vec<crate::api::layer::BridgeGradientStop>),
     /// A name from the OCIO config, as the config spells it; empty is unset.
     /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
     Text(String),
@@ -2209,6 +2221,16 @@ impl BridgeEffectValue {
                 BridgeEffectValue::Shape(points.iter().map(|xy| xy.to_vec()).collect())
             }
             EffectValue::Text(name) => BridgeEffectValue::Text(name.clone()),
+            EffectValue::Gradient(stops) => BridgeEffectValue::Gradient(
+                stops
+                    .iter()
+                    .map(|s| crate::api::layer::BridgeGradientStop {
+                        position: BridgeScalar::read_at(&s.position, offset),
+                        colour: crate::api::assets::colour_of(s.colour),
+                        opacity: BridgeScalar::read_at(&s.opacity, offset),
+                    })
+                    .collect(),
+            ),
         }
     }
 
@@ -2316,6 +2338,22 @@ impl BridgeEffectValue {
                     .filter(|xy| xy.len() >= 2)
                     .map(|xy| [xy[0], xy[1]])
                     .collect();
+                Ok(())
+            }
+            // As a shape gradient's stops, held to its cap and its ranges.
+            (BridgeEffectValue::Gradient(stops), EffectValue::Gradient(target)) => {
+                use crate::api::layer::clamped_property;
+                *target = stops
+                    .iter()
+                    .take(lumit_core::shape::MAX_GRADIENT_STOPS)
+                    .map(|s| {
+                        Ok(lumit_core::shape::GradientStop {
+                            position: clamped_property(&s.position, offset, 0.0, 100.0)?,
+                            colour: crate::api::assets::linear_of(s.colour),
+                            opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
+                        })
+                    })
+                    .collect::<Result<_, BridgeError>>()?;
                 Ok(())
             }
             _ => Err(BridgeError::ParamKindMismatch),

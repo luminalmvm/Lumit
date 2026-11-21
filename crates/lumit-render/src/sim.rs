@@ -274,13 +274,7 @@ fn run_steps(
     let style = then.rows.draw_style();
     let sched = lumit_core::fx::points::PointsSchedule::default();
     let frames = [[0u32; 4]];
-    let curves = {
-        let look = &packed.particle;
-        let mut c = Vec::with_capacity(look.size_curve.len() * 2);
-        c.extend_from_slice(&look.size_curve);
-        c.extend_from_slice(&look.opacity_curve);
-        c
-    };
+    let curves = packed.particle.curves();
     let surface = models.surface(src);
     let poly = if packed.emitter.shape.is_outline() {
         lumit_core::fx::points::emitter::outline_polyline(&packed.emitter)

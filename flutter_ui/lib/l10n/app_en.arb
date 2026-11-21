@@ -5233,6 +5233,10 @@
   "@fxOpacityOverLife": {
     "description": "Effect controls — a curve on Particulate: how a particle's opacity changes between its birth and its end."
   },
+  "fxColourOverLife": "Colour over life",
+  "@fxColourOverLife": {
+    "description": "Effect controls — a gradient on Particulate: the colours a particle passes through between Colour and End colour over its life."
+  },
   "fxOpacityPct": "Opacity %",
   "@fxOpacityPct": {
     "description": "Effect controls — a control on Transform."

@@ -32,6 +32,7 @@ pub const LOOK_ROWS: &[&str] = &[
     "opacity_over_life",
     "colour",
     "end_colour",
+    "colour_over_life",
     "rotation",
     "rotation_jitter",
     "spin",

@@ -22,6 +22,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart' show BridgeColourRgba;
 import 'package:lumit_flutter/src/rust/api/colour.dart'
     show BridgeColourItem, BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -58,6 +59,7 @@ import '../state/template_controls.dart' show ControlRow;
 import 'control_rows.dart' show ControlMark;
 import 'expression_editor.dart';
 import 'fx_key_strip.dart';
+import 'gradient_stops_popover.dart';
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'graph_panel.dart' show portColour;
@@ -1329,6 +1331,53 @@ class EffectParamRowFrb extends StatelessWidget {
                 ),
               ),
           ]);
+        }
+        return Text('—', style: t.small);
+
+      // The ramp, from one colour row to the other through the stops this
+      // row holds. A click opens it to edit the stops.
+      case BridgeParamKind_Gradient(:final from, :final to):
+        if (value case BridgeEffectValue_Gradient(:final field0)) {
+          double at(BridgeScalar s) => scalarValueAt(s, comp, frame) ?? 0;
+          BridgeColourRgba end(String row) => switch (siblings[row]) {
+                BridgeEffectValue_Colour(:final field0) => BridgeColourRgba(
+                    r: at(field0.r), g: at(field0.g), b: at(field0.b), a: 1),
+                _ => const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
+              };
+          final ramp = GradientRamp(
+            startColour: end(from),
+            startOpacity: 100,
+            endColour: end(to),
+            endOpacity: 100,
+            between: [
+              for (final (i, s) in field0.indexed)
+                RampStop(
+                    id: i,
+                    position: at(s.position),
+                    colour: s.colour,
+                    opacity: at(s.opacity)),
+            ],
+          );
+          BridgeEffectValue stops(GradientRamp r) => BridgeEffectValue.gradient([
+                for (final s in r.between)
+                  BridgeGradientStop(
+                    position: BridgeScalar.static_(s.position),
+                    colour: s.colour,
+                    opacity: BridgeScalar.static_(s.opacity),
+                  ),
+              ]);
+          return RampChip(
+            key: ValueKey<String>('fx-gradient-$id-${param.id}'),
+            ramp: ramp,
+            onOpen: (where) => showGradientStopsPopover(
+              context: context,
+              position: where,
+              ramp: ramp,
+              fixedEnds: true,
+              onPreview: (r) => _setLive(stops(r)),
+              onCommit: (r) => _set(stops(r)),
+            ),
+          );
         }
         return Text('—', style: t.small);
 
@@ -3695,6 +3744,8 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
         curveValue(curvePointsOf(default_)),
       // A fresh outline has no points.
       BridgeParamKind_Shape() => const BridgeEffectValue.shape([]),
+      // No stops: the plain blend between the two colour rows.
+      BridgeParamKind_Gradient() => const BridgeEffectValue.gradient([]),
     };
 
 /// Whether [value] is what [fallback] declares, to the precision a number field

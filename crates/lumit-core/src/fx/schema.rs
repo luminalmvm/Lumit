@@ -458,6 +458,13 @@ pub enum ParamKind {
     /// [`ShapePoints::sanitised`](super::shape_points::ShapePoints::sanitised).
     /// Static, as a curve is: the box animates, the points do not.
     Shape,
+    /// The **stops** of a ramp from colour row `from` to colour row `to`, an
+    /// [`EffectValue::Gradient`](crate::model::EffectValue::Gradient). None is
+    /// the plain blend between the two. Static: the ends animate, the stops do not.
+    Gradient {
+        from: &'static str,
+        to: &'static str,
+    },
     /// A **button**, not a value: a row the panel draws as a push
     /// button, which asks the engine to *do* something rather than describing
     /// what a picture should look like.
@@ -515,6 +522,7 @@ impl ParamKind {
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
             | ParamKind::Shape
+            | ParamKind::Gradient { .. }
             | ParamKind::ColourName { .. }
             | ParamKind::Text { .. }
             | ParamKind::Action => None,

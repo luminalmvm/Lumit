@@ -1727,6 +1727,10 @@ pub enum EffectValue {
     /// the box the rows beside it place. Static, and straightened on read
     /// ([`crate::fx::shape_points::ShapePoints::sanitised`]) as a curve is.
     Shape(Vec<[f32; 2]>),
+    /// A Gradient row's stops between its two colour rows, a shape gradient's
+    /// own stops. Static, and read through
+    /// [`crate::fx::colour_stops::ColourStops::sanitised`].
+    Gradient(Vec<crate::shape::GradientStop>),
 }
 
 /// One named parameter on an effect instance. `id` is the stable snake_case
