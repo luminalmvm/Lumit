@@ -4233,8 +4233,8 @@
   "@fxDepth": {
     "description": "Effect controls - the name of the effect that reads how far away every pixel is, and its View option showing that reading. Also a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it. And how far the cycle travels on Chorus, Phaser, Tremolo, Vibrato and Wah."
   },
-  "fxDepthAnythingV2Small": "Depth Anything V2 Small",
-  "@fxDepthAnythingV2Small": {
+  "fxDepthAnythingV3Small": "Depth Anything V3 Small",
+  "@fxDepthAnythingV3Small": {
     "description": "Effect controls - an option on the Depth effect's Model row. The name of a model pack, so it stays as it is in every language."
   },
   "fxDepthChannel": "Depth channel",
