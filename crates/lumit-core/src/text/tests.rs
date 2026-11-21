@@ -148,7 +148,12 @@ fn ease_high_and_low_bend_the_ramp() {
     s.ease_low = Property::zero();
     s.ease_high = Property::fixed(-50.0);
     let steep_top = s.weights_at(10, 0.0);
-    assert!(steep_top[8] > even[8] - 0.2 && steep_top[8] <= 1.0, "{steep_top:?}");
+    // An upright handle reaches the whole way steeply: the last step is
+    // bigger than the even ramp's.
+    assert!(
+        steep_top[9] - steep_top[8] > even[9] - even[8],
+        "{even:?} {steep_top:?}"
+    );
     assert!(steep_top.iter().all(|w| (0.0..=1.0).contains(w)), "{steep_top:?}");
     // Past the range the letters are moved the whole way, eased or not.
     s.offset = Property::fixed(-100.0);

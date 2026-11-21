@@ -170,8 +170,9 @@ pub struct RangeSelector {
     pub invert: bool,
     /// Per cent, −100 to 100: how a Range selector's ramp eases into the
     /// whole way (High) and out of nothing (Low), as After Effects' Ease High
-    /// and Ease Low. 0 is the even ramp; 100 flattens that end of the slope;
-    /// −100 steepens it.
+    /// and Ease Low, bending it as a keyframe's ease handles bend a curve in
+    /// the graph editor: 0 is the even ramp, 100 lands that end as softly as a
+    /// full easy ease, −100 stands the handle upright.
     #[serde(
         default = "Property::zero",
         with = "crate::mask::still_or_keyed",
@@ -391,19 +392,45 @@ struct Ease {
 }
 
 impl Ease {
-    /// `t` (0–1 across the slope) bent by the two eases: a cubic that leaves
-    /// 0 with the slope `1 − low` and reaches 1 with the slope `1 − high`, so
-    /// 0 % keeps the even ramp, 100 % lands flat and −100 % lands at twice the
-    /// pace. A curve that would overshoot is held to 0–1.
+    /// `t` (0–1 across the slope) bent by the two eases, as a keyframe's ease
+    /// handles bend a curve in the graph editor: a cubic Bézier from (0, 0) to
+    /// (1, 1) whose two handles are the eases' **influence**. A positive ease
+    /// lays its handle flat, as far along as the per cent says, so 100 % lands
+    /// as softly as a full easy ease; a negative one stands it upright, so the
+    /// curve leaves or reaches that end steeply. 0 % at both ends is the even
+    /// ramp.
     fn bend(self, t: f64) -> f64 {
         if self.high == 0.0 && self.low == 0.0 {
             return t;
         }
         let t = t.clamp(0.0, 1.0);
-        let (m0, m1) = (1.0 - self.low, 1.0 - self.high);
-        let (t2, t3) = (t * t, t * t * t);
-        let v = (t3 - 2.0 * t2 + t) * m0 + (-2.0 * t3 + 3.0 * t2) + (t3 - t2) * m1;
-        v.clamp(0.0, 1.0)
+        // The handle out of 0 and the handle into 1.
+        let p1 = if self.low >= 0.0 {
+            [self.low, 0.0]
+        } else {
+            [0.0, -self.low]
+        };
+        let p2 = if self.high >= 0.0 {
+            [1.0 - self.high, 1.0]
+        } else {
+            [1.0, 1.0 + self.high]
+        };
+        let bezier = |s: f64, a: f64, b: f64| {
+            let r = 1.0 - s;
+            3.0 * r * r * s * a + 3.0 * r * s * s * b + s * s * s
+        };
+        // x(s) rises from 0 to 1 whatever the handles, since both handles'
+        // x lie in 0–1, so halving finds the s whose x is t.
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        for _ in 0..40 {
+            let mid = 0.5 * (lo + hi);
+            if bezier(mid, p1[0], p2[0]) < t {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        bezier(0.5 * (lo + hi), p1[1], p2[1]).clamp(0.0, 1.0)
     }
 }
 
