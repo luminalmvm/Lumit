@@ -4,7 +4,7 @@ use flutter_rust_bridge::frb;
 
 use super::{
     BridgeAnimatorAxis, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorKind,
-    BridgeSelectorMode, BridgeSelectorShape, BridgeTextAnimator,
+    BridgeSelectorMode, BridgeSelectorShape, BridgeStaggerOrder, BridgeTextAnimator,
 };
 use crate::api::{effect::BridgeScalar, BridgeError};
 
@@ -14,7 +14,9 @@ pub(crate) fn read_animator(
     animator: &lumit_core::text::TextAnimator,
     offset: lumit_core::time::Rational,
 ) -> BridgeTextAnimator {
-    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorMode, SelectorShape};
+    use lumit_core::text::selector::{
+        SelectorBasis, SelectorKind, SelectorMode, SelectorShape, StaggerOrder,
+    };
     let read = |p| BridgeScalar::read_at(p, offset);
     let s = &animator.selector;
     BridgeTextAnimator {
@@ -45,12 +47,23 @@ pub(crate) fn read_animator(
                 SelectorKind::Range => BridgeSelectorKind::Range,
                 SelectorKind::Proximity => BridgeSelectorKind::Proximity,
                 SelectorKind::Wiggly => BridgeSelectorKind::Wiggly,
+                SelectorKind::Stagger => BridgeSelectorKind::Stagger,
             },
             target: s.target,
             radius: read(&s.radius),
             invert: s.invert,
             ease_high: read(&s.ease_high),
             ease_low: read(&s.ease_low),
+            amount: read(&s.amount),
+            delay: read(&s.delay),
+            delay_ease: read(&s.delay_ease),
+            order: match s.order {
+                StaggerOrder::Forward => BridgeStaggerOrder::Forward,
+                StaggerOrder::Backward => BridgeStaggerOrder::Backward,
+                StaggerOrder::FromCentre => BridgeStaggerOrder::FromCentre,
+                StaggerOrder::FromEdges => BridgeStaggerOrder::FromEdges,
+                StaggerOrder::Random => BridgeStaggerOrder::Random,
+            },
             min_amount: read(&s.min_amount),
             max_amount: read(&s.max_amount),
             wiggles: read(&s.wiggles),
@@ -91,7 +104,9 @@ pub(super) fn animator_from(
     animator: BridgeTextAnimator,
     offset: lumit_core::time::Rational,
 ) -> Result<lumit_core::text::TextAnimator, BridgeError> {
-    use lumit_core::text::selector::{SelectorBasis, SelectorKind, SelectorMode, SelectorShape};
+    use lumit_core::text::selector::{
+        SelectorBasis, SelectorKind, SelectorMode, SelectorShape, StaggerOrder,
+    };
     let write = |s: &BridgeScalar| -> Result<lumit_core::anim::Property, BridgeError> {
         Ok(lumit_core::anim::Property {
             animation: s.animation_at(offset)?,
@@ -145,12 +160,23 @@ pub(super) fn animator_from(
                 BridgeSelectorKind::Range => SelectorKind::Range,
                 BridgeSelectorKind::Proximity => SelectorKind::Proximity,
                 BridgeSelectorKind::Wiggly => SelectorKind::Wiggly,
+                BridgeSelectorKind::Stagger => SelectorKind::Stagger,
             },
             target: s.target,
             radius: write(&s.radius)?,
             invert: s.invert,
             ease_high: write(&s.ease_high)?,
             ease_low: write(&s.ease_low)?,
+            amount: write(&s.amount)?,
+            delay: write(&s.delay)?,
+            delay_ease: write(&s.delay_ease)?,
+            order: match s.order {
+                BridgeStaggerOrder::Forward => StaggerOrder::Forward,
+                BridgeStaggerOrder::Backward => StaggerOrder::Backward,
+                BridgeStaggerOrder::FromCentre => StaggerOrder::FromCentre,
+                BridgeStaggerOrder::FromEdges => StaggerOrder::FromEdges,
+                BridgeStaggerOrder::Random => StaggerOrder::Random,
+            },
             min_amount: write(&s.min_amount)?,
             max_amount: write(&s.max_amount)?,
             wiggles: write(&s.wiggles)?,

@@ -40881,8 +40881,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeRangeSelector dco_decode_bridge_range_selector(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 22)
+      throw Exception('unexpected arr length: expect 22 but see ${arr.length}');
     return BridgeRangeSelector(
       start: dco_decode_bridge_scalar(arr[0]),
       end: dco_decode_bridge_scalar(arr[1]),
@@ -40897,11 +40897,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       invert: dco_decode_bool(arr[10]),
       easeHigh: dco_decode_bridge_scalar(arr[11]),
       easeLow: dco_decode_bridge_scalar(arr[12]),
-      minAmount: dco_decode_bridge_scalar(arr[13]),
-      maxAmount: dco_decode_bridge_scalar(arr[14]),
-      wiggles: dco_decode_bridge_scalar(arr[15]),
-      correlation: dco_decode_bridge_scalar(arr[16]),
-      seed: dco_decode_u_32(arr[17]),
+      amount: dco_decode_bridge_scalar(arr[13]),
+      delay: dco_decode_bridge_scalar(arr[14]),
+      delayEase: dco_decode_bridge_scalar(arr[15]),
+      order: dco_decode_bridge_stagger_order(arr[16]),
+      minAmount: dco_decode_bridge_scalar(arr[17]),
+      maxAmount: dco_decode_bridge_scalar(arr[18]),
+      wiggles: dco_decode_bridge_scalar(arr[19]),
+      correlation: dco_decode_bridge_scalar(arr[20]),
+      seed: dco_decode_u_32(arr[21]),
     );
   }
 
@@ -42514,6 +42518,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       canPrecomp: dco_decode_bool(arr[15]),
       canConvert: dco_decode_bool(arr[16]),
     );
+  }
+
+  @protected
+  BridgeStaggerOrder dco_decode_bridge_stagger_order(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return BridgeStaggerOrder.values[raw as int];
   }
 
   @protected
@@ -51637,6 +51647,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_invert = sse_decode_bool(deserializer);
     var var_easeHigh = sse_decode_bridge_scalar(deserializer);
     var var_easeLow = sse_decode_bridge_scalar(deserializer);
+    var var_amount = sse_decode_bridge_scalar(deserializer);
+    var var_delay = sse_decode_bridge_scalar(deserializer);
+    var var_delayEase = sse_decode_bridge_scalar(deserializer);
+    var var_order = sse_decode_bridge_stagger_order(deserializer);
     var var_minAmount = sse_decode_bridge_scalar(deserializer);
     var var_maxAmount = sse_decode_bridge_scalar(deserializer);
     var var_wiggles = sse_decode_bridge_scalar(deserializer);
@@ -51656,6 +51670,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         invert: var_invert,
         easeHigh: var_easeHigh,
         easeLow: var_easeLow,
+        amount: var_amount,
+        delay: var_delay,
+        delayEase: var_delayEase,
+        order: var_order,
         minAmount: var_minAmount,
         maxAmount: var_maxAmount,
         wiggles: var_wiggles,
@@ -53388,6 +53406,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         analysable: var_analysable,
         canPrecomp: var_canPrecomp,
         canConvert: var_canConvert);
+  }
+
+  @protected
+  BridgeStaggerOrder sse_decode_bridge_stagger_order(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return BridgeStaggerOrder.values[inner];
   }
 
   @protected
@@ -63132,6 +63158,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.invert, serializer);
     sse_encode_bridge_scalar(self.easeHigh, serializer);
     sse_encode_bridge_scalar(self.easeLow, serializer);
+    sse_encode_bridge_scalar(self.amount, serializer);
+    sse_encode_bridge_scalar(self.delay, serializer);
+    sse_encode_bridge_scalar(self.delayEase, serializer);
+    sse_encode_bridge_stagger_order(self.order, serializer);
     sse_encode_bridge_scalar(self.minAmount, serializer);
     sse_encode_bridge_scalar(self.maxAmount, serializer);
     sse_encode_bridge_scalar(self.wiggles, serializer);
@@ -64445,6 +64475,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.analysable, serializer);
     sse_encode_bool(self.canPrecomp, serializer);
     sse_encode_bool(self.canConvert, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_stagger_order(
+      BridgeStaggerOrder self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected

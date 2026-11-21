@@ -240,6 +240,18 @@ pub enum BridgeSelectorKind {
     Range,
     Proximity,
     Wiggly,
+    Stagger,
+}
+
+/// The order a Stagger selector starts its units in.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeStaggerOrder {
+    Forward,
+    Backward,
+    FromCentre,
+    FromEdges,
+    Random,
 }
 
 /// Which stretch of the words an animator reaches, in per cent of the run, or
@@ -265,6 +277,13 @@ pub struct BridgeRangeSelector {
     /// Range selector's ramp.
     pub ease_high: BridgeScalar,
     pub ease_low: BridgeScalar,
+    /// A Stagger selector: the animation every unit plays (per cent), the
+    /// seconds between starts, how the delays are shared out (per cent) and
+    /// the order. Its Random order uses `seed`.
+    pub amount: BridgeScalar,
+    pub delay: BridgeScalar,
+    pub delay_ease: BridgeScalar,
+    pub order: BridgeStaggerOrder,
     /// A Wiggly selector: the range of weights, per cent, how often they
     /// change course a second, how much the letters wander together, per
     /// cent, and which wander.

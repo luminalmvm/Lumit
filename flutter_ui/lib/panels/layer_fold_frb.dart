@@ -832,8 +832,9 @@ final class FoldAnimatorValueRow extends LayerFoldRow {
 /// A text animator's selector choices, which have no curve: what picks the
 /// letters, the target a Proximity selector measures from, what it counts,
 /// the shape of its edge, whether it is turned over, a Range selector's Mode
-/// (Add or Subtract), and a Wiggly's seed.
-enum AnimatorSetting { selector, target, basis, mode, shape, invert, seed }
+/// (Add or Subtract), a Stagger's order, and a Wiggly's or a random
+/// Stagger's seed.
+enum AnimatorSetting { selector, target, order, basis, mode, shape, invert, seed }
 
 /// One of [AnimatorSetting] on animator [index], as the Effect controls panel
 /// shows it, so the Timeline has the whole selector too.
@@ -853,10 +854,18 @@ List<AnimatorSetting> animatorSettingsOf(BridgeTextAnimator a) => [
         AnimatorSetting.target,
         AnimatorSetting.invert,
       ],
-      if (a.selector.kind == BridgeSelectorKind.wiggly) AnimatorSetting.seed,
+      if (a.selector.kind == BridgeSelectorKind.stagger) AnimatorSetting.order,
+      if (a.selector.kind == BridgeSelectorKind.wiggly ||
+          (a.selector.kind == BridgeSelectorKind.stagger &&
+              a.selector.order == BridgeStaggerOrder.random))
+        AnimatorSetting.seed,
       AnimatorSetting.basis,
-      if (a.selector.kind == BridgeSelectorKind.range) AnimatorSetting.mode,
-      if (a.selector.kind != BridgeSelectorKind.wiggly) AnimatorSetting.shape,
+      if (a.selector.kind == BridgeSelectorKind.range ||
+          a.selector.kind == BridgeSelectorKind.stagger)
+        AnimatorSetting.mode,
+      if (a.selector.kind != BridgeSelectorKind.wiggly &&
+          a.selector.kind != BridgeSelectorKind.stagger)
+        AnimatorSetting.shape,
     ];
 
 /// One control of a footage layer's Flow group. Which control
@@ -1276,6 +1285,8 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
           AnimatorSetting.invert => animator.selector.invert,
           AnimatorSetting.seed => animator.selector.seed != 0,
           AnimatorSetting.mode => animator.selector.invert,
+          AnimatorSetting.order =>
+            animator.selector.order != BridgeStaggerOrder.forward,
           AnimatorSetting.basis =>
             animator.selector.basis != BridgeSelectorBasis.characters,
           AnimatorSetting.shape =>

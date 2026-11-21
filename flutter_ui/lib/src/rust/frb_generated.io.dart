@@ -1930,6 +1930,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeStabiliseStatus dco_decode_bridge_stabilise_status(dynamic raw);
 
   @protected
+  BridgeStaggerOrder dco_decode_bridge_stagger_order(dynamic raw);
+
+  @protected
   BridgeStill dco_decode_bridge_still(dynamic raw);
 
   @protected
@@ -5254,6 +5257,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeStabiliseStatus sse_decode_bridge_stabilise_status(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeStaggerOrder sse_decode_bridge_stagger_order(
       SseDeserializer deserializer);
 
   @protected
@@ -8993,6 +9000,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_stabilise_status(
       BridgeStabiliseStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_stagger_order(
+      BridgeStaggerOrder self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_still(BridgeStill self, SseSerializer serializer);

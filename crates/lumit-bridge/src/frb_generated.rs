@@ -44181,6 +44181,10 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
         let mut var_invert = <bool>::sse_decode(deserializer);
         let mut var_easeHigh = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_easeLow = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_amount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_delay = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_delayEase = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_order = <crate::api::assets::BridgeStaggerOrder>::sse_decode(deserializer);
         let mut var_minAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_maxAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_wiggles = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -44200,6 +44204,10 @@ impl SseDecode for crate::api::assets::BridgeRangeSelector {
             invert: var_invert,
             ease_high: var_easeHigh,
             ease_low: var_easeLow,
+            amount: var_amount,
+            delay: var_delay,
+            delay_ease: var_delayEase,
+            order: var_order,
             min_amount: var_minAmount,
             max_amount: var_maxAmount,
             wiggles: var_wiggles,
@@ -45002,6 +45010,7 @@ impl SseDecode for crate::api::assets::BridgeSelectorKind {
             0 => crate::api::assets::BridgeSelectorKind::Range,
             1 => crate::api::assets::BridgeSelectorKind::Proximity,
             2 => crate::api::assets::BridgeSelectorKind::Wiggly,
+            3 => crate::api::assets::BridgeSelectorKind::Stagger,
             _ => unreachable!("Invalid variant for BridgeSelectorKind: {}", inner),
         };
     }
@@ -46423,6 +46432,21 @@ impl SseDecode for crate::api::stabilise::BridgeStabiliseStatus {
             analysable: var_analysable,
             can_precomp: var_canPrecomp,
             can_convert: var_canConvert,
+        };
+    }
+}
+
+impl SseDecode for crate::api::assets::BridgeStaggerOrder {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::assets::BridgeStaggerOrder::Forward,
+            1 => crate::api::assets::BridgeStaggerOrder::Backward,
+            2 => crate::api::assets::BridgeStaggerOrder::FromCentre,
+            3 => crate::api::assets::BridgeStaggerOrder::FromEdges,
+            4 => crate::api::assets::BridgeStaggerOrder::Random,
+            _ => unreachable!("Invalid variant for BridgeStaggerOrder: {}", inner),
         };
     }
 }
@@ -61395,6 +61419,10 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeRangeSelector {
             self.invert.into_into_dart().into_dart(),
             self.ease_high.into_into_dart().into_dart(),
             self.ease_low.into_into_dart().into_dart(),
+            self.amount.into_into_dart().into_dart(),
+            self.delay.into_into_dart().into_dart(),
+            self.delay_ease.into_into_dart().into_dart(),
+            self.order.into_into_dart().into_dart(),
             self.min_amount.into_into_dart().into_dart(),
             self.max_amount.into_into_dart().into_dart(),
             self.wiggles.into_into_dart().into_dart(),
@@ -62472,6 +62500,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeSelectorKind {
             Self::Range => 0.into_dart(),
             Self::Proximity => 1.into_dart(),
             Self::Wiggly => 2.into_dart(),
+            Self::Stagger => 3.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -64176,6 +64205,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::stabilise::BridgeStabiliseSta
     for crate::api::stabilise::BridgeStabiliseStatus
 {
     fn into_into_dart(self) -> crate::api::stabilise::BridgeStabiliseStatus {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeStaggerOrder {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Forward => 0.into_dart(),
+            Self::Backward => 1.into_dart(),
+            Self::FromCentre => 2.into_dart(),
+            Self::FromEdges => 3.into_dart(),
+            Self::Random => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeStaggerOrder
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeStaggerOrder>
+    for crate::api::assets::BridgeStaggerOrder
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeStaggerOrder {
         self
     }
 }
@@ -70928,6 +70981,10 @@ impl SseEncode for crate::api::assets::BridgeRangeSelector {
         <bool>::sse_encode(self.invert, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.ease_high, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.ease_low, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.amount, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.delay, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.delay_ease, serializer);
+        <crate::api::assets::BridgeStaggerOrder>::sse_encode(self.order, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.min_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.max_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.wiggles, serializer);
@@ -71576,6 +71633,7 @@ impl SseEncode for crate::api::assets::BridgeSelectorKind {
                 crate::api::assets::BridgeSelectorKind::Range => 0,
                 crate::api::assets::BridgeSelectorKind::Proximity => 1,
                 crate::api::assets::BridgeSelectorKind::Wiggly => 2,
+                crate::api::assets::BridgeSelectorKind::Stagger => 3,
                 _ => {
                     unimplemented!("");
                 }
@@ -72608,6 +72666,25 @@ impl SseEncode for crate::api::stabilise::BridgeStabiliseStatus {
         <bool>::sse_encode(self.analysable, serializer);
         <bool>::sse_encode(self.can_precomp, serializer);
         <bool>::sse_encode(self.can_convert, serializer);
+    }
+}
+
+impl SseEncode for crate::api::assets::BridgeStaggerOrder {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::assets::BridgeStaggerOrder::Forward => 0,
+                crate::api::assets::BridgeStaggerOrder::Backward => 1,
+                crate::api::assets::BridgeStaggerOrder::FromCentre => 2,
+                crate::api::assets::BridgeStaggerOrder::FromEdges => 3,
+                crate::api::assets::BridgeStaggerOrder::Random => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

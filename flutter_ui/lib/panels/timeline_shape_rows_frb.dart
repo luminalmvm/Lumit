@@ -1838,6 +1838,7 @@ class AnimatorSettingRow extends StatelessWidget {
         AnimatorSetting.invert => l10n.textAnimatorInvert,
         AnimatorSetting.seed => l10n.textAnimatorSeed,
         AnimatorSetting.mode => l10n.textAnimatorMode,
+        AnimatorSetting.order => l10n.textAnimatorOrder,
       };
 
   Widget _control(BuildContext context) {
@@ -1853,6 +1854,7 @@ class AnimatorSettingRow extends StatelessWidget {
             BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
             BridgeSelectorKind.proximity => l10n.textAnimatorSelectorProximity,
             BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
+            BridgeSelectorKind.stagger => l10n.textAnimatorSelectorStagger,
           },
           onChanged: (k) =>
               _put(animatorWithSelectorKind(animator, k).selector),
@@ -1901,6 +1903,14 @@ class AnimatorSettingRow extends StatelessWidget {
             value: s.invert,
             onChanged: (on) => _put(selectorWith(s, invert: on)),
           ),
+        ),
+      AnimatorSetting.order => BareDropdown<BridgeStaggerOrder>(
+          key: key,
+          dense: true,
+          value: s.order,
+          options: BridgeStaggerOrder.values,
+          label: staggerOrderLabel,
+          onChanged: (o) => _put(selectorWith(s, order: o)),
         ),
       AnimatorSetting.mode => BareDropdown<bool>(
           key: key,

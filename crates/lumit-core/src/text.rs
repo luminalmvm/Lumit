@@ -507,6 +507,7 @@ pub fn glyph_xforms_near(
             let weights = match animator.selector.kind {
                 SelectorKind::Range => animator.selector.weights_at(total, lt),
                 SelectorKind::Wiggly => animator.selector.wiggly_weights(total, lt),
+                SelectorKind::Stagger => animator.selector.stagger_weights(total, lt),
                 SelectorKind::Proximity => {
                     // A unit's middle is the mean of its characters' middles, so
                     // a word is measured from its own middle.

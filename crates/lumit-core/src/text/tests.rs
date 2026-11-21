@@ -452,6 +452,7 @@ fn every_wireable_number_is_found_by_its_port() {
         SelectorKind::Range,
         SelectorKind::Proximity,
         SelectorKind::Wiggly,
+        SelectorKind::Stagger,
     ] {
         let mut a = TextAnimator::new("A");
         a.selector.kind = kind;
@@ -469,4 +470,91 @@ fn every_wireable_number_is_found_by_its_port() {
         }
         assert!(a.number_mut("nothing").is_none());
     }
+}
+
+/// Amount keyed from 100 at 0 s to 0 at 1 s, linear.
+fn falling_amount() -> Property {
+    use crate::anim::{Animation, Keyframe, SideInterp};
+    use crate::time::Rational;
+    let key = |s: i64, value: f64| Keyframe {
+        time: Rational::new(s, 1).unwrap(),
+        value,
+        interp_in: SideInterp::Linear,
+        interp_out: SideInterp::Linear,
+    };
+    Property {
+        animation: Animation::Keyframed(vec![key(0, 100.0), key(1, 0.0)]),
+        extra: serde_json::Map::new(),
+    }
+}
+
+/// **A Stagger selector plays Amount on every unit, one after another**: the
+/// first unit is where Amount is, each next one a Delay behind it.
+#[test]
+fn a_stagger_selector_plays_the_amount_one_unit_after_another() {
+    use super::selector::{RangeSelector, SelectorKind};
+    let s = RangeSelector {
+        kind: SelectorKind::Stagger,
+        amount: falling_amount(),
+        delay: Property::fixed(0.25),
+        ..RangeSelector::default()
+    };
+    let w = s.stagger_weights(3, 0.5);
+    // Units 0, 1, 2 read Amount at 0.5, 0.25 and 0 s.
+    for (got, want) in w.iter().zip([0.5f32, 0.75, 1.0]) {
+        assert!((got - want).abs() < 1e-6, "{w:?}");
+    }
+    // Subtract turns them over.
+    let sub = RangeSelector { invert: true, ..s.clone() }.stagger_weights(3, 0.5);
+    for (a, b) in w.iter().zip(&sub) {
+        assert!((a + b - 1.0).abs() < 1e-6, "{w:?} {sub:?}");
+    }
+}
+
+/// The orders: Backward starts the last unit first, From centre the middle,
+/// From edges both ends, Random an order of its own for each seed.
+#[test]
+fn a_stagger_selector_starts_its_units_in_order() {
+    use super::selector::{RangeSelector, SelectorKind, StaggerOrder};
+    let at = |order: StaggerOrder, seed: u32| {
+        RangeSelector {
+            kind: SelectorKind::Stagger,
+            amount: falling_amount(),
+            delay: Property::fixed(0.1),
+            order,
+            seed,
+            ..RangeSelector::default()
+        }
+        .stagger_weights(5, 0.3)
+    };
+    // A unit further on in the order has fallen less far.
+    let back = at(StaggerOrder::Backward, 0);
+    assert!(back[4] < back[0], "{back:?}");
+    let centre = at(StaggerOrder::FromCentre, 0);
+    assert!(centre[2] < centre[1] && centre[1] < centre[0], "{centre:?}");
+    assert!((centre[1] - centre[3]).abs() < 1e-6, "{centre:?}");
+    let edges = at(StaggerOrder::FromEdges, 0);
+    assert!(edges[0] < edges[1] && edges[1] < edges[2], "{edges:?}");
+    let (a, b) = (at(StaggerOrder::Random, 1), at(StaggerOrder::Random, 2));
+    assert_ne!(a, b);
+    assert_eq!(a, at(StaggerOrder::Random, 1));
+}
+
+/// Delay ease shares the delays out unevenly: above 0 the first units start
+/// close together, so the second has fallen nearly as far as the first.
+#[test]
+fn delay_ease_bunches_the_first_starts() {
+    use super::selector::{RangeSelector, SelectorKind};
+    let mut s = RangeSelector {
+        kind: SelectorKind::Stagger,
+        amount: falling_amount(),
+        delay: Property::fixed(0.2),
+        ..RangeSelector::default()
+    };
+    let even = s.stagger_weights(4, 0.7);
+    s.delay_ease = Property::fixed(100.0);
+    let eased = s.stagger_weights(4, 0.7);
+    assert!(eased[1] < even[1], "{even:?} {eased:?}");
+    // The last still starts the whole spread after the first.
+    assert!((eased[3] - even[3]).abs() < 1e-6, "{even:?} {eased:?}");
 }

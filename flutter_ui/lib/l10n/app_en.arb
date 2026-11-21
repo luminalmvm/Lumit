@@ -11039,6 +11039,46 @@
   "@textAnimatorSelectorWiggly": {
     "description": "Option in the Animators section's Selector picker: each letter's share wanders on its own over time, as After Effects' Wiggly selector."
   },
+  "textAnimatorSelectorStagger": "Stagger",
+  "@textAnimatorSelectorStagger": {
+    "description": "Option in the Animators section's Selector picker: every word or letter plays the same Amount animation, one after another, as Cavalry's Stagger."
+  },
+  "textAnimatorAmount": "Amount",
+  "@textAnimatorAmount": {
+    "description": "Row label for a Stagger selector's animation, a per cent each word or letter plays; its curve in the graph editor is the one every unit moves on."
+  },
+  "textAnimatorDelay": "Delay",
+  "@textAnimatorDelay": {
+    "description": "Row label for a Stagger selector: seconds between one word or letter starting and the next."
+  },
+  "textAnimatorDelayEase": "Delay ease",
+  "@textAnimatorDelayEase": {
+    "description": "Row label for a Stagger selector, a per cent from -100 to 100: how the delays are shared out. 0 keeps them even; above 0 the first start close together and the later ones further apart."
+  },
+  "textAnimatorOrder": "Order",
+  "@textAnimatorOrder": {
+    "description": "Row label for the order a Stagger selector starts its words or letters in."
+  },
+  "textAnimatorOrderForward": "Forward",
+  "@textAnimatorOrderForward": {
+    "description": "Option in a Stagger selector's Order picker: first to last."
+  },
+  "textAnimatorOrderBackward": "Backward",
+  "@textAnimatorOrderBackward": {
+    "description": "Option in a Stagger selector's Order picker: last to first."
+  },
+  "textAnimatorOrderFromCentre": "From centre",
+  "@textAnimatorOrderFromCentre": {
+    "description": "Option in a Stagger selector's Order picker: the middle first, out to both ends."
+  },
+  "textAnimatorOrderFromEdges": "From edges",
+  "@textAnimatorOrderFromEdges": {
+    "description": "Option in a Stagger selector's Order picker: both ends first, in to the middle."
+  },
+  "textAnimatorOrderRandom": "Random",
+  "@textAnimatorOrderRandom": {
+    "description": "Option in a Stagger selector's Order picker: an order of its own for each Seed."
+  },
   "textAnimatorProperty": "Property",
   "@textAnimatorProperty": {
     "description": "Submenu of a text animator's Add menu listing what the animator can change: Position, Rotation, Scale, Opacity, Fill offset and the variable font's axes."

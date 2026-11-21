@@ -328,10 +328,71 @@ class _AnimatorSection extends StatelessWidget {
               BridgeSelectorKind.proximity =>
                 l10n.textAnimatorSelectorProximity,
               BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
+              BridgeSelectorKind.stagger => l10n.textAnimatorSelectorStagger,
             },
             onChanged: (k) => put(animatorWithSelectorKind(a, k)),
           ),
         ),
+        // Stagger: every unit plays Amount, a Delay after the one before,
+        // so the curve drawn on Amount is each word's own.
+        if (a.selector.kind == BridgeSelectorKind.stagger) ...[
+          _numberRow(
+              context,
+              l10n.textAnimatorAmount,
+              'stagger-amount-$index',
+              [a.selector.amount],
+              -200,
+              200,
+              100,
+              (s) => putSelector(selectorWith(a.selector, amount: s.first))),
+          _numberRow(
+              context,
+              l10n.textAnimatorDelay,
+              'stagger-delay-$index',
+              [a.selector.delay],
+              0,
+              10,
+              0.1,
+              (s) => putSelector(selectorWith(a.selector, delay: s.first)),
+              decimals: 2),
+          _numberRow(
+              context,
+              l10n.textAnimatorDelayEase,
+              'stagger-delay-ease-$index',
+              [a.selector.delayEase],
+              -100,
+              100,
+              0,
+              (s) =>
+                  putSelector(selectorWith(a.selector, delayEase: s.first))),
+          _plainRow(
+            context,
+            l10n.textAnimatorOrder,
+            BareDropdown<BridgeStaggerOrder>(
+              key: ValueKey<String>('stagger-order-$index'),
+              value: a.selector.order,
+              options: BridgeStaggerOrder.values,
+              label: staggerOrderLabel,
+              onChanged: (o) =>
+                  putSelector(selectorWith(a.selector, order: o)),
+            ),
+          ),
+          if (a.selector.order == BridgeStaggerOrder.random)
+            _plainRow(
+              context,
+              l10n.textAnimatorSeed,
+              DragValueField(
+                key: ValueKey<String>('stagger-seed-$index'),
+                value: a.selector.seed,
+                min: 0,
+                max: 99999,
+                resetTo: 0,
+                decimals: 0,
+                onChanged: (v) => putSelector(selectorWith(a.selector,
+                    seed: v.round().clamp(0, 99999).toInt())),
+              ),
+            ),
+        ],
         if (a.selector.kind == BridgeSelectorKind.wiggly) ...[
           _numberRow(
               context,
@@ -490,26 +551,30 @@ class _AnimatorSection extends StatelessWidget {
           onChanged: (b) => putSelector(selectorWith(a.selector, basis: b)),
         ),
       ),
-      _plainRow(
-        context,
-        l10n.textAnimatorShape,
-        BareDropdown<BridgeSelectorShape>(
-          key: ValueKey<String>('text-animator-shape-$index'),
-          value: a.selector.shape,
-          options: BridgeSelectorShape.values,
-          label: (s) => switch (s) {
-            BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
-            BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
-            BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
-            BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
-          },
-          onChanged: (s) => putSelector(selectorWith(a.selector, shape: s)),
+      // A Stagger's curve is Amount's own, so it has no shape.
+      if (a.selector.kind != BridgeSelectorKind.stagger)
+        _plainRow(
+          context,
+          l10n.textAnimatorShape,
+          BareDropdown<BridgeSelectorShape>(
+            key: ValueKey<String>('text-animator-shape-$index'),
+            value: a.selector.shape,
+            options: BridgeSelectorShape.values,
+            label: (s) => switch (s) {
+              BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
+              BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
+              BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
+              BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
+            },
+            onChanged: (s) =>
+                putSelector(selectorWith(a.selector, shape: s)),
+          ),
         ),
-      ),
-      // A Range selector's Mode and the eases of its ramp, as After Effects'
-      // Advanced rows: Subtract moves the letters the range does not reach.
+      // A Range or Stagger selector's Mode, as After Effects' Advanced row:
+      // Subtract moves the letters the selector does not reach.
       if (a.selector.mode == BridgeSelectorMode.range &&
-          a.selector.kind == BridgeSelectorKind.range) ...[
+          (a.selector.kind == BridgeSelectorKind.range ||
+              a.selector.kind == BridgeSelectorKind.stagger))
         _plainRow(
           context,
           l10n.textAnimatorMode,
@@ -524,6 +589,9 @@ class _AnimatorSection extends StatelessWidget {
                 putSelector(selectorWith(a.selector, invert: subtract)),
           ),
         ),
+      // The eases of a Range selector's ramp.
+      if (a.selector.mode == BridgeSelectorMode.range &&
+          a.selector.kind == BridgeSelectorKind.range) ...[
         _numberRow(
             context,
             l10n.textAnimatorEaseHigh,
@@ -723,8 +791,9 @@ class _AnimatorSection extends StatelessWidget {
     double min,
     double max,
     double resetTo,
-    ValueChanged<List<BridgeScalar>> write,
-  ) {
+    ValueChanged<List<BridgeScalar>> write, {
+    int decimals = 1,
+  }) {
     // The playhead is listened to here, per row, rather than by the panel above
     // — and only where a channel can actually move under it. A card that
     // redrew whole on every frame of a scrub is what made the playhead lag.
@@ -732,12 +801,12 @@ class _AnimatorSection extends StatelessWidget {
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
     if (scalars.every((s) => s is BridgeScalar_Static)) {
       return _numberRowAt(context, label, keyName, scalars, min, max, resetTo,
-          write, playhead.value);
+          write, playhead.value, decimals);
     }
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
-      builder: (context, at, _) => _numberRowAt(
-          context, label, keyName, scalars, min, max, resetTo, write, at),
+      builder: (context, at, _) => _numberRowAt(context, label, keyName,
+          scalars, min, max, resetTo, write, at, decimals),
     );
   }
 
@@ -751,6 +820,7 @@ class _AnimatorSection extends StatelessWidget {
     double resetTo,
     ValueChanged<List<BridgeScalar>> write,
     int at,
+    int decimals,
   ) {
     final t = ThemeScope.of(context).theme;
     // An animated channel shows what its curve reads at the playhead, sampled
@@ -804,7 +874,7 @@ class _AnimatorSection extends StatelessWidget {
                     min: min,
                     max: max,
                     resetTo: resetTo,
-                    decimals: 1,
+                    decimals: decimals,
                     onChanged: (v) => commit(i, v),
                   ),
                 ),
@@ -880,6 +950,10 @@ BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
         invert: false,
         easeHigh: BridgeScalar.static_(0),
         easeLow: BridgeScalar.static_(0),
+        amount: BridgeScalar.static_(100),
+        delay: BridgeScalar.static_(0.1),
+        delayEase: BridgeScalar.static_(0),
+        order: BridgeStaggerOrder.forward,
         minAmount: BridgeScalar.static_(0),
         maxAmount: BridgeScalar.static_(100),
         wiggles: BridgeScalar.static_(2),
@@ -1020,6 +1094,9 @@ enum TextAnimatorValue {
   maxAmount,
   wiggles,
   correlation,
+  staggerAmount,
+  staggerDelay,
+  staggerDelayEase,
   axis0,
   axis1,
   axis2,
@@ -1069,6 +1146,10 @@ List<TextAnimatorValue> textAnimatorValuesOf(BridgeTextAnimator a,
         TextAnimatorValue.wiggles ||
         TextAnimatorValue.correlation =>
           kind == BridgeSelectorKind.wiggly,
+        TextAnimatorValue.staggerAmount ||
+        TextAnimatorValue.staggerDelay ||
+        TextAnimatorValue.staggerDelayEase =>
+          kind == BridgeSelectorKind.stagger,
         _ when textAnimatorAxisIndex(value) != null =>
           textAnimatorAxisIndex(value)! < a.axes.length,
         _ => switch (animatorPropertyOf(value)) {
@@ -1201,6 +1282,9 @@ String textAnimatorValueLabel(TextAnimatorValue value,
       TextAnimatorValue.maxAmount => l10n.textAnimatorMaxAmount,
       TextAnimatorValue.wiggles => l10n.textAnimatorWiggles,
       TextAnimatorValue.correlation => l10n.textAnimatorCorrelation,
+      TextAnimatorValue.staggerAmount => l10n.textAnimatorAmount,
+      TextAnimatorValue.staggerDelay => l10n.textAnimatorDelay,
+      TextAnimatorValue.staggerDelayEase => l10n.textAnimatorDelayEase,
       _ when textAnimatorAxisIndex(value) != null =>
         l10n.textAnimatorAxisLabel(fontAxisName('', '', _axisTag(a, value))),
       TextAnimatorValue.rangeStart => l10n.textAnimatorRangeStart,
@@ -1239,6 +1323,8 @@ double textAnimatorDefault(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.radius => 200,
       TextAnimatorValue.wiggles => 2,
       TextAnimatorValue.correlation => 50,
+      TextAnimatorValue.staggerAmount => 100,
+      TextAnimatorValue.staggerDelay => 0.1,
       TextAnimatorValue.maxAmount ||
       TextAnimatorValue.rangeEnd ||
       TextAnimatorValue.scaleX ||
@@ -1282,6 +1368,9 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.maxAmount => a.selector.maxAmount,
       TextAnimatorValue.wiggles => a.selector.wiggles,
       TextAnimatorValue.correlation => a.selector.correlation,
+      TextAnimatorValue.staggerAmount => a.selector.amount,
+      TextAnimatorValue.staggerDelay => a.selector.delay,
+      TextAnimatorValue.staggerDelayEase => a.selector.delayEase,
       _ => switch (textAnimatorAxisIndex(value)) {
           final i? when i < a.axes.length => a.axes[i].value,
           _ => const BridgeScalar.static_(0),
@@ -1328,6 +1417,12 @@ BridgeTextAnimator animatorWithScalar(
         animatorWith(a, selector: selectorWith(a.selector, wiggles: to)),
       TextAnimatorValue.correlation =>
         animatorWith(a, selector: selectorWith(a.selector, correlation: to)),
+      TextAnimatorValue.staggerAmount =>
+        animatorWith(a, selector: selectorWith(a.selector, amount: to)),
+      TextAnimatorValue.staggerDelay =>
+        animatorWith(a, selector: selectorWith(a.selector, delay: to)),
+      TextAnimatorValue.staggerDelayEase =>
+        animatorWith(a, selector: selectorWith(a.selector, delayEase: to)),
       _ => switch (textAnimatorAxisIndex(value)) {
           final i? when i < a.axes.length => animatorWith(a, axes: [
               for (var k = 0; k < a.axes.length; k++)
@@ -1392,6 +1487,10 @@ BridgeRangeSelector selectorWith(
   bool? invert,
   BridgeScalar? easeHigh,
   BridgeScalar? easeLow,
+  BridgeScalar? amount,
+  BridgeScalar? delay,
+  BridgeScalar? delayEase,
+  BridgeStaggerOrder? order,
   BridgeScalar? minAmount,
   BridgeScalar? maxAmount,
   BridgeScalar? wiggles,
@@ -1417,7 +1516,20 @@ BridgeRangeSelector selectorWith(
       invert: invert ?? s.invert,
       easeHigh: easeHigh ?? s.easeHigh,
       easeLow: easeLow ?? s.easeLow,
+      amount: amount ?? s.amount,
+      delay: delay ?? s.delay,
+      delayEase: delayEase ?? s.delayEase,
+      order: order ?? s.order,
     );
+
+/// What a Stagger selector's order is called.
+String staggerOrderLabel(BridgeStaggerOrder o) => switch (o) {
+      BridgeStaggerOrder.forward => l10n.textAnimatorOrderForward,
+      BridgeStaggerOrder.backward => l10n.textAnimatorOrderBackward,
+      BridgeStaggerOrder.fromCentre => l10n.textAnimatorOrderFromCentre,
+      BridgeStaggerOrder.fromEdges => l10n.textAnimatorOrderFromEdges,
+      BridgeStaggerOrder.random => l10n.textAnimatorOrderRandom,
+    };
 
 /// How many font axes one Text layer's animators can move, as many as After
 /// Effects allows. The engine drops a ninth.
@@ -1532,6 +1644,7 @@ List<Widget> animatorAddMenuRows({
                   l10n.textAnimatorSelectorProximity
                 ),
                 (BridgeSelectorKind.wiggly, l10n.textAnimatorSelectorWiggly),
+                (BridgeSelectorKind.stagger, l10n.textAnimatorSelectorStagger),
               ])
                 MenuRow(
                   key: ValueKey<String>(

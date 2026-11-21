@@ -9,7 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `shift_property`, `text_document_of`, `with_camera_at`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The style a text layer has before anything is styled.
 BridgeTextStyle defaultTextStyle() =>
@@ -305,6 +305,14 @@ class BridgeRangeSelector {
   final BridgeScalar easeHigh;
   final BridgeScalar easeLow;
 
+  /// A Stagger selector: the animation every unit plays (per cent), the
+  /// seconds between starts, how the delays are shared out (per cent) and
+  /// the order. Its Random order uses `seed`.
+  final BridgeScalar amount;
+  final BridgeScalar delay;
+  final BridgeScalar delayEase;
+  final BridgeStaggerOrder order;
+
   /// A Wiggly selector: the range of weights, per cent, how often they
   /// change course a second, how much the letters wander together, per
   /// cent, and which wander.
@@ -328,6 +336,10 @@ class BridgeRangeSelector {
     required this.invert,
     required this.easeHigh,
     required this.easeLow,
+    required this.amount,
+    required this.delay,
+    required this.delayEase,
+    required this.order,
     required this.minAmount,
     required this.maxAmount,
     required this.wiggles,
@@ -350,6 +362,10 @@ class BridgeRangeSelector {
       invert.hashCode ^
       easeHigh.hashCode ^
       easeLow.hashCode ^
+      amount.hashCode ^
+      delay.hashCode ^
+      delayEase.hashCode ^
+      order.hashCode ^
       minAmount.hashCode ^
       maxAmount.hashCode ^
       wiggles.hashCode ^
@@ -374,6 +390,10 @@ class BridgeRangeSelector {
           invert == other.invert &&
           easeHigh == other.easeHigh &&
           easeLow == other.easeLow &&
+          amount == other.amount &&
+          delay == other.delay &&
+          delayEase == other.delayEase &&
+          order == other.order &&
           minAmount == other.minAmount &&
           maxAmount == other.maxAmount &&
           wiggles == other.wiggles &&
@@ -402,6 +422,7 @@ enum BridgeSelectorKind {
   range,
   proximity,
   wiggly,
+  stagger,
   ;
 }
 
@@ -451,6 +472,16 @@ class BridgeSolidDef {
           colour == other.colour &&
           width == other.width &&
           height == other.height;
+}
+
+/// The order a Stagger selector starts its units in.
+enum BridgeStaggerOrder {
+  forward,
+  backward,
+  fromCentre,
+  fromEdges,
+  random,
+  ;
 }
 
 /// Which side the lines of a block line up on.

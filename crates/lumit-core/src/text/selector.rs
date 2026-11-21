@@ -74,6 +74,44 @@ pub enum SelectorKind {
     /// `correlation` is how much the letters wander together: 100 % moves
     /// them as one, 0 % each on its own.
     Wiggly,
+    /// **Every unit plays the same animation, one after another**, as
+    /// Cavalry's Stagger: each unit's weight is `amount` read `delay` seconds
+    /// later than the unit before it, in `order`. The curve drawn on Amount in
+    /// the graph editor is the curve every word or letter moves on.
+    Stagger,
+}
+
+/// The order a Stagger selector starts its units in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum StaggerOrder {
+    /// First to last.
+    #[default]
+    Forward,
+    /// Last to first.
+    Backward,
+    /// The middle first, out to both ends.
+    FromCentre,
+    /// Both ends first, in to the middle.
+    FromEdges,
+    /// An order of its own for each Seed.
+    Random,
+}
+
+fn is_default_order(o: &StaggerOrder) -> bool {
+    *o == StaggerOrder::Forward
+}
+
+/// serde default for [`RangeSelector::delay`]: a tenth of a second.
+fn tenth() -> Property {
+    Property::fixed(0.1)
+}
+
+fn is_static_tenth(p: &Property) -> bool {
+    matches!(p.animation, crate::anim::Animation::Static(v) if v == 0.1) && p.extra.is_empty()
+}
+
+fn is_static_hundred_amount(p: &Property) -> bool {
+    matches!(p.animation, crate::anim::Animation::Static(v) if v == 100.0) && p.extra.is_empty()
 }
 
 fn hundred_wiggly() -> Property {
@@ -185,6 +223,33 @@ pub struct RangeSelector {
         skip_serializing_if = "is_static_zero"
     )]
     pub ease_low: Property,
+    /// A Stagger selector's animation, per cent: what every unit plays, keyed
+    /// and curved as the user draws it.
+    #[serde(
+        default = "hundred_wiggly",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_hundred_amount"
+    )]
+    pub amount: Property,
+    /// Seconds between one unit's start and the next's.
+    #[serde(
+        default = "tenth",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_tenth"
+    )]
+    pub delay: Property,
+    /// Per cent, −100 to 100: how the delays are shared out. 0 keeps them
+    /// even; above 0 the first units start close together and the later ones
+    /// further apart; below 0 the other way round.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub delay_ease: Property,
+    /// The order the units start in. Random uses `seed`.
+    #[serde(default, skip_serializing_if = "is_default_order")]
+    pub order: StaggerOrder,
     /// A Wiggly selector's range of weights, per cent: each letter wanders
     /// between the two.
     #[serde(
@@ -246,6 +311,10 @@ impl Default for RangeSelector {
             invert: false,
             ease_high: Property::zero(),
             ease_low: Property::zero(),
+            amount: hundred_wiggly(),
+            delay: tenth(),
+            delay_ease: Property::zero(),
+            order: StaggerOrder::default(),
             min_amount: Property::zero(),
             max_amount: hundred_wiggly(),
             wiggles: two(),
@@ -281,6 +350,80 @@ impl RangeSelector {
                 }
             })
             .collect()
+    }
+}
+
+impl RangeSelector {
+    /// The weight a Stagger selector gives each of `units` at layer time `lt`:
+    /// Amount, per cent, read as many delays earlier as the unit is from the
+    /// first to start. Amount is not held to 0–100, so a curve that overshoots
+    /// in the graph editor overshoots on every unit. Mode Subtract turns the
+    /// weights over, as on a Range selector.
+    #[must_use]
+    pub fn stagger_weights(&self, units: usize, lt: f64) -> Vec<f32> {
+        if units == 0 {
+            return Vec::new();
+        }
+        let delay = self.delay.value_at(lt);
+        let delay = if delay.is_finite() { delay } else { 0.0 };
+        let ease = (self.delay_ease.value_at(lt) / 100.0).clamp(-1.0, 1.0);
+        let ease = if ease.is_finite() { ease } else { 0.0 };
+        let ranks = self.stagger_ranks(units);
+        #[allow(clippy::cast_precision_loss)] // a line is short
+        let last = ranks.iter().copied().max().unwrap_or(0) as f64;
+        ranks
+            .iter()
+            .map(|&rank| {
+                // Where the unit comes in the order, 0–1, bent by Delay ease:
+                // a power above 1 keeps the first starts together, below 1
+                // the last ones.
+                #[allow(clippy::cast_precision_loss)] // a line is short
+                let s = if last > 0.0 { rank as f64 / last } else { 0.0 };
+                let s = if ease >= 0.0 {
+                    s.powf(1.0 + 3.0 * ease)
+                } else {
+                    1.0 - (1.0 - s).powf(1.0 - 3.0 * ease)
+                };
+                let w = self.amount.value_at(lt - s * last * delay) / 100.0;
+                let w = if w.is_finite() { w } else { 0.0 };
+                #[allow(clippy::cast_possible_truncation)] // a weight
+                let w = if self.invert { 1.0 - w } else { w } as f32;
+                w
+            })
+            .collect()
+    }
+
+    /// Each unit's place in a Stagger selector's order, 0 for the first to
+    /// start. Units the same distance from the middle (or the edges) start
+    /// together.
+    fn stagger_ranks(&self, units: usize) -> Vec<usize> {
+        #[allow(clippy::cast_precision_loss)] // a line is short
+        let mid = (units as f64 - 1.0) * 0.5;
+        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let from_mid = |i: usize| ((i as f64 - mid).abs() + 0.25).floor() as usize;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let half = (mid + 0.25).floor() as usize;
+        match self.order {
+            StaggerOrder::Forward => (0..units).collect(),
+            StaggerOrder::Backward => (0..units).map(|i| units - 1 - i).collect(),
+            StaggerOrder::FromCentre => (0..units).map(from_mid).collect(),
+            StaggerOrder::FromEdges => (0..units).map(|i| half - from_mid(i).min(half)).collect(),
+            StaggerOrder::Random => {
+                let mut by: Vec<(f64, usize)> = (0..units)
+                    .map(|i| {
+                        #[allow(clippy::cast_possible_truncation)] // a line is short
+                        let channel = 7 + i as u32;
+                        (crate::fx::maths::value_noise_1d(self.seed, channel, 0.0), i)
+                    })
+                    .collect();
+                by.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let mut ranks = vec![0; units];
+                for (rank, (_, i)) in by.into_iter().enumerate() {
+                    ranks[i] = rank;
+                }
+                ranks
+            }
+        }
     }
 }
 

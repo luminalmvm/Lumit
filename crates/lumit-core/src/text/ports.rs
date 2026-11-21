@@ -47,6 +47,11 @@ impl TextAnimator {
                 add("wiggles", "Wiggles/second");
                 add("correlation", "Correlation");
             }
+            SelectorKind::Stagger => {
+                add("amount", "Amount");
+                add("delay", "Delay");
+                add("delay_ease", "Delay ease");
+            }
         }
         let shows = |group: &str| {
             self.properties
@@ -106,6 +111,9 @@ impl TextAnimator {
             "radius" => &mut s.radius,
             "min_amount" => &mut s.min_amount,
             "max_amount" => &mut s.max_amount,
+            "amount" => &mut s.amount,
+            "delay" => &mut s.delay,
+            "delay_ease" => &mut s.delay_ease,
             "wiggles" => &mut s.wiggles,
             "correlation" => &mut s.correlation,
             "position_x" => &mut self.position_x,
