@@ -47,7 +47,6 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../state/copies.dart';
 import '../state/dock.dart' show Panel;
-import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../state/motion_paths.dart' show motionPathWith;
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
@@ -4481,23 +4480,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final contents = shapeContentsEdited(box, edit);
     try {
       if (contents != null) {
-        // Art, and the layer moved with it: the layer's picture *is* the art's
-        // bounding box, so a preview of the art alone would slide the untouched
-        // half of it and the commit would slide it back.
-        final art = shapeContentsRect(contents);
-        final shift = art == null ? Offset.zero : art.topLeft - box.artOrigin;
+        // The engine moves the layer with the art's corner as the commit does,
+        // and seats a keyed path's picture itself. A position written here as
+        // well moved the picture twice when a key's top or left point moved.
         widget.comp.renderFrameWithShapePreview(
           frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: box.layer,
           contents: contents,
-          transform: shift == Offset.zero
-              ? null
-              : transformWith(
-                  box.layer.getTransform(),
-                  positionX: box.map.px + shift.dx,
-                  positionY: box.map.py + shift.dy,
-                ),
         );
         return;
       }

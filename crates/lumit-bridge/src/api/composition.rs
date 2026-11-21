@@ -393,12 +393,17 @@ pub enum BridgePlaybackMode {
 /// One animated mask's shape at a moment: which mask, on which layer,
 /// and the path it is showing there. A keyed shape item comes the same way,
 /// its id in `mask`.
+///
+/// `art_shift` is how far a shape layer's picture has moved from where it is
+/// at the head of the layer, px, which the points are drawn with. Nought for a
+/// mask.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeAnimatedMaskPath {
     pub layer: Uuid,
     pub mask: Uuid,
     pub vertices: Vec<crate::api::layer::BridgeVertex>,
+    pub art_shift: (f64, f64),
 }
 
 /// The Viewer's chosen OCIO display and view, out of the two-name list the
@@ -2276,7 +2281,7 @@ impl CompositionReference {
         for layer in &comp.layers {
             // A mask lives on its layer's clock, as every other property does.
             let local = time.0.checked_sub(layer.start_offset.0).unwrap_or(time.0);
-            let mut push = |id: Uuid, path: &lumit_core::mask::BezierPath| {
+            let mut push = |id: Uuid, path: &lumit_core::mask::BezierPath, art_shift| {
                 out.push(BridgeAnimatedMaskPath {
                     layer: layer.id,
                     mask: id,
@@ -2292,17 +2297,22 @@ impl CompositionReference {
                             tan_out_y: v.tan_out.1,
                         })
                         .collect(),
+                    art_shift,
                 });
             };
             for mask in &layer.masks {
                 if !mask.path_keys.is_empty() {
-                    push(mask.id, &mask.path_at(local.to_f64()));
+                    push(mask.id, &mask.path_at(local.to_f64()), (0.0, 0.0));
                 }
             }
             if let lumit_core::model::LayerKind::Shape { contents } = &layer.kind {
+                let mut shift = None;
                 for item in lumit_core::shape::modifier::items(contents) {
                     if item.path_is_animated() {
-                        push(item.id, &item.path_at(local.to_f64()));
+                        let shift = *shift.get_or_insert_with(|| {
+                            lumit_core::model::art_shift(layer, local.to_f64())
+                        });
+                        push(item.id, &item.path_at(local.to_f64()), shift);
                     }
                 }
             }

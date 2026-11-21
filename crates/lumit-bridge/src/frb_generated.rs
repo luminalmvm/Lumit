@@ -38417,10 +38417,12 @@ impl SseDecode for crate::api::composition::BridgeAnimatedMaskPath {
         let mut var_layer = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_mask = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_vertices = <Vec<crate::api::layer::BridgeVertex>>::sse_decode(deserializer);
+        let mut var_artShift = <(f64, f64)>::sse_decode(deserializer);
         return crate::api::composition::BridgeAnimatedMaskPath {
             layer: var_layer,
             mask: var_mask,
             vertices: var_vertices,
+            art_shift: var_artShift,
         };
     }
 }
@@ -51890,6 +51892,15 @@ impl SseDecode for crate::api::project::ProjectReference {
     }
 }
 
+impl SseDecode for (f64, f64) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_field0 = <f64>::sse_decode(deserializer);
+        let mut var_field1 = <f64>::sse_decode(deserializer);
+        return (var_field0, var_field1);
+    }
+}
+
 impl SseDecode for (String, String) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -54004,6 +54015,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::composition::BridgeAnimatedMa
             self.layer.into_into_dart().into_dart(),
             self.mask.into_into_dart().into_dart(),
             self.vertices.into_into_dart().into_dart(),
+            self.art_shift.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -66673,6 +66685,7 @@ impl SseEncode for crate::api::composition::BridgeAnimatedMaskPath {
         <uuid::Uuid>::sse_encode(self.layer, serializer);
         <uuid::Uuid>::sse_encode(self.mask, serializer);
         <Vec<crate::api::layer::BridgeVertex>>::sse_encode(self.vertices, serializer);
+        <(f64, f64)>::sse_encode(self.art_shift, serializer);
     }
 }
 
@@ -76828,6 +76841,14 @@ impl SseEncode for crate::api::project::ProjectReference {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <uuid::Uuid>::sse_encode(self.id, serializer);
+    }
+}
+
+impl SseEncode for (f64, f64) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f64>::sse_encode(self.0, serializer);
+        <f64>::sse_encode(self.1, serializer);
     }
 }
 
