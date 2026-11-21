@@ -3545,7 +3545,7 @@ List<LayerFoldRow> layerFoldRows({
           }
         }
       }
-      if (!bus) {
+      if (!bus && info.kind != BridgeLayerKind.sequence) {
         // The waveform behind its own twirl, so a busy comp only pays
         // for the lanes actually being looked at.
         final waveOpen = open.contains(waveformPath(id));
