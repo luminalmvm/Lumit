@@ -28,6 +28,7 @@ mod engine;
 pub mod environment;
 /// Film's passes, built on first use.
 pub mod film;
+pub mod flicker;
 mod gaussian;
 pub mod generate;
 /// CDL and the colour warper, built on first use.
@@ -334,6 +335,8 @@ pub struct FxEngine {
     jolt: wgpu::ComputePipeline,
     /// Light leak: a band of drifting light screened on in one pass.
     light_leak: wgpu::ComputePipeline,
+    /// Flicker: this frame's gains on the picture in one pass.
+    flicker: wgpu::ComputePipeline,
     /// Slices: strips read back along their length, one pass.
     slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,

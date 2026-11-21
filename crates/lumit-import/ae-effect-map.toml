@@ -599,6 +599,7 @@ pending_audit = true
 [[effect]]
 ae = "S_Flicker"
 name = "S_Flicker"
+suggest = "Flicker does the same job"
 ofx = ["com.genarts.sapphire.Time.S_Flicker", "com.borisfx.sapphire.Time.S_Flicker"]
 pending_audit = true
 

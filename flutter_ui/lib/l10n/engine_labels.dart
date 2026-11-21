@@ -2106,6 +2106,11 @@ Map<String, String> get _built => {
       // Light leak, and its looks.
       "Light leak": l10n.fxLightLeak,
       "Film burn": l10n.fxFilmBurn,
+      // Flicker's looks.
+      "Neon tube": l10n.fxNeonTube,
+      "Failing light": l10n.fxFailingLight,
+      "Film projector": l10n.fxFilmProjector,
+      "CRT": l10n.fxCrt,
       // Slices, and its looks.
       "Slices": l10n.fxSlices,
       "Slice glitch": l10n.fxSliceGlitch,
