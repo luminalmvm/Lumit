@@ -2559,6 +2559,12 @@ pub fn turbulent_displace(
 /// Sampling up the slope draws each pixel from nearer a peak, which magnifies
 /// the picture there: the lenses After Effects' Bulge makes.
 fn turbulent_bulge(field: &FractalField, qx: f32, qy: f32, z: f32) -> (f32, f32) {
+    // The plain sum, not the folded one: a fold has a crease where the slope
+    // flips, which would tear the picture rather than swell it.
+    let field = &FractalField {
+        turbulent: false,
+        ..*field
+    };
     let e = TURBULENT_BULGE_STEP;
     let k = TURBULENT_BULGE_GAIN / (2.0 * e);
     let gx = fractal(field, qx + e, qy, z) - fractal(field, qx - e, qy, z);
