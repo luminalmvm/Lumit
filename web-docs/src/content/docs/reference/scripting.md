@@ -356,6 +356,7 @@ Script: `lumit.markers.set({ ... })`. MCP tool: `markers_set`.
 | `markers[].colour` | integer (0 to 255) |  |  |
 | `markers[].duration` | integer |  | Frames it spans |
 | `markers[].chapter` | boolean |  | Whether it starts a chapter |
+| `markers[].beat` | number (0 to 1) |  | Makes it a beat marker with this confidence, as Detect beats does. Beat trigger fires on beat markers |
 
 ## effect.list
 

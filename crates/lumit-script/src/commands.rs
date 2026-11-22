@@ -373,7 +373,7 @@ pub const COMMANDS: &[Command] = &[
             layer!(),
             r#","markers":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string","description":"An existing marker's id, to keep what it was"},"time":"#,
             time!(),
-            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"},"chapter":{"type":"boolean","description":"Whether it starts a chapter"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
+            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"},"chapter":{"type":"boolean","description":"Whether it starts a chapter"},"beat":{"type":"number","minimum":0,"maximum":1,"description":"Makes it a beat marker with this confidence, as Detect beats does. Beat trigger fires on beat markers"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
         ),
     },
     Command {
