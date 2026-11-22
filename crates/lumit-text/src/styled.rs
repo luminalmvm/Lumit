@@ -27,6 +27,7 @@ use crate::{BlockLayout, BlockLine, GlyphOutline, RasterText, TextBlock};
 
 mod axes;
 mod plate;
+pub(crate) mod reach;
 mod wrap;
 use axes::{face_of, respace};
 use wrap::{breaks, lines_of};
@@ -842,19 +843,21 @@ fn draw(
 }
 
 pub(crate) fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
-    rasterise_zoomed(block, xforms, 1.0, None)
+    rasterise_zoomed(block, xforms, 1.0, None, [0; 4])
 }
 
 /// [`rasterise`] drawn `zoom` times as large, the raster's own size grown
 /// with it. `fit` lays the words into another raster's frame instead of the
 /// styled one's: its left edge and first baseline, and its size, in the
 /// layer's own pixels. That is how an unstyled line, which the plain path
-/// lays out and crops tighter, is drawn larger exactly where it sat.
+/// lays out and crops tighter, is drawn larger exactly where it sat. Without
+/// `fit`, the raster grows by `grow` on the left, top, right and bottom.
 pub(crate) fn rasterise_zoomed(
     block: &TextBlock<'_>,
     xforms: &[GlyphXform],
     zoom: f32,
     fit: Option<([f32; 2], (u32, u32))>,
+    grow: [u32; 4],
 ) -> RasterText {
     let face = face_of(block);
     let mut laid = lay(block, &face);
@@ -874,7 +877,13 @@ pub(crate) fn rasterise_zoomed(
     let first = laid.lines.first().map_or(0.0, |l| l.baseline);
     let (origin, (width, height)) = match fit {
         Some(([left, baseline], size)) => ([left, baseline - first], size),
-        None => (laid.origin(margin), laid.raster_size(margin)),
+        None => {
+            let ([x, y], (w, h)) = (laid.origin(margin), laid.raster_size(margin));
+            let [left, top, right, bottom] = grow;
+            #[allow(clippy::cast_precision_loss)] // px
+            let origin = [x + left as f32, y + top as f32];
+            (origin, (w + left + right, h + top + bottom))
+        }
     };
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // px
     let (width, height) = (

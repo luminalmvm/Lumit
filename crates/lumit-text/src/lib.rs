@@ -218,15 +218,22 @@ pub fn glyph_middles(
 /// its letters never blur. The raster grows by `zoom`; the layer keeps its
 /// own size (the second answer), for the placement to draw it at.
 ///
-/// A `zoom` of 1 or less is [`rasterise`] itself, byte for byte.
+/// A `zoom` of 1 or less is [`rasterise`] itself, byte for byte. `grow` is
+/// how much more room animated letters get on the left, top, right and
+/// bottom, what [`animated::overhang`] measures; the layer's size grows with it.
 #[must_use]
 pub fn rasterise_at(
     block: &TextBlock<'_>,
     xforms: &[GlyphXform],
     zoom: f32,
+    grow: [u32; 4],
 ) -> (RasterText, (u32, u32)) {
     if !zoom.is_finite() || zoom <= 1.0 + 1e-3 {
-        let plain = rasterise(block, xforms);
+        let plain = if block.plain() {
+            animated::rasterise_line_grown(block.text, block.size, block.fill, xforms, grow)
+        } else {
+            styled::rasterise_zoomed(block, xforms, 1.0, None, grow)
+        };
         let size = (plain.width, plain.height);
         return (plain, size);
     }
@@ -235,22 +242,26 @@ pub fn rasterise_at(
     // larger drawing is fitted into that same frame and nothing moves as the
     // layer crosses 100 %.
     let laid = layout(block, !xforms.is_empty());
+    let [left, top, right, bottom] = grow;
+    let size = (laid.width + left + right, laid.height + top + bottom);
+    #[allow(clippy::cast_precision_loss)] // px
     let fit = block.plain().then(|| {
         let line = laid.lines.first();
         (
             [
                 line.and_then(|l| l.carets.first().copied())
-                    .unwrap_or(laid.left),
-                line.map_or(0.0, |l| l.baseline),
+                    .unwrap_or(laid.left)
+                    + left as f32,
+                line.map_or(0.0, |l| l.baseline) + top as f32,
             ],
-            (laid.width, laid.height),
+            size,
         )
     });
-    let raster = styled::rasterise_zoomed(block, xforms, zoom, fit);
+    let raster = styled::rasterise_zoomed(block, xforms, zoom, fit, grow);
     if raster.width <= 1 && raster.height <= 1 {
         return (raster, (1, 1));
     }
-    (raster, (laid.width, laid.height))
+    (raster, size)
 }
 
 /// [`rasterise_along`] drawn `zoom` times as large, the same way.

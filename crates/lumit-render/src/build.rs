@@ -1929,6 +1929,9 @@ fn comp_walk(
     // layer time, for the effect cache. Only looked up, so the map's order
     // decides nothing.
     let raster_names: std::cell::RefCell<HashMap<(Uuid, u64), u128>> = Default::default();
+    // How far up and left of its layer's corner each grown text raster starts.
+    let raster_origins: std::cell::RefCell<HashMap<(Uuid, u64), (f32, f32)>> = Default::default();
+    let origin_of = |id: Uuid, lt: f64| raster_origins.borrow().get(&(id, lt.to_bits())).copied();
     let named = |layer: &lumit_core::model::Layer,
                  lt: f64,
                  (raster, name): (kept_raster::LayerRaster, Option<u128>)| {
@@ -2038,7 +2041,11 @@ fn comp_walk(
                 )
             }),
             LayerKind::Text { document } => in_span(layer).then(|| {
-                let made = kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context);
+                let (made, at) =
+                    kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context);
+                raster_origins
+                    .borrow_mut()
+                    .insert((layer.id, lt.to_bits()), at);
                 named(layer, lt, made)
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
@@ -2087,6 +2094,7 @@ fn comp_walk(
                 lumit_media::decode::PixelFormat::LinearF32 => !layer.masks.is_empty(),
             };
             if !layer.paint.is_empty() || gated {
+                let (masks, paint) = kept_raster::moved_art(layer, origin_of(layer.id, lt));
                 let rgba = Arc::make_mut(&mut rgba);
                 // Paint first, masks second: a stroke is part of the layer's
                 // picture, and a mask gates the picture (docs/06 render
@@ -2107,7 +2115,7 @@ fn comp_walk(
                     h,
                     f64::from(natural.0),
                     f64::from(natural.1),
-                    &layer.paint,
+                    &paint,
                     // The layer's own clock, as a mask's keys are read on:
                     // a stroke keyed to draw itself on travels with the layer.
                     lt,
@@ -2127,7 +2135,7 @@ fn comp_walk(
                     h,
                     f64::from(natural.0),
                     f64::from(natural.1),
-                    &layer.masks,
+                    &masks,
                     lt,
                 );
             }
@@ -4016,7 +4024,7 @@ fn comp_walk(
                     ),
                 )
             };
-            let placed = drawn(src, mlt, &context);
+            let placed = kept_raster::lifted(drawn(src, mlt, &context), origin_of(src.id, mlt));
             Some(MatteDraw {
                 rgba: m_rgba.to_vec(),
                 tex_w: m_w,
@@ -5040,7 +5048,8 @@ fn comp_walk(
             _ => None,
         };
 
-        let placed = drawn(layer, lt, &context);
+        let lift = |s| kept_raster::lifted(s, origin_of(layer.id, lt));
+        let placed = lift(drawn(layer, lt, &context));
         draws.push(crate::trails::with_sprites(CompLayerDraw {
             layer: layer.id,
             source,
@@ -5126,7 +5135,10 @@ fn comp_walk(
             fx_input_key,
             // Per-layer motion blur (docs/06 §4): where the layer is across
             // the open shutter, empty unless it blurs.
-            mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone()),
+            mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone())
+                .into_iter()
+                .map(lift)
+                .collect(),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading::shading_lights(comp, layer, t_comp, &context),
             material: shading::shading_material(comp, layer, t_comp),
