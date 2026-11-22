@@ -122,6 +122,15 @@ void main() {
       expect(offset.dy - end.dy,
           tester.getSize(find.byKey(const ValueKey('text-animator-heading-0'))).height + 5,
           reason: 'a row steps at the section pitch, its 2 + 2 and hairline');
+      // Advanced's rows step at the same pitch, further in.
+      await tester.tap(find.byKey(const ValueKey('text-animator-advanced-0')));
+      await tester.pump();
+      final based = tester.getTopLeft(find.text('Based on'));
+      final mode = tester.getTopLeft(find.text('Mode'));
+      expect(mode.dy - based.dy, offset.dy - end.dy);
+      expect(based.dx, greaterThan(amount.dx + 10));
+      await tester.tap(find.byKey(const ValueKey('text-animator-advanced-0')));
+      await tester.pump();
       // The twirl folds the animator to its heading.
       await tester.tap(find.byKey(const ValueKey('text-animator-fold-0')));
       await tester.pump();

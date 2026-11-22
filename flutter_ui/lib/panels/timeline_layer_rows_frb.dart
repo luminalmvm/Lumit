@@ -62,6 +62,9 @@ import 'text_animator_rows_frb.dart'
         animatorDropTarget,
         animatorDraggable,
         animatorButtonsWidth,
+        animatorButtonGap,
+        animatorHasKeys,
+        animatorsReversed,
         animatorGrip,
         animatorSwitch,
         animatorWith,
@@ -1104,7 +1107,20 @@ class FoldRow extends StatelessWidget {
                       onTap: (at) => _animatorMenu(context, at, index),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  // Reverse, beside More, when the animator has keys.
+                  if (_animatorAt(index) case final a? when animatorHasKeys(a))
+                    ...[
+                      SizedBox(width: animatorButtonGap(afterArrow: true)),
+                      RowButton(
+                        key: ValueKey<String>('tl-text-animator-reverse-$path'),
+                        label: l10n.textAnimatorReverse,
+                        onTap: (_) => _writeAnimators(
+                            (list) => animatorsReversed(list, index)),
+                      ),
+                      SizedBox(width: animatorButtonGap(afterArrow: false)),
+                    ]
+                  else
+                    SizedBox(width: animatorButtonGap(afterArrow: true)),
                   RowButton(
                     key: ValueKey<String>('tl-text-animator-remove-$path'),
                     label: l10n.textAnimatorRemove,

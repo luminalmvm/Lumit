@@ -431,33 +431,31 @@ class _AnimatorSection extends StatelessWidget {
         ),
       for (final i in items)
         if (!i.advanced) item(i),
-      if (items.any((i) => i.advanced))
-        ValueListenableBuilder<Set<String>>(
-          valueListenable: advancedOpen,
-          builder: (context, open, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              fxTwoColumnRow(
-                context: context,
-                name: GestureDetector(
-                  key: ValueKey<String>('text-animator-advanced-$tag'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => toggleAdvanced(advancedKey),
-                  child: Text(
-                      '${open.contains(advancedKey) ? '▾' : '▸'} '
-                      '${t.propertyCase(l10n.textAnimatorAdvanced)}',
-                      style: t.body,
-                      overflow: TextOverflow.ellipsis),
-                ),
-                control: const SizedBox.shrink(),
-              ),
-              if (open.contains(advancedKey))
-                for (final i in items)
-                  if (i.advanced) item(i),
-            ],
+      // Each Advanced row is a row of the section too, so it keeps the
+      // section's spacing; the panel rebuilds when Advanced opens or shuts.
+      if (items.any((i) => i.advanced)) ...[
+        fxTwoColumnRow(
+          context: context,
+          name: Padding(
+            padding:
+                const EdgeInsetsDirectional.only(start: animatorRowIndent),
+            child: GestureDetector(
+              key: ValueKey<String>('text-animator-advanced-$tag'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => toggleAdvanced(advancedKey),
+              child: Text(
+                  '${advancedOpen.value.contains(advancedKey) ? '▾' : '▸'} '
+                  '${t.propertyCase(l10n.textAnimatorAdvanced)}',
+                  style: t.body,
+                  overflow: TextOverflow.ellipsis),
+            ),
           ),
+          control: const SizedBox.shrink(),
         ),
+        if (advancedOpen.value.contains(advancedKey))
+          for (final i in items)
+            if (i.advanced) item(i, indent: animatorRowIndent * 2),
+      ],
     ];
   }
 

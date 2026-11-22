@@ -1210,13 +1210,12 @@ class AnimatorHeading extends StatelessWidget {
                 key: ValueKey<String>('text-animator-reverse-$index'),
                 label: l10n.textAnimatorReverse,
                 // Every animator of this name, as Tracking in lays two.
-                onTap: (_) => write([
-                  for (final other in animators)
-                    if (other.name == a.name) reversedAnimator(other) else other,
-                ]),
+                onTap: (_) => write(animatorsReversed(animators, index)),
               ),
             ],
-          const SizedBox(width: 8),
+          // A word without an arrow leaves more room after it, so the gaps
+          // read alike.
+          SizedBox(width: animatorButtonGap(afterArrow: !animatorHasKeys(a))),
           RowButton(
             key: ValueKey<String>('text-animator-remove-$index'),
             label: l10n.textAnimatorRemove,
@@ -1290,6 +1289,21 @@ void showAnimatorMoreMenu(BuildContext context, Offset at,
       ),
     );
 
+/// The room between two of an animator heading's buttons: an arrow leaves
+/// some of its own after the word, a bare word does not.
+double animatorButtonGap({required bool afterArrow}) => afterArrow ? 8 : 12;
+
+/// [animators] with animator [index] played backwards: every animator of its
+/// name, as Tracking in lays two.
+List<BridgeTextAnimator> animatorsReversed(
+    List<BridgeTextAnimator> animators, int index) {
+  final name = animators[index].name;
+  return [
+    for (final other in animators)
+      if (other.name == name) reversedAnimator(other) else other,
+  ];
+}
+
 /// An animator dragged by its grip: whose, and its place in the list, so a
 /// drop moves it only among its own layer's animators.
 class AnimatorDrag {
@@ -1340,7 +1354,7 @@ const double animatorRowIndent = 18;
 /// The room the Timeline keeps for an animator heading's Add, More and
 /// Remove, so they and the Animators heading's Add animator start in one
 /// column.
-const double animatorButtonsWidth = 196;
+const double animatorButtonsWidth = 260;
 
 /// The animators folded shut in the Effect controls panel, by
 /// [animatorFoldKey]. Not saved: a fold is how the panel is looked at.
