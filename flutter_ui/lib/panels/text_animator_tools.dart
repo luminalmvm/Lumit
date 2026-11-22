@@ -1551,27 +1551,41 @@ String? movedAnimatorKey(String key, String stem, List<int?> moves) {
 void followAnimators(LumitUiState? ui, LayerReference layer,
     List<BridgeTextAnimator> old, List<BridgeTextAnimator> next) {
   final moves = animatorMoves(old, next);
-  var same = old.length == next.length;
+  // A selector taken out moves the ones after it up.
+  final selectorMoves = <int, List<int?>>{
+    for (var i = 0; i < old.length; i++)
+      if (moves[i] case final to?)
+        if (selectorMovesOf(old[i], next[to]) case final sm
+            when [for (var k = 0; k < sm.length; k++) sm[k] != k]
+                .any((x) => x))
+          i: sm,
+  };
+  var same = old.length == next.length && selectorMoves.isEmpty;
   for (var i = 0; same && i < moves.length; i++) {
     same = moves[i] == i;
   }
   if (same) return;
   final id = layer.internallayerId.toString();
-  Set<String> moved(Iterable<String> keys, String stem) => {
+  animatorsMovedNote.value = AnimatorsMoved(id, moves, selectorMoves);
+  Set<String> moved(Iterable<String> keys, String stem, {bool timeline = false}) => {
         for (final k in keys)
-          if (movedAnimatorKey(k, stem, moves) case final m?) m,
+          if (followedAnimatorKey(k, stem, moves, selectorMoves,
+                  timeline: timeline)
+              case final m?)
+            m,
       };
   animatorFolded.value = moved(animatorFolded.value, '$id/');
   advancedOpen.value = moved(advancedOpen.value, '$id/');
   animatorRenaming.value = null;
   if (ui == null) return;
   final open = ui.folds.timelineOpen;
-  final opened = moved(open, '${animatorsPath(id)}/');
+  final opened = moved(open, '${animatorsPath(id)}/', timeline: true);
   open
     ..clear()
     ..addAll(opened);
   final picked = ui.selectedProperties.value;
-  final kept = moved(picked, '${animatorsPath(id)}/').toList();
+  final kept =
+      moved(picked, '${animatorsPath(id)}/', timeline: true).toList();
   if (kept.length != picked.length ||
       [for (var i = 0; i < kept.length; i++) kept[i] != picked[i]]
           .any((x) => x)) {
@@ -1600,4 +1614,109 @@ List<BridgeTextAnimator> animatorsPasted(
       else
         a,
   ];
+}
+
+/// What [followAnimators] last moved, for a panel holding picks of its own
+/// (the Timeline's keys) to move them the same way.
+class AnimatorsMoved {
+  final String layerId;
+  final List<int?> moves;
+
+  /// For each animator that lost a selector, by its old place: where each of
+  /// its old selectors went.
+  final Map<int, List<int?>> selectorMoves;
+  const AnimatorsMoved(this.layerId, this.moves, this.selectorMoves);
+
+  /// [key], a Timeline path (or a key or curve id built on one), moved along.
+  String? timelineKey(String key) => followedAnimatorKey(
+      key, '${animatorsPath(layerId)}/', moves, selectorMoves,
+      timeline: true);
+}
+
+final ValueNotifier<AnimatorsMoved?> animatorsMovedNote = ValueNotifier(null);
+
+/// Where each of [old]'s selectors is in [next], the same animator before
+/// and after an edit: one fewer is the first that differs taken out, as the
+/// engine reads it for the Node graph's wires.
+List<int?> selectorMovesOf(BridgeTextAnimator old, BridgeTextAnimator next) {
+  final before = selectorCount(old), after = selectorCount(next);
+  if (after + 1 == before) {
+    var gone = before - 1;
+    for (var k = 0; k < after; k++) {
+      if (selectorAt(old, k) != selectorAt(next, k)) {
+        gone = k;
+        break;
+      }
+    }
+    return [
+      for (var k = 0; k < before; k++)
+        k < gone
+            ? k
+            : k == gone
+                ? null
+                : k - 1,
+    ];
+  }
+  return [for (var k = 0; k < before; k++) k < after ? k : null];
+}
+
+/// The names a selector's rows go by under their animator on the Timeline.
+final Set<String> _selectorRowNames = {
+  'selector',
+  'advanced',
+  for (final s in AnimatorSetting.values) s.name,
+  for (final kind in BridgeSelectorKind.values)
+    for (final item in selectorItemsOf(freshSelector(kind), 0))
+      if (item case SelectorValueItem(:final value)) value.name,
+};
+
+/// [key] with the animator after [stem] moved as [moves] says, and the
+/// selector after it as [selectors] says for that animator; null when either
+/// is gone. On the Timeline ([timeline]) a selector is named by its `s<k>/`
+/// segment, the first one by no segment; in the Effect controls panel\x27s
+/// Advanced keys by a plain `/<k>`. A key about no animator comes back as it
+/// is.
+String? followedAnimatorKey(String key, String stem, List<int?> moves,
+    Map<int, List<int?>> selectors,
+    {bool timeline = false}) {
+  if (!key.startsWith(stem)) return key;
+  final rest = key.substring(stem.length);
+  var cut = rest.indexOf('/');
+  for (final mark in ['#', '@']) {
+    final at = rest.indexOf(mark);
+    if (at >= 0 && (cut < 0 || at < cut)) cut = at;
+  }
+  final index = int.tryParse(cut < 0 ? rest : rest.substring(0, cut));
+  if (index == null || index >= moves.length) return key;
+  final to = moves[index];
+  if (to == null) return null;
+  var tail = cut < 0 ? '' : rest.substring(cut);
+  final sm = selectors[index];
+  if (sm != null && tail.startsWith('/')) {
+    final body = tail.substring(1);
+    int? k;
+    var after = body;
+    if (timeline) {
+      final m = RegExp(r'^s(\d+)/').firstMatch(body);
+      if (m != null) {
+        k = int.parse(m.group(1)!);
+        after = body.substring(m.end);
+      } else if (_selectorRowNames
+          .contains(body.split(RegExp(r'[/#@]')).first)) {
+        k = 0;
+      }
+    } else {
+      k = int.tryParse(body.split('/').first);
+      after = '';
+    }
+    if (k != null) {
+      if (k >= sm.length) return key;
+      final k2 = sm[k];
+      if (k2 == null) return null;
+      tail = timeline
+          ? '/${k2 == 0 ? '' : 's$k2/'}$after'
+          : '/$k2';
+    }
+  }
+  return '$stem$to$tail';
 }

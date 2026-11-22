@@ -1023,3 +1023,29 @@ fn the_wires_follow_the_animators_through_an_edit_and_its_undo() {
         ["text.0.offset", "text.1.delay", "text.1.opacity"]
     );
 }
+
+/// A selector turned into another kind takes off the wires into numbers it
+/// no longer has, and keeps the rest.
+#[test]
+fn a_selector_of_another_kind_drops_the_wires_it_cannot_take() {
+    use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+    let wire = |port: &str| Edge {
+        from: OutputRef::Driver {
+            node: uuid::Uuid::nil(),
+            port: "value".into(),
+        },
+        to: InputRef::Param {
+            node: NodeRef::Source,
+            port: ports::animator_port(0, port),
+        },
+    };
+    let mut graph = LayerGraph {
+        edges: vec![wire("start"), wire("opacity")],
+        ..LayerGraph::default()
+    };
+    let old = vec![TextAnimator::new("A")];
+    let mut new = old.clone();
+    new[0].selector.kind = SelectorKind::Stagger;
+    assert!(ports::remap_text_ports(&mut graph, &old, &new));
+    assert_eq!(graph.edges, vec![wire("opacity")]);
+}
