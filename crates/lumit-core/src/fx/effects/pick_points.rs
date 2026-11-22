@@ -9,7 +9,8 @@
 //! still follows them. They go out on the Points socket, and are drawn as
 //! discs unless Mix is 0. Nothing wired draws nothing.
 
-use crate::fx::effects::vary_points::{Pattern, PatternKind, POINTS_IN, POINTS_OUT};
+use crate::fx::effects::point_pattern::{Pattern, PatternKind};
+use crate::fx::effects::vary_points::{POINTS_IN, POINTS_OUT};
 use crate::fx::points::PointsStream;
 use crate::fx::{
     builtins::MAP_PLACEMENT_OPTIONS, params::ParamId, params::Params, params::ShortText,
