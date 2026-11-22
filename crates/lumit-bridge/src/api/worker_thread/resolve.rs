@@ -350,7 +350,27 @@ fn serve(mut stream: TcpStream, project: ProjectReference, token: String) -> std
     }
 }
 
+// Whether the Resolve plugin sits beside Lumit, where the installer's Resolve
+// linking component and ofx/build.ps1 put it. Without it nothing can connect.
+fn installed() -> bool {
+    std::env::current_exe().is_ok_and(|exe| {
+        exe.with_file_name("Resolve/LumitPreview.ofx.bundle")
+            .is_dir()
+    })
+}
+
+// The process record, removed however the listener stops.
+struct Written(std::path::PathBuf);
+impl Drop for Written {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 pub(super) fn start(project: ProjectReference) {
+    if !installed() {
+        return;
+    }
     // Only this user's loopback endpoint is published. Connections never keep
     // the project's worker sender alive while idle, so closing a project frees
     // its renderer normally.
@@ -365,6 +385,7 @@ pub(super) fn start(project: ProjectReference) {
             .join("Lumit/Resolve Preview");
             std::fs::create_dir_all(&folder)?;
             let path = folder.join(format!("{}-{}.txt", std::process::id(), project.id));
+            let _written = Written(path.clone());
             let token = lumit_peer::Token::generate()
                 .map_err(std::io::Error::other)?
                 .as_name();
@@ -420,7 +441,6 @@ pub(super) fn start(project: ProjectReference) {
                     Err(e) => return Err(e),
                 }
             }
-            let _ = std::fs::remove_file(path);
             Ok(())
         };
         if let Err(error) = run() {
