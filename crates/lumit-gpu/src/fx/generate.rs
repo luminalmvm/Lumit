@@ -65,6 +65,8 @@ pub struct GradientOp {
     pub mid: [[f32; 4]; 3],
     /// The alpha of each colour in between.
     pub mid_alpha: [f32; 3],
+    /// Mix the colours as display values (cpu::gradient::GradientParams::display).
+    pub display: bool,
 }
 
 #[repr(C)]
@@ -87,7 +89,7 @@ struct GradientParams {
     mid: [[f32; 4]; 3],
     /// x = where an angle ramp begins, radians; yzw = the focal point.
     shape_k: [f32; 4],
-    /// xyz = each colour in between's alpha.
+    /// xyz = each colour in between's alpha; w = 1 to mix as display values.
     mid_alpha: [f32; 4],
 }
 
@@ -113,6 +115,7 @@ impl From<&lumit_core::fx::cpu::gradient::GradientParams> for GradientOp {
             mids: p.mids,
             mid: p.mid,
             mid_alpha: p.mid_alpha,
+            display: p.display,
         }
     }
 }
@@ -260,7 +263,12 @@ impl FxEngine {
                 mids: op.mids.min(3),
                 mid: op.mid,
                 shape_k: [op.turn, op.focal[0], op.focal[1], op.focal[2]],
-                mid_alpha: [op.mid_alpha[0], op.mid_alpha[1], op.mid_alpha[2], 0.0],
+                mid_alpha: [
+                    op.mid_alpha[0],
+                    op.mid_alpha[1],
+                    op.mid_alpha[2],
+                    f32::from(u8::from(op.display)),
+                ],
             }),
         );
         out

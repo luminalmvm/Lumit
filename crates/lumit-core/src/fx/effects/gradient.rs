@@ -9,11 +9,22 @@
 
 use crate::anim::Property;
 use crate::fx::{
-    cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
-    schema::ParamGroup,
+    cpu, params::ParamId, params::Params, registry::EffectDef, registry::EffectMetadata,
+    schema::EffectSchema, schema::ParamGroup,
 };
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
+
+/// Set on a Gradient, and a Gradient overlay style, whose layer is in a comp
+/// that blends in display: its colours mix as display values. Never a panel
+/// row: the comp decides it.
+pub const DERIVED_DISPLAY: ParamId = ParamId::new("derived.display");
+
+/// Whether a resolved Gradient mixes its colours as display values.
+#[must_use]
+pub fn in_display(p: Params<'_>) -> bool {
+    p.int(DERIVED_DISPLAY, 0) != 0
+}
 
 /// Each colour in between shows only once Colours counts it, and the
 /// highlight only on a radial ramp.
@@ -281,7 +292,8 @@ impl EffectDef for GradientDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient::gradient(rgba, w, h, &Gradient::read(p).packed());
+        let g = Gradient::read(p).packed().in_display(in_display(p));
+        cpu::gradient::gradient(rgba, w, h, &g);
     }
 }
 

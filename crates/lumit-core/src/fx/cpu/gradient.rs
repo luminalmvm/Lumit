@@ -55,6 +55,9 @@ pub struct GradientParams {
     pub mid: [[f32; 4]; 3],
     /// The alpha of each of `mid`.
     pub mid_alpha: [f32; 3],
+    /// Mix the colours as display values, as a browser does, for a layer in a
+    /// comp that blends in display.
+    pub display: bool,
 }
 
 impl GradientParams {
@@ -84,7 +87,15 @@ impl GradientParams {
             mids: 0,
             mid: [[0.0; 4]; 3],
             mid_alpha: [1.0; 3],
+            display: false,
         }
+    }
+
+    /// The same ramp, mixing its colours as display values when `display` is
+    /// set.
+    #[must_use]
+    pub fn in_display(self, display: bool) -> Self {
+        Self { display, ..self }
     }
 }
 
@@ -107,24 +118,47 @@ pub fn focal(axis: [f32; 2], length: f32, angle: f32) -> [f32; 3] {
 
 /// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
 /// then `c1`, each mixed with the next by how far between them `t` is. The
-/// colour and its alpha mix apart, straight, as a shape's gradient does.
+/// colour and its alpha mix apart, straight, as a shape's gradient does. In
+/// display the colours mix as display values and the alpha as it is.
 #[must_use]
 pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 4] {
-    let (mut at, mut from) = (0.0f32, p.c0);
+    let each = |c: [f32; 4], f: fn(f32) -> f32| [f(c[0]), f(c[1]), f(c[2]), c[3]];
+    let shown = |c: [f32; 4]| if p.display { each(c, display_value) } else { c };
+    let back = |c: [f32; 4]| if p.display { each(c, linear_value) } else { c };
+    let (mut at, mut from) = (0.0f32, shown(p.c0));
     for (m, a) in p.mid.iter().zip(p.mid_alpha).take(p.mids.min(3) as usize) {
-        let to = [m[0], m[1], m[2], a];
+        let to = shown([m[0], m[1], m[2], a]);
         if t <= m[3] {
             let k = if m[3] > at {
                 (t - at) / (m[3] - at)
             } else {
                 1.0
             };
-            return std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k);
+            return back(std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k));
         }
         (at, from) = (m[3], to);
     }
     let k = if at < 1.0 { (t - at) / (1.0 - at) } else { 1.0 };
-    std::array::from_fn(|c| from[c] + (p.c1[c] - from[c]) * k)
+    let to = shown(p.c1);
+    back(std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k))
+}
+
+/// A linear value as a display (sRGB) one, open above 1.
+fn display_value(v: f32) -> f32 {
+    if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// [`display_value`] undone.
+fn linear_value(v: f32) -> f32 {
+    if v <= 0.040_45 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 /// Gradient (docs/08 §3.35): a linear, radial or angle ramp with optional

@@ -1518,6 +1518,7 @@ impl GpuEffect for Gradient {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let g = effects::gradient::Gradient::read(p).packed();
+        let g = g.in_display(effects::gradient::in_display(p));
         fx.gradient(ctx, tex, w, h, &gradient_op(&g))
     }
 }
@@ -1543,6 +1544,7 @@ fn gradient_op(
         mids: p.mids,
         mid: p.mid,
         mid_alpha: p.mid_alpha,
+        display: p.display,
     }
 }
 
@@ -3095,6 +3097,7 @@ impl GpuEffect for StyleGradientOverlay {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let d = lumit_core::fx::styles::defs::GradientOverlay::read(p).packed(w, h);
+        let d = d.in_display(effects::gradient::in_display(p));
         fx.gradient(ctx, tex, w, h, &gradient_op(&d))
     }
 }

@@ -507,7 +507,9 @@ impl EffectDef for GradientOverlayDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient::gradient(rgba, w, h, &GradientOverlay::read(p).packed(w, h));
+        let display = crate::fx::effects::gradient::in_display(p);
+        let g = GradientOverlay::read(p).packed(w, h).in_display(display);
+        cpu::gradient::gradient(rgba, w, h, &g);
     }
 }
 

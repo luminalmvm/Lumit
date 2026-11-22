@@ -699,6 +699,28 @@ impl ResolvedStack {
         }
     }
 
+    /// Hand every op of the effect named `name` one more value, after its own
+    /// rows: something its layer's comp decides and its stack cannot know.
+    pub fn tell(&mut self, name: &str, id: ParamId, value: Value) {
+        if !self.ops.iter().any(|op| op.def.schema().match_name == name) {
+            return;
+        }
+        let mut entries = Vec::with_capacity(self.entries.len() + self.ops.len());
+        for op in &mut self.ops {
+            let start = entries.len() as u32;
+            let own = self
+                .entries
+                .get(op.span.start as usize..op.span.end as usize)
+                .unwrap_or(&[]);
+            entries.extend_from_slice(own);
+            if op.def.schema().match_name == name && own.iter().all(|(k, _)| *k != id) {
+                entries.push((id, value));
+            }
+            op.span = start..entries.len() as u32;
+        }
+        self.entries = entries;
+    }
+
     /// Append another resolved stack's ops after this one's, in order.
     ///
     /// **In plain terms.** A layer's styles resolve in a second walk of their

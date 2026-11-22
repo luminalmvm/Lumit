@@ -631,6 +631,23 @@ pub fn rasterise_contents(
     max_y: f64,
     t: f64,
 ) -> Vec<u8> {
+    rasterise_contents_in(contents, w, h, min_x, min_y, max_x, max_y, t, false)
+}
+
+/// [`rasterise_contents`], with gradients mixing their colours as display
+/// values when `display` is set, for a layer in a comp that blends in display.
+#[allow(clippy::too_many_arguments)]
+pub fn rasterise_contents_in(
+    contents: &[ShapeEntry],
+    w: u32,
+    h: u32,
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+    t: f64,
+    display: bool,
+) -> Vec<u8> {
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
     if w == 0 || h == 0 {
         return rgba;
@@ -706,7 +723,7 @@ pub fn rasterise_contents(
                 // A gradient fill is the same coverage painted with a
                 // colour that changes across it; the flat fill is the same
                 // walk with the colour worked out once.
-                match item.ramp_at(t, &to_box, sx, sy) {
+                match item.ramp_at(t, &to_box, (sx, sy), display) {
                     None => {
                         let colour = crate::pixels::solid_rgba(fill);
                         let alpha = f32::from(colour[3]) / 255.0;
@@ -736,7 +753,7 @@ pub fn rasterise_contents(
             if let (Some(stroke), true) =
                 (item.stroke_shown().map(|c| colour::at(c, t)), width > 0.0)
             {
-                let outline_ramp = item.stroke_ramp_at(t, &to_box, sx, sy);
+                let outline_ramp = item.stroke_ramp_at(t, &to_box, (sx, sy), display);
                 // A gradient outline marks where it covers in white, and the
                 // ramp colours what it marked.
                 let stroke = match outline_ramp {

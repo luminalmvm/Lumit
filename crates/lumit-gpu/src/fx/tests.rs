@@ -7355,12 +7355,13 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         ("hdr", hdr, 1.0),
         ("degenerate", degenerate, 1.0),
         ("three colours", three, 1.0),
+        ("three colours in display", three, 1.0),
         ("mixed", base, 0.6),
         ("mix-zero", base, 0.0),
     ] {
         let mut g = gradient;
         g.mix = mix * 100.0;
-        let p = g.packed();
+        let p = g.packed().in_display(name.ends_with("in display"));
         let op = GradientOp::from(&p);
 
         let mut cpu = img.clone();

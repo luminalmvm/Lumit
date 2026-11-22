@@ -87,8 +87,15 @@ impl ShapeItem {
     /// The gradient this item's fill is drawn with at `t`, placed by `to_box`
     /// (a repeated copy carries its gradient with it) and scaled into the
     /// buffer's pixels — `None` for the flat fill every shape has until
-    /// somebody ramps it.
-    pub(super) fn ramp_at(&self, t: f64, to_box: &Affine, sx: f64, sy: f64) -> Option<Ramp> {
+    /// somebody ramps it. With `display` the colours mix as display values,
+    /// as a browser mixes them.
+    pub(super) fn ramp_at(
+        &self,
+        t: f64,
+        to_box: &Affine,
+        s: (f64, f64),
+        display: bool,
+    ) -> Option<Ramp> {
         if self.gradient == 0 {
             return None;
         }
@@ -106,12 +113,19 @@ impl ShapeItem {
             opacity: [&self.gradient_start_opacity, &self.gradient_end_opacity],
             highlight: [&self.gradient_highlight, &self.gradient_highlight_angle],
             stops: &self.gradient_stops,
+            display,
         };
-        Some(source.ramp(t, to_box, sx, sy))
+        Some(source.ramp(t, to_box, s.0, s.1))
     }
 
     /// [`Self::ramp_at`] for the outline: `None` for the flat stroke colour.
-    pub(super) fn stroke_ramp_at(&self, t: f64, to_box: &Affine, sx: f64, sy: f64) -> Option<Ramp> {
+    pub(super) fn stroke_ramp_at(
+        &self,
+        t: f64,
+        to_box: &Affine,
+        s: (f64, f64),
+        display: bool,
+    ) -> Option<Ramp> {
         let g = self.stroke_gradient.as_ref().filter(|g| g.kind != 0)?;
         let source = RampSource {
             kind: g.kind,
@@ -126,8 +140,9 @@ impl ShapeItem {
             opacity: [&g.start_opacity, &g.end_opacity],
             highlight: [&g.highlight, &g.highlight_angle],
             stops: &g.stops,
+            display,
         };
-        Some(source.ramp(t, to_box, sx, sy))
+        Some(source.ramp(t, to_box, s.0, s.1))
     }
 
     /// The dash pattern at `t` in layer pixels, evened out — empty when the
@@ -469,6 +484,8 @@ pub(super) struct RampSource<'a> {
     /// at what angle from the axis, degrees.
     pub(super) highlight: [&'a Property; 2],
     pub(super) stops: &'a [GradientStop],
+    /// Mix the colours as display values, for a comp that blends in display.
+    pub(super) display: bool,
 }
 
 impl RampSource<'_> {
@@ -533,7 +550,16 @@ impl RampSource<'_> {
                 a[2] + (b[2] - a[2]) * v,
                 a[3] + (b[3] - a[3]) * v,
             ]);
-            *cell = crate::pixels::solid_rgba(mix);
+            *cell = if self.display {
+                let shown = |c: usize| {
+                    let (from, to) = (encoded(a[c]), encoded(b[c]));
+                    ((from + (to - from) * v) * 255.0).round() as u8
+                };
+                let alpha = (mix.0[3].clamp(0.0, 1.0) * 255.0).round() as u8;
+                [shown(0), shown(1), shown(2), alpha]
+            } else {
+                crate::pixels::solid_rgba(mix)
+            };
         }
         let shape = match self.kind {
             RADIAL => RampShape::Radial,
@@ -596,6 +622,17 @@ enum RampShape {
     /// How far along the outline's own line the pixel is, which the pixel
     /// alone cannot say: the outline's painter measures it.
     Along,
+}
+
+/// A linear value as display sRGB, 0..1 (`pixels::srgb_encode` before it
+/// rounds to a byte).
+fn encoded(v: f32) -> f32 {
+    let v = v.clamp(0.0, 1.0);
+    if v <= 0.003_130_8 {
+        12.92 * v
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 /// How many colours a gradient is worked out at. One per 8-bit level, so the

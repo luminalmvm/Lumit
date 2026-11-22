@@ -23,7 +23,7 @@ struct Params {
     mids: u32,              // colours in between in use, 0..3
     mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
     shape_k: vec4<f32>,     // x = where an angle ramp begins, radians; yzw = focal point
-    mid_alpha: vec4<f32>,   // xyz = each colour in between's alpha
+    mid_alpha: vec4<f32>,   // xyz = each colour in between's alpha; w = 1 mixes as display values
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -56,20 +56,38 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
+// == lumit_core::fx::cpu::gradient's display_value and linear_value, on the
+// colour only, and only in a comp that blends in display.
+fn shown(c: vec4<f32>) -> vec4<f32> {
+    if (p.mid_alpha.w < 0.5) {
+        return c;
+    }
+    let hi = 1.055 * pow(max(c.rgb, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
+    return vec4<f32>(select(hi, c.rgb * 12.92, c.rgb <= vec3<f32>(0.0031308)), c.a);
+}
+
+fn back(c: vec4<f32>) -> vec4<f32> {
+    if (p.mid_alpha.w < 0.5) {
+        return c;
+    }
+    let hi = pow((max(c.rgb, vec3<f32>(0.0)) + 0.055) / 1.055, vec3<f32>(2.4));
+    return vec4<f32>(select(hi, c.rgb / 12.92, c.rgb <= vec3<f32>(0.04045)), c.a);
+}
+
 // == lumit_core::fx::cpu::gradient::gradient_ramp: Start colour, the colours in
 // between that are in use, End colour.
 fn ramp(t: f32) -> vec4<f32> {
     var at = 0.0;
-    var prev = p.c0;
+    var prev = shown(p.c0);
     for (var k = 0u; k < min(p.mids, 3u); k = k + 1u) {
         let m = p.mid[k];
-        let to = vec4<f32>(m.rgb, p.mid_alpha[k]);
+        let to = shown(vec4<f32>(m.rgb, p.mid_alpha[k]));
         if (t <= m.w) {
             var f = 1.0;
             if (m.w > at) {
                 f = (t - at) / (m.w - at);
             }
-            return prev + (to - prev) * f;
+            return back(prev + (to - prev) * f);
         }
         at = m.w;
         prev = to;
@@ -78,7 +96,7 @@ fn ramp(t: f32) -> vec4<f32> {
     if (at < 1.0) {
         f = (t - at) / (1.0 - at);
     }
-    return prev + (p.c1 - prev) * f;
+    return back(prev + (shown(p.c1) - prev) * f);
 }
 
 @compute @workgroup_size(8, 8)
