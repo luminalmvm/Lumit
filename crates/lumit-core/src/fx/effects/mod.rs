@@ -76,6 +76,8 @@ pub mod grade_group;
 pub mod gradient;
 pub mod grid;
 pub mod grid_lines;
+pub mod hologram;
+pub mod holographic_foil;
 pub mod hue_saturation;
 pub mod hue_shift;
 pub mod intersection_points;

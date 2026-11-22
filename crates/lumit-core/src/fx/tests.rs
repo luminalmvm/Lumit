@@ -7820,6 +7820,8 @@ fn every_effect_carries_a_matte_row() {
                 // The Correction: the matte joins the node's key, which
                 // mixes the grade back per pixel inside the kernel.
                 | "correction"
+                | "holographic_foil"
+                | "hologram"
         );
         assert_eq!(
             !s.matte.generic(),

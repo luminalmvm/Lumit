@@ -134,6 +134,8 @@ use super::effects::{
     grade_group::{GradeGroup, GradeGroupDef},
     gradient::{Gradient, GradientDef},
     grid::{Grid, GridDef},
+    hologram::{Hologram, HologramDef},
+    holographic_foil::{HolographicFoil, HolographicFoilDef},
     hue_saturation::{HueSaturation, HueSaturationDef},
     hue_shift::{HueShift, HueShiftDef},
     intersection_points::{IntersectionPoints, IntersectionPointsDef},
@@ -462,6 +464,11 @@ crate::catalogue![
     // rearranges the pixels that are already there rather than changing the
     // colour of any of them, which is as squarely Stylise as an effect gets.
     PixelSortDef => PixelSort,
+    // Holographic foil, at the Stylise family's end: a surface the picture is
+    // printed on, lit, rather than a colour moved.
+    HolographicFoilDef => HolographicFoil,
+    // Hologram beside it: the same film, replaying a picture with depth.
+    HologramDef => Hologram,
     // The Transition family, in docs/08 §3.46–§3.47 order.
     LinearWipeDef => LinearWipe,
     RadialWipeDef => RadialWipe,

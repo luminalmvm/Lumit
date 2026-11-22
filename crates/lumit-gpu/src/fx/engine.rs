@@ -806,6 +806,8 @@ impl FxEngine {
             custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             lens_blur: Default::default(),
             lens_dirt: Default::default(),
+            holographic_foil: Default::default(),
+            hologram: Default::default(),
             film: Default::default(),
             grade: Default::default(),
             correction: Default::default(),

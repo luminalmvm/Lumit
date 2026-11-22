@@ -174,10 +174,27 @@ mod tests {
                         (Some(ParamKind::Colour { .. }), PresetValue::Colour(_)) => true,
                         _ => false,
                     };
+                    // And a number within the row's hard range.
+                    let within = |v: f64, lo: Option<f64>, hi: Option<f64>| {
+                        lo.is_none_or(|lo| v >= lo) && hi.is_none_or(|hi| v <= hi)
+                    };
+                    let in_range = match (row.map(|r| &r.kind), value) {
+                        (Some(ParamKind::Float { hard, .. }), PresetValue::Float(v)) => {
+                            within(*v, hard.0, hard.1)
+                        }
+                        (Some(ParamKind::Slider { range, .. }), PresetValue::Float(v)) => {
+                            within(*v, Some(range.0), Some(range.1))
+                        }
+                        (Some(ParamKind::Int { hard, .. }), PresetValue::Float(v)) => {
+                            within(*v, hard.0.map(|x| x as f64), hard.1.map(|x| x as f64))
+                        }
+                        _ => true,
+                    };
                     assert!(
-                        fits,
+                        fits && in_range,
                         "{} preset {:?} sets {id} wrongly",
-                        schema.match_name, preset.name
+                        schema.match_name,
+                        preset.name
                     );
                 }
             }
