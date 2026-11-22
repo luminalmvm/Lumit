@@ -2696,6 +2696,9 @@ class BridgeTransform {
   final BridgeScalar scaleY;
   final BridgeOrient orient;
 
+  /// Position runs along a smooth path through its keys.
+  final bool curvedPath;
+
   /// Degrees, about z — the 2D rotation.
   final BridgeScalar rotation;
   final BridgeScalar rotationX;
@@ -2729,6 +2732,7 @@ class BridgeTransform {
     required this.scaleX,
     required this.scaleY,
     required this.orient,
+    this.curvedPath = false,
     required this.rotation,
     required this.rotationX,
     required this.rotationY,
@@ -2749,6 +2753,7 @@ class BridgeTransform {
       scaleX.hashCode ^
       scaleY.hashCode ^
       orient.hashCode ^
+      curvedPath.hashCode ^
       rotation.hashCode ^
       rotationX.hashCode ^
       rotationY.hashCode ^
@@ -2771,6 +2776,7 @@ class BridgeTransform {
           scaleX == other.scaleX &&
           scaleY == other.scaleY &&
           orient == other.orient &&
+          curvedPath == other.curvedPath &&
           rotation == other.rotation &&
           rotationX == other.rotationX &&
           rotationY == other.rotationY &&
@@ -4939,6 +4945,11 @@ class LayerReference {
   void setCueText({required int cue, required String text}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetCueText(that: this, cue: cue, text: text);
+
+  /// Run Position along a smooth path through its keys, or straight from
+  /// key to key.
+  void setCurvedPath({required bool curved}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetCurvedPath(that: this, curved: curved);
 
   /// Lower this layer behind another layer or a bus, or stop, as one
   /// undoable step. Refused, with nothing changed, when the sound would go

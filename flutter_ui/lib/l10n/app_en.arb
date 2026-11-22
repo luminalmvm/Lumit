@@ -12804,6 +12804,10 @@
   "@orientTowardsCamera": {
     "description": "Orient choice on a 3D layer: the layer always faces the camera."
   },
+  "transformCurvedPath": "Curved motion path",
+  "@transformCurvedPath": {
+    "description": "A checked row in Layer > Transform: Position runs along a smooth path through its keys rather than straight from key to key."
+  },
   "transformAnchorPointX": "Anchor point x",
   "@transformAnchorPointX": {
     "description": "A Transform row in the Timeline fold-out and the Effect controls card: the sideways half of the anchor point, shown once its axes have been separated."

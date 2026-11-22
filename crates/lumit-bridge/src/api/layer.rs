@@ -2260,6 +2260,9 @@ pub struct BridgeTransform {
     pub scale_x: BridgeScalar,
     pub scale_y: BridgeScalar,
     pub orient: crate::api::orient::BridgeOrient,
+    /// Position runs along a smooth path through its keys.
+    #[frb(default = false)]
+    pub curved_path: bool,
     /// Degrees, about z — the 2D rotation.
     pub rotation: BridgeScalar,
     pub rotation_x: BridgeScalar,
@@ -2845,6 +2848,7 @@ impl BridgeTransform {
             scale_x: BridgeScalar::read_at(&group.scale_x, offset),
             scale_y: BridgeScalar::read_at(&group.scale_y, offset),
             orient: crate::api::orient::BridgeOrient::of(group.orient),
+            curved_path: !group.motion_path.is_straight(),
             rotation: BridgeScalar::read_at(&group.rotation, offset),
             rotation_x: BridgeScalar::read_at(&group.rotation_x, offset),
             rotation_y: BridgeScalar::read_at(&group.rotation_y, offset),
