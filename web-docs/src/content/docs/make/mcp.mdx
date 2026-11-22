@@ -78,7 +78,8 @@ Each frame is written beside the project. Closing standard input ends **lumit-cl
 - A tool's answer is one `text` item holding the command's answer as JSON. `comp_frame`
   adds an `image` item with the PNG when it is 2 MB or smaller.
 - A command that fails answers `isError: true`, and the text is the reason.
-- Nothing is saved until `project_save` is called.
+- Nothing is saved until `project_save` is called. A `--project` file that is not there yet
+  starts a new, empty project, which saves there.
 
 The limits on files, saves and exports are in
 [Command line](/use/command-line/#let-another-program-edit-a-project). Without `--project`,

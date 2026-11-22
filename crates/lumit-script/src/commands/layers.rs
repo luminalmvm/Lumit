@@ -225,21 +225,43 @@ pub(super) struct ShapeArgs {
     items: Vec<Value>,
 }
 
+/// Give every entry without one an id and a name, inside groups too: a path
+/// is Path and its place, a group Group, a modifier its kind.
+fn named(entries: &mut [Value]) -> Result<(), ScriptError> {
+    for (n, entry) in entries.iter_mut().enumerate() {
+        let Some(object) = entry.as_object_mut() else {
+            return Err(bad("Each item is an object."));
+        };
+        object.entry("id").or_insert_with(|| json!(Uuid::now_v7()));
+        let name = match (object.get("modifier"), object.get("entries")) {
+            (Some(kind), _) => match kind.as_str() {
+                Some("repeat") => "Repeater",
+                Some("trim") => "Trim paths",
+                Some("offset") => "Offset paths",
+                Some("twist") => "Twist",
+                Some("deform") => "Deform",
+                Some("smooth") => "Smooth",
+                _ => "Modifier",
+            }
+            .to_owned(),
+            (None, Some(_)) => format!("Group {}", n + 1),
+            (None, None) => format!("Path {}", n + 1),
+        };
+        object.entry("name").or_insert_with(|| json!(name));
+        if let Some(Value::Array(inner)) = object.get_mut("entries") {
+            named(inner)?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
     use lumit_core::model::TransformGroup;
     let store = host.store();
     let doc = store.snapshot();
     let comp = find_comp(&doc, &a.comp)?;
     let mut items = a.items;
-    for (n, item) in items.iter_mut().enumerate() {
-        let Some(object) = item.as_object_mut() else {
-            return Err(bad("Each item is an object."));
-        };
-        object.entry("id").or_insert_with(|| json!(Uuid::now_v7()));
-        object
-            .entry("name")
-            .or_insert_with(|| json!(format!("Path {}", n + 1)));
-    }
+    named(&mut items)?;
     // Read as a file's contents are, so an item written the old way, with
     // its trim or its copies as fields, still lands as entries.
     let contents = lumit_core::shape::modifier::read_entries(Value::Array(items))
