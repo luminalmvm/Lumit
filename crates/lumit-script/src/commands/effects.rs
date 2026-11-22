@@ -394,6 +394,24 @@ fn set_own(
             .ok_or_else(|| bad(format!("{what} takes a list of [x, y] points.")))?;
             return Ok(());
         }
+        // Another layer of the comp, by id or name, or null for none.
+        EffectValue::Layer(picked) => {
+            *picked = match change {
+                Change::Value(Value::Null) => None,
+                Change::Value(Value::String(key)) => Some(find_layer(comp, &key)?.id),
+                _ => return Err(bad(format!("{what} takes a layer's id or name, or null."))),
+            };
+            return Ok(());
+        }
+        // A curve: `[[x, y], ...]` points in 0..1, as its editor keeps them.
+        EffectValue::Curve(points) => {
+            *points = match change {
+                Change::Value(v) => serde_json::from_value::<Vec<[f32; 2]>>(v).ok(),
+                _ => None,
+            }
+            .ok_or_else(|| bad(format!("{what} takes a list of [x, y] points.")))?;
+            return Ok(());
+        }
         _ => return Err(bad(format!("{what} cannot be set from a script."))),
     };
     // A colour may leave its alpha alone.

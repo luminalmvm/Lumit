@@ -167,7 +167,7 @@ row's `value`, is a number, a list of keys as `{time, value, hold, in, out}`, or
   folder cannot go inside itself.
 - `effect.add`: an effect that goes in a node graph and not on a layer.
 - `effect.set`: more than one of `value`, `keys` and `expression`, or one without `param`.
-  Layer, file and text rows cannot be set.
+  File and text rows cannot be set.
 - `footage.import`: a file that is missing or cannot be read. Nothing is imported then.
 - `export.start`: a second export while one runs. Without `out`, the file is an H.264 mp4
   named after the comp, beside the project, numbered when that file is there.
@@ -183,8 +183,9 @@ takes the effects an extension carries, by name.
 
 `effect.get` answers one effect with every row it has, including the rows an LFX effect's or
 a Custom shader's `Params` declare. `effect.set` sets a row by its id or its label. A number
-row takes a number, a point two, a colour three or four, a checkbox `true` or `false`, and a
-menu or a seed a whole number:
+row takes a number, a point two, a colour three or four, a checkbox `true` or `false`, a
+menu or a seed a whole number, a layer row a layer's id or name, or `null` for none, and a
+curve a list of `[x, y]` points from 0 to 1:
 
 ```js
 const at = { comp: "Stripes", layer: "Stripe 1" };
