@@ -254,8 +254,9 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
               axis,
       ];
   axesNow();
-  BridgeTextAnimator fresh(LayerReference layer) => freshTextAnimator(l10n
-      .textAnimatorDefaultName((layer.getText()?.animators.length ?? 0) + 1));
+  BridgeTextAnimator fresh(LayerReference layer, [String? what]) =>
+      freshTextAnimator(animatorNameFor(
+          (layer.getText()?.animators.length ?? 0) + 1, what));
   return [
     MenuEntry(
         l10n.textAnimatorBlank,
@@ -270,7 +271,7 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
             app,
             ui,
             (entry) => addTextAnimator(entry.layer,
-                adding: [animatorWithProperty(fresh(entry.layer), p)]),
+                adding: [animatorWithProperty(fresh(entry.layer, p.label), p)]),
             when: isText,
             name: 'Animate text',
           ),
@@ -288,7 +289,7 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
                 app,
                 ui,
                 (entry) => addTextAnimator(entry.layer, adding: [
-                  animatorWith(fresh(entry.layer), axes: [
+                  animatorWith(fresh(entry.layer, axis.name), axes: [
                     BridgeAnimatorAxis(
                         tag: axis.tag, value: BridgeScalar.static_(axis.face)),
                   ])

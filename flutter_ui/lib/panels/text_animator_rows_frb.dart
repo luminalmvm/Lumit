@@ -162,6 +162,17 @@ class _AnimatorSection extends StatelessWidget {
       onChanged();
     }
 
+    // Every row of every animator is a row of the section, so each keeps the
+    // section's own spacing and hairline; a folded animator or a shut
+    // Advanced leaves its rows out.
+    return ListenableBuilder(
+      listenable: Listenable.merge([advancedOpen, animatorFolded]),
+      builder: (context, _) => _section(context, write),
+    );
+  }
+
+  Widget _section(
+      BuildContext context, ValueChanged<List<BridgeTextAnimator>> write) {
     final rows = <Widget>[];
     for (var i = 0; i < animators.length; i++) {
       rows.addAll(_animatorRows(
@@ -243,13 +254,9 @@ class _AnimatorSection extends StatelessWidget {
         write: write,
         solid: solid,
       ),
-      // A switched-off animator keeps its rows, faint.
-      Opacity(
-        opacity: a.enabled ? 1 : 0.45,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      // A folded animator shows its heading only.
+      if (!animatorFolded.value.contains(animatorFoldKey(layer, index)))
+        for (final row in <Widget>[
             _numberRow(
                 context,
                 l10n.textAnimatorAnimatorAmount,
@@ -296,23 +303,15 @@ class _AnimatorSection extends StatelessWidget {
                       put(animatorWith(a, followOffset: v.toDouble())),
                 ),
               ),
-            // A linked animator reads the other's selectors, so its own are
-            // set aside, faint, rather than hidden.
-            Opacity(
-              opacity: a.follow == null ? 1 : 0.45,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var k = 0; k < selectorCount(a); k++)
-                    ..._selectorRows(context, a, index, k, put),
-                ],
-              ),
-            ),
-            ..._propertyRows(context, animators, index, put, style),
-          ],
-        ),
-      ),
+          // A linked animator reads the other's selectors, so its own are
+          // set aside, faint, rather than hidden.
+          for (var k = 0; k < selectorCount(a); k++)
+            for (final row in _selectorRows(context, a, index, k, put))
+              a.follow == null ? row : Opacity(opacity: 0.45, child: row),
+          ..._propertyRows(context, animators, index, put, style),
+        ])
+          // A switched-off animator keeps its rows, faint.
+          a.enabled ? row : Opacity(opacity: 0.45, child: row),
     ];
   }
 
@@ -332,7 +331,7 @@ class _AnimatorSection extends StatelessWidget {
     final tag = k == 0 ? '$index' : '$index-s$k';
     final advancedKey = '${layer.internallayerId}/$index/$k';
     final items = selectorItemsOf(s, k);
-    Widget item(SelectorItem item) {
+    Widget item(SelectorItem item, {double indent = animatorRowIndent}) {
       final idle = selectorItemIdle(s, item);
       final row = switch (item) {
         SelectorSettingItem(:final setting) => _plainRow(
@@ -346,7 +345,8 @@ class _AnimatorSection extends StatelessWidget {
               setting: setting,
               put: putSelector,
               keyName: '${_settingKey(setting, s)}-$tag',
-            )),
+            ),
+            indent: indent),
         SelectorValueItem(:final value) => _numberRow(
             context,
             textAnimatorValueLabel(value, a),
@@ -364,6 +364,7 @@ class _AnimatorSection extends StatelessWidget {
                     value == TextAnimatorValue.easeHigh
                 ? SelectorCurvePreview(selector: s)
                 : null,
+            indent: indent,
           ),
       };
       return idle ? Opacity(opacity: 0.4, child: row) : row;
@@ -373,8 +374,12 @@ class _AnimatorSection extends StatelessWidget {
       if (selectorCount(a) > 1)
         fxTwoColumnRow(
           context: context,
-          name: Text(t.kickerCase(l10n.textAnimatorSelectorNumber(k + 1)),
-              style: t.kicker, overflow: TextOverflow.ellipsis),
+          name: Padding(
+            padding:
+                const EdgeInsetsDirectional.only(start: animatorRowIndent),
+            child: Text(t.kickerCase(l10n.textAnimatorSelectorNumber(k + 1)),
+                style: t.kicker, overflow: TextOverflow.ellipsis),
+          ),
           control: k == 0
               ? const SizedBox.shrink()
               : Align(
@@ -634,6 +639,7 @@ class _AnimatorSection extends StatelessWidget {
     int decimals = 1,
     double scale = 1,
     Widget? trailing,
+    double indent = animatorRowIndent,
   }) {
     // The playhead is listened to here, per row, rather than by the panel above
     // — and only where a channel can actually move under it. A card that
@@ -642,12 +648,13 @@ class _AnimatorSection extends StatelessWidget {
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
     if (scalars.every((s) => s is BridgeScalar_Static)) {
       return _numberRowAt(context, label, keyName, scalars, min, max, resetTo,
-          write, playhead.value, decimals, scale, trailing);
+          write, playhead.value, decimals, scale, trailing, indent);
     }
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
       builder: (context, at, _) => _numberRowAt(context, label, keyName,
-          scalars, min, max, resetTo, write, at, decimals, scale, trailing),
+          scalars, min, max, resetTo, write, at, decimals, scale, trailing,
+          indent),
     );
   }
 
@@ -664,6 +671,7 @@ class _AnimatorSection extends StatelessWidget {
     int decimals, [
     double scale = 1,
     Widget? trailing,
+    double indent = animatorRowIndent,
   ]) {
     final t = ThemeScope.of(context).theme;
     // An animated channel shows what its curve reads at the playhead, sampled
@@ -702,8 +710,11 @@ class _AnimatorSection extends StatelessWidget {
         context: context,
         keyframeControls: keys,
         lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
-        name: Text(t.propertyCase(label),
-            style: t.body, overflow: TextOverflow.ellipsis),
+        name: Padding(
+          padding: EdgeInsetsDirectional.only(start: indent),
+          child: Text(t.propertyCase(label),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
         control: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -734,12 +745,16 @@ class _AnimatorSection extends StatelessWidget {
 
   /// A row whose control is a choice, not a curve — so a plain name, with no
   /// stopwatch to promise a keyframe that cannot exist.
-  Widget _plainRow(BuildContext context, String label, Widget control) {
+  Widget _plainRow(BuildContext context, String label, Widget control,
+      {double indent = animatorRowIndent}) {
     final t = ThemeScope.of(context).theme;
     return fxTwoColumnRow(
       context: context,
-      name: Text(t.propertyCase(label),
-          style: t.body, overflow: TextOverflow.ellipsis),
+      name: Padding(
+        padding: EdgeInsetsDirectional.only(start: indent),
+        child: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
+      ),
       control: SizedBox(width: _cellWidth + 60, child: control),
     );
   }
@@ -877,6 +892,13 @@ bool addTextAnimator(LayerReference layer,
     ),
   );
   return true;
+}
+
+/// A new animator's name, the [n]th, with what it was added for after it
+/// in brackets: "Animator 1 (Position)". Renamed, it is whatever is typed.
+String animatorNameFor(int n, [String? what]) {
+  final base = l10n.textAnimatorDefaultName(n);
+  return what == null ? base : '$base ($what)';
 }
 
 /// A fresh animator: the whole set of properties, every one of them at a value
@@ -1728,8 +1750,9 @@ List<Widget> animateMenuRows({
     for (final axis in shownFontAxes(style.family, style.face))
       if (moved.contains(axis.tag) || moved.length < maxAnimatedFontAxes) axis,
   ];
-  BridgeTextAnimator fresh() => freshTextAnimator(
-      l10n.textAnimatorDefaultName(document.animators.length + 1));
+  // Named after what it was added for: "Animator 1 (Position)".
+  BridgeTextAnimator fresh([String? what]) => freshTextAnimator(
+      animatorNameFor(document.animators.length + 1, what));
   void add(List<BridgeTextAnimator> animators) {
     close();
     if (addTextAnimator(layer, adding: animators)) onChanged();
@@ -1746,7 +1769,7 @@ List<Widget> animateMenuRows({
       if (solid || !p.solidOnly)
         MenuRow(
           key: ValueKey<String>('text-animate-${p.key}'),
-          onPressed: () => add([animatorWithProperty(fresh(), p)]),
+          onPressed: () => add([animatorWithProperty(fresh(p.label), p)]),
           child: Text(p.label),
         ),
     // The font's axes, one animator moving each, in a menu of their own: a
@@ -1767,7 +1790,7 @@ List<Widget> animateMenuRows({
                   onPressed: () {
                     dismiss();
                     add([
-                      animatorWith(fresh(), axes: [
+                      animatorWith(fresh(axis.name), axes: [
                         BridgeAnimatorAxis(
                             tag: axis.tag,
                             value: BridgeScalar.static_(axis.face)),

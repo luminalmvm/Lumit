@@ -84,15 +84,14 @@ void main() {
           find.byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')),
           findsNothing,
           reason: 'the animator heading shows once Animators is open');
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
       expect(
           find.byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')),
           findsOneWidget);
 
       // The animator open shows its whole selector, as Effect controls does.
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/0')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/0')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
       // Based on and Shape fold under the selector's Advanced.
       expect(find.byKey(const ValueKey<String>('tl-anim-0-basis')), findsNothing);
@@ -133,11 +132,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey<String>('text-animate-opacity')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
       expect(text.getText()!.animators, hasLength(2));
 
       expect(find.byKey(const ValueKey<String>('tl-anim-grip-1')), findsOneWidget);
+      // Named after what it was added for.
+      expect(text.getText()!.animators.map((a) => a.name),
+          ['Animator 1 (Scale)', 'Animator 2 (Opacity)']);
+      // Add on each animator starts in the column of Add animator.
+      final addAnimator = tester.getTopLeft(
+          find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      final add0 = tester.getTopLeft(find
+          .byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')));
+      expect(add0.dx, closeTo(addAnimator.dx, 1));
       await tester.tap(find.byKey(const ValueKey<String>('tl-anim-eye-0')));
       await tester.pumpAndSettle();
       expect(text.getText()!.animators[0].enabled, isFalse);
@@ -164,6 +172,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(text.getText()!.animators.map((a) => a.properties?.single),
           ['scale', 'opacity']);
+      // Remove on the heading.
+      await tester.tap(find.byKey(
+          ValueKey<String>('tl-text-animator-remove-$id/animators/1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.properties?.single),
+          ['scale']);
     });
 
     testWidgets('Delete takes off an animator, a property, or all of them',
@@ -190,10 +204,9 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
       await twirl(tester, id);
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/0')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/0')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
 
       // A property row: Rotation comes off the list, the axis off the
@@ -212,15 +225,14 @@ void main() {
       expect(first.axes, isEmpty);
 
       // An animator's heading takes that animator.
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/1')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/1')), matching: find.byType(Text)).first);
       await tester.pump();
       await delete(tester, p);
       expect(text.getText()!.animators.map((a) => a.name),
           ['Animator 1', 'Animator 3']);
 
       // Animators takes every one.
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pump();
       await delete(tester, p);
       expect(text.getText()!.animators, isEmpty);

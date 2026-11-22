@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 // The Animators section on frb: a text layer's letters moved one at a time.
 //
 // Driven through the Effect controls panel, like the Source rows beside it,
@@ -101,6 +102,44 @@ void main() {
       // document is written whole, so anything dropped would be deleted.
       expect(text.getText()!.text, 'Lumit');
       expect(text.getText()!.size, 72);
+
+      // The heading's Add starts in the column Add animator does.
+      expect(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('text-animator-add-to-0')))
+              .dx,
+          closeTo(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('text-animator-add')))
+                  .dx,
+              1));
+      // Its rows sit in from the heading, each at the section's pitch.
+      final heading = tester.getTopLeft(find.text('Animators'));
+      final amount = tester.getTopLeft(find.text('Animator amount'));
+      expect(amount.dx, greaterThan(heading.dx + 10));
+      final end = tester.getTopLeft(find.text('Range end'));
+      final offset = tester.getTopLeft(find.text('Range offset'));
+      expect(offset.dy - end.dy,
+          tester.getSize(find.byKey(const ValueKey('text-animator-heading-0'))).height + 5,
+          reason: 'a row steps at the section pitch, its 2 + 2 and hairline');
+      // The twirl folds the animator to its heading.
+      await tester.tap(find.byKey(const ValueKey('text-animator-fold-0')));
+      await tester.pump();
+      expect(find.text('Animator amount'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('text-animator-fold-0')));
+      await tester.pump();
+      expect(find.text('Animator amount'), findsOneWidget);
+      // A right-click on the heading offers Rename.
+      await tester.tap(find.byKey(const ValueKey('text-animator-name-0')),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('text-animator-rename-0')));
+      await tester.pumpAndSettle();
+      expect(find.byType(EditableText), findsWidgets);
+      await tester.enterText(find.byType(EditableText).last, 'Wave');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.first.name, 'Wave');
 
       await tester.tap(find.byKey(const ValueKey('text-animator-remove-0')));
       await tester.pump();

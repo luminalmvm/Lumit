@@ -13,6 +13,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 
+import 'package:uuid/uuid.dart' show UuidValue;
 import '../state/layer_bounds.dart' show measuredText;
 import 'graph_maths.dart' show evaluateScalar, rationalSeconds;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
@@ -78,9 +79,18 @@ class _ViewerRangeHandlesState extends State<ViewerRangeHandles> {
     );
   }
 
+  /// Whether each layer looked at is a Text layer. A layer's kind never
+  /// changes, so it is asked once: a drag on any other layer then costs no
+  /// read of the document (the stage rebuilds on every move).
+  final Map<UuidValue, bool> _isText = {};
+
   Widget _build(BuildContext context, int frame) {
     final box = _box;
     if (box == null) return const SizedBox.shrink();
+    if (!(_isText[box.id] ??= widget.uiState.model.byId(box.id)?.info.kind ==
+        BridgeLayerKind.text)) {
+      return const SizedBox.shrink();
+    }
     final entry = widget.uiState.model.byId(box.id);
     if (entry == null || entry.info.kind != BridgeLayerKind.text) {
       return const SizedBox.shrink();

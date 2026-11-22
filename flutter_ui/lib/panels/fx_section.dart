@@ -693,6 +693,8 @@ class FxSection extends StatelessWidget {
                 SizedBox(
                     width: fxKeyColumnWidth + 4 + fxLabelWidthFor(box.maxWidth),
                     child: names),
+                // The 6 a row leaves between its name and its control.
+                const SizedBox(width: 6),
                 Expanded(child: Row(children: actions)),
               ]),
             ),

@@ -985,6 +985,7 @@ List<BridgeTextAnimator> animatorsMoved(
 /// presets, move, remove.
 List<Widget> animatorMoreMenuRows({
   required BuildContext context,
+  required String layerId,
   required VoidCallback close,
   required CompositionReference comp,
   required List<BridgeTextAnimator> animators,
@@ -1006,6 +1007,9 @@ List<Widget> animatorMoreMenuRows({
         child: Text(label),
       );
   return [
+    row('rename', l10n.rename,
+        () => animatorRenaming.value = '$layerId/$index'),
+    const MenuDivider(),
     row('duplicate', l10n.textAnimatorDuplicate, () {
       write([
         ...animators.sublist(0, index + 1),
@@ -1123,8 +1127,21 @@ class AnimatorHeading extends StatelessWidget {
       context: context,
       name: Row(
         children: [
-          animatorGrip(context,
-              layerId: layerId, index: index, name: a.name, key: 'text-animator-grip-$index'),
+          // The twirl folds the whole animator to its heading.
+          GestureDetector(
+            key: ValueKey<String>('text-animator-fold-$index'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => toggleAnimatorFold(animatorFoldKey(layer, index)),
+            child: SizedBox(
+              width: iconSize + 2,
+              child: glyph.LumitIcon(
+                  animatorFolded.value.contains(animatorFoldKey(layer, index))
+                      ? LumitIcons.expand
+                      : LumitIcons.collapse,
+                  size: iconSize,
+                  colour: t.textSecondary),
+            ),
+          ),
           animatorSwitch(context,
               key: 'text-animator-eye-$index',
               solo: false,
@@ -1136,7 +1153,16 @@ class AnimatorHeading extends StatelessWidget {
               on: a.solo,
               onTap: () => put(animatorWith(a, solo: !a.solo))),
           const SizedBox(width: 4),
-          Expanded(child: name),
+          Expanded(
+            child: animatorDraggable(context,
+                layerId: layerId,
+                index: index,
+                name: a.name,
+                child: Row(children: [
+                  animatorGrip(context, key: 'text-animator-grip-$index'),
+                  Flexible(child: name),
+                ])),
+          ),
         ],
       ),
       control: Row(
@@ -1169,34 +1195,35 @@ class AnimatorHeading extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           animatorMoreButton(context,
+              layerId: layerId,
               key: 'text-animator-more-$index',
               comp: comp,
               animators: animators,
               index: index,
               write: write),
           if (animatorHasKeys(a))
-            HouseButton(
-              key: ValueKey<String>('text-animator-reverse-$index'),
-              small: true,
-              frameless: true,
-              // Every animator of this name, as Tracking in lays two.
-              onPressed: () => write([
-                for (final other in animators)
-                  if (other.name == a.name) reversedAnimator(other) else other,
-              ]),
-              child: Text(l10n.textAnimatorReverse),
-            ),
-          HouseButton(
+            ...[
+              const SizedBox(width: 8),
+              RowButton(
+                key: ValueKey<String>('text-animator-reverse-$index'),
+                label: l10n.textAnimatorReverse,
+                // Every animator of this name, as Tracking in lays two.
+                onTap: (_) => write([
+                  for (final other in animators)
+                    if (other.name == a.name) reversedAnimator(other) else other,
+                ]),
+              ),
+            ],
+          const SizedBox(width: 8),
+          RowButton(
             key: ValueKey<String>('text-animator-remove-$index'),
-            small: true,
-            frameless: true,
-            onPressed: () => write([
+            label: l10n.textAnimatorRemove,
+            onTap: (_) => write([
               for (var i = 0; i < animators.length; i++)
                 if (i != index) animators[i],
             ]),
-            child: Text(l10n.textAnimatorRemove),
           ),
         ],
       ),
@@ -1205,7 +1232,17 @@ class AnimatorHeading extends StatelessWidget {
       layerId: layerId,
       index: index,
       onMove: (from) => write(animatorsMoved(animators, from, index)),
-      child: heading,
+      // A right-click on the heading opens More, Rename first.
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onSecondaryTapUp: (d) => showAnimatorMoreMenu(context, d.globalPosition,
+            layerId: layerId,
+            comp: comp,
+            animators: animators,
+            index: index,
+            write: write),
+        child: heading,
+      ),
     );
   }
 }
@@ -1213,7 +1250,8 @@ class AnimatorHeading extends StatelessWidget {
 /// More ▸, beside an animator's name: what can be done with the whole
 /// animator. The Timeline heading opens the same menu on a right-click.
 Widget animatorMoreButton(BuildContext context,
-        {required String key,
+        {required String layerId,
+        required String key,
         required CompositionReference comp,
         required List<BridgeTextAnimator> animators,
         required int index,
@@ -1225,13 +1263,15 @@ Widget animatorMoreButton(BuildContext context,
         label: l10n.textAnimatorMore,
         arrow: true,
         onTap: (at) => showAnimatorMoreMenu(context, at,
+            layerId: layerId,
             comp: comp, animators: animators, index: index, write: write),
       ),
     );
 
 /// The More menu of animator [index], dropped at [at].
 void showAnimatorMoreMenu(BuildContext context, Offset at,
-        {required CompositionReference comp,
+        {required String layerId,
+        required CompositionReference comp,
         required List<BridgeTextAnimator> animators,
         required int index,
         required ValueChanged<List<BridgeTextAnimator>> write}) =>
@@ -1241,6 +1281,7 @@ void showAnimatorMoreMenu(BuildContext context, Offset at,
       width: 200,
       rows: (close) => animatorMoreMenuRows(
         context: context,
+        layerId: layerId,
         close: () => close(null),
         comp: comp,
         animators: animators,
@@ -1259,28 +1300,59 @@ class AnimatorDrag {
 
 /// The grip that drags an animator above or below the others, in the Effect
 /// controls panel and the Timeline alike.
-Widget animatorGrip(BuildContext context,
-    {required String layerId,
-    required int index,
-    required String name,
-    required String key}) {
+Widget animatorGrip(BuildContext context, {required String key}) {
   final t = ThemeScope.of(context).theme;
   return LumitTooltip(
     message: l10n.textAnimatorDrag,
-    child: Draggable<AnimatorDrag>(
-      data: AnimatorDrag(layerId, index),
-      feedback: Text(name, style: t.kickerOn),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.grab,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 2),
-          child: Text('⠿',
-              key: ValueKey<String>(key),
-              style: t.kicker.copyWith(color: t.textMuted)),
-        ),
-      ),
+    child: Padding(
+      padding: const EdgeInsetsDirectional.only(end: 4),
+      child: Text('⠿',
+          key: ValueKey<String>(key),
+          style: t.body.copyWith(
+              fontSize: 17, height: 1, color: t.textSecondary)),
     ),
   );
+}
+
+/// What drags an animator: its grip and its name, held with the left button
+/// and moved up or down onto another heading. Only a vertical move starts
+/// the drag, so a click on the name (to pick, twirl or rename) still lands.
+Widget animatorDraggable(BuildContext context,
+    {required String layerId,
+    required int index,
+    required String name,
+    required Widget child}) {
+  final t = ThemeScope.of(context).theme;
+  return Draggable<AnimatorDrag>(
+    data: AnimatorDrag(layerId, index),
+    affinity: Axis.vertical,
+    dragAnchorStrategy: pointerDragAnchorStrategy,
+    feedback: Text(name, style: t.kickerOn),
+    childWhenDragging: Opacity(opacity: 0.4, child: child),
+    child: MouseRegion(cursor: SystemMouseCursors.grab, child: child),
+  );
+}
+
+/// How far an animator's rows sit in from its heading in the Effect
+/// controls panel, and an Advanced row in from those.
+const double animatorRowIndent = 18;
+
+/// The room the Timeline keeps for an animator heading's Add, More and
+/// Remove, so they and the Animators heading's Add animator start in one
+/// column.
+const double animatorButtonsWidth = 196;
+
+/// The animators folded shut in the Effect controls panel, by
+/// [animatorFoldKey]. Not saved: a fold is how the panel is looked at.
+final ValueNotifier<Set<String>> animatorFolded = ValueNotifier(<String>{});
+
+String animatorFoldKey(LayerReference layer, int index) =>
+    '${layer.internallayerId}/$index';
+
+void toggleAnimatorFold(String key) {
+  final next = {...animatorFolded.value};
+  if (!next.remove(key)) next.add(key);
+  animatorFolded.value = next;
 }
 
 /// An animator's heading, taking a grip dropped on it: the dragged

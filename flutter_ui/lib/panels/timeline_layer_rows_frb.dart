@@ -60,6 +60,8 @@ import 'text_animator_rows_frb.dart'
         writeTextAnimator,
         writeTextAnimatorList,
         animatorDropTarget,
+        animatorDraggable,
+        animatorButtonsWidth,
         animatorGrip,
         animatorSwitch,
         animatorWith,
@@ -746,6 +748,7 @@ class FoldRow extends StatelessWidget {
     final animators = layer.getText()?.animators;
     if (animators == null || index >= animators.length) return;
     showAnimatorMoreMenu(context, at,
+        layerId: layer.internallayerId.toString(),
         comp: comp,
         animators: animators,
         index: index,
@@ -1004,7 +1007,12 @@ class FoldRow extends StatelessWidget {
                   // Effects' Animate, in the place Global add has on a shape
                   // layer's Contents.
                   Expanded(child: _headingName(context, label, named, lit)),
-                  RowButton(
+                  // Its button starts where the animators' Add does.
+                  SizedBox(
+                    width: animatorButtonsWidth,
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: RowButton(
                     key: ValueKey<String>('tl-text-animate-$path'),
                     label: l10n.textAnimatorAdd,
                     arrow: true,
@@ -1031,18 +1039,30 @@ class FoldRow extends StatelessWidget {
                       );
                     },
                   ),
+                    ),
+                  ),
                   const SizedBox(width: 6),
                   SizedBox(width: valueColumn.width),
                 ] else if (_animatorIndexOf(locked ? null : path)
                     case final index?) ...[
                   // An animator's heading: Add ▸ Property or Selector, as
                   // beside an animator in After Effects.
-                  animatorGrip(context,
-                      layerId: layer.internallayerId.toString(),
-                      index: index,
-                      name: label,
-                      key: 'tl-anim-grip-$index'),
-                  Expanded(child: _headingName(context, label, named, lit)),
+                  // Held on its grip or its name and moved up or down, it
+                  // moves among the layer's animators.
+                  Expanded(
+                    child: animatorDraggable(context,
+                        layerId: layer.internallayerId.toString(),
+                        index: index,
+                        name: label,
+                        child: Row(children: [
+                          animatorGrip(context, key: 'tl-anim-grip-$index'),
+                          Flexible(
+                              child: _headingName(context, label, named, lit)),
+                        ])),
+                  ),
+                  SizedBox(
+                    width: animatorButtonsWidth,
+                    child: Row(children: [
                   RowButton(
                     key: ValueKey<String>('tl-text-animator-add-$path'),
                     label: l10n.shapeOpAdd,
@@ -1074,7 +1094,7 @@ class FoldRow extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   LumitTooltip(
                     message: l10n.textAnimatorMoreTip,
                     child: RowButton(
@@ -1083,6 +1103,17 @@ class FoldRow extends StatelessWidget {
                       arrow: true,
                       onTap: (at) => _animatorMenu(context, at, index),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  RowButton(
+                    key: ValueKey<String>('tl-text-animator-remove-$path'),
+                    label: l10n.textAnimatorRemove,
+                    onTap: (_) => _writeAnimators((list) => [
+                          for (var i = 0; i < list.length; i++)
+                            if (i != index) list[i],
+                        ]),
+                  ),
+                    ]),
                   ),
                   const SizedBox(width: 6),
                   SizedBox(width: valueColumn.width),
