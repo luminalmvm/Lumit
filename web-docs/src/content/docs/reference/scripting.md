@@ -205,6 +205,8 @@ Script: `lumit.shape.add({ ... })`. MCP tool: `shape_add`.
 | `name` | string |  |  |
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `items` | list of object | yes | The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one |
+| `anchor` | `"corner"`, `"centre"` or list of 2 numbers |  | Where the layer turns from, in the paths' pixels: the corner of the art's box (the default), its centre, or [x, y]. The position goes to the same point, so the art draws where its paths say. The answer adds origin, the point in the paths' pixels where the layer's own pixels start, and the anchor and position it set |
+| `masks` | list of object |  | Masks as a .lum file keeps them, with paths in the same pixels as the items. They are kept in the layer's own pixels, which start at origin |
 
 ## layer.read
 
