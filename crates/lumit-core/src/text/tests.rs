@@ -942,6 +942,7 @@ fn the_wires_follow_the_animators_through_an_edit_and_its_undo() {
         style: Default::default(),
         paragraph: Default::default(),
         captions: None,
+        keys: None,
         extra: serde_json::Map::new(),
     };
     let mut layer = base_layer(
