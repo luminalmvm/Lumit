@@ -115,12 +115,19 @@ Under a shape, in order:
 | **Fill** | The colour inside the path. |
 | **Gradient** | Flat, Linear, Radial or Angle. |
 | **Gradient colour**, **Gradient stops** | The colour the ramp ends at, and the ramp's editor. With a ramp. |
-| **Stroke**, **Stroke width** | The outline's colour, and its width in pixels. |
+| **Stroke** | The outline's colour. |
+| **Stroke gradient** | Flat, Linear, Radial, Angle or Along the path. |
+| **Stroke gradient colour**, **Stroke gradient stops** | The colour the outline's ramp ends at, and that ramp's editor. With a ramp. |
+| **Stroke width** | The outline's width in pixels. |
 | **Opacity** | How opaque the shape is. |
 | **Gradient start opacity**, **Gradient end opacity** | How opaque each end of the ramp is. With a ramp. |
-| **Stop _n_ position**, **Stop _n_ opacity** | One pair for each stop between the ends. |
+| **Stop _n_ position**, **Stop _n_ colour**, **Stop _n_ opacity** | Three for each stop between the ends. |
 | **Path** | The shape itself, or the rows of a rectangle, ellipse, polygon or star. |
 | **Gradient start x**, **Gradient start y**, **Gradient end x**, **Gradient end y** | The two points that aim the ramp. With a ramp. |
+| **Highlight length**, **Highlight angle** | How far a radial ramp's centre sits off its first point, and which way. On Radial. |
+| **Stroke gradient start opacity**, **Stroke gradient end opacity**, **Stroke stop _n_ position**, **Stroke stop _n_ colour**, **Stroke stop _n_ opacity** | The same for the outline's ramp. |
+| **Stroke gradient start x**, **Stroke gradient start y**, **Stroke gradient end x**, **Stroke gradient end y** | The two points that aim the outline's ramp. Not on Along the path. |
+| **Stroke highlight length**, **Stroke highlight angle** | The highlight of the outline's ramp. On Radial. |
 | **Dash**, **Gap**, **Dash offset** | A dashed outline. On a shape with a stroke. |
 | **Taper scope** and the taper's rows | On a shape with a stroke taper. |
 
@@ -183,36 +190,44 @@ towards the second. A new ramp runs down the shape's box, or out from or round i
 opaque the Gradient colour end is, as a percentage. The ramp fades evenly between them, and
 an end at 0 is clear.
 
-The Fill, the points and the opacities are animatable. The Gradient colour and the stops'
-colours have no stopwatch, and are keyed in the file or through
-[scripting](/reference/scripting/). The Timeline shows a keyed colour as it is at the
-layer's start, and picking another there replaces its keys.
+The Fill, the Gradient colour, the points and the opacities are animatable. A colour row
+shows its colour at the playhead, and picking another on a keyed colour sets a keyframe
+there.
 
-A radial ramp's centre can sit off its first point, as a highlight. `gradient_highlight` is
-how far, as a percentage of the radius from -100 to 100, and `gradient_highlight_angle` which
-way, in degrees clockwise from the line to the second point. Both are set in the file or
-through scripting, and have no row.
+A radial ramp's centre can sit off its first point, as a highlight. **Highlight length** is
+how far, as a percentage of the radius from -100 to 100, and **Highlight angle** which way,
+in degrees clockwise from the line to the second point. Both are animatable. In
+[scripting](/reference/scripting/) they are `gradient_highlight` and
+`gradient_highlight_angle`.
 
-An outline takes a gradient from `stroke_gradient` on the shape, set in the file or through
-scripting. It has no row. The ramp runs from the **Stroke** colour to its own `colour`, and
-its `kind` is 1 for linear, 2 for radial, 4 for angle or 3 for along the path. Along the
-path, each line runs from the Stroke colour at its start to the end colour at its end,
-measured on the piece a trim leaves and carried across the gaps between dashes. The width,
-the taper, the dashes and the opacity apply as they do to a flat outline.
+An outline takes a gradient from **Stroke gradient**, under **Stroke**, which is Flat,
+Linear, Radial, Angle or Along the path. The ramp runs from the Stroke colour to the
+**Stroke gradient colour**, and has the fill ramp's rows over again, each with **Stroke** in
+front of its name.
+
+Along the path, each line runs from the Stroke colour at its start to the end colour at its
+end, measured on the piece a trim leaves and carried across the gaps between dashes. It has
+no points to aim. The width, the taper, the dashes and the opacity apply as they do to a
+flat outline.
+
+In scripting the ramp is `stroke_gradient` on the shape. Its `kind` is 1 for linear, 2 for
+radial, 4 for angle or 3 for along the path, and its `colour` is the end colour.
 
 ### Gradient stops
 
 Click the ramp on the **Gradient stops** row to open its editor. The handles at either end
-are the Fill and the Gradient colour.
+are the Fill and the Gradient colour. **Stroke gradient stops** opens the same editor on
+the outline's ramp, between the Stroke and the Stroke gradient colour.
 
 - Click the ramp to add a stop between them.
 - Drag a stop to move it. Drag it away from the ramp, or press **Remove**, to take it off.
 - **Colour**, **Opacity** and **Position** set the selected stop.
 - Right-click the ramp for **Add stop**, **Remove**, **Reverse** and **Space evenly**.
 
-Each stop also has two rows in the Timeline, **Stop 1 position** and **Stop 1 opacity** for
-the first, and both are animatable. Editing a keyed stop in the editor sets a keyframe at the
-playhead.
+Each stop also has three rows in the Timeline, **Stop 1 position**, **Stop 1 colour** and
+**Stop 1 opacity** for the first, and all three are animatable. The ramp shows its colours
+at the playhead, and editing a keyed colour or a keyed stop in the editor sets a keyframe
+there.
 
 Two stops at the same position make a hard edge. A gradient holds up to 16 stops between
 its ends.
