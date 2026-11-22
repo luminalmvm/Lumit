@@ -140,6 +140,29 @@ void main() {
       // Named after what it was added for.
       expect(text.getText()!.animators.map((a) => a.name),
           ['Animator 1 (Scale)', 'Animator 2 (Opacity)']);
+      // Under an open animator, Animator amount then Link to, as in the
+      // Effect controls panel; Link offset once it is linked.
+      await twirl(tester, '$id/animators/0');
+      final amountY = tester.getTopLeft(find.byKey(
+          const ValueKey<String>('tl-anim-0-animatorAmount-label'))).dy;
+      final linkY = tester.getTopLeft(find.byKey(
+          const ValueKey<String>('tl-anim-0-link-label'))).dy;
+      expect(linkY, greaterThan(amountY));
+      expect(find.byKey(const ValueKey<String>('tl-anim-0-link-offset')),
+          findsNothing);
+      final linked = text.getText()!.animators;
+      writeTextAnimatorList(text, [
+        animatorWith(linked[0], follow: linked[1].name),
+        linked[1],
+      ]);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey<String>('tl-anim-0-link-offset')),
+          findsOneWidget);
+      writeTextAnimatorList(text, linked);
+      p.uiState.model.refresh();
+      await twirl(tester, '$id/animators/0');
+
       // Add on each animator starts in the column of Add animator.
       final addAnimator = tester.getTopLeft(
           find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
