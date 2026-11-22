@@ -349,6 +349,7 @@ struct SwitchArgs {
     motion_blur: Option<bool>,
     fx: Option<bool>,
     accepts_lights: Option<bool>,
+    collapse: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -479,7 +480,7 @@ pub(super) fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptErro
         });
     }
     type Switch = fn(Uuid, Uuid, bool) -> Op;
-    let switches: [(Option<bool>, Switch); 8] = [
+    let switches: [(Option<bool>, Switch); 9] = [
         (s.visible, |comp, layer, visible| Op::SetLayerVisible {
             comp,
             layer,
@@ -519,6 +520,11 @@ pub(super) fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptErro
                 layer,
                 accepts_lights,
             }
+        }),
+        (s.collapse, |comp, layer, collapse| Op::SetLayerCollapse {
+            comp,
+            layer,
+            collapse,
         }),
     ];
     for (on, op) in switches {

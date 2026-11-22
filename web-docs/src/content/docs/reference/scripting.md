@@ -299,6 +299,7 @@ Script: `lumit.layer.set({ ... })`. MCP tool: `layer_set`.
 | `switches.motion_blur` | boolean |  |  |
 | `switches.fx` | boolean |  |  |
 | `switches.accepts_lights` | boolean |  |  |
+| `switches.collapse` | boolean |  | A precomp's collapse switch: its layers are drawn straight into this comp, its shapes and text as large as they are shown |
 
 ## layer.delete
 
