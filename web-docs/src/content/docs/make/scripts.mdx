@@ -179,7 +179,8 @@ row's `value`, is a number, a list of keys as `{time, value, hold, in, out}`, or
 ## Effects
 
 `effect.add` takes Lumit's name for an effect, its id, or After Effects' match name. It also
-takes the effects an extension carries, by name.
+takes the effects an extension carries, by name. A points effect added below a producer is
+wired to the nearest one above it, as in the [node graph](/use/nodes/#mattes-and-points).
 
 `effect.get` answers one effect with every row it has, including the rows an LFX effect's or
 a Custom shader's `Params` declare. `effect.set` sets a row by its id or its label. A number

@@ -218,12 +218,22 @@ pub(super) fn add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     let id = instance.id;
     let mut effects = layer.effects.clone();
     effects.push(instance);
-    commit(
-        store,
-        vec![fx::effects::particulate::rows::set_effects(
-            comp.id, layer, effects,
-        )],
-    )?;
+    // A points effect landing below a producer is wired to it in the same
+    // undo step, as Lumit's own Add effect does, so the stack works.
+    let mut graph = layer.graph.clone();
+    let mut ops = vec![fx::effects::particulate::rows::set_effects(
+        comp.id,
+        layer,
+        effects.clone(),
+    )];
+    if graph.wire_points_from_above(&effects, id) {
+        ops.push(lumit_core::ops::Op::SetLayerGraph {
+            comp: comp.id,
+            layer: layer.id,
+            graph: Box::new(graph),
+        });
+    }
+    commit(store, ops)?;
     let mut answer = now(store, comp.id, layer.id, id)?;
     if let Some(ae) = ae {
         answer["after_effects"] = json!(ae);
