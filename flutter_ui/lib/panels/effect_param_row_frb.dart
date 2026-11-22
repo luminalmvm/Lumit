@@ -27,6 +27,7 @@ import 'package:lumit_flutter/src/rust/api/colour.dart'
     show BridgeColourItem, BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart' show BridgeGradientStop;
 import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowRef;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart'

@@ -13,7 +13,33 @@ import 'package:uuid/uuid.dart';
 part 'shape.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `groups`, `modifiers`, `read_at`, `read_at`, `read_entries`, `write_entries`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// A colour part way along a shape's gradient: where it sits as a per cent of
+/// the ramp, and how opaque it is, 0..100. Both animate.
+class BridgeGradientStop {
+  final BridgeScalar position;
+  final BridgeColourRgba colour;
+  final BridgeScalar opacity;
+
+  const BridgeGradientStop({
+    required this.position,
+    required this.colour,
+    required this.opacity,
+  });
+
+  @override
+  int get hashCode => position.hashCode ^ colour.hashCode ^ opacity.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeGradientStop &&
+          runtimeType == other.runtimeType &&
+          position == other.position &&
+          colour == other.colour &&
+          opacity == other.opacity;
+}
 
 /// One entry of a shape layer's contents, and how deep it sits: 0 at the top
 /// of the layer, one more inside each group.

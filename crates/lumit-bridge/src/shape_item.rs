@@ -4,9 +4,8 @@
 use lumit_core::time::Rational;
 
 use crate::api::effect::{BridgeKeyframe, BridgeRational, BridgeScalar, BridgeSideInterp};
-use crate::api::layer::{
-    clamped_property, BridgeGradientStop, BridgeShapeItem, BridgeShapeTaper, BridgeVertex,
-};
+use crate::api::layer::{clamped_property, BridgeShapeItem, BridgeShapeTaper, BridgeVertex};
+use crate::api::shape::BridgeGradientStop;
 use crate::api::BridgeError;
 use crate::mask_shape::same_shape;
 

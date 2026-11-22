@@ -161,16 +161,6 @@ pub struct BridgeVertex {
     pub tan_out_y: f64,
 }
 
-/// A colour part way along a shape's gradient: where it sits as a per cent of
-/// the ramp, and how opaque it is, 0..100. Both animate.
-#[frb(non_opaque)]
-#[derive(Debug, Clone, PartialEq)]
-pub struct BridgeGradientStop {
-    pub position: BridgeScalar,
-    pub colour: crate::api::assets::BridgeColourRgba,
-    pub opacity: BridgeScalar,
-}
-
 impl BridgeVertex {
     /// One engine vertex, read across the seam.
     #[frb(ignore)]
@@ -239,7 +229,7 @@ pub struct BridgeShapeItem {
     pub gradient_end_opacity: BridgeScalar,
     /// The colours the ramp passes through between its two ends, in the order
     /// they were made. Empty is the plain two-colour ramp.
-    pub gradient_stops: Vec<BridgeGradientStop>,
+    pub gradient_stops: Vec<crate::api::shape::BridgeGradientStop>,
     /// **A boolean combine**: how this item joins the item **before**
     /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
     /// from that one, 3 keeps only what both cover, 4 keeps only what one of

@@ -3055,7 +3055,7 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         }),
     });
     // A gradient's stops keep the order they were made in, held to the ramp.
-    let stop = |position: f64, opacity: f64| crate::api::layer::BridgeGradientStop {
+    let stop = |position: f64, opacity: f64| crate::api::shape::BridgeGradientStop {
         position: BridgeScalar::Static(position),
         colour: crate::api::assets::BridgeColourRgba {
             r: 0.0,

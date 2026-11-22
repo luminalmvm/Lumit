@@ -108,6 +108,16 @@ pub struct BridgeShapeTrim {
     pub offset: BridgeScalar,
 }
 
+/// A colour part way along a shape's gradient: where it sits as a per cent of
+/// the ramp, and how opaque it is, 0..100. Both animate.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeGradientStop {
+    pub position: BridgeScalar,
+    pub colour: crate::api::assets::BridgeColourRgba,
+    pub opacity: BridgeScalar,
+}
+
 /// **A parametric shape**: `kind` 0 is a rectangle, 1 an ellipse, 2 a polygon
 /// and 3 a star. The position is its middle in the art's own coordinates. A
 /// rectangle and an ellipse use the width and height, the rectangle its
