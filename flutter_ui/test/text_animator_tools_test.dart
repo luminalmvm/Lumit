@@ -70,6 +70,29 @@ void main() {
     expect(movedAnimatorKey('L/transform', 'L/animators/', [1, 0]), 'L/transform');
   });
 
+  test('a selector taken out moves the rows, Advanced and keys after it up',
+      () {
+    final three = animatorWith(freshTextAnimator('A'), selectors: [
+      freshSelector(BridgeSelectorKind.stagger),
+      freshSelector(BridgeSelectorKind.wiggly),
+    ]);
+    final two = animatorWithoutSelector(three, 1);
+    final sm = selectorMovesOf(three, two);
+    expect(sm, [0, null, 1]);
+    const stem = 'L/animators/';
+    final sel = {0: sm};
+    String? tl(String k) =>
+        followedAnimatorKey(k, stem, [0], sel, timeline: true);
+    expect(tl('L/animators/0/s2/maxAmount#2'), 'L/animators/0/s1/maxAmount#2');
+    expect(tl('L/animators/0/s2/advanced'), 'L/animators/0/s1/advanced');
+    expect(tl('L/animators/0/s1/staggerAmount'), isNull);
+    expect(tl('L/animators/0/rangeStart'), 'L/animators/0/rangeStart');
+    expect(tl('L/animators/0/opacity'), 'L/animators/0/opacity');
+    expect(followedAnimatorKey('L/0/2', 'L/', [0], sel), 'L/0/1');
+    expect(followedAnimatorKey('L/0/1', 'L/', [0], sel), isNull);
+    expect(followedAnimatorKey('L/0', 'L/', [0], sel), 'L/0');
+  });
+
   test('a rename never takes another animator''s name', () {
     final out = animatorsRenamed(
         [freshTextAnimator('A'), freshTextAnimator('B')], 1, 'A');

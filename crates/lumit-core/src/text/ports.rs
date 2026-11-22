@@ -354,6 +354,15 @@ pub fn remap_text_ports(
                     changed = true;
                     return false;
                 };
+                // A selector turned into another kind has no such number: the
+                // wire would lead nowhere, so it is taken off.
+                let has = new[to]
+                    .selector_at(k2)
+                    .is_some_and(|s| selector_numbers(s.kind).iter().any(|(n, _)| *n == number));
+                if !has {
+                    changed = true;
+                    return false;
+                }
                 if k2 == 0 {
                     number.to_owned()
                 } else {
