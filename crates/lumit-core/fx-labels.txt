@@ -1493,6 +1493,9 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Rim phase
+Rim wave
+Rim waves
 Rims
 Ring
 Ring wave

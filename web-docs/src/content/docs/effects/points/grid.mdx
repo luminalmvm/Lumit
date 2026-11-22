@@ -47,6 +47,9 @@ Lines emits no points.
 | **Inner radius** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
 | **Tilt** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Open top** | Slider | 0 to 180 | 0 | Degrees |
+| **Rim wave** | Slider | 0 to 90; up to 180 | 0 | Degrees |
+| **Rim waves** | Slider | 0 to 12; up to 100 | 3 | - |
+| **Rim phase** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Size from** | Dropdown | Grid size · Corner point | Grid size | - |
 | **Boxes x** | Slider, whole numbers | 1 to 100; up to 1000 | 24 | - |
 | **Boxes y** | Slider, whole numbers | 1 to 100; up to 1000 | 16 | - |
@@ -143,10 +146,14 @@ In the Effect Controls panel:
   round it, and anything less puts one at each end.
 - **Inner radius**: Rings only. How far out the rings start. With the spacings it is added to every
   ring. Fitted, it is the innermost ring, and at 0 that ring is one point at the centre.
-- **Tilt**: how far the ball leans its top towards the camera. It shows for Sphere, as does
-  the next.
+- **Tilt**: how far the ball leans its top towards the camera. It shows for Sphere, as do
+  the next four.
 - **Open top**: how much of the ball is left open from the top, as an angle down from it.
   At 0 the ball is closed, at 90 it is a bowl, and at 180 nothing is left.
+- **Rim wave**: how far the edge of the open top rises and falls round the ball, either way
+  of Open top. At 0 the rim is level. The rows beneath follow it, less the lower they are.
+- **Rim waves**: how many times the rim rises and falls on the way round the ball.
+- **Rim phase**: where round the ball the waves stand. Turning it rolls them round the rim.
 - **Size**: the diameter of the disc a point is drawn as.
 - **Feather**: how soft that disc's edge is. At nought it is a hard circle.
 - **Colour**: what the discs are drawn in. Values above 1 are legal, and useful under a

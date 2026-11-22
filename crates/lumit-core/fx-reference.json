@@ -15948,6 +15948,36 @@
           "hard_max": 180.0
         },
         {
+          "id": "rim_wave",
+          "label": "Rim wave",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 90.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "rim_waves",
+          "label": "Rim waves",
+          "kind": "float",
+          "unit": "raw",
+          "default": 3.0,
+          "slider_min": 0.0,
+          "slider_max": 12.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "rim_phase",
+          "label": "Rim phase",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "size_from",
           "label": "Size from",
           "kind": "choice",
@@ -16303,7 +16333,10 @@
           "label": "",
           "params": [
             "tilt",
-            "open_top"
+            "open_top",
+            "rim_wave",
+            "rim_waves",
+            "rim_phase"
           ],
           "collapsed": false,
           "visible_when": {

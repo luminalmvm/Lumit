@@ -6305,6 +6305,18 @@
   "@fxOpenTop": {
     "description": "Effect controls — a control on Grid's Sphere layout: how much of the ball is left open from the top."
   },
+  "fxRimWave": "Rim wave",
+  "@fxRimWave": {
+    "description": "Effect controls — a control on Grid's Sphere layout: how far the edge of the open top rises and falls round the ball."
+  },
+  "fxRimWaves": "Rim waves",
+  "@fxRimWaves": {
+    "description": "Effect controls — a control on Grid's Sphere layout: how many times the edge of the open top rises and falls on the way round."
+  },
+  "fxRimPhase": "Rim phase",
+  "@fxRimPhase": {
+    "description": "Effect controls — a control on Grid's Sphere layout: where round the ball the waves of the open top stand."
+  },
   "fxStartColour": "Start colour",
   "@fxStartColour": {
     "description": "Effect controls — a control on Gradient."

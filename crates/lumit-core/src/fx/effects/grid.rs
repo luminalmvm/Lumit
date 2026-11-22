@@ -87,7 +87,7 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
     // The rows only Sphere reads.
     ParamGroup {
         label: "",
-        params: &["tilt", "open_top"],
+        params: &["tilt", "open_top", "rim_wave", "rim_waves", "rim_phase"],
         collapsed: false,
         visible_when: Some(("layout", &[6])),
         visible_when_lens_elements: None,
@@ -143,6 +143,9 @@ const POINTS_ONLY: &[&str] = &[
     "inner_radius",
     "tilt",
     "open_top",
+    "rim_wave",
+    "rim_waves",
+    "rim_phase",
     "size",
     "feather",
     "max_points",
@@ -472,6 +475,35 @@ pub struct Grid {
         unit = Degrees
     )]
     pub open_top: f32,
+
+    /// Sphere: how far the edge of the open top rises and falls round the
+    /// ball, degrees either way, so the rim waves instead of running level.
+    #[slider(
+        label = "Rim wave",
+        min = 0.0,
+        max = 90.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 180.0,
+        unit = Degrees
+    )]
+    pub rim_wave: f32,
+
+    /// Sphere: how many times the rim rises and falls on the way round.
+    #[slider(
+        label = "Rim waves",
+        min = 0.0,
+        max = 12.0,
+        default = 3.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Raw
+    )]
+    pub rim_waves: f32,
+
+    /// Sphere: where round the ball the waves stand. Turn it to roll them.
+    #[dial(label = "Rim phase", default = 0.0)]
+    pub rim_phase: f32,
 
     /// Lines: how big a cell is. Grid size is Sapphire's way, the boxes
     /// sharing the grid's size, and Corner point is After Effects', Position
@@ -830,6 +862,10 @@ impl Grid {
         let (lean_sin, lean_cos) = self.tilt.to_radians().sin_cos();
         let ball = |c: i32, j: i32| -> Option<(f32, f32, f32)> {
             let round = c as f32 / arc_gaps as f32 * (arc / 360.0) * std::f32::consts::TAU;
+            // The rim's height on this column: level, or waving round the ball.
+            let open = (open
+                + self.rim_wave * (self.rim_waves * round + self.rim_phase.to_radians()).sin())
+            .clamp(0.0, 180.0);
             let down = if rows > 1 {
                 j as f32 / (rows - 1) as f32
             } else {
