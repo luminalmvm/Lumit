@@ -4,7 +4,6 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
-import 'assets.dart';
 import 'effect.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -16,10 +15,10 @@ part 'shape.freezed.dart';
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A colour part way along a shape's gradient: where it sits as a per cent of
-/// the ramp, and how opaque it is, 0..100. Both animate.
+/// the ramp, and how opaque it is, 0..100. All three animate.
 class BridgeGradientStop {
   final BridgeScalar position;
-  final BridgeColourRgba colour;
+  final BridgeColour colour;
   final BridgeScalar opacity;
 
   const BridgeGradientStop({

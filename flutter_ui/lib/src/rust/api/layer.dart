@@ -2217,11 +2217,12 @@ class BridgeShapeItem {
   /// **A gradient fill**: 0 is the flat [`fill`](Self::fill), 1 ramps
   /// from it linearly to `gradient_colour`, 2 radially with the end point on
   /// the outer edge, 4 round the start point. The two points are in layer
-  /// pixels, the art's own coordinates, and animate; what a ramp *is* does not.
-  /// Each end has an opacity of its own, 0..100, and the ramp fades evenly
-  /// from `gradient_start_opacity` to `gradient_end_opacity`.
+  /// pixels, the art's own coordinates, and animate, as do the colours;
+  /// what a ramp *is* does not. Each end has an opacity of its own, 0..100,
+  /// and the ramp fades evenly from `gradient_start_opacity` to
+  /// `gradient_end_opacity`.
   final int gradient;
-  final BridgeColourRgba? gradientColour;
+  final BridgeColour? gradientColour;
   final BridgeScalar gradientStartX;
   final BridgeScalar gradientStartY;
   final BridgeScalar gradientEndX;

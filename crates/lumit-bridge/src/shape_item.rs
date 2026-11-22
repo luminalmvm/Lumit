@@ -8,6 +8,7 @@ use crate::api::layer::{clamped_property, BridgeShapeItem, BridgeShapeTaper, Bri
 use crate::api::shape::BridgeGradientStop;
 use crate::api::BridgeError;
 use crate::mask_shape::same_shape;
+use crate::shape_paint::{read as read_colour, write as write_colour};
 
 impl BridgeShapeItem {
     pub(crate) fn read_at(item: &lumit_core::shape::ShapeItem, offset: Rational) -> Self {
@@ -19,8 +20,8 @@ impl BridgeShapeItem {
             hidden: item.hidden,
             fill_hidden: item.fill_hidden,
             stroke_hidden: item.stroke_hidden,
-            fill: crate::shape_paint::read(item.fill.as_ref(), offset),
-            stroke: crate::shape_paint::read(item.stroke.as_ref(), offset),
+            fill: item.fill.as_ref().map(|c| read_colour(c, offset)),
+            stroke: item.stroke.as_ref().map(|c| read_colour(c, offset)),
             stroke_width: BridgeScalar::read_at(&item.stroke_width, offset),
             opacity: BridgeScalar::read_at(&item.opacity, offset),
             dashes: item
@@ -30,7 +31,10 @@ impl BridgeShapeItem {
                 .collect(),
             dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
             gradient: item.gradient,
-            gradient_colour: item.gradient_colour.as_ref().map(shown),
+            gradient_colour: item
+                .gradient_colour
+                .as_ref()
+                .map(|c| read_colour(c, offset)),
             gradient_start_x: BridgeScalar::read_at(&item.gradient_start_x, offset),
             gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
             gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
@@ -42,7 +46,7 @@ impl BridgeShapeItem {
                 .iter()
                 .map(|s| BridgeGradientStop {
                     position: BridgeScalar::read_at(&s.position, offset),
-                    colour: shown(&s.colour),
+                    colour: read_colour(&s.colour, offset),
                     opacity: BridgeScalar::read_at(&s.opacity, offset),
                 })
                 .collect(),
@@ -101,8 +105,16 @@ impl BridgeShapeItem {
             hidden: self.hidden,
             fill_hidden: self.fill_hidden,
             stroke_hidden: self.stroke_hidden,
-            fill: crate::shape_paint::write(self.fill.as_ref(), offset)?,
-            stroke: crate::shape_paint::write(self.stroke.as_ref(), offset)?,
+            fill: self
+                .fill
+                .as_ref()
+                .map(|c| write_colour(c, offset))
+                .transpose()?,
+            stroke: self
+                .stroke
+                .as_ref()
+                .map(|c| write_colour(c, offset))
+                .transpose()?,
             stroke_width: clamped_property(&self.stroke_width, offset, 0.0, 10_000.0)?,
             opacity: clamped_property(&self.opacity, offset, 0.0, 100.0)?,
             // Lengths in layer pixels: a negative dash is not a shorter dash,
@@ -120,7 +132,11 @@ impl BridgeShapeItem {
                 0..=2 | lumit_core::shape::gradient::ANGLE => self.gradient,
                 _ => 0,
             },
-            gradient_colour: self.gradient_colour.map(still),
+            gradient_colour: self
+                .gradient_colour
+                .as_ref()
+                .map(|c| write_colour(c, offset))
+                .transpose()?,
             // The art's own coordinates, held to the same reach a vertex has.
             gradient_start_x: clamped_property(
                 &self.gradient_start_x,
@@ -152,7 +168,7 @@ impl BridgeShapeItem {
                 .map(|s| {
                     Ok(lumit_core::shape::GradientStop {
                         position: clamped_property(&s.position, offset, 0.0, 100.0)?,
-                        colour: still(s.colour),
+                        colour: write_colour(&s.colour, offset)?,
                         opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
                     })
                 })
@@ -187,9 +203,8 @@ impl BridgeShapeItem {
 
     /// [`Self::write_item`], but keeping what `previous` carries and this type
     /// does not describe: the **shape keyframes**, the outline's gradient, the
-    /// fill's highlight, the keys on its gradient colours and the
-    /// forward-compatibility `extra` a newer Lumit may have written (docs/10
-    /// §1.1 makes preserving it mandatory).
+    /// fill's highlight and the forward-compatibility `extra` a newer Lumit may
+    /// have written (docs/10 §1.1 makes preserving it mandatory).
     ///
     /// **A shape edit on a morphing item lands on the key under the
     /// playhead**, exactly as a mask's does. Once a path is keyed,
@@ -218,23 +233,6 @@ impl BridgeShapeItem {
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };
-        // A keyed gradient colour crosses still, so one that comes back as it
-        // went keeps its keys.
-        if let (Some(was), Some(sent)) = (&previous.gradient_colour, self.gradient_colour) {
-            if shown(was) == sent {
-                written.gradient_colour = Some(was.clone());
-            }
-        }
-        for ((stop, was), sent) in written
-            .gradient_stops
-            .iter_mut()
-            .zip(&previous.gradient_stops)
-            .zip(&self.gradient_stops)
-        {
-            if shown(&was.colour) == sent.colour {
-                stop.colour = was.colour.clone();
-            }
-        }
         // A parametric shape keeps its numbers until one of its points is
         // dragged, which makes it a drawn path holding the dragged points.
         if let Some(p) = &mut written.primitive {
@@ -295,15 +293,4 @@ impl BridgeShapeItem {
             closed: self.closed,
         }
     }
-}
-
-/// A gradient colour as the frontend shows it: still, at the head of the
-/// layer, as it does not key one yet.
-pub(crate) fn shown(c: &[lumit_core::anim::Property; 4]) -> crate::api::assets::BridgeColourRgba {
-    crate::api::assets::colour_of(lumit_core::shape::colour::at(c, 0.0))
-}
-
-/// A colour the frontend sent, as a gradient colour.
-pub(crate) fn still(c: crate::api::assets::BridgeColourRgba) -> [lumit_core::anim::Property; 4] {
-    lumit_core::shape::colour::still(crate::api::assets::linear_of(c))
 }

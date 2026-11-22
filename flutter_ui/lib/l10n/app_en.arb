@@ -12209,6 +12209,15 @@
   "@shapeGradientStopOpacity": {
     "description": "Gradient editor: label over how opaque the selected stop is, as a percentage."
   },
+  "shapeGradientStopColourRow": "Stop {n} colour",
+  "@shapeGradientStopColourRow": {
+    "description": "Timeline row under a shape layer's art: the colour of one of the stops along its gradient, which keys like the fill's colour. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "shapeGradientStopOpacityRow": "Stop {n} opacity",
   "@shapeGradientStopOpacityRow": {
     "description": "Timeline row under a shape layer's art: how opaque one of the stops along its gradient fill is, as a percentage. {n} counts the stops up from 1.",

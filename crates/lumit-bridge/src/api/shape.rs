@@ -109,12 +109,12 @@ pub struct BridgeShapeTrim {
 }
 
 /// A colour part way along a shape's gradient: where it sits as a per cent of
-/// the ramp, and how opaque it is, 0..100. Both animate.
+/// the ramp, and how opaque it is, 0..100. All three animate.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeGradientStop {
     pub position: BridgeScalar,
-    pub colour: crate::api::assets::BridgeColourRgba,
+    pub colour: crate::api::effect::BridgeColour,
     pub opacity: BridgeScalar,
 }
 

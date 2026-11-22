@@ -41707,7 +41707,7 @@ impl SseDecode for crate::api::shape::BridgeGradientStop {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_position = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
-        let mut var_colour = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
+        let mut var_colour = <crate::api::effect::BridgeColour>::sse_decode(deserializer);
         let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::shape::BridgeGradientStop {
             position: var_position,
@@ -45616,7 +45616,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradient = <u32>::sse_decode(deserializer);
         let mut var_gradientColour =
-            <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
+            <Option<crate::api::effect::BridgeColour>>::sse_decode(deserializer);
         let mut var_gradientStartX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientStartY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientEndX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -51084,19 +51084,6 @@ impl SseDecode for Option<crate::api::effect::BridgeColour> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::effect::BridgeColour>::sse_decode(deserializer));
-        } else {
-            return None;
-        }
-    }
-}
-
-impl SseDecode for Option<crate::api::assets::BridgeColourRgba> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::api::assets::BridgeColourRgba>::sse_decode(
-                deserializer,
-            ));
         } else {
             return None;
         }
@@ -69198,7 +69185,7 @@ impl SseEncode for crate::api::shape::BridgeGradientStop {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::effect::BridgeScalar>::sse_encode(self.position, serializer);
-        <crate::api::assets::BridgeColourRgba>::sse_encode(self.colour, serializer);
+        <crate::api::effect::BridgeColour>::sse_encode(self.colour, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
     }
 }
@@ -72243,10 +72230,7 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
         <u32>::sse_encode(self.gradient, serializer);
-        <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(
-            self.gradient_colour,
-            serializer,
-        );
+        <Option<crate::api::effect::BridgeColour>>::sse_encode(self.gradient_colour, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_x, serializer);
@@ -76322,16 +76306,6 @@ impl SseEncode for Option<crate::api::effect::BridgeColour> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::effect::BridgeColour>::sse_encode(value, serializer);
-        }
-    }
-}
-
-impl SseEncode for Option<crate::api::assets::BridgeColourRgba> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::api::assets::BridgeColourRgba>::sse_encode(value, serializer);
         }
     }
 }

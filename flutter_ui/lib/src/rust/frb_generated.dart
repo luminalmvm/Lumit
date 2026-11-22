@@ -35998,12 +35998,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  BridgeColourRgba dco_decode_box_autoadd_bridge_colour_rgba(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_bridge_colour_rgba(raw);
-  }
-
-  @protected
   BridgeCompSettings dco_decode_box_autoadd_bridge_comp_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_comp_settings(raw);
@@ -39180,7 +39174,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeGradientStop(
       position: dco_decode_bridge_scalar(arr[0]),
-      colour: dco_decode_bridge_colour_rgba(arr[1]),
+      colour: dco_decode_bridge_colour(arr[1]),
       opacity: dco_decode_bridge_scalar(arr[2]),
     );
   }
@@ -41995,7 +41989,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       dashes: dco_decode_list_bridge_scalar(arr[8]),
       dashOffset: dco_decode_bridge_scalar(arr[9]),
       gradient: dco_decode_u_32(arr[10]),
-      gradientColour: dco_decode_opt_box_autoadd_bridge_colour_rgba(arr[11]),
+      gradientColour: dco_decode_opt_box_autoadd_bridge_colour(arr[11]),
       gradientStartX: dco_decode_bridge_scalar(arr[12]),
       gradientStartY: dco_decode_bridge_scalar(arr[13]),
       gradientEndX: dco_decode_bridge_scalar(arr[14]),
@@ -45294,12 +45288,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  BridgeColourRgba? dco_decode_opt_box_autoadd_bridge_colour_rgba(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_bridge_colour_rgba(raw);
-  }
-
-  @protected
   BridgeCompSettings? dco_decode_opt_box_autoadd_bridge_comp_settings(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -46435,13 +46423,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_colour(deserializer));
-  }
-
-  @protected
-  BridgeColourRgba sse_decode_box_autoadd_bridge_colour_rgba(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_bridge_colour_rgba(deserializer));
   }
 
   @protected
@@ -49844,7 +49825,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_position = sse_decode_bridge_scalar(deserializer);
-    var var_colour = sse_decode_bridge_colour_rgba(deserializer);
+    var var_colour = sse_decode_bridge_colour(deserializer);
     var var_opacity = sse_decode_bridge_scalar(deserializer);
     return BridgeGradientStop(
         position: var_position, colour: var_colour, opacity: var_opacity);
@@ -52817,7 +52798,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_dashOffset = sse_decode_bridge_scalar(deserializer);
     var var_gradient = sse_decode_u_32(deserializer);
     var var_gradientColour =
-        sse_decode_opt_box_autoadd_bridge_colour_rgba(deserializer);
+        sse_decode_opt_box_autoadd_bridge_colour(deserializer);
     var var_gradientStartX = sse_decode_bridge_scalar(deserializer);
     var var_gradientStartY = sse_decode_bridge_scalar(deserializer);
     var var_gradientEndX = sse_decode_bridge_scalar(deserializer);
@@ -57531,18 +57512,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  BridgeColourRgba? sse_decode_opt_box_autoadd_bridge_colour_rgba(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_bridge_colour_rgba(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
   BridgeCompSettings? sse_decode_opt_box_autoadd_bridge_comp_settings(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -59137,13 +59106,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeColour self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_colour(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_bridge_colour_rgba(
-      BridgeColourRgba self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_bridge_colour_rgba(self, serializer);
   }
 
   @protected
@@ -61889,7 +61851,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeGradientStop self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_scalar(self.position, serializer);
-    sse_encode_bridge_colour_rgba(self.colour, serializer);
+    sse_encode_bridge_colour(self.colour, serializer);
     sse_encode_bridge_scalar(self.opacity, serializer);
   }
 
@@ -64184,8 +64146,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_list_bridge_scalar(self.dashes, serializer);
     sse_encode_bridge_scalar(self.dashOffset, serializer);
     sse_encode_u_32(self.gradient, serializer);
-    sse_encode_opt_box_autoadd_bridge_colour_rgba(
-        self.gradientColour, serializer);
+    sse_encode_opt_box_autoadd_bridge_colour(self.gradientColour, serializer);
     sse_encode_bridge_scalar(self.gradientStartX, serializer);
     sse_encode_bridge_scalar(self.gradientStartY, serializer);
     sse_encode_bridge_scalar(self.gradientEndX, serializer);
@@ -67799,17 +67760,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_colour(self, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_opt_box_autoadd_bridge_colour_rgba(
-      BridgeColourRgba? self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_bridge_colour_rgba(self, serializer);
     }
   }
 

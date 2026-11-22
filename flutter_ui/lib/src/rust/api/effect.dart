@@ -5,7 +5,6 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
-import 'assets.dart';
 import 'graph.dart';
 import 'layer.dart';
 import 'lens.dart';
