@@ -567,6 +567,8 @@ pub struct Compositor {
     /// The last multisample attachment and the ledger's charge for it, kept
     /// for the next composite of the same shape.
     kept: std::sync::Mutex<Option<(wgpu::Texture, lumit_budget::Reservation)>>,
+    /// The motion blur's scratch, kept for the next blurring layer.
+    mb_kept: std::sync::Mutex<Option<([wgpu::Texture; 3], lumit_budget::Reservation)>>,
     /// How a model's picture joins a run of 3D layers, built on first use.
     joins: join::Joins,
 }
@@ -867,17 +869,22 @@ impl Compositor {
             white,
             black,
             kept: std::sync::Mutex::new(None),
+            mb_kept: std::sync::Mutex::new(None),
             joins: Default::default(),
         }
     }
 
-    /// Let go of the kept multisample attachment. It is kept from one
-    /// composite to the next because making it costs more than drawing into
-    /// it, at 4K and 8x it is half a gigabyte, and a frame with an adjustment
-    /// layer composites more than once. The Viewer lets go of it when it goes
+    /// Let go of the kept multisample attachment, and the motion blur's
+    /// scratch. The attachment is kept from one composite to the next because
+    /// making it costs more than drawing into it, at 4K and 8x it is half a
+    /// gigabyte, and a frame with an adjustment layer composites more than
+    /// once. The Viewer lets go of it when it goes
     /// idle, so an idle project holds none.
     pub fn drop_attachment(&self) {
         if let Ok(mut k) = self.kept.lock() {
+            k.take();
+        }
+        if let Ok(mut k) = self.mb_kept.lock() {
             k.take();
         }
     }

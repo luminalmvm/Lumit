@@ -188,37 +188,7 @@ impl Compositor {
         // quad, so the accumulate() full-frame ping-pong can't apply. Instead:
         // render each placement into a cleared fp16 temp (0 outside its quad),
         // add that temp into an fp32 running sum full-frame, and resolve once.
-        let mk_f32 = |label: &str| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            })
-        };
-        let temp = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("mb-temp"),
-            size: wgpu::Extent3d {
-                width: tw,
-                height: th,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: ctx.working(),
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+        let [accum_a, accum_b, temp] = self.mb_scratch(ctx, tw, th);
         let temp_view = temp.create_view(&Default::default());
         // Trap 4: the placement quads are geometry, so they get the same
         // multisample treatment the composite does, resolving into `temp` —
@@ -249,8 +219,6 @@ impl Compositor {
             .as_ref()
             .map(|t| t.create_view(&Default::default()));
         let pipelines = self.pipelines(ctx, aa_samples, None);
-        let accum_a = mk_f32("mb-accum-a");
-        let accum_b = mk_f32("mb-accum-b");
         let a_view = accum_a.create_view(&Default::default());
         let b_view = accum_b.create_view(&Default::default());
 
@@ -423,6 +391,60 @@ impl Compositor {
         if let Some(msaa) = temp_msaa {
             self.give_back(ctx, msaa);
         }
+        self.keep_mb_scratch(ctx, [accum_a, accum_b, temp]);
         target
+    }
+
+    /// The scratch kept by the last blurring layer when it has this size, or
+    /// a new set: the two halves of the fp32 running sum, and the temp each
+    /// batch of placements is drawn into. Each is cleared before it is read,
+    /// so what it held last time never shows.
+    fn mb_scratch(&self, ctx: &GpuContext, tw: u32, th: u32) -> [wgpu::Texture; 3] {
+        let kept = self.mb_kept.lock().ok().and_then(|mut k| k.take());
+        if let Some((kept, _)) = kept {
+            let [a, _, temp] = &kept;
+            if (a.width(), a.height(), temp.format()) == (tw, th, ctx.working()) {
+                return kept;
+            }
+        }
+        let make = |label: &str, format: wgpu::TextureFormat| {
+            ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: tw,
+                    height: th,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        [
+            make("mb-accum-a", wgpu::TextureFormat::Rgba32Float),
+            make("mb-accum-b", wgpu::TextureFormat::Rgba32Float),
+            make("mb-temp", ctx.working()),
+        ]
+    }
+
+    /// Hold the scratch for the next blurring layer, if the ledger has room
+    /// for it. Otherwise it goes. Made new for every layer, a frame of a
+    /// hundred fast layers held a hundred sets until the card was done with
+    /// the frame.
+    fn keep_mb_scratch(&self, ctx: &GpuContext, scratch: [wgpu::Texture; 3]) {
+        let bytes = scratch
+            .iter()
+            .map(|t| crate::texture_bytes(t.format(), t.width(), t.height()))
+            .sum();
+        let Ok(held) = ctx.ledger().reserve(lumit_budget::Tier::Vram, bytes) else {
+            return;
+        };
+        if let Ok(mut k) = self.mb_kept.lock() {
+            *k = Some((scratch, held));
+        }
     }
 }
