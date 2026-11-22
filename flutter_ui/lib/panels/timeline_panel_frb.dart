@@ -6098,9 +6098,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 controller: _vLane,
                 showThumb: true,
                 header: [
+                  // The corner level with the ruler holds the comp marker
+                  // bin, as After Effects' does: a click marks the
+                  // playhead's frame.
                   Container(
                     height: t.density.ruler,
                     color: t.timelineOutOfRange,
+                    child: CompMarkerBin(
+                      comp: comp,
+                      playhead: ui.playheadFrame,
+                      onAdded: ui.model.refresh,
+                    ),
                   ),
                 ],
               ),
