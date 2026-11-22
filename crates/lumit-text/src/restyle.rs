@@ -54,3 +54,63 @@ fn reference_point(document: &lumit_core::model::TextDocument) -> (f64, f64) {
     let y = l.lines.first().map_or(0.0, |line| line.baseline);
     (f64::from(x), f64::from(y))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::shift;
+    use lumit_core::anim::Property;
+    use lumit_core::model::{LinearColour, TextDocument};
+    use lumit_core::text::{ParagraphStyle, TextAlign, TextAnimator};
+
+    fn document(text: &str, size: f64, align: TextAlign) -> TextDocument {
+        TextDocument {
+            text: text.into(),
+            expression: None,
+            keys: None,
+            size,
+            fill: LinearColour([1.0; 4]),
+            path: None,
+            path_offset: Property::zero(),
+            animators: Vec::new(),
+            style: Box::default(),
+            paragraph: ParagraphStyle {
+                align,
+                ..ParagraphStyle::default()
+            },
+            captions: None,
+            extra: Default::default(),
+        }
+    }
+
+    /// Nothing changed, nothing moves; retyped left-aligned words grow from
+    /// where they start, so they don't move either.
+    #[test]
+    fn the_anchor_stays_when_nothing_needs_it_to_move() {
+        let line = document("Hello", 48.0, TextAlign::Left);
+        assert_eq!(shift(&line, &line), (0.0, 0.0));
+        let retyped = document("Hello there", 48.0, TextAlign::Left);
+        assert_eq!(shift(&line, &retyped), (0.0, 0.0));
+        let mut spoken = document("Hello", 48.0, TextAlign::Centre);
+        spoken.expression = Some("\"Hi\"".into());
+        let mut respoken = spoken.clone();
+        respoken.text = "Hello there".into();
+        assert_eq!(shift(&spoken, &respoken), (0.0, 0.0));
+    }
+
+    /// A bigger size, centred words retyped, or a first animator's padding
+    /// each move the anchor so the words stay where they were.
+    #[test]
+    fn the_anchor_follows_a_restyle() {
+        let centred = document("Hello", 48.0, TextAlign::Centre);
+        let bigger = document("Hello", 96.0, TextAlign::Centre);
+        let (x, y) = shift(&centred, &bigger);
+        assert!(x > 0.0 && y > 0.0, "{x} {y}");
+        let retyped = document("Hello there", 48.0, TextAlign::Centre);
+        let (x, y) = shift(&centred, &retyped);
+        assert!(x > 0.0 && y.abs() < 1e-6, "{x} {y}");
+        let mut animated = centred.clone();
+        animated.animators.push(TextAnimator::new("Animator 1"));
+        let (x, y) = shift(&centred, &animated);
+        assert!(x > 0.0 && y > 0.0, "{x} {y}");
+    }
+}
