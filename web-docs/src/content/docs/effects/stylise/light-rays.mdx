@@ -38,6 +38,7 @@ of a pixel.
 | **Source point X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Source point Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Ray length** | Slider | 0 to 10; up to 100 | 4 | - |
+| **Extend beyond layer** | Checkbox | On or off | Off | - |
 | **Amount** | Slider | 0 to 100; up to 200 | 0 | Per cent |
 | **Detail** | Slider | 1 to 100; up to 400 | 10 | - |
 | **Phase** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
@@ -92,6 +93,10 @@ In the Effect Controls panel:
 - **Ray length** is how far the rays reach, in their own distance from the source: at 4, something
   bright throws its ray out to five times as far from the source as it is. It does not change how
   long a frame takes.
+- **Extend beyond layer** gives the layer room around it for the rays to reach into, so the rays
+  of a text or shape layer are not cut off at its bounding box. The room is as far as the longest
+  ray reaches, up to the picture's diagonal on each side; leave it off on a full-frame layer, where
+  the frame cuts the rays anyway.
 
 ### Shimmer
 

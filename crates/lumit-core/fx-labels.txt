@@ -625,6 +625,7 @@ Expansion
 Explosion
 Exposure
 Expression
+Extend beyond layer
 Extra scale
 Extract channels
 Extrusion depth

@@ -19,9 +19,9 @@
 //! in Phase too.
 
 use crate::fx::{
-    cpu, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
-    registry::Pressed, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
-    schema::ParamGroup,
+    cpu, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::Pressed, registry::ResolveCx, schema::EffectSchema,
+    schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup,
 };
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
@@ -347,6 +347,13 @@ pub struct LightRays {
     )]
     pub ray_length: f32,
 
+    /// On, the layer is given room around it for the rays to reach into, so
+    /// a text or shape layer's rays are not cut off at its bounding box.
+    /// The room is as far as the longest ray reaches, up to the picture's
+    /// diagonal on each side.
+    #[toggle(label = "Extend beyond layer", default = false)]
+    pub extend_beyond_layer: bool,
+
     /// How much the ray length changes around the source, per cent.
     #[slider(
         label = "Amount",
@@ -647,6 +654,23 @@ fn noise4(x: [f64; 4], period: [i64; 4], octave: u32) -> f32 {
 }
 
 impl LightRays {
+    /// The raster's diagonal, pixels. Never a panel row.
+    pub const DERIVED_DIAG: ParamId = ParamId::new("derived.diag");
+
+    /// How far past the picture the rays can reach, raster pixels, under
+    /// Extend beyond layer: the farthest a ray from anywhere on a picture
+    /// `diag` across can go, at most one diagonal. Zero when it is off.
+    #[must_use]
+    pub fn reach(self, diag: f32) -> f32 {
+        if !self.extend_beyond_layer || self.mix <= 0.0 || diag <= 0.0 {
+            return 0.0;
+        }
+        let shimmer = 1.0 + self.shimmer_amount.max(0.0) / 100.0;
+        let len = (1.0 + self.ray_length.max(0.0)).ln() * shimmer;
+        let far = self.source_x.hypot(self.source_y) + diag;
+        (far * len.exp_m1()).min(diag)
+    }
+
     /// The numbers both render paths read, on a `w` by `h` raster. Positions
     /// and sizes arrive already scaled to it.
     #[must_use]
@@ -1068,6 +1092,15 @@ impl EffectDef for LightRaysDef {
         light_rays(rgba, w, h, &LightRays::read(p).packed(w, h));
     }
 
+    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
+        push(LightRays::DERIVED_DIAG, Value::Float(cx.diag_px));
+    }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        let reach = LightRays::read(p).reach(p.float(LightRays::DERIVED_DIAG, 0.0));
+        [reach, reach]
+    }
+
     fn settle(&self, before: Option<&EffectInstance>, after: &EffectInstance) -> Option<Pressed> {
         settle(before, after)
     }
@@ -1191,6 +1224,22 @@ mod tests {
         assert!(near(gradient(&p, 0.1), rgb3(fx.shadows)));
         assert!(near(gradient(&p, 0.8), rgb3(fx.highlights)));
         assert_eq!(gradient(&p, 1.0), [1.0; 3]);
+    }
+
+    #[test]
+    fn extend_beyond_layer_gives_the_rays_room_up_to_a_diagonal() {
+        let mut fx = LightRays::read(Params::EMPTY);
+        assert_eq!(fx.reach(2203.0), 0.0, "off by default: no room");
+        fx.extend_beyond_layer = true;
+        assert_eq!(fx.reach(2203.0), 2203.0, "long rays: one diagonal");
+        fx.ray_length = 0.05;
+        let short = fx.reach(2203.0);
+        assert!(
+            short > 0.0 && short < 2203.0,
+            "short rays: less room ({short})"
+        );
+        fx.ray_length = 0.0;
+        assert_eq!(fx.reach(2203.0), 0.0, "no rays: no room");
     }
 
     #[test]

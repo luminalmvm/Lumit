@@ -38562,6 +38562,13 @@
           "hard_max": 100.0
         },
         {
+          "id": "extend_beyond_layer",
+          "label": "Extend beyond layer",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "shimmer_amount",
           "label": "Amount",
           "kind": "float",

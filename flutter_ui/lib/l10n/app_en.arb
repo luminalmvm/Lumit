@@ -33401,5 +33401,9 @@
   "fxBlendMode": "Blend mode",
   "@fxBlendMode": {
     "description": "Effect controls: a menu on Light rays, how the rays go onto the picture; None shows the rays alone."
+  },
+  "fxExtendBeyondLayer": "Extend beyond layer",
+  "@fxExtendBeyondLayer": {
+    "description": "Effect controls: a switch on Light rays; the layer is given room so its rays are not cut off at its bounding box."
   }
 }

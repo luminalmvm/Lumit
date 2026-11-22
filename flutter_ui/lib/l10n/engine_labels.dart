@@ -2295,6 +2295,7 @@ Map<String, String> get _built => {
       "Source point X": l10n.fxSourcePointX,
       "Source point Y": l10n.fxSourcePointY,
       "Ray length": l10n.fxRayLength,
+      "Extend beyond layer": l10n.fxExtendBeyondLayer,
       "Source point affects shimmer": l10n.fxSourcePointAffectsShimmer,
       "Reduce flicker": l10n.fxReduceFlicker,
       "Use loop": l10n.fxUseLoop,
