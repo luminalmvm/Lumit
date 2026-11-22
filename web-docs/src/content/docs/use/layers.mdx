@@ -316,7 +316,9 @@ The Motion blur effect is different, see
 **Collapse** is a switch on a Precomp layer. On, the layers of the nested composition are
 drawn straight into this one with the Precomp layer's transform applied to each. The nested
 composition is not drawn to a picture of its own first, and its layers are not cut off at
-its edges.
+its edges. Its shape and text layers are drawn at the size they are shown and stay sharp
+when the Precomp layer is scaled up. An ordinary Precomp layer is drawn at the nested
+composition's size and then scaled.
 
 The switch does nothing, and the layer draws as an ordinary Precomp layer, while any of
 these holds:

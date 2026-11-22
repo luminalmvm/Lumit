@@ -252,7 +252,11 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     // Spliced: one draw, pixel source (the inner text), pre = the parent
     // Precomp layer's placement matrix — exactly the compositor's maths.
     assert_eq!(draws.len(), 1);
-    assert!(matches!(draws[0].source, DrawSource::Pixels { .. }));
+    // Its words are drawn as large as the collapsed layer shows them.
+    let DrawSource::Pixels { tex_w, .. } = &draws[0].source else {
+        panic!("a collapsed Precomp's text is spliced in as pixels");
+    };
+    assert!((*tex_w as f32 - 2.0 * draws[0].natural_size.0).abs() <= 2.0);
     let tr = &pre_layer.transform;
     let expect = lumit_gpu::composite::place_matrix(
         (

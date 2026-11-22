@@ -20,9 +20,10 @@ pub(super) struct Walk<'a> {
     /// over a Precomp that holds an Echo builds the whole of the inside once
     /// for every frame of both windows, only to throw it away.
     pub(super) rebuild: bool,
-    /// The camera a collapsed precomp's layers are seen through, the one of
-    /// the comp it was collapsed into. `None` is this comp's own.
-    pub(super) seen_through: Option<lumit_core::model::CameraPose>,
+    /// How a collapsed precomp's layers are seen: through the camera of the
+    /// comp it was collapsed into, in that comp's frame, inside the collapsed
+    /// layers' placement. `None` is this comp's own.
+    pub(super) seen_through: Option<super::raster_scale::Seen>,
 }
 
 impl Walk<'static> {
