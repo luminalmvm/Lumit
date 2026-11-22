@@ -7554,7 +7554,8 @@
           "options": [
             "Turbulent",
             "Horizontal",
-            "Vertical"
+            "Vertical",
+            "Bulge"
           ],
           "dividers_after": []
         },

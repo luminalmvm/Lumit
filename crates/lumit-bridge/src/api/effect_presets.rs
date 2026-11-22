@@ -304,6 +304,7 @@ impl LayerReference {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     document,
+                    graph: None,
                 });
                 for (prop, mut property, by) in [
                     (

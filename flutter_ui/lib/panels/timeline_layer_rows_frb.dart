@@ -301,7 +301,7 @@ class FoldRow extends StatelessWidget {
         : animatorDropTarget(
             layerId: layer.internallayerId.toString(),
             index: animator,
-            onMove: (from) => _writeAnimators(
+            onMove: (from) => _writeAnimators(context,
                 (list) => animatorsMoved(list, from, animator)),
             child: body_,
           );
@@ -689,17 +689,24 @@ class FoldRow extends StatelessWidget {
   }
 
   /// The layer's animators changed by [change], written back as one step.
-  void _writeAnimators(
+  void _writeAnimators(BuildContext context,
       List<BridgeTextAnimator> Function(List<BridgeTextAnimator>) change) {
     final animators = layer.getText()?.animators;
     if (animators == null) return;
-    writeTextAnimatorList(layer, change(animators));
+    writeTextAnimatorList(layer, change(animators),
+        ui: Provider.of<LumitUiState>(context, listen: false));
     onChanged();
   }
 
   /// The animator an animator heading names, as the document holds it.
-  BridgeTextAnimator? _animatorAt(int index) {
-    final animators = layer.getText()?.animators;
+  /// Read from the model the panels already hold, not from the engine: a
+  /// heading asks on every build.
+  BridgeTextAnimator? _animatorAt(BuildContext context, int index) {
+    final animators = Provider.of<LumitUiState>(context, listen: false)
+        .model
+        .byId(layer.internallayerId)
+        ?.info
+        .textAnimators;
     return animators == null || index >= animators.length
         ? null
         : animators[index];
@@ -710,14 +717,14 @@ class FoldRow extends StatelessWidget {
   Widget? _animatorEye(BuildContext context) {
     if (row is! FoldGroupRow || locked) return null;
     final index = _animatorIndexOf(path);
-    final a = index == null ? null : _animatorAt(index);
+    final a = index == null ? null : _animatorAt(context, index);
     if (index == null || a == null) return null;
     return Center(
       child: animatorSwitch(context,
           key: 'tl-anim-eye-$index',
           solo: false,
           on: a.enabled,
-          onTap: () => _writeAnimators((list) => [
+          onTap: () => _writeAnimators(context, (list) => [
                 for (var i = 0; i < list.length; i++)
                   i == index
                       ? animatorWith(list[i], enabled: !list[i].enabled)
@@ -730,14 +737,14 @@ class FoldRow extends StatelessWidget {
   Widget? _animatorSolo(BuildContext context) {
     if (row is! FoldGroupRow || locked) return null;
     final index = _animatorIndexOf(path);
-    final a = index == null ? null : _animatorAt(index);
+    final a = index == null ? null : _animatorAt(context, index);
     if (index == null || a == null) return null;
     return Center(
       child: animatorSwitch(context,
           key: 'tl-anim-solo-$index',
           solo: true,
           on: a.solo,
-          onTap: () => _writeAnimators((list) => [
+          onTap: () => _writeAnimators(context, (list) => [
                 for (var i = 0; i < list.length; i++)
                   i == index
                       ? animatorWith(list[i], solo: !list[i].solo)
@@ -752,11 +759,13 @@ class FoldRow extends StatelessWidget {
     if (animators == null || index >= animators.length) return;
     showAnimatorMoreMenu(context, at,
         layerId: layer.internallayerId.toString(),
+        renameScope: 'tl',
         comp: comp,
         animators: animators,
         index: index,
         write: (next) {
-          writeTextAnimatorList(layer, next);
+          writeTextAnimatorList(layer, next,
+              ui: Provider.of<LumitUiState>(context, listen: false));
           onChanged();
         });
   }
@@ -771,7 +780,7 @@ class FoldRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis);
     // An animator's name: double-click to rename, Enter keeps, Esc goes back.
     if (_animatorIndexOf(path) case final index?) {
-      final key = '${layer.internallayerId}/$index';
+      final key = 'tl:${layer.internallayerId}/$index';
       return ValueListenableBuilder<String?>(
         valueListenable: animatorRenaming,
         builder: (context, renaming, _) => renaming != key
@@ -1108,13 +1117,13 @@ class FoldRow extends StatelessWidget {
                     ),
                   ),
                   // Reverse, beside More, when the animator has keys.
-                  if (_animatorAt(index) case final a? when animatorHasKeys(a))
+                  if (_animatorAt(context, index) case final a? when animatorHasKeys(a))
                     ...[
                       SizedBox(width: animatorButtonGap(afterArrow: true)),
                       RowButton(
                         key: ValueKey<String>('tl-text-animator-reverse-$path'),
                         label: l10n.textAnimatorReverse,
-                        onTap: (_) => _writeAnimators(
+                        onTap: (_) => _writeAnimators(context,
                             (list) => animatorsReversed(list, index)),
                       ),
                       SizedBox(width: animatorButtonGap(afterArrow: false)),
@@ -1124,7 +1133,7 @@ class FoldRow extends StatelessWidget {
                   RowButton(
                     key: ValueKey<String>('tl-text-animator-remove-$path'),
                     label: l10n.textAnimatorRemove,
-                    onTap: (_) => _writeAnimators((list) => [
+                    onTap: (_) => _writeAnimators(context, (list) => [
                           for (var i = 0; i < list.length; i++)
                             if (i != index) list[i],
                         ]),

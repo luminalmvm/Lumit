@@ -255,8 +255,8 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
       ];
   axesNow();
   BridgeTextAnimator fresh(LayerReference layer, [String? what]) =>
-      freshTextAnimator(animatorNameFor(
-          (layer.getText()?.animators.length ?? 0) + 1, what));
+      freshTextAnimator(
+          animatorNameFor(layer.getText()?.animators ?? const [], what));
   return [
     MenuEntry(
         l10n.textAnimatorBlank,

@@ -33,6 +33,7 @@ import 'fx_section.dart' show FxRenameField, fxTwoColumnRow;
 import 'text_animation_presets.dart' show reversedAnimator, reversedScalar;
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_mask_rows_frb.dart' show RowButton;
+import 'layer_fold_frb.dart' show animatorsPath;
 import 'text_animator_rows_frb.dart';
 
 // ---- Selectors ------------------------------------------------------------
@@ -958,8 +959,12 @@ final ValueNotifier<String?> animatorRenaming = ValueNotifier(null);
 List<BridgeTextAnimator> animatorsRenamed(
     List<BridgeTextAnimator> animators, int index, String name) {
   final was = animators[index].name;
-  final next = name.trim();
-  if (next.isEmpty || next == was) return animators;
+  final typed = name.trim();
+  if (typed.isEmpty || typed == was) return animators;
+  // Never the name of another animator: Link to and Reverse go by name.
+  final next = freeAnimatorName(
+      [for (var i = 0; i < animators.length; i++) if (i != index) animators[i]],
+      typed);
   return [
     for (var i = 0; i < animators.length; i++)
       if (i == index)
@@ -986,6 +991,7 @@ List<BridgeTextAnimator> animatorsMoved(
 List<Widget> animatorMoreMenuRows({
   required BuildContext context,
   required String layerId,
+  String renameScope = 'fx',
   required VoidCallback close,
   required CompositionReference comp,
   required List<BridgeTextAnimator> animators,
@@ -1008,7 +1014,7 @@ List<Widget> animatorMoreMenuRows({
       );
   return [
     row('rename', l10n.rename,
-        () => animatorRenaming.value = '$layerId/$index'),
+        () => animatorRenaming.value = '$renameScope:$layerId/$index'),
     const MenuDivider(),
     row('duplicate', l10n.textAnimatorDuplicate, () {
       write([
@@ -1026,11 +1032,7 @@ List<Widget> animatorMoreMenuRows({
         copiedAnimators.isEmpty
             ? null
             : () {
-                final out = [...animators];
-                for (final c in copiedAnimators) {
-                  out.add(animatorWith(c, name: freeAnimatorName(out, c.name)));
-                }
-                write(out);
+                write(animatorsPasted(animators, copiedAnimators));
               }),
     const MenuDivider(),
     row(
@@ -1081,6 +1083,9 @@ class AnimatorHeading extends StatelessWidget {
   final ValueChanged<List<BridgeTextAnimator>> write;
   final bool solid;
 
+  /// Which panel this heading is in, so a rename opens only here.
+  final String renameScope;
+
   const AnimatorHeading({
     super.key,
     required this.layer,
@@ -1089,6 +1094,7 @@ class AnimatorHeading extends StatelessWidget {
     required this.index,
     required this.write,
     required this.solid,
+    this.renameScope = 'fx',
   });
 
   @override
@@ -1100,7 +1106,8 @@ class AnimatorHeading extends StatelessWidget {
             if (i == index) next else animators[i],
         ]);
     final layerId = layer.internallayerId.toString();
-    final renameKey = '${layer.internallayerId}/$index';
+    // The panel's own: a rename opens where it was asked for.
+    final renameKey = '$renameScope:${layer.internallayerId}/$index';
     final name = ValueListenableBuilder<String?>(
       valueListenable: animatorRenaming,
       builder: (context, renaming, _) => renaming == renameKey
@@ -1198,6 +1205,7 @@ class AnimatorHeading extends StatelessWidget {
           const SizedBox(width: 8),
           animatorMoreButton(context,
               layerId: layerId,
+              renameScope: renameScope,
               key: 'text-animator-more-$index',
               comp: comp,
               animators: animators,
@@ -1236,6 +1244,7 @@ class AnimatorHeading extends StatelessWidget {
         behavior: HitTestBehavior.translucent,
         onSecondaryTapUp: (d) => showAnimatorMoreMenu(context, d.globalPosition,
             layerId: layerId,
+            renameScope: renameScope,
             comp: comp,
             animators: animators,
             index: index,
@@ -1250,6 +1259,7 @@ class AnimatorHeading extends StatelessWidget {
 /// animator. The Timeline heading opens the same menu on a right-click.
 Widget animatorMoreButton(BuildContext context,
         {required String layerId,
+        String renameScope = 'fx',
         required String key,
         required CompositionReference comp,
         required List<BridgeTextAnimator> animators,
@@ -1263,6 +1273,7 @@ Widget animatorMoreButton(BuildContext context,
         arrow: true,
         onTap: (at) => showAnimatorMoreMenu(context, at,
             layerId: layerId,
+            renameScope: renameScope,
             comp: comp, animators: animators, index: index, write: write),
       ),
     );
@@ -1270,6 +1281,7 @@ Widget animatorMoreButton(BuildContext context,
 /// The More menu of animator [index], dropped at [at].
 void showAnimatorMoreMenu(BuildContext context, Offset at,
         {required String layerId,
+        String renameScope = 'fx',
         required CompositionReference comp,
         required List<BridgeTextAnimator> animators,
         required int index,
@@ -1281,6 +1293,7 @@ void showAnimatorMoreMenu(BuildContext context, Offset at,
       rows: (close) => animatorMoreMenuRows(
         context: context,
         layerId: layerId,
+        renameScope: renameScope,
         close: () => close(null),
         comp: comp,
         animators: animators,
@@ -1432,9 +1445,11 @@ Widget animatorSwitch(BuildContext context,
 /// Write [layer]'s animators back as [animators], the rest of the document
 /// as it is.
 void writeTextAnimatorList(
-    LayerReference layer, List<BridgeTextAnimator> animators) {
+    LayerReference layer, List<BridgeTextAnimator> animators,
+    {LumitUiState? ui}) {
   final document = layer.getText();
   if (document == null) return;
+  followAnimators(ui, layer, document.animators, animators);
   layer.setText(
     document: BridgeTextDocument(
       text: document.text,
@@ -1480,4 +1495,109 @@ class _DoubleClickListenerState extends State<DoubleClickListener> {
         },
         child: widget.child,
       );
+}
+
+/// Where each of [old]'s animators is in [next], or null for one that is
+/// gone: by name, the n-th of a name to the n-th of it, and those left over
+/// on both sides, when as many are left on each, taken as renamed in order.
+/// The engine moves the Node graph's wires by the same rule.
+List<int?> animatorMoves(
+    List<BridgeTextAnimator> old, List<BridgeTextAnimator> next) {
+  int nth(List<BridgeTextAnimator> list, int i) =>
+      list.take(i).where((a) => a.name == list[i].name).length;
+  final taken = List<bool>.filled(next.length, false);
+  final out = <int?>[
+    for (var i = 0; i < old.length; i++)
+      () {
+        final n = nth(old, i);
+        for (var j = 0; j < next.length; j++) {
+          if (!taken[j] && next[j].name == old[i].name && nth(next, j) == n) {
+            taken[j] = true;
+            return j;
+          }
+        }
+        return null;
+      }(),
+  ];
+  final lost = [for (var i = 0; i < old.length; i++) if (out[i] == null) i];
+  final fresh = [for (var j = 0; j < next.length; j++) if (!taken[j]) j];
+  if (lost.length == fresh.length) {
+    for (var x = 0; x < lost.length; x++) {
+      out[lost[x]] = fresh[x];
+    }
+  }
+  return out;
+}
+
+/// [key] with the animator index right after [stem] moved as [moves] says;
+/// null when that animator is gone. A key about no animator comes back as it
+/// is.
+String? movedAnimatorKey(String key, String stem, List<int?> moves) {
+  if (!key.startsWith(stem)) return key;
+  final rest = key.substring(stem.length);
+  final cut = rest.indexOf('/');
+  final index = int.tryParse(cut < 0 ? rest : rest.substring(0, cut));
+  if (index == null || index >= moves.length) return key;
+  final to = moves[index];
+  if (to == null) return null;
+  return '$stem$to${cut < 0 ? '' : rest.substring(cut)}';
+}
+
+/// Keep what the panels show about [layer]'s animators on the animators
+/// themselves when the list goes from [old] to [next]: which are folded, which
+/// Advanced groups are open, the Timeline's open rows and the picked rows (so
+/// the graph editor keeps showing the same curves). A rename in progress is
+/// put away.
+void followAnimators(LumitUiState? ui, LayerReference layer,
+    List<BridgeTextAnimator> old, List<BridgeTextAnimator> next) {
+  final moves = animatorMoves(old, next);
+  var same = old.length == next.length;
+  for (var i = 0; same && i < moves.length; i++) {
+    same = moves[i] == i;
+  }
+  if (same) return;
+  final id = layer.internallayerId.toString();
+  Set<String> moved(Iterable<String> keys, String stem) => {
+        for (final k in keys)
+          if (movedAnimatorKey(k, stem, moves) case final m?) m,
+      };
+  animatorFolded.value = moved(animatorFolded.value, '$id/');
+  advancedOpen.value = moved(advancedOpen.value, '$id/');
+  animatorRenaming.value = null;
+  if (ui == null) return;
+  final open = ui.folds.timelineOpen;
+  final opened = moved(open, '${animatorsPath(id)}/');
+  open
+    ..clear()
+    ..addAll(opened);
+  final picked = ui.selectedProperties.value;
+  final kept = moved(picked, '${animatorsPath(id)}/').toList();
+  if (kept.length != picked.length ||
+      [for (var i = 0; i < kept.length; i++) kept[i] != picked[i]]
+          .any((x) => x)) {
+    ui.selectedProperties.value = kept;
+  }
+}
+
+/// [animators] with [copied] added after them. A copy whose name is taken is
+/// given a free one, and a copy linked to another of the copies is linked to
+/// it under its new name, so a pasted pair stays a pair.
+List<BridgeTextAnimator> animatorsPasted(
+    List<BridgeTextAnimator> animators, List<BridgeTextAnimator> copied) {
+  final out = [...animators];
+  final renamed = <String, String>{};
+  final added = <BridgeTextAnimator>[];
+  for (final c in copied) {
+    final name = freeAnimatorName([...out, ...added], c.name);
+    renamed.putIfAbsent(c.name, () => name);
+    added.add(animatorWith(c, name: name));
+  }
+  return [
+    ...out,
+    for (final a in added)
+      if (a.follow case final f? when renamed.containsKey(f))
+        animatorWith(a, follow: renamed[f])
+      else
+        a,
+  ];
 }

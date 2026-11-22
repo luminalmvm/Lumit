@@ -653,6 +653,7 @@ impl LayerReference {
             comp: self.comp_id,
             layer: self.layer_id,
             document: after,
+            graph: None,
         };
         if shift == (0.0, 0.0) {
             return self.commit(set);
@@ -709,6 +710,7 @@ impl LayerReference {
             comp: self.comp_id,
             layer: self.layer_id,
             document: text_document_of(document, offset)?,
+            graph: None,
         }];
         for (prop, value) in [
             (TransformProp::AnchorX, anchor_x),

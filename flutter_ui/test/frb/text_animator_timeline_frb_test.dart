@@ -153,6 +153,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(text.getText()!.animators[1].solo, isTrue);
 
+      // Animator 2 open: it stays open as it moves.
+      await twirl(tester, '$id/animators/1');
+      expect(p.uiState.folds.timelineOpen, contains('$id/animators/1'));
+
       // More: the same menu as in the Effect controls panel.
       await tester.tap(find.byKey(ValueKey<String>('tl-text-animator-more-$id/animators/1')));
       await tester.pumpAndSettle();
@@ -160,6 +164,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(text.getText()!.animators.map((a) => a.properties?.single),
           ['opacity', 'scale']);
+      expect(p.uiState.folds.timelineOpen, contains('$id/animators/0'));
+      expect(p.uiState.folds.timelineOpen,
+          isNot(contains('$id/animators/1')));
 
       // The grip dropped on the other heading moves it there.
       final from = tester.getCenter(find.byKey(const ValueKey<String>('tl-anim-grip-1')));
@@ -178,6 +185,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(text.getText()!.animators.map((a) => a.properties?.single),
           ['scale']);
+      // The next is numbered past the one left, never taking its name.
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animate-scale')));
+      await tester.pumpAndSettle();
+      final names = text.getText()!.animators.map((a) => a.name).toList();
+      expect(names.toSet(), hasLength(names.length), reason: '$names');
     });
 
     testWidgets('Delete takes off an animator, a property, or all of them',

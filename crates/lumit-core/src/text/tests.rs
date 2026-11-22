@@ -889,3 +889,137 @@ fn a_second_selector_has_ports_of_its_own() {
     let port = ports::animator_port(0, "s1.delay");
     assert_eq!(ports::parse_animator_port(&port), Some((0, "s1.delay")));
 }
+
+/// **A wire follows its animator.** Moving, renaming or taking out an
+/// animator (or one of its selectors) carries the Node graph's wires into
+/// its numbers along, and undo puts them back exactly.
+#[test]
+fn the_wires_follow_the_animators_through_an_edit_and_its_undo() {
+    use crate::edits::{base_layer, new_comp_ops, CompSettings};
+    use crate::graph::{Edge, InputRef, NodeRef, OutputRef};
+    use crate::model::{Document, LayerKind, LinearColour, TextDocument};
+    use crate::ops::Op;
+
+    let wire = |port: String| Edge {
+        from: OutputRef::Driver {
+            node: uuid::Uuid::nil(),
+            port: "value".into(),
+        },
+        to: InputRef::Param {
+            node: NodeRef::Source,
+            port,
+        },
+    };
+    let ports = |doc: &Document, comp, layer| -> Vec<String> {
+        let l = doc.comp(comp).unwrap().layers.iter().find(|l| l.id == layer).unwrap();
+        l.graph
+            .edges
+            .iter()
+            .map(|e| match &e.to {
+                InputRef::Param { port, .. } => port.clone(),
+                InputRef::Matte { .. } => String::new(),
+            })
+            .collect()
+    };
+
+    let mut doc = Document::new();
+    let (comp, ops) = new_comp_ops(&doc, CompSettings::default(), None);
+    for op in &ops {
+        crate::ops::apply(&mut doc, op).unwrap();
+    }
+    let duration = doc.comp(comp).unwrap().duration.0;
+    let mut b = TextAnimator::new("B");
+    b.selectors.push(b.selector.clone());
+    b.selectors[0].kind = SelectorKind::Stagger;
+    let document = TextDocument {
+        text: "Lumit".into(),
+        expression: None,
+        size: 60.0,
+        fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+        path: None,
+        path_offset: Property::zero(),
+        animators: vec![TextAnimator::new("A"), b],
+        style: Default::default(),
+        paragraph: Default::default(),
+        captions: None,
+        extra: serde_json::Map::new(),
+    };
+    let mut layer = base_layer(
+        "Words".into(),
+        LayerKind::Text {
+            document: document.clone(),
+        },
+        duration,
+        Default::default(),
+    );
+    layer.graph.edges = vec![
+        wire(ports::animator_port(0, "offset")),
+        wire(ports::animator_port(1, "start")),
+        wire(ports::animator_port(1, "s1.delay")),
+        wire(ports::animator_port(1, "opacity")),
+    ];
+    let id = layer.id;
+    crate::ops::apply(
+        &mut doc,
+        &Op::AddLayer {
+            comp,
+            index: 0,
+            layer: Box::new(layer),
+        },
+    )
+    .unwrap();
+    let set = |doc: &mut Document, animators: Vec<TextAnimator>| {
+        let mut next = document.clone();
+        next.animators = animators;
+        crate::ops::apply(
+            doc,
+            &Op::SetTextDocument {
+                comp,
+                layer: id,
+                document: next,
+                graph: None,
+            },
+        )
+        .unwrap()
+    };
+    let [a, b] = [document.animators[0].clone(), document.animators[1].clone()];
+
+    // B moved above A: every wire follows.
+    let undo = set(&mut doc, vec![b.clone(), a.clone()]);
+    assert_eq!(
+        ports(&doc, comp, id),
+        ["text.1.offset", "text.0.start", "text.0.s1.delay", "text.0.opacity"]
+    );
+    crate::ops::apply(&mut doc, &undo).unwrap();
+    assert_eq!(
+        ports(&doc, comp, id),
+        ["text.0.offset", "text.1.start", "text.1.s1.delay", "text.1.opacity"]
+    );
+
+    // A taken out: its wire goes, B's follow it up one place.
+    let undo = set(&mut doc, vec![b.clone()]);
+    assert_eq!(
+        ports(&doc, comp, id),
+        ["text.0.start", "text.0.s1.delay", "text.0.opacity"]
+    );
+    crate::ops::apply(&mut doc, &undo).unwrap();
+    assert_eq!(ports(&doc, comp, id).len(), 4, "undo brings the wire back");
+
+    // B renamed: its wires stay on it.
+    let mut renamed = b.clone();
+    renamed.name = "Wave".into();
+    set(&mut doc, vec![a.clone(), renamed.clone()]);
+    assert_eq!(
+        ports(&doc, comp, id),
+        ["text.0.offset", "text.1.start", "text.1.s1.delay", "text.1.opacity"]
+    );
+
+    // Its first selector taken out: the second's wire becomes the first's.
+    let mut fewer = renamed.clone();
+    fewer.selector = fewer.selectors.remove(0);
+    set(&mut doc, vec![a, fewer]);
+    assert_eq!(
+        ports(&doc, comp, id),
+        ["text.0.offset", "text.1.delay", "text.1.opacity"]
+    );
+}

@@ -63,6 +63,9 @@ class TextAnimatorRowsFrb extends StatefulWidget {
   /// A solid layer's letters also move in depth and turn in 3D.
   final bool solid;
 
+  /// Which panel the rows are in, so a rename opens only there.
+  final String renameScope;
+
   const TextAnimatorRowsFrb({
     super.key,
     required this.layer,
@@ -73,6 +76,7 @@ class TextAnimatorRowsFrb extends StatefulWidget {
     required this.open,
     required this.onToggle,
     this.solid = false,
+    this.renameScope = 'fx',
   });
 
   @override
@@ -146,6 +150,9 @@ class _AnimatorSection extends StatelessWidget {
     void write(List<BridgeTextAnimator> animators) {
       final document = layer.getText();
       if (document == null) return;
+      // What the panels show about each animator moves with it.
+      followAnimators(Provider.of<LumitUiState>(context, listen: false), layer,
+          document.animators, animators);
       layer.setText(
         document: BridgeTextDocument(
           text: document.text,
@@ -253,6 +260,7 @@ class _AnimatorSection extends StatelessWidget {
         index: index,
         write: write,
         solid: solid,
+        renameScope: of.renameScope,
       ),
       // A folded animator shows its heading only.
       if (!animatorFolded.value.contains(animatorFoldKey(layer, index)))
@@ -884,8 +892,7 @@ bool addTextAnimator(LayerReference layer,
         ...document.animators,
         ...adding,
         if (adding.isEmpty)
-          freshTextAnimator(
-              l10n.textAnimatorDefaultName(document.animators.length + 1)),
+          freshTextAnimator(animatorNameFor(document.animators)),
       ],
     ),
   );
@@ -894,9 +901,15 @@ bool addTextAnimator(LayerReference layer,
 
 /// A new animator's name, the [n]th, with what it was added for after it
 /// in brackets: "Animator 1 (Position)". Renamed, it is whatever is typed.
-String animatorNameFor(int n, [String? what]) {
-  final base = l10n.textAnimatorDefaultName(n);
-  return what == null ? base : '$base ($what)';
+/// Numbered after the [existing] ones, and never a name one of them has: one
+/// taken out leaves its number free, and the next is numbered past it.
+String animatorNameFor(List<BridgeTextAnimator> existing, [String? what]) {
+  final taken = {for (final a in existing) a.name};
+  for (var n = existing.length + 1;; n++) {
+    final base = l10n.textAnimatorDefaultName(n);
+    final name = what == null ? base : '$base ($what)';
+    if (!taken.contains(name)) return name;
+  }
 }
 
 /// A fresh animator: the whole set of properties, every one of them at a value
@@ -1750,7 +1763,7 @@ List<Widget> animateMenuRows({
   ];
   // Named after what it was added for: "Animator 1 (Position)".
   BridgeTextAnimator fresh([String? what]) => freshTextAnimator(
-      animatorNameFor(document.animators.length + 1, what));
+      animatorNameFor(document.animators, what));
   void add(List<BridgeTextAnimator> animators) {
     close();
     if (addTextAnimator(layer, adding: animators)) onChanged();
@@ -1857,9 +1870,15 @@ List<Widget> animateMenuRows({
 
 /// [layer]'s animators with [index] taken off, or all of them when [index] is
 /// null: what Delete does on an animator's heading and on Animators.
-void removeTextAnimators(LayerReference layer, {int? index}) {
+void removeTextAnimators(LayerReference layer,
+    {int? index, LumitUiState? ui}) {
   final document = layer.getText();
   if (document == null || document.animators.isEmpty) return;
+  followAnimators(ui, layer, document.animators, [
+    if (index != null)
+      for (var i = 0; i < document.animators.length; i++)
+        if (i != index) document.animators[i],
+  ]);
   layer.setText(
     document: BridgeTextDocument(
       text: document.text,
