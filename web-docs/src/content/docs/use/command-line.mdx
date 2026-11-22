@@ -23,6 +23,11 @@ project over MCP.
 | `lumit-cli --help`, `-h`, `help` | Prints the commands and their options. So does **lumit-cli** alone, and `--help` after any command. |
 | `lumit-cli --version`, `-V` | Prints the version. |
 
+Every command also takes `--fonts <folder>`: the `.ttf`, `.otf` and `.ttc` files in the
+folder are used as if they were installed. Repeat it for more folders. A folder with no
+fonts in it is named on standard error. It does not reach the Lumit that **mcp** edits
+without `--project`.
+
 ## Export compositions
 
 ```
