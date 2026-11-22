@@ -21063,7 +21063,8 @@
             "Number",
             "Stripes",
             "Checker",
-            "Waves"
+            "Waves",
+            "Depth"
           ],
           "dividers_after": []
         },
@@ -21120,6 +21121,29 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "centre_z",
+          "label": "Centre Z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "plane",
+          "label": "Plane",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "XY",
+            "XZ",
+            "YZ",
+            "XYZ"
+          ],
+          "dividers_after": []
         },
         {
           "id": "radius",
@@ -21627,6 +21651,39 @@
         {
           "label": "",
           "params": [
+            "centre_z"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13,
+              14
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "plane"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "radius"
           ],
           "collapsed": false,
@@ -21635,7 +21692,8 @@
             "values": [
               3,
               6,
-              7
+              7,
+              14
             ]
           }
         },
@@ -21907,7 +21965,8 @@
             "Number",
             "Stripes",
             "Checker",
-            "Waves"
+            "Waves",
+            "Depth"
           ],
           "dividers_after": []
         },
@@ -21977,6 +22036,29 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "centre_z",
+          "label": "Centre Z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -4000.0,
+          "slider_max": 4000.0
+        },
+        {
+          "id": "plane",
+          "label": "Plane",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "XY",
+            "XZ",
+            "YZ",
+            "XYZ"
+          ],
+          "dividers_after": []
         },
         {
           "id": "radius",
@@ -22251,6 +22333,39 @@
         {
           "label": "",
           "params": [
+            "centre_z"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13,
+              14
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "plane"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              3,
+              11,
+              12,
+              13
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "radius"
           ],
           "collapsed": false,
@@ -22259,7 +22374,8 @@
             "values": [
               3,
               6,
-              7
+              7,
+              14
             ]
           }
         },

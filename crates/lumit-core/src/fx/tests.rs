@@ -6987,6 +6987,7 @@ fn every_parameter_declares_a_unit() {
             ("vary_points", "noise_scale"),
             ("vary_points", "centre_x"),
             ("vary_points", "centre_y"),
+            ("vary_points", "centre_z"),
             ("vary_points", "radius"),
             ("vary_points", "spacing"),
             ("vary_points", "offset_x"),
@@ -6997,6 +6998,7 @@ fn every_parameter_declares_a_unit() {
             ("pick_points", "noise_scale"),
             ("pick_points", "centre_x"),
             ("pick_points", "centre_y"),
+            ("pick_points", "centre_z"),
             ("pick_points", "radius"),
             ("pick_points", "spacing"),
             // Transform points, Relax points and Flow points: where the

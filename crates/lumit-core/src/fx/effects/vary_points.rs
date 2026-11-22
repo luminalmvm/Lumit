@@ -2,7 +2,7 @@
 //!
 //! Each point gets a number from 0 to 1 from a pattern: its place in the
 //! stream, its own dice, a noise at its position, its distance from a centre,
-//! its age, where it is across or down the frame, how bright a picture is
+//! its age, where it is across, down or into depth, how bright a picture is
 //! under it, whether it is picked, the number it carries, or which stripe,
 //! square or wave of a drawn pattern it sits in. That number sets how much of
 //! each change the point takes.
@@ -66,7 +66,9 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
         &["centre_x", "centre_y"],
         Some(("pattern", &[3, 6, 7, 11, 12, 13])),
     ),
-    group("", &["radius"], Some(("pattern", &[3, 6, 7]))),
+    group("", &["centre_z"], Some(("pattern", &[3, 11, 12, 13, 14]))),
+    group("", &["plane"], Some(("pattern", &[3, 11, 12, 13]))),
+    group("", &["radius"], Some(("pattern", &[3, 6, 7, 14]))),
     group(
         "",
         &["number_range", "pattern_name"],
@@ -237,14 +239,26 @@ pub struct VaryPoints {
     )]
     pub noise_speed: f32,
 
-    /// Where Distance, Across and Down are measured from, and where the
-    /// stripes, squares and waves start, px@comp. Keyframe it to slide them.
+    /// Where Distance, Across, Down and Depth are measured from, and where
+    /// the stripes, squares and waves start, px@comp. Keyframe it to slide
+    /// them.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
     /// px@comp. See [`centre_x`](Self::centre_x).
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
+
+    /// px@comp, through the layer's plane. See [`centre_x`](Self::centre_x).
+    #[slider(label = "Centre Z", min = -4000.0, max = 4000.0, default = 0.0, unit = Px)]
+    pub centre_z: f32,
+
+    /// The plane Distance, the stripes, the squares and the waves lie in.
+    /// XY is the layer's own plane. XZ lies flat, across and into depth,
+    /// like a floor, and YZ stands side on. XYZ measures Distance and the
+    /// rings through all three, and lays the rest as XY does.
+    #[choice(label = "Plane", options = ["XY", "XZ", "YZ", "XYZ"], default = 0)]
+    pub plane: u32,
 
     /// The distance from Centre at which the pattern reads 1, px@comp.
     #[slider(
@@ -521,7 +535,8 @@ impl VaryPoints {
             seed: self.seed,
             noise_scale: self.noise_scale,
             noise_speed: self.noise_speed,
-            centre: [self.centre_x, self.centre_y],
+            centre: [self.centre_x, self.centre_y, self.centre_z],
+            plane: self.plane,
             radius: self.radius,
             number_range: self.number_range,
             number: s.column(self.pattern_name.as_str()),

@@ -23,7 +23,8 @@ pub enum PatternKind {
     Random,
     /// A smooth noise read at its position.
     Noise,
-    /// How far it is from Centre, as a share of Radius.
+    /// How far it is from Centre in the pattern's plane, as a share of
+    /// Radius.
     Distance,
     /// How far through its life it is.
     Age,
@@ -46,6 +47,9 @@ pub enum PatternKind {
     Checker,
     /// A wave that repeats over space and can travel over time.
     Waves,
+    /// Where it is from near to far: 0 at Centre Z less Radius, 1 at Centre
+    /// Z plus Radius.
+    Depth,
 }
 
 impl PatternKind {
@@ -53,7 +57,7 @@ impl PatternKind {
     /// index, so a new pattern goes on the end.
     pub const OPTIONS: &'static [&'static str] = &[
         "Index", "Random", "Noise", "Distance", "Age", "Constant", "Across", "Down", "Image",
-        "Picked", "Number", "Stripes", "Checker", "Waves",
+        "Picked", "Number", "Stripes", "Checker", "Waves", "Depth",
     ];
 
     /// The pattern for a stored Choice index. Anything unknown is Random.
@@ -73,6 +77,7 @@ impl PatternKind {
             11 => PatternKind::Stripes,
             12 => PatternKind::Checker,
             13 => PatternKind::Waves,
+            14 => PatternKind::Depth,
             _ => PatternKind::Random,
         }
     }
@@ -88,9 +93,12 @@ pub struct Pattern {
     pub noise_scale: f32,
     /// How fast the noise evolves, and how many waves pass, per second.
     pub noise_speed: f32,
-    /// Where Distance, Across and Down are measured from, and where the
-    /// stripes, squares and waves start, in the stream's own units.
-    pub centre: [f32; 2],
+    /// Where Distance, Across, Down and Depth are measured from, and where
+    /// the stripes, squares and waves start, in the stream's own units.
+    pub centre: [f32; 3],
+    /// The plane Distance, the stripes, the squares and the waves lie in:
+    /// XY, XZ, YZ, or XYZ for a distance through all three.
+    pub plane: u32,
     /// The distance that reads as 1.
     pub radius: f32,
     /// The number that reads as 1 under the Number pattern.
@@ -132,11 +140,20 @@ impl Pattern {
         let p = s.position.get(i).copied().unwrap_or([0.0; 3]);
         // 0 at the centre less the radius, 1 at the centre plus it.
         let along = |at: f32, centre: f32| (at - centre) / (2.0 * self.radius.max(1e-3)) + 0.5;
+        // Where it is from Centre in the pattern's plane: across it, down it,
+        // and the depth a distance through all three adds.
+        let d = [0, 1, 2].map(|k| p[k] - self.centre[k]);
+        let [x, y, deep] = match self.plane {
+            1 => [d[0], d[2], 0.0],
+            2 => [d[2], d[1], 0.0],
+            3 => d,
+            _ => [d[0], d[1], 0.0],
+        };
+        let far = x.hypot(y).hypot(deep);
         // Where it is from Centre in the pattern's own turned frame, along
         // Angle and then across it, counted in Spacings.
         let turned = || {
             let (sin, cos) = self.angle.to_radians().sin_cos();
-            let (x, y) = (p[0] - self.centre[0], p[1] - self.centre[1]);
             let k = 1.0 / self.spacing.max(1e-3);
             [(x * cos + y * sin) * k, (y * cos - x * sin) * k]
         };
@@ -156,9 +173,7 @@ impl Pattern {
                 let z = p[2] * k + (t as f32) * self.noise_speed;
                 value3(self.seed, NOISE_CHANNEL + axis, p[0] * k, p[1] * k, z, 0) * 0.5 + 0.5
             }
-            PatternKind::Distance => {
-                (p[0] - self.centre[0]).hypot(p[1] - self.centre[1]) / self.radius.max(1e-3)
-            }
+            PatternKind::Distance => far / self.radius.max(1e-3),
             PatternKind::Age => {
                 let life = s.life.get(i).copied().unwrap_or(1.0);
                 s.age.get(i).copied().unwrap_or(0.0) / life.max(1e-6)
@@ -166,6 +181,7 @@ impl Pattern {
             PatternKind::Constant => 1.0,
             PatternKind::Across => along(p[0], self.centre[0]),
             PatternKind::Down => along(p[1], self.centre[1]),
+            PatternKind::Depth => along(p[2], self.centre[2]),
             PatternKind::Image => {
                 let c = sampled.and_then(|c| c.get(i)).copied().unwrap_or([0.0; 4]);
                 // The picture is premultiplied, so the coverage is divided
@@ -195,7 +211,7 @@ impl Pattern {
             }
             PatternKind::Waves => {
                 let far = if self.rings {
-                    (p[0] - self.centre[0]).hypot(p[1] - self.centre[1]) / self.spacing.max(1e-3)
+                    far / self.spacing.max(1e-3)
                 } else {
                     turned()[0]
                 };
