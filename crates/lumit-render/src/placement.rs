@@ -86,6 +86,33 @@ pub(crate) fn drawn_placement(
     p
 }
 
+/// What the compositor draws `layer`'s own picture with at layer time `lt`,
+/// each property read under `context`: any Orientation turned into the
+/// rotations and Anchor Z into the position. A 2D layer's hidden 3D values
+/// count as nought, as the compositor draws them.
+pub(crate) fn drawn(
+    layer: &lumit_core::model::Layer,
+    lt: f64,
+    context: &Arc<ExpressionContext>,
+) -> lumit_gpu::composite::MbSample {
+    let p = drawn_placement(layer, lt, context);
+    let at = p.flat_position();
+    // A Shape layer's art moving under keys moves its picture too.
+    let (dx, dy) = lumit_core::model::art_shift(layer, lt);
+    // So does a caption moved off where the layer puts it.
+    let (cx, cy) = lumit_core::captions::show::moved(layer, context);
+    lumit_gpu::composite::MbSample {
+        position: (at.0 as f32, at.1 as f32),
+        anchor: ((p.anchor.0 - dx - cx) as f32, (p.anchor.1 - dy - cy) as f32),
+        scale: (p.scale.0 as f32, p.scale.1 as f32),
+        rotation_deg: p.rotation_deg.2 as f32,
+        z: at.2 as f32,
+        rotation_x_deg: p.rotation_deg.0 as f32,
+        rotation_y_deg: p.rotation_deg.1 as f32,
+        pre: None,
+    }
+}
+
 fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
     let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
     lumit_gpu::composite::place_matrix_3d(f(p.position), f(p.anchor), f(p.scale), f(p.rotation_deg))

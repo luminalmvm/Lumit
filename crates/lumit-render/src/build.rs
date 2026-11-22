@@ -24,7 +24,7 @@ use crate::draw::{
     LayerInputDraw, MatteDraw, TemporalBelow,
 };
 use crate::export::mask_rgba;
-use crate::placement::{own_placement, parent_world_placement, world_placement};
+use crate::placement::{drawn, own_placement, parent_world_placement, world_placement};
 use crate::realise::Realiser;
 use lumit_core::expression::ExpressionContext;
 use lumit_core::pixels::{px_tile, solid_rgba};
@@ -206,33 +206,6 @@ fn outline_like(rgba: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
         }
     }
     Some(out)
-}
-
-/// What the compositor draws `layer`'s own picture with at layer time `lt`,
-/// each property read under `context`: any Orientation turned into the
-/// rotations and Anchor Z into the position. A 2D layer's hidden 3D values
-/// count as nought, as the compositor draws them.
-fn drawn(
-    layer: &lumit_core::model::Layer,
-    lt: f64,
-    context: &Arc<ExpressionContext>,
-) -> lumit_gpu::composite::MbSample {
-    let p = crate::placement::drawn_placement(layer, lt, context);
-    let at = p.flat_position();
-    // A Shape layer's art moving under keys moves its picture too.
-    let (dx, dy) = lumit_core::model::art_shift(layer, lt);
-    // So does a caption moved off where the layer puts it.
-    let (cx, cy) = lumit_core::captions::show::moved(layer, context);
-    lumit_gpu::composite::MbSample {
-        position: (at.0 as f32, at.1 as f32),
-        anchor: ((p.anchor.0 - dx - cx) as f32, (p.anchor.1 - dy - cy) as f32),
-        scale: (p.scale.0 as f32, p.scale.1 as f32),
-        rotation_deg: p.rotation_deg.2 as f32,
-        z: at.2 as f32,
-        rotation_x_deg: p.rotation_deg.0 as f32,
-        rotation_y_deg: p.rotation_deg.1 as f32,
-        pre: None,
-    }
 }
 
 /// The transform edits that keep `layer` where it is at comp time `t_comp`
