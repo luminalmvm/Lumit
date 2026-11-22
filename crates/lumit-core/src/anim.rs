@@ -927,3 +927,41 @@ pub fn keys_kept_in(extra: &serde_json::Map<String, serde_json::Value>) -> Optio
     let keys: Vec<Keyframe> = serde_json::from_value(kept.clone()).ok()?;
     (!keys.is_empty()).then_some(keys)
 }
+
+/// `animation` with every value `v` made `gain * v + offset`, or `None` for
+/// an expression, which has no values to move. A key's speed is a slope, so
+/// it takes the gain and not the offset.
+#[must_use]
+pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animation> {
+    use crate::anim::SideInterp as S;
+    let side = |s: S| match s {
+        S::Bezier { speed, influence } => S::Bezier {
+            speed: speed * gain,
+            influence,
+        },
+        S::Auto {
+            clamped,
+            speed,
+            influence,
+        } => S::Auto {
+            clamped,
+            speed: speed * gain,
+            influence,
+        },
+        other => other,
+    };
+    match animation {
+        Animation::Static(v) => Some(Animation::Static(gain * v + offset)),
+        Animation::Keyframed(keys) => Some(Animation::Keyframed(
+            keys.iter()
+                .map(|k| crate::anim::Keyframe {
+                    value: gain * k.value + offset,
+                    interp_in: side(k.interp_in),
+                    interp_out: side(k.interp_out),
+                    ..*k
+                })
+                .collect(),
+        )),
+        Animation::Expression(_) => None,
+    }
+}

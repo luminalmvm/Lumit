@@ -520,11 +520,11 @@ impl BridgeShapeItem {
             let showing = match at {
                 Some(at) => at
                     .checked_sub(offset)
-                    .map(|at| same_shape(&sent, &previous.path_at(at.to_f64())))
+                    .map(|at| crate::mask_shape::same_shape(&sent, &previous.path_at(at.to_f64())))
                     .unwrap_or(false),
                 None => false,
             };
-            if !showing && !same_shape(&sent, &previous.path) {
+            if !showing && !crate::mask_shape::same_shape(&sent, &previous.path) {
                 written.primitive = None;
                 written.path = sent;
             }
@@ -535,8 +535,8 @@ impl BridgeShapeItem {
                 .checked_sub(offset)
                 .map_err(|_| BridgeError::InvalidKeyframes)?;
             let path = std::mem::replace(&mut written.path, previous.path.clone());
-            if same_shape(&path, &previous.path)
-                || same_shape(&path, &previous.path_at(at.to_f64()))
+            if crate::mask_shape::same_shape(&path, &previous.path)
+                || crate::mask_shape::same_shape(&path, &previous.path_at(at.to_f64()))
             {
                 return Ok(written);
             }
@@ -571,17 +571,6 @@ impl BridgeShapeItem {
             closed: self.closed,
         }
     }
-}
-
-/// Whether two paths are the same shape, give or take a thousandth of a
-/// pixel, which is rounding on the way across rather than an edit.
-fn same_shape(a: &lumit_core::mask::BezierPath, b: &lumit_core::mask::BezierPath) -> bool {
-    let near = |p: (f64, f64), q: (f64, f64)| (p.0 - q.0).abs() < 1e-3 && (p.1 - q.1).abs() < 1e-3;
-    a.closed == b.closed
-        && a.vertices.len() == b.vertices.len()
-        && a.vertices.iter().zip(&b.vertices).all(|(p, q)| {
-            near(p.pos, q.pos) && near(p.tan_in, q.tan_in) && near(p.tan_out, q.tan_out)
-        })
 }
 
 /// What a paint stroke does to the pixels under it.

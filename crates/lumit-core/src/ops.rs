@@ -2789,44 +2789,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     }
 }
 
-/// `animation` with every value `v` made `gain * v + offset`, or `None` for
-/// an expression, which has no values to move. A key's speed is a slope, so
-/// it takes the gain and not the offset.
-#[must_use]
-pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animation> {
-    use crate::anim::SideInterp as S;
-    let side = |s: S| match s {
-        S::Bezier { speed, influence } => S::Bezier {
-            speed: speed * gain,
-            influence,
-        },
-        S::Auto {
-            clamped,
-            speed,
-            influence,
-        } => S::Auto {
-            clamped,
-            speed: speed * gain,
-            influence,
-        },
-        other => other,
-    };
-    match animation {
-        Animation::Static(v) => Some(Animation::Static(gain * v + offset)),
-        Animation::Keyframed(keys) => Some(Animation::Keyframed(
-            keys.iter()
-                .map(|k| crate::anim::Keyframe {
-                    value: gain * k.value + offset,
-                    interp_in: side(k.interp_in),
-                    interp_out: side(k.interp_out),
-                    ..*k
-                })
-                .collect(),
-        )),
-        Animation::Expression(_) => None,
-    }
-}
-
 /// The ops that make a folder — the Project panel's bottom-bar **Folder**
 /// button (docs/07 §3.1) — plus the new folder's id.
 ///

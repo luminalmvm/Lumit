@@ -739,7 +739,7 @@ fn made_up(
     let gain = gain.unwrap_or((from + delta) / from);
     match &property.animation {
         Animation::Static(v) => Some(Animation::Static(v + delta)),
-        keyed => lumit_core::ops::remapped(keyed, gain, from + delta - gain * from),
+        keyed => lumit_core::anim::remapped(keyed, gain, from + delta - gain * from),
     }
 }
 
