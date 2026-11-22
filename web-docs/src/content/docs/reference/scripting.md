@@ -233,7 +233,7 @@ Script: `lumit.layer.write({ ... })`. MCP tool: `layer_write`.
 
 ## comp.write
 
-Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them.
+Change a comp's motion blur, lighting, blending or node graph, in the form a .lum file keeps them.
 
 Script: `lumit.comp.write({ ... })`. MCP tool: `comp_write`.
 
@@ -243,6 +243,7 @@ Script: `lumit.comp.write({ ... })`. MCP tool: `comp_write`.
 | `fields` | object | yes | Each laid over the comp's own as JSON Merge Patch does |
 | `fields.motion_blur` | object |  |  |
 | `fields.lighting` | object |  |  |
+| `fields.blending` | `"linear"`, `"display"` |  | What the layers mix in: linear light, or display values as a browser does |
 | `fields.graph` | object |  |  |
 
 ## layer.composite

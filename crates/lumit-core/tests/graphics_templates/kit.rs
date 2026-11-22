@@ -33,6 +33,7 @@ pub fn comp(name: &str, width: u32, height: u32, seconds: i64, layers: Vec<Layer
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

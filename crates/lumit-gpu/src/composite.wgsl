@@ -3,7 +3,8 @@
 // Each layer draws as a textured quad. The vertex transform is a full 4×4
 // (4×4 from day one, so 3D bolts on without a rewrite).
 // Blending is premultiplied-over in LINEAR light — the whole reason the
-// working format exists: light adds correctly here.
+// working format exists: light adds correctly here. A comp that blends in
+// display mixes display values instead (`cut.z`, composite/display.rs).
 
 struct LayerUniform {
     // comp pixel space → NDC, including the layer's transform.
@@ -20,7 +21,9 @@ struct LayerUniform {
     // w: 1 when the picture is premultiplied already, 0 when its alpha is straight
     target_size: vec4<f32>,
     // x: the clip z a layer cut by depth draws at, y: how many corners of
-    // `piece` a piece of a layer draws, 0 for every other draw
+    // `piece` a piece of a layer draws, 0 for every other draw, z: 1 when the
+    // target holds display values (a comp that blends in display), and for
+    // fs_seed -1 to turn display values back into linear
     cut: vec4<f32>,
     // A piece's corners in the layer's own 0..1 space, two to a row.
     piece: array<vec4<f32>, 5>,
@@ -87,6 +90,22 @@ fn srgb_decode_c(v: vec3<f32>) -> vec3<f32> {
     let lo = v / 12.92;
     let hi = pow((v + 0.055) / 1.055, vec3<f32>(2.4));
     return select(hi, lo, v <= vec3<f32>(0.04045));
+}
+
+// A premultiplied colour's straight colour taken to display values and back.
+// Alpha is left alone, so coverage and opacity mix as a browser mixes them.
+fn display_premul(c: vec4<f32>) -> vec4<f32> {
+    if (c.a <= 0.0) {
+        return c;
+    }
+    return vec4<f32>(srgb_encode_c(c.rgb / c.a) * c.a, c.a);
+}
+
+fn linear_premul(c: vec4<f32>) -> vec4<f32> {
+    if (c.a <= 0.0) {
+        return c;
+    }
+    return vec4<f32>(srgb_decode_c(c.rgb / c.a) * c.a, c.a);
 }
 
 // W3C soft-light D(d) helper.
@@ -256,13 +275,21 @@ fn fs_layer_snapshot(in: VsOut) -> @location(0) vec4<f32> {
     }
     let dst = textureSample(dst_snapshot, samp, comp_uv);
     let mode = layer.target_size.z;
+    // A target of display values already holds what the formulas want, so
+    // every mode, the linear three too, works on display values there.
+    let display = layer.cut.z > 0.5;
+    let own = select(texel.rgb, srgb_encode_c(texel.rgb), display);
     var blended: vec3<f32>;
     if (mode >= 3.5 && mode < 4.5) { // lighten: per-channel max, linear
-        blended = max(texel.rgb, dst.rgb);
+        blended = max(own, dst.rgb);
     } else if (mode >= 4.5 && mode < 5.5) { // darken: per-channel min, linear
-        blended = min(texel.rgb, dst.rgb);
+        blended = min(own, dst.rgb);
     } else if (mode >= 5.5 && mode < 6.5) { // subtract: dst − src, clamped, linear
-        blended = max(dst.rgb - texel.rgb, vec3<f32>(0.0));
+        blended = max(dst.rgb - own, vec3<f32>(0.0));
+    } else if (display) { // the perceptual set, on display values as they are
+        let one = vec3<f32>(1.0);
+        let zero = vec3<f32>(0.0);
+        blended = blend_encoded(mode, clamp(own, zero, one), clamp(dst.rgb, zero, one));
     } else { // the encoded (perceptual) set: 0–3 and 7–22
         let s_enc = srgb_encode_c(clamp(texel.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
         let d_enc = srgb_encode_c(clamp(dst.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
@@ -313,7 +340,11 @@ fn layer_colour(in: VsOut) -> vec4<f32> {
         a = a * clamp(strength, 0.0, 1.0);
         k = k * clamp(strength, 0.0, 1.0);
     }
-    return vec4<f32>(texel.rgb * select(a, k, layer.target_size.w > 0.5), a);
+    let out = vec4<f32>(texel.rgb * select(a, k, layer.target_size.w > 0.5), a);
+    if (layer.cut.z > 0.5) {
+        return display_premul(out);
+    }
+    return out;
 }
 
 // Scene depth: how far this layer's pixel is from the camera, metres, where
@@ -345,9 +376,19 @@ fn fs_layer_depth(in: VsOut) -> @location(0) vec4<f32> {
 // resampling the seeded path stays bit-identical to the copy it replaces.
 // A full-frame quad covers every sample of every pixel, so all the samples of a
 // pixel take the one value and the resolve gives it back unchanged.
+//
+// A comp that blends in display seeds its target with display values, and
+// draws them back to linear the same way once its layers are in.
 @fragment
 fn fs_seed(in: VsOut) -> @location(0) vec4<f32> {
-    return textureLoad(src, vec2<i32>(in.pos.xy), 0);
+    let c = textureLoad(src, vec2<i32>(in.pos.xy), 0);
+    if (layer.cut.z > 0.5) {
+        return display_premul(c);
+    }
+    if (layer.cut.z < -0.5) {
+        return linear_premul(c);
+    }
+    return c;
 }
 
 // fp32 accumulation (docs/06 §4). The combine sums its weighted premultiplied

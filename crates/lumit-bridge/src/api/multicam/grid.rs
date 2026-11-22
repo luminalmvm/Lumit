@@ -138,6 +138,7 @@ pub(crate) fn document(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         beat_grid: None,
         extra: serde_json::Map::new(),

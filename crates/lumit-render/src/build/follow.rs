@@ -210,6 +210,7 @@ pub(super) fn wrap(
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: blend_of(layer.blend),
         mask_cov: None,
         pre: None,

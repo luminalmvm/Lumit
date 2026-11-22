@@ -91,6 +91,7 @@ fn a_baked_scatter_is_read_by_a_driver_and_draws_as_it_did_live() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 mod axis_modes;
 mod blend_mode;
+pub mod blending;
 mod light;
 mod light_file;
 mod material;
@@ -476,6 +477,9 @@ pub struct Composition {
     /// the picture; After Effects' lights a layer from black.
     #[serde(default, skip_serializing_if = "CompLighting::is_default")]
     pub lighting: CompLighting,
+    /// What the comp's layers mix in. Linear light unless set.
+    #[serde(default, skip_serializing_if = "blending::CompBlending::is_default")]
+    pub blending: blending::CompBlending,
     /// **The mix mark** (docs/impl/audio-timeline.md §2): set by the first
     /// edit made in the Audio timeline, and never by looking at the comp.
     ///
@@ -5300,6 +5304,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -5632,6 +5637,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

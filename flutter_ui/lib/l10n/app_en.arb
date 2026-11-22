@@ -16981,6 +16981,10 @@
   "@histSetLighting": {
     "description": "Undo history entry: a composition's lighting was switched between Lumit's and After Effects' way."
   },
+  "histSetBlending": "Set blending",
+  "@histSetBlending": {
+    "description": "Undo history entry: a composition was switched between blending its layers in linear light and in display colours."
+  },
   "compSamples": "Samples",
   "@compSamples": {
     "description": "New composition / Composition settings dialog: label beside the shutter angle: the fewest sub-frame samples a moving blurred layer is drawn at."

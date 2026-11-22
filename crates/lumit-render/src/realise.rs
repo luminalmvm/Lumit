@@ -2494,6 +2494,7 @@ impl Realiser<'_> {
                 .map_or(0, |i| i + 1),
             None => comp_layers.len(),
         };
+        let display = layers.iter().any(|l| l.display_blend);
         let below = self.compositor.composite_joined(
             &self.ctx,
             width,
@@ -2507,6 +2508,7 @@ impl Realiser<'_> {
             region,
             &cuts[..split],
             &models,
+            display,
         );
         let below = self.haze_over(
             below,
@@ -2545,6 +2547,7 @@ impl Realiser<'_> {
             region,
             &cuts[split..],
             &models,
+            display,
         )
     }
 

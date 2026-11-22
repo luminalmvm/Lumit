@@ -270,6 +270,10 @@ pub(super) fn comp_write(host: &dyn Host, a: CompWriteArgs) -> Result<Value, Scr
                 comp: comp.id,
                 lighting: patched(&comp.lighting, patch, "lighting")?,
             },
+            "blending" => Op::SetCompBlending {
+                comp: comp.id,
+                blending: patched(&comp.blending, patch, "blending")?,
+            },
             "graph" => Op::SetCompGraph {
                 comp: comp.id,
                 graph: Box::new(
@@ -279,7 +283,7 @@ pub(super) fn comp_write(host: &dyn Host, a: CompWriteArgs) -> Result<Value, Scr
             },
             _ => {
                 return Err(bad(format!(
-                    "comp.write sets motion_blur, lighting and graph, not {key}."
+                    "comp.write sets motion_blur, lighting, blending and graph, not {key}."
                 )))
             }
         });
@@ -290,6 +294,7 @@ pub(super) fn comp_write(host: &dyn Host, a: CompWriteArgs) -> Result<Value, Scr
     Ok(json!({
         "motion_blur": comp.motion_blur,
         "lighting": comp.lighting,
+        "blending": comp.blending,
         "graph": comp.graph,
     }))
 }

@@ -3768,6 +3768,7 @@ fn comp_walk(
                 three_d: false,
                 ends_run: false,
                 matte: None,
+                display_blend: false,
                 blend: lumit_gpu::composite::Blend::Normal,
                 mask_cov: None,
                 pre: None,
@@ -4761,6 +4762,7 @@ fn comp_walk(
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
+                    display_blend: false,
                     blend: lumit_gpu::composite::Blend::Normal,
                     mask_cov: (native && !layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
@@ -5039,6 +5041,7 @@ fn comp_walk(
             matte,
             // A layer showing only its shadows multiplies them into what is
             // under it, so a coloured one tints it and never brightens it.
+            display_blend: false,
             blend: match layer.blend {
                 lumit_core::model::BlendMode::Normal
                     if layer.switches.three_d
@@ -5140,6 +5143,7 @@ fn comp_walk(
     if !spliced {
         crate::haze::add(&mut draws, doc, comp, t_comp);
         crate::environment::add(&mut draws, doc, comp, t_comp, pixels_by_layer);
+        blending::stamp(&mut draws, comp);
     }
     draws
 }
@@ -5323,6 +5327,7 @@ fn graph_comp_draw(
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
@@ -6542,6 +6547,7 @@ pub(crate) fn read_draw(
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
@@ -7240,6 +7246,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
 }
 
 mod audio_spectrum_levels;
+mod blending;
 mod energy_line_path;
 pub(crate) mod follow;
 mod moments;
@@ -7354,6 +7361,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7448,6 +7456,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7588,6 +7597,7 @@ mod render_below_at_tests {
                 master_automation: Default::default(),
                 loudness_target: None,
                 lighting: Default::default(),
+                blending: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -7714,6 +7724,7 @@ mod render_below_at_tests {
                 master_automation: Default::default(),
                 loudness_target: None,
                 lighting: Default::default(),
+                blending: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -7863,6 +7874,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -8022,6 +8034,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

@@ -53,6 +53,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

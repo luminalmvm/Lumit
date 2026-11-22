@@ -2103,6 +2103,7 @@ fn a_plugin_is_told_its_frame_and_handed_its_neighbours() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

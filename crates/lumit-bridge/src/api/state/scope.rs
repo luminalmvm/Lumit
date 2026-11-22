@@ -91,6 +91,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
         | Op::SetCompLighting { comp, .. }
+        | Op::SetCompBlending { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
         | Op::SetMasterAutomation { comp, .. }

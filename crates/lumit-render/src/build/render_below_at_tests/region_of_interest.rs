@@ -44,6 +44,7 @@ fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

@@ -117,6 +117,7 @@ fn comp(in_scene: bool) -> Result<(Document, Uuid), String> {
         markers: Vec::new(),
         motion_blur: Default::default(),
         lighting: CompLighting::AfterEffects { linear: true },
+        blending: Default::default(),
         extra: serde_json::Map::new(),
     };
     let id = c.id;
@@ -206,6 +207,7 @@ fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
         markers: Vec::new(),
         motion_blur: Default::default(),
         lighting: Default::default(),
+        blending: Default::default(),
         extra: serde_json::Map::new(),
     };
     // Round the comp's middle, at the same distance a fresh camera stands.

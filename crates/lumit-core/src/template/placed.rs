@@ -259,6 +259,7 @@ pub(crate) fn fitted(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         beat_grid: None,
         graph: None,

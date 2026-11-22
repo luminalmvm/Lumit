@@ -111,6 +111,7 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
