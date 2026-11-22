@@ -1,0 +1,345 @@
+---
+title: Hologram
+description: "Records a layer as a hologram on a film, with depth that shows as the film tips."
+---
+
+import Compare from "../../../../components/Compare.astro";
+import Shot from "../../../../components/Shot.astro";
+
+Hologram is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Hologram" category="stylise" slug="hologram" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns the layer into a hologram on a flat film. As the film tips, the picture inside it
+moves with depth, in one replay colour.
+
+The layer is the recorded subject. Its colour is what was recorded, and black is empty.
+Its alpha is the film's outline: a round layer is a round sticker. A **Depth map** layer
+pushes each part of the subject behind the film. Without one the subject is a flat picture
+at **Subject depth**. Behind it sits a recorded grid or star field, or any layer, and the
+film can carry line patterns of its own that split light into rainbows.
+
+Each light replays the picture. A reflection hologram replays in one colour that turns
+bluer at steep angles. A rainbow hologram replays in a colour that follows the eye up and
+down. The image fades as a light leaves the reference direction, and its deep parts soften
+under a large light. A rainbow hologram lit from one side smears them sideways.
+
+<Shot file="hologram-types.webp" caption="Top: a reflection hologram with Tilt x at -8, 0 and 8. Bottom: a rainbow hologram with Tilt x at -4, 0 and 4." />
+
+The film shares its sheet, lights, surface and output with
+[Holographic foil](/effects/stylise/holographic-foil/).
+
+The model of the hologram follows the open-source holospot kit by Dmitry Kurash (MIT
+licensed), reimplemented for Lumit. It also uses Wyman, Sloan and Shirley's colour-matching
+fit, Brian Karis's environment BRDF fit, Jarzynski and Olano's pcg3d hash, the Khronos PBR
+Neutral curve and AgX as published for three.js.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Type** | Dropdown | Reflection · Rainbow | Reflection | - |
+| **Efficiency** | Slider | 5 to 100; down to 0 | 85 | Per cent |
+| **Glare** | Slider | 0 to 100 | 100 | Per cent |
+| **Subject colour** | Dropdown | Replay colour only · Tinted by the layer · Full colour | Replay colour only | - |
+| **Subject depth (mm)** | Slider | -40 to 15; down to -500 and up to 500 | -8 | - |
+| **Depth map** | Layer | Any layer in the composition | None | - |
+| **Depth › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | Stretch to fit | - |
+| **Depth scale (mm)** | Slider | 0 to 40; up to 500 | 10 | - |
+| **Depth › Invert** | Checkbox | On or off | Off | - |
+| **Backdrop** | Dropdown | None · Grid · Stars · Seal · Rosette · Spiral · Lattice · Sunburst · Sparkle | Grid | - |
+| **Backdrop depth (mm)** | Slider | -80 to -5; down to -1000 and up to 0 | -30 | - |
+| **Backdrop layer** | Layer | Any layer in the composition | None | - |
+| **Backdrop › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | Stretch to fit | - |
+| **Pattern depth (mm)** | Slider | -20 to 0; down to -200 | -3 | - |
+| **Pattern size (mm)** | Slider | 5 to 80; down to 1 and up to 1000 | 28 | - |
+| **Line width** | Slider | 5 to 60; down to 1 and up to 100 | 22 | Per cent |
+| **Pitch (nm)** | Slider | 600 to 1600; down to 200 and up to 5000 | 1000 | - |
+| **Backdrop › Strength** | Slider | 0 to 3; up to 10 | 1 | - |
+| **Colour (nm)** | Slider | 450 to 650; down to 380 and up to 780 | 545 | - |
+| **Reference x** | Slider | -1 to 1 | -0.5 | - |
+| **Reference y** | Slider | -1 to 1 | 0.42 | - |
+| **Bandwidth (nm)** | Slider | 4 to 60; down to 1 and up to 200 | 30 | - |
+| **Selectivity** | Slider | 2 to 40; down to 0.5 and up to 90 | 16 | Degrees |
+| **Slit** | Slider | 1 to 20; down to 0.2 and up to 60 | 6 | Degrees |
+| **Recording** | Dropdown | Optical · Stereogram | Optical | - |
+| **Speckle** | Slider | 0 to 100 | 25 | Per cent |
+| **Views** | Slider, whole numbers | 6 to 64; down to 2 and up to 256 | 20 | - |
+| **View blend** | Slider | 0 to 100 | 25 | Per cent |
+| **View zone** | Slider | 5 to 60; down to 1 and up to 170 | 30 | Degrees |
+| **Tilt x** | Slider | -60 to 60; down to -89 and up to 89 | 0 | Degrees |
+| **Tilt y** | Slider | -60 to 60; down to -89 and up to 89 | 0 | Degrees |
+| **Spin** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Auto tilt** | Slider | 0 to 25; up to 90 | 0 | Degrees |
+| **Auto tilt speed (Hz)** | Slider | 0 to 2; up to 30 | 0.25 | - |
+| **Follow layer rotation** | Dropdown | Off · On | Off | - |
+| **Motion blur** | Slider | 0 to 100 | 50 | Per cent |
+| **Sheet width (mm)** | Slider | 20 to 1000; down to 1 and higher | 90 | - |
+| **View distance (m)** | Slider | 0.1 to 5; down to 0.05 and higher | 0.35 | - |
+| **Lighting** | Dropdown | Studio · Spot · Softbox · Strip · Dark · Desk · Office · Raking · Custom | Spot | - |
+| **Rig rotation** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Environment** | Layer | Any layer in the composition | None | - |
+| **Amount** | Slider | 0 to 200; up to 1000 | 100 | Per cent |
+| **Spot A › On** | Checkbox | On or off | On | - |
+| **Spot A › Direction x** | Slider | -1 to 1 | -0.38 | - |
+| **Spot A › Direction y** | Slider | -1 to 1 | 0.57 | - |
+| **Spot A › Size** | Slider | 0.2 to 10; down to 0.05 and up to 45 | 1.5 | Degrees |
+| **Spot A › Intensity** | Slider | 0 to 5000; higher | 970 | - |
+| **Spot A › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 1 | - |
+| **Spot A › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Spot B › On** | Checkbox | On or off | On | - |
+| **Spot B › Direction x** | Slider | -1 to 1 | -0.12 | - |
+| **Spot B › Direction y** | Slider | -1 to 1 | -0.17 | - |
+| **Spot B › Size** | Slider | 0.2 to 10; down to 0.05 and up to 45 | 2.5 | Degrees |
+| **Spot B › Intensity** | Slider | 0 to 5000; higher | 485 | - |
+| **Spot B › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 1.2 | - |
+| **Spot B › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Spot C › On** | Checkbox | On or off | On | - |
+| **Spot C › Direction x** | Slider | -1 to 1 | -0.42 | - |
+| **Spot C › Direction y** | Slider | -1 to 1 | 0.71 | - |
+| **Spot C › Size** | Slider | 0.2 to 10; down to 0.05 and up to 45 | 1 | Degrees |
+| **Spot C › Intensity** | Slider | 0 to 5000; higher | 970 | - |
+| **Spot C › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 1 | - |
+| **Spot C › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Panel › On** | Checkbox | On or off | On | - |
+| **Panel › Direction x** | Slider | -1 to 1 | -0.43 | - |
+| **Panel › Direction y** | Slider | -1 to 1 | 0.48 | - |
+| **Width** | Slider | 1 to 80; down to 0.5 and up to 120 | 14 | Degrees |
+| **Length** | Slider | 1 to 90; down to 0.5 and up to 120 | 50 | Degrees |
+| **Panel › Intensity** | Slider | 0 to 50; higher | 1.6 | - |
+| **Panel › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 0.9 | - |
+| **Panel › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Rims** | Slider | 0 to 10; higher | 0.5 | - |
+| **Fill** | Slider | 0 to 3; higher | 0.25 | - |
+| **Scrim** | Slider | 0 to 2; higher | 0.2 | - |
+| **Room** | Slider | 0 to 0.5; higher | 0.04 | - |
+| **Coat roughness** | Slider | 0.01 to 0.5; down to 0.005 and up to 1 | 0.01 | - |
+| **Relief** | Dropdown | Scratches · Brushed · Hammered · Crinkled · Linen · Fingerprint · Sandblast · None | Scratches | - |
+| **Surface › Strength** | Slider | 0 to 3; up to 10 | 0.78 | - |
+| **Scale** | Slider | 1 to 12; down to 0.1 and up to 100 | 3.5 | - |
+| **Relief on** | Dropdown | Foil · Varnish | Foil | - |
+| **Surface › Invert** | Checkbox | On or off | On | - |
+| **Waviness** | Slider | 0 to 1; up to 10 | 0 | Degrees |
+| **Orange peel (µm)** | Slider | 0 to 2; up to 20 | 0 | - |
+| **Lines** | Dropdown | None · Lines · Crosshatch | None | - |
+| **Line pitch (mm)** | Slider | 0.15 to 2; down to 0.01 and up to 20 | 1.17 | - |
+| **Line height (µm)** | Slider | 0 to 15; up to 100 | 0.5 | - |
+| **Bow (mm)** | Slider | 0 to 2; down to -20 and up to 20 | 0 | - |
+| **Bow axis** | Dropdown | Across · Along | Across | - |
+| **Wear** | Slider | 0 to 100 | 0 | Per cent |
+| **Height map** | Layer | Any layer in the composition | None | - |
+| **Surface › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | Stretch to fit | - |
+| **Repeats** | Slider | 1 to 12; up to 100 | 1 | - |
+| **Wrap** | Dropdown | Repeat · Mirror · Clamp | Repeat | - |
+| **Exposure** | Slider | -3 to 3; any value by typing | 1 | - |
+| **Highlights** | Dropdown | Off · Neutral · AgX | Neutral | - |
+| **Quality** | Dropdown | Draft · Normal · High | Normal | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Film** groups **Type**, **Efficiency**, **Glare**.
+- **Subject** groups **Subject colour**, **Subject depth (mm)**.
+- **Depth** groups **Depth map**, **Placement**, **Depth scale (mm)**, **Invert**.
+- **Backdrop** groups **Backdrop**, **Backdrop depth (mm)**, **Backdrop layer**, **Placement**, **Pattern depth (mm)**, **Pattern size (mm)**, **Line width**, **Pitch (nm)**, **Strength**, and starts closed.
+- **Replay** groups **Colour (nm)**, **Reference x**, **Reference y**, **Bandwidth (nm)**, **Selectivity**, **Slit**.
+- **Recording** groups **Recording**, **Speckle**, and starts closed.
+- **Stereogram** groups **Views**, **View blend**, **View zone**, and starts closed, and appears while **Recording** is Stereogram.
+- **Tilt** groups **Tilt x**, **Tilt y**, **Spin**, **Auto tilt**, **Auto tilt speed (Hz)**, **Follow layer rotation**, **Motion blur**.
+- **Sheet** groups **Sheet width (mm)**, **View distance (m)**, and starts closed.
+- **Lights** groups **Lighting**, **Rig rotation**, **Environment**, **Amount**.
+- **Spot A** groups **On**, **Direction x**, **Direction y**, **Size**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Spot B** groups **On**, **Direction x**, **Direction y**, **Size**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Spot C** groups **On**, **Direction x**, **Direction y**, **Size**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Panel** groups **On**, **Direction x**, **Direction y**, **Width**, **Length**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Surroundings** groups **Rims**, **Fill**, **Scrim**, **Room**, and starts closed, and appears while **Lighting** is Custom.
+- **Surface** groups **Coat roughness**, **Relief**, **Strength**, **Scale**, **Relief on**, **Invert**, **Waviness**, **Orange peel (µm)**, **Lines**, **Line pitch (mm)**, **Line height (µm)**, **Bow (mm)**, **Bow axis**, **Wear**, **Height map**, **Placement**, **Repeats**, **Wrap**, and starts closed.
+- **Output** groups **Exposure**, **Highlights**, **Quality**, **Seed**, and starts closed.
+- **Bandwidth (nm)** is editable while **Type** is anything but Rainbow.
+- **Selectivity** is editable while **Type** is anything but Rainbow.
+- **Slit** is editable while **Type** is set to Rainbow.
+- **Placement** is editable while **Depth map** names a layer.
+- **Depth scale (mm)** is editable while **Depth map** names a layer.
+- **Invert** is editable while **Depth map** names a layer.
+- **Placement** is editable while **Backdrop layer** names a layer.
+- **Pattern depth (mm)** is editable while **Backdrop** is anything but None.
+- **Pattern depth (mm)** is editable while **Backdrop** is anything but Grid.
+- **Pattern depth (mm)** is editable while **Backdrop** is anything but Stars.
+- **Line width** is editable while **Backdrop** is anything but None.
+- **Line width** is editable while **Backdrop** is anything but Grid.
+- **Line width** is editable while **Backdrop** is anything but Stars.
+- **Pitch (nm)** is editable while **Backdrop** is anything but None.
+- **Pitch (nm)** is editable while **Backdrop** is anything but Grid.
+- **Pitch (nm)** is editable while **Backdrop** is anything but Stars.
+- **Strength** is editable while **Backdrop** is anything but None.
+- **Strength** is editable while **Backdrop** is anything but Grid.
+- **Strength** is editable while **Backdrop** is anything but Stars.
+- **Pattern size (mm)** is editable while **Backdrop** is anything but None.
+- **Relief** is editable while **Height map** names no layer.
+- **Scale** is editable while **Height map** names no layer.
+- **Line pitch (mm)** is editable while **Lines** is anything but None.
+- **Line height (µm)** is editable while **Lines** is anything but None.
+- **Placement** is editable while **Height map** names a layer.
+- **Repeats** is editable while **Height map** names a layer.
+- **Wrap** is editable while **Height map** names a layer.
+- **Amount** is editable while **Environment** names a layer.
+- **Matte** scales the replay per pixel: white keeps the image, black leaves bare film. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+### Film
+
+- **Type**: **Reflection** is a thick hologram on a black backing, in one colour.
+  **Rainbow** is an embossed hologram on a mirror.
+- **Efficiency** is how much of the light the film sends into the image.
+- **Glare** is how strongly the film's mirror shows the lights. 100 is physical.
+
+### Subject
+
+- **Subject colour** is how the layer's colour reaches the image. **Replay colour only**
+  takes its brightness, in the replay colour. **Tinted by the layer** multiplies its colour
+  by the replay colour. **Full colour** keeps its own colours.
+- **Subject depth (mm)** is how far behind the film the subject sits. Above 0 it stands in
+  front.
+
+<Shot file="hologram-subject-colour.webp" caption="Replay colour only, Tinted by the layer and Full colour." />
+
+### Depth
+
+- **Depth map** is a layer whose brightness is the subject's depth. White is near.
+- **Placement** is where the Depth map's picture sits on this layer. **As placed in comp**
+  reads it where the layer sits in the composition. **Stretch to fit** stretches it over
+  this layer. **Centre** centres it at its own size.
+- **Depth scale (mm)** is how far the Depth map's black lies behind its white. The two sit
+  either side of **Subject depth**.
+- **Invert** reads the Depth map with black near.
+
+The subject is a surface with no back. A steep edge in the Depth map hides what lies
+beyond it.
+
+<Shot file="hologram-depth.webp" caption="Tilt y at -8, 0 and 8. Top: a portrait with a Depth map, in Full colour over the grid. Bottom: the same over a Backdrop layer 45 mm behind the film, tinted." />
+
+### Backdrop
+
+- **Backdrop**: **Grid** and **Stars** were recorded behind the subject. **Seal**,
+  **Rosette**, **Spiral**, **Lattice**, **Sunburst** and **Sparkle** are line patterns on
+  the film itself, which split light into colour. **None** leaves both out.
+- **Backdrop depth (mm)** is how far behind the film the grid, the stars and the Backdrop
+  layer sit.
+- **Backdrop layer** is a layer recorded behind the subject. It shows whatever **Backdrop**
+  is set to.
+- **Placement** places the Backdrop layer as the Depth map's does.
+- **Pattern depth (mm)** is how far behind the surface the line patterns lie.
+- **Pattern size (mm)** is how wide the grid, the stars and the patterns are. Seal, Rosette
+  and Spiral end at half of it from the centre. The others cover the film.
+- **Line width** is how much of each line spacing a pattern's line fills.
+- **Pitch (nm)** is the groove spacing inside the pattern lines.
+- **Strength** is how strongly the pattern lines split light into colour.
+
+<Shot file="hologram-backdrops.webp" caption="None, Grid, Stars, Seal and Rosette, then Spiral, Lattice, Sunburst, Sparkle and a Backdrop layer. The patterns are at a Pattern size of 60." />
+
+### Replay
+
+- **Colour (nm)** is the colour the image replays in when lit from the reference direction.
+- **Reference x** and **Reference y** are where a light must be for the clean image, as
+  seen from the film, from -1 to 1 across and up. They start on the Spot rig's light.
+- **Bandwidth (nm)** is how wide the reflection hologram's band of colour is.
+- **Selectivity** is how far a light can stray from the reference before the reflection
+  hologram's image fades.
+- **Slit** is how wide the rainbow hologram's slit was. Narrower gives purer colour.
+
+### Recording
+
+- **Recording**: **Optical** is one continuous recording. **Stereogram** is made from
+  separate views, side by side.
+- **Speckle** is how grainy the laser light makes the image.
+- **Views** is how many views the stereogram was made from.
+- **View blend** is how softly one view hands over to the next.
+- **View zone** is how wide a fan of angles the views cover. Outside it the image is cut.
+
+### Tilt, Sheet, Lights, Surface and Output
+
+These groups work as they do on Holographic foil:
+[Tilt](/effects/stylise/holographic-foil/#tilt),
+[Sheet](/effects/stylise/holographic-foil/#sheet),
+[Lights](/effects/stylise/holographic-foil/#lights),
+[Surface](/effects/stylise/holographic-foil/#surface) and
+[Output](/effects/stylise/holographic-foil/#output). What differs:
+
+- **Spin** turns the backdrop and the patterns within the film.
+- Turned past edge-on, the film shows the same plain back, with no image.
+- **Motion blur** blurs the film's own colours. The replayed image is not blurred.
+- **Lighting** has no Auto and starts on **Spot**. One light replays one clean image, and
+  Studio's four lights replay four.
+- **Environment** and **Amount** sit in **Lights**, and **Height map** with its
+  **Placement**, **Repeats** and **Wrap** in **Surface**. They read a layer as
+  [Maps](/effects/stylise/holographic-foil/#maps) does.
+- **Relief** has no Bevel from alpha. Relief and Waviness bend the film's mirror and its
+  coat, and leave the image steady. **Wear** makes the replay patchy as well.
+- **Quality**: **Draft** takes fewer, longer steps through the Depth map and replays the
+  brightest light alone. **High** takes more steps.
+- **Seed** picks another speckle, wobble and wear.
+
+The rows every effect ends with:
+
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** scales the replay for each pixel: white keeps the image, black leaves bare
+  film. **Invert** reads it the other way round.
+- **Channel**: the channel of the Matte layer that is read.
+
+## Presets
+
+On the effect's heading menu, under **Presets**. A preset puts every other row back to how
+the effect starts. The layers the layer rows name, their Placement and the Seed are kept.
+
+| Preset | Sets |
+| --- | --- |
+| **Reflection hologram** | The effect as it starts. |
+| **Rainbow hologram** | Type Rainbow, Glare 40. |
+| **Stereogram** | Recording Stereogram, Views 20, View blend 25. |
+| **Security seal** | Type Rainbow, Backdrop Seal, Pattern size 60, Strength 1.5, Glare 40. |
+| **Sticker** | Type Rainbow, Backdrop Seal, Recording Stereogram, Views 16, View blend 50, Slit 4, Glare 15, Speckle 30, Sheet width 30, Subject depth -6, Backdrop depth -24. |
+| **Deep backdrop** | Backdrop None, Subject depth -3, Backdrop depth -45, Subject colour Tinted by the layer. It leaves the backdrop to a Backdrop layer. |
+
+<Shot file="hologram-presets.webp" caption="The presets in the order of the table. Deep backdrop is shown with a Backdrop layer." />
+
+## Speed and colour depth
+
+The effect is worked out on the graphics card. The times here were measured on an RTX 5080
+on Windows.
+
+- The first frame waits about 8 seconds while the shader is built. **Wear**, a Height map
+  and an Environment layer use a larger shader, built in the background after the first
+  frame.
+- A 1920×1080 frame takes 1 to 6 ms and a 3840×2160 frame up to 19 ms. **Draft** is about
+  a tenth faster.
+- A still film is drawn once and cached for the layer's span. **Auto tilt** above 0 draws
+  every frame. So does **Motion blur** with **Follow layer rotation** on, or with keyframes
+  on a tilt, **Spin**, **Rig rotation** or a light's direction.
+- In a project at 8 bpc [colour depth](/use/colour-management/#colour-depth) nothing is
+  brighter than white, the glints included.
+
+## Related
+
+- [Making a hologram sticker](/tutorials/hologram-sticker/)
+- [Holographic foil](/effects/stylise/holographic-foil/)
+- [Depth](/effects/utility/depth/)
+- [Glow](/effects/stylise/glow/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)
