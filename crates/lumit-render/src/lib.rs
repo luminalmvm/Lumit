@@ -72,6 +72,8 @@ mod gpufx_denoise;
 mod gpufx_film;
 mod gpufx_flicker;
 mod gpufx_grade;
+mod gpufx_hologram;
+mod gpufx_holographic_foil;
 mod gpufx_jolt;
 mod gpufx_light_leak;
 mod gpufx_luma_fade;

@@ -32,6 +32,7 @@ Add to picked
 Add up
 Adjust
 Adjust time by
+AgX
 Age
 Align
 Align to motion
@@ -43,6 +44,8 @@ All at once
 All edges
 All frames
 All points
+Along
+Along edges
 Alpha
 Alpha bias
 Alpha blur
@@ -92,9 +95,14 @@ Audio
 Audio level
 Audio spectrum
 Auto
+Auto tilt
+Auto tilt speed (Hz)
 Away from points
 B
 Back
+Backdrop
+Backdrop depth (mm)
+Backdrop layer
 Background
 Background only
 Backing
@@ -129,10 +137,13 @@ Band 5 frequency
 Band 5 gain
 Band 5 on
 Band 5 type
+Band contrast
 Bands
+Bandwidth (nm)
 Bars
 Base colour
 Base colour layer
+Base roughness
 Basic
 Beam
 Beat markers
@@ -145,8 +156,11 @@ Between
 Bevel
 Bevel and emboss
 Bevel depth
+Bevel from alpha
+Bevel height (µm)
 Bevel segments
 Bevel style
+Bevel width (mm)
 Bezier warp
 BiRefNet
 Bias
@@ -198,6 +212,8 @@ Bounce
 Bounciness
 Boundary
 Bounds
+Bow (mm)
+Bow axis
 Box
 Boxes x
 Boxes y
@@ -211,6 +227,7 @@ Broadband, green
 Broadcast safe
 Brush hardness
 Brush size
+Brushed
 Brushed metal
 Bulge
 Buoyancy
@@ -227,6 +244,7 @@ Camera kick
 Camera track
 Cancel
 Candle
+Card rainbow
 Card wipe
 Ceiling
 Cell height
@@ -246,6 +264,7 @@ Character
 Checkbox
 Checkbox control
 Checker
+Chirp
 Chisel hard
 Chisel soft
 Choke
@@ -263,6 +282,7 @@ Circle
 Clamp
 Clean black
 Clean white
+Clear
 Clearance
 Click removal
 Clicks
@@ -296,6 +316,7 @@ Collide
 Collide with
 Collision
 Colour
+Colour (nm)
 Colour 1
 Colour 2
 Colour 2 position
@@ -332,6 +353,7 @@ Combine channels
 Combine with existing alpha
 Combined
 Comp
+Compact disc
 Completion
 Complexity
 Composite
@@ -377,9 +399,14 @@ Count
 Count nested inputs
 Cover left
 Cover right
+Coverage
 Crackle
+Crease height (µm)
+Crease width (µm)
+Creased
 Create corner pin
 Create transform keys
+Crinkled
 Crop
 Crop and scale
 Crop bottom
@@ -388,6 +415,7 @@ Crop right
 Crop top
 Crossfade
 Crossfade Bastiuni
+Crosshatch
 Crystal Archive paper
 Curl noise
 Curve
@@ -402,6 +430,7 @@ Cyans
 Cycle
 Cycle evolution
 Damping
+Dark
 Dark balance
 Dark exposure
 Dark range
@@ -410,10 +439,13 @@ Darken
 Darker
 Darker colour
 Datamosh
+Daylight
 De-esser
 Death
+Deboss
 Decay
 Decimals
+Deep backdrop
 Deep blue
 Deep emerald
 Deep red
@@ -426,6 +458,7 @@ Denominator
 Density
 Density layer
 Depth
+Depth (nm)
 Depth Anything V3 Small
 Depth channel
 Depth layer
@@ -433,7 +466,9 @@ Depth map
 Depth of field
 Depth of field pro
 Depth points
+Depth scale (mm)
 Depth sort
+Desk
 Despill amount
 Despill bias
 Despot black
@@ -448,10 +483,12 @@ Difference
 Digital
 Dip to black
 Direction
+Direction map
 Direction x
 Direction y
 Direction z
 Directional blur
+Directions
 Dirt
 Dirt alone
 Dirt scale
@@ -462,10 +499,15 @@ Displacement map
 Display
 Dissipation
 Distance
+Distance (m)
 Distortion
 Distribution
 Divide
+Dome
 Dominant motion
+Dot cover
+Dot size (µm)
+Dot tilt
 Dots
 Down
 Draft
@@ -491,17 +533,20 @@ Echo
 Echo operator
 Echo time (seconds)
 Edge
+Edge (nm)
 Edge colour
 Edge fade
 Edge margin
 Edge repeat
 Edge sharpness
 Edge type
+Edge width (nm)
 Edges
 Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Efficiency
 Eight hues
 Ektachrome 100
 Ektar 100
@@ -551,6 +596,8 @@ End y
 Energy
 Energy line
 Envelope
+Environment
+Equal
 Even
 Events
 Every N frames
@@ -578,6 +625,7 @@ Fade out
 Fade power
 Failing light
 Falloff
+Fan
 Far blur
 Farthest (m)
 Fast forward blur
@@ -608,6 +656,8 @@ Find edges
 Find frequency
 Find reverb time
 Fine
+Finest pitch (nm)
+Fingerprint
 Finish
 Fire
 Fire brightness
@@ -620,6 +670,11 @@ Fit piece
 Fit to size
 Five
 Flag
+Flake curve
+Flake layers
+Flake shape
+Flake size (µm)
+Flake tilt
 Flare options
 Flash
 Flash colour
@@ -632,9 +687,11 @@ Flip direction
 Flip order
 Flock
 Flock radius
+Floor
 Flow points
 Flow resolution
 Flow smoothness
+Fluorescent
 Focal length
 Focus distance
 Focus distance (m)
@@ -642,7 +699,11 @@ Focus map
 Focus point x
 Focus point y
 Focus range
+Foil
+Foil mask
+Foil only
 Follow
+Follow layer rotation
 Follow motion
 Follow the vectors
 For
@@ -668,6 +729,7 @@ Frequency y
 Friction
 From
 From group
+From map
 From x
 From y
 Front
@@ -676,6 +738,7 @@ Fuel
 Fujicolor C200
 Fujicolor Pro 400H
 Full body
+Full colour
 Full frame
 Full off
 Full on
@@ -690,12 +753,15 @@ Geometry options
 Ghost
 Ghost intensity
 Ghost softness
+Gilded vortex
+Glare
 Glass
 Glass curvature
 Glass dirt
 Glitch
 Glitch hit
 Glitch slices
+Glitter
 Global balance
 Glow
 Glow colour
@@ -707,6 +773,8 @@ Glow radius
 Glow size
 Gold
 Gold 200
+Gold rainbow foil
+Gold shatter
 Gradient
 Gradient 1
 Gradient 2
@@ -718,6 +786,7 @@ Gradient type
 Grain
 Graphic EQ
 Graphics template
+Grating
 Gravity
 Green
 Green amount
@@ -734,6 +803,7 @@ Grid size
 Grid size x
 Grid size y
 Grit
+Groove angle
 Ground
 Ground height
 Group
@@ -750,6 +820,7 @@ Halation
 Half
 Half speed
 Halo
+Hammered
 Hard
 Hard colour
 Hard hide
@@ -759,6 +830,8 @@ Hardness
 Harmonics
 Haze
 Height
+Height map
+Hex
 Hexagons
 Hide behind
 Hiding
@@ -783,6 +856,8 @@ Hold
 Hold frame
 Hold off
 Hole bevel depth
+Hologram
+Holographic foil
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -809,6 +884,7 @@ Hum removal
 Hysteresis
 IOR
 Ice
+Ice blue
 Image
 Image layer
 In high
@@ -821,6 +897,7 @@ Incoming
 Index
 Inflate
 Initial speed
+Ink over foil
 Inner bevel
 Inner glow
 Inner radius
@@ -853,6 +930,7 @@ Iris centre x
 Iris centre y
 Iris points
 Iris wipe
+Irregularity
 Iterations
 Jagged
 Jitter x
@@ -873,12 +951,15 @@ Key out unsafe
 Kill
 Knee
 Kodachrome 64
+LED
 LUT
 Label points
 Label rotation
 Label scale
+Lacquer index
 Laser
 Latitude
+Lattice
 Layer
 Layer in to out
 Layer index
@@ -933,23 +1014,28 @@ Light y
 Light z
 Lighten
 Lighter colour
+Lighting
 Lightness
 Lightning
 Lights
 Limit to radius
 Limiter
 Line
+Line height (µm)
 Line period
+Line pitch (mm)
 Line width
 Linear
 Linear burn
 Linear light
 Linear to sRGB
 Linear wipe
+Linen
 Lines
 Load from file…
 Log
 Log wheels
+Long waves
 Look
 Lookahead
 Loop
@@ -990,6 +1076,7 @@ Map placement
 Map slope
 Map softness
 Map white to
+Maps
 Markers
 Mask
 Mask path
@@ -1069,9 +1156,11 @@ Nearby
 Nearest
 Nearest (m)
 Nearest distance
+Nebula glitter
 Negative
 Neon
 Neon tube
+Neutral
 No motion
 Node
 Node graph
@@ -1106,6 +1195,7 @@ OCIO display transform
 OCIO file transform
 OCIO look transform
 Off
+Office
 Offset
 Offset forward
 Offset rows
@@ -1127,13 +1217,17 @@ Opacity %
 Opacity by
 Opacity layer
 Opacity over life
+Opaque print
 Open graph
 Operate on alpha
 Operation
+Optical
 Orange
+Orange peel (µm)
 Order
 Order by
 Orientation
+Orientation jitter
 Origin
 Origin x
 Origin y
@@ -1161,6 +1255,7 @@ Padding x
 Padding y
 Paint
 Paint style
+Panel
 Parallel
 Parametric EQ
 Part
@@ -1178,6 +1273,8 @@ Path layer
 Path overlap
 Paths
 Pattern
+Pattern depth (mm)
+Pattern size (mm)
 Peak
 Per
 Per clone
@@ -1209,6 +1306,13 @@ Pinned
 Pinning
 Pipe radius
 Pipe segments
+Pitch (nm)
+Pitch A (nm)
+Pitch B (nm)
+Pitch C (nm)
+Pitch at white (nm)
+Pitch jitter
+Pitch map
 Pivot
 Pixel motion
 Pixel sort
@@ -1262,10 +1366,13 @@ Pre-delay
 Preserve luminance
 Preserve luminosity
 Preset
+Pressed logo
 Print
 Print stock
+Prism
 Producer x
 Producer y
+Profile
 Projected from
 Projection time
 Propagate
@@ -1289,6 +1396,9 @@ Radial blur
 Radial wipe
 Radio waves
 Radius
+Rainbow
+Rainbow hologram
+Raking
 Ramp
 Random
 Random hue
@@ -1305,7 +1415,9 @@ Ratio
 Ray traced
 Rays
 Read
+Reading
 Rec. 709
+Recording
 Rectangle
 Rectangle outline
 Rectangular to polar
@@ -1324,7 +1436,11 @@ Reduce brightness
 Reduce saturation
 Reduction
 Reference
+Reference x
+Reference y
 Refine radius
+Reflection
+Reflection hologram
 Refraction
 Region from
 Region layer
@@ -1333,6 +1449,7 @@ Region size
 Relax points
 Release
 Relief
+Relief on
 Reload channels
 Remainder
 Remap
@@ -1344,12 +1461,16 @@ Removed
 Removed noise
 Render
 Rendered
+Repeat
 Repeat edge pixels
 Repeat end
 Repeat start
 Repeat words
+Repeats
 Replace colour
 Replace method
+Replay
+Replay colour only
 Reset interval
 Reset mesh
 Resolution
@@ -1361,6 +1482,7 @@ Reverb only
 Reverb reduction
 Reverb time
 Reverse
+Rig rotation
 Right
 Right bottom tangent x
 Right bottom tangent y
@@ -1370,6 +1492,7 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Rims
 Ring
 Ring wave
 Rings
@@ -1380,8 +1503,10 @@ Roll
 Roll speed
 Rolling shutter
 Rolloff
+Room
 Room size
 Rose
+Rosette
 Rotation
 Rotation amount
 Rotation frequency
@@ -1396,6 +1521,7 @@ Roto brush
 Roughen
 Roughen edges
 Roughness
+Round
 Round corners
 Roundness
 Row gap
@@ -1412,6 +1538,9 @@ Sample size
 Sample x
 Sample y
 Samples
+Sand size
+Sand tilt
+Sandblast
 Sat v lum
 Sat v sat
 Satin
@@ -1445,14 +1574,18 @@ Screen pre-blur
 Screen shrink/grow
 Screen softness
 Scribble
+Scrim
+Seal
 Second input
 Second tint
 Seconds
+Security seal
 Seed
 Seed from
 Segment
 Segment length
 Segments
+Selectivity
 Semicircle
 Sensitivity
 Sensor
@@ -1480,14 +1613,20 @@ Shadows
 Shake
 Shape
 Shapes
+Shard size (mm)
+Shard tilt
 Share of frame
 Shared
 Sharp
 Sharp colours
 Sharpen
+Shatter
+Sheet
+Sheet width (mm)
 Shift per row
 Shift x
 Shift y
+Short waves
 Show
 Show points
 Shuffle
@@ -1499,6 +1638,8 @@ Sibilance only
 Siceliot
 Side
 Sides
+Silver glitter
+Silver shatter
 Simulate
 Simulation
 Sine
@@ -1515,6 +1656,7 @@ Size over life
 Size with distance
 Skew
 Skew axis
+Sky sparkle
 Slice end
 Slice glitch
 Slice repeat
@@ -1525,6 +1667,7 @@ Slide left
 Slide right
 Slider
 Slider control
+Slit
 Slope
 Slope channel
 Slow motion with blur
@@ -1541,6 +1684,8 @@ Smudges
 Soft colour
 Soft iris
 Soft light
+Soft pastel satin
+Softbox
 Softness
 Solar
 Sort
@@ -1566,10 +1711,17 @@ Spark inherit
 Spark life
 Spark size
 Spark speed
+Sparkle
 Sparks
 Sparks from
 Spatial
 Spatial by size
+Speck colour (nm)
+Speck floor
+Speck width (nm)
+Speckle
+Specks
+Spectrum
 Specular balance
 Specular exposure
 Specular range
@@ -1589,6 +1741,11 @@ Spiral
 Split
 Split channels
 Split colours
+Splits
+Spot
+Spot A
+Spot B
+Spot C
 Spread
 Spread z
 Sprite
@@ -1605,7 +1762,9 @@ Standard
 Star
 Star depth
 Star points
+Star size (µm)
 Starburst intensity
+Stars
 Start
 Start angle
 Start colour
@@ -1621,7 +1780,9 @@ Steady crop
 Steps per second
 Stereo phase
 Stereo width
+Stereogram
 Stick
+Sticker
 Stillness
 Stock
 Stops
@@ -1635,6 +1796,7 @@ Stretch to fit
 Stretch x
 Stretch y
 Strike
+Strip
 Stripes
 Strobe
 Stroke
@@ -1643,20 +1805,27 @@ Stroke emboss
 Stroke width
 Strokes
 Strong
+Studio
 Style
 Stylise
 Sub influence
 Sub scaling
 Sub settings
 Sub-steps
+Subject
+Subject colour
+Subject depth (mm)
 Subtract
 Subtract from layer
+Sunburst
 Super 16
 Super 35
 Super 8
 Superia X-TRA 400
 Surface
+Surroundings
 Swing
+Swirl (mm)
 Switch
 Symmetric
 Sync
@@ -1689,6 +1858,9 @@ Tile centre x
 Tile centre y
 Tile height
 Tile width
+Tilt
+Tilt x
+Tilt y
 Time
 Time loop
 Time offset
@@ -1700,6 +1872,7 @@ Times
 Timewarp
 Tint
 Tint colour
+Tinted by the layer
 To
 To group
 To x
@@ -1739,6 +1912,7 @@ Trim right
 Trim top
 Tritone
 True peak
+Tungsten
 Turbulence
 Turbulence amount
 Turbulence scale
@@ -1793,6 +1967,7 @@ V line rel width
 Value
 Value noise
 Variation
+Varnish
 Vary by
 Vary points
 Vector
@@ -1813,6 +1988,10 @@ Vibrancy
 Vibrato
 Video
 View
+View blend
+View distance (m)
+View zone
+Views
 Vignette
 Violet
 Visible
@@ -1847,7 +2026,9 @@ Wave y
 Waveform
 Wavelength
 Waves
+Waviness
 Weak
+Wear
 Wet
 Wheels
 Whip down
@@ -1859,6 +2040,7 @@ Whole frame
 Whole frames
 Whole sound
 Widen
+Widest pitch (nm)
 Width
 Wiggle
 Wiggle type

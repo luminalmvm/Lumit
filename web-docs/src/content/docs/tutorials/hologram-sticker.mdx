@@ -1,0 +1,66 @@
+---
+title: Making a hologram sticker
+description: Record a layer as a round hologram with depth and a backdrop, then tip it under its light.
+sidebar:
+  order: 20
+---
+
+import Shot from "../../../components/Shot.astro";
+
+[Hologram](/effects/stylise/hologram/) records a layer as a hologram on a film. This makes
+a round sticker with depth in it and a backdrop behind it, and tips it to show both.
+
+**1. Start with the subject.** Use artwork or footage over black. Black is empty in a
+hologram, and the backdrop shows through it.
+
+**2. Cut it round.** Select the layer, pick the **Ellipse** tool and drag a circle over it
+with `Shift` held. The [mask](/use/masks/) is the film's outline.
+
+**3. Make a depth layer.** It is white where the subject is near and black where it is far.
+
+- For footage or a photograph, duplicate the layer with `Ctrl+D`, add **Effect ▸ Utility
+  ▸ Depth** to the copy and press **Analyse**. Leave **View** on **Depth**. See
+  [Depth](/effects/utility/depth/) for the model it needs.
+- For artwork, draw one: a soft white shape on a black solid.
+
+Turn off the depth layer's **Visible** switch.
+
+**4. Add the effect.** Select the subject and choose **Effect ▸ Stylise ▸ Hologram**.
+The subject replays in green over a grid. The first frame takes a few seconds while the
+shader is built.
+
+**5. Choose the Sticker preset.** On the effect's heading menu in
+[Effect controls](/panels/effect-controls/), choose **Presets ▸ Sticker**. The film is now
+a rainbow hologram 30 mm wide, made from 16 views, with a seal on it.
+
+**6. Keep the subject's colours.** In **Subject**, set **Subject colour** to **Full
+colour**.
+
+**7. Give it depth.** In **Depth**, set **Depth map** to the depth layer and **Depth scale
+(mm)** to 6. White now stands 3 mm nearer than **Subject depth** and black 3 mm further.
+
+**8. Put a backdrop behind it.** Open **Backdrop**. Set **Backdrop** to **None** and
+**Backdrop layer** to a layer holding a pattern, with its **Visible** switch off. It sits
+at **Backdrop depth (mm)**, 24 mm behind the film.
+
+<Shot file="hologram-sticker-steps.webp" caption="The sticker after steps 4, 5, 7 and 8. The last two have Tilt y at 6." eager/>
+
+**9. Tip the film.** At the first frame, turn on the stopwatch beside **Tilt y** and set it
+to -6. Move the playhead two seconds on and set **Tilt y** to 6. The subject slides over
+the backdrop as it plays. Past the preset's **View zone** the image is cut.
+
+<Shot file="hologram-sticker-tilt.webp" caption="Tilt y at -6, -3, 0, 3 and 6."/>
+
+**10. Shift the colour.** Keyframe **Tilt x** from -2 to 2. A rainbow hologram's colour
+follows the tilt up and down, from blue towards red.
+
+**11. Move the light.** In **Lights**, keyframe **Rig rotation** from -10 to 10. The image
+dims as the light leaves the direction **Reference x** and **Reference y** name.
+
+## Related
+
+- [Hologram](/effects/stylise/hologram/)
+- [Turning a logo into holographic foil](/tutorials/holographic-foil/)
+- [Depth](/effects/utility/depth/)
+- [Masks](/use/masks/)
+- [Keyframes](/use/keyframes/)

@@ -29,6 +29,18 @@ const LIGHT_CORE: &str = include_str!("../src/light_core.wgsl");
 const SHADOW_CORE: &str = include_str!("../src/shadow_core.wgsl");
 /// An Environment light as the passes it lights read it.
 const ENVIRONMENT_CORE: &str = include_str!("../src/environment_core.wgsl");
+/// The holographic core, prepended to the holographic kernels.
+const HOLO_CORE: &str = include_str!("../src/fx_holo_core.wgsl");
+/// The holographic relief, prepended after the core.
+const HOLO_RELIEF: &str = include_str!("../src/fx_holo_relief.wgsl");
+/// Holographic foil's shards, prepended after the relief.
+const HOLO_SHATTER: &str = include_str!("../src/fx_holo_shatter.wgsl");
+/// Holographic foil's flakes, and the candidate loop the dots share.
+const HOLO_GLITTER: &str = include_str!("../src/fx_holo_glitter.wgsl");
+/// Holographic foil's sparkle dots.
+const HOLO_SPARKLE: &str = include_str!("../src/fx_holo_sparkle.wgsl");
+/// Holographic foil's kernel, whose sheet and lights Hologram is compiled after.
+const HOLO_FOIL: &str = include_str!("../src/fx_holographic_foil.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -65,6 +77,11 @@ fn every_wgsl_kernel_parses_and_validates() {
             || name == "shadow_core.wgsl"
             || name == "environment_core.wgsl"
             || name == "fx_denoise_common.wgsl"
+            || name == "fx_holo_core.wgsl"
+            || name == "fx_holo_relief.wgsl"
+            || name == "fx_holo_shatter.wgsl"
+            || name == "fx_holo_glitter.wgsl"
+            || name == "fx_holo_sparkle.wgsl"
         {
             continue;
         }
@@ -112,6 +129,36 @@ fn every_wgsl_kernel_parses_and_validates() {
         };
         let source = if source.contains("irradiance(") {
             format!("{LIGHT_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if name == "fx_hologram.wgsl" {
+            format!("{HOLO_FOIL}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("holo_sparkle(") {
+            format!("{HOLO_SPARKLE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("holo_glitter(") {
+            format!("{HOLO_GLITTER}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("holo_shatter(") {
+            format!("{HOLO_SHATTER}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("holo_relief(") {
+            format!("{HOLO_RELIEF}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("holo_band(") {
+            format!("{HOLO_CORE}{source}")
         } else {
             source
         };
