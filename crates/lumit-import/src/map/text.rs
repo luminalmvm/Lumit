@@ -63,8 +63,24 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
         _ => (TextAlign::Left, false),
     };
 
+    // Source Text keys are held words in After Effects, so they come across
+    // as keyed words.
+    let keys = node
+        .and_then(|node| node.keyframes.as_deref())
+        .into_iter()
+        .flatten()
+        .filter_map(|k| Some((conv.layer_time(k.t?), k.v.as_ref()?.get("text")?.as_str()?)))
+        .fold(
+            None,
+            |keys: Option<lumit_core::text::keys::TextKeys>, (t, w)| {
+                Some(match keys {
+                    Some(keys) => keys.with_word_at(t, w),
+                    None => lumit_core::text::keys::TextKeys::start(w, t),
+                })
+            },
+        );
     let changes = node.is_some_and(|node| {
-        node.keyframes.as_deref().is_some_and(|k| !k.is_empty())
+        (keys.is_none() && node.keyframes.as_deref().is_some_and(|k| !k.is_empty()))
             || (node.expression_enabled == Some(true)
                 && node
                     .expression
@@ -99,6 +115,7 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
     TextDocument {
         text: word("text"),
         expression: None,
+        keys: keys.map(Box::new),
         size: number("fontSize").unwrap_or(72.0),
         fill: colour("fillColor").unwrap_or(lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0])),
         // After Effects' text-on-a-path rides in the layer's own mask list,

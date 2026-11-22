@@ -4,6 +4,7 @@
 // LumitState asks it (`askBeforeLeaving`), so New, Open, Close, an import and
 // quitting all get the same question from one place.
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
@@ -81,7 +82,8 @@ void installUnsavedQuestion(BuildContext context) {
 /// Save runs the ordinary save, which asks for a location when the project has
 /// never had one. If that is cancelled, or the write fails, the project still
 /// has unsaved changes and the answer is no: nothing is lost and nothing
-/// closes. Cancel, Escape and a click outside are all no.
+/// closes. Cancel, Escape and a click outside are all no. The Save and Discard
+/// keys are the letters underlined on the buttons.
 ///
 /// [savePicker] is the seam `saveProjectFrb` takes, for a test.
 Future<bool> askUnsavedChangesFrb(
@@ -123,44 +125,88 @@ class _UnsavedDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return DialogFrame(
-      width: unsavedDialogWidth,
-      children: [
-        dialogTitleBar(
-          t,
-          title: l10n.unsavedChanges,
-          onClose: () => onChoose(null),
-          keyPrefix: 'unsaved',
-        ),
-        Padding(
-          padding: const EdgeInsets.all(dialogPadding),
-          child: Text(l10n.unsavedQuestion, style: t.body),
-        ),
-        dialogFooter(
-          t,
-          keyPrefix: 'unsaved',
-          actions: [
-            HouseButton(
-              key: const ValueKey('unsaved-cancel'),
-              onPressed: () => onChoose(null),
-              child: Text(l10n.cancel),
-            ),
-            HouseButton(
-              key: const ValueKey('unsaved-discard'),
-              onPressed: () => onChoose(false),
-              child: Text(l10n.discard),
-            ),
-            // The default: focused on open, so Enter saves.
-            HouseButton(
-              key: const ValueKey('unsaved-save'),
-              primary: true,
-              autofocus: true,
-              onPressed: () => onChoose(true),
-              child: Text(l10n.save),
-            ),
-          ],
-        ),
-      ],
+    // The dialogue holds no text field, so a letter is never someone typing.
+    // It sits above the buttons, so it hears the keys the focused Save does.
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _onKey,
+      child: DialogFrame(
+        width: unsavedDialogWidth,
+        children: [
+          dialogTitleBar(
+            t,
+            title: l10n.unsavedChanges,
+            onClose: () => onChoose(null),
+            keyPrefix: 'unsaved',
+          ),
+          Padding(
+            padding: const EdgeInsets.all(dialogPadding),
+            child: Text(l10n.unsavedQuestion, style: t.body),
+          ),
+          dialogFooter(
+            t,
+            keyPrefix: 'unsaved',
+            actions: [
+              HouseButton(
+                key: const ValueKey('unsaved-cancel'),
+                onPressed: () => onChoose(null),
+                child: Text(l10n.cancel),
+              ),
+              HouseButton(
+                key: const ValueKey('unsaved-discard'),
+                onPressed: () => onChoose(false),
+                child: _keyed(l10n.discard, l10n.unsavedKeyDiscard),
+              ),
+              // The default: focused on open, so Enter saves.
+              HouseButton(
+                key: const ValueKey('unsaved-save'),
+                primary: true,
+                autofocus: true,
+                onPressed: () => onChoose(true),
+                child: _keyed(l10n.save, l10n.unsavedKeySave),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
+  }
+
+  /// The Save and Discard letters, on their own: with Ctrl, Alt or Cmd held a
+  /// press is a shortcut, not an answer.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isAltPressed || keys.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+    // The character typed, so a letter on another layout still answers.
+    final typed = (event.character ?? event.logicalKey.keyLabel).toLowerCase();
+    if (typed.isEmpty) return KeyEventResult.ignored;
+    if (typed == l10n.unsavedKeySave.toLowerCase()) {
+      onChoose(true);
+      return KeyEventResult.handled;
+    }
+    if (typed == l10n.unsavedKeyDiscard.toLowerCase()) {
+      onChoose(false);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// [label] with the first [key] in it underlined. A label that has no such
+  /// letter is shown as it is.
+  Widget _keyed(String label, String key) {
+    final at = key.isEmpty ? -1 : label.toLowerCase().indexOf(key.toLowerCase());
+    if (at < 0) return Text(label);
+    return Text.rich(TextSpan(children: [
+      TextSpan(text: label.substring(0, at)),
+      TextSpan(
+        text: label.substring(at, at + key.length),
+        style: const TextStyle(decoration: TextDecoration.underline),
+      ),
+      TextSpan(text: label.substring(at + key.length)),
+    ]));
   }
 }

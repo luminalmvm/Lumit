@@ -1427,6 +1427,14 @@ fn feed_effect_stack(
                         feed_f64(h, f64::from(xy[1]));
                     }
                 }
+                // The stops as the render reads them at this time.
+                EffectValue::Gradient(stops) => {
+                    lumit_core::fx::colour_stops::ColourStops::sanitised(stops, lt).feed_hash(
+                        &mut |b| {
+                            h.update(b);
+                        },
+                    );
+                }
             }
         }
         // A seeded effect (docs/08 §1.3 Randomness) draws from
@@ -2264,9 +2272,19 @@ fn feed_source(
                 current_depth: 0,
                 inputs: None,
             });
+            let blend = document.resolved_blend(&context);
             let (line, spoken, [x, y]) = lumit_core::captions::show::spoken(document, context);
             h.update(line.as_bytes());
             h.update(&[0]); // length delimiter: text then size never collide
+
+            // A fade between keyed words is a new picture at every frame. A held
+            // span feeds nothing here and keeps one key.
+            if let Some((other, weight)) = &blend {
+                h.update(b"xfade/");
+                h.update(other.as_bytes());
+                h.update(&[0]);
+                h.update(&weight.to_le_bytes());
+            }
 
             // A font from the library names the files it was drawn from.
             if let Some(font) = stamper.font_identity(&document.style.family) {
@@ -2333,9 +2351,13 @@ fn feed_source(
             // A Proximity selector's letters are weighed against where its
             // target is now, so a target dragged across the words keys each
             // frame apart.
-            for x in lumit_core::text::ports::layer_glyph_xforms(
-                doc, owner, layer, document, &line, comp_time, &spoken,
-            ) {
+            // During a fade the other word's letters reach the picture too.
+            let words = std::iter::once(line.as_ref()).chain(blend.as_ref().map(|b| b.0.as_ref()));
+            for x in words.flat_map(|words| {
+                lumit_core::text::ports::layer_glyph_xforms(
+                    doc, owner, layer, document, words, comp_time, &spoken,
+                )
+            }) {
                 let lone = [x.rotation, x.opacity, x.depth];
                 let pairs = x.position.into_iter().chain(x.scale).chain(x.turn);
                 for v in pairs.chain(lone).chain(x.fill).chain(x.plate) {
@@ -2972,6 +2994,7 @@ mod tests {
                 document: TextDocument {
                     text: text.into(),
                     expression: None,
+                    keys: None,
                     size: 72.0,
                     fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                     path: None,

@@ -242,9 +242,7 @@ impl Particulate {
         let default_schedule = lumit_core::fx::points::PointsSchedule::default();
         let sched = aux.schedule().unwrap_or(&default_schedule);
         let frames = particulate_frames(sched);
-        let mut curves = Vec::with_capacity(packed.particle.size_curve.len() * 2);
-        curves.extend_from_slice(&packed.particle.size_curve);
-        curves.extend_from_slice(&packed.particle.opacity_curve);
+        let curves = packed.particle.curves();
         // The camera, in the raster this frame is drawn at: the projection
         // was built in px@comp, like the mask path beside it.
         let projection = sched

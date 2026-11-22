@@ -234,7 +234,11 @@ pub fn layer_rect(
                 comp_time: t,
                 ..context.increase_depth()
             }));
+            // Centred or right-aligned words an expression gives sit where the
+            // typed words' side was, as the picture draws them.
+            let [dx, dy] = crate::captions::show::typed_side(document, &words);
             crate::text::words_box(document, &words)
+                .map(|b| [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy])
         }
         // The picture's corner is the corner of the art's box.
         LayerKind::Shape { contents } => crate::shape::contents_bounds(contents, lt)

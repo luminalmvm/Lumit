@@ -32,6 +32,7 @@ pub const LOOK_ROWS: &[&str] = &[
     "opacity_over_life",
     "colour",
     "end_colour",
+    "colour_over_life",
     "rotation",
     "rotation_jitter",
     "spin",
@@ -135,6 +136,59 @@ pub(crate) fn feed_shape(doc: &Document, l: &Layer, h: &mut blake3::Hasher) {
     }
 }
 
+/// Whether a row of `e` not in `skip` is an expression, or `e` is the
+/// Expression box.
+fn has_expression(e: &EffectInstance, skip: &[&str]) -> bool {
+    let expressed =
+        |p: &crate::anim::Property| matches!(p.animation, crate::anim::Animation::Expression(_));
+    e.effect.match_name == "expression"
+        || e.params
+            .iter()
+            .filter(|p| !skip.contains(&p.id.as_str()))
+            .any(|p| match &p.value {
+                EffectValue::Float(f) => expressed(f),
+                EffectValue::Point(x, y) => expressed(x) || expressed(y),
+                EffectValue::Colour(c) => c.iter().any(expressed),
+                _ => false,
+            })
+}
+
+/// Every layer, when an expression the walk reads could read one, or a node
+/// that names a layer, such as Measure: this one by its place and its other
+/// effects, the rest whole. They are read at each frame, so a key moved on
+/// another layer changes every frame after it.
+pub(crate) fn feed_expressed(
+    comp: &Composition,
+    layer: &Layer,
+    inst: &EffectInstance,
+    h: &mut blake3::Hasher,
+) {
+    let above = layer.effects.iter().take_while(|e| e.id != inst.id);
+    let names_layer = |e: &EffectInstance| {
+        e.params
+            .iter()
+            .any(|p| matches!(p.value, EffectValue::Layer(Some(_))))
+    };
+    let reads = has_expression(inst, LOOK_ROWS)
+        || layer.graph.nodes.iter().any(names_layer)
+        || layer
+            .graph
+            .nodes
+            .iter()
+            .chain(above)
+            .any(|e| has_expression(e, &[]));
+    if !reads {
+        return;
+    }
+    for l in comp.layers.iter().filter(|l| l.id != layer.id) {
+        let _ = serde_json::to_writer(&mut *h, l);
+    }
+    feed_place(comp, layer, h);
+    for e in layer.effects.iter().filter(|e| e.id != inst.id) {
+        let _ = serde_json::to_writer(&mut *h, e);
+    }
+}
+
 /// Everything a simulation reads, as one name: its kept states and its bake are
 /// found by it. What only changes how it looks is left out, so a change to Size
 /// or Colour draws again rather than walking again.
@@ -169,6 +223,7 @@ pub fn definition(
             let _ = serde_json::to_writer(&mut h, above);
         }
     }
+    feed_expressed(comp, layer, inst, &mut h);
     feed_shape(doc, layer, &mut h);
     let _ = serde_json::to_writer(&mut h, &layer.start_offset);
     // The layer's place only matters against what the particles hit.
@@ -591,5 +646,28 @@ mod tests {
         let mut moved = layer.clone();
         moved.transform.position_x = crate::anim::Property::fixed(400.0);
         assert_eq!(walk, name(&comp, &e, &moved));
+        // Another layer is not read until an expression could read it, and then
+        // a key moved there renames the walk.
+        let mut other = layer.clone();
+        other.id = uuid::Uuid::now_v7();
+        let mut with = comp.clone();
+        with.layers.push(other.clone());
+        let mut shifted = with.clone();
+        shifted.layers[1].transform.position_x = crate::anim::Property::fixed(400.0);
+        assert_eq!(name(&with, &e, &layer), name(&shifted, &e, &layer));
+        let mut expressed = e.clone();
+        let row = expressed
+            .params
+            .iter_mut()
+            .find(|p| p.id == "position_x")
+            .unwrap();
+        let EffectValue::Float(f) = &mut row.value else {
+            panic!("position_x is a number");
+        };
+        f.set_animation(crate::anim::Animation::Expression("0".into()));
+        assert_ne!(
+            name(&with, &expressed, &layer),
+            name(&shifted, &expressed, &layer)
+        );
     }
 }

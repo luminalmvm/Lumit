@@ -221,6 +221,7 @@ Bursts
 By strength
 Bypass
 CDL
+CRT
 Camera
 Camera kick
 Camera track
@@ -317,6 +318,7 @@ Colour fringing
 Colour from image
 Colour name
 Colour noise
+Colour over life
 Colour overlay
 Colour ramp
 Colour variation
@@ -424,7 +426,7 @@ Denominator
 Density
 Density layer
 Depth
-Depth Anything V2 Small
+Depth Anything V3 Small
 Depth channel
 Depth layer
 Depth map
@@ -574,6 +576,7 @@ Fade in
 Fade length
 Fade out
 Fade power
+Failing light
 Falloff
 Far blur
 Farthest (m)
@@ -597,6 +600,7 @@ Fill from
 Film
 Film burn
 Film colour
+Film projector
 Filter
 Final
 Final result
@@ -1067,6 +1071,7 @@ Nearest (m)
 Nearest distance
 Negative
 Neon
+Neon tube
 No motion
 Node
 Node graph

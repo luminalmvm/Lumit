@@ -56,9 +56,10 @@ pub struct Shown {
 }
 
 /// What a Text layer says at the moment `context` names, when each word of
-/// it is said, and how far a caption is moved off its place: a caption
-/// layer's caption, or any other layer's own text, whose words have no times
-/// and which is never moved.
+/// it is said, and how far its words are moved off their place: a caption
+/// layer's caption, or any other layer's own text, whose words have no times.
+/// Words an expression gives are moved so the side the lines line up on stays
+/// where the typed words put it.
 #[must_use]
 pub fn spoken(
     document: &TextDocument,
@@ -69,21 +70,61 @@ pub fn spoken(
             let shown = at(captions, &context);
             (Cow::Owned(shown.text), shown.words, shown.offset)
         }
-        None => (document.resolved_text(context), Vec::new(), [0.0; 2]),
+        None => {
+            let line = document.resolved_text(context);
+            let moved = typed_side(document, &line);
+            (line, Vec::new(), moved)
+        }
     }
 }
 
-/// How far the caption `layer` shows at the comp time `context` names is
-/// moved from where the layer puts it, in the layer's own pixels: nought for
-/// any other layer. The same clock [`spoken`] reads, so the words and their
-/// place agree.
+/// Whether words an expression gives are lined up on the typed words' side:
+/// point text, straight, centred or on the right.
+fn follows_typed_side(document: &TextDocument) -> bool {
+    document.expression.is_some()
+        && document.path.is_none()
+        && document.paragraph.box_width <= 0.0
+        && document.paragraph.align != crate::text::TextAlign::Left
+}
+
+/// How far `line` is moved so its centre or right edge sits where the typed
+/// words' does. Retyping moves the anchor instead, which words that change
+/// every frame cannot do.
+#[must_use]
+pub fn typed_side(document: &TextDocument, line: &str) -> [f64; 2] {
+    if !follows_typed_side(document) || line == document.text {
+        return [0.0; 2];
+    }
+    let side = |b: [f64; 4]| match document.paragraph.align {
+        crate::text::TextAlign::Centre => (b[0] + b[2]) * 0.5,
+        _ => b[2],
+    };
+    let typed = crate::text::words_box(document, &document.text);
+    match typed.zip(crate::text::words_box(document, line)) {
+        Some((typed, shown)) => [side(typed) - side(shown), 0.0],
+        None => [0.0; 2],
+    }
+}
+
+/// How far the words `layer` shows at the comp time `context` names are
+/// moved from where the layer puts it, in the layer's own pixels: a caption's,
+/// or words an expression gives ([`spoken`]), and nought for any other layer.
+/// The same clock [`spoken`] reads, so the words and their place agree.
 #[must_use]
 pub fn moved(layer: &Layer, context: &ExpressionContext) -> (f64, f64) {
     let LayerKind::Text { document } = &layer.kind else {
         return (0.0, 0.0);
     };
     let Some(captions) = document.captions.as_deref() else {
-        return (0.0, 0.0);
+        if !follows_typed_side(document) {
+            return (0.0, 0.0);
+        }
+        let moment = ExpressionContext {
+            layer: Some(layer.id),
+            ..context.clone()
+        };
+        let [x, y] = spoken(document, Arc::new(moment)).2;
+        return (x, y);
     };
     if captions.cues.iter().all(|c| c.offset.is_none()) {
         return (0.0, 0.0);

@@ -1,0 +1,52 @@
+---
+title: Changing the words over time
+description: Switch a title from one set of words to another, then fade between them.
+sidebar:
+  order: 11
+---
+
+A text layer's words can be [keyed](/use/text/#keyed-words) like any other property. A key
+either switches the words or fades into the next key's words.
+
+## Switch the words
+
+**1. Add the title.** Press `Ctrl+T` for the Type tool, click in the Viewer, type *hello*
+and press `Enter`.
+
+**2. Open the Source section.** With the layer selected, open **Source** in
+[Effect controls](/panels/effect-controls/).
+
+**3. Key the words.** Move the playhead to 0 s and click the stopwatch on the **Text** row.
+A key appears in the row's lane.
+
+**4. Go to the switch.** Move the playhead to 2 s.
+
+**5. Type the new words.** Select the **Text** row, type *goodbye* and press `Enter`. A
+second key appears at 2 s.
+
+**6. Play it.** The Viewer shows *hello* until 2 s, then *goodbye*.
+
+## Fade between them
+
+**1. Right-click the first key.** In the lane, right-click the key at 0 s.
+
+**2. Make it linear.** Choose **Linear**. The words now fade from *hello* to *goodbye*
+over the two seconds, and *hello* is gone at 2 s.
+
+**3. Ease it.** Choose **Easy ease** instead to start and end the fade slowly.
+
+**4. Switch again.** Choose **Hold** on the key to put it back to a switch.
+
+## Add a third set of words
+
+**1. Go to 4 s.** Move the playhead there and type *see you* in the **Text** row.
+
+**2. Choose each span.** The span from 0 s to 2 s fades and the span from 2 s to 4 s
+switches, since only the first key was made linear. Right-click the key at 2 s and choose
+**Linear** to fade that span too.
+
+## Related
+
+- [Text](/use/text/)
+- [Animating a title letter by letter](/tutorials/text-animators/)
+- [Keyframes](/use/keyframes/)

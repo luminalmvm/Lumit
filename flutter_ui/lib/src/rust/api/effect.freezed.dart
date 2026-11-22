@@ -68,6 +68,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(BridgeEffectValue_MaskPath value)? maskPath,
     TResult Function(BridgeEffectValue_Curve value)? curve,
     TResult Function(BridgeEffectValue_Shape value)? shape,
+    TResult Function(BridgeEffectValue_Gradient value)? gradient,
     TResult Function(BridgeEffectValue_Text value)? text,
     required TResult orElse(),
   }) {
@@ -97,6 +98,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return curve(_that);
       case BridgeEffectValue_Shape() when shape != null:
         return shape(_that);
+      case BridgeEffectValue_Gradient() when gradient != null:
+        return gradient(_that);
       case BridgeEffectValue_Text() when text != null:
         return text(_that);
       case _:
@@ -131,6 +134,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(BridgeEffectValue_MaskPath value) maskPath,
     required TResult Function(BridgeEffectValue_Curve value) curve,
     required TResult Function(BridgeEffectValue_Shape value) shape,
+    required TResult Function(BridgeEffectValue_Gradient value) gradient,
     required TResult Function(BridgeEffectValue_Text value) text,
   }) {
     final _that = this;
@@ -159,6 +163,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return curve(_that);
       case BridgeEffectValue_Shape():
         return shape(_that);
+      case BridgeEffectValue_Gradient():
+        return gradient(_that);
       case BridgeEffectValue_Text():
         return text(_that);
     }
@@ -190,6 +196,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(BridgeEffectValue_MaskPath value)? maskPath,
     TResult? Function(BridgeEffectValue_Curve value)? curve,
     TResult? Function(BridgeEffectValue_Shape value)? shape,
+    TResult? Function(BridgeEffectValue_Gradient value)? gradient,
     TResult? Function(BridgeEffectValue_Text value)? text,
   }) {
     final _that = this;
@@ -218,6 +225,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return curve(_that);
       case BridgeEffectValue_Shape() when shape != null:
         return shape(_that);
+      case BridgeEffectValue_Gradient() when gradient != null:
+        return gradient(_that);
       case BridgeEffectValue_Text() when text != null:
         return text(_that);
       case _:
@@ -251,6 +260,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult Function(UuidValue? field0)? maskPath,
     TResult Function(List<Float32List> field0)? curve,
     TResult Function(List<Float32List> field0)? shape,
+    TResult Function(List<BridgeGradientStop> field0)? gradient,
     TResult Function(String field0)? text,
     required TResult orElse(),
   }) {
@@ -280,6 +290,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return curve(_that.field0);
       case BridgeEffectValue_Shape() when shape != null:
         return shape(_that.field0);
+      case BridgeEffectValue_Gradient() when gradient != null:
+        return gradient(_that.field0);
       case BridgeEffectValue_Text() when text != null:
         return text(_that.field0);
       case _:
@@ -314,6 +326,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     required TResult Function(UuidValue? field0) maskPath,
     required TResult Function(List<Float32List> field0) curve,
     required TResult Function(List<Float32List> field0) shape,
+    required TResult Function(List<BridgeGradientStop> field0) gradient,
     required TResult Function(String field0) text,
   }) {
     final _that = this;
@@ -342,6 +355,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return curve(_that.field0);
       case BridgeEffectValue_Shape():
         return shape(_that.field0);
+      case BridgeEffectValue_Gradient():
+        return gradient(_that.field0);
       case BridgeEffectValue_Text():
         return text(_that.field0);
     }
@@ -373,6 +388,7 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
     TResult? Function(UuidValue? field0)? maskPath,
     TResult? Function(List<Float32List> field0)? curve,
     TResult? Function(List<Float32List> field0)? shape,
+    TResult? Function(List<BridgeGradientStop> field0)? gradient,
     TResult? Function(String field0)? text,
   }) {
     final _that = this;
@@ -401,6 +417,8 @@ extension BridgeEffectValuePatterns on BridgeEffectValue {
         return curve(_that.field0);
       case BridgeEffectValue_Shape() when shape != null:
         return shape(_that.field0);
+      case BridgeEffectValue_Gradient() when gradient != null:
+        return gradient(_that.field0);
       case BridgeEffectValue_Text() when text != null:
         return text(_that.field0);
       case _:
@@ -1226,6 +1244,81 @@ class _$BridgeEffectValue_ShapeCopyWithImpl<$Res>
           ? _self._field0
           : field0 // ignore: cast_nullable_to_non_nullable
               as List<Float32List>,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeEffectValue_Gradient extends BridgeEffectValue {
+  const BridgeEffectValue_Gradient(final List<BridgeGradientStop> field0)
+      : _field0 = field0,
+        super._();
+
+  final List<BridgeGradientStop> _field0;
+  @override
+  List<BridgeGradientStop> get field0 {
+    if (_field0 is EqualUnmodifiableListView) return _field0;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_field0);
+  }
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeEffectValue_GradientCopyWith<BridgeEffectValue_Gradient>
+      get copyWith =>
+          _$BridgeEffectValue_GradientCopyWithImpl<BridgeEffectValue_Gradient>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeEffectValue_Gradient &&
+            const DeepCollectionEquality().equals(other._field0, _field0));
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(runtimeType, const DeepCollectionEquality().hash(_field0));
+
+  @override
+  String toString() {
+    return 'BridgeEffectValue.gradient(field0: $field0)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeEffectValue_GradientCopyWith<$Res>
+    implements $BridgeEffectValueCopyWith<$Res> {
+  factory $BridgeEffectValue_GradientCopyWith(BridgeEffectValue_Gradient value,
+          $Res Function(BridgeEffectValue_Gradient) _then) =
+      _$BridgeEffectValue_GradientCopyWithImpl;
+  @useResult
+  $Res call({List<BridgeGradientStop> field0});
+}
+
+/// @nodoc
+class _$BridgeEffectValue_GradientCopyWithImpl<$Res>
+    implements $BridgeEffectValue_GradientCopyWith<$Res> {
+  _$BridgeEffectValue_GradientCopyWithImpl(this._self, this._then);
+
+  final BridgeEffectValue_Gradient _self;
+  final $Res Function(BridgeEffectValue_Gradient) _then;
+
+  /// Create a copy of BridgeEffectValue
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = null,
+  }) {
+    return _then(BridgeEffectValue_Gradient(
+      null == field0
+          ? _self._field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as List<BridgeGradientStop>,
     ));
   }
 }
@@ -2311,6 +2404,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(BridgeParamKind_MaskPath value)? maskPath,
     TResult Function(BridgeParamKind_Curve value)? curve,
     TResult Function(BridgeParamKind_Shape value)? shape,
+    TResult Function(BridgeParamKind_Gradient value)? gradient,
     TResult Function(BridgeParamKind_Slider value)? slider,
     TResult Function(BridgeParamKind_Action value)? action,
     required TResult orElse(),
@@ -2347,6 +2441,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that);
       case BridgeParamKind_Shape() when shape != null:
         return shape(_that);
+      case BridgeParamKind_Gradient() when gradient != null:
+        return gradient(_that);
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that);
       case BridgeParamKind_Action() when action != null:
@@ -2386,6 +2482,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(BridgeParamKind_MaskPath value) maskPath,
     required TResult Function(BridgeParamKind_Curve value) curve,
     required TResult Function(BridgeParamKind_Shape value) shape,
+    required TResult Function(BridgeParamKind_Gradient value) gradient,
     required TResult Function(BridgeParamKind_Slider value) slider,
     required TResult Function(BridgeParamKind_Action value) action,
   }) {
@@ -2421,6 +2518,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that);
       case BridgeParamKind_Shape():
         return shape(_that);
+      case BridgeParamKind_Gradient():
+        return gradient(_that);
       case BridgeParamKind_Slider():
         return slider(_that);
       case BridgeParamKind_Action():
@@ -2457,6 +2556,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(BridgeParamKind_MaskPath value)? maskPath,
     TResult? Function(BridgeParamKind_Curve value)? curve,
     TResult? Function(BridgeParamKind_Shape value)? shape,
+    TResult? Function(BridgeParamKind_Gradient value)? gradient,
     TResult? Function(BridgeParamKind_Slider value)? slider,
     TResult? Function(BridgeParamKind_Action value)? action,
   }) {
@@ -2492,6 +2592,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that);
       case BridgeParamKind_Shape() when shape != null:
         return shape(_that);
+      case BridgeParamKind_Gradient() when gradient != null:
+        return gradient(_that);
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that);
       case BridgeParamKind_Action() when action != null:
@@ -2536,6 +2638,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function()? maskPath,
     TResult Function(List<Float32List> default_)? curve,
     TResult Function()? shape,
+    TResult Function(String from, String to)? gradient,
     TResult Function(double default_, double min, double max, bool log)? slider,
     TResult Function()? action,
     required TResult orElse(),
@@ -2574,6 +2677,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that.default_);
       case BridgeParamKind_Shape() when shape != null:
         return shape();
+      case BridgeParamKind_Gradient() when gradient != null:
+        return gradient(_that.from, _that.to);
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that.default_, _that.min, _that.max, _that.log);
       case BridgeParamKind_Action() when action != null:
@@ -2620,6 +2725,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function() maskPath,
     required TResult Function(List<Float32List> default_) curve,
     required TResult Function() shape,
+    required TResult Function(String from, String to) gradient,
     required TResult Function(double default_, double min, double max, bool log)
         slider,
     required TResult Function() action,
@@ -2658,6 +2764,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that.default_);
       case BridgeParamKind_Shape():
         return shape();
+      case BridgeParamKind_Gradient():
+        return gradient(_that.from, _that.to);
       case BridgeParamKind_Slider():
         return slider(_that.default_, _that.min, _that.max, _that.log);
       case BridgeParamKind_Action():
@@ -2700,6 +2808,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function()? maskPath,
     TResult? Function(List<Float32List> default_)? curve,
     TResult? Function()? shape,
+    TResult? Function(String from, String to)? gradient,
     TResult? Function(double default_, double min, double max, bool log)?
         slider,
     TResult? Function()? action,
@@ -2738,6 +2847,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return curve(_that.default_);
       case BridgeParamKind_Shape() when shape != null:
         return shape();
+      case BridgeParamKind_Gradient() when gradient != null:
+        return gradient(_that.from, _that.to);
       case BridgeParamKind_Slider() when slider != null:
         return slider(_that.default_, _that.min, _that.max, _that.log);
       case BridgeParamKind_Action() when action != null:
@@ -3682,6 +3793,79 @@ class BridgeParamKind_Shape extends BridgeParamKind {
   @override
   String toString() {
     return 'BridgeParamKind.shape()';
+  }
+}
+
+/// @nodoc
+
+class BridgeParamKind_Gradient extends BridgeParamKind {
+  const BridgeParamKind_Gradient({required this.from, required this.to})
+      : super._();
+
+  final String from;
+  final String to;
+
+  /// Create a copy of BridgeParamKind
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeParamKind_GradientCopyWith<BridgeParamKind_Gradient> get copyWith =>
+      _$BridgeParamKind_GradientCopyWithImpl<BridgeParamKind_Gradient>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeParamKind_Gradient &&
+            (identical(other.from, from) || other.from == from) &&
+            (identical(other.to, to) || other.to == to));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, from, to);
+
+  @override
+  String toString() {
+    return 'BridgeParamKind.gradient(from: $from, to: $to)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeParamKind_GradientCopyWith<$Res>
+    implements $BridgeParamKindCopyWith<$Res> {
+  factory $BridgeParamKind_GradientCopyWith(BridgeParamKind_Gradient value,
+          $Res Function(BridgeParamKind_Gradient) _then) =
+      _$BridgeParamKind_GradientCopyWithImpl;
+  @useResult
+  $Res call({String from, String to});
+}
+
+/// @nodoc
+class _$BridgeParamKind_GradientCopyWithImpl<$Res>
+    implements $BridgeParamKind_GradientCopyWith<$Res> {
+  _$BridgeParamKind_GradientCopyWithImpl(this._self, this._then);
+
+  final BridgeParamKind_Gradient _self;
+  final $Res Function(BridgeParamKind_Gradient) _then;
+
+  /// Create a copy of BridgeParamKind
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? from = null,
+    Object? to = null,
+  }) {
+    return _then(BridgeParamKind_Gradient(
+      from: null == from
+          ? _self.from
+          : from // ignore: cast_nullable_to_non_nullable
+              as String,
+      to: null == to
+          ? _self.to
+          : to // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
   }
 }
 

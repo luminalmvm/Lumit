@@ -148,7 +148,7 @@ layer's own rows.
 
 | Row | What it does |
 | --- | --- |
-| **Text** | The words. |
+| **Text** | The words. Has a stopwatch and keyframe arrows once the words are [keyed](#keyed-words). |
 | **Expression** | An expression that gives the words. |
 | **Size**, **Fill** | The size and colour the Text panel sets. |
 | **Path** | The mask the words run along. |
@@ -158,9 +158,46 @@ layer's own rows.
 
 With an expression on the **Expression** row, the layer shows what the expression returns
 at each frame in place of its words: a number as a number, a string as itself. The words
-in **Text** are kept, and come back when the row is emptied. An expression that fails
-shows nothing. The expression is written in Rhai. See [Expressions](/use/expressions/)
+in **Text** are kept, and come back when the row is emptied. Centred or right-aligned text
+with no box keeps that side where the typed words put it. An expression wins over keyed
+words. An expression that fails shows nothing. The expression is written in Rhai. See
+[Expressions](/use/expressions/)
 and the [expression reference](/reference/expressions/).
+
+## Keyed words
+
+The words can change over time. Click the stopwatch on the **Text** row, in the **Source**
+section of Effect controls, to key them. A key holds the words typed at the playhead.
+
+With the stopwatch on, typing in the **Text** row or in the Viewer at another time adds a
+key there, and the other keys keep their words. The row shows the words at the playhead.
+The arrows beside the stopwatch go to the previous and next key, and the middle one adds
+or removes a key at the playhead. Turning the stopwatch off removes the keys and keeps the
+words shown at the playhead.
+
+A key made by typing is a **Hold** key: the words switch at the key and stay until the
+next one. Right-click a key and choose **Linear** or **Easy ease** to fade the words into
+the next key's words instead. The two words are set and drawn separately, each with the
+layer's box, **Shrink to fit**, path and [animators](#animators), and are mixed by their
+opacity across the span. The key's curve sets the timing of the fade. Each span has its own
+choice, so one layer can switch between two words and fade into a third.
+
+Everything that reads a layer's words reads the words shown at that moment. During a fade
+that is the word with more than half of the opacity. Convert to shapes, Measure and Text to
+points use it, and so does an export to Lottie or SVG.
+
+A text layer with keyed words has no row in a graphics template. Captions ignore keys. A
+project saved with keyed words opens in an older Lumit with the words that were typed
+before they were keyed.
+
+An After Effects project brought in by script keeps its **Source Text** keys as Hold keys.
+
+:::note[Not built yet]
+Typewriter and character-by-character changes between keys are not built. The keys have no
+row in the Timeline or the graph editor.
+:::
+
+See [Changing the words over time](/tutorials/keyed-text/).
 
 ## Run it along a path
 

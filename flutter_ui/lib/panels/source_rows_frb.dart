@@ -12,26 +12,35 @@
 // does.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'package:lumit_flutter/src/rust/api/solid.dart';
+import 'package:lumit_flutter/src/rust/api/text_keys.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'fx_key_strip.dart';
 import 'fx_section.dart';
+import 'keyframe_controls_frb.dart';
 
 /// The section of source rows for [layer], or nothing when its kind has none.
 class SourceRowsFrb extends StatefulWidget {
   final LayerReference layer;
   final VoidCallback onChanged;
+
+  /// The comp, for the Text row's keys.
+  final CompositionReference comp;
 
   /// Whether the section is twirled open, and how to toggle it — held by the
   /// panel so the open set survives a rebuild of these rows.
@@ -42,6 +51,7 @@ class SourceRowsFrb extends StatefulWidget {
     super.key,
     required this.layer,
     required this.onChanged,
+    required this.comp,
     required this.open,
     required this.onToggle,
   });
@@ -91,14 +101,6 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
   }
 
   List<Widget> _textRows(LumitTheme t, BridgeTextDocument document) {
-    // The controller is created against the document the layer currently has,
-    // and rebuilt only when the text changed underneath us — otherwise typing
-    // would fight the rebuild its own commit triggers.
-    if (_text == null ||
-        (_text!.text != document.text && !_text!.selection.isValid)) {
-      _text?.dispose();
-      _text = TextEditingController(text: document.text);
-    }
     final expression = document.expression ?? '';
     if (_expression == null ||
         (_expression!.text != expression && !_expression!.selection.isValid)) {
@@ -117,13 +119,16 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
       UuidValue? path,
       bool clearPath = false,
       BridgeScalar? pathOffset,
+      BridgeTextKeys? keys,
     }) {
       widget.layer.setText(
         document: BridgeTextDocument(
-          text: body ?? _text!.text,
+          // Keyed words leave `text` alone, as an expression does.
+          text: body ?? (document.keys == null ? _text!.text : document.text),
           // An empty box is no expression at all, which the engine settles —
           // so emptying the field simply hands the layer back to its words.
           expression: expression ?? _expression!.text,
+          keys: keys ?? document.keys,
           size: size ?? document.size,
           fill: fill ?? document.fill,
           path: clearPath ? null : (path ?? document.path),
@@ -143,19 +148,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
     final offset = document.pathOffset;
 
     return [
-      _row(
-        t,
-        l10n.sourceText,
-        SizedBox(
-          width: _cellWidth + 60,
-          child: HouseTextField(
-            key: const ValueKey('src-text'),
-            controller: _text!,
-            width: _cellWidth + 60,
-            onSubmitted: (value) => write(body: value),
-          ),
-        ),
-      ),
+      _textRow(t, document, write),
       // The words can come from an expression instead — the same language the
       // numeric properties use, printed rather than measured, which is how a
       // caption shows a live value. The Text box above stays as it was: it is
@@ -250,6 +243,105 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
                   style: t.small.copyWith(color: t.textMuted)),
         ),
     ];
+  }
+
+  /// The Text row. It can be keyed, so it has the stopwatch, the navigator and
+  /// a lane, and keyed words show what the engine has at the playhead.
+  Widget _textRow(LumitTheme t, BridgeTextDocument document,
+      void Function({String? body, BridgeTextKeys? keys}) write) {
+    final playhead =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    final keys = document.keys;
+    // An expression writes the words, so there is nothing to key.
+    final keyable = (document.expression ?? '').trim().isEmpty;
+    final scalars = [keys?.index ?? const BridgeScalar.static_(0)];
+
+    // The stopwatch, the navigator and the lane write the keys. Turning the
+    // stopwatch on or off is the engine's to do, so the words stay put.
+    void writeKeys(List<BridgeScalar> next) {
+      final keyed = next.first is! BridgeScalar_Static;
+      if (keys != null && keyed) {
+        // A key the navigator adds partway through a fade lands between two
+        // words. It takes the words shown there.
+        var index = next.first;
+        if (index case BridgeScalar_Keyframed(:final field0)) {
+          final here = keys.words.indexOf(
+              widget.layer.textAt(frame: playhead.value));
+          index = BridgeScalar.keyframed([
+            for (final k in field0)
+              if (here >= 0 && (k.value - k.value.roundToDouble()).abs() > 1e-6)
+                BridgeKeyframe(
+                    time: k.time,
+                    value: here.toDouble(),
+                    interpIn: k.interpIn,
+                    interpOut: k.interpOut)
+              else
+                k,
+          ]);
+        }
+        write(keys: BridgeTextKeys(words: keys.words, index: index));
+        return;
+      }
+      if (keys == null && keyed) {
+        widget.layer.startTextKeys(frame: playhead.value);
+      } else if (keys != null) {
+        widget.layer.stopTextKeys(frame: playhead.value);
+      } else {
+        return;
+      }
+      widget.onChanged();
+    }
+
+    Widget at(int frame) {
+      final shown =
+          keys == null ? document.text : widget.layer.textAt(frame: frame);
+      // Rebuilt only when the words changed underneath us, otherwise typing
+      // would fight the rebuild its own commit triggers.
+      if (_text == null ||
+          (_text!.text != shown && !_text!.selection.isValid)) {
+        _text?.dispose();
+        _text = TextEditingController(text: shown);
+      }
+      return fxTwoColumnRow(
+        context: context,
+        keyframeControls: keyable
+            ? KeyframeControlsFrb(
+                scalars: scalars,
+                onWrite: writeKeys,
+                comp: widget.comp,
+                onSeek: (f) => playhead.value = f,
+                rowKey: 'src-text',
+                fixedColumns: true,
+              )
+            : null,
+        lane: keyable
+            ? FxKeyLane(rowKey: 'src-text', scalars: scalars, onWrite: writeKeys)
+            : null,
+        name: Text(t.propertyCase(l10n.sourceText),
+            style: t.body, overflow: TextOverflow.ellipsis),
+        control: SizedBox(
+          width: _cellWidth + 60,
+          child: HouseTextField(
+            key: const ValueKey('src-text'),
+            controller: _text!,
+            width: _cellWidth + 60,
+            onSubmitted: (value) {
+              if (keys == null) return write(body: value);
+              if (value == widget.layer.textAt(frame: playhead.value)) return;
+              widget.layer.setTextKeyAt(frame: playhead.value, text: value);
+              widget.onChanged();
+            },
+          ),
+        ),
+      );
+    }
+
+    // Only keyed words change under the playhead, so only they listen to it.
+    if (keys == null) return at(playhead.value);
+    return ValueListenableBuilder<int>(
+      valueListenable: playhead,
+      builder: (context, frame, _) => at(frame),
+    );
   }
 
   /// The name of the mask the words run along, the straight-line entry when

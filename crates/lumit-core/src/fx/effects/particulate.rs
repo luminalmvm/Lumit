@@ -317,6 +317,11 @@ pub struct Particulate {
     #[colour(label = "End colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub end_colour: [f32; 4],
 
+    /// Colours between Colour and End colour. None by default, which is the
+    /// plain blend from one to the other.
+    #[gradient(label = "Colour over life", from = "colour", to = "end_colour")]
+    pub colour_over_life: crate::fx::colour_stops::ColourStops,
+
     /// How far round a particle is drawn. Invisible on a disc; it is Sprite and
     /// Streak that read it.
     #[dial(label = "Rotation", default = 0.0)]
@@ -355,8 +360,8 @@ pub struct Particulate {
     #[choice(label = "Opacity by", options = *points::Drive::OPTIONS, default = 0)]
     pub opacity_by: u32,
 
-    /// What runs the blend from Colour to End colour; see
-    /// [`size_by`](Self::size_by).
+    /// What runs the blend from Colour through Colour over life to End
+    /// colour; see [`size_by`](Self::size_by).
     #[choice(label = "Colour by", options = *points::Drive::OPTIONS, default = 0)]
     pub colour_by: u32,
 
@@ -845,6 +850,7 @@ impl Particulate {
                 opacity_curve: cpu::curve_table(&self.opacity_over_life),
                 colour: self.colour,
                 end_colour: self.end_colour,
+                colour_ramp: self.colour_over_life.tables(self.colour, self.end_colour),
                 rotation_deg: self.rotation,
                 rotation_jitter_deg: self.rotation_jitter.clamp(0.0, 360.0),
                 spin_deg: self.spin,

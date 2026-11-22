@@ -34,7 +34,7 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
 | --- | --- | --- | --- | --- |
 | **Analyse** | Button | - | - | - |
 | **Cancel** | Button | - | - | - |
-| **Model** | Dropdown | Depth Anything V2 Small | Depth Anything V2 Small | - |
+| **Model** | Dropdown | Depth Anything V3 Small | Depth Anything V3 Small | - |
 | **View** | Dropdown | Depth · Source | Depth | - |
 | **Invert** | Checkbox | On or off | Off | - |
 | **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
@@ -47,7 +47,10 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
 - **Analyse**: read the shot and file its depth. Only one analysis runs at a time.
 - **Cancel**: stop a run and keep the frames already read; a later Analyse carries on
   from them.
-- **Model**: which trained model reads the frames.
+- **Model**: which trained model reads the frames. A project saved with Depth Anything V2
+  Small shows Depth Anything V3 Small here. The V2 pack, when it is the only depth pack
+  installed, keeps reading the frames. Once the V3 pack is installed the shot reads **Not
+  analysed yet** until **Analyse** runs again.
 - **View**: the depth as a grey picture, or the layer's own picture untouched.
 - **Invert**: draws the plane the other way up, so far is bright.
 - **Frames**: which frames Analyse reads. **All frames** is the whole footage however the

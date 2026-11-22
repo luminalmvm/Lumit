@@ -429,6 +429,7 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         ParamKind::Curve { default } => EffectValue::Curve(default.to_vec()),
         // A fresh outline has no points: the user draws them.
         ParamKind::Shape => EffectValue::Shape(Vec::new()),
+        ParamKind::Gradient { .. } => EffectValue::Gradient(Vec::new()),
         // A button holds nothing — see the doc comment above.
         ParamKind::Action => return None,
     })

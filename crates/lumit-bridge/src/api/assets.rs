@@ -41,6 +41,7 @@ pub struct BridgeTextDocument {
     /// rather than from `text`, which is kept so switching the expression off
     /// restores what was typed.
     pub expression: Option<String>,
+    pub keys: Option<crate::api::text_keys::BridgeTextKeys>,
     /// Pixel size at natural scale.
     pub size: f64,
     pub fill: BridgeColourRgba,
@@ -606,6 +607,7 @@ impl LayerReference {
         Ok(Some(BridgeTextDocument {
             text: document.text,
             expression: document.expression,
+            keys: crate::api::text_keys::read(document.keys.as_deref(), offset),
             size: document.size,
             fill: colour_of(document.fill),
             path: document.path,
@@ -1067,8 +1069,7 @@ pub(crate) fn colour_of(c: lumit_core::model::LinearColour) -> BridgeColourRgba 
 }
 
 #[frb(ignore)]
-/// The document as the model holds it. One conversion, used by every path that
-/// writes text — a new layer, a retype, a preview.
+/// The document as the model holds it, for every path that writes text.
 pub(crate) fn text_document_of(
     document: BridgeTextDocument,
     offset: lumit_core::time::Rational,
@@ -1080,6 +1081,7 @@ pub(crate) fn text_document_of(
         // permanently blank with no way back to its words. Applied here, in
         // the one conversion, so every writer of a text document gets it.
         expression: document.expression.filter(|e| !e.trim().is_empty()),
+        keys: crate::api::text_keys::write(document.keys, offset)?,
         size: document.size,
         fill: linear_of(document.fill),
         path: document.path,
@@ -1106,7 +1108,6 @@ pub(crate) fn text_document_of(
 /// An expression is left alone: what it evaluates to is the expression's
 /// business, and quietly wrapping somebody's sum in an addition would be a
 /// worse surprise than a converted layer a few pixels out.
-#[frb(ignore)]
 #[frb(ignore)]
 pub(crate) fn shift_property(property: &mut lumit_core::anim::Property, delta: f64) {
     use lumit_core::anim::Animation;

@@ -35,10 +35,10 @@ const MAX_TEXTS: usize = 120;
 fn texts(c: &Clock, document: &TextDocument) -> Vec<(String, f64)> {
     let times = c.times();
     let first = times.first().copied().unwrap_or(0.0);
-    if document.expression.is_none() {
+    if document.expression.is_none() && document.keys.is_none() {
         return vec![(document.text.clone(), first)];
     }
-    c.baked.set(true);
+    c.baked.set(c.baked.get() || document.expression.is_some());
     let mut out: Vec<(String, f64)> = Vec::new();
     for lt in times {
         let words = document.resolved_text(c.context(lt)).into_owned();

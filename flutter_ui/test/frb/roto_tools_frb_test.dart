@@ -253,6 +253,10 @@ void main() {
     testWidgets('the edge is read once per frame and not once per rebuild',
         (tester) async {
       final w = withBrush();
+      // A brush with no base frame has no edge to read.
+      final staged = w.layer.getEffects();
+      staged.single.rotoSetBaseFrame(frame: 6);
+      w.layer.setEffects(effects: staged);
       final frame = ValueNotifier(3);
       final nudge = ValueNotifier(0);
       addTearDown(frame.dispose);

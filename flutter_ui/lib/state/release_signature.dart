@@ -17,18 +17,20 @@
 //
 // So a release carries one more thing: a small **manifest** naming every
 // attachment and its size and digest, and a **detached signature** over that
-// manifest made with a key that lives nowhere near GitHub. The application
-// carries the matching public key, compiled in ([updateSigningKey]). A release
-// is believed when the signature is this key's, and an attachment is believed
-// when the signed manifest says that is its size and its digest. A compromised
-// release account can publish whatever it likes; without the private key it
-// cannot make this application run any of it.
+// manifest made with a key whose private half never touches GitHub. The
+// application carries the matching public keys, compiled in
+// ([updateSigningKeys]). A release is believed when one of these keys made
+// the signature, and an attachment is believed when the signed manifest says
+// that is its size and its digest. A compromised release account can publish
+// whatever it likes; without a private key it cannot make this application run
+// any of it.
 //
-// **Pinning a key is a deliberate act.** While [updateSigningKey] is empty this
-// file refuses nothing, and the updater falls back to the digest check. With a
-// key pinned, a signed manifest is compulsory and an update that has none is
-// refused. That is the whole of the switch, and the steps to make a key are in
-// the comment above the signing step of `.github/workflows/release.yml`.
+// **Pinning a key is a deliberate act.** While [updateSigningKeys] is empty
+// this file refuses nothing, and the updater falls back to the digest check.
+// With a key pinned, a signed manifest is compulsory and an update that has
+// none is refused. That is the whole of the switch. CI leaves each release as
+// a draft, and `scripts/sign-release.ps1` makes the keys, signs the draft on
+// the machine that publishes releases, and publishes it.
 //
 // **Nothing here reads the network or the disk.** It is given bytes and answers
 // yes or no, which is what lets the updater's tests drive the whole sequence.
@@ -38,14 +40,21 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
-/// The public half of the release signing key, base64, raw 32 bytes.
+/// The public halves of the release signing keys, base64, raw 32 bytes each.
 ///
-/// Pinned 2026-10-25. The private half is the `RELEASE_SIGNING_KEY` secret,
-/// and the release job refuses to sign with any other key.
+/// The first is the key releases are signed with, the second an offline
+/// backup. Their private halves are kept off GitHub: one on the machine that
+/// publishes releases, the other offline. A key on its way out goes last:
+/// `scripts/sign-release.ps1` signs with the last key here that it holds, so
+/// builds from before a change of key go on updating until it is dropped.
 ///
-/// This is a **public** key: it is meant to be read, copied and published. The
-/// private half is never committed.
-const String updateSigningKey = 'wdKj5QBAiMqg4MrywhedvTYx9zChP8UCebYHvtyvwxY=';
+/// These are **public** keys: they are meant to be read, copied and published.
+const List<String> updateSigningKeys = [
+  'chUP7yrHcxVoMNJvvrS2OI4Yp7ykKnirZtjtdL6OP5I=',
+  '1tL5V8lkZIrdhr7+vItvC8M0gakZfsA/d3i5QXbm38k=',
+  // The key from 2026-10-25, which was a GitHub secret. Drop it in 0.13.0.
+  'wdKj5QBAiMqg4MrywhedvTYx9zChP8UCebYHvtyvwxY=',
+];
 
 /// What one attachment is, as the signed manifest says it.
 class SignedAsset {
@@ -129,7 +138,7 @@ class VerifiedManifest {
 /// **The signature is checked before the JSON is parsed**, so a manifest nobody
 /// signed never reaches the parser at all.
 ///
-/// The key is passed in, not read from [updateSigningKey], so the tests can
+/// The key is passed in, not read from [updateSigningKeys], so the tests can
 /// make a real Ed25519 pair, sign real manifests with it, and drive exactly
 /// the path the shipped updater takes.
 Future<(VerifiedManifest?, ReleaseTrust)> verifyManifestWithKey(

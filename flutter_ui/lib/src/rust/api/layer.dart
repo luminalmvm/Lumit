@@ -37,6 +37,7 @@ import 'state.dart';
 import 'streams.dart';
 import 'template.dart';
 import 'template/copy.dart';
+import 'text_keys.dart';
 import 'track.dart';
 import 'transcript.dart';
 import 'wire_tie.dart';
@@ -4692,6 +4693,13 @@ class LayerReference {
         that: this,
       );
 
+  /// The rows a new `name` on this layer starts somewhere other than its
+  /// schema says: the points it centres on the picture its stack runs on,
+  /// as a Transform's anchor and position. Reset puts them back there.
+  List<BridgeParamValue> seededDefaults({required String name}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSeededDefaults(that: this, name: name);
+
   /// The adjustment switch: set this layer's own picture aside and
   /// run its effect stack on the composite beneath it, or give it back.
   ///
@@ -5242,6 +5250,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
           that: this, id: id, keys: keys);
 
+  /// Change this solid layer's colour and size. With `all_layers`, or when
+  /// no other layer uses the solid, the solid itself is edited. Otherwise
+  /// the layer gets a solid of its own with the new settings and the others
+  /// keep theirs. On a shared solid the name stays the layer's own and never
+  /// renames it. One undo step.
+  void setSolidSettings(
+          {required BridgeSolidDef definition, required bool allLayers}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetSolidSettings(
+          that: this, definition: definition, allLayers: allLayers);
+
   /// A solo safe layer keeps sounding while another layer is soloed.
   void setSoloSafe({required bool enabled}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetSoloSafe(that: this, enabled: enabled);
@@ -5296,6 +5314,12 @@ class LayerReference {
   /// that is tracked out grows both ways.
   void setText({required BridgeTextDocument document}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetText(that: this, document: document);
+
+  /// Type `text` at comp frame `frame`: a held key there when the words are
+  /// keyed, otherwise the words themselves. One undo step.
+  void setTextKeyAt({required int frame, required String text}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetTextKeyAt(
+          that: this, frame: frame, text: text);
 
   /// Replace a text layer's document **and its anchor and position
   /// together**, as one op.
@@ -5394,6 +5418,14 @@ class LayerReference {
           overlap: overlap,
           nudgeTicks: nudgeTicks);
 
+  /// How many layers draw this layer's solid, this one included. Zero for a
+  /// layer that is not a solid. A duplicated layer shares its original's
+  /// solid, as a solid dragged in from the Project panel does.
+  int solidLayerCount() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSolidLayerCount(
+        that: this,
+      );
+
   /// Razor: split this layer in two at `frame` (docs/07 §4.4).
   ///
   /// After Effects' split, not a clip cut: the layer keeps everything it has —
@@ -5445,6 +5477,10 @@ class LayerReference {
   void splitCueAt({required BridgeRational at}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSplitCueAt(that: this, at: at);
 
+  /// The stopwatch on: the words held from comp frame `frame`.
+  void startTextKeys({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceStartTextKeys(that: this, frame: frame);
+
   /// This shot's stack with the still at `path` graded on it in place of
   /// its own grade, to preview and never to write: the old grade stays in
   /// the list switched off, and the still's comes right after it. The list
@@ -5454,6 +5490,10 @@ class LayerReference {
           {UuidValue? clip, required String path}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceStillGradePreview(
           that: this, clip: clip, path: path);
+
+  /// The stopwatch off: the words shown at comp frame `frame` are kept.
+  void stopTextKeys({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceStopTextKeys(that: this, frame: frame);
 
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half
@@ -5510,6 +5550,11 @@ class LayerReference {
   void switchGradeVersion({UuidValue? clip, required UuidValue version}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSwitchGradeVersion(
           that: this, clip: clip, version: version);
+
+  /// The words typed or keyed at comp frame `frame`. During a fade, the word
+  /// with more of the weight.
+  String textAt({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceTextAt(that: this, frame: frame);
 
   /// Key this mask's **shape** at `time`, or take the key already there away —
   /// the ◆ on the mask's Path row.

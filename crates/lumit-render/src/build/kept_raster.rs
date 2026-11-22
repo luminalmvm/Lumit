@@ -210,7 +210,6 @@ pub(super) fn text(
     // which is what makes a caption able to print a live value.
 
     let (line, spoken, _) = lumit_core::captions::show::spoken(document, context.clone());
-    let size = document.size as f32;
     // **Text on a path**. The named mask's own flattened
     // curve, read through the carriage every path-walking effect
     // reads — so the glyphs and a Stroke on the same mask
@@ -222,19 +221,6 @@ pub(super) fn text(
         .path
         .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
         .filter(|p| !p.is_empty());
-    // **The letters move separately**. What each one is
-    // asked to do is worked out here, from the animators' own
-    // keyframed numbers at this layer time; a layer with none hands
-    // back an empty list and the rasteriser takes the path it
-    // always took, byte for byte.
-    let xforms = lumit_core::text::ports::layer_glyph_xforms(
-        doc, comp, layer, document, &line, t_comp, &spoken,
-    );
-    // An unstyled single line draws the way it always has. A
-    // styled one, or one with a line break, is set by the shaper.
-    // Character offset sets a reached letter as another character.
-    let line = lumit_core::text::offset_text(&line, &xforms).map_or(line, std::borrow::Cow::Owned);
-    let block = lumit_text::TextBlock::of(document, &line);
     let offset = document.path_offset.value_at(lt) as f32;
     // **Continuously rasterised**, as a shape layer is: the words
     // are drawn as large as the layer and its parents show them,
@@ -243,6 +229,91 @@ pub(super) fn text(
     // at the most it can be.
     let shown =
         raster_scale::shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
+    let spine = spine.as_ref();
+    let at = (doc, comp, layer, document, t_comp, spine, shown);
+    let mut offset_words = None;
+    let words = laid(at, &line, &spoken, &mut offset_words);
+    let Some((other, w)) = document.resolved_blend(context) else {
+        let name = text_name(
+            &words.block,
+            &words.xforms,
+            spine,
+            offset,
+            (words.zoom, words.own),
+        );
+        let r = kept(name, || {
+            kept_of(draw(&words, spine, offset, words.zoom, shown))
+        });
+        return ((Arc::clone(&r.rgba), r.w, r.h, r.natural), Some(name));
+    };
+    // **A fade between keyed words**: each word laid out and drawn on its
+    // own, at the same zoom, then mixed. Named by both and the weight, so a
+    // kept raster of one frame of the fade is never served for another.
+    let mut offset_fade = None;
+    let fade = laid(at, &other, &[], &mut offset_fade);
+    let zoom = words.zoom.min(fade.zoom);
+    let mut h = blake3::Hasher::new();
+    h.update(b"text/fade/1/");
+    for one in [&words, &fade] {
+        let name = text_name(&one.block, &one.xforms, spine, offset, (zoom, one.own));
+        h.update(&name.to_le_bytes());
+    }
+    h.update(&w.to_le_bytes());
+    let name = name_of(&h);
+    let r = kept(name, || {
+        let (a, a_natural) = draw(&words, spine, offset, zoom, shown);
+        let (b, b_natural) = draw(&fade, spine, offset, zoom, shown);
+        let mixed = lumit_text::blend::crossfade(&a, &b, w);
+        let natural = (a_natural.0.max(b_natural.0), a_natural.1.max(b_natural.1));
+        kept_of((mixed, natural))
+    });
+    ((Arc::clone(&r.rgba), r.w, r.h, r.natural), Some(name))
+}
+
+/// What one set of words is laid out from: the document and layer, the comp
+/// time, the path and how large the layer is shown.
+type LaidAt<'a> = (
+    &'a Arc<Document>,
+    &'a Composition,
+    &'a Layer,
+    &'a TextDocument,
+    f64,
+    Option<&'a MaskPolyline>,
+    f32,
+);
+
+/// One set of words laid out: the block, what each letter is asked to do, and
+/// the zoom it can be drawn at and the box it is drawn into.
+struct Laid<'a> {
+    block: lumit_text::TextBlock<'a>,
+    xforms: Vec<GlyphXform>,
+    zoom: f32,
+    own: (u32, u32),
+}
+
+/// `line` laid out as the layer's words.
+fn laid<'a>(
+    (doc, comp, layer, document, t_comp, spine, shown): LaidAt<'a>,
+    line: &'a str,
+    spoken: &[lumit_core::text::SpokenWord],
+    offset_line: &'a mut Option<String>,
+) -> Laid<'a> {
+    // **The letters move separately**. What each one is
+    // asked to do is worked out here, from the animators' own
+    // keyframed numbers at this layer time; a layer with none hands
+    // back an empty list and the rasteriser takes the path it
+    // always took, byte for byte.
+    let xforms = lumit_core::text::ports::layer_glyph_xforms(
+        doc, comp, layer, document, line, t_comp, spoken,
+    );
+    // Character offset sets a reached letter as another character.
+    let line: &'a str = match lumit_core::text::offset_text(line, &xforms) {
+        Some(other) => offset_line.insert(other).as_str(),
+        None => line,
+    };
+    // An unstyled single line draws the way it always has. A
+    // styled one, or one with a line break, is set by the shaper.
+    let block = lumit_text::TextBlock::of(document, line);
     let room = |w: u32, h: u32| {
         (SHAPE_RASTER_PIXELS / (f64::from(w.max(1)) * f64::from(h.max(1))))
             .sqrt()
@@ -251,9 +322,9 @@ pub(super) fn text(
     // The zoom it is drawn at and the box it is drawn into. Shown at its own
     // size or smaller, the layer is drawn as it always was, without laying it
     // out twice, and the box is the raster's own.
-    let (zoom, own) = match &spine {
+    let (zoom, own) = match spine {
         Some(path) => {
-            let (w, h) = lumit_text::path_box(path, size);
+            let (w, h) = lumit_text::path_box(path, document.size as f32);
             (f64::from(shown).clamp(1.0, room(w, h)) as f32, (w, h))
         }
         None if shown <= 1.0 => (1.0, (0, 0)),
@@ -263,29 +334,45 @@ pub(super) fn text(
             (zoom, (own.width, own.height))
         }
     };
-    let name = text_name(&block, &xforms, spine.as_ref(), offset, (zoom, own));
-    let r = kept(name, || {
-        let (r, natural) = match &spine {
-            Some(path) => {
-                let (w, h) = own;
-                let r = lumit_text::rasterise_along_at(&block, path, offset, w, h, &xforms, zoom);
-                (r, (w.max(1), h.max(1)))
-            }
-            None if shown <= 1.0 => {
-                let r = lumit_text::rasterise(&block, &xforms);
-                let size = (r.width, r.height);
-                (r, size)
-            }
-            None => lumit_text::rasterise_at(&block, &xforms, zoom),
-        };
-        KeptRaster {
-            rgba: Arc::new(r.rgba),
-            w: r.width,
-            h: r.height,
-            natural: (natural.0 as f32, natural.1 as f32),
+    Laid {
+        block,
+        xforms,
+        zoom,
+        own,
+    }
+}
+
+/// Laid-out words drawn at `zoom`, and the layer's own size.
+fn draw(
+    words: &Laid<'_>,
+    spine: Option<&MaskPolyline>,
+    offset: f32,
+    zoom: f32,
+    shown: f32,
+) -> (lumit_text::RasterText, (u32, u32)) {
+    let (block, xforms) = (&words.block, &words.xforms);
+    match spine {
+        Some(path) => {
+            let (w, h) = words.own;
+            let r = lumit_text::rasterise_along_at(block, path, offset, w, h, xforms, zoom);
+            (r, (w.max(1), h.max(1)))
         }
-    });
-    ((Arc::clone(&r.rgba), r.w, r.h, r.natural), Some(name))
+        None if shown <= 1.0 => {
+            let r = lumit_text::rasterise(block, xforms);
+            let size = (r.width, r.height);
+            (r, size)
+        }
+        None => lumit_text::rasterise_at(block, xforms, zoom),
+    }
+}
+
+fn kept_of((r, natural): (lumit_text::RasterText, (u32, u32))) -> KeptRaster {
+    KeptRaster {
+        rgba: Arc::new(r.rgba),
+        w: r.width,
+        h: r.height,
+        natural: (natural.0 as f32, natural.1 as f32),
+    }
 }
 
 /// A Shape layer's art at layer time `lt`, rasterised, and the raster's name
@@ -336,4 +423,125 @@ pub(super) fn shape(
         None => Arc::new(make()),
     };
     Some(((rgba, w, h, (natural_w as f32, natural_h as f32)), name))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+    use lumit_core::model::{LayerKind, ProjectItem};
+    use lumit_core::text::keys::TextKeys;
+    use lumit_core::time::{Duration, FrameRate, Rational};
+
+    type Drawn = (Vec<u8>, u32, u32, u128);
+
+    /// `document` on a layer drawn at layer time 1.
+    fn drawn(document: &TextDocument) -> Drawn {
+        let mut layer = crate::build::render_below_at_tests::text_layer(0.0);
+        layer.kind = LayerKind::Text {
+            document: document.clone(),
+        };
+        let comp = Composition {
+            graph: None,
+            master_volume_db: 0.0,
+            master_keys: None,
+            master_automation: Default::default(),
+            loudness_target: None,
+            lighting: Default::default(),
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: uuid::Uuid::now_v7(),
+            name: "c".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![layer.clone()],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(comp.clone()));
+        let doc = Arc::new(doc);
+        let context = Arc::new(ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(layer.id),
+            comp_time: 1.0,
+            current_depth: 0,
+            inputs: None,
+        });
+        let ((rgba, w, h, _), name) = text(&doc, &comp, &layer, document, (1.0, 1.0), &context);
+        (rgba.to_vec(), w, h, name.unwrap())
+    }
+
+    /// "hello" keyed at 0 and "goodbye" at 2, the first key leaving `out`.
+    fn keyed(plain: &TextDocument, out: SideInterp) -> TextDocument {
+        let key = |t: i64, value: f64, interp_out: SideInterp| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value,
+            interp_in: SideInterp::Linear,
+            interp_out,
+        };
+        let mut document = plain.clone();
+        document.keys = Some(Box::new(TextKeys {
+            words: vec!["hello".into(), "goodbye".into()],
+            index: Property {
+                animation: Animation::Keyframed(vec![
+                    key(0, 0.0, out),
+                    key(2, 1.0, SideInterp::Hold),
+                ]),
+                extra: serde_json::Map::new(),
+            },
+        }));
+        document
+    }
+
+    /// A held span draws the plain raster of its word, under the same name. A
+    /// fade halfway draws both words mixed half and half, from the top left.
+    #[test]
+    fn a_fade_between_keyed_words_draws_both_mixed_and_a_hold_draws_one() {
+        let layer = crate::build::render_below_at_tests::text_layer(0.0);
+        let LayerKind::Text { document: plain } = layer.kind else {
+            panic!("a text layer");
+        };
+        let words = |text: &str| {
+            let mut document = plain.clone();
+            document.text = text.into();
+            drawn(&document)
+        };
+        let (hello, goodbye) = (words("hello"), words("goodbye"));
+        assert_eq!(drawn(&keyed(&plain, SideInterp::Hold)), hello);
+
+        let mixed = drawn(&keyed(&plain, SideInterp::Linear));
+        let (w, h) = (hello.1.max(goodbye.1), hello.2.max(goodbye.2));
+        assert_eq!((mixed.1, mixed.2), (w, h), "the union of the two sizes");
+        assert_ne!(mixed.3, hello.3, "a fade frame has a name of its own");
+        let px = |r: &Drawn, x: u32, y: u32| -> [u8; 4] {
+            if x >= r.1 || y >= r.2 {
+                return [0; 4];
+            }
+            let i = ((y * r.1 + x) * 4) as usize;
+            [r.0[i], r.0[i + 1], r.0[i + 2], r.0[i + 3]]
+        };
+        let mut alone = 0;
+        for y in 0..h {
+            for x in 0..w {
+                let (a, b, m) = (px(&hello, x, y), px(&goodbye, x, y), px(&mixed, x, y));
+                if a[3] == 255 && b[3] == 0 {
+                    assert_eq!(m, [a[0], a[1], a[2], 128], "half of one word at {x},{y}");
+                    alone += 1;
+                }
+                if a[3] == 0 && b[3] == 0 {
+                    assert_eq!(m, [0; 4], "nothing where neither word is, at {x},{y}");
+                }
+            }
+        }
+        assert!(alone > 0, "some pixel is covered by one word only");
+    }
 }

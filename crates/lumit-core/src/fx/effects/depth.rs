@@ -24,8 +24,9 @@ use lumit_fx_macros::Effect;
 
 /// The depth models this build has code for, in index order. One today: the
 /// architecture is what the engine binds to, and a second entry means a second
-/// tensor contract rather than a second download.
-pub const MODEL_OPTIONS: &[&str] = &["Depth Anything V2 Small"];
+/// tensor contract rather than a second download. A project saved when the
+/// entry was Depth Anything V2 Small reads as this one.
+pub const MODEL_OPTIONS: &[&str] = &["Depth Anything V3 Small"];
 
 /// The catalogue id each [`MODEL_OPTIONS`] entry means, so the badge can name
 /// the pack that is missing.
@@ -34,7 +35,7 @@ pub const MODEL_OPTIONS: &[&str] = &["Depth Anything V2 Small"];
 /// Camera track's reason: the crate that owns the control cannot depend on the
 /// crate that owns the runtime, and the job reads it the other way round, which
 /// is the only direction there is.
-pub const MODEL_PACKS: [&str; 1] = ["depth-anything-v2-small"];
+pub const MODEL_PACKS: [&str; 1] = ["depth-anything-3-small"];
 
 /// The pack a stored model index names. An index this build does not know
 /// reads as the first, which is the tasteful default rather than a fault

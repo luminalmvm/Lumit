@@ -465,7 +465,10 @@ class ViewerStage extends StatelessWidget {
                     ? shapeContentsBounds(art, t: playheadSeconds)
                     : null) ??
                 uiState.layerBounds.boundsOf(entry,
-                    compSize: compSize, revision: revision, t: playheadSeconds),
+                    compSize: compSize,
+                    revision: revision,
+                    t: playheadSeconds,
+                    frame: uiState.playheadFrame.value),
         // A keyed position is dragged by its body from wherever it is
         // grabbed, as in After Effects, and takes a key at the playhead; its
         // keys can still be dragged on the motion path. Only an expression
@@ -509,9 +512,18 @@ class ViewerStage extends StatelessWidget {
         shapeContents: art,
         pickedItem: pickedShapeItem(uiState.selectedProperties.value, id),
         // Where the art's box starts, which is where the layer's pixels do.
-        // Without it every drawn point sat a box away from its art.
-        artOrigin:
-            shapeContentsRect(art, t: playheadSeconds)?.topLeft ?? Offset.zero,
+        // Without it every drawn point sat a box away from its art. A keyed
+        // path's picture is set down further on by the art's shift, which
+        // the engine adds to the layer's anchor, so the origin is read that
+        // much less.
+        artOrigin: switch ((
+          shapeContentsRect(art, t: playheadSeconds)?.topLeft,
+          uiState.animatedMaskPaths.shiftOf(id),
+        )) {
+          (final corner?, (final dx, final dy)) =>
+            Offset(corner.dx - dx, corner.dy - dy),
+          _ => Offset.zero,
+        },
         // The pins the puppet tools draw and aim at, from the same read
         // as everything else on the box.
         puppet: entry.info.puppet,

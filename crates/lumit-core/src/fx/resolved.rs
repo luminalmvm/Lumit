@@ -666,6 +666,13 @@ pub(super) fn resolve_into_arena(
                 Some(EffectValue::Shape(points)) => shape_points::ShapePoints::sanitised(points),
                 _ => shape_points::ShapePoints::EMPTY,
             }),
+            // Stops ride in the bag as a curve's points do.
+            ParamKind::Gradient { .. } => Value::Gradient(match e.param(p.id) {
+                Some(EffectValue::Gradient(stops)) => {
+                    colour_stops::ColourStops::sanitised(stops, lt)
+                }
+                _ => colour_stops::ColourStops::EMPTY,
+            }),
             // A text is short enough to ride in the bag too. It does not
             // animate, so it is only cut to the cap.
             ParamKind::Text { default } => Value::Text(ShortText::new(match e.param(p.id) {

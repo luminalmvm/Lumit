@@ -195,6 +195,7 @@ pub(super) fn text_layer(
     let document = TextDocument {
         text: words,
         expression: None,
+        keys: None,
         size,
         fill: colour("fc").unwrap_or(LinearColour::BLACK),
         path: None,

@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::anim::Property;
 
+pub mod keys;
 pub mod ports;
 pub mod selector;
 mod spoken;

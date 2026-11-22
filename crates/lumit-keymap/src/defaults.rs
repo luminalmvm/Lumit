@@ -575,6 +575,11 @@ const UNBOUND: &[(KeyContext, &str)] = &[
     (KeyContext::Global, "layer.stabilise"),
 ];
 
+/// Defaults that were later given another key: Ctrl+D added the default
+/// transition in Cut before it became Duplicate.
+const RETIRED: &[(KeyContext, &str, &str)] =
+    &[(KeyContext::Cut, "Mod+D", "cut.transition.default")];
+
 /// A **stored** keymap laid over the shipped defaults: the file's chord
 /// wins for every action it names, and an action it never heard of — one added
 /// to Lumit after that file was written — keeps its default binding.
@@ -590,6 +595,27 @@ const UNBOUND: &[(KeyContext, &str)] = &[
 #[must_use]
 pub fn with_new_defaults(stored: Keymap) -> Keymap {
     let mut out = stored;
+    // A default that has since moved, as the file still has it. Left in, it
+    // sits ahead of the new default for the same key and wins the press.
+    // Only a file that has never heard of Duplicate: one that holds it, bound
+    // or unbound, moved Ctrl+D on purpose.
+    let heard = out
+        .bindings
+        .iter()
+        .any(|b| b.context == KeyContext::Cut && b.action.0 == "cut.duplicate")
+        || out
+            .unbound
+            .iter()
+            .any(|(c, a)| *c == KeyContext::Cut && a.0 == "cut.duplicate");
+    for (context, chord, action) in RETIRED {
+        if heard {
+            break;
+        }
+        if let Ok(chord) = chord.parse::<Chord>() {
+            out.bindings
+                .retain(|b| !(b.context == *context && b.chord == chord && b.action.0 == *action));
+        }
+    }
     // The actions that ship with no key, so the page lists them.
     for (context, action) in UNBOUND {
         let known = out.bindings.iter().any(|b| b.action.0 == *action)

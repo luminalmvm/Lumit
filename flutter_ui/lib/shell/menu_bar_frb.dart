@@ -967,7 +967,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       // The primary layer only: the ring is aimed at one layer.
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
-      ui.addEffect(layer, name);
+      ui.addEffect(layer, name, onPickedClip: true);
       app.notifyDocumentChanged();
     }
 
@@ -2440,7 +2440,7 @@ void addEffectToLayers(LumitState app, LumitUiState ui,
     Iterable<LayerReference> layers, String name) {
   asOneUndoStep(app.project, () {
     for (final layer in layers) {
-      ui.addEffect(layer, name);
+      ui.addEffect(layer, name, onPickedClip: true);
     }
   });
   app.notifyDocumentChanged();
@@ -3127,13 +3127,17 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
 /// The Edit menu's own row stays on [_pasteAction]: keyframes have never been
 /// one of its cases, and a row that greys on the clipboard being empty must not
 /// ungrey merely because the Timeline is open.
+///
+/// [claims] false skips the panels' claims, for a panel that took the chord and
+/// then found nothing of its own to paste.
 Future<bool> pasteSelectionFrb(
   LumitState app,
   LumitUiState ui,
   CompositionReference? comp,
-  LayerReference? layer,
-) async {
-  if (ui.pasteClaim?.call() ?? false) return true;
+  LayerReference? layer, {
+  bool claims = true,
+}) async {
+  if (claims && (ui.pasteClaim?.call() ?? false)) return true;
   // A picture the system clipboard holds is a last resort, except when the tray
   // is no longer what was copied last: its mirror on the system clipboard has
   // been replaced, and what replaced it may be a picture.

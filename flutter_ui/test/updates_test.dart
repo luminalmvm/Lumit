@@ -672,7 +672,7 @@ UpdateService _service({
       downloadFolder: folder ?? Directory.systemTemp.createTempSync,
       // These tests are about downloading, not signing, which
       // release_signature_test.dart covers.
-      signingKey: '',
+      signingKeys: const [],
     );
 
 /// An installation Lumit cannot replace from inside — the safe default for

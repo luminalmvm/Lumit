@@ -60,6 +60,7 @@ A particle system.
 | **Opacity over life** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **End colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Colour over life** | Gradient | Up to 16 stops | None | - |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Rotation jitter** | Slider | 0 to 360 | 360 | Degrees |
 | **Spin** | Slider | -720 to 720; any value by typing | 0 | Degrees |
@@ -128,7 +129,7 @@ In the Effect Controls panel:
 - **Simulation** groups **Simulate**, **Sub-steps**, **Bake**, **Cancel**.
 - **Emitter** groups **In the scene**, **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emitter layer**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
-- **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
+- **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Colour over life**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
 - **Fields** groups **Field x**, **Field y**, **Field z**, **Field radius**, **Attractor**, **Vortex**, **Vortex axis**, **Sphere**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
@@ -274,6 +275,10 @@ The **Particle** group, how a particle looks:
 - **Opacity over life**: the same curve for opacity. It starts solid and ends invisible.
 - **Colour** and **End colour**: the colour at birth and at death, blended across the
   particle's life.
+- **Colour over life**: the ramp between them. Click it to open its editor, the one a
+  shape's [Gradient stops](/use/shapes/#gradient-stops) has. The ends are Colour and End
+  colour, set on their own rows, and **Reverse** turns only the stops round. A stop's
+  **Opacity** multiplies the particle's opacity there. The stops are not animatable.
 - **Rotation**: the rotation of particles.
 - **Rotation jitter**: how much particles differ from one another in that rotation.
 - **Spin**: how fast that rotation turns.
@@ -283,11 +288,11 @@ The **Particle** group, how a particle looks:
 The **Variation** group, what runs those changes:
 
 - **Size by**, **Opacity by** and **Colour by**: what runs Size over life, Opacity over life
-  and the blend to End colour. **Age** runs from birth to death. **Speed** runs from Speed
+  and Colour over life. **Age** runs from birth to death. **Speed** runs from Speed
   min to Speed max. **Random** is a number of the particle's own that stays the same all
   its life.
 - **Speed min** and **Speed max**: the speeds, in pixels per second, at the left and right
-  ends of the curve or blend.
+  ends of the curve or ramp.
 
 The **Fields** group, read with Simulate on:
 

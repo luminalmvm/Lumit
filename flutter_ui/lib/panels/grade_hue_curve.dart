@@ -239,14 +239,23 @@ class GradeHueCurveState extends State<GradeHueCurve> {
     widget.onCommit(_out(withPointsAt([x])));
   }
 
+  /// A press on a point holds it; a press elsewhere puts a point on the line
+  /// there and holds that, so one gesture adds and places it.
   void _start(DragStartDetails d) {
-    final i = _nearest(d.localPosition);
-    if (i < 0) return;
+    var i = _nearest(d.localPosition);
+    var points = [
+      for (final p in _points) [p[0], p[1]]
+    ];
+    if (i < 0) {
+      if (points.length >= curveMaxPoints) return;
+      final x = _toCurve(d.localPosition)[0];
+      points = withPointsAt([x]);
+      i = points.indexWhere((p) => p[0] == x);
+      if (i < 0) return;
+    }
     setState(() {
       _held = i;
-      _dragging = [
-        for (final p in _points) [p[0], p[1]]
-      ];
+      _dragging = points;
     });
   }
 

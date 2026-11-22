@@ -7268,6 +7268,8 @@ fn payload_len(v: Value) -> usize {
         // A length byte, then the bytes typed.
         Value::Text(t) => 1 + t.as_str().len(),
         Value::Shape(s) => 4 + 8 * s.len(),
+        // A length, then three floats and two 16-bit fractions a stop.
+        Value::Gradient(g) => 4 + 16 * g.len(),
     }
 }
 

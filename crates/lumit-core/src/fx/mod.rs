@@ -23,6 +23,8 @@ pub mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
 pub mod colour_name;
+/// A Gradient row's stops between its two colour rows.
+pub mod colour_stops;
 /// Denoise's maths: the CPU twin of its kernels, and Learn.
 pub mod denoise;
 /// The drivers and the driver-graph evaluation: one module per driver,

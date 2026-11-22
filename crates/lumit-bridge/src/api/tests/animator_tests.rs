@@ -23,6 +23,7 @@ fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
     let plain = BridgeTextDocument {
         text: "Lumit".into(),
         expression: None,
+        keys: None,
         size: 72.0,
         fill: BridgeColourRgba {
             r: 1.0,

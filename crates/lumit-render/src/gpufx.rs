@@ -461,6 +461,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_luma_fade::LumaFadeFx,
     &crate::gpufx_move::MoveFx,
     &crate::gpufx_light_leak::LightLeakFx,
+    &crate::gpufx_flicker::FlickerFx,
     &crate::gpufx_slices::SlicesFx,
     &crate::gpufx_srgb_curve::SrgbCurveFx,
     &crate::gpufx_timewarp::TimewarpFx,
@@ -6574,9 +6575,7 @@ mod tests {
             .projected(carriage.projection.unwrap_or_default());
         let style = inst.draw_style();
         let frames = particulate_frames(carriage);
-        let mut curves = Vec::new();
-        curves.extend_from_slice(&packed.particle.size_curve);
-        curves.extend_from_slice(&packed.particle.opacity_curve);
+        let curves = packed.particle.curves();
         (packed, style, frames, curves)
     }
 
@@ -6784,6 +6783,20 @@ mod tests {
             // Opacity by a number of each particle's own, colour by speed.
             inst.opacity_by = 2;
             inst.colour_by = 1;
+            // Through Colour over life, one stop faded, so the card reads the
+            // ramp the CPU bakes.
+            let stop = |at: f64, c: [f32; 4], opacity: f64| lumit_core::shape::GradientStop {
+                position: lumit_core::anim::Property::fixed(at),
+                colour: lumit_core::model::LinearColour(c),
+                opacity: lumit_core::anim::Property::fixed(opacity),
+            };
+            inst.colour_over_life = lumit_core::fx::colour_stops::ColourStops::sanitised(
+                &[
+                    stop(35.0, [0.1, 0.9, 0.2, 1.0], 100.0),
+                    stop(70.0, [1.0; 4], 30.0),
+                ],
+                0.0,
+            );
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
             let packed = packed.framed(w as f32, h as f32);
             let (cpu_stream, tails) = lumit_core::fx::points::evaluate_with_tail(

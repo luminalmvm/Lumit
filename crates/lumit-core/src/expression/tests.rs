@@ -7,6 +7,7 @@ fn document(expression: Option<&str>) -> TextDocument {
     TextDocument {
         text: "typed".into(),
         expression: expression.map(str::to_owned),
+        keys: None,
         size: 48.0,
         fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
         path: None,

@@ -118,7 +118,7 @@ pub(crate) fn text_art(
     document: &TextDocument,
     comp_time: f64,
     t: f64,
-) -> Result<Vec<ShapeEntry>, BridgeError> {
+) -> Result<(Vec<ShapeEntry>, (f64, f64)), BridgeError> {
     // The words at this moment, through the one resolver the rasteriser and
     // the frame key read, so a converted caption says what it was saying.
     let doc = {
@@ -143,11 +143,15 @@ pub(crate) fn text_art(
         .path
         .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, t))
         .filter(|p| !p.is_empty());
-    Ok(lumit_text::shape_items(
+    let items = lumit_text::shape_items(
         &lumit_text::TextBlock::of(document, &words),
         spine.as_ref(),
         document.path_offset.value_at(t) as f32,
-    ))
+    );
+    // Words an expression gives sit where the typed words' side was, so the art's
+    // corner is that far from the layer's own.
+    let [dx, dy] = lumit_core::captions::show::typed_side(document, &words);
+    Ok((items, (-dx, -dy)))
 }
 
 /// The Illustrator file a footage layer reads, and which of its layers.

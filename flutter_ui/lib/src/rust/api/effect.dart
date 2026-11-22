@@ -5,6 +5,7 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import 'assets.dart';
 import 'graph.dart';
 import 'layer.dart';
 import 'lens.dart';
@@ -1058,6 +1059,11 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
     List<Float32List> field0,
   ) = BridgeEffectValue_Shape;
 
+  /// A ramp's stops between its two colour rows, as a shape gradient's.
+  const factory BridgeEffectValue.gradient(
+    List<BridgeGradientStop> field0,
+  ) = BridgeEffectValue_Gradient;
+
   /// A name from the OCIO config, as the config spells it; empty is unset.
   /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
   const factory BridgeEffectValue.text(
@@ -1460,6 +1466,13 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   /// An outline inside a box, as up to 32 points in `-1..1` of it. The
   /// row shows how many there are; the Viewer draws them.
   const factory BridgeParamKind.shape() = BridgeParamKind_Shape;
+
+  /// A ramp's stops, drawn as the ramp. Its two ends are the colour rows
+  /// `from` and `to`.
+  const factory BridgeParamKind.gradient({
+    required String from,
+    required String to,
+  }) = BridgeParamKind_Gradient;
 
   /// A closed range, drawn as a track and thumb with the value
   /// beside it. `min`/`max` are the travel *and* the hard bound — that is

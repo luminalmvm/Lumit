@@ -521,7 +521,9 @@ fn animated(comp: &Composition, target: &Target) -> bool {
                 _ => false,
             }),
         Target::Text { .. } => match &layer.kind {
-            LayerKind::Text { document } => document.expression.is_some(),
+            LayerKind::Text { document } => {
+                document.expression.is_some() || document.keys.is_some()
+            }
             _ => false,
         },
         Target::Volume { .. } => layer.volume_db.is_animated(),

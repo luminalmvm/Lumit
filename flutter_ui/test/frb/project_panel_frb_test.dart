@@ -1009,20 +1009,21 @@ void main() {
         ));
         await tester.pump();
 
-        BoxDecoration? highlight() => tester
-            .widget<Container>(find
-                .descendant(
-                  of: find.byType(DropTarget),
-                  matching: find.byType(Container),
-                )
-                .first)
-            .foregroundDecoration as BoxDecoration?;
+        BoxBorder? highlight() => (tester
+                .widget<Container>(find
+                    .descendant(
+                      of: find.byType(DropTarget),
+                      matching: find.byType(Container),
+                    )
+                    .first)
+                .foregroundDecoration as BoxDecoration)
+            .border;
 
         expect(highlight(), isNull, reason: 'nothing is being dragged');
 
         await hover();
         await tester.pump();
-        expect(highlight()?.border,
+        expect(highlight(),
             Border.all(color: LumitTheme.dark().accent, width: 1.5),
             reason: 'the drop-target treatment, as the folder rows wear it');
 

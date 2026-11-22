@@ -196,6 +196,8 @@ pub enum Value {
     Text(ShortText),
     /// A Shape row's points, inline for the reason a curve's are.
     Shape(ShapePoints),
+    /// A Gradient row's stops, inline for the reason a curve's are.
+    Gradient(ColourStops),
 }
 
 /// The most bytes of UTF-8 a [`ParamKind::Text`](crate::fx::schema::ParamKind::Text)
@@ -390,7 +392,7 @@ impl Value {
             // misleading scalar to give a caller that asked anyway.
             Value::Curve(c) => c.xy[0][1],
             // Words are not a number either, and nor is an outline.
-            Value::Text(_) | Value::Shape(_) => 0.0,
+            Value::Text(_) | Value::Shape(_) | Value::Gradient(_) => 0.0,
         }
     }
 
@@ -410,6 +412,7 @@ impl Value {
             Value::Curve(_) => 9,
             Value::Text(_) => 10,
             Value::Shape(_) => 11,
+            Value::Gradient(_) => 12,
         }
     }
 }
@@ -543,6 +546,14 @@ impl<'a> Params<'a> {
         match self.get(id) {
             Some(Value::Shape(s)) => s,
             _ => ShapePoints::EMPTY,
+        }
+    }
+
+    /// The Gradient row `id`, or no stops when absent or of another kind.
+    pub fn gradient(&self, id: ParamId) -> ColourStops {
+        match self.get(id) {
+            Some(Value::Gradient(g)) => g,
+            _ => ColourStops::EMPTY,
         }
     }
 
@@ -903,11 +914,13 @@ impl ResolvedFx<'_> {
                         feed(&p[1].to_le_bytes());
                     }
                 }
+                Value::Gradient(g) => g.feed_hash(feed),
             }
         }
     }
 }
 
+use super::colour_stops::ColourStops;
 use super::registry::EffectDef;
 use super::schema::ParamSchema;
 use super::shape_points::ShapePoints;

@@ -1645,6 +1645,11 @@ impl Realiser<'_> {
                 (l.opacity / 100.0).clamp(0.0, 1.0),
             ));
             self.layer_done(l, started, fx_ms);
+            // Handed to the card now, and the card kept close behind. Recorded
+            // as one batch, every adjustment layer's pictures stay alive until
+            // the frame is submitted, so a stack of them outgrows the card
+            // long before the governor's count says it is full.
+            self.ctx.flush_paced();
             start = i + 1;
         }
         self.realise_segment(

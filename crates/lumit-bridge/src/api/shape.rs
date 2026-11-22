@@ -603,10 +603,9 @@ impl LayerReference {
             .to_f64();
         let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         let (contents, origin) = match &layer.kind {
-            LayerKind::Text { document } => (
-                crate::outlines::text_art(self, &layer, document, t, lt)?,
-                (0.0, 0.0),
-            ),
+            LayerKind::Text { document } => {
+                crate::outlines::text_art(self, &layer, document, t, lt)?
+            }
             LayerKind::Shape { contents } => {
                 let corner = lumit_core::shape::contents_bounds(contents, lt);
                 let (x0, y0, ..) = corner.ok_or(BridgeError::NothingToConvert)?;

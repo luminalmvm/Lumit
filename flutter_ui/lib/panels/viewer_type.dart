@@ -958,17 +958,26 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       }
     }();
     if (document == null) return;
-    final text = document.text;
+    // Keyed words are typed at the playhead: the edit opens on the word shown
+    // there, and the preview and the write treat it as the layer's own words.
+    final keyed = document.keys != null;
+    final text = keyed
+        ? layer.textAt(frame: widget.uiState.playheadFrame.value)
+        : document.text;
     final caret = box != null && at != null
         ? utf16OffsetOf(
             text,
-            caretNearest(measuredText(document), box.map.layerOf(at)),
+            caretNearest(
+                measuredText(keyed
+                    ? document.copyWith(text: text, clearKeys: true)
+                    : document),
+                box.map.layerOf(at)),
           )
         : text.length;
     setState(() {
       _editing = layer;
       _created = created;
-      _held = document;
+      _held = keyed ? document.copyWith(text: text, clearKeys: true) : document;
       _typed = text;
       _controller.value = TextEditingValue(
         text: text,
@@ -984,11 +993,13 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   void _publishLive(LayerReference layer) {
     final document = _document;
     if (document == null) return;
-    final typed = document.copyWith(text: _controller.text);
+    final typed = document.copyWith(text: _controller.text, clearKeys: true);
     widget.uiState.liveText.value = {layer.internallayerId: typed};
     // Centred or right-aligned point text grows from that side, so the
     // preview moves its anchor, and the box and caret move with it.
-    final shift = typedAnchorShift(document, typed);
+    // Keyed words are written as a key, which moves no anchor.
+    final shift =
+        document.keys != null ? Offset.zero : typedAnchorShift(document, typed);
     BridgeTransform? tf;
     if (shift != Offset.zero) {
       try {
@@ -1109,7 +1120,11 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   void _write(LayerReference layer, BridgeTextDocument document) {
     final words = document.text.trim().split(RegExp(r'[\r\n]')).first.trim();
     asOneUndoStep(widget.state.project, () {
-      if (!_created) {
+      if (!_created && layer.getText()?.keys != null) {
+        // A key at the playhead, so the other keys keep their words.
+        layer.setTextKeyAt(
+            frame: widget.uiState.playheadFrame.value, text: document.text);
+      } else if (!_created) {
         layer.setText(document: document);
       } else {
         final placed = _recentredAnchor(layer, document);
@@ -1133,7 +1148,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// round a curve must not straighten it, or throw away its animators or its
   /// style. An expression is the one thing typing replaces, as it always has.
   BridgeTextDocument? _typedDocument(String text) =>
-      _document?.copyWith(text: text, expression: '');
+      _document?.copyWith(text: text, expression: '', clearKeys: true);
 
   /// Where a new layer's anchor and position want to be once the line is known:
   /// the pivot in the middle of the text, **without the line moving** — the

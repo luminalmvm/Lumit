@@ -838,6 +838,7 @@ fn example_doc(
                     document: TextDocument {
                         text: if labels { "{index}" } else { "Lumit" }.into(),
                         expression: None,
+                        keys: None,
                         size: if labels { 44.0 } else { 300.0 },
                         fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                         path: None,
