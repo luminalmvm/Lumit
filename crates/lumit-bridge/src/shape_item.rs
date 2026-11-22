@@ -31,7 +31,7 @@ impl BridgeShapeItem {
                 .collect(),
             dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
             gradient: item.gradient,
-            gradient_colour: item.gradient_colour.map(crate::api::assets::colour_of),
+            gradient_colour: item.gradient_colour.as_ref().map(shown),
             gradient_start_x: BridgeScalar::read_at(&item.gradient_start_x, offset),
             gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
             gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
@@ -43,7 +43,7 @@ impl BridgeShapeItem {
                 .iter()
                 .map(|s| BridgeGradientStop {
                     position: BridgeScalar::read_at(&s.position, offset),
-                    colour: crate::api::assets::colour_of(s.colour),
+                    colour: shown(&s.colour),
                     opacity: BridgeScalar::read_at(&s.opacity, offset),
                 })
                 .collect(),
@@ -121,7 +121,7 @@ impl BridgeShapeItem {
                 0..=2 | lumit_core::shape::gradient::ANGLE => self.gradient,
                 _ => 0,
             },
-            gradient_colour: self.gradient_colour.map(crate::api::assets::linear_of),
+            gradient_colour: self.gradient_colour.map(still),
             // The art's own coordinates, held to the same reach a vertex has.
             gradient_start_x: clamped_property(
                 &self.gradient_start_x,
@@ -153,7 +153,7 @@ impl BridgeShapeItem {
                 .map(|s| {
                     Ok(lumit_core::shape::GradientStop {
                         position: clamped_property(&s.position, offset, 0.0, 100.0)?,
-                        colour: crate::api::assets::linear_of(s.colour),
+                        colour: still(s.colour),
                         opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
                     })
                 })
@@ -188,7 +188,7 @@ impl BridgeShapeItem {
 
     /// [`Self::write_item`], but keeping what `previous` carries and this type
     /// does not describe: the **shape keyframes**, the outline's gradient, the
-    /// fill's highlight and the
+    /// fill's highlight, the keys on its gradient colours and the
     /// forward-compatibility `extra` a newer Lumit may have written (docs/10
     /// §1.1 makes preserving it mandatory).
     ///
@@ -219,6 +219,23 @@ impl BridgeShapeItem {
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };
+        // A keyed gradient colour crosses still, so one that comes back as it
+        // went keeps its keys.
+        if let (Some(was), Some(sent)) = (&previous.gradient_colour, self.gradient_colour) {
+            if shown(was) == sent {
+                written.gradient_colour = Some(was.clone());
+            }
+        }
+        for ((stop, was), sent) in written
+            .gradient_stops
+            .iter_mut()
+            .zip(&previous.gradient_stops)
+            .zip(&self.gradient_stops)
+        {
+            if shown(&was.colour) == sent.colour {
+                stop.colour = was.colour.clone();
+            }
+        }
         // A parametric shape keeps its numbers until one of its points is
         // dragged, which makes it a drawn path holding the dragged points.
         if let Some(p) = &mut written.primitive {
@@ -279,4 +296,15 @@ impl BridgeShapeItem {
             closed: self.closed,
         }
     }
+}
+
+/// A gradient colour as the frontend shows it: still, at the head of the
+/// layer, as it does not key one yet.
+pub(crate) fn shown(c: &[lumit_core::anim::Property; 4]) -> crate::api::assets::BridgeColourRgba {
+    crate::api::assets::colour_of(lumit_core::shape::colour::at(c, 0.0))
+}
+
+/// A colour the frontend sent, as a gradient colour.
+pub(crate) fn still(c: crate::api::assets::BridgeColourRgba) -> [lumit_core::anim::Property; 4] {
+    lumit_core::shape::colour::still(crate::api::assets::linear_of(c))
 }

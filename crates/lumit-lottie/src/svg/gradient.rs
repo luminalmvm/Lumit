@@ -94,10 +94,10 @@ impl Svg<'_> {
             .is_some_and(|c| c.iter().any(|p| !still(p)))
             || !still(&item.gradient_start_opacity)
             || !still(&item.gradient_end_opacity)
-            || item
-                .gradient_stops
-                .iter()
-                .any(|s| !still(&s.position) || !still(&s.opacity));
+            || item.gradient_colour.iter().flatten().any(|p| !still(p))
+            || item.gradient_stops.iter().any(|s| {
+                !still(&s.position) || !still(&s.opacity) || s.colour.iter().any(|p| !still(p))
+            });
         let clock = Svg::layer_clock(scope, layer);
         let display = |c: [f64; 3]| self.host.display(c);
         if !moves {
@@ -249,7 +249,10 @@ fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
         .map(f64::from);
     let to = item
         .gradient_colour
-        .unwrap_or(lumit_core::model::LinearColour::BLACK)
+        .as_ref()
+        .map_or(lumit_core::model::LinearColour::BLACK, |c| {
+            lumit_core::shape::colour::at(c, lt)
+        })
         .0
         .map(f64::from);
     let mut between: Vec<(f64, &GradientStop)> = item
@@ -271,7 +274,9 @@ fn points(item: &ShapeItem, lt: f64) -> Vec<Point> {
         ],
     ));
     for (at, stop) in between {
-        let c = stop.colour.0.map(f64::from);
+        let c = lumit_core::shape::colour::at(&stop.colour, lt)
+            .0
+            .map(f64::from);
         points.push((
             (at.clamp(0.0, 100.0)) / 100.0,
             [c[0], c[1], c[2], c[3] * faded(&stop.opacity)],

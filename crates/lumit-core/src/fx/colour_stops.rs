@@ -55,7 +55,7 @@ impl ColourStops {
         read.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut out = Self::EMPTY;
         for (i, (at, stop)) in read.into_iter().enumerate() {
-            let c = stop.colour.0;
+            let c = crate::shape::colour::at(&stop.colour, t).0;
             let finite = |v: f32| if v.is_finite() { v } else { 0.0 };
             out.rgb[i] = [finite(c[0]), finite(c[1]), finite(c[2])];
             let alpha = f64::from(c[3]) * stop.opacity.value_at(t) / 100.0;
@@ -149,7 +149,7 @@ mod tests {
     fn stop(at: f64, colour: [f32; 4], opacity: f64) -> GradientStop {
         GradientStop {
             position: Property::fixed(at),
-            colour: LinearColour(colour),
+            colour: crate::shape::colour::still(LinearColour(colour)),
             opacity: Property::fixed(opacity),
         }
     }

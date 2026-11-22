@@ -98,10 +98,15 @@ pub struct ShapeItem {
     /// aim the ramp are `Property` and animate.
     #[serde(default, skip_serializing_if = "is_flat")]
     pub gradient: u32,
-    /// The colour at the far end of the ramp. `None` is black, which is where
-    /// a gradient nobody has picked a second colour for starts.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gradient_colour: Option<LinearColour>,
+    /// The colour at the far end of the ramp, each channel keyable. `None` is
+    /// black, which is where a gradient nobody has picked a second colour for
+    /// starts.
+    #[serde(
+        default,
+        with = "colour::keyed",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub gradient_colour: Option<[Property; 4]>,
     /// Where the ramp starts and ends, in **layer pixels** — the art's own
     /// coordinates, the same ones its vertices are in. Linear projects onto
     /// the line between them; radial measures out from the start, the end
@@ -261,7 +266,9 @@ pub struct GradientStop {
     /// a hard edge.
     #[serde(with = "crate::mask::still_or_keyed")]
     pub position: Property,
-    pub colour: LinearColour,
+    /// Each channel keyable, as the fill's.
+    #[serde(with = "colour::channels")]
+    pub colour: [Property; 4],
     /// 0..100, like the two ends.
     #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
     pub opacity: Property,

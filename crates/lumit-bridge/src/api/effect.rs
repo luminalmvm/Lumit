@@ -2226,7 +2226,7 @@ impl BridgeEffectValue {
                     .iter()
                     .map(|s| crate::api::layer::BridgeGradientStop {
                         position: BridgeScalar::read_at(&s.position, offset),
-                        colour: crate::api::assets::colour_of(s.colour),
+                        colour: crate::shape_item::shown(&s.colour),
                         opacity: BridgeScalar::read_at(&s.opacity, offset),
                     })
                     .collect(),
@@ -2349,7 +2349,7 @@ impl BridgeEffectValue {
                     .map(|s| {
                         Ok(lumit_core::shape::GradientStop {
                             position: clamped_property(&s.position, offset, 0.0, 100.0)?,
-                            colour: crate::api::assets::linear_of(s.colour),
+                            colour: crate::shape_item::still(s.colour),
                             opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
                         })
                     })

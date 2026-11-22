@@ -365,7 +365,7 @@ fn a_linear_gradient_ramps_across_the_fill() {
     let mut it = item(square(0.0, 0.0, 20.0));
     it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 1;
-    it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+    it.gradient_colour = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
     it.gradient_start_x = Property::fixed(0.0);
     it.gradient_end_x = Property::fixed(20.0);
     let rgba = rasterise_contents(&entries(vec![it]), 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
@@ -400,7 +400,7 @@ fn a_radial_gradient_ramps_out_from_its_start() {
     let mut it = item(square(0.0, 0.0, 20.0));
     it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 2;
-    it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+    it.gradient_colour = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
     it.gradient_start_x = Property::fixed(10.0);
     it.gradient_start_y = Property::fixed(10.0);
     it.gradient_end_x = Property::fixed(20.0);
@@ -425,7 +425,7 @@ fn a_gradient_end_fades_to_clear() {
     let mut it = item(square(0.0, 0.0, 20.0));
     it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 1;
-    it.gradient_colour = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+    it.gradient_colour = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient_start_x = Property::fixed(0.0);
     it.gradient_end_x = Property::fixed(20.0);
     it.gradient_end_opacity = Property::fixed(0.0);
@@ -461,12 +461,12 @@ fn a_gradient_passes_through_the_stops_between_its_ends() {
     let mut it = item(square(0.0, 0.0, 20.0));
     it.fill = Some(colour::still(LinearColour([1.0, 0.0, 0.0, 1.0])));
     it.gradient = 1;
-    it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+    it.gradient_colour = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
     it.gradient_start_x = Property::fixed(0.0);
     it.gradient_end_x = Property::fixed(20.0);
     it.gradient_stops = vec![GradientStop {
         position: Property::fixed(50.0),
-        colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
+        colour: colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])),
         opacity: Property::fixed(0.0),
     }];
     let rgba = rasterise_contents(
@@ -791,7 +791,7 @@ fn an_unkeyed_shape_is_absent_from_the_file() {
     keyed.gradient_end_opacity = Property::fixed(0.0);
     keyed.gradient_stops = vec![GradientStop {
         position: Property::fixed(40.0),
-        colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
+        colour: colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])),
         opacity: Property::fixed(50.0),
     }];
     let json = serde_json::to_string(&keyed).unwrap();

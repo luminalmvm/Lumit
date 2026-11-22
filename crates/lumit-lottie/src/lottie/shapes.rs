@@ -624,9 +624,11 @@ fn gradient_props<'a>(item: &'a ShapeItem, fill: &'a [Property; 4]) -> Vec<&'a P
     let mut out: Vec<&Property> = fill.iter().collect();
     out.push(&item.gradient_start_opacity);
     out.push(&item.gradient_end_opacity);
+    out.extend(item.gradient_colour.iter().flatten());
     for s in &item.gradient_stops {
         out.push(&s.position);
         out.push(&s.opacity);
+        out.extend(&s.colour);
     }
     out
 }
@@ -635,18 +637,17 @@ fn gradient_props<'a>(item: &'a ShapeItem, fill: &'a [Property; 4]) -> Vec<&'a P
 fn points(c: &Clock, item: &ShapeItem, fill: &[Property; 4], lt: f64) -> Vec<(f64, [f64; 3], f64)> {
     let v = |p: &Property| c.value(p, lt);
     let faded = |p: &Property| v(p).clamp(0.0, 100.0) / 100.0;
-    let to = item
-        .gradient_colour
-        .unwrap_or(LinearColour::BLACK)
-        .0
-        .map(f64::from);
+    let to = match &item.gradient_colour {
+        Some(c) => [v(&c[0]), v(&c[1]), v(&c[2]), v(&c[3])],
+        None => LinearColour::BLACK.0.map(f64::from),
+    };
     let from = [v(&fill[0]), v(&fill[1]), v(&fill[2]), v(&fill[3])];
     let mut between: Vec<(f64, [f64; 4], f64)> = item
         .gradient_stops
         .iter()
         .take(lumit_core::shape::MAX_GRADIENT_STOPS)
         .map(|s| {
-            let colour = s.colour.0.map(f64::from);
+            let colour = s.colour.each_ref().map(v);
             (
                 (v(&s.position).clamp(0.0, 100.0)) / 100.0,
                 colour,

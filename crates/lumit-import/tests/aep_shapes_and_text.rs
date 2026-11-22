@@ -109,7 +109,7 @@ fn gradients_and_merged_paths_come_across() {
         .find(|item| item.gradient == 1)
         .expect("the gradient");
     let red = lumit_core::shape::colour::at(ramp.fill.as_ref().expect("a start"), 0.0).0;
-    let blue = ramp.gradient_colour.expect("an end").0;
+    let blue = lumit_core::shape::colour::at(ramp.gradient_colour.as_ref().expect("an end"), 0.0).0;
     assert!(red[0] > 0.9 && red[2] < 0.1, "{red:?}");
     assert!(blue[2] > 0.9 && blue[0] < 0.1, "{blue:?}");
     assert_eq!(ramp.gradient_stops.len(), 1);

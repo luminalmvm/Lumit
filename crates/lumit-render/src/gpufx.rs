@@ -6771,7 +6771,7 @@ mod tests {
             // ramp the CPU bakes.
             let stop = |at: f64, c: [f32; 4], opacity: f64| lumit_core::shape::GradientStop {
                 position: lumit_core::anim::Property::fixed(at),
-                colour: lumit_core::model::LinearColour(c),
+                colour: lumit_core::shape::colour::still(lumit_core::model::LinearColour(c)),
                 opacity: lumit_core::anim::Property::fixed(opacity),
             };
             inst.colour_over_life = lumit_core::fx::colour_stops::ColourStops::sanitised(

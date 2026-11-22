@@ -99,7 +99,8 @@ impl ShapeItem {
             from: colour::at(self.fill_shown()?, t),
             to: self
                 .gradient_colour
-                .unwrap_or(crate::model::LinearColour::BLACK),
+                .as_ref()
+                .map_or(crate::model::LinearColour::BLACK, |c| colour::at(c, t)),
             start: [&self.gradient_start_x, &self.gradient_start_y],
             end: [&self.gradient_end_x, &self.gradient_end_y],
             opacity: [&self.gradient_start_opacity, &self.gradient_end_opacity],
@@ -503,7 +504,7 @@ impl RampSource<'_> {
         let mut points = Vec::with_capacity(between.len() + 2);
         points.push((0.0f32, [from.0[0], from.0[1], from.0[2], from_alpha]));
         for (at, stop) in between {
-            let c = stop.colour.0;
+            let c = colour::at(&stop.colour, t).0;
             let alpha = c[3] * faded(&stop.opacity);
             let at = (at.clamp(0.0, 100.0) / 100.0) as f32;
             points.push((at, [c[0], c[1], c[2], alpha]));

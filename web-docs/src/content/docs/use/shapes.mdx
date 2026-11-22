@@ -184,7 +184,9 @@ opaque the Gradient colour end is, as a percentage. The ramp fades evenly betwee
 an end at 0 is clear.
 
 The Fill, the points and the opacities are animatable. The Gradient colour and the stops'
-colours are not.
+colours have no stopwatch, and are keyed in the file or through
+[scripting](/reference/scripting/). The Timeline shows a keyed colour as it is at the
+layer's start, and picking another there replaces its keys.
 
 A radial ramp's centre can sit off its first point, as a highlight. `gradient_highlight` is
 how far, as a percentage of the radius from -100 to 100, and `gradient_highlight_angle` which

@@ -192,7 +192,9 @@ fn gradient(
             cx.approximated(here.property("Highlight"), "Highlight");
         }
     }
-    item.gradient_colour = Some(linear(ramp.colour_at(1.0)));
+    item.gradient_colour = Some(lumit_core::shape::colour::still(linear(
+        ramp.colour_at(1.0),
+    )));
     item.gradient_start_opacity = Property::fixed(ramp.alpha_at(0.0) * 100.0);
     item.gradient_end_opacity = Property::fixed(ramp.alpha_at(1.0) * 100.0);
     let mut inside = ramp.offsets();
@@ -204,7 +206,7 @@ fn gradient(
         .into_iter()
         .map(|at| GradientStop {
             position: Property::fixed(at * 100.0),
-            colour: linear(ramp.colour_at(at)),
+            colour: lumit_core::shape::colour::still(linear(ramp.colour_at(at))),
             opacity: Property::fixed(ramp.alpha_at(at) * 100.0),
         })
         .collect();
