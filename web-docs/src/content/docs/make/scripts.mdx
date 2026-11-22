@@ -154,7 +154,9 @@ row's `value`, is a number, a list of keys as `{time, value, hold, in, out}`, or
   the project, or in the script's folder when the project has no file.
 - `layer.add`: a colour or a size on anything but a solid, and a comp placed inside itself.
   The layer goes to the top of the stack unless `index` says otherwise.
-- `shape.add`: an item with fewer than two vertices.
+- `shape.add`: an item with fewer than two vertices. A path, group or modifier with no `id`
+  or `name` is given one, inside groups too: `Path` or `Group` and its place, or the
+  modifier's name.
 - `layer.add` and `layer.write`: an `id` among `fields`.
 - `layer.set`: `jump` without `parent`, `two_node` on anything but a camera, and
   `after_effects_order` while an expression drives a rotation.
