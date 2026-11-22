@@ -148,6 +148,7 @@ use super::effects::{
     lens_flare::{LensFlare, LensFlareDef},
     levels::{Levels, LevelsDef},
     light_leak::{LightLeak, LightLeakDef},
+    light_rays::{LightRays, LightRaysDef},
     light_wrap::{LightWrap, LightWrapDef},
     lightning::{Lightning, LightningDef},
     linear_wipe::{LinearWipe, LinearWipeDef},
@@ -469,6 +470,9 @@ crate::catalogue![
     HolographicFoilDef => HolographicFoil,
     // Hologram beside it: the same film, replaying a picture with depth.
     HologramDef => Hologram,
+    // Light rays, at the Stylise family's end: light thrown out of the
+    // picture's bright parts, away from a source point.
+    LightRaysDef => LightRays,
     // The Transition family, in docs/08 §3.46–§3.47 order.
     LinearWipeDef => LinearWipe,
     RadialWipeDef => RadialWipe,

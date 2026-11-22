@@ -38487,6 +38487,623 @@
       "matte_role": "own"
     },
     {
+      "slug": "light-rays",
+      "match_name": "light_rays",
+      "label": "Light rays",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "use_mask",
+          "label": "Use mask",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mask_radius",
+          "label": "Mask radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "mask_feather",
+          "label": "Mask feather",
+          "kind": "float",
+          "unit": "px",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "source_x",
+          "label": "Source point X",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "source_y",
+          "label": "Source point Y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "ray_length",
+          "label": "Ray length",
+          "kind": "float",
+          "unit": "raw",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "shimmer_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 200.0
+        },
+        {
+          "id": "shimmer_detail",
+          "label": "Detail",
+          "kind": "float",
+          "unit": "raw",
+          "default": 10.0,
+          "slider_min": 1.0,
+          "slider_max": 100.0,
+          "hard_min": 1.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "shimmer_phase",
+          "label": "Phase",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "source_affects_shimmer",
+          "label": "Source point affects shimmer",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "shimmer_radius",
+          "label": "Radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 100.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "reduce_flicker",
+          "label": "Reduce flicker",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "use_loop",
+          "label": "Use loop",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "revolutions",
+          "label": "Revolutions in loop",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 20.0,
+          "hard_min": 1.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "boost_light",
+          "label": "Boost light",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "colourise",
+          "label": "Colourise",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "None",
+            "One colour",
+            "3-colour gradient",
+            "5-colour gradient",
+            "Ember",
+            "Rust",
+            "Acid",
+            "Lagoon",
+            "Arc",
+            "Orchid",
+            "Plum",
+            "Dusk",
+            "Rose",
+            "Twilight",
+            "Dawn",
+            "Isotope",
+            "Thermal"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.8,
+            0.45,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "highlights",
+          "label": "Highlights",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.871,
+            0.672,
+            0.361,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mid_high",
+          "label": "Mid-high",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.521,
+            0.242,
+            0.242,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "midtones",
+          "label": "Midtones",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.468,
+            0.136,
+            0.001,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "mid_low",
+          "label": "Mid-low",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.038,
+            0.028,
+            0.13,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "shadows",
+          "label": "Shadows",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.06,
+            0.001,
+            0.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "based_on",
+          "label": "Based on",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Lightness",
+            "Luminance",
+            "Alpha",
+            "Alpha edges",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "edge_thickness",
+          "label": "Edge thickness",
+          "kind": "float",
+          "unit": "px",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 500.0
+        },
+        {
+          "id": "source_opacity",
+          "label": "Source opacity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "rays_opacity",
+          "label": "Rays opacity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "rays_blend",
+          "label": "Blend mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "None",
+            "Normal",
+            "Add",
+            "Screen",
+            "Lighten",
+            "Lighter colour",
+            "Colour dodge",
+            "Linear light",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Multiply",
+            "Difference"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Pre-process",
+          "params": [
+            "threshold",
+            "use_mask",
+            "mask_radius",
+            "mask_feather"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Shimmer",
+          "params": [
+            "shimmer_amount",
+            "shimmer_detail",
+            "shimmer_phase",
+            "source_affects_shimmer",
+            "shimmer_radius",
+            "reduce_flicker",
+            "use_loop",
+            "revolutions"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "",
+          "params": [
+            "colour"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colourise",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "highlights"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colourise",
+            "values": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "mid_high"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colourise",
+            "values": [
+              3,
+              14,
+              15,
+              16
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "midtones"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colourise",
+            "values": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "mid_low"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colourise",
+            "values": [
+              3,
+              14,
+              15,
+              16
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "shadows"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "colourise",
+            "values": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ]
+          }
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "mask_radius",
+          "on": "use_mask",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "mask_feather",
+          "on": "use_mask",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "shimmer_radius",
+          "on": "source_affects_shimmer",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "reduce_flicker",
+          "on": "source_affects_shimmer",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "revolutions",
+          "on": "use_loop",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "based_on",
+          "on": "colourise",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "edge_thickness",
+          "on": "based_on",
+          "cond": "choice_is",
+          "value": 3
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "linear-wipe",
       "match_name": "linear_wipe",
       "label": "Linear wipe",

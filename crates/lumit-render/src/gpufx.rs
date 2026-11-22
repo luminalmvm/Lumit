@@ -461,6 +461,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &crate::gpufx_luma_fade::LumaFadeFx,
     &crate::gpufx_move::MoveFx,
     &crate::gpufx_light_leak::LightLeakFx,
+    &crate::gpufx_light_rays::LightRaysFx,
     &crate::gpufx_flicker::FlickerFx,
     &crate::gpufx_holographic_foil::HolographicFoilFx,
     &crate::gpufx_hologram::HologramFx,

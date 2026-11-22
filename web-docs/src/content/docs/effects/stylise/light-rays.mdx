@@ -1,0 +1,150 @@
+---
+title: Light rays
+description: "Throws rays of light out of the picture's bright parts, away from a source point."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Light rays is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Light rays" category="stylise" slug="light-rays" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Light streams out of the picture's bright parts, away from **Source point**, as through haze or
+dust: a logo with light behind it, sun through trees, a sweep across a title. Each pixel gathers
+the picture along the line back towards the source point, so whatever is bright throws a streak
+outward that fades as it goes.
+
+The rays are gathered in four passes, each reaching eight times as far as the one before, so
+**Ray length** costs nothing: long rays take the same time to draw as short ones. The source point
+can sit off the layer, up to one layer's size beyond each edge, and it moves smoothly by fractions
+of a pixel.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Threshold** | Slider | 0 to 100 | 0 | Per cent |
+| **Use mask** | Checkbox | On or off | Off | - |
+| **Mask radius** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
+| **Mask feather** | Slider | 0 to 1000; higher | 50 | Pixels at composition size |
+| **Source point X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Source point Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Ray length** | Slider | 0 to 10; up to 100 | 4 | - |
+| **Amount** | Slider | 0 to 100; up to 200 | 0 | Per cent |
+| **Detail** | Slider | 1 to 100; up to 400 | 10 | - |
+| **Phase** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Source point affects shimmer** | Checkbox | On or off | Off | - |
+| **Radius** | Slider | 1 to 1000; higher | 100 | Pixels at composition size |
+| **Reduce flicker** | Checkbox | On or off | Off | - |
+| **Use loop** | Checkbox | On or off | Off | - |
+| **Revolutions in loop** | Slider, whole numbers | 1 to 20; up to 1000 | 1 | - |
+| **Boost light** | Slider | 0 to 10; up to 1000 | 0 | - |
+| **Colourise** | Dropdown | None · One colour · 3-colour gradient · 5-colour gradient · Ember · Rust · Acid · Lagoon · Arc · Orchid · Plum · Dusk · Rose · Twilight · Dawn · Isotope · Thermal | None | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 0.8, 0.45, 1 | - |
+| **Highlights** | Colour | Each channel 0 to 4, scene-linear | 0.871, 0.672, 0.361, 1 | - |
+| **Mid-high** | Colour | Each channel 0 to 4, scene-linear | 0.521, 0.242, 0.242, 1 | - |
+| **Midtones** | Colour | Each channel 0 to 4, scene-linear | 0.468, 0.136, 0.001, 1 | - |
+| **Mid-low** | Colour | Each channel 0 to 4, scene-linear | 0.038, 0.028, 0.13, 1 | - |
+| **Shadows** | Colour | Each channel 0 to 4, scene-linear | 0.06, 0.001, 0, 1 | - |
+| **Based on** | Dropdown | Lightness · Luminance · Alpha · Alpha edges · Red · Green · Blue | Lightness | - |
+| **Edge thickness** | Slider | 0 to 50; up to 500 | 4 | Pixels at composition size |
+| **Source opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Rays opacity** | Slider | 0 to 100; up to 400 | 100 | Per cent |
+| **Blend mode** | Dropdown | None · Normal · Add · Screen · Lighten · Lighter colour · Colour dodge · Linear light · Overlay · Soft light · Hard light · Multiply · Difference | Add | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Threshold**, **Use mask**, **Mask radius** and **Mask feather** are under the **Pre-process** heading, folded.
+- **Amount**, **Detail**, **Phase**, **Source point affects shimmer**, **Radius**, **Reduce flicker**, **Use loop** and **Revolutions in loop** are under the **Shimmer** heading, folded.
+- **Colour** shows only for One colour; **Highlights**, **Midtones** and **Shadows** for the gradients and their colourings; **Mid-high** and **Mid-low** for the five-colour ones.
+- **Mask radius** and **Mask feather** answer to **Use mask**, **Radius** and **Reduce flicker** to **Source point affects shimmer**, **Revolutions in loop** to **Use loop**, **Based on** to any **Colourise** but None, and **Edge thickness** to **Based on** set to Alpha edges.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+### Pre-process
+
+- **Threshold** keeps only the parts brighter than it, by how much brighter they are, so a picture
+  throws rays from its highlights alone. It reads the lightness as a picture shows it.
+- **Use mask** lets only a circle around the source point throw rays: **Mask radius** is its size
+  and **Mask feather** how far beyond the radius it fades out.
+
+### Source point and Ray length
+
+- **Source point** is where the rays start. Drag it in the Viewer. It can lie off the layer, up to
+  one layer's size beyond each edge, which is how the light comes from behind a corner of the
+  frame.
+- **Ray length** is how far the rays reach, in their own distance from the source: at 4, something
+  bright throws its ray out to five times as far from the source as it is. It does not change how
+  long a frame takes.
+
+### Shimmer
+
+The shimmer changes the ray length around the source, so the rays seem to move in and out and
+sideways.
+
+- **Amount** is how much the length changes, and **Detail** how fine the changes are.
+- **Phase** moves the shimmer. Each full turn is a new shimmer; animate it to make the light play.
+- **Source point affects shimmer** moves the shimmer as the source point moves, as light through real
+  haze would. **Radius** is how far the source point travels for the shimmer to change right
+  through: low is fast, high is slow. If a logo flickers, **Reduce flicker** keeps only the
+  coarse shimmer and moves it half as fast.
+- **Use loop** makes the shimmer repeat every **Revolutions in loop** turns of Phase. For a loop
+  four seconds long with two turns, key Phase at 0° at the start and 720° four seconds later, set
+  Revolutions in loop to 2, and leave the last frame out of the loop.
+
+### Boost light
+
+**Boost light** brightens the rays. High enough, it burns the picture out to white, which makes a
+transition.
+
+### Colourise
+
+- **None** keeps the picture's own colours, for light through stained glass or out of a coloured
+  logo.
+- **One colour** colours the rays **Colour**, brighter where they are brighter.
+- **3-colour gradient** colours the rays by how bright they are, from **Shadows** through
+  **Midtones** to **Highlights**, fading to black below and to white above.
+  **5-colour gradient** adds **Mid-low** and **Mid-high** between them.
+- The colourings below them fill the colours in for you: **Ember**, **Rust**, **Acid**, **Lagoon**,
+  **Arc**, **Orchid**, **Plum**, **Dusk**, **Rose** and **Twilight** are three-colour; **Dawn**,
+  **Isotope** and **Thermal** are five-colour. Editing any colour after picking one puts the menu
+  back to the plain gradient, since the colours are no longer that colouring's. A colour with
+  keyframes keeps them.
+- **Based on** is what the colours are picked by: **Lightness**, **Luminance**, **Alpha**, one of
+  **Red**, **Green** or **Blue**, or **Alpha edges**, the edges of the layer's alpha, as wide as
+  **Edge thickness**, so a solid logo throws rays only from its outline.
+
+### Compositing
+
+- **Source opacity** is how much of the picture shows under the rays, and **Rays opacity** how
+  strong the rays are.
+- **Blend mode** is how the rays go onto the picture. **None** shows the rays alone, **Normal** lays
+  them over it, and the rest work as the layer modes of the same name.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Radial blur](/effects/blur-sharpen/radial-blur/)
+- [Glow](/effects/stylise/glow/)
+- [Light leak](/effects/stylise/light-leak/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

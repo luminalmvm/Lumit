@@ -8,12 +8,14 @@
 16 mm
 2 kHz
 250 Hz
+3-colour gradient
 31 Hz
 35 mm
 35 mm stills
 3D
 3D point
 4 kHz
+5-colour gradient
 500 Hz
 63 Hz
 64
@@ -23,6 +25,7 @@
 A
 APS-C
 Accumulation motion blur
+Acid
 Across
 Adaptive
 Add
@@ -49,6 +52,7 @@ Along edges
 Alpha
 Alpha bias
 Alpha blur
+Alpha edges
 Alpha from
 Alternate
 Alternate rows
@@ -144,6 +148,7 @@ Bars
 Base colour
 Base colour layer
 Base roughness
+Based on
 Basic
 Beam
 Beat markers
@@ -173,6 +178,7 @@ Black range
 Black saturation
 Blades
 Blend
+Blend mode
 Blobs
 Block glitch
 Block size
@@ -195,6 +201,7 @@ Blur radius
 Blur size
 Boolean
 Boolean layer
+Boost light
 Border
 Both
 Both ways
@@ -344,6 +351,7 @@ Colour overlay
 Colour ramp
 Colour variation
 Colour warper
+Colourise
 Colours
 Column mix
 Column widths
@@ -439,6 +447,7 @@ Darken
 Darker
 Darker colour
 Datamosh
+Dawn
 Daylight
 De-esser
 Death
@@ -523,6 +532,7 @@ Drop the rest
 Droplets
 Dry
 Duration
+Dusk
 Dust
 Each path
 Each point
@@ -539,6 +549,7 @@ Edge fade
 Edge margin
 Edge repeat
 Edge sharpness
+Edge thickness
 Edge type
 Edge width (nm)
 Edges
@@ -573,6 +584,7 @@ Element 8
 Element 9
 Ellipse
 Ellipse outline
+Ember
 Emboss
 Emission colour
 Emission layer
@@ -931,6 +943,7 @@ Iris centre y
 Iris points
 Iris wipe
 Irregularity
+Isotope
 Iterations
 Jagged
 Jitter x
@@ -957,6 +970,7 @@ Label points
 Label rotation
 Label scale
 Lacquer index
+Lagoon
 Laser
 Latitude
 Lattice
@@ -1005,6 +1019,7 @@ Light flicker
 Light from
 Light leak
 Light range
+Light rays
 Light saturation
 Light size
 Light tint
@@ -1079,8 +1094,10 @@ Map white to
 Maps
 Markers
 Mask
+Mask feather
 Mask path
 Mask points
+Mask radius
 Mask/Path
 Master
 Material
@@ -1116,6 +1133,8 @@ Mesh warp
 Metallic
 Method
 Micro Four Thirds
+Mid-high
+Mid-low
 Middle
 Middle colour
 Midtone
@@ -1211,6 +1230,7 @@ On transparent
 On trigger
 Once at start
 One after another
+One colour
 One point
 Opacity
 Opacity %
@@ -1224,6 +1244,7 @@ Operation
 Optical
 Orange
 Orange peel (µm)
+Orchid
 Order
 Order by
 Orientation
@@ -1326,6 +1347,7 @@ Planar track
 Planes
 Plasma
 Plastic
+Plum
 Point
 Point 1 x
 Point 1 y
@@ -1363,6 +1385,7 @@ Posterize time
 Power
 Pre
 Pre-delay
+Pre-process
 Preserve luminance
 Preserve luminosity
 Preset
@@ -1412,8 +1435,10 @@ Range
 Raster
 Rate
 Ratio
+Ray length
 Ray traced
 Rays
+Rays opacity
 Read
 Reading
 Rec. 709
@@ -1433,6 +1458,7 @@ Red phase
 Reds
 Reduce
 Reduce brightness
+Reduce flicker
 Reduce saturation
 Reduction
 Reference
@@ -1482,6 +1508,7 @@ Reverb only
 Reverb reduction
 Reverb time
 Reverse
+Revolutions in loop
 Rig rotation
 Right
 Right bottom tangent x
@@ -1531,6 +1558,7 @@ Row stagger
 Rows
 Rows/columns jitter
 Rubber
+Rust
 Safe margin
 Same
 Same as Per
@@ -1626,6 +1654,7 @@ Sheet width (mm)
 Shift per row
 Shift x
 Shift y
+Shimmer
 Short waves
 Show
 Show points
@@ -1699,6 +1728,10 @@ Source green
 Source height
 Source layer
 Source luminance
+Source opacity
+Source point X
+Source point Y
+Source point affects shimmer
 Source red
 Source width
 Space
@@ -1846,6 +1879,7 @@ Texture layer
 Textures
 Texturize
 The stock's own
+Thermal
 Thickness
 Thickness max
 Thickness min
@@ -1922,6 +1956,7 @@ Turbulent displace
 Turn
 Turn points
 Turns
+Twilight
 Twirl
 Twist
 Twitch frequency
@@ -1954,7 +1989,9 @@ Use hue
 Use inner radius
 Use light colour
 Use light intensity
+Use loop
 Use luma
+Use mask
 Use masks
 Use middle colour
 Use point colour

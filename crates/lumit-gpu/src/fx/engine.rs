@@ -807,6 +807,7 @@ impl FxEngine {
             lens_blur: Default::default(),
             lens_dirt: Default::default(),
             holographic_foil: Default::default(),
+            light_rays: Default::default(),
             hologram: Default::default(),
             film: Default::default(),
             grade: Default::default(),

@@ -7085,6 +7085,14 @@ fn every_parameter_declares_a_unit() {
             ("texturize", "relief"),
             ("mood_lighting", "scale"),
             ("pixel_sort", "max_span"),
+            // Light rays: the mask's size, the source point, the distance the
+            // shimmer changes over and the alpha edges' width.
+            ("light_rays", "mask_radius"),
+            ("light_rays", "mask_feather"),
+            ("light_rays", "source_x"),
+            ("light_rays", "source_y"),
+            ("light_rays", "shimmer_radius"),
+            ("light_rays", "edge_thickness"),
             ("linear_wipe", "feather"),
             ("radial_wipe", "centre_x"),
             ("radial_wipe", "centre_y"),

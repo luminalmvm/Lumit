@@ -292,8 +292,12 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // 540 is the middle of a 1080p comp and the top-left quarter of a
             // 4K one, and a fresh radial blur must spin about the middle of
             // whatever frame it landed on.
-            ("radial_blur" | "sprite_flare", "centre_x") | ("jolt", "origin_x") => w * 0.5,
-            ("radial_blur" | "sprite_flare", "centre_y") | ("jolt", "origin_y") => h * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_x")
+            | ("jolt", "origin_x")
+            | ("light_rays", "source_x") => w * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_y")
+            | ("jolt", "origin_y")
+            | ("light_rays", "source_y") => h * 0.5,
             // Denoise's sample starts in the middle until Learn moves it.
             ("denoise", "sample_x") => w * 0.5,
             ("denoise", "sample_y") => h * 0.5,

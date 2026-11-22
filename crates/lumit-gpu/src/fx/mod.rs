@@ -43,6 +43,7 @@ mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
 pub mod light_leak;
+pub mod light_rays;
 pub mod lighting;
 pub mod particulate;
 pub mod particulate_params;
@@ -417,6 +418,8 @@ pub struct FxEngine {
     lens_dirt: lens_dirt::LazyLensDirt,
     /// Holographic foil, built the first time one is drawn.
     holographic_foil: holographic_foil::LazyHolographicFoil,
+    /// Light rays, built the first time one is drawn.
+    light_rays: light_rays::LazyLightRays,
     /// Hologram, built the first time one is drawn.
     hologram: hologram::LazyHologram,
     film: film::LazyFilm,
