@@ -250,7 +250,7 @@ pub(super) enum Which {
     Key(String),
 }
 
-fn find_effect(layer: &Layer, which: &Which) -> Result<usize, ScriptError> {
+pub(super) fn find_effect(layer: &Layer, which: &Which) -> Result<usize, ScriptError> {
     let effects = &layer.effects;
     let found = match which {
         Which::Place(n) => (*n < effects.len()).then_some(*n),
@@ -292,7 +292,7 @@ pub(super) struct SetArgs {
 }
 
 /// What a control is set to.
-enum Change {
+pub(super) enum Change {
     Value(Value),
     Keys(Vec<KeyArgs>),
     Expression(String),
@@ -337,7 +337,7 @@ pub(super) fn set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
     now(store, comp.id, layer.id, id)
 }
 
-fn set_param(
+pub(super) fn set_param(
     comp: &Composition,
     layer: &Layer,
     e: &mut EffectInstance,

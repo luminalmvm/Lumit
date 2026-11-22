@@ -1,6 +1,7 @@
 //! The commands themselves: the table, and one function each.
 
 mod comps;
+mod drive;
 mod effects;
 mod grade;
 mod items;
@@ -425,6 +426,17 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "layer.drive",
+        summary: "Drive an effect's control from a driver on the layer's node graph, as Drive with does: Audio level and Beat trigger through Remap (and Smooth), Wiggle about the control's number, or any other driver straight in",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"description":"The driven effect's id or name, or its place in the stack, 0 the top","oneOf":[{"type":"string"},{"type":"integer","minimum":0}]},"param":{"type":"string","description":"The control's id or name"},"driver":{"type":"string","description":"The driver's id: audio_level, beat_trigger, wiggle, colour_cycle, expression, oscillator, value_noise, ring_wave and the rest"},"listen":{"type":"string","description":"For Audio level and Beat trigger, the layer whose sound they hear, by id or name. The whole comp when left out"},"output":{"type":"string","description":"The driver's output to wire, its first (Amplitude, Envelope) when left out"},"low":{"type":"number","description":"For a sound: the control's value in silence, its own number when left out"},"high":{"type":"number","description":"For a sound: the control's value at the loud end, the top of its range when left out"},"in_high":{"type":"number","description":"For a sound: the level that reaches high, 0.3 for Audio level and 1 for Beat trigger when left out"},"settings":{"type":"object","description":"The driver's own controls, by id or name, to their values: band, decay, window, frequency, amount and so on"},"expression":{"type":"string","description":"For the Expression driver, its source"}},"required":["comp","layer","effect","param","driver"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "grade.get",
         summary: "A shot's grade versions, which one is showing, and the grade group it is in",
         schema: concat!(
@@ -594,6 +606,7 @@ pub(crate) fn run(
         "effect.get" => effects::get(host, parse(args)?),
         "effect.add" => effects::add(host, parse(args)?),
         "effect.set" => effects::set(host, parse(args)?),
+        "layer.drive" => drive::drive(host, parse(args)?),
         "grade.get" => grade::get(host, parse(args)?),
         "grade.set" => grade::set(host, parse(args)?),
         "grade.groups" => grade::group_list(host, parse(args)?),
