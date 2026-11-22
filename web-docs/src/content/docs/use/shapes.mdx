@@ -186,6 +186,13 @@ an end at 0 is clear.
 The Fill, the points and the opacities are animatable. The Gradient colour and the stops'
 colours are not.
 
+An outline takes a gradient from `stroke_gradient` on the shape, set in the file or through
+scripting. It has no row. The ramp runs from the **Stroke** colour to its own `colour`, and
+its `kind` is 1 for linear, 2 for radial or 3 for along the path. Along the
+path, each line runs from the Stroke colour at its start to the end colour at its end,
+measured on the piece a trim leaves and carried across the gaps between dashes. The width,
+the taper, the dashes and the opacity apply as they do to a flat outline.
+
 ### Gradient stops
 
 Click the ramp on the **Gradient stops** row to open its editor. The handles at either end

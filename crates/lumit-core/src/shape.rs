@@ -150,6 +150,11 @@ pub struct ShapeItem {
     /// two-colour ramp, and is absent from the file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gradient_stops: Vec<GradientStop>,
+    /// **A gradient outline**: the stroke's colour ramping to others across
+    /// the art or along the line. `None` is the flat
+    /// [`stroke`](Self::stroke) colour, and is absent from the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_gradient: Option<gradient::StrokeGradient>,
     /// **A morphing path**: the shapes this item's path is keyed to,
     /// in the layer's own time. Empty is the still [`path`](Self::path) above,
     /// which is what every shape is until somebody keys its shape, and is
@@ -284,6 +289,7 @@ impl ShapeItem {
             gradient_start_opacity: crate::paint::full(),
             gradient_end_opacity: crate::paint::full(),
             gradient_stops: Vec::new(),
+            stroke_gradient: None,
             path_keys: Vec::new(),
             combine: 0,
             taper: None,
@@ -705,6 +711,13 @@ pub fn rasterise_contents(
             if let (Some(stroke), true) =
                 (item.stroke_shown().map(|c| colour::at(c, t)), width > 0.0)
             {
+                let outline_ramp = item.stroke_ramp_at(t, &to_box, sx, sy);
+                // A gradient outline marks where it covers in white, and the
+                // ramp colours what it marked.
+                let stroke = match outline_ramp {
+                    Some(_) => LinearColour([1.0; 4]),
+                    None => stroke,
+                };
                 // A stroke is a brush run along the path, which is exactly what the
                 // paint rasteriser already does — one widened-path implementation
                 // for both, rather than two that can disagree.
@@ -754,15 +767,31 @@ pub fn rasterise_contents(
                         extra: serde_json::Map::new(),
                     })
                     .collect();
-                crate::paint::apply_strokes(
-                    &mut rgba,
-                    w,
-                    h,
-                    max_x - min_x,
-                    max_y - min_y,
-                    &brushes,
-                    0.0,
-                );
+                let natural = (max_x - min_x, max_y - min_y);
+                match outline_ramp {
+                    None => crate::paint::apply_strokes(
+                        &mut rgba, w, h, natural.0, natural.1, &brushes, 0.0,
+                    ),
+                    Some(outline_ramp) => {
+                        // Along the line is measured on the lines before the
+                        // dashes cut them, so the colours run on across a gap.
+                        let lines = if outline_ramp.along() {
+                            art.lines(&placed)
+                        } else {
+                            Vec::new()
+                        };
+                        let reach = width * copy.scale() * sx.max(sy) / 2.0;
+                        gradient::paint_ramped(
+                            &mut rgba,
+                            (w, h),
+                            natural,
+                            &brushes,
+                            &outline_ramp,
+                            &lines,
+                            (sx, sy, reach),
+                        );
+                    }
+                }
             }
         }
     }
@@ -773,6 +802,7 @@ mod bend;
 pub mod colour;
 pub mod expand;
 pub mod geometry;
+pub mod gradient;
 pub mod modifier;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

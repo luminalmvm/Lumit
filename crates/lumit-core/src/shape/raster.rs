@@ -2,6 +2,7 @@
 //! combine, the dashes, and the outline an effect walks.
 
 use super::geometry::{densified, dist, flatten_path, polyline_path, transform_path, Affine};
+use super::gradient::{ALONG, RADIAL};
 use super::modifier::{self, Lowered, ShapeModifier};
 use super::{colour, GradientStop, ShapeItem, Taper, MAX_GRADIENT_STOPS};
 use crate::anim::Property;
@@ -91,84 +92,39 @@ impl ShapeItem {
         if self.gradient == 0 {
             return None;
         }
-        let from = colour::at(self.fill_shown()?, t);
-        let to = self
-            .gradient_colour
-            .unwrap_or(crate::model::LinearColour::BLACK);
-        let place = |x: f64, y: f64| {
-            let (x, y) = to_box.apply((x, y));
-            (x * sx, y * sy)
+        let source = RampSource {
+            kind: self.gradient,
+            // A fill has no length to run along, so it reads that as linear.
+            outline: false,
+            from: colour::at(self.fill_shown()?, t),
+            to: self
+                .gradient_colour
+                .unwrap_or(crate::model::LinearColour::BLACK),
+            start: [&self.gradient_start_x, &self.gradient_start_y],
+            end: [&self.gradient_end_x, &self.gradient_end_y],
+            opacity: [&self.gradient_start_opacity, &self.gradient_end_opacity],
+            stops: &self.gradient_stops,
         };
-        let start = place(
-            self.gradient_start_x.value_at(t),
-            self.gradient_start_y.value_at(t),
-        );
-        let end = place(
-            self.gradient_end_x.value_at(t),
-            self.gradient_end_y.value_at(t),
-        );
-        let axis = (end.0 - start.0, end.1 - start.1);
-        // One epsilon on the squared length, so the linear and the radial
-        // reading degenerate at exactly the same point — the Gradient effect's
-        // rule, and for the same reason.
-        let len2 = (axis.0 * axis.0 + axis.1 * axis.1).max(1e-6);
-        // Each end's opacity goes into its colour's alpha, so the table fades
-        // as it mixes.
-        let faded = |p: &Property| (p.value_at(t).clamp(0.0, 100.0) / 100.0) as f32;
-        let from_alpha = from.0[3] * faded(&self.gradient_start_opacity);
-        let to_alpha = to.0[3] * faded(&self.gradient_end_opacity);
-        // The ramp's colours in order: the fill, the stops between, then the
-        // gradient colour.
-        let mut between: Vec<(f64, &GradientStop)> = self
-            .gradient_stops
-            .iter()
-            .take(MAX_GRADIENT_STOPS)
-            .map(|s| (s.position.value_at(t), s))
-            .filter(|(at, _)| at.is_finite())
-            .collect();
-        between.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let mut points = Vec::with_capacity(between.len() + 2);
-        points.push((0.0f32, [from.0[0], from.0[1], from.0[2], from_alpha]));
-        for (at, stop) in between {
-            let c = stop.colour.0;
-            let alpha = c[3] * faded(&stop.opacity);
-            let at = (at.clamp(0.0, 100.0) / 100.0) as f32;
-            points.push((at, [c[0], c[1], c[2], alpha]));
-        }
-        points.push((1.0, [to.0[0], to.0[1], to.0[2], to_alpha]));
-        let mut lut = [[0u8; 4]; RAMP_STEPS];
-        let mut piece = 0;
-        for (i, cell) in lut.iter_mut().enumerate() {
-            let u = i as f32 / (RAMP_STEPS - 1) as f32;
-            // The piece of the ramp this step falls in. Stepping past a stop
-            // as soon as it is reached is what makes two at one place an edge.
-            while piece + 2 < points.len() && u >= points[piece + 1].0 {
-                piece += 1;
-            }
-            let (a_at, a) = points[piece];
-            let (b_at, b) = points[piece + 1];
-            let span = b_at - a_at;
-            let v = if span > 0.0 {
-                ((u - a_at) / span).clamp(0.0, 1.0)
-            } else {
-                1.0
-            };
-            let mix = crate::model::LinearColour([
-                a[0] + (b[0] - a[0]) * v,
-                a[1] + (b[1] - a[1]) * v,
-                a[2] + (b[2] - a[2]) * v,
-                a[3] + (b[3] - a[3]) * v,
-            ]);
-            *cell = crate::pixels::solid_rgba(mix);
-        }
-        Some(Ramp {
-            radial: self.gradient == 2,
-            start,
-            axis,
-            inv_len2: 1.0 / len2,
-            inv_len: 1.0 / len2.sqrt(),
-            lut,
-        })
+        Some(source.ramp(t, to_box, sx, sy))
+    }
+
+    /// [`Self::ramp_at`] for the outline: `None` for the flat stroke colour.
+    pub(super) fn stroke_ramp_at(&self, t: f64, to_box: &Affine, sx: f64, sy: f64) -> Option<Ramp> {
+        let g = self.stroke_gradient.as_ref().filter(|g| g.kind != 0)?;
+        let source = RampSource {
+            kind: g.kind,
+            outline: true,
+            from: colour::at(self.stroke_shown()?, t),
+            to: g
+                .colour
+                .as_ref()
+                .map_or(crate::model::LinearColour::BLACK, |c| colour::at(c, t)),
+            start: [&g.start_x, &g.start_y],
+            end: [&g.end_x, &g.end_y],
+            opacity: [&g.start_opacity, &g.end_opacity],
+            stops: &g.stops,
+        };
+        Some(source.ramp(t, to_box, sx, sy))
     }
 
     /// The dash pattern at `t` in layer pixels, evened out — empty when the
@@ -372,19 +328,7 @@ impl<'a> Art<'a> {
         } else {
             Vec::new()
         };
-        let lines: Vec<Vec<(f64, f64)>> = placed
-            .iter()
-            .map(|path| {
-                let mut points: Vec<(f64, f64)> = match &self.lines {
-                    Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
-                    None => flatten_path(path),
-                };
-                if let (true, Some(&first)) = (self.ring, points.first()) {
-                    points.push(first);
-                }
-                points
-            })
-            .collect();
+        let lines = self.lines(placed);
         // The taper is laid along the whole line before the dashes cut it,
         // so each dash is as wide as the outline is where it falls.
         let lines: Vec<Pressed> = match (&item.taper, outlined) {
@@ -404,6 +348,24 @@ impl<'a> Art<'a> {
                         item.dash_offset.value_at(t) * scale,
                     )
                 }
+            })
+            .collect()
+    }
+
+    /// The lines the outline runs along for one copy's `placed` paths, whole,
+    /// before a taper or the dashes have had them.
+    pub(super) fn lines(&self, placed: &[BezierPath]) -> Vec<Vec<(f64, f64)>> {
+        placed
+            .iter()
+            .map(|path| {
+                let mut points: Vec<(f64, f64)> = match &self.lines {
+                    Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
+                    None => flatten_path(path),
+                };
+                if let (true, Some(&first)) = (self.ring, points.first()) {
+                    points.push(first);
+                }
+                points
             })
             .collect()
     }
@@ -488,7 +450,102 @@ pub(super) fn walked(
     }
 }
 
-/// A gradient fill worked out for one drawn copy: the ramp's geometry in the
+/// What a ramp is made of at one instant, borrowed from a fill's numbers or
+/// an outline's gradient: the reading, the two ends, the two points that aim
+/// it and the stops between.
+pub(super) struct RampSource<'a> {
+    pub(super) kind: u32,
+    /// Drawn on an outline, which alone can be ramped along its own line.
+    pub(super) outline: bool,
+    pub(super) from: crate::model::LinearColour,
+    pub(super) to: crate::model::LinearColour,
+    pub(super) start: [&'a Property; 2],
+    pub(super) end: [&'a Property; 2],
+    pub(super) opacity: [&'a Property; 2],
+    pub(super) stops: &'a [GradientStop],
+}
+
+impl RampSource<'_> {
+    /// The ramp at `t`, placed by `to_box` and scaled into the buffer's
+    /// pixels.
+    pub(super) fn ramp(&self, t: f64, to_box: &Affine, sx: f64, sy: f64) -> Ramp {
+        let (from, to) = (self.from, self.to);
+        let place = |p: [&Property; 2]| {
+            let (x, y) = to_box.apply((p[0].value_at(t), p[1].value_at(t)));
+            (x * sx, y * sy)
+        };
+        let (start, end) = (place(self.start), place(self.end));
+        let axis = (end.0 - start.0, end.1 - start.1);
+        // One epsilon on the squared length, so the linear and the radial
+        // reading degenerate at exactly the same point — the Gradient effect's
+        // rule, and for the same reason.
+        let len2 = (axis.0 * axis.0 + axis.1 * axis.1).max(1e-6);
+        // Each end's opacity goes into its colour's alpha, so the table fades
+        // as it mixes.
+        let faded = |p: &Property| (p.value_at(t).clamp(0.0, 100.0) / 100.0) as f32;
+        let from_alpha = from.0[3] * faded(self.opacity[0]);
+        let to_alpha = to.0[3] * faded(self.opacity[1]);
+        // The ramp's colours in order: the start colour, the stops between,
+        // then the end colour.
+        let mut between: Vec<(f64, &GradientStop)> = self
+            .stops
+            .iter()
+            .take(MAX_GRADIENT_STOPS)
+            .map(|s| (s.position.value_at(t), s))
+            .filter(|(at, _)| at.is_finite())
+            .collect();
+        between.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut points = Vec::with_capacity(between.len() + 2);
+        points.push((0.0f32, [from.0[0], from.0[1], from.0[2], from_alpha]));
+        for (at, stop) in between {
+            let c = stop.colour.0;
+            let alpha = c[3] * faded(&stop.opacity);
+            let at = (at.clamp(0.0, 100.0) / 100.0) as f32;
+            points.push((at, [c[0], c[1], c[2], alpha]));
+        }
+        points.push((1.0, [to.0[0], to.0[1], to.0[2], to_alpha]));
+        let mut lut = [[0u8; 4]; RAMP_STEPS];
+        let mut piece = 0;
+        for (i, cell) in lut.iter_mut().enumerate() {
+            let u = i as f32 / (RAMP_STEPS - 1) as f32;
+            // The piece of the ramp this step falls in. Stepping past a stop
+            // as soon as it is reached is what makes two at one place an edge.
+            while piece + 2 < points.len() && u >= points[piece + 1].0 {
+                piece += 1;
+            }
+            let (a_at, a) = points[piece];
+            let (b_at, b) = points[piece + 1];
+            let span = b_at - a_at;
+            let v = if span > 0.0 {
+                ((u - a_at) / span).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            let mix = crate::model::LinearColour([
+                a[0] + (b[0] - a[0]) * v,
+                a[1] + (b[1] - a[1]) * v,
+                a[2] + (b[2] - a[2]) * v,
+                a[3] + (b[3] - a[3]) * v,
+            ]);
+            *cell = crate::pixels::solid_rgba(mix);
+        }
+        let shape = match self.kind {
+            RADIAL => RampShape::Radial,
+            ALONG if self.outline => RampShape::Along,
+            _ => RampShape::Linear,
+        };
+        Ramp {
+            shape,
+            start,
+            axis,
+            inv_len2: 1.0 / len2,
+            inv_len: 1.0 / len2.sqrt(),
+            lut,
+        }
+    }
+}
+
+/// A gradient worked out for one drawn copy: the ramp's geometry in the
 /// **buffer's** own pixels, and the colours it runs through as a lookup table.
 ///
 /// A table rather than a lerp per pixel because the two ends are scene-linear
@@ -496,7 +553,7 @@ pub(super) fn walked(
 /// after, which is a transcendental per pixel done honestly and a table lookup
 /// done sensibly. 256 steps is finer than the 8-bit result can show.
 pub(super) struct Ramp {
-    radial: bool,
+    shape: RampShape,
     start: (f64, f64),
     axis: (f64, f64),
     inv_len2: f64,
@@ -504,11 +561,27 @@ pub(super) struct Ramp {
     lut: [[u8; 4]; RAMP_STEPS],
 }
 
+/// How a pixel finds its place on a ramp.
+#[derive(Clone, Copy, PartialEq)]
+enum RampShape {
+    Linear,
+    Radial,
+    /// How far along the outline's own line the pixel is, which the pixel
+    /// alone cannot say: the outline's painter measures it.
+    Along,
+}
+
 /// How many colours a gradient is worked out at. One per 8-bit level, so the
 /// table cannot be the thing you can see.
 const RAMP_STEPS: usize = 256;
 
 impl Ramp {
+    /// Whether the ramp runs along the outline's line rather than across the
+    /// picture.
+    pub(super) fn along(&self) -> bool {
+        self.shape == RampShape::Along
+    }
+
     /// The colour at a pixel centre, `[r, g, b]` encoded and the alpha 0..1.
     pub(super) fn at(&self, x: f64, y: f64) -> ([u8; 3], f32) {
         let (dx, dy) = (x - self.start.0, y - self.start.1);
@@ -517,12 +590,17 @@ impl Ramp {
         // point on the outer edge. Both reciprocals were floored against one
         // epsilon when the ramp was built, so a zero-length axis is one flat
         // colour rather than a division by zero (docs/14 §4).
-        let along = if self.radial {
+        let along = if self.shape == RampShape::Radial {
             (dx * dx + dy * dy).sqrt() * self.inv_len
         } else {
             (dx * self.axis.0 + dy * self.axis.1) * self.inv_len2
         };
-        let i = (along.clamp(0.0, 1.0) * (RAMP_STEPS - 1) as f64).round() as usize;
+        self.at_place(along)
+    }
+
+    /// The colour `u` of the way along the ramp, 0..1.
+    pub(super) fn at_place(&self, u: f64) -> ([u8; 3], f32) {
+        let i = (u.clamp(0.0, 1.0) * (RAMP_STEPS - 1) as f64).round() as usize;
         let c = self.lut[i.min(RAMP_STEPS - 1)];
         ([c[0], c[1], c[2]], f32::from(c[3]) / 255.0)
     }
