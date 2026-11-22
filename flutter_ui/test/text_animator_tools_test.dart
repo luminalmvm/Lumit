@@ -107,6 +107,13 @@ void main() {
     expect(out[2].follow, 'Arrive 2');
     // A copy linked to one not copied keeps its link.
     expect(animatorsPasted([arrive], [fade]).last.follow, 'Arrive');
+    // A preset laying two of one name, put on twice: the pair keeps one
+    // name, free of the first pair's.
+    final tracking = freshTextAnimator('Tracking in');
+    expect(
+        animatorsPasted([tracking, tracking], [tracking, tracking])
+            .map((x) => x.name),
+        ['Tracking in', 'Tracking in', 'Tracking in 2', 'Tracking in 2']);
   });
 
   test('a Stagger with Total duration spreads over Delay whatever the length',
