@@ -1004,6 +1004,13 @@ class CompositionReference {
         that: this,
       );
 
+  /// Whether the comp's layers mix in display values, as a browser mixes
+  /// them, rather than in linear light.
+  bool blendsInDisplay() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceBlendsInDisplay(
+        that: this,
+      );
+
   /// Which frames of this composition are held, one byte each — **two
   /// nibbles**, because the bar says not just "cached" but "cached at what
   /// size" (docs/15 §6.3).
@@ -3375,6 +3382,11 @@ class CompositionReference {
   void setBeatGrid({BridgeBeatGrid? grid}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
           that: this, grid: grid);
+
+  /// Switch it, as one undo step.
+  void setBlendsInDisplay({required bool on_}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetBlendsInDisplay(
+          that: this, on_: on_);
 
   /// Look at this comp in Viewer view `view` through `pose` rather than its
   /// active camera, or through the active camera again with `None`, and

@@ -553,6 +553,28 @@ impl CompositionReference {
         })
     }
 
+    /// Whether the comp's layers mix in display values, as a browser mixes
+    /// them, rather than in linear light.
+    #[frb(sync)]
+    pub fn blends_in_display(&self) -> Result<bool, BridgeError> {
+        use lumit_core::model::blending::CompBlending;
+        Ok(self.composition()?.blending == CompBlending::Display)
+    }
+
+    /// Switch it, as one undo step.
+    #[frb(sync)]
+    pub fn set_blends_in_display(&self, on: bool) -> Result<(), BridgeError> {
+        use lumit_core::model::blending::CompBlending;
+        self.commit(lumit_core::ops::Op::SetCompBlending {
+            comp: self.id,
+            blending: if on {
+                CompBlending::Display
+            } else {
+                CompBlending::Linear
+            },
+        })
+    }
+
     /// How many frames the comp is long at its own rate — the Timeline's axis,
     /// and one past the last frame the transport can reach.
     ///
