@@ -2,6 +2,9 @@
 // waves, one per colour channel, are fed back into each other Depth times,
 // each pass bending the next by Distortion, so the bands fold into loops and
 // eyes. Evolution moves through the pattern and loops every 360 degrees.
+//
+// The first three waves and the closing colour follow svm_magic in Blender
+// Cycles, Apache-2.0.
 
 struct Params {
     /// @counter(0, 10) @default(2) Depth
