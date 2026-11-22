@@ -248,3 +248,126 @@ fn selector_numbers(kind: SelectorKind) -> &'static [(&'static str, &'static str
         ],
     }
 }
+
+/// Where each of `old`'s animators is in `new`, or `None` for one that is
+/// gone. Animators are matched by name, the n-th of a name to the n-th of it
+/// (a preset may lay two of one name); those left over on both sides, when as
+/// many are left on each, are taken as renamed, in order.
+#[must_use]
+pub fn animator_moves(old: &[TextAnimator], new: &[TextAnimator]) -> Vec<Option<usize>> {
+    let nth = |list: &[TextAnimator], i: usize| {
+        list[..i].iter().filter(|a| a.name == list[i].name).count()
+    };
+    let mut taken = vec![false; new.len()];
+    let mut out: Vec<Option<usize>> = (0..old.len())
+        .map(|i| {
+            let n = nth(old, i);
+            let j = (0..new.len()).find(|&j| new[j].name == old[i].name && nth(new, j) == n)?;
+            taken[j] = true;
+            Some(j)
+        })
+        .collect();
+    let lost: Vec<usize> = (0..old.len()).filter(|&i| out[i].is_none()).collect();
+    let fresh: Vec<usize> = (0..new.len()).filter(|&j| !taken[j]).collect();
+    if lost.len() == fresh.len() {
+        for (i, j) in lost.into_iter().zip(fresh) {
+            out[i] = Some(j);
+        }
+    }
+    out
+}
+
+/// Where each of `old`'s selectors is in `new`, the same animator before and
+/// after an edit: one fewer is the first that differs taken out, more are
+/// added at the end.
+fn selector_moves(old: &TextAnimator, new: &TextAnimator) -> Vec<Option<usize>> {
+    let (before, after) = (old.all_selectors().count(), new.all_selectors().count());
+    if after + 1 == before {
+        let gone = (0..before)
+            .find(|&k| old.selector_at(k) != new.selector_at(k))
+            .unwrap_or(before - 1);
+        return (0..before)
+            .map(|k| match k.cmp(&gone) {
+                std::cmp::Ordering::Less => Some(k),
+                std::cmp::Ordering::Equal => None,
+                std::cmp::Ordering::Greater => Some(k - 1),
+            })
+            .collect();
+    }
+    (0..before).map(|k| (k < after).then_some(k)).collect()
+}
+
+/// A selector's number named on a port: which selector, and the number.
+fn selector_of(name: &str) -> Option<(usize, &str)> {
+    let is_selector = |n: &str| {
+        [
+            SelectorKind::Range,
+            SelectorKind::Proximity,
+            SelectorKind::Wiggly,
+            SelectorKind::Stagger,
+        ]
+        .iter()
+        .any(|&kind| selector_numbers(kind).iter().any(|(p, _)| *p == n))
+    };
+    if let Some((k, rest)) = name.strip_prefix('s').and_then(|r| r.split_once('.')) {
+        if !k.is_empty() && k.bytes().all(|b| b.is_ascii_digit()) {
+            return Some((k.parse().ok()?, rest));
+        }
+    }
+    is_selector(name).then_some((0, name))
+}
+
+/// Move the wires into a Text layer's animator numbers along with the
+/// animators, when its list goes from `old` to `new`: a wire follows its
+/// animator (and selector) to its new place, and one into an animator or a
+/// selector that is gone is taken off. True when anything changed.
+pub fn remap_text_ports(
+    graph: &mut crate::graph::LayerGraph,
+    old: &[TextAnimator],
+    new: &[TextAnimator],
+) -> bool {
+    use crate::graph::{InputRef, NodeRef};
+    let moves = animator_moves(old, new);
+    let mut changed = false;
+    graph.edges.retain_mut(|edge| {
+        let InputRef::Param {
+            node: NodeRef::Source,
+            port,
+        } = &mut edge.to
+        else {
+            return true;
+        };
+        let Some((index, name)) = parse_animator_port(port) else {
+            return true;
+        };
+        // A wire into no animator stays as it was found.
+        let Some(&moved) = moves.get(index) else {
+            return true;
+        };
+        let Some(to) = moved else {
+            changed = true;
+            return false;
+        };
+        let name = match selector_of(name) {
+            Some((k, number)) => {
+                let Some(Some(k2)) = selector_moves(&old[index], &new[to]).get(k).copied() else {
+                    changed = true;
+                    return false;
+                };
+                if k2 == 0 {
+                    number.to_owned()
+                } else {
+                    format!("s{k2}.{number}")
+                }
+            }
+            None => name.to_owned(),
+        };
+        let next = animator_port(to, &name);
+        if next != *port {
+            *port = next;
+            changed = true;
+        }
+        true
+    });
+    changed
+}

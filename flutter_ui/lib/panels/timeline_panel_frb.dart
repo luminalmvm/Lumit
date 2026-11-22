@@ -2894,7 +2894,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       try {
         if (all.contains(id)) {
           if (entry.layer.getText()?.animators.isEmpty ?? true) continue;
-          removeTextAnimators(entry.layer);
+          removeTextAnimators(entry.layer, ui: _ui);
           deleted = true;
           continue;
         }
@@ -2909,7 +2909,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final gone = (whole[id]?.toList() ?? [])..sort((a, b) => b - a);
         for (final index in gone) {
           if (index < entry.layer.getText()!.animators.length) {
-            removeTextAnimators(entry.layer, index: index);
+            removeTextAnimators(entry.layer, index: index, ui: _ui);
             deleted = true;
           }
         }

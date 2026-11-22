@@ -512,11 +512,16 @@ pub enum Op {
         layer: Uuid,
         collapse: bool,
     },
-    /// Replace a Text layer's document (exactly invertible).
+    /// Replace a Text layer's document (exactly invertible). The wires into
+    /// its animators' numbers follow the animators when they are moved,
+    /// renamed or taken out; `graph`, when set, is the layer graph to put
+    /// back instead, which is how the inverse restores the wires exactly.
     SetTextDocument {
         comp: Uuid,
         layer: Uuid,
         document: crate::model::TextDocument,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        graph: Option<crate::graph::LayerGraph>,
     },
     /// Change a Text layer's captions ([`crate::captions::CaptionsEdit`]).
     EditCaptions {
@@ -2038,6 +2043,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             comp,
             layer,
             document,
+            graph,
         } => {
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
             let l = c
@@ -2045,6 +2051,21 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
+            // The wires into the animators' numbers follow the animators, or
+            // the graph the inverse carries is put back.
+            let previous_graph = match (graph, &l.kind) {
+                (Some(g), _) => Some(std::mem::replace(&mut l.graph, g.clone())),
+                (None, crate::model::LayerKind::Text { document: current }) => {
+                    let mut g = l.graph.clone();
+                    crate::text::ports::remap_text_ports(
+                        &mut g,
+                        &current.animators,
+                        &document.animators,
+                    )
+                    .then(|| std::mem::replace(&mut l.graph, g))
+                }
+                (None, _) => None,
+            };
             let crate::model::LayerKind::Text { document: current } = &mut l.kind else {
                 return Err(OpError::UnknownLayer);
             };
@@ -2058,6 +2079,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 document: previous,
+                graph: previous_graph,
             })
         }
         Op::SetWorkArea { comp, work_area } => {

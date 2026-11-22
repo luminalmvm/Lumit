@@ -54,6 +54,38 @@ void main() {
     expect(animatorsMoved(out, 1, 0).map((x) => x.name), ['Fade', 'Drop']);
   });
 
+  test('animators are followed by name through a move, a removal and a rename',
+      () {
+    final a = freshTextAnimator('A');
+    final b = freshTextAnimator('B');
+    final c = freshTextAnimator('C');
+    expect(animatorMoves([a, b, c], [c, a, b]), [1, 2, 0]);
+    expect(animatorMoves([a, b, c], [a, c]), [0, null, 1]);
+    expect(animatorMoves([a, b], [a, animatorWith(b, name: 'Wave')]), [0, 1]);
+    // Two of one name, as a preset lays: the first to the first.
+    expect(animatorMoves([a, a, b], [b, a, a]), [1, 2, 0]);
+    expect(movedAnimatorKey('L/animators/2/advanced', 'L/animators/', [1, 2, 0]),
+        'L/animators/0/advanced');
+    expect(movedAnimatorKey('L/animators/1', 'L/animators/', [0, null, 1]), isNull);
+    expect(movedAnimatorKey('L/transform', 'L/animators/', [1, 0]), 'L/transform');
+  });
+
+  test('a rename never takes another animator''s name', () {
+    final out = animatorsRenamed(
+        [freshTextAnimator('A'), freshTextAnimator('B')], 1, 'A');
+    expect(out.map((x) => x.name), ['A', 'A 2']);
+  });
+
+  test('a pasted pair stays linked under its new names', () {
+    final arrive = freshTextAnimator('Arrive');
+    final fade = animatorWith(freshTextAnimator('Fade'), follow: 'Arrive');
+    final out = animatorsPasted([arrive], [arrive, fade]);
+    expect(out.map((x) => x.name), ['Arrive', 'Arrive 2', 'Fade']);
+    expect(out[2].follow, 'Arrive 2');
+    // A copy linked to one not copied keeps its link.
+    expect(animatorsPasted([arrive], [fade]).last.follow, 'Arrive');
+  });
+
   test('a Stagger with Total duration spreads over Delay whatever the length',
       () {
     final s = selectorWith(freshSelector(BridgeSelectorKind.stagger),
