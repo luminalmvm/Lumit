@@ -68,12 +68,28 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
             "jitter_z",
         ],
     ),
-    // The rows only Rings reads.
+    // The rows Rings and Sphere read.
     ParamGroup {
         label: "",
-        params: &["start_angle", "arc", "inner_radius"],
+        params: &["start_angle", "arc"],
+        collapsed: false,
+        visible_when: Some(("layout", &[2, 6])),
+        visible_when_lens_elements: None,
+    },
+    // The row only Rings reads.
+    ParamGroup {
+        label: "",
+        params: &["inner_radius"],
         collapsed: false,
         visible_when: Some(("layout", &[2])),
+        visible_when_lens_elements: None,
+    },
+    // The rows only Sphere reads.
+    ParamGroup {
+        label: "",
+        params: &["tilt", "open_top"],
+        collapsed: false,
+        visible_when: Some(("layout", &[6])),
         visible_when_lens_elements: None,
     },
     ParamGroup {
@@ -125,6 +141,8 @@ const POINTS_ONLY: &[&str] = &[
     "start_angle",
     "arc",
     "inner_radius",
+    "tilt",
+    "open_top",
     "size",
     "feather",
     "max_points",
@@ -147,14 +165,25 @@ pub const GRID_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("corner_y", "size_from", EnabledCond::ChoiceIs(1)),
     grey("spacing_x", "fit", EnabledCond::BoolIs(false)),
     grey("spacing_x", "layout", EnabledCond::ChoiceIsNot(5)),
+    grey("spacing_x", "layout", EnabledCond::ChoiceIsNot(6)),
     grey("spacing_y", "fit", EnabledCond::BoolIs(false)),
     grey("spacing_y", "layout", EnabledCond::ChoiceIsNot(4)),
     grey("spacing_y", "layout", EnabledCond::ChoiceIsNot(5)),
+    grey("spacing_y", "layout", EnabledCond::ChoiceIsNot(6)),
     grey("spacing_z", "layout", EnabledCond::ChoiceIsNot(5)),
     grey("fit", "layout", EnabledCond::ChoiceIsNot(5)),
-    grey("width", "fit", EnabledCond::BoolIs(true)),
+    grey("fit", "layout", EnabledCond::ChoiceIsNot(6)),
+    grey(
+        "width",
+        "layout",
+        EnabledCond::Or("fit", &EnabledCond::ChoiceIs(6)),
+    ),
     grey("width", "layout", EnabledCond::ChoiceIsNot(5)),
-    grey("height", "fit", EnabledCond::BoolIs(true)),
+    grey(
+        "height",
+        "layout",
+        EnabledCond::Or("fit", &EnabledCond::ChoiceIs(6)),
+    ),
     grey("height", "layout", EnabledCond::ChoiceIsNot(4)),
     grey("height", "layout", EnabledCond::ChoiceIsNot(5)),
 ];
@@ -185,6 +214,10 @@ pub enum GridLayout {
     /// Every point at Position, on top of each other until a Jitter or an
     /// effect below moves them apart.
     Point,
+    /// Rows become circles of latitude from the top of a ball to the bottom,
+    /// and Columns the points round each, so the points sit in depth. Width
+    /// and Height are the ball's size.
+    Sphere,
 }
 
 impl GridLayout {
@@ -197,6 +230,7 @@ impl GridLayout {
         "Spiral",
         "Hexagons",
         "Point",
+        "Sphere",
     ];
 
     /// The layout for a stored Choice index. Anything unknown is Rows.
@@ -208,6 +242,7 @@ impl GridLayout {
             3 => GridLayout::Spiral,
             4 => GridLayout::Hexagons,
             5 => GridLayout::Point,
+            6 => GridLayout::Sphere,
             _ => GridLayout::Rows,
         }
     }
@@ -420,6 +455,23 @@ pub struct Grid {
         unit = Px
     )]
     pub inner_radius: f32,
+
+    /// Sphere: how far the ball leans its top towards the camera, degrees.
+    #[dial(label = "Tilt", default = 0.0)]
+    pub tilt: f32,
+
+    /// Sphere: how much of the ball is left open from the top, as an angle
+    /// down from the top. At 0 it is closed, at 90 a bowl, at 180 nothing.
+    #[slider(
+        label = "Open top",
+        min = 0.0,
+        max = 180.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 180.0,
+        unit = Degrees
+    )]
+    pub open_top: f32,
 
     /// Lines: how big a cell is. Grid size is Sapphire's way, the boxes
     /// sharing the grid's size, and Corner point is After Effects', Position
@@ -766,8 +818,34 @@ impl Grid {
                         k.sqrt() * turn.sin() * step_y,
                     )
                 }
-                GridLayout::Point => (0.0, 0.0),
+                GridLayout::Point | GridLayout::Sphere => (0.0, 0.0),
             }
+        };
+        // Where cell (column, row) sits on the ball, from its centre, or
+        // nothing for a repeat of a pole or a point in the open top. Row 0 is
+        // the top, column 0 faces the camera, and Tilt leans the top towards
+        // it. Depth is positive away from the camera.
+        let (rx, ry) = (0.5 * self.width.max(0.0), 0.5 * self.height.max(0.0));
+        let open = self.open_top.clamp(0.0, 180.0);
+        let (lean_sin, lean_cos) = self.tilt.to_radians().sin_cos();
+        let ball = |c: i32, j: i32| -> Option<(f32, f32, f32)> {
+            let round = c as f32 / arc_gaps as f32 * (arc / 360.0) * std::f32::consts::TAU;
+            let down = if rows > 1 {
+                j as f32 / (rows - 1) as f32
+            } else {
+                0.0
+            };
+            let polar = (open + (180.0 - open) * down).to_radians();
+            if open >= 180.0 || (c > 0 && polar.sin() < 1e-4) {
+                return None;
+            }
+            let turn = round + self.start_angle.to_radians();
+            let (x, y, z) = (
+                polar.sin() * turn.sin() * rx,
+                -polar.cos() * ry,
+                -polar.sin() * turn.cos() * rx,
+            );
+            Some((x, y * lean_cos - z * lean_sin, z * lean_cos + y * lean_sin))
         };
         let depth = if layout == GridLayout::Point {
             0.0
@@ -786,12 +864,25 @@ impl Grid {
                         i += 1;
                         continue;
                     }
+                    let (across, down, deep) = if layout == GridLayout::Sphere {
+                        match ball(c, j) {
+                            Some(p) => p,
+                            // A pole is one point, and the open top has none.
+                            None => {
+                                i += 1;
+                                continue;
+                            }
+                        }
+                    } else {
+                        let (across, down) = cell(c, j);
+                        (across, down, 0.0)
+                    };
                     let die = |attr| points::draw(self.seed, i, attr) - 0.5;
-                    let (across, down) = cell(c, j);
                     out.position.push([
                         self.position_x + across + die(attr::JITTER_X) * self.jitter_x,
                         self.position_y + down + die(attr::JITTER_Y) * self.jitter_y,
                         self.position_z
+                            + deep
                             + (k as f32 - half(planes)) * depth
                             + die(attr::JITTER_Z) * self.jitter_z,
                     ]);

@@ -6301,6 +6301,10 @@
   "@fxStartAngle": {
     "description": "Effect controls — a control on Radial wipe: where the sweep begins."
   },
+  "fxOpenTop": "Open top",
+  "@fxOpenTop": {
+    "description": "Effect controls — a control on Grid's Sphere layout: how much of the ball is left open from the top."
+  },
   "fxStartColour": "Start colour",
   "@fxStartColour": {
     "description": "Effect controls — a control on Gradient."
@@ -32768,7 +32772,7 @@
   },
   "fxTilt": "Tilt",
   "@fxTilt": {
-    "description": "Effect controls: a group heading on Holographic foil, how the sheet is tipped toward the viewer."
+    "description": "Effect controls: a group heading on Holographic foil, how the sheet is tipped toward the viewer; and a control on Grid's Sphere layout, how far the ball leans its top towards the camera."
   },
   "fxTiltX": "Tilt x",
   "@fxTiltX": {

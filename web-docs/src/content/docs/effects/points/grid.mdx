@@ -26,7 +26,7 @@ Lines emits no points.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Type** | Dropdown | Points · Lines | Points | - |
-| **Layout** | Dropdown | Rows · Offset rows · Rings · Spiral · Hexagons · Point | Rows | - |
+| **Layout** | Dropdown | Rows · Offset rows · Rings · Spiral · Hexagons · Point · Sphere | Rows | - |
 | **Columns** | Slider, whole numbers | 1 to 100; up to 1000 | 10 | - |
 | **Rows** | Slider, whole numbers | 1 to 100; up to 1000 | 6 | - |
 | **Planes** | Slider, whole numbers | 1 to 100; up to 1000 | 1 | - |
@@ -45,6 +45,8 @@ Lines emits no points.
 | **Start angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Arc** | Slider | 0 to 360 | 360 | Degrees |
 | **Inner radius** | Slider | 0 to 1000; higher | 0 | Pixels at composition size |
+| **Tilt** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Open top** | Slider | 0 to 180 | 0 | Degrees |
 | **Size from** | Dropdown | Grid size · Corner point | Grid size | - |
 | **Boxes x** | Slider, whole numbers | 1 to 100; up to 1000 | 24 | - |
 | **Boxes y** | Slider, whole numbers | 1 to 100; up to 1000 | 16 | - |
@@ -87,14 +89,17 @@ In the Effect Controls panel:
 - **Corner y** is editable while **Size from** is set to Corner point.
 - **Spacing x** is editable while **Fit to size** is off.
 - **Spacing x** is editable while **Layout** is anything but Point.
+- **Spacing x** is editable while **Layout** is anything but Sphere.
 - **Spacing y** is editable while **Fit to size** is off.
 - **Spacing y** is editable while **Layout** is anything but Hexagons.
 - **Spacing y** is editable while **Layout** is anything but Point.
+- **Spacing y** is editable while **Layout** is anything but Sphere.
 - **Spacing z** is editable while **Layout** is anything but Point.
 - **Fit to size** is editable while **Layout** is anything but Point.
-- **Width** is editable while **Fit to size** is on.
+- **Fit to size** is editable while **Layout** is anything but Sphere.
+- **Width** is editable while **Fit to size** is on, or **Layout** is set to Sphere.
 - **Width** is editable while **Layout** is anything but Point.
-- **Height** is editable while **Fit to size** is on.
+- **Height** is editable while **Fit to size** is on, or **Layout** is set to Sphere.
 - **Height** is editable while **Layout** is anything but Hexagons.
 - **Height** is editable while **Layout** is anything but Point.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
@@ -112,8 +117,11 @@ In the Effect Controls panel:
   centre, like a sunflower's seeds, and the spacings set how tightly. **Hexagons** packs
   offset rows as a honeycomb, every point the same distance from its six neighbours, and
   works the gap between rows out from Spacing x. **Point** puts every point at Position,
-  one on top of another until a Jitter or an effect below moves them apart. Every layout has
-  Columns times Rows points on each plane.
+  one on top of another until a Jitter or an effect below moves them apart. **Sphere** makes
+  Rows circles of latitude from the top of a ball to the bottom and Columns the points round
+  each, with one point at each pole. Its points sit in depth, which only shows once the
+  layer is 3D and the composition has a camera. Every layout has Columns times Rows points
+  on each plane.
 - **Columns**, **Rows** and **Planes**: how many cells across, down, and through the layer's
   plane. Planes at 1 is flat, which is what a 2D layer wants. More than one only shows once
   the layer is 3D and the composition has a camera. See [Cameras and 3D](/use/camera/).
@@ -122,19 +130,23 @@ In the Effect Controls panel:
 - **Fit to size**: fits the layout into Width and Height in place of Spacing x and Spacing
   y. It stays that size however many points it holds.
 - **Width** and **Height**: how wide and tall the fitted layout is. Rings and Spiral read
-  them as their diameter across and down.
+  them as their diameter across and down, and Sphere as the ball's size.
 - **Position x**, **Position y** and **Position z**: where the middle of the lattice sits.
   Position z is how far in front of or behind the layer's own plane it floats. Nought is on
   the plane.
 - **Jitter x**, **Jitter y** and **Jitter z**: how far a cell may wander off its place.
   Each cell gets the same nudge every frame.
 - **Seed**: which jitter. Reseed to roll a different one.
-- **Start angle**: where round a ring its first point sits. It shows for Rings, as do the
-  next two.
+- **Start angle**: where round a ring its first point sits. Sphere turns the ball about its
+  upright axis by it. It shows for Rings and Sphere, as does the next.
 - **Arc**: how much of the circle a ring covers. A whole circle spaces its points evenly
   round it, and anything less puts one at each end.
-- **Inner radius**: how far out the rings start. With the spacings it is added to every
+- **Inner radius**: Rings only. How far out the rings start. With the spacings it is added to every
   ring. Fitted, it is the innermost ring, and at 0 that ring is one point at the centre.
+- **Tilt**: how far the ball leans its top towards the camera. It shows for Sphere, as does
+  the next.
+- **Open top**: how much of the ball is left open from the top, as an angle down from it.
+  At 0 the ball is closed, at 90 it is a bowl, and at 180 nothing is left.
 - **Size**: the diameter of the disc a point is drawn as.
 - **Feather**: how soft that disc's edge is. At nought it is a hard circle.
 - **Colour**: what the discs are drawn in. Values above 1 are legal, and useful under a

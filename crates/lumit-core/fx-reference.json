@@ -15747,7 +15747,8 @@
             "Rings",
             "Spiral",
             "Hexagons",
-            "Point"
+            "Point",
+            "Sphere"
           ],
           "dividers_after": []
         },
@@ -15926,6 +15927,25 @@
           "slider_min": 0.0,
           "slider_max": 1000.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "tilt",
+          "label": "Tilt",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "open_top",
+          "label": "Open top",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
         },
         {
           "id": "size_from",
@@ -16255,7 +16275,20 @@
           "label": "",
           "params": [
             "start_angle",
-            "arc",
+            "arc"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "layout",
+            "values": [
+              2,
+              6
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
             "inner_radius"
           ],
           "collapsed": false,
@@ -16263,6 +16296,20 @@
             "param": "layout",
             "values": [
               2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "tilt",
+            "open_top"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "layout",
+            "values": [
+              6
             ]
           }
         },
@@ -16368,6 +16415,12 @@
           "value": 5
         },
         {
+          "param": "spacing_x",
+          "on": "layout",
+          "cond": "choice_is_not",
+          "value": 6
+        },
+        {
           "param": "spacing_y",
           "on": "fit",
           "cond": "bool_is",
@@ -16386,6 +16439,12 @@
           "value": 5
         },
         {
+          "param": "spacing_y",
+          "on": "layout",
+          "cond": "choice_is_not",
+          "value": 6
+        },
+        {
           "param": "spacing_z",
           "on": "layout",
           "cond": "choice_is_not",
@@ -16398,10 +16457,20 @@
           "value": 5
         },
         {
+          "param": "fit",
+          "on": "layout",
+          "cond": "choice_is_not",
+          "value": 6
+        },
+        {
           "param": "width",
-          "on": "fit",
-          "cond": "bool_is",
-          "value": true
+          "on": "layout",
+          "cond": "or",
+          "value": {
+            "cond": "choice_is",
+            "or": "fit",
+            "value": 6
+          }
         },
         {
           "param": "width",
@@ -16411,9 +16480,13 @@
         },
         {
           "param": "height",
-          "on": "fit",
-          "cond": "bool_is",
-          "value": true
+          "on": "layout",
+          "cond": "or",
+          "value": {
+            "cond": "choice_is",
+            "or": "fit",
+            "value": 6
+          }
         },
         {
           "param": "height",

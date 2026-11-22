@@ -1862,6 +1862,7 @@ Map<String, String> get _built => {
       "Standard": l10n.fxStandard,
       "Starburst intensity": l10n.fxStarburstIntensity,
       "Start angle": l10n.fxStartAngle,
+      "Open top": l10n.fxOpenTop,
       "Start colour": l10n.fxStartColour,
       "Start x": l10n.fxStartX,
       "Start y": l10n.fxStartY,
