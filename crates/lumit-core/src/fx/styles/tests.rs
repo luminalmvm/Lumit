@@ -386,7 +386,7 @@ fn a_gradient_overlay_is_clipped_to_the_alpha_and_reverses_in_place() {
         let p = g.packed(w, h);
         assert!(p.clip_to_alpha, "an overlay is not a generator");
         let mut px = before.clone();
-        cpu::gradient(&mut px, w, h, &p);
+        cpu::gradient::gradient(&mut px, w, h, &p);
         px
     };
     let plain = run(false);

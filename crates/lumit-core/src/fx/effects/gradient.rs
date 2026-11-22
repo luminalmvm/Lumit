@@ -191,13 +191,13 @@ impl Gradient {
     /// paths read this one method, so the CPU reference and the WGSL kernel
     /// cannot drift apart.
     #[must_use]
-    pub fn packed(self) -> cpu::GradientParams {
+    pub fn packed(self) -> cpu::gradient::GradientParams {
         let axis = [self.end_x - self.start_x, self.end_y - self.start_y];
         let len2 = axis[0] * axis[0] + axis[1] * axis[1];
         // One epsilon, applied to the squared length, so the linear and radial
         // reciprocals degenerate at exactly the same point.
         let len2 = len2.max(1e-6);
-        cpu::GradientParams {
+        cpu::gradient::GradientParams {
             radial: self.shape == 1,
             start: [self.start_x, self.start_y],
             axis,
@@ -247,7 +247,7 @@ impl EffectDef for GradientDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient(rgba, w, h, &Gradient::read(p).packed());
+        cpu::gradient::gradient(rgba, w, h, &Gradient::read(p).packed());
     }
 }
 
@@ -269,10 +269,10 @@ mod tests {
             ..plain()
         }
         .packed();
-        assert_eq!(cpu::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0]);
-        assert_eq!(cpu::gradient_ramp(&g, 0.0), [1.0, 1.0, 1.0]);
-        assert_eq!(cpu::gradient_ramp(&g, 1.0), [1.0, 1.0, 1.0]);
-        let quarter = cpu::gradient_ramp(&g, 0.25);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.0), [1.0, 1.0, 1.0]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 1.0), [1.0, 1.0, 1.0]);
+        let quarter = cpu::gradient::gradient_ramp(&g, 0.25);
         assert!((quarter[1] - 0.75).abs() < 1e-6);
         // Two colours ignore the ones in between.
         let two = Gradient {
@@ -280,6 +280,6 @@ mod tests {
             ..plain()
         }
         .packed();
-        assert_eq!(cpu::gradient_ramp(&two, 0.5), [0.5, 0.5, 0.5]);
+        assert_eq!(cpu::gradient::gradient_ramp(&two, 0.5), [0.5, 0.5, 0.5]);
     }
 }

@@ -54,7 +54,7 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
-// == lumit_core::fx::cpu::gradient_ramp: Start colour, the colours in
+// == lumit_core::fx::cpu::gradient::gradient_ramp: Start colour, the colours in
 // between that are in use, End colour.
 fn ramp(t: f32) -> vec3<f32> {
     var at = 0.0;

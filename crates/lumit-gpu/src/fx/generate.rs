@@ -31,7 +31,7 @@ struct FillParams {
 }
 
 /// One resolved Gradient (docs/08 §3.35). Mirrors
-/// `lumit_core::fx::cpu::GradientParams` field-for-field; both reciprocals
+/// `lumit_core::fx::cpu::gradient::GradientParams` field-for-field; both reciprocals
 /// arrive floored, so a zero-length axis collapses the ramp to one flat colour
 /// rather than faulting.
 #[derive(Debug, Clone, Copy, PartialEq)]

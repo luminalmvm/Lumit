@@ -455,7 +455,7 @@ impl GradientOverlay {
     // already have to. Trigger: an import comparison or a report where the
     // overlay reads flat.
     #[must_use]
-    pub fn packed(self, w: u32, h: u32) -> cpu::GradientParams {
+    pub fn packed(self, w: u32, h: u32) -> cpu::gradient::GradientParams {
         let theta = self.angle.to_radians();
         let (sin, cos) = theta.sin_cos();
         // "From straight up, clockwise" on a raster whose y grows downward —
@@ -483,7 +483,7 @@ impl GradientOverlay {
         } else {
             (self.colour_a, self.colour_b)
         };
-        cpu::GradientParams {
+        cpu::gradient::GradientParams {
             radial: self.gradient_type == 1,
             start,
             axis,
@@ -513,7 +513,7 @@ impl EffectDef for GradientOverlayDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient(rgba, w, h, &GradientOverlay::read(p).packed(w, h));
+        cpu::gradient::gradient(rgba, w, h, &GradientOverlay::read(p).packed(w, h));
     }
 }
 

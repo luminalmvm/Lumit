@@ -7365,7 +7365,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         };
 
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::gradient(&mut cpu, w, h, &p);
+        lumit_core::fx::cpu::gradient::gradient(&mut cpu, w, h, &p);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let out = fx.gradient(&ctx, &tex, w, h, &op);
