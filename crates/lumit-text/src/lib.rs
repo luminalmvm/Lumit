@@ -18,6 +18,7 @@ pub mod animated;
 pub mod blend;
 mod block_key;
 pub mod fonts;
+pub mod restyle;
 mod styled;
 
 use animated::{animator_margin, rasterise_line_animated, rasterise_on_path_animated};
