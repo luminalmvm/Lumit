@@ -53,8 +53,10 @@ Compression=lzma2
 SolidCompression=no
 
 [Types]
-Name: "full"; Description: "Lumit with DaVinci Resolve linking"
+; The first type is the default, and what a silent update picks over an install
+; made before these types existed. Resolve linking stays a choice.
 Name: "compact"; Description: "Lumit only"
+Name: "full"; Description: "Lumit with DaVinci Resolve linking"
 Name: "custom"; Description: "Custom installation"; Flags: iscustom
 
 [Components]
