@@ -2230,6 +2230,12 @@ class BridgeShapeItem {
   final BridgeScalar gradientStartOpacity;
   final BridgeScalar gradientEndOpacity;
 
+  /// A radial ramp's **highlight**: how far its centre sits off the start
+  /// point, per cent of the radius, and its angle from the line to the end
+  /// point in degrees. At 0 the ramp is centred.
+  final BridgeScalar gradientHighlight;
+  final BridgeScalar gradientHighlightAngle;
+
   /// The colours the ramp passes through between its two ends, in the order
   /// they were made. Empty is the plain two-colour ramp.
   final List<BridgeGradientStop> gradientStops;
@@ -2284,6 +2290,8 @@ class BridgeShapeItem {
     required this.gradientEndY,
     required this.gradientStartOpacity,
     required this.gradientEndOpacity,
+    required this.gradientHighlight,
+    required this.gradientHighlightAngle,
     required this.gradientStops,
     required this.combine,
     required this.hidden,
@@ -2314,6 +2322,8 @@ class BridgeShapeItem {
       gradientEndY.hashCode ^
       gradientStartOpacity.hashCode ^
       gradientEndOpacity.hashCode ^
+      gradientHighlight.hashCode ^
+      gradientHighlightAngle.hashCode ^
       gradientStops.hashCode ^
       combine.hashCode ^
       hidden.hashCode ^
@@ -2346,6 +2356,8 @@ class BridgeShapeItem {
           gradientEndY == other.gradientEndY &&
           gradientStartOpacity == other.gradientStartOpacity &&
           gradientEndOpacity == other.gradientEndOpacity &&
+          gradientHighlight == other.gradientHighlight &&
+          gradientHighlightAngle == other.gradientHighlightAngle &&
           gradientStops == other.gradientStops &&
           combine == other.combine &&
           hidden == other.hidden &&

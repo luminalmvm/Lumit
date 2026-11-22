@@ -1218,6 +1218,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStopPosition ||
         ShapeValue.gradientStopOpacity =>
           (0, 100, '%'),
+        // Per cent of the radius off the start point, either way.
+        ShapeValue.gradientHighlight => (-100, 100, '%'),
+        ShapeValue.gradientHighlightAngle => (-3600, 3600, '°'),
         ShapeValue.smoothAmount => (0, 1000, ' px'),
         ShapeValue.twistAngle ||
         ShapeValue.twistRotation ||

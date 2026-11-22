@@ -228,6 +228,11 @@ pub struct BridgeShapeItem {
     pub gradient_end_y: BridgeScalar,
     pub gradient_start_opacity: BridgeScalar,
     pub gradient_end_opacity: BridgeScalar,
+    /// A radial ramp's **highlight**: how far its centre sits off the start
+    /// point, per cent of the radius, and its angle from the line to the end
+    /// point in degrees. At 0 the ramp is centred.
+    pub gradient_highlight: BridgeScalar,
+    pub gradient_highlight_angle: BridgeScalar,
     /// The colours the ramp passes through between its two ends, in the order
     /// they were made. Empty is the plain two-colour ramp.
     pub gradient_stops: Vec<crate::api::shape::BridgeGradientStop>,

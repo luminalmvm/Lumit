@@ -41,6 +41,8 @@ impl BridgeShapeItem {
             gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
             gradient_start_opacity: BridgeScalar::read_at(&item.gradient_start_opacity, offset),
             gradient_end_opacity: BridgeScalar::read_at(&item.gradient_end_opacity, offset),
+            gradient_highlight: BridgeScalar::read_at(&item.gradient_highlight, offset),
+            gradient_highlight_angle: BridgeScalar::read_at(&item.gradient_highlight_angle, offset),
             gradient_stops: item
                 .gradient_stops
                 .iter()
@@ -159,6 +161,14 @@ impl BridgeShapeItem {
                 100.0,
             )?,
             gradient_end_opacity: clamped_property(&self.gradient_end_opacity, offset, 0.0, 100.0)?,
+            // Per cent of the radius either way, and degrees.
+            gradient_highlight: clamped_property(&self.gradient_highlight, offset, -100.0, 100.0)?,
+            gradient_highlight_angle: clamped_property(
+                &self.gradient_highlight_angle,
+                offset,
+                -360_000.0,
+                360_000.0,
+            )?,
             // Held inside the ramp, every key of them, and left in the order
             // they came in: a stop's rows are found by where it is in the list.
             gradient_stops: self
@@ -173,10 +183,8 @@ impl BridgeShapeItem {
                     })
                 })
                 .collect::<Result<_, BridgeError>>()?,
-            // The frontend does not edit these yet.
+            // The frontend does not edit this yet.
             stroke_gradient: None,
-            gradient_highlight: lumit_core::anim::Property::zero(),
-            gradient_highlight_angle: lumit_core::anim::Property::zero(),
             // Five readings and no sixth: a number naming none of them draws
             // the art on its own, which is the answer that shows something.
             combine: if self.combine <= 4 { self.combine } else { 0 },
@@ -202,9 +210,9 @@ impl BridgeShapeItem {
     }
 
     /// [`Self::write_item`], but keeping what `previous` carries and this type
-    /// does not describe: the **shape keyframes**, the outline's gradient, the
-    /// fill's highlight and the forward-compatibility `extra` a newer Lumit may
-    /// have written (docs/10 §1.1 makes preserving it mandatory).
+    /// does not describe: the **shape keyframes**, the outline's gradient and
+    /// the forward-compatibility `extra` a newer Lumit may have written
+    /// (docs/10 §1.1 makes preserving it mandatory).
     ///
     /// **A shape edit on a morphing item lands on the key under the
     /// playhead**, exactly as a mask's does. Once a path is keyed,
@@ -228,8 +236,6 @@ impl BridgeShapeItem {
         let mut written = lumit_core::shape::ShapeItem {
             path_keys: previous.path_keys.clone(),
             stroke_gradient: previous.stroke_gradient.clone(),
-            gradient_highlight: previous.gradient_highlight.clone(),
-            gradient_highlight_angle: previous.gradient_highlight_angle.clone(),
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };

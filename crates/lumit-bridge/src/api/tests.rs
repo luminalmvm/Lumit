@@ -2936,6 +2936,8 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_end_y: BridgeScalar::Static(0.0),
         gradient_start_opacity: BridgeScalar::Static(100.0),
         gradient_end_opacity: BridgeScalar::Static(100.0),
+        gradient_highlight: BridgeScalar::Static(0.0),
+        gradient_highlight_angle: BridgeScalar::Static(0.0),
         gradient_stops: Vec::new(),
         combine: 0,
         hidden: false,

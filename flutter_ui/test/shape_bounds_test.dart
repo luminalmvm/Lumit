@@ -57,6 +57,8 @@ void main() {
         gradientEndY: const BridgeScalar.static_(0),
         gradientStartOpacity: const BridgeScalar.static_(100),
         gradientEndOpacity: const BridgeScalar.static_(100),
+        gradientHighlight: const BridgeScalar.static_(0),
+        gradientHighlightAngle: const BridgeScalar.static_(0),
         gradientStops: const [],
         combine: 0,
         hidden: false,

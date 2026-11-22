@@ -336,6 +336,11 @@ enum ShapeValue {
   gradientStartY,
   gradientEndX,
   gradientEndY,
+
+  /// A radial ramp's highlight: how far its centre sits off the start point,
+  /// and at what angle.
+  gradientHighlight,
+  gradientHighlightAngle,
   smoothAmount,
   twistAngle,
   twistRotation,
@@ -572,10 +577,17 @@ bool isGradientValue(ShapeValue value) => switch (value) {
       ShapeValue.gradientStartX ||
       ShapeValue.gradientStartY ||
       ShapeValue.gradientEndX ||
-      ShapeValue.gradientEndY =>
+      ShapeValue.gradientEndY ||
+      ShapeValue.gradientHighlight ||
+      ShapeValue.gradientHighlightAngle =>
         true,
       _ => false,
     };
+
+/// Which of a gradient's numbers only a radial ramp has.
+bool isHighlightValue(ShapeValue value) =>
+    value == ShapeValue.gradientHighlight ||
+    value == ShapeValue.gradientHighlightAngle;
 
 /// Which of a repeater's numbers describe the **step** it takes: everything
 /// but the count itself, which is the row that is always there to find.
@@ -1335,6 +1347,8 @@ double? shapeValueDefault(ShapeValue value) => switch (value) {
       ShapeValue.taperStart ||
       ShapeValue.taperEnd =>
         100,
+      ShapeValue.gradientHighlight ||
+      ShapeValue.gradientHighlightAngle ||
       ShapeValue.roundness ||
       ShapeValue.shapeRotation ||
       ShapeValue.outerRoundness ||
@@ -1676,6 +1690,8 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
       ShapeValue.gradientEndY => l10n.shapeGradientEndY,
+      ShapeValue.gradientHighlight => l10n.fxHighlightLength,
+      ShapeValue.gradientHighlightAngle => l10n.fxHighlightAngle,
       ShapeValue.smoothAmount => l10n.shapeModifierAmount,
       ShapeValue.twistAngle => l10n.shapeTwistAngle,
       ShapeValue.twistRotation => l10n.shapeTwistRotation,
@@ -1796,6 +1812,8 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.gradientStartY => item.gradientStartY,
       ShapeValue.gradientEndX => item.gradientEndX,
       ShapeValue.gradientEndY => item.gradientEndY,
+      ShapeValue.gradientHighlight => item.gradientHighlight,
+      ShapeValue.gradientHighlightAngle => item.gradientHighlightAngle,
       // A modifier's number is on the modifier's own row; asked of the item
       // it reads as the still zero nobody draws, as a gone stop does.
       ShapeValue.smoothAmount ||
@@ -1927,6 +1945,9 @@ BridgeShapeItem shapeItemWith(
         at(ShapeValue.gradientStartOpacity, item.gradientStartOpacity),
     gradientEndOpacity: gradientEndOpacity ??
         at(ShapeValue.gradientEndOpacity, item.gradientEndOpacity),
+    gradientHighlight: at(ShapeValue.gradientHighlight, item.gradientHighlight),
+    gradientHighlightAngle:
+        at(ShapeValue.gradientHighlightAngle, item.gradientHighlightAngle),
     gradientStops: gradientStops ??
         switch (value) {
           // A stop's colour names the stop and the channel together.
@@ -3264,6 +3285,9 @@ List<LayerFoldRow> layerFoldRows({
               // The gradient's two points aim a ramp and its two opacities
               // fade one; with no ramp there is nothing for them to work on.
               if (isGradientValue(value) && item.gradient == 0) continue;
+              // The highlight moves a radial ramp's centre, so only a radial
+              // ramp shows it.
+              if (isHighlightValue(value) && item.gradient != 2) continue;
               // A taper narrows the outline, so it shows only where there is
               // one, as the dashes do, and only once it has been added.
               if (isTaperValue(value) &&

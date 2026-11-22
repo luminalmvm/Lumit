@@ -45625,6 +45625,10 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientEndOpacity =
             <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientHighlight =
+            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientHighlightAngle =
+            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientStops =
             <Vec<crate::api::shape::BridgeGradientStop>>::sse_decode(deserializer);
         let mut var_combine = <u32>::sse_decode(deserializer);
@@ -45654,6 +45658,8 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             gradient_end_y: var_gradientEndY,
             gradient_start_opacity: var_gradientStartOpacity,
             gradient_end_opacity: var_gradientEndOpacity,
+            gradient_highlight: var_gradientHighlight,
+            gradient_highlight_angle: var_gradientHighlightAngle,
             gradient_stops: var_gradientStops,
             combine: var_combine,
             hidden: var_hidden,
@@ -63282,6 +63288,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.gradient_end_y.into_into_dart().into_dart(),
             self.gradient_start_opacity.into_into_dart().into_dart(),
             self.gradient_end_opacity.into_into_dart().into_dart(),
+            self.gradient_highlight.into_into_dart().into_dart(),
+            self.gradient_highlight_angle.into_into_dart().into_dart(),
             self.gradient_stops.into_into_dart().into_dart(),
             self.combine.into_into_dart().into_dart(),
             self.hidden.into_into_dart().into_dart(),
@@ -72237,6 +72245,8 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_opacity, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_highlight, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_highlight_angle, serializer);
         <Vec<crate::api::shape::BridgeGradientStop>>::sse_encode(self.gradient_stops, serializer);
         <u32>::sse_encode(self.combine, serializer);
         <bool>::sse_encode(self.hidden, serializer);

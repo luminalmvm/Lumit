@@ -41975,8 +41975,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 26)
-      throw Exception('unexpected arr length: expect 26 but see ${arr.length}');
+    if (arr.length != 28)
+      throw Exception('unexpected arr length: expect 28 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -41996,14 +41996,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       gradientEndY: dco_decode_bridge_scalar(arr[15]),
       gradientStartOpacity: dco_decode_bridge_scalar(arr[16]),
       gradientEndOpacity: dco_decode_bridge_scalar(arr[17]),
-      gradientStops: dco_decode_list_bridge_gradient_stop(arr[18]),
-      combine: dco_decode_u_32(arr[19]),
-      hidden: dco_decode_bool(arr[20]),
-      fillHidden: dco_decode_bool(arr[21]),
-      strokeHidden: dco_decode_bool(arr[22]),
-      pathKeys: dco_decode_list_bridge_keyframe(arr[23]),
-      taper: dco_decode_opt_box_autoadd_bridge_shape_taper(arr[24]),
-      primitive: dco_decode_opt_box_autoadd_bridge_shape_primitive(arr[25]),
+      gradientHighlight: dco_decode_bridge_scalar(arr[18]),
+      gradientHighlightAngle: dco_decode_bridge_scalar(arr[19]),
+      gradientStops: dco_decode_list_bridge_gradient_stop(arr[20]),
+      combine: dco_decode_u_32(arr[21]),
+      hidden: dco_decode_bool(arr[22]),
+      fillHidden: dco_decode_bool(arr[23]),
+      strokeHidden: dco_decode_bool(arr[24]),
+      pathKeys: dco_decode_list_bridge_keyframe(arr[25]),
+      taper: dco_decode_opt_box_autoadd_bridge_shape_taper(arr[26]),
+      primitive: dco_decode_opt_box_autoadd_bridge_shape_primitive(arr[27]),
     );
   }
 
@@ -52805,6 +52807,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_gradientEndY = sse_decode_bridge_scalar(deserializer);
     var var_gradientStartOpacity = sse_decode_bridge_scalar(deserializer);
     var var_gradientEndOpacity = sse_decode_bridge_scalar(deserializer);
+    var var_gradientHighlight = sse_decode_bridge_scalar(deserializer);
+    var var_gradientHighlightAngle = sse_decode_bridge_scalar(deserializer);
     var var_gradientStops = sse_decode_list_bridge_gradient_stop(deserializer);
     var var_combine = sse_decode_u_32(deserializer);
     var var_hidden = sse_decode_bool(deserializer);
@@ -52833,6 +52837,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         gradientEndY: var_gradientEndY,
         gradientStartOpacity: var_gradientStartOpacity,
         gradientEndOpacity: var_gradientEndOpacity,
+        gradientHighlight: var_gradientHighlight,
+        gradientHighlightAngle: var_gradientHighlightAngle,
         gradientStops: var_gradientStops,
         combine: var_combine,
         hidden: var_hidden,
@@ -64153,6 +64159,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.gradientEndY, serializer);
     sse_encode_bridge_scalar(self.gradientStartOpacity, serializer);
     sse_encode_bridge_scalar(self.gradientEndOpacity, serializer);
+    sse_encode_bridge_scalar(self.gradientHighlight, serializer);
+    sse_encode_bridge_scalar(self.gradientHighlightAngle, serializer);
     sse_encode_list_bridge_gradient_stop(self.gradientStops, serializer);
     sse_encode_u_32(self.combine, serializer);
     sse_encode_bool(self.hidden, serializer);
