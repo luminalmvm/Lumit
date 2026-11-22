@@ -47,6 +47,8 @@ import 'package:lumit_flutter/shell/menu_layer_frb.dart';
 import 'package:lumit_flutter/shell/project_history_window.dart'
     show saveVersionFrb;
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
+import 'package:lumit_flutter/shell/resolve_import.dart';
+import 'package:lumit_flutter/shell/resolve_project.dart';
 import 'package:lumit_flutter/shell/run_script_frb.dart'
     show installEventScripts;
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
@@ -413,6 +415,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         // Somebody who clicked an invite link came to join, and the tour
         // waits for a launch that is about nothing else.
         final app = context.read<LumitState>();
+        final resolve = app.launchResolve;
+        if (resolve != null) {
+          app.launchResolve = null;
+          unawaited(_openAsked(resolve));
+          return;
+        }
         final invite = app.launchInvite;
         if (invite != null) {
           app.launchInvite = null;
@@ -465,9 +473,51 @@ class _LumitAppViewState extends State<LumitAppView> {
   /// the background. They are opened as File ▸ Open, the install window,
   /// Import style, [openPresetOrTheme], [installTemplateFiles] and the Shared
   /// project window would.
-  void _openAsked(List<String> asked) {
+  Future<void> _openAsked(List<String> asked) async {
     if (!mounted) return;
     final app = context.read<LumitState>();
+    for (final argument in asked) {
+      if (argument.startsWith('--resolve-import=')) {
+        unawaited(importResolveSelection(app, context.read<LumitUiState>(),
+            argument.substring('--resolve-import='.length), context: context));
+        return;
+      }
+      if (!argument.startsWith('--resolve-open=')) continue;
+      String? option(String prefix) => asked
+          .where((s) => s.startsWith(prefix))
+          .map((s) => s.substring(prefix.length))
+          .firstOrNull;
+      try {
+        final project = await locateResolveProject(
+            app,
+            option('--resolve-path=') ?? projectPathFromArgs(asked),
+            option('--resolve-project='),
+            context: context);
+        if (!mounted || project == null) return;
+        if (!sameResolveProject(app.project?.path(), project)) {
+          await app.openProject(project);
+          if (!mounted || !sameResolveProject(app.project?.path(), project)) {
+            return;
+          }
+        }
+        final name = argument.substring(argument.indexOf('=') + 1);
+        if (name.isEmpty) return;
+        final matches = app
+            .comps()
+            .where((c) => c.$1.internalid.toString() == name || c.$2 == name)
+            .toList();
+        if (matches.length != 1) {
+          app.postNotice(l10n.resolveCompNotFound, error: true);
+          return;
+        }
+        final comp = matches.single.$1;
+        context.read<LumitUiState>().setSelectedComp(comp);
+      } catch (error) {
+        app.postNotice(l10n.resolveLinkFailed(resolveErrorText(error)),
+            error: true);
+      }
+      return;
+    }
     final project = projectPathFromArgs(asked);
     if (project != null) app.openProject(project);
     final package = packagePathFromArgs(asked);

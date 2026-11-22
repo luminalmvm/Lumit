@@ -168,6 +168,12 @@ jobs:
           cache: true
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
+      - name: Install Resolve delivery build tools
+        uses: Jimver/cuda-toolkit@3d45d157f327c09c04b50ee6ccdea2d9d017ec76 # v0.2.35
+        with:
+          cuda: '12.9.1'
+          method: network
+          sub-packages: '["nvcc", "cudart", "opencl"]'
       # After the Rust cache is keyed, in every job: the stamp rewrites
       # Cargo.toml, and a key that changed nightly would never be hit.
       - name: Stamp a nightly build

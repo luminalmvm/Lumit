@@ -144,6 +144,7 @@ class LumitState extends ChangeNotifier {
   /// The graphics template Lumit was started with, until it is in the
   /// library.
   String? launchTemplate;
+  List<String>? launchResolve;
 
   StreamSubscription? currentDocumentStream;
 
