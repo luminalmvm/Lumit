@@ -217,6 +217,41 @@ void main() {
       expect(names.toSet(), hasLength(names.length), reason: '$names');
     });
 
+    testWidgets('an open animator stays open through a move and its undo',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      writeTextAnimatorList(text, [
+        freshTextAnimator('Rise'),
+        freshTextAnimator('Fade'),
+      ]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = text.internallayerId.toString();
+      await twirl(tester, id);
+      await twirl(tester, '$id/animators');
+      await twirl(tester, '$id/animators/1');
+      final open = p.uiState.folds.timelineOpen;
+      expect(open, contains('$id/animators/1'));
+
+      await tester.tap(find.byKey(
+          ValueKey<String>('tl-text-animator-more-$id/animators/1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animator-move-up-1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.name), ['Fade', 'Rise']);
+      expect(open, contains('$id/animators/0'));
+      expect(open, isNot(contains('$id/animators/1')));
+
+      // Undo puts Fade back second, and its open row with it.
+      p.state.project!.undo();
+      p.uiState.model.refreshIfMoved();
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.name), ['Rise', 'Fade']);
+      expect(open, contains('$id/animators/1'));
+      expect(open, isNot(contains('$id/animators/0')));
+    });
+
     testWidgets('Delete takes off an animator, a property, or all of them',
         (tester) async {
       final p = withComp();

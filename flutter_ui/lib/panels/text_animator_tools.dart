@@ -12,6 +12,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
+import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -1184,7 +1185,25 @@ class AnimatorHeading extends StatelessWidget {
           ),
         ],
       ),
-      control: Row(
+      // Only the buttons the column has room for: Reverse, then Remove, give
+      // way to More (whose menu holds both) rather than running into the
+      // key lane or being cut short.
+      control: LayoutBuilder(builder: (context, box) {
+        double w(String s) => (TextPainter(
+              text: TextSpan(text: s, style: t.small),
+              textDirection: TextDirection.ltr,
+              textScaler: MediaQuery.textScalerOf(context),
+            )..layout())
+                .width;
+        const arrow = 2 + iconSize;
+        final base = w(l10n.shapeOpAdd) + arrow + 8 + w(l10n.textAnimatorMore) + arrow;
+        final remove = w(l10n.textAnimatorRemove);
+        final reverse = w(l10n.textAnimatorReverse);
+        final keyed = animatorHasKeys(a);
+        final showRemove = base + 8 + remove + 2 <= box.maxWidth;
+        final showReverse =
+            keyed && showRemove && base + 8 + reverse + 12 + remove + 2 <= box.maxWidth;
+        return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Add ▸ Property or Selector, as After Effects' Add beside an
@@ -1223,7 +1242,7 @@ class AnimatorHeading extends StatelessWidget {
               animators: animators,
               index: index,
               write: write),
-          if (animatorHasKeys(a))
+          if (showReverse)
             ...[
               const SizedBox(width: 8),
               RowButton(
@@ -1235,17 +1254,20 @@ class AnimatorHeading extends StatelessWidget {
             ],
           // A word without an arrow leaves more room after it, so the gaps
           // read alike.
-          SizedBox(width: animatorButtonGap(afterArrow: !animatorHasKeys(a))),
-          RowButton(
-            key: ValueKey<String>('text-animator-remove-$index'),
-            label: l10n.textAnimatorRemove,
-            onTap: (_) => write([
-              for (var i = 0; i < animators.length; i++)
-                if (i != index) animators[i],
-            ]),
-          ),
+          if (showRemove) ...[
+            SizedBox(width: animatorButtonGap(afterArrow: !showReverse)),
+            RowButton(
+              key: ValueKey<String>('text-animator-remove-$index'),
+              label: l10n.textAnimatorRemove,
+              onTap: (_) => write([
+                for (var i = 0; i < animators.length; i++)
+                  if (i != index) animators[i],
+              ]),
+            ),
+          ],
         ],
-      ),
+        );
+      }),
     );
     // Renaming, the field takes the whole row, buttons and all, so a long
     // name can be read and edited.
@@ -1591,6 +1613,7 @@ String? movedAnimatorKey(String key, String stem, List<int?> moves) {
 /// put away.
 void followAnimators(LumitUiState? ui, LayerReference layer,
     List<BridgeTextAnimator> old, List<BridgeTextAnimator> next) {
+  _knownAnimators[layer.internallayerId.toString()] = next;
   final moves = animatorMoves(old, next);
   // A selector taken out moves the ones after it up.
   final selectorMoves = <int, List<int?>>{
@@ -1770,4 +1793,59 @@ String? followedAnimatorKey(String key, String stem, List<int?> moves,
     }
   }
   return '$stem$to$tail';
+}
+
+/// Each Text layer's animators as the panels last saw them, by layer id: what
+/// [watchAnimatorOrder] compares the document against.
+final Map<String, List<BridgeTextAnimator>> _knownAnimators = {};
+final Expando<bool> _watching = Expando<bool>();
+
+bool _sameOrder(List<BridgeTextAnimator> a, List<BridgeTextAnimator> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].name != b[i].name || selectorCount(a[i]) != selectorCount(b[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Keep what the panels show about each animator on the animator through
+/// edits that do not pass through the panels: undo and redo above all, which
+/// put an older list back. Each time the model changes, a layer whose
+/// animators are in another order than last seen has its folds, Advanced
+/// groups, open rows, picks and picked keys moved as [followAnimators] moves
+/// them for an edit made here. Installed once per [ui].
+void watchAnimatorOrder(LumitUiState ui) {
+  if (_watching[ui] == true) return;
+  _watching[ui] = true;
+  var busy = false;
+  void look() {
+    if (busy) return;
+    busy = true;
+    try {
+      for (final entry in ui.model.layers) {
+        final now = entry.info.textAnimators;
+        final id = entry.layer.internallayerId.toString();
+        final was = _knownAnimators[id];
+        if (was != null && !_sameOrder(was, now)) {
+          followAnimators(ui, entry.layer, was, now);
+        }
+        _knownAnimators[id] = now;
+      }
+    } finally {
+      busy = false;
+    }
+  }
+
+  look();
+  // Never in the middle of a build: the folds it moves rebuild panels.
+  ui.model.addListener(() {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => look());
+    } else {
+      look();
+    }
+  });
 }

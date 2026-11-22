@@ -95,6 +95,13 @@ class _TextAnimatorRowsFrbState extends State<TextAnimatorRowsFrb> {
   List<BridgeTextAnimator>? _styleFor;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Folds follow the animators through undo and redo too.
+    watchAnimatorOrder(Provider.of<LumitUiState>(context, listen: false));
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Drawn from the read model. Only the style is asked of the engine.
     final entry = Provider.of<LumitUiState>(context, listen: false)
