@@ -25,7 +25,8 @@ Normally used as a base for more complex effects or textures.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Fractal type** | Dropdown | Basic · Turbulent · Turbulent smooth · Turbulent sharp · Dynamic · Dynamic progressive · Dynamic twist · Max · Smeary · Swirly · Rocky · Cloudy · Terrain · Subscale · Strings | Turbulent | - |
-| **Noise type** | Dropdown | Value · Perlin · Block · Linear · Spline | Perlin | - |
+| **Noise type** | Dropdown | Value · Perlin · Block · Linear · Spline · Chips · Circular · Box · Buya · Cranal · Dents · Electric · Fire · Hama · Luka · Naki · Nutous · Ober · Pezo · Poxo · Sema · Stupl · Zada · Blistered turbulence · Displaced turbulence · Wavy turbulence · Displaced Voronoi · VL noise · Stucci · Stucci wall in · Stucci wall out · Windy · Billow · Waves | Perlin | - |
+| **Distortion** | Slider | 0 to 4; higher | 0 | - |
 | **Invert noise** | Checkbox | On or off | Off | - |
 | **Contrast** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Brightness** | Slider | -200 to 200; any value by typing | 0 | Per cent |
@@ -67,6 +68,8 @@ In the Effect Controls panel:
 - **Fractal type**: how each layer of detail is shaped and how the layers are combined; see
   [Fractal types](#fractal-types).
 - **Noise type**: the pattern each layer is drawn from; see [Noise types](#noise-types).
+- **Distortion**: how far a second noise pushes each point of the pattern before it is drawn,
+  in cells of the largest layer.
 - **Invert noise**: inverts the finished pattern.
 - **Contrast**: increases the difference between white and dark areas of the noise.
 - **Brightness**: lifts or darkens the noise after Contrast.
@@ -116,6 +119,18 @@ In the Effect Controls panel:
 | **Block** | Holds one value across each cell. |
 | **Linear** | Blends the corner values in straight lines. |
 | **Spline** | Runs a curve through the sixteen nearest values. |
+
+The rest shape each layer further. The cells in the first group circle as **Evolution** turns.
+
+| Noise types | What they draw |
+| --- | --- |
+| **Chips** · **Circular** · **Cranal** · **Hama** · **Displaced Voronoi** · **Billow** | Scattered cells: flat greys, soft round dots, pale or glossy cells with dark borders, the distance to the nearest cell, and crowded round puffs. |
+| **Box** | Linear, held flat across the middle of each cell. |
+| **Buya** · **Fire** · **Pezo** · **Poxo** | Bright speckles, tongues, blobs and sparse dots on black. |
+| **Dents** · **Luka** · **Naki** · **Stupl** · **Blistered turbulence** · **Wavy turbulence** | Folded noise: lumps, crinkles and soft clouds parted by creases. |
+| **Nutous** · **Sema** · **Ober** · **Zada** · **Waves** | Lines: thin bright filaments, wiry white lines, contour bands, swirled stripes and three crossing sets of waves. |
+| **Electric** · **Displaced turbulence** · **VL noise** · **Windy** | Perlin pushed about by further noise: diagonal streaks, displaced patterns, and fine waves that die away in patches. |
+| **Stucci** · **Stucci wall in** · **Stucci wall out** | Relief lit from the top left: soft blobs, and creases cut into the surface or standing out of it. |
 
 ## After Effects import
 
