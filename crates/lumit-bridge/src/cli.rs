@@ -749,7 +749,13 @@ fn run(
 /// Answer MCP, one message a line on standard input and one reply a line on
 /// standard output, until the client closes its end.
 fn mcp(project: &Path) -> Result<(), String> {
-    let host = open(project)?;
+    // A project that isn't there yet is a new, empty one, saved there.
+    let host = if project.exists() {
+        open(project)?
+    } else {
+        note!("Starting {} as a new project", project.display());
+        Headless::new_at(project)
+    };
     crate::api::extensions::register_effects();
     // Held while the client is there, so Lumit does not open a project the
     // client may still save.

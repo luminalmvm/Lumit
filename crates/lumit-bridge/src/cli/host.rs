@@ -72,6 +72,15 @@ impl Headless {
         Self::with(Document::new(), None, None)
     }
 
+    /// A new, empty project that saves to `path`, a file not made yet.
+    pub fn new_at(path: &Path) -> Self {
+        let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        library::register_fonts();
+        let host = Self::with(Document::new(), None, None);
+        host.path.replace(Some(path));
+        host
+    }
+
     /// A project from a document in hand, with no file.
     pub fn from_document(doc: Document) -> Self {
         Self::with(doc, None, None)
