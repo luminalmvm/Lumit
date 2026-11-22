@@ -5,7 +5,7 @@ use std::{
     fs,
     io::{Read, Write},
     os::windows::process::CommandExt,
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
     thread,
     time::{Duration, Instant},
@@ -304,14 +304,33 @@ fn ask_editor(editor: &Path, request: &Path) -> Result<Value> {
     }
     Ok(answer)
 }
+// The codec is loaded into this signed program, so it has to come from
+// Resolve's install folder or Lumit's own.
+fn trusted_codec(codec: &Path, editor: &Path) -> Result<PathBuf> {
+    let codec = fs::canonicalize(codec)?;
+    let resolve = std::env::var_os("ProgramFiles")
+        .map(|folder| PathBuf::from(folder).join("Blackmagic Design/DaVinci Resolve"));
+    let trusted = [Some(editor.to_path_buf()), resolve]
+        .into_iter()
+        .flatten()
+        .filter_map(|folder| fs::canonicalize(folder).ok())
+        .any(|folder| codec.starts_with(folder));
+    if !trusted {
+        return Err("The preset codec is not in the Resolve or Lumit install folder".into());
+    }
+    Ok(codec)
+}
 fn prepare(directory: &Path) -> Result<Value> {
     let spec: Value = serde_json::from_slice(&fs::read(directory.join("selection.json"))?)?;
-    let codec = Path::new(spec["codec"].as_str().ok_or("Missing preset codec")?);
     let executable = std::env::current_exe()?;
     let editor = executable
         .parent()
         .and_then(Path::parent)
         .ok_or("Missing Lumit app folder")?;
+    let codec = trusted_codec(
+        Path::new(spec["codec"].as_str().ok_or("Missing preset codec")?),
+        editor,
+    )?;
     let seed = directory.join("seed.drt");
     let source = directory.join("selection.lum");
     super::run(
@@ -344,7 +363,7 @@ fn prepare(directory: &Path) -> Result<Value> {
             ))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
-    preset(&seed, &directory.join("configured.drt"), codec, &values)?;
+    preset(&seed, &directory.join("configured.drt"), &codec, &values)?;
 
     Ok(answer)
 }
