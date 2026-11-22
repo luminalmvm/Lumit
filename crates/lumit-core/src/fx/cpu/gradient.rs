@@ -3,14 +3,22 @@
 
 use crate::fx::noise::hash01;
 
+/// [`GradientParams::shape`]: the ramp projected onto the axis.
+pub const LINEAR: u32 = 0;
+/// [`GradientParams::shape`]: the ramp measured out from the start point.
+pub const RADIAL: u32 = 1;
+/// [`GradientParams::shape`]: the ramp swept once round the start point,
+/// clockwise from the direction of the end point.
+pub const ANGLE: u32 = 2;
+
 /// One resolved Gradient (docs/08 §3.35), reduced to what both paths read.
 /// Every reciprocal is computed host-side (`Gradient::packed`) and floored
 /// there, so a zero-length axis collapses the ramp to one flat colour instead of
 /// dividing by zero (docs/14 §4) and neither path divides per pixel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradientParams {
-    /// Radial rather than linear.
-    pub radial: bool,
+    /// [`LINEAR`], [`RADIAL`] or [`ANGLE`].
+    pub shape: u32,
     /// The start point in raster pixels (the §2.3 preview factor already applied).
     pub start: [f32; 2],
     /// `end − start`, raster pixels.
@@ -19,6 +27,8 @@ pub struct GradientParams {
     pub inv_len2: f32,
     /// `1 ÷ |axis|` for the radial distance, floored.
     pub inv_len: f32,
+    /// The axis's direction, radians, where an angle ramp begins.
+    pub turn: f32,
     /// Scene-linear start colour (alpha ignored: the ramp is opaque).
     pub c0: [f32; 3],
     /// Scene-linear end colour.
@@ -39,6 +49,35 @@ pub struct GradientParams {
     /// the last lane.
     pub mids: u32,
     pub mid: [[f32; 4]; 3],
+}
+
+impl GradientParams {
+    /// A black to white ramp from `start` along `axis`, in raster pixels, with
+    /// every number the kernels read from the axis worked out here, once.
+    /// Both reciprocals are floored against one epsilon on the squared
+    /// length, so the linear and radial readings degenerate at exactly the
+    /// same point, and Start and End at one place give one flat colour rather
+    /// than a division by zero (docs/14 §4).
+    #[must_use]
+    pub fn aimed(start: [f32; 2], axis: [f32; 2]) -> Self {
+        let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
+        Self {
+            shape: LINEAR,
+            start,
+            axis,
+            inv_len2: 1.0 / len2,
+            inv_len: 1.0 / len2.sqrt(),
+            turn: axis[1].atan2(axis[0]),
+            c0: [0.0; 3],
+            c1: [1.0; 3],
+            scatter: 0.0,
+            seed: 0,
+            mix: 1.0,
+            clip_to_alpha: false,
+            mids: 0,
+            mid: [[0.0; 4]; 3],
+        }
+    }
 }
 
 /// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
@@ -62,7 +101,7 @@ pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
     std::array::from_fn(|c| from[c] + (p.c1[c] - from[c]) * k)
 }
 
-/// Gradient (docs/08 §3.35): a linear or radial ramp with optional
+/// Gradient (docs/08 §3.35): a linear, radial or angle ramp with optional
 /// scatter — a **generator**, so it replaces the frame edge to edge and writes
 /// opaque alpha. Interpolation is in the working space (scene-linear, §2.1), so
 /// the ramp is photometrically even and can drive another effect's matte. Mix 0
@@ -73,10 +112,14 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             let i = ((y * w + x) * 4) as usize;
             let dx = x as f32 + 0.5 - p.start[0];
             let dy = y as f32 + 0.5 - p.start[1];
-            let mut t = if p.radial {
-                (dx * dx + dy * dy).sqrt() * p.inv_len
-            } else {
-                (dx * p.axis[0] + dy * p.axis[1]) * p.inv_len2
+            let mut t = match p.shape {
+                RADIAL => (dx * dx + dy * dy).sqrt() * p.inv_len,
+                ANGLE => {
+                    // y grows downwards, so a growing angle turns clockwise.
+                    let turns = (dy.atan2(dx) - p.turn) / std::f32::consts::TAU;
+                    turns - turns.floor()
+                }
+                _ => (dx * p.axis[0] + dy * p.axis[1]) * p.inv_len2,
             };
             if p.scatter > 0.0 {
                 t += (hash01(p.seed, 0, x as i32, y as i32, 0) - 0.5) * p.scatter;

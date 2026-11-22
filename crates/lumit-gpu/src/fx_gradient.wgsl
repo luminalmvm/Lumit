@@ -1,4 +1,4 @@
-// Gradient (docs/08-EFFECTS.md §3.35): a linear or radial ramp of two to five
+// Gradient (docs/08-EFFECTS.md §3.35): a linear, radial or angle ramp of two to five
 // colours, with scatter. Mirrors lumit_core::fx::cpu::gradient op-for-op (§1.6: the CPU is
 // the oracle).
 //
@@ -18,10 +18,11 @@ struct Params {
     scatter: f32,           // 0..1 dither of t
     mix_amt: f32,           // 0..1, blended against the unprocessed input
     seed: u32,
-    radial: u32,            // 0 linear, 1 radial
+    shape: u32,             // 0 linear, 1 radial, 2 angle
     clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha
     mids: u32,              // colours in between in use, 0..3
     mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
+    shape_k: vec4<f32>,     // x = where an angle ramp begins, radians
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -89,8 +90,12 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dx = f32(xy.x) + 0.5 - p.start_axis.x;
     let dy = f32(xy.y) + 0.5 - p.start_axis.y;
     var t: f32;
-    if (p.radial != 0u) {
+    if (p.shape == 1u) {
         t = sqrt(dx * dx + dy * dy) * p.inv_len;
+    } else if (p.shape == 2u) {
+        // y grows downwards, so a growing angle turns clockwise.
+        let turns = (atan2(dy, dx) - p.shape_k.x) / 6.2831855;
+        t = turns - floor(turns);
     } else {
         t = (dx * p.start_axis.z + dy * p.start_axis.w) * p.inv_len2;
     }

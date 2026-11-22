@@ -88,8 +88,9 @@ pub struct ShapeItem {
     )]
     pub dash_offset: Property,
     /// **A gradient fill**: 0 draws the flat [`fill`](Self::fill), 1
-    /// ramps from it **linearly** to [`gradient_colour`](Self::gradient_colour)
-    /// and 2 ramps **radially**, `gradient_colour` sitting on the outer edge.
+    /// ramps from it **linearly** to [`gradient_colour`](Self::gradient_colour),
+    /// 2 ramps **radially**, `gradient_colour` sitting on the outer edge, and
+    /// 4 sweeps it round the start point ([`gradient::ANGLE`]).
     ///
     /// A choice rather than a `Property`: what a ramp *is* does not tween, and
     /// a number between linear and radial would have to mean something. The

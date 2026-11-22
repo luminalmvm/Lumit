@@ -12177,6 +12177,10 @@
   "@shapeGradientRadial": {
     "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
   },
+  "shapeGradientAngle": "Angle",
+  "@shapeGradientAngle": {
+    "description": "One choice on a shape layer's Gradient row: the fill's colours sweep round a point, like a colour wheel."
+  },
   "shapeGradientStartOpacity": "Gradient start opacity",
   "@shapeGradientStartOpacity": {
     "description": "Timeline row under a shape layer's art: how opaque its gradient fill is where it starts, as a percentage."

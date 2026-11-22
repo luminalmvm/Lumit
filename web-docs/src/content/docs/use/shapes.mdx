@@ -113,7 +113,7 @@ Under a shape, in order:
 | --- | --- |
 | **Combine** | How the shape joins the one above it. On a shape with another directly above it. |
 | **Fill** | The colour inside the path. |
-| **Gradient** | Flat, Linear or Radial. |
+| **Gradient** | Flat, Linear, Radial or Angle. |
 | **Gradient colour**, **Gradient stops** | The colour the ramp ends at, and the ramp's editor. With a ramp. |
 | **Stroke**, **Stroke width** | The outline's colour, and its width in pixels. |
 | **Opacity** | How opaque the shape is. |
@@ -172,12 +172,12 @@ line adds a point, and `Alt` on a point converts it.
 ## Gradient fills
 
 A shape's first rows are **Fill**, the colour inside its path, and **Gradient**, which is
-Flat, Linear or Radial. Choose a ramp and its rows appear: the **Gradient colour** it ends
-at, **Gradient stops**, an opacity for each end, and the two points that aim it.
+Flat, Linear, Radial or Angle. Choose a ramp and its rows appear: the **Gradient colour** it
+ends at, **Gradient stops**, an opacity for each end, and the two points that aim it.
 
 Linear ramps along the line between the points; radial ramps outwards from the first,
-with the second on the outer edge. A new ramp runs down the shape's box, or out from its
-middle.
+with the second on the outer edge; angle sweeps once round the first, clockwise, starting
+towards the second. A new ramp runs down the shape's box, or out from or round its middle.
 
 **Gradient start opacity** is how opaque the Fill end is and **Gradient end opacity** how
 opaque the Gradient colour end is, as a percentage. The ramp fades evenly between them, and
@@ -188,7 +188,7 @@ colours are not.
 
 An outline takes a gradient from `stroke_gradient` on the shape, set in the file or through
 scripting. It has no row. The ramp runs from the **Stroke** colour to its own `colour`, and
-its `kind` is 1 for linear, 2 for radial or 3 for along the path. Along the
+its `kind` is 1 for linear, 2 for radial, 4 for angle or 3 for along the path. Along the
 path, each line runs from the Stroke colour at its start to the end colour at its end,
 measured on the piece a trim leaves and carried across the gaps between dashes. The width,
 the taper, the dashes and the opacity apply as they do to a flat outline.

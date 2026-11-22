@@ -1473,9 +1473,9 @@ class ShapePaintRow extends StatelessWidget {
       BridgeColourRgba(r: p.r, g: p.g, b: p.b, a: alpha);
 
   /// Where a ramp nobody has aimed should start and end: down the art's own
-  /// box for a linear one, out from its middle for a radial one. A gradient
-  /// that read as one flat colour the moment it was switched on would look
-  /// broken rather than unaimed.
+  /// box for a linear one, out from its middle for a radial or angle one. A
+  /// gradient that read as one flat colour the moment it was switched on would
+  /// look broken rather than unaimed.
   BridgeShapeItem _aimed(BridgeShapeItem i, int kind) {
     final aimed = i.gradientStartX != const BridgeScalar.static_(0) ||
         i.gradientEndX != const BridgeScalar.static_(0) ||
@@ -1485,7 +1485,7 @@ class ShapePaintRow extends StatelessWidget {
     final box = shapeContentsRect(
         [BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(i))]);
     if (box == null) return shapeItemWith(i, gradient: kind);
-    final (start, end) = kind == 2
+    final (start, end) = kind == 2 || kind == 4
         ? (box.center, Offset(box.right, box.center.dy))
         : (Offset(box.center.dx, box.top), Offset(box.center.dx, box.bottom));
     return shapeItemWith(
@@ -1684,11 +1684,14 @@ class ShapePaintRow extends StatelessWidget {
                   width: 96,
                   child: BareDropdown<int>(
                     key: ValueKey<String>(key),
-                    value: item.gradient <= 2 ? item.gradient : 0,
-                    options: const [0, 1, 2],
+                    value: const [1, 2, 4].contains(item.gradient)
+                        ? item.gradient
+                        : 0,
+                    options: const [0, 1, 2, 4],
                     label: (k) => switch (k) {
                       1 => l10n.shapeGradientLinear,
                       2 => l10n.shapeGradientRadial,
+                      4 => l10n.shapeGradientAngle,
                       _ => l10n.shapeGradientFlat,
                     },
                     onChanged: (k) => _write((i) => _aimed(i, k)),

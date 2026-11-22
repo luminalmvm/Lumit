@@ -7323,6 +7323,8 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     radial.shape = 1;
     radial.start_x = 16.0;
     radial.start_y = 12.0;
+    let mut angle = radial;
+    angle.shape = 2;
     let mut scattered = base;
     scattered.scatter = 40.0;
     scattered.seed = 7;
@@ -7338,6 +7340,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     for (name, gradient, mix) in [
         ("linear", base, 1.0f32),
         ("radial", radial, 1.0),
+        ("angle", angle, 1.0),
         ("scattered", scattered, 1.0),
         ("hdr", hdr, 1.0),
         ("degenerate", degenerate, 1.0),
@@ -7348,21 +7351,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         let mut g = gradient;
         g.mix = mix * 100.0;
         let p = g.packed();
-        let op = GradientOp {
-            radial: p.radial,
-            start: p.start,
-            axis: p.axis,
-            inv_len2: p.inv_len2,
-            inv_len: p.inv_len,
-            c0: p.c0,
-            c1: p.c1,
-            scatter: p.scatter,
-            seed: p.seed,
-            mix: p.mix,
-            clip_to_alpha: p.clip_to_alpha,
-            mids: p.mids,
-            mid: p.mid,
-        };
+        let op = GradientOp::from(&p);
 
         let mut cpu = img.clone();
         lumit_core::fx::cpu::gradient::gradient(&mut cpu, w, h, &p);

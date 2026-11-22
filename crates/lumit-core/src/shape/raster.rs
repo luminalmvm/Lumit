@@ -2,7 +2,7 @@
 //! combine, the dashes, and the outline an effect walks.
 
 use super::geometry::{densified, dist, flatten_path, polyline_path, transform_path, Affine};
-use super::gradient::{ALONG, RADIAL};
+use super::gradient::{ALONG, ANGLE, RADIAL};
 use super::modifier::{self, Lowered, ShapeModifier};
 use super::{colour, GradientStop, ShapeItem, Taper, MAX_GRADIENT_STOPS};
 use crate::anim::Property;
@@ -531,6 +531,7 @@ impl RampSource<'_> {
         }
         let shape = match self.kind {
             RADIAL => RampShape::Radial,
+            ANGLE => RampShape::Angle,
             ALONG if self.outline => RampShape::Along,
             _ => RampShape::Linear,
         };
@@ -540,6 +541,7 @@ impl RampSource<'_> {
             axis,
             inv_len2: 1.0 / len2,
             inv_len: 1.0 / len2.sqrt(),
+            turn: axis.1.atan2(axis.0),
             lut,
         }
     }
@@ -558,6 +560,9 @@ pub(super) struct Ramp {
     axis: (f64, f64),
     inv_len2: f64,
     inv_len: f64,
+    /// The direction of the end point from the start, radians, where an
+    /// angle ramp begins.
+    turn: f64,
     lut: [[u8; 4]; RAMP_STEPS],
 }
 
@@ -566,6 +571,9 @@ pub(super) struct Ramp {
 enum RampShape {
     Linear,
     Radial,
+    /// How far round the start point the pixel is, clockwise from the end
+    /// point.
+    Angle,
     /// How far along the outline's own line the pixel is, which the pixel
     /// alone cannot say: the outline's painter measures it.
     Along,
@@ -590,10 +598,13 @@ impl Ramp {
         // point on the outer edge. Both reciprocals were floored against one
         // epsilon when the ramp was built, so a zero-length axis is one flat
         // colour rather than a division by zero (docs/14 §4).
-        let along = if self.shape == RampShape::Radial {
-            (dx * dx + dy * dy).sqrt() * self.inv_len
-        } else {
-            (dx * self.axis.0 + dy * self.axis.1) * self.inv_len2
+        let along = match self.shape {
+            RampShape::Radial => (dx * dx + dy * dy).sqrt() * self.inv_len,
+            // y grows downwards, so a growing angle turns clockwise.
+            RampShape::Angle => {
+                ((dy.atan2(dx) - self.turn) / std::f64::consts::TAU).rem_euclid(1.0)
+            }
+            _ => (dx * self.axis.0 + dy * self.axis.1) * self.inv_len2,
         };
         self.at_place(along)
     }

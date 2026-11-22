@@ -27,13 +27,16 @@ pub const RADIAL: u32 = 2;
 /// The ramp runs along the outline's own line, start to end. An outline
 /// only: a fill has no length to run along, and reads it as linear.
 pub const ALONG: u32 = 3;
+/// The ramp sweeps once round its start point, clockwise from the
+/// direction of its end point.
+pub const ANGLE: u32 = 4;
 
 /// **A gradient outline**: the stroke's colour at the start of the ramp,
 /// running through the stops to [`colour`](Self::colour) at its end. The
 /// numbers mean what a gradient fill's do.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StrokeGradient {
-    /// [`LINEAR`], [`RADIAL`] or [`ALONG`]. A choice rather than a
+    /// [`LINEAR`], [`RADIAL`], [`ALONG`] or [`ANGLE`]. A choice rather than a
     /// `Property`, for the fill's reason: what a ramp is does not tween. 0
     /// draws the flat stroke colour.
     pub kind: u32,

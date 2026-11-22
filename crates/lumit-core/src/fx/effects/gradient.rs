@@ -1,4 +1,4 @@
-//! Gradient (docs/08 §3.35): a linear or radial ramp of two to five colours, with scatter.
+//! Gradient (docs/08 §3.35): a linear, radial or angle ramp of two to five colours, with scatter.
 //!
 //! **In plain terms.** Two points and two colours. Everything on the line
 //! through the first point is the first colour, everything at the second point
@@ -62,8 +62,9 @@ pub const GRADIENT_GROUPS: &[ParamGroup] = &[
 )]
 pub struct Gradient {
     /// Linear projects onto the axis; Radial measures distance from Start, with
-    /// End sitting on the outer edge.
-    #[choice(options = ["Linear", "Radial"], default = 0)]
+    /// End sitting on the outer edge; Angle sweeps round Start, clockwise from
+    /// End.
+    #[choice(options = ["Linear", "Radial", "Angle"], default = 0)]
     pub shape: u32,
 
     /// px@comp. The default pair runs top-to-bottom down a 1080p frame.
@@ -183,26 +184,16 @@ pub struct Gradient {
 impl Gradient {
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
     ///
-    /// Both reciprocals are taken here, once, and floored against the same
-    /// epsilon: Start and End at the same place give a zero-length axis, and the
-    /// floor collapses the ramp to one flat colour rather than dividing by zero
-    /// (docs/14 §4). The two points
-    /// arrive already scaled to the raster by the declared `Px` unit. Both render
-    /// paths read this one method, so the CPU reference and the WGSL kernel
-    /// cannot drift apart.
+    /// The axis's numbers are worked out once, by
+    /// [`GradientParams::aimed`](cpu::gradient::GradientParams::aimed). The two
+    /// points arrive already scaled to the raster by the declared `Px` unit.
+    /// Both render paths read this one method, so the CPU reference and the
+    /// WGSL kernel cannot drift apart.
     #[must_use]
     pub fn packed(self) -> cpu::gradient::GradientParams {
         let axis = [self.end_x - self.start_x, self.end_y - self.start_y];
-        let len2 = axis[0] * axis[0] + axis[1] * axis[1];
-        // One epsilon, applied to the squared length, so the linear and radial
-        // reciprocals degenerate at exactly the same point.
-        let len2 = len2.max(1e-6);
         cpu::gradient::GradientParams {
-            radial: self.shape == 1,
-            start: [self.start_x, self.start_y],
-            axis,
-            inv_len2: 1.0 / len2,
-            inv_len: 1.0 / len2.sqrt(),
+            shape: self.shape.min(cpu::gradient::ANGLE),
             c0: [
                 self.start_colour[0],
                 self.start_colour[1],
@@ -218,6 +209,7 @@ impl Gradient {
             clip_to_alpha: self.paint == 0,
             mids: self.colours.min(3),
             mid: self.mids(),
+            ..cpu::gradient::GradientParams::aimed([self.start_x, self.start_y], axis)
         }
     }
 

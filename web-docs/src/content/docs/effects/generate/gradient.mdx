@@ -23,7 +23,7 @@ Paints a smooth run of two to five colours over the whole frame between two poin
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Shape** | Dropdown | Linear · Radial | Linear | - |
+| **Shape** | Dropdown | Linear · Radial · Angle | Linear | - |
 | **Start x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Start y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
 | **Start colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
@@ -55,7 +55,8 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Shape**: **Linear** runs the ramp along the line between two points. **Radial**
-  runs it outward from Start, with End marking the outer edge.
+  runs it outward from Start, with End marking the outer edge. **Angle** sweeps it once
+  round Start, clockwise, starting towards End.
 - **Start x** and **Start y**: the starting point.
 - **Start colour**: the colour at the start point.
 - **End x** and **End y**: the end point.

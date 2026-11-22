@@ -1518,27 +1518,29 @@ impl GpuEffect for Gradient {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let g = effects::gradient::Gradient::read(p).packed();
-        fx.gradient(
-            ctx,
-            tex,
-            w,
-            h,
-            &lumit_gpu::fx::generate::GradientOp {
-                radial: g.radial,
-                start: g.start,
-                axis: g.axis,
-                inv_len2: g.inv_len2,
-                inv_len: g.inv_len,
-                c0: g.c0,
-                c1: g.c1,
-                scatter: g.scatter,
-                seed: g.seed,
-                mix: g.mix,
-                clip_to_alpha: g.clip_to_alpha,
-                mids: g.mids,
-                mid: g.mid,
-            },
-        )
+        fx.gradient(ctx, tex, w, h, &gradient_op(&g))
+    }
+}
+
+/// The Gradient kernel's numbers as the GPU op takes them, field for field.
+fn gradient_op(
+    p: &lumit_core::fx::cpu::gradient::GradientParams,
+) -> lumit_gpu::fx::generate::GradientOp {
+    lumit_gpu::fx::generate::GradientOp {
+        shape: p.shape,
+        start: p.start,
+        axis: p.axis,
+        inv_len2: p.inv_len2,
+        inv_len: p.inv_len,
+        turn: p.turn,
+        c0: p.c0,
+        c1: p.c1,
+        scatter: p.scatter,
+        seed: p.seed,
+        mix: p.mix,
+        clip_to_alpha: p.clip_to_alpha,
+        mids: p.mids,
+        mid: p.mid,
     }
 }
 
@@ -3091,27 +3093,7 @@ impl GpuEffect for StyleGradientOverlay {
         _aux: AuxSlot<'_>,
     ) -> Tex {
         let d = lumit_core::fx::styles::defs::GradientOverlay::read(p).packed(w, h);
-        fx.gradient(
-            ctx,
-            tex,
-            w,
-            h,
-            &lumit_gpu::fx::generate::GradientOp {
-                radial: d.radial,
-                start: d.start,
-                axis: d.axis,
-                inv_len2: d.inv_len2,
-                inv_len: d.inv_len,
-                c0: d.c0,
-                c1: d.c1,
-                scatter: d.scatter,
-                seed: d.seed,
-                mix: d.mix,
-                clip_to_alpha: d.clip_to_alpha,
-                mids: d.mids,
-                mid: d.mid,
-            },
-        )
+        fx.gradient(ctx, tex, w, h, &gradient_op(&d))
     }
 }
 

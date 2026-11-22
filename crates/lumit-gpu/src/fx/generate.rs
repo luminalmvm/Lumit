@@ -36,13 +36,16 @@ struct FillParams {
 /// rather than faulting.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradientOp {
-    pub radial: bool,
+    /// 0 linear, 1 radial, 2 angle.
+    pub shape: u32,
     /// Start point in raster pixels.
     pub start: [f32; 2],
     /// `end − start`, raster pixels.
     pub axis: [f32; 2],
     pub inv_len2: f32,
     pub inv_len: f32,
+    /// The axis's direction, radians, where an angle ramp begins.
+    pub turn: f32,
     /// Scene-linear start and end colours.
     pub c0: [f32; 3],
     pub c1: [f32; 3],
@@ -71,12 +74,39 @@ struct GradientParams {
     scatter: f32,
     mix_amt: f32,
     seed: u32,
-    radial: u32,
+    /// 0 linear, 1 radial, 2 angle.
+    shape: u32,
     /// 1 = clip the ramp to the layer's coverage and leave its alpha.
     clip_to_alpha: u32,
     /// How many of `mid` are in use.
     mids: u32,
     mid: [[f32; 4]; 3],
+    /// x = where an angle ramp begins, radians.
+    shape_k: [f32; 4],
+}
+
+/// The parity test's copy of the renderer's `gradient_op`: this crate sees
+/// the CPU kernel's numbers only in its tests.
+#[cfg(test)]
+impl From<&lumit_core::fx::cpu::gradient::GradientParams> for GradientOp {
+    fn from(p: &lumit_core::fx::cpu::gradient::GradientParams) -> Self {
+        Self {
+            shape: p.shape,
+            start: p.start,
+            axis: p.axis,
+            inv_len2: p.inv_len2,
+            inv_len: p.inv_len,
+            turn: p.turn,
+            c0: p.c0,
+            c1: p.c1,
+            scatter: p.scatter,
+            seed: p.seed,
+            mix: p.mix,
+            clip_to_alpha: p.clip_to_alpha,
+            mids: p.mids,
+            mid: p.mid,
+        }
+    }
 }
 
 /// One resolved Noise (docs/08 §3.36). `tick` arrives already discretised from
@@ -217,10 +247,11 @@ impl FxEngine {
                 scatter: op.scatter,
                 mix_amt: op.mix,
                 seed: op.seed,
-                radial: u32::from(op.radial),
+                shape: op.shape,
                 clip_to_alpha: u32::from(op.clip_to_alpha),
                 mids: op.mids.min(3),
                 mid: op.mid,
+                shape_k: [op.turn, 0.0, 0.0, 0.0],
             }),
         );
         out

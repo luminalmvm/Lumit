@@ -10768,7 +10768,8 @@
           "default": 0,
           "options": [
             "Linear",
-            "Radial"
+            "Radial",
+            "Angle"
           ],
           "dividers_after": []
         },

@@ -115,9 +115,12 @@ impl BridgeShapeItem {
                 .map(|d| clamped_property(d, offset, 0.0, 100_000.0))
                 .collect::<Result<_, _>>()?,
             dash_offset: clamped_property(&self.dash_offset, offset, -100_000.0, 100_000.0)?,
-            // Two readings and no third: a number naming neither is the flat
-            // fill, which is the answer that draws something.
-            gradient: if self.gradient <= 2 { self.gradient } else { 0 },
+            // A number naming no reading a fill has is the flat fill, which
+            // is the answer that draws something.
+            gradient: match self.gradient {
+                0..=2 | lumit_core::shape::gradient::ANGLE => self.gradient,
+                _ => 0,
+            },
             gradient_colour: self.gradient_colour.map(crate::api::assets::linear_of),
             // The art's own coordinates, held to the same reach a vertex has.
             gradient_start_x: clamped_property(
