@@ -161,7 +161,7 @@ fn letters(
     let animated = animated && !on_path;
     let layout = lumit_text::layout(&block, animated);
     let margin = if animated {
-        f64::from(lumit_text::animator_margin(block.size))
+        f64::from(lumit_text::animated::animator_margin(block.size))
     } else {
         0.0
     };

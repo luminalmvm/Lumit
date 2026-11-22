@@ -21,8 +21,9 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::MetadataProvider;
 use zeno::{Angle, Command, Fill, Join, Mask, PathBuilder, Stroke, Transform};
 
+use crate::animated::animator_margin;
 use crate::fonts::Face;
-use crate::{animator_margin, BlockLayout, BlockLine, GlyphOutline, RasterText, TextBlock};
+use crate::{BlockLayout, BlockLine, GlyphOutline, RasterText, TextBlock};
 
 mod axes;
 mod plate;
