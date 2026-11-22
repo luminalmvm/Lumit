@@ -149,12 +149,14 @@ void main() {
       // Repeat Edge Pixels. The text layer's words are read now, so nothing
       // is skipped, and the shape layer's contents arrive, so one fewer
       // adjusted. One fewer again since shadows are drawn, so the card that
-      // casts them is no longer reported. 63, 50, 0 and 0, and only the
-      // adjusted are listed.
+      // casts them is no longer reported. One fewer again since Fractal noise
+      // has every After Effects fractal type, so the fixture's Turbulent
+      // smooth comes in as itself. 63, 49, 0 and 0, and only the adjusted
+      // are listed.
       expect(find.text(l10n.aeItemsImported(63)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
       expect(find.text(l10n.aeOutcomeAdjusted), findsOneWidget);
-      expect(find.text('50'), findsOneWidget);
+      expect(find.text('49'), findsOneWidget);
       expect(find.text(l10n.aeOutcomeSkipped), findsNothing);
 
       await tester.tap(find.text(l10n.close));
