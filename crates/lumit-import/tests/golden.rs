@@ -1016,23 +1016,22 @@ fn the_colour_and_generate_effects_convert_every_parameter() {
     let noise = effect(host, "fractal_noise");
     assert_eq!(
         noise.param("noise_type"),
-        Some(&EffectValue::Choice(0)),
-        "AE's Block is Lumit's first entry"
+        Some(&EffectValue::Choice(2)),
+        "AE's Block is Lumit's Block"
     );
     assert_eq!(
         noise.param("fractal_type"),
-        Some(&EffectValue::Choice(1)),
-        "AE's Turbulent Smooth folds onto Lumit's Turbulent"
+        Some(&EffectValue::Choice(2)),
+        "AE's Turbulent Smooth is Lumit's Turbulent smooth"
     );
     assert_close(float(noise, "contrast"), 140.0);
     assert_close(float(noise, "complexity"), 3.0);
     assert_close(float(noise, "evolution"), 90.0);
     // AE's 100 is Lumit's 200 on the anchor docs/11 §5 records.
     assert_close(float(noise, "scale"), 100.0 * 2.0);
-    assert!(reported(|r| matches!(
+    assert!(!reported(|r| matches!(
         r,
-        Reason::EffectParamApproximated { effect, param, .. }
-            if effect == "Fractal Noise" && param == "Fractal Type"
+        Reason::EffectParamApproximated { effect, .. } if effect == "Fractal Noise"
     )));
 
     // Levels and Hue/Saturation: the master group, values unchanged.
@@ -1150,7 +1149,9 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // One fewer since the text layer's styling carries.
             // Two fewer since the Gaussian blur gained Repeat edge pixels:
             // the fixture's two blurs carry theirs.
-            adjusted: 54,
+            // One fewer since Fractal noise has every AE fractal type: the
+            // fixture's Turbulent Smooth carries as itself.
+            adjusted: 53,
             placeholders: 1,
             skipped: 1,
         }
