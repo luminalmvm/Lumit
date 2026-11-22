@@ -36,6 +36,7 @@
 
 mod graph_nodes;
 mod matte_key_views;
+mod pixel;
 
 use graph_nodes::{number_input, output, picture_input, read, wire};
 use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
@@ -45,6 +46,7 @@ use lumit_core::model::{
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
+use pixel::rgb;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -182,11 +184,6 @@ fn node_graph_effect(comp: &Composition) -> EffectInstance {
     let graph = comp.graph.as_ref().expect("a node graph comp");
     lumit_core::fx::effects::node_graph::bind(&mut inst, comp.id, graph);
     inst
-}
-
-fn rgb(rgba: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
-    let d = ((y * w + x) * 4) as usize;
-    [rgba[d], rgba[d + 1], rgba[d + 2]]
 }
 
 struct Stub;

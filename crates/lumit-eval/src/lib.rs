@@ -46,6 +46,7 @@ mod orient;
 mod overlap_key;
 pub mod pool;
 mod projection;
+mod quality;
 pub mod schedule;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
@@ -59,12 +60,6 @@ pub struct FrameKey(pub u128);
 pub struct Quality {
     /// Preview resolution divisor (1 = Full, 2 = Half, …).
     pub divisor: u32,
-}
-
-impl Default for Quality {
-    fn default() -> Self {
-        Self { divisor: 1 }
-    }
 }
 
 /// Supplies the content identity of footage pixels: which source, and which

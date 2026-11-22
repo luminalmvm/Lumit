@@ -49,6 +49,7 @@ mod example_cube;
 mod oval_mask;
 
 mod skipped;
+mod still_values;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -64,6 +65,7 @@ use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
 use oval_mask::oval_mask;
+use still_values::{choice, colour, f, on, pt};
 use uuid::Uuid;
 
 /// The example frame's size: the source plate's own, and close enough to 1080p
@@ -435,31 +437,6 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
 
         _ => Vec::new(),
     }
-}
-
-/// A still float parameter.
-fn f(v: f64) -> EffectValue {
-    EffectValue::Float(Property::fixed(v))
-}
-
-/// A still point parameter, in pixels at composition size.
-fn pt(x: f64, y: f64) -> EffectValue {
-    EffectValue::Point(Property::fixed(x), Property::fixed(y))
-}
-
-/// A still colour parameter, scene-linear RGBA.
-fn colour(rgba: [f64; 4]) -> EffectValue {
-    EffectValue::Colour(rgba.map(Property::fixed))
-}
-
-/// A dropdown, by option index.
-fn choice(i: u32) -> EffectValue {
-    EffectValue::Choice(i)
-}
-
-/// A checkbox.
-fn on(b: bool) -> EffectValue {
-    EffectValue::Bool(b)
 }
 
 // ---------------------------------------------------------------------------
