@@ -1,6 +1,7 @@
 use lumit_core::anim::Property;
 use lumit_core::edits;
 use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
+use lumit_core::motion_path::MotionPath;
 use lumit_core::ops::Op;
 use lumit_core::time::{CompTime, Rational};
 use serde::Deserialize;
@@ -370,6 +371,7 @@ pub(super) struct SetArgs {
     index: Option<usize>,
     two_node: Option<bool>,
     after_effects_order: Option<bool>,
+    curved_path: Option<bool>,
     #[serde(default)]
     switches: SwitchArgs,
 }
@@ -451,6 +453,17 @@ pub(super) fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptErro
                     animation,
                 }),
         );
+    }
+    if let Some(curved) = a.curved_path {
+        ops.push(Op::SetLayerMotionPath {
+            comp: c,
+            layer,
+            path: if curved {
+                MotionPath::Curved
+            } else {
+                MotionPath::Straight
+            },
+        });
     }
     if let Some(three_d) = a.three_d {
         ops.push(Op::SetLayerThreeD {

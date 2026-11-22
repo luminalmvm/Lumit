@@ -311,7 +311,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.set",
-        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack",
+        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order, motion path or place in the stack",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
@@ -323,7 +323,7 @@ pub const COMMANDS: &[Command] = &[
             time!(),
             r#","start_offset":"#,
             time!(),
-            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"},"collapse":{"type":"boolean","description":"A precomp's collapse switch: its layers are drawn straight into this comp, its shapes and text as large as they are shown"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
+            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"curved_path":{"type":"boolean","description":"Run Position along a smooth path through its keys, as After Effects' auto bezier does, rather than straight from key to key. Motion blur follows it"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"},"collapse":{"type":"boolean","description":"A precomp's collapse switch: its layers are drawn straight into this comp, its shapes and text as large as they are shown"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -770,6 +770,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
         "start_offset": exact(layer.start_offset.0),
         "three_d": s.three_d,
         "after_effects_order": layer.transform.after_effects_order,
+        "curved_path": !layer.transform.motion_path.is_straight(),
         "switches": {
             "visible": s.visible,
             "audible": s.audible,
