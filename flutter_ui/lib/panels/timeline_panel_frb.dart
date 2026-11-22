@@ -124,6 +124,7 @@ import 'text_animator_rows_frb.dart'
     show
         TextAnimatorValue,
         animatorsMovedNote,
+        watchAnimatorOrder,
         removeTextAnimatorValue,
         removeTextAnimators;
 
@@ -2359,6 +2360,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    // Folds and picks follow the animators through undo and redo too.
+    watchAnimatorOrder(_ui!);
     // The columns as they were left, or the defaults.
     final columns = columnsFromJson(_ui!.workspace.timelineColumns);
     _groupOrder = columns.order;
