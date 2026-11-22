@@ -1,0 +1,136 @@
+---
+title: DaVinci Resolve link
+description: Turn clips on a Resolve timeline into a Lumit composition that Resolve shows in their place.
+sidebar:
+  order: 18.6
+---
+
+The **Resolve link** turns clips selected on a DaVinci Resolve timeline into a Lumit
+composition, and puts a clip in their place that shows that composition. Lumit draws the
+frames. Resolve asks for them through an OpenFX effect, **Lumit Composition**.
+
+The link is Windows only. It is verified with Resolve Studio 21.2, Lumit 0.11.2 and an
+NVIDIA RTX 4080. The free edition of Resolve and AMD graphics cards are untested.
+
+For a walk-through, see [Linking a Resolve timeline](/tutorials/resolve-link/).
+
+## Install it
+
+The Lumit installer has a **DaVinci Resolve Linking** component. Choose **Lumit with
+DaVinci Resolve linking**, or **Custom installation** and tick it. It adds the **Lumit Composition** effect and the **Create Lumit
+Composition** command to Resolve for the Windows user who installed it. Restart Resolve
+afterwards.
+
+Running the installer again without the component, or uninstalling Lumit, removes both.
+
+## Create a linked composition
+
+1. In Resolve, select clips on the timeline. At least one is a video clip.
+2. Choose **Workspace ▸ Scripts ▸ Create Lumit Composition**.
+3. The first time in a Resolve project, Lumit asks which Lumit project to use.
+4. Lumit makes the composition and saves the project. Resolve replaces the selected video
+   with one clip named **Lumit ·** and the composition's name, and saves its own project.
+
+Lumit starts if it is not running. With two Lumit windows open the command is refused.
+
+The first-time question is **Lumit project for Resolve**:
+
+- **Create new**: asks where to save a new project, offering the Resolve project's name.
+- **Choose existing**: asks for a `.lum` file.
+
+Every later link from that Resolve project, on any of its timelines, goes to the same Lumit
+project without asking. If another project is open in Lumit with unsaved changes, Lumit asks
+before leaving it.
+
+Cancelling a question in Lumit leaves the Resolve timeline as it was. So does leaving one
+unanswered for five minutes.
+
+## What Lumit receives
+
+The composition takes the timeline's name with the time of day, its resolution and frame
+rate, and the length of the selected video. Its background is transparent.
+
+Each selected clip becomes a layer, placed where it sat on the timeline with its source
+trim.
+
+| In Resolve | In Lumit |
+| --- | --- |
+| Video clip | A footage layer, scaled to fit the composition |
+| Audio clip | An audio-only layer, at the clip's volume |
+| Disabled clip, or a clip on a disabled track | A layer that is hidden or silent |
+| Generator, title or nested clip | A placeholder |
+| Retimed clip | A placeholder |
+| Clip whose media Lumit cannot import | A placeholder |
+
+A placeholder is an empty layer named **[Placeholder]** and the clip's name, spanning the
+clip's time.
+
+Nothing else comes across. Resolve's effects, grades and transforms on the clips are not
+read.
+
+## What Resolve keeps
+
+The selected video clips go inside a compound clip, disabled. The **Lumit Composition**
+effect is on the compound clip. The selected audio clips stay on the timeline, unchanged.
+
+A transparent still sits inside the compound clip, named **Lumit duration canvas - KEEP
+ENABLED**. It is an hour long, which is how far the linked clip can be trimmed out past the
+selected range. Its media pool item is **Lumit duration canvas - KEEP**, in the bin **Lumit
+Link - DO NOT DELETE**. That item records which Lumit project the Resolve project is linked
+to. Leave the bin, the item and the still in place.
+
+## The effect's controls
+
+- **Choose Project**: picks the `.lum` file the effect reads, and opens it in Lumit. Picking
+  a different file clears the composition and **Match duration to Resolve**.
+- **Choose Composition**: lists the compositions of the project as it is open in Lumit.
+- **Open in Lumit**: brings the composition to the front in Lumit, starting Lumit and
+  opening the project if needed.
+- **Match duration to Resolve**: the composition ends where the linked clip ends. Lumit
+  changes the composition's duration when Resolve asks for a frame, as an edit that can be
+  undone. Turn it on for one clip per composition.
+
+Only **Choose Project** is available until a project is chosen. The effect can also be
+added by hand, from **Lumit** in Resolve's OpenFX list.
+
+Changing a composition's duration in Lumit never trims the clip in Resolve.
+
+## Seeing changes
+
+Resolve shows the composition as Lumit's Viewer would draw it, at the composition's
+[preview resolution](/use/preview/#preview-resolution), scaled to Resolve's frame. Outside
+the composition's duration the clip is transparent.
+
+Lumit sends nothing to Resolve on its own. A change made in Lumit appears when Resolve next
+asks for a frame.
+
+## When Lumit is closed
+
+The effect needs Lumit running, with the linked project open and saved to a file. Otherwise
+it draws a card reading **Lumit is offline** on a transparent frame. This applies to exports
+from Resolve too: an export made while Lumit is closed contains the card.
+
+Press **Open in Lumit**. The picture returns at the next frame Resolve asks for.
+
+The effect reports an error in place of a picture when:
+
+- The same project is open in two Lumit windows.
+- The chosen composition is gone, or two compositions share its name.
+- A composition picked with **Choose Composition** has since been renamed. Pick it again.
+
+## A moved or renamed project
+
+A link follows the Lumit project itself, not its path. Opening the moved file in Lumit
+reconnects every link to it.
+
+When Lumit cannot find the file, **Linked project not found** offers **Locate project** and
+**Cancel**. It appears on **Open in Lumit**, and on the next **Create Lumit Composition**.
+Locating the file once reconnects all of that project's links. A different Lumit project is
+refused, and the file picker opens again.
+
+## Related
+
+- [Linking a Resolve timeline](/tutorials/resolve-link/)
+- [Compositions](/use/compositions/)
+- [Preview and playback](/use/preview/)
+- [Projects](/use/projects/)

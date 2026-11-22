@@ -238,7 +238,7 @@ crate knows a UI exists. `lumit-core` has no GPU, codec or audio dependency.
 |---|---|
 | `flutter_ui/` | The app |
 | `web/`, `web-docs/` | lumitlab.com and docs.lumitlab.com (Astro). Nothing depends on them |
-| `scripts/` | `build`, `check`, `codegen`, `translations`, `manual-pages`, `shots`, `win-dev-env`. Each answers `-?` |
+| `scripts/` | `build`, `check`, `codegen`, `translations`, `manual-pages`, `shots`, `sign-release`, `win-dev-env`. Each answers `-?` |
 | `packaging/` | Windows installer, macOS dmg, Linux desktop files, Flatpak |
 | `tools/` | The After Effects export script and its audit kit |
-| `.github/workflows/` | `ci.yml`, and `release.yml` on a `v*` tag and nightly from `nightly` |
+| `.github/workflows/` | `ci.yml`, and `release.yml` on a `v*` tag and nightly from `nightly`, which leaves a draft that `scripts/sign-release.ps1` signs and publishes |
