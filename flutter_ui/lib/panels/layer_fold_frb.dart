@@ -3256,6 +3256,11 @@ List<LayerFoldRow> layerFoldRows({
         final solid = meshKindOf(info) == BridgeLayerKind.model;
         // Each selector's rows, under a heading of its own once there are
         // more than one, its Advanced rows under a twirl of their own.
+        // Animator amount first, over the selectors, as in the Effect
+        // controls panel.
+        rows.add(FoldAnimatorValueRow(
+            i, animator, TextAnimatorValue.animatorAmount,
+            depth: 3));
         final many = selectorCount(animator) > 1;
         for (var k = 0; k < selectorCount(animator); k++) {
           final depth = many ? 4 : 3;
@@ -3297,6 +3302,7 @@ List<LayerFoldRow> layerFoldRows({
           }
         }
         for (final value in textAnimatorValuesOf(animator, solid: solid)) {
+          if (value == TextAnimatorValue.animatorAmount) continue;
           rows.add(FoldAnimatorValueRow(i, animator, value, depth: 3));
         }
       }

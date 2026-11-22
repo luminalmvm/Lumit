@@ -862,11 +862,15 @@ class FxRenameField extends StatefulWidget {
   final String initial;
   final ValueChanged<String> onDone;
   final VoidCallback onCancel;
+
+  /// How wide the field is; the name column's width when not given.
+  final double? width;
   const FxRenameField(
       {super.key,
       required this.initial,
       required this.onDone,
-      required this.onCancel});
+      required this.onCancel,
+      this.width});
 
   @override
   State<FxRenameField> createState() => _FxRenameFieldState();
@@ -880,9 +884,23 @@ class _FxRenameFieldState extends State<FxRenameField> {
       extentOffset: widget.initial.length,
     );
 
+  /// Its own focus, asked for once it is on screen. `autofocus` alone is not
+  /// enough: it does nothing while another panel (the Node graph, say) holds
+  /// the focus, and the typing then went there.
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_focus.hasFocus) _focus.requestFocus();
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -890,7 +908,8 @@ class _FxRenameFieldState extends State<FxRenameField> {
   Widget build(BuildContext context) => HouseTextField(
         key: const ValueKey('fx-rename-field'),
         controller: _controller,
-        width: fxNameColumnWidth - 40,
+        focusNode: _focus,
+        width: widget.width ?? fxNameColumnWidth - 40,
         autofocus: true,
         submitOnLostFocus: true,
         onSubmitted: widget.onDone,

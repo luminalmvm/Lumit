@@ -853,6 +853,8 @@ class _SubmenuRowState extends State<SubmenuRow> {
     showLumitPopup<void>(
       context: context,
       position: at,
+      // A click on this row, while its flyout is out, keeps both open.
+      keepOpenOn: box.localToGlobal(Offset.zero) & box.size,
       // So the menu underneath still feels the pointer: moving to another row
       // is what takes this flyout back.
       hoverThrough: true,

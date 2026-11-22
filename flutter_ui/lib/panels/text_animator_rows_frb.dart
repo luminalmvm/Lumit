@@ -890,12 +890,14 @@ bool addTextAnimator(LayerReference layer,
       pathOffset: document.pathOffset,
       style: document.style,
       paragraph: document.paragraph,
-      animators: [
-        ...document.animators,
-        ...adding,
-        if (adding.isEmpty)
-          freshTextAnimator(animatorNameFor(document.animators)),
-      ],
+      // Never a name already on the layer: Link to, Reverse and the Node
+      // graph's wires go by it.
+      animators: adding.isEmpty
+          ? [
+              ...document.animators,
+              freshTextAnimator(animatorNameFor(document.animators)),
+            ]
+          : animatorsPasted(document.animators, adding),
     ),
   );
   return true;
@@ -1860,11 +1862,8 @@ List<Widget> animateMenuRows({
       const MenuDivider(),
       MenuRow(
         key: const ValueKey<String>('text-animate-paste'),
-        onPressed: () => add([
-          for (final a in copiedAnimators)
-            animatorWith(a,
-                name: freeAnimatorName(document.animators, a.name)),
-        ]),
+        // Named free and kept linked as they are added.
+        onPressed: () => add(copiedAnimators),
         child: Text(l10n.textAnimatorPaste),
       ),
     ],

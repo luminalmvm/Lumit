@@ -29,7 +29,8 @@ import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'graph_maths.dart' show evaluateScalar, keysOf, rationalSeconds;
 import '../state/font_axes.dart' show fontAxesReady;
-import 'fx_section.dart' show FxRenameField, fxTwoColumnRow;
+import 'fx_section.dart'
+    show FxRenameField, fxKeyColumnWidth, fxRowHeight, fxTwoColumnRow;
 import 'text_animation_presets.dart' show reversedAnimator, reversedScalar;
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'timeline_mask_rows_frb.dart' show RowButton;
@@ -884,11 +885,21 @@ BridgeTextAnimator outAnimator(
 // ---- User presets -----------------------------------------------------------
 
 /// Where the user's text animator presets are kept: a folder of `.json`
-/// files beside the effect presets.
+/// files beside the effect presets' folder, not inside it, so the Effects &
+/// Presets panel never lists it as a folder of effect presets. One kept inside
+/// it by an earlier build is moved out the first time it is looked for.
 Directory? animatorPresetsDir() {
   final library = presetsDirPath();
   if (library == null) return null;
-  return Directory('$library${Platform.pathSeparator}text-animators');
+  final sep = Platform.pathSeparator;
+  final dir = Directory('${Directory(library).parent.path}${sep}text-animator-presets');
+  final old = Directory('$library${sep}text-animators');
+  try {
+    if (old.existsSync() && !dir.existsSync()) old.renameSync(dir.path);
+  } catch (_) {
+    // Left where it is: the presets are still read from there below.
+  }
+  return old.existsSync() && !dir.existsSync() ? old : dir;
 }
 
 /// The saved presets' names and files, by name.
@@ -1120,7 +1131,8 @@ class AnimatorHeading extends StatelessWidget {
               onCancel: () => animatorRenaming.value = null,
             )
           : LumitTooltip(
-              message: l10n.textAnimatorRename,
+              // The whole name, which a narrow column cuts short.
+              message: '${a.name}\n${l10n.textAnimatorRename}',
               child: DoubleClickListener(
                 key: ValueKey<String>('text-animator-name-$index'),
                 onDoubleClick: () => animatorRenaming.value = renameKey,
@@ -1235,6 +1247,35 @@ class AnimatorHeading extends StatelessWidget {
         ],
       ),
     );
+    // Renaming, the field takes the whole row, buttons and all, so a long
+    // name can be read and edited.
+    final renameRow = SizedBox(
+      height: fxRowHeight(t),
+      child: Row(children: [
+        const SizedBox(width: fxKeyColumnWidth + 4),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, box) => Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FxRenameField(
+                initial: a.name,
+                width: box.maxWidth - 8,
+                onDone: (next) {
+                  animatorRenaming.value = null;
+                  write(animatorsRenamed(animators, index, next));
+                },
+                onCancel: () => animatorRenaming.value = null,
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
+    final shown = ValueListenableBuilder<String?>(
+      valueListenable: animatorRenaming,
+      builder: (context, renaming, _) =>
+          renaming == renameKey ? renameRow : heading,
+    );
     return animatorDropTarget(
       layerId: layerId,
       index: index,
@@ -1249,7 +1290,7 @@ class AnimatorHeading extends StatelessWidget {
             animators: animators,
             index: index,
             write: write),
-        child: heading,
+        child: shown,
       ),
     );
   }
@@ -1593,19 +1634,29 @@ void followAnimators(LumitUiState? ui, LayerReference layer,
   }
 }
 
-/// [animators] with [copied] added after them. A copy whose name is taken is
-/// given a free one, and a copy linked to another of the copies is linked to
-/// it under its new name, so a pasted pair stays a pair.
+/// [animators] with [copied] added after them: pasted, or put on from a
+/// preset. A name already taken is given a free one, the same for every copy
+/// of that name (a preset may lay two of one name on purpose, and Reverse
+/// goes by name), and a copy linked to another of the copies is linked to it
+/// under its new name, so a pasted pair stays a pair.
 List<BridgeTextAnimator> animatorsPasted(
     List<BridgeTextAnimator> animators, List<BridgeTextAnimator> copied) {
   final out = [...animators];
+  final taken = {for (final a in animators) a.name};
   final renamed = <String, String>{};
-  final added = <BridgeTextAnimator>[];
   for (final c in copied) {
-    final name = freeAnimatorName([...out, ...added], c.name);
-    renamed.putIfAbsent(c.name, () => name);
-    added.add(animatorWith(c, name: name));
+    renamed.putIfAbsent(c.name, () {
+      var name = c.name;
+      for (var n = 2; taken.contains(name); n++) {
+        name = '${c.name} $n';
+      }
+      taken.add(name);
+      return name;
+    });
   }
+  final added = [
+    for (final c in copied) animatorWith(c, name: renamed[c.name]),
+  ];
   return [
     ...out,
     for (final a in added)
