@@ -20468,6 +20468,10 @@
   "@histSetAxisMode": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histSetMotionPath": "Set motion path",
+  "@histSetMotionPath": {
+    "description": "A row of the Edit > History window: a layer's motion path was switched between straight and curved. Sent by the engine as English and looked up here."
+  },
   "histSetRotationOrder": "Set rotation order",
   "@histSetRotationOrder": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."

@@ -41,6 +41,7 @@ pub mod model;
 pub mod model_layer;
 pub mod model_material;
 pub mod model_part;
+pub mod motion_path;
 pub mod multicam;
 /// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;

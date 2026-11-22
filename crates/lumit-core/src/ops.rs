@@ -359,6 +359,12 @@ pub enum Op {
         layer: Uuid,
         orient: crate::orient::Orient,
     },
+    /// How a layer's Position travels between keys ([`crate::motion_path`]).
+    SetLayerMotionPath {
+        comp: Uuid,
+        layer: Uuid,
+        path: crate::motion_path::MotionPath,
+    },
     /// Mute or unmute a layer's audio (the audible switch).
     SetLayerAudible {
         comp: Uuid,
@@ -1046,6 +1052,7 @@ impl Op {
             Op::SetSequenceClips { .. } => "Edit clips",
             Op::SetLayerKind { .. } => "Change layer kind",
             Op::SetLayerOrient { .. } => "Set orient",
+            Op::SetLayerMotionPath { .. } => "Set motion path",
             Op::SetLayerAdjustment { .. } => "Adjustment switch",
             Op::SetLayerPitchFollowsSpeed { .. } => "Keep pitch",
             Op::SetLayerAudible { .. } => "Audible switch",
@@ -1701,6 +1708,9 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             layer,
             orient,
         } => crate::orient::set(doc, *comp, *layer, *orient),
+        Op::SetLayerMotionPath { comp, layer, path } => {
+            crate::motion_path::set(doc, *comp, *layer, *path)
+        }
         Op::SetLayerPitchFollowsSpeed {
             comp,
             layer,

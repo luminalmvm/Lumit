@@ -1,9 +1,11 @@
-//! What Orient adds to a frame's name. Nothing while it is off, so every other
-//! key stays as it was. Towards camera adds only its name, as the camera, the
-//! layer's place and its parents are in the key already.
+//! What Orient and a curved motion path add to a frame's name. Nothing while
+//! they are off, so every other key stays as it was. Towards camera adds only
+//! its name, as the camera, the layer's place and its parents are in the key
+//! already.
 
 use super::feed_f64;
 use lumit_core::model::TransformGroup;
+use lumit_core::motion_path::position;
 use lumit_core::orient::{direction, Orient};
 
 pub(super) fn feed(h: &mut blake3::Hasher, tr: &TransformGroup, lt: f64) {
@@ -18,6 +20,14 @@ pub(super) fn feed(h: &mut blake3::Hasher, tr: &TransformGroup, lt: f64) {
             for v in [x, y, z] {
                 feed_f64(h, v);
             }
+        }
+    }
+    // A curved path puts the layer off the straight values the key holds.
+    if !tr.motion_path.is_straight() {
+        h.update(b"curved-path/");
+        let (x, y, z) = position(tr, lt, false, &|p| p.value_at(lt));
+        for v in [x, y, z] {
+            feed_f64(h, v);
         }
     }
 }

@@ -63,13 +63,7 @@ const STEP: f64 = 1.0 / 1000.0;
 /// went, and one yet to start points the way it is about to go.
 #[must_use]
 pub fn direction(tr: &TransformGroup, lt: f64, flat: bool) -> Option<(f64, f64, f64)> {
-    let at = |t: f64| {
-        (
-            tr.position_x.value_at(t),
-            tr.position_y.value_at(t),
-            if flat { 0.0 } else { tr.position_z.value_at(t) },
-        )
-    };
+    let at = |t: f64| crate::motion_path::position(tr, t, flat, &|p| p.value_at(t));
     let heading = |a: f64, b: f64| {
         let (p, q) = (at(a), at(b));
         let d = (q.0 - p.0, q.1 - p.1, q.2 - p.2);

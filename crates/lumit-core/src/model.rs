@@ -731,6 +731,11 @@ pub struct TransformGroup {
     pub axis_modes: AxisModes,
     #[serde(default, skip_serializing_if = "crate::orient::Orient::is_off")]
     pub orient: crate::orient::Orient,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::motion_path::MotionPath::is_straight"
+    )]
+    pub motion_path: crate::motion_path::MotionPath,
     /// How the layer takes the comp's lights. Kept beside the transform
     /// because it is animated the same way and read in the same places; a
     /// file from before it existed reads as the lights it had then, and a
@@ -891,6 +896,7 @@ impl Default for TransformGroup {
             anchor_z: Property::zero(),
             scale_z: Property::fixed(100.0),
             orient: crate::orient::Orient::Off,
+            motion_path: crate::motion_path::MotionPath::Straight,
             after_effects_order: false,
             opacity: Property::fixed(100.0),
             axis_modes: AxisModes::default(),
@@ -1198,11 +1204,7 @@ impl TransformGroup {
             self.orientation_at(lt, read)
         };
         Placement {
-            position: (
-                read(&self.position_x),
-                read(&self.position_y),
-                hidden(&self.position_z, 0.0),
-            ),
+            position: crate::motion_path::position(self, lt, flat, read),
             anchor: (
                 read(&self.anchor_x),
                 read(&self.anchor_y),
@@ -2778,11 +2780,7 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
         return None;
     };
     let tr = &layer.transform;
-    let position = (
-        tr.position_x.value_at(lt),
-        tr.position_y.value_at(lt),
-        tr.position_z.value_at(lt),
-    );
+    let position = crate::motion_path::position(tr, lt, false, &|p| p.value_at(lt));
     let stored = crate::camera::oriented(
         tr.orientation_at(lt, &|p: &Property| p.value_at(lt)),
         (
