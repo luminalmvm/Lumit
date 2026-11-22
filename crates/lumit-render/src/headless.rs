@@ -42,6 +42,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use uuid::Uuid;
 
 mod crop;
+mod faults;
 mod routes;
 #[cfg(target_arch = "wasm32")]
 mod web;
