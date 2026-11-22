@@ -11,7 +11,7 @@
 
 struct Params {
     start_axis: vec4<f32>,  // xy = start (raster px), zw = end − start
-    c0: vec4<f32>,          // start colour; alpha lane ignored (the ramp is opaque)
+    c0: vec4<f32>,          // start colour, straight alpha
     c1: vec4<f32>,          // end colour
     inv_len2: f32,          // 1 ÷ |axis|², floored
     inv_len: f32,           // 1 ÷ |axis|, floored
@@ -23,6 +23,7 @@ struct Params {
     mids: u32,              // colours in between in use, 0..3
     mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
     shape_k: vec4<f32>,     // x = where an angle ramp begins, radians; yzw = focal point
+    mid_alpha: vec4<f32>,   // xyz = each colour in between's alpha
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -57,26 +58,27 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
 
 // == lumit_core::fx::cpu::gradient::gradient_ramp: Start colour, the colours in
 // between that are in use, End colour.
-fn ramp(t: f32) -> vec3<f32> {
+fn ramp(t: f32) -> vec4<f32> {
     var at = 0.0;
-    var prev = p.c0.rgb;
+    var prev = p.c0;
     for (var k = 0u; k < min(p.mids, 3u); k = k + 1u) {
         let m = p.mid[k];
+        let to = vec4<f32>(m.rgb, p.mid_alpha[k]);
         if (t <= m.w) {
             var f = 1.0;
             if (m.w > at) {
                 f = (t - at) / (m.w - at);
             }
-            return prev + (m.rgb - prev) * f;
+            return prev + (to - prev) * f;
         }
         at = m.w;
-        prev = m.rgb;
+        prev = to;
     }
     var f = 1.0;
     if (at < 1.0) {
         f = (t - at) / (1.0 - at);
     }
-    return prev + (p.c1.rgb - prev) * f;
+    return prev + (p.c1 - prev) * f;
 }
 
 @compute @workgroup_size(8, 8)
@@ -119,13 +121,21 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     // premultiplied form of "this ramp at this coverage", and the layer's own
     // alpha is then left exactly as it was — the whole difference between the
     // Gradient overlay style and the generator this kernel also serves.
+    let r = ramp(tc);
     var cover = 1.0;
-    var outa = o.a * (1.0 - p.mix_amt) + p.mix_amt;
+    var outa = o.a * (1.0 - p.mix_amt) + r.a * p.mix_amt;
+    var under = 0.0;
     if (p.clip_to_alpha != 0u) {
         cover = o.a;
         outa = o.a;
+        under = 1.0 - r.a;
     }
-    let g = ramp(tc) * cover;
+    // == cpu::gradient: a clear part of the ramp shows the layer inside it,
+    // nothing on the whole frame.
+    var g = r.rgb * r.a * cover;
+    if (under > 0.0) {
+        g = g + o.rgb * under;
+    }
     let outv = o.rgb * (1.0 - p.mix_amt) + g * p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, outa));
 }

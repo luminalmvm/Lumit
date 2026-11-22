@@ -48,9 +48,9 @@ pub struct GradientOp {
     pub turn: f32,
     /// A radial ramp's centre off the start point and its reach.
     pub focal: [f32; 3],
-    /// Scene-linear start and end colours.
-    pub c0: [f32; 3],
-    pub c1: [f32; 3],
+    /// Scene-linear start and end colours, straight alpha last.
+    pub c0: [f32; 4],
+    pub c1: [f32; 4],
     /// 0..1 dither of the ramp position.
     pub scatter: f32,
     pub seed: u32,
@@ -63,6 +63,8 @@ pub struct GradientOp {
     /// The colours in between in use (0..=3), rgb and place along the ramp.
     pub mids: u32,
     pub mid: [[f32; 4]; 3],
+    /// The alpha of each colour in between.
+    pub mid_alpha: [f32; 3],
 }
 
 #[repr(C)]
@@ -85,6 +87,8 @@ struct GradientParams {
     mid: [[f32; 4]; 3],
     /// x = where an angle ramp begins, radians; yzw = the focal point.
     shape_k: [f32; 4],
+    /// xyz = each colour in between's alpha.
+    mid_alpha: [f32; 4],
 }
 
 /// The parity test's copy of the renderer's `gradient_op`: this crate sees
@@ -108,6 +112,7 @@ impl From<&lumit_core::fx::cpu::gradient::GradientParams> for GradientOp {
             clip_to_alpha: p.clip_to_alpha,
             mids: p.mids,
             mid: p.mid,
+            mid_alpha: p.mid_alpha,
         }
     }
 }
@@ -243,8 +248,8 @@ impl FxEngine {
             h,
             bytemuck::bytes_of(&GradientParams {
                 start_axis: [op.start[0], op.start[1], op.axis[0], op.axis[1]],
-                c0: [op.c0[0], op.c0[1], op.c0[2], 0.0],
-                c1: [op.c1[0], op.c1[1], op.c1[2], 0.0],
+                c0: op.c0,
+                c1: op.c1,
                 inv_len2: op.inv_len2,
                 inv_len: op.inv_len,
                 scatter: op.scatter,
@@ -255,6 +260,7 @@ impl FxEngine {
                 mids: op.mids.min(3),
                 mid: op.mid,
                 shape_k: [op.turn, op.focal[0], op.focal[1], op.focal[2]],
+                mid_alpha: [op.mid_alpha[0], op.mid_alpha[1], op.mid_alpha[2], 0.0],
             }),
         );
         out

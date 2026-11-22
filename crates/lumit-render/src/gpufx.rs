@@ -1542,6 +1542,7 @@ fn gradient_op(
         clip_to_alpha: p.clip_to_alpha,
         mids: p.mids,
         mid: p.mid,
+        mid_alpha: p.mid_alpha,
     }
 }
 

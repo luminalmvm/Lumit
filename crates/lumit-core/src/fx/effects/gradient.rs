@@ -7,10 +7,12 @@
 //! pixel, which is the standard cure for the contour rings a long, shallow ramp
 //! shows on an 8-bit display.
 
+use crate::anim::Property;
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
     schema::ParamGroup,
 };
+use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
 /// Each colour in between shows only once Colours counts it, and the
@@ -58,7 +60,8 @@ pub const GRADIENT_GROUPS: &[ParamGroup] = &[
 #[effect(
     match_name = "gradient",
     label = "Gradient",
-    version = 1,
+    // 2: the colours' alpha comes through (`migrate_v1`).
+    version = 2,
     category = Generate,
     cost = Cheap,
     roi = Exact,
@@ -83,7 +86,8 @@ pub struct Gradient {
     #[slider(label = "Start y", min = 0.0, max = 2160.0, default = 0.0, unit = Px)]
     pub start_y: f32,
 
-    /// The colour at Start. Scene-linear and open above 1 (§2.1).
+    /// The colour at Start. Scene-linear and open above 1 (§2.1). Its alpha
+    /// comes through, so a ramp can fade to clear.
     #[colour(label = "Start colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub start_colour: [f32; 4],
 
@@ -219,12 +223,8 @@ impl Gradient {
         let axis = [self.end_x - self.start_x, self.end_y - self.start_y];
         cpu::gradient::GradientParams {
             shape: self.shape.min(cpu::gradient::ANGLE),
-            c0: [
-                self.start_colour[0],
-                self.start_colour[1],
-                self.start_colour[2],
-            ],
-            c1: [self.end_colour[0], self.end_colour[1], self.end_colour[2]],
+            c0: self.start_colour,
+            c1: self.end_colour,
             scatter: (self.scatter / 100.0).clamp(0.0, 1.0),
             seed: self.seed,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
@@ -234,6 +234,7 @@ impl Gradient {
             clip_to_alpha: self.paint == 0,
             mids: self.colours.min(3),
             mid: self.mids(),
+            mid_alpha: [self.colour_2[3], self.colour_3[3], self.colour_4[3]],
             focal: cpu::gradient::focal(axis, self.highlight, self.highlight_angle),
             ..cpu::gradient::GradientParams::aimed([self.start_x, self.start_y], axis)
         }
@@ -253,6 +254,21 @@ impl Gradient {
             at = (pos / 100.0).clamp(at, 1.0);
             [c[0], c[1], c[2], at]
         })
+    }
+}
+
+/// A Gradient saved before its colours' alpha came through drew every colour
+/// solid, whatever its alpha said. Each colour's alpha is made full, so the
+/// picture stays exactly as it was.
+pub(crate) fn migrate_v1(e: &mut EffectInstance) {
+    if e.effect.match_name != "gradient" || e.effect.version >= 2 {
+        return;
+    }
+    e.effect.version = 2;
+    for p in &mut e.params {
+        if let EffectValue::Colour(c) = &mut p.value {
+            c[3] = Property::fixed(1.0);
+        }
     }
 }
 
@@ -287,9 +303,9 @@ mod tests {
             ..plain()
         }
         .packed();
-        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0]);
-        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.0), [1.0, 1.0, 1.0]);
-        assert_eq!(cpu::gradient::gradient_ramp(&g, 1.0), [1.0, 1.0, 1.0]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.5), [1.0, 0.5, 0.0, 1.0]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 0.0), [1.0; 4]);
+        assert_eq!(cpu::gradient::gradient_ramp(&g, 1.0), [1.0; 4]);
         let quarter = cpu::gradient::gradient_ramp(&g, 0.25);
         assert!((quarter[1] - 0.75).abs() < 1e-6);
         // Two colours ignore the ones in between.
@@ -298,6 +314,9 @@ mod tests {
             ..plain()
         }
         .packed();
-        assert_eq!(cpu::gradient::gradient_ramp(&two, 0.5), [0.5, 0.5, 0.5]);
+        assert_eq!(
+            cpu::gradient::gradient_ramp(&two, 0.5),
+            [0.5, 0.5, 0.5, 1.0]
+        );
     }
 }

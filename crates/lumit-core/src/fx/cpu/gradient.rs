@@ -33,10 +33,10 @@ pub struct GradientParams {
     /// squared distance from it less the squared radius: see [`focal`].
     /// Zero is centred.
     pub focal: [f32; 3],
-    /// Scene-linear start colour (alpha ignored: the ramp is opaque).
-    pub c0: [f32; 3],
+    /// Scene-linear start colour, its alpha straight in the last lane.
+    pub c0: [f32; 4],
     /// Scene-linear end colour.
-    pub c1: [f32; 3],
+    pub c1: [f32; 4],
     /// Dither of `t`, 0..1 (Scatter ÷ 100).
     pub scatter: f32,
     pub seed: u32,
@@ -53,6 +53,8 @@ pub struct GradientParams {
     /// the last lane.
     pub mids: u32,
     pub mid: [[f32; 4]; 3],
+    /// The alpha of each of `mid`.
+    pub mid_alpha: [f32; 3],
 }
 
 impl GradientParams {
@@ -73,14 +75,15 @@ impl GradientParams {
             inv_len: 1.0 / len2.sqrt(),
             turn: axis[1].atan2(axis[0]),
             focal: [0.0; 3],
-            c0: [0.0; 3],
-            c1: [1.0; 3],
+            c0: [0.0, 0.0, 0.0, 1.0],
+            c1: [1.0; 4],
             scatter: 0.0,
             seed: 0,
             mix: 1.0,
             clip_to_alpha: false,
             mids: 0,
             mid: [[0.0; 4]; 3],
+            mid_alpha: [1.0; 3],
         }
     }
 }
@@ -103,12 +106,13 @@ pub fn focal(axis: [f32; 2], length: f32, angle: f32) -> [f32; 3] {
 }
 
 /// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
-/// then `c1`, each mixed with the next by how far between them `t` is.
+/// then `c1`, each mixed with the next by how far between them `t` is. The
+/// colour and its alpha mix apart, straight, as a shape's gradient does.
 #[must_use]
-pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
+pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 4] {
     let (mut at, mut from) = (0.0f32, p.c0);
-    for m in p.mid.iter().take(p.mids.min(3) as usize) {
-        let to = [m[0], m[1], m[2]];
+    for (m, a) in p.mid.iter().zip(p.mid_alpha).take(p.mids.min(3) as usize) {
+        let to = [m[0], m[1], m[2], a];
         if t <= m[3] {
             let k = if m[3] > at {
                 (t - at) / (m[3] - at)
@@ -125,7 +129,7 @@ pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
 
 /// Gradient (docs/08 §3.35): a linear, radial or angle ramp with optional
 /// scatter — a **generator**, so it replaces the frame edge to edge and writes
-/// opaque alpha. Interpolation is in the working space (scene-linear, §2.1), so
+/// the ramp's own alpha. Interpolation is in the working space (scene-linear, §2.1), so
 /// the ramp is photometrically even and can drive another effect's matte. Mix 0
 /// is the bit-exact identity (the WGSL twin matches).
 pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
@@ -167,14 +171,22 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             // premultiplied values with no round trip, exactly as `fill` does.
             let cover = if p.clip_to_alpha { rgba[i + 3] } else { 1.0 };
             let ramp = gradient_ramp(p, t);
+            // A clear part of the ramp shows what it is laid over: the layer
+            // inside it, nothing on the whole frame. Opaque, both terms are
+            // the ones this kernel has always had, to the bit.
+            let a = ramp[3];
+            let under = if p.clip_to_alpha { 1.0 - a } else { 0.0 };
             for c in 0..3 {
-                let g = ramp[c] * cover;
+                let mut g = ramp[c] * a * cover;
+                if under > 0.0 {
+                    g += rgba[i + c] * under;
+                }
                 rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + g * p.mix;
             }
             if !p.clip_to_alpha {
-                // The generator writes opaque; the overlay leaves the layer's
-                // own coverage exactly as it found it.
-                rgba[i + 3] = rgba[i + 3] * (1.0 - p.mix) + p.mix;
+                // The generator writes the ramp's alpha; the overlay leaves
+                // the layer's own coverage exactly as it found it.
+                rgba[i + 3] = rgba[i + 3] * (1.0 - p.mix) + a * p.mix;
             }
         }
     }

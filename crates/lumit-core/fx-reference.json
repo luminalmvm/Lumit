@@ -10756,7 +10756,7 @@
       "slug": "gradient",
       "match_name": "gradient",
       "label": "Gradient",
-      "version": 1,
+      "version": 2,
       "category": "Generate",
       "category_slug": "generate",
       "params": [

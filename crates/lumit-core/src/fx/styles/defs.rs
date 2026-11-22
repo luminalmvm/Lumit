@@ -484,8 +484,8 @@ impl GradientOverlay {
         };
         cpu::gradient::GradientParams {
             shape: u32::from(self.gradient_type == 1),
-            c0: [a[0], a[1], a[2]],
-            c1: [b[0], b[1], b[2]],
+            c0: [a[0], a[1], a[2], 1.0],
+            c1: [b[0], b[1], b[2], 1.0],
             // The style has no Scatter: dither is the generator's cure for
             // banding across a whole frame, and an overlay rides whatever the
             // layer under it already does.

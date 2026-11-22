@@ -7325,6 +7325,10 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     radial.start_y = 12.0;
     let mut angle = radial;
     angle.shape = 2;
+    let mut clear = base;
+    clear.end_colour = [0.0, 0.2, 1.0, 0.0];
+    let mut clear_inside = clear;
+    clear_inside.paint = 0;
     let mut lit = radial;
     lit.highlight = 60.0;
     lit.highlight_angle = -135.0;
@@ -7345,6 +7349,8 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         ("radial", radial, 1.0),
         ("angle", angle, 1.0),
         ("highlight", lit, 1.0),
+        ("clear", clear, 1.0),
+        ("clear inside", clear_inside, 1.0),
         ("scattered", scattered, 1.0),
         ("hdr", hdr, 1.0),
         ("degenerate", degenerate, 1.0),
@@ -7372,8 +7378,8 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         } else {
             assert!(gpu != img, "{name}: the ramp must actually do something");
         }
-        if mix == 1.0 {
-            // A generator writes opaque pixels edge to edge (§3.35).
+        if mix == 1.0 && !name.starts_with("clear") {
+            // Opaque colours write opaque pixels edge to edge (§3.35).
             for g in gpu.chunks_exact(4) {
                 assert_eq!(g[3], 1.0, "{name}: the ramp must be opaque");
             }
