@@ -12,7 +12,7 @@ import 'package:uuid/uuid.dart';
 part 'shape.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `groups`, `modifiers`, `read_at`, `read_at`, `read_entries`, `write_entries`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A colour part way along a shape's gradient: where it sits as a per cent of
 /// the ramp, and how opaque it is, 0..100. All three animate.
@@ -323,4 +323,68 @@ class BridgeShapeTrim {
           start == other.start &&
           end == other.end &&
           offset == other.offset;
+}
+
+/// **A gradient outline**: the stroke colour at the start of the ramp,
+/// running through the stops to `colour` at its end. `kind` 1 is linear, 2
+/// radial, 3 along the outline's own line and 4 round the start point; 0 draws
+/// the flat stroke colour and keeps the rest. The numbers mean what a gradient
+/// fill's do, and along the line has no use for the two points.
+class BridgeStrokeGradient {
+  final int kind;
+  final BridgeColour? colour;
+  final BridgeScalar startX;
+  final BridgeScalar startY;
+  final BridgeScalar endX;
+  final BridgeScalar endY;
+  final BridgeScalar startOpacity;
+  final BridgeScalar endOpacity;
+  final BridgeScalar highlight;
+  final BridgeScalar highlightAngle;
+  final List<BridgeGradientStop> stops;
+
+  const BridgeStrokeGradient({
+    required this.kind,
+    this.colour,
+    required this.startX,
+    required this.startY,
+    required this.endX,
+    required this.endY,
+    required this.startOpacity,
+    required this.endOpacity,
+    required this.highlight,
+    required this.highlightAngle,
+    required this.stops,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      colour.hashCode ^
+      startX.hashCode ^
+      startY.hashCode ^
+      endX.hashCode ^
+      endY.hashCode ^
+      startOpacity.hashCode ^
+      endOpacity.hashCode ^
+      highlight.hashCode ^
+      highlightAngle.hashCode ^
+      stops.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeStrokeGradient &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          colour == other.colour &&
+          startX == other.startX &&
+          startY == other.startY &&
+          endX == other.endX &&
+          endY == other.endY &&
+          startOpacity == other.startOpacity &&
+          endOpacity == other.endOpacity &&
+          highlight == other.highlight &&
+          highlightAngle == other.highlightAngle &&
+          stops == other.stops;
 }

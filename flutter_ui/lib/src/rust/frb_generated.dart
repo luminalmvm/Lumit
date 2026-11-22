@@ -36591,6 +36591,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeStrokeGradient dco_decode_box_autoadd_bridge_stroke_gradient(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_stroke_gradient(raw);
+  }
+
+  @protected
   BridgeSurfaceAxis dco_decode_box_autoadd_bridge_surface_axis(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_surface_axis(raw);
@@ -41975,8 +41982,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 28)
-      throw Exception('unexpected arr length: expect 28 but see ${arr.length}');
+    if (arr.length != 29)
+      throw Exception('unexpected arr length: expect 29 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -41985,27 +41992,28 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       fill: dco_decode_opt_box_autoadd_bridge_colour(arr[4]),
       stroke: dco_decode_opt_box_autoadd_bridge_colour(arr[5]),
       strokeWidth: dco_decode_bridge_scalar(arr[6]),
-      opacity: dco_decode_bridge_scalar(arr[7]),
-      dashes: dco_decode_list_bridge_scalar(arr[8]),
-      dashOffset: dco_decode_bridge_scalar(arr[9]),
-      gradient: dco_decode_u_32(arr[10]),
-      gradientColour: dco_decode_opt_box_autoadd_bridge_colour(arr[11]),
-      gradientStartX: dco_decode_bridge_scalar(arr[12]),
-      gradientStartY: dco_decode_bridge_scalar(arr[13]),
-      gradientEndX: dco_decode_bridge_scalar(arr[14]),
-      gradientEndY: dco_decode_bridge_scalar(arr[15]),
-      gradientStartOpacity: dco_decode_bridge_scalar(arr[16]),
-      gradientEndOpacity: dco_decode_bridge_scalar(arr[17]),
-      gradientHighlight: dco_decode_bridge_scalar(arr[18]),
-      gradientHighlightAngle: dco_decode_bridge_scalar(arr[19]),
-      gradientStops: dco_decode_list_bridge_gradient_stop(arr[20]),
-      combine: dco_decode_u_32(arr[21]),
-      hidden: dco_decode_bool(arr[22]),
-      fillHidden: dco_decode_bool(arr[23]),
-      strokeHidden: dco_decode_bool(arr[24]),
-      pathKeys: dco_decode_list_bridge_keyframe(arr[25]),
-      taper: dco_decode_opt_box_autoadd_bridge_shape_taper(arr[26]),
-      primitive: dco_decode_opt_box_autoadd_bridge_shape_primitive(arr[27]),
+      strokeGradient: dco_decode_opt_box_autoadd_bridge_stroke_gradient(arr[7]),
+      opacity: dco_decode_bridge_scalar(arr[8]),
+      dashes: dco_decode_list_bridge_scalar(arr[9]),
+      dashOffset: dco_decode_bridge_scalar(arr[10]),
+      gradient: dco_decode_u_32(arr[11]),
+      gradientColour: dco_decode_opt_box_autoadd_bridge_colour(arr[12]),
+      gradientStartX: dco_decode_bridge_scalar(arr[13]),
+      gradientStartY: dco_decode_bridge_scalar(arr[14]),
+      gradientEndX: dco_decode_bridge_scalar(arr[15]),
+      gradientEndY: dco_decode_bridge_scalar(arr[16]),
+      gradientStartOpacity: dco_decode_bridge_scalar(arr[17]),
+      gradientEndOpacity: dco_decode_bridge_scalar(arr[18]),
+      gradientHighlight: dco_decode_bridge_scalar(arr[19]),
+      gradientHighlightAngle: dco_decode_bridge_scalar(arr[20]),
+      gradientStops: dco_decode_list_bridge_gradient_stop(arr[21]),
+      combine: dco_decode_u_32(arr[22]),
+      hidden: dco_decode_bool(arr[23]),
+      fillHidden: dco_decode_bool(arr[24]),
+      strokeHidden: dco_decode_bool(arr[25]),
+      pathKeys: dco_decode_list_bridge_keyframe(arr[26]),
+      taper: dco_decode_opt_box_autoadd_bridge_shape_taper(arr[27]),
+      primitive: dco_decode_opt_box_autoadd_bridge_shape_primitive(arr[28]),
     );
   }
 
@@ -42911,6 +42919,27 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       blend: dco_decode_u_32(arr[11]),
       cloneOffsetX: dco_decode_f_64(arr[12]),
       cloneOffsetY: dco_decode_f_64(arr[13]),
+    );
+  }
+
+  @protected
+  BridgeStrokeGradient dco_decode_bridge_stroke_gradient(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    return BridgeStrokeGradient(
+      kind: dco_decode_u_32(arr[0]),
+      colour: dco_decode_opt_box_autoadd_bridge_colour(arr[1]),
+      startX: dco_decode_bridge_scalar(arr[2]),
+      startY: dco_decode_bridge_scalar(arr[3]),
+      endX: dco_decode_bridge_scalar(arr[4]),
+      endY: dco_decode_bridge_scalar(arr[5]),
+      startOpacity: dco_decode_bridge_scalar(arr[6]),
+      endOpacity: dco_decode_bridge_scalar(arr[7]),
+      highlight: dco_decode_bridge_scalar(arr[8]),
+      highlightAngle: dco_decode_bridge_scalar(arr[9]),
+      stops: dco_decode_list_bridge_gradient_stop(arr[10]),
     );
   }
 
@@ -45689,6 +45718,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeStrokeGradient? dco_decode_opt_box_autoadd_bridge_stroke_gradient(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_bridge_stroke_gradient(raw);
+  }
+
+  @protected
   BridgeSurfaceAxis? dco_decode_opt_box_autoadd_bridge_surface_axis(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -47079,6 +47117,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_stroke(deserializer));
+  }
+
+  @protected
+  BridgeStrokeGradient sse_decode_box_autoadd_bridge_stroke_gradient(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_stroke_gradient(deserializer));
   }
 
   @protected
@@ -52795,6 +52840,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_fill = sse_decode_opt_box_autoadd_bridge_colour(deserializer);
     var var_stroke = sse_decode_opt_box_autoadd_bridge_colour(deserializer);
     var var_strokeWidth = sse_decode_bridge_scalar(deserializer);
+    var var_strokeGradient =
+        sse_decode_opt_box_autoadd_bridge_stroke_gradient(deserializer);
     var var_opacity = sse_decode_bridge_scalar(deserializer);
     var var_dashes = sse_decode_list_bridge_scalar(deserializer);
     var var_dashOffset = sse_decode_bridge_scalar(deserializer);
@@ -52826,6 +52873,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         fill: var_fill,
         stroke: var_stroke,
         strokeWidth: var_strokeWidth,
+        strokeGradient: var_strokeGradient,
         opacity: var_opacity,
         dashes: var_dashes,
         dashOffset: var_dashOffset,
@@ -53841,6 +53889,35 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         blend: var_blend,
         cloneOffsetX: var_cloneOffsetX,
         cloneOffsetY: var_cloneOffsetY);
+  }
+
+  @protected
+  BridgeStrokeGradient sse_decode_bridge_stroke_gradient(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_u_32(deserializer);
+    var var_colour = sse_decode_opt_box_autoadd_bridge_colour(deserializer);
+    var var_startX = sse_decode_bridge_scalar(deserializer);
+    var var_startY = sse_decode_bridge_scalar(deserializer);
+    var var_endX = sse_decode_bridge_scalar(deserializer);
+    var var_endY = sse_decode_bridge_scalar(deserializer);
+    var var_startOpacity = sse_decode_bridge_scalar(deserializer);
+    var var_endOpacity = sse_decode_bridge_scalar(deserializer);
+    var var_highlight = sse_decode_bridge_scalar(deserializer);
+    var var_highlightAngle = sse_decode_bridge_scalar(deserializer);
+    var var_stops = sse_decode_list_bridge_gradient_stop(deserializer);
+    return BridgeStrokeGradient(
+        kind: var_kind,
+        colour: var_colour,
+        startX: var_startX,
+        startY: var_startY,
+        endX: var_endX,
+        endY: var_endY,
+        startOpacity: var_startOpacity,
+        endOpacity: var_endOpacity,
+        highlight: var_highlight,
+        highlightAngle: var_highlightAngle,
+        stops: var_stops);
   }
 
   @protected
@@ -58169,6 +58246,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeStrokeGradient? sse_decode_opt_box_autoadd_bridge_stroke_gradient(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bridge_stroke_gradient(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   BridgeSurfaceAxis? sse_decode_opt_box_autoadd_bridge_surface_axis(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -59770,6 +59859,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeStroke self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_stroke(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bridge_stroke_gradient(
+      BridgeStrokeGradient self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_stroke_gradient(self, serializer);
   }
 
   @protected
@@ -64148,6 +64244,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_box_autoadd_bridge_colour(self.fill, serializer);
     sse_encode_opt_box_autoadd_bridge_colour(self.stroke, serializer);
     sse_encode_bridge_scalar(self.strokeWidth, serializer);
+    sse_encode_opt_box_autoadd_bridge_stroke_gradient(
+        self.strokeGradient, serializer);
     sse_encode_bridge_scalar(self.opacity, serializer);
     sse_encode_list_bridge_scalar(self.dashes, serializer);
     sse_encode_bridge_scalar(self.dashOffset, serializer);
@@ -64891,6 +64989,23 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.blend, serializer);
     sse_encode_f_64(self.cloneOffsetX, serializer);
     sse_encode_f_64(self.cloneOffsetY, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_stroke_gradient(
+      BridgeStrokeGradient self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.kind, serializer);
+    sse_encode_opt_box_autoadd_bridge_colour(self.colour, serializer);
+    sse_encode_bridge_scalar(self.startX, serializer);
+    sse_encode_bridge_scalar(self.startY, serializer);
+    sse_encode_bridge_scalar(self.endX, serializer);
+    sse_encode_bridge_scalar(self.endY, serializer);
+    sse_encode_bridge_scalar(self.startOpacity, serializer);
+    sse_encode_bridge_scalar(self.endOpacity, serializer);
+    sse_encode_bridge_scalar(self.highlight, serializer);
+    sse_encode_bridge_scalar(self.highlightAngle, serializer);
+    sse_encode_list_bridge_gradient_stop(self.stops, serializer);
   }
 
   @protected
@@ -68362,6 +68477,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_streams_arrival(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_stroke_gradient(
+      BridgeStrokeGradient? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bridge_stroke_gradient(self, serializer);
     }
   }
 

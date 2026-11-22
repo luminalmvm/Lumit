@@ -2204,6 +2204,9 @@ class BridgeShapeItem {
   final BridgeColour? stroke;
   final BridgeScalar strokeWidth;
 
+  /// **A gradient outline**, or `None` for the flat stroke colour.
+  final BridgeStrokeGradient? strokeGradient;
+
   /// 0..100.
   final BridgeScalar opacity;
 
@@ -2279,6 +2282,7 @@ class BridgeShapeItem {
     this.fill,
     this.stroke,
     required this.strokeWidth,
+    this.strokeGradient,
     required this.opacity,
     required this.dashes,
     required this.dashOffset,
@@ -2311,6 +2315,7 @@ class BridgeShapeItem {
       fill.hashCode ^
       stroke.hashCode ^
       strokeWidth.hashCode ^
+      strokeGradient.hashCode ^
       opacity.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
@@ -2345,6 +2350,7 @@ class BridgeShapeItem {
           fill == other.fill &&
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
+          strokeGradient == other.strokeGradient &&
           opacity == other.opacity &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&

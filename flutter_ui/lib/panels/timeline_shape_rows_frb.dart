@@ -1184,7 +1184,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.fillColour ||
         ShapeValue.gradientColour ||
         ShapeValue.gradientStopColour ||
-        ShapeValue.strokeColour =>
+        ShapeValue.strokeColour ||
+        ShapeValue.strokeGradientColour ||
+        ShapeValue.strokeGradientStopColour =>
           (0, 0, ''),
         ShapeValue.strokeWidth => (0, 1000, ' px'),
         // A parametric shape's size and place in the art's own pixels, the
@@ -1210,17 +1212,29 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStartX ||
         ShapeValue.gradientStartY ||
         ShapeValue.gradientEndX ||
-        ShapeValue.gradientEndY =>
+        ShapeValue.gradientEndY ||
+        ShapeValue.strokeGradientStartX ||
+        ShapeValue.strokeGradientStartY ||
+        ShapeValue.strokeGradientEndX ||
+        ShapeValue.strokeGradientEndY =>
           (-10000, 10000, ' px'),
         // How opaque each end of the ramp is.
         ShapeValue.gradientStartOpacity ||
         ShapeValue.gradientEndOpacity ||
         ShapeValue.gradientStopPosition ||
-        ShapeValue.gradientStopOpacity =>
+        ShapeValue.gradientStopOpacity ||
+        ShapeValue.strokeGradientStartOpacity ||
+        ShapeValue.strokeGradientEndOpacity ||
+        ShapeValue.strokeGradientStopPosition ||
+        ShapeValue.strokeGradientStopOpacity =>
           (0, 100, '%'),
         // Per cent of the radius off the start point, either way.
-        ShapeValue.gradientHighlight => (-100, 100, '%'),
-        ShapeValue.gradientHighlightAngle => (-3600, 3600, '°'),
+        ShapeValue.gradientHighlight ||
+        ShapeValue.strokeGradientHighlight =>
+          (-100, 100, '%'),
+        ShapeValue.gradientHighlightAngle ||
+        ShapeValue.strokeGradientHighlightAngle =>
+          (-3600, 3600, '°'),
         ShapeValue.smoothAmount => (0, 1000, ' px'),
         ShapeValue.twistAngle ||
         ShapeValue.twistRotation ||
@@ -1456,6 +1470,21 @@ class ShapePaintRow extends StatelessWidget {
   /// that is not, and never reads this.
   BridgeShapeItem get item => _item!;
 
+  /// Whether the row is the outline's ramp rather than the fill's.
+  bool get _outline =>
+      which == ShapePaint.strokeGradient ||
+      which == ShapePaint.strokeGradientStops;
+
+  /// [i] as the ramp's code reads it: on the outline's rows, with the
+  /// outline's paint where the fill's is.
+  BridgeShapeItem _view(BridgeShapeItem i) =>
+      _outline ? shapeOutlineAsFill(i) : i;
+
+  /// [i] with [change] made to the row's ramp.
+  BridgeShapeItem _onRamp(
+          BridgeShapeItem i, BridgeShapeItem Function(BridgeShapeItem) change) =>
+      _outline ? shapeOutlineFrom(i, change(_view(i))) : change(i);
+
   /// The whole list back with this item changed, which is how every shape
   /// edit is written, so this is one op and one undo step.
   void _write(BridgeShapeItem Function(BridgeShapeItem) change) =>
@@ -1581,19 +1610,20 @@ class ShapePaintRow extends StatelessWidget {
   /// gradient's numbers is keyed, as a still one has nothing to follow.
   Widget _rampChip(BuildContext context, String key) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    final view = _view(item);
     Widget chip() => RampChip(
           key: ValueKey<String>(key),
-          ramp: _rampOf(item, ui),
+          ramp: _rampOf(view, ui),
           onOpen: (at) => _editStops(context, at),
         );
-    final fill = item.fill;
-    final end = item.gradientColour;
+    final fill = view.fill;
+    final end = view.gradientColour;
     final still = [
       if (fill != null) ...[fill.r, fill.g, fill.b],
       if (end != null) ...[end.r, end.g, end.b],
-      item.gradientStartOpacity,
-      item.gradientEndOpacity,
-      for (final s in item.gradientStops)
+      view.gradientStartOpacity,
+      view.gradientEndOpacity,
+      for (final s in view.gradientStops)
         ...[s.position, s.colour.r, s.colour.g, s.colour.b, s.opacity],
     ].every((s) => s is BridgeScalar_Static);
     if (still) return chip();
@@ -1609,15 +1639,17 @@ class ShapePaintRow extends StatelessWidget {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final throttle = PreviewThrottle();
     final known = {
-      for (final (index, s) in item.gradientStops.indexed) index: s,
+      for (final (index, s) in _view(item).gradientStops.indexed) index: s,
     };
-    List<BridgeShapeEntry> contents(GradientRamp ramp) => layer
-        .getShapeContents()
-        .withItem(item.id, (other) => _withRamp(other, ramp, ui, known));
+    List<BridgeShapeEntry> contents(GradientRamp ramp) =>
+        layer.getShapeContents().withItem(
+            item.id,
+            (other) =>
+                _onRamp(other, (v) => _withRamp(v, ramp, ui, known)));
     showGradientStopsPopover(
       context: context,
       position: at,
-      ramp: _rampOf(item, ui),
+      ramp: _rampOf(_view(item), ui),
       onPreview: (ramp) => throttle.request(() {
         try {
           ui.selectedComp?.renderFrameWithShapePreview(
@@ -1636,9 +1668,9 @@ class ShapePaintRow extends StatelessWidget {
           final written = contents(ramp);
           layer.setShapeContents(contents: written, at: null);
           // What each stop is now, for the next edit to start from.
-          final stops = written.items
-              .firstWhere((i) => i.id == item.id)
-              .gradientStops;
+          final stops =
+              _view(written.items.firstWhere((i) => i.id == item.id))
+                  .gradientStops;
           known.clear();
           for (final (index, s) in ramp.between.indexed) {
             known[s.id] = stops[index];
@@ -1703,7 +1735,33 @@ class ShapePaintRow extends StatelessWidget {
                     onChanged: (k) => _write((i) => _aimed(i, k)),
                   ),
                 ),
-              ShapePaint.gradientStops => _rampChip(context, key),
+              // The outline's, with along the path, which only a line has.
+              ShapePaint.strokeGradient => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: switch (item.strokeGradient?.kind) {
+                      final k? when k >= 1 && k <= 4 => k,
+                      _ => 0,
+                    },
+                    options: const [0, 1, 2, 4, 3],
+                    label: (k) => switch (k) {
+                      1 => l10n.shapeGradientLinear,
+                      2 => l10n.shapeGradientRadial,
+                      3 => l10n.shapeGradientAlong,
+                      4 => l10n.shapeGradientAngle,
+                      _ => l10n.shapeGradientFlat,
+                    },
+                    onChanged: (k) {
+                      // Flat on an outline with no ramp is what it already is.
+                      if (k == 0 && item.strokeGradient == null) return;
+                      _write((i) => _onRamp(i, (v) => _aimed(v, k)));
+                    },
+                  ),
+                ),
+              ShapePaint.gradientStops ||
+              ShapePaint.strokeGradientStops =>
+                _rampChip(context, key),
               // Displace or Scale, on the deform entry.
               ShapePaint.deformMode => SizedBox(
                   width: 96,

@@ -205,6 +205,8 @@ pub struct BridgeShapeItem {
     /// outline; a width of zero draws none either.
     pub stroke: Option<crate::api::effect::BridgeColour>,
     pub stroke_width: BridgeScalar,
+    /// **A gradient outline**, or `None` for the flat stroke colour.
+    pub stroke_gradient: Option<crate::api::shape::BridgeStrokeGradient>,
     /// 0..100.
     pub opacity: BridgeScalar,
     /// **Dashes**: the outline's dash and gap lengths in layer pixels,

@@ -2939,6 +2939,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_highlight: BridgeScalar::Static(0.0),
         gradient_highlight_angle: BridgeScalar::Static(0.0),
         gradient_stops: Vec::new(),
+        stroke_gradient: None,
         combine: 0,
         hidden: false,
         fill_hidden: false,
