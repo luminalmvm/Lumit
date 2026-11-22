@@ -789,10 +789,15 @@ class FoldRow extends StatelessWidget {
                 onDoubleClick: () => animatorRenaming.value = key,
                 child: text,
               )
-            : Align(
+            // As wide as the heading leaves it, so a long name can be read.
+            : LayoutBuilder(
+                builder: (context, box) => Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: FxRenameField(
                   initial: label,
+                  width: box.maxWidth.isFinite
+                      ? (box.maxWidth - 4).clamp(80.0, 600.0)
+                      : null,
                   onDone: (name) {
                     animatorRenaming.value = null;
                     final animators = layer.getText()?.animators;
@@ -804,6 +809,7 @@ class FoldRow extends StatelessWidget {
                   onCancel: () => animatorRenaming.value = null,
                 ),
               ),
+            ),
       );
     }
     final id = effectIdOfPath(path) ?? styleIdOfPath(path);
