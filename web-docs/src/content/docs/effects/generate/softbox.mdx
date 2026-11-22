@@ -1,0 +1,68 @@
+---
+title: Softbox
+description: "The lit face of a studio softbox."
+---
+
+Softbox is a **Textures** effect.
+
+## What it does
+
+Draws a lit panel the size of the layer, in one colour. Each side can run brighter or
+darker, a frame darkens the rim, and a hot spot or a dark spot sits on the panel.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Colour** | Colour | Each channel 0 to 1 | White | - |
+| **Intensity** | Slider | 0 to 400; any value by typing | 70 | - |
+| **Top** | Slider | 0 to 200 | 100 | - |
+| **Bottom** | Slider | 0 to 200 | 100 | - |
+| **Left** | Slider | 0 to 200 | 100 | - |
+| **Right** | Slider | 0 to 200 | 100 | - |
+| **Frame width** | Slider | 0 to 50 | 6 | - |
+| **Frame softness** | Slider | 0 to 100 | 60 | - |
+| **Frame colour** | Colour | Each channel 0 to 1 | Black | - |
+| **Spot** | Dropdown | None · Hot spot · Dark spot | Hot spot | - |
+| **Spot centre** | Point | Any position | 960, 540 | Pixels at composition size |
+| **Spot inner radius** | Slider | 0 to 4000; any value by typing | 80 | Pixels at composition size |
+| **Spot outer radius** | Slider | 1 to 4000; any value by typing | 500 | Pixels at composition size |
+| **Spot strength** | Slider | 0 to 400; any value by typing | 100 | - |
+| **Spot falloff** | Slider | 0.1 to 10; any value by typing | 1.5 | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+In the Effect Controls panel:
+
+- **Spot centre**, **Spot inner radius**, **Spot outer radius**, **Spot strength** and
+  **Spot falloff** are editable while **Spot** is set to Hot spot or Dark spot.
+
+## What each control does
+
+- **Colour**: the colour of the panel.
+- **Intensity**: how bright the panel is, as a per cent.
+- **Top**, **Bottom**, **Left** and **Right**: how bright the panel is at each side, as a
+  per cent of Intensity. The panel runs from one side's value to the other's.
+- **Frame width**: how far the frame comes in from each side, as a per cent of the layer's
+  shorter side.
+- **Frame softness**: how far the inner edge of the frame fades.
+- **Frame colour**: the colour of the frame.
+- **Spot**: **Hot spot** brightens the panel round Spot centre, and **Dark spot** darkens
+  it.
+- **Spot centre**: the middle of the spot.
+- **Spot inner radius**: the spot is at full strength inside this.
+- **Spot outer radius**: the spot is gone past this.
+- **Spot strength**: how much the spot brightens or darkens, as a per cent.
+- **Spot falloff**: the curve of the fade between the two radii.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Gradient](/effects/generate/gradient/)
+- [Light sweep](/effects/stylise/light-sweep/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

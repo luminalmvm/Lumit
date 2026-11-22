@@ -127,6 +127,8 @@ pub struct FractalNoiseOp {
     /// Fractal type, `lumit_core::fx::noise::FRACTAL_*`; the kernel reads this,
     /// not `turbulent`.
     pub kind: u32,
+    /// Distortion, in cells of the base octave; 0 reads the field in place.
+    pub distortion: f32,
     /// Depth loop length in cells; 0 for a field that never repeats.
     pub cycle: i32,
     /// `(cos, sin)` of the Rotation control, host-computed.
@@ -161,7 +163,7 @@ struct FractalNoiseParams {
     flags: u32,
     base: u32,
     kind: u32,
-    _pad0: u32,
+    distortion: f32,
     _pad1: u32,
 }
 
@@ -308,7 +310,7 @@ impl FxEngine {
                 flags,
                 base: op.base,
                 kind: op.kind,
-                _pad0: 0,
+                distortion: op.distortion,
                 _pad1: 0,
             }),
         );

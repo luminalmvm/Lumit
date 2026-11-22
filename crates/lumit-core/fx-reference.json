@@ -18,6 +18,10 @@
       "label": "Generate"
     },
     {
+      "slug": "textures",
+      "label": "Textures"
+    },
+    {
       "slug": "points",
       "label": "Points"
     },
@@ -11024,8 +11028,8 @@
       "match_name": "fractal_noise",
       "label": "Fractal noise",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Textures",
+      "category_slug": "textures",
       "params": [
         {
           "id": "fractal_type",
@@ -11063,9 +11067,48 @@
             "Perlin",
             "Block",
             "Linear",
-            "Spline"
+            "Spline",
+            "Chips",
+            "Circular",
+            "Box",
+            "Buya",
+            "Cranal",
+            "Dents",
+            "Electric",
+            "Fire",
+            "Hama",
+            "Luka",
+            "Naki",
+            "Nutous",
+            "Ober",
+            "Pezo",
+            "Poxo",
+            "Sema",
+            "Stupl",
+            "Zada",
+            "Blistered turbulence",
+            "Displaced turbulence",
+            "Wavy turbulence",
+            "Displaced Voronoi",
+            "VL noise",
+            "Stucci",
+            "Stucci wall in",
+            "Stucci wall out",
+            "Windy",
+            "Billow",
+            "Waves"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "distortion",
+          "label": "Distortion",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
         },
         {
           "id": "invert",

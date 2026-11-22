@@ -7586,6 +7586,7 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
             turbulent: p.field.turbulent,
             base: p.base,
             kind: p.kind,
+            distortion: p.distortion,
             cycle: p.field.cycle,
             cos_sin: p.cos_sin,
             offset: p.offset,
@@ -7647,16 +7648,31 @@ fn wgsl_fractal_types_match_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let mut cases = Vec::new();
-    for kind in 0..15u32 {
-        cases.push((1u32, kind));
+    for kind in 0..=lumit_core::fx::noise::FRACTAL_LAST {
+        cases.push((1u32, kind, 0.0f32));
     }
     for base in [2u32, 3, 4] {
         for kind in [0u32, 3, 4, 6, 7, 12, 14] {
-            cases.push((base, kind));
+            cases.push((base, kind, 0.0));
         }
     }
-    for (base, kind) in cases {
+    // Every shaped base plainly; a cell base, a cell-and-noise base and a
+    // noise base under a warping type (its slope is a central difference)
+    // and under Terrain; Distortion on a few.
+    for base in 5..=lumit_core::fx::noise::NOISE_LAST {
+        cases.push((base, 0, 0.0));
+    }
+    for base in [6u32, 13, 27] {
+        for kind in [1u32, 4, 12] {
+            cases.push((base, kind, 0.0));
+        }
+    }
+    for base in [1u32, 9, 27] {
+        cases.push((base, 0, 1.5));
+    }
+    for (base, kind, distortion) in cases {
         let mut f = FractalNoise::read(Params::EMPTY);
+        f.distortion = distortion;
         f.scale = 12.0;
         f.scale_width = 12.0;
         f.scale_height = 12.0;
@@ -7676,6 +7692,7 @@ fn wgsl_fractal_types_match_the_cpu_oracle() {
             turbulent: p.field.turbulent,
             base: p.base,
             kind: p.kind,
+            distortion: p.distortion,
             cycle: p.field.cycle,
             cos_sin: p.cos_sin,
             offset: p.offset,

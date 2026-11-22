@@ -11724,7 +11724,7 @@ fn octave_slope_matches_the_values_own_derivative() {
 /// octaves faster, by whole multiples, so it must close too).
 #[test]
 fn every_fractal_type_is_distinct_bounded_and_loops() {
-    use super::noise::{fractal_typed, FractalField, FRACTAL_STRINGS, NOISE_SPLINE};
+    use super::noise::{fractal_typed, FractalField, FRACTAL_LAST, NOISE_LAST};
     let field = |cycle| FractalField {
         seed: 77,
         octaves: 6,
@@ -11743,9 +11743,16 @@ fn every_fractal_type_is_distinct_bounded_and_loops() {
             })
             .collect()
     };
-    for base in 0..=NOISE_SPLINE {
+    let mut bases: Vec<Vec<f32>> = Vec::new();
+    for base in 0..=NOISE_LAST {
+        let plain = sample(base, 0, 0, 0.3);
+        assert!(
+            bases.iter().all(|s| s != &plain),
+            "base {base} draws the same picture as another base"
+        );
+        bases.push(plain);
         let mut seen: Vec<Vec<f32>> = Vec::new();
-        for kind in 0..=FRACTAL_STRINGS {
+        for kind in 0..=FRACTAL_LAST {
             let a = sample(base, kind, 0, 0.3);
             for v in &a {
                 assert!(
