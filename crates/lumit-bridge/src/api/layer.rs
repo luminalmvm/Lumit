@@ -4188,20 +4188,21 @@ impl LayerReference {
     ) -> Vec<lumit_core::ops::Op> {
         // Both boxes on the same clock, the head of the layer, so the delta
         // is the edit's own, not the repeater's animation moving underneath it.
-        let shift = match (
-            lumit_core::shape::contents_bounds(before, 0.0),
-            lumit_core::shape::contents_bounds(&items, 0.0),
-        ) {
-            (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
-            // Art appearing or going away entirely leaves the layer where it
-            // is: there is no corner to follow.
-            _ => (0.0, 0.0),
-        };
+        let shift = lumit_core::shape::corner_shift(before, &items);
         let mut ops = vec![lumit_core::ops::Op::SetShapeContents {
             comp: self.comp_id,
             layer: self.layer_id,
             contents: items,
         }];
+        // The masks are drawn from the box's corner too, so they move back
+        // by as much and stay on the art.
+        if let Some(masks) = lumit_core::shape::masks_on_art(&layer.masks, shift) {
+            ops.push(lumit_core::ops::Op::SetLayerMasks {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                masks,
+            });
+        }
         // Only a still position can follow the corner: a keyframed one has no
         // single value to add to, and moving one key of a curve is an edit the
         // gesture never asked for.

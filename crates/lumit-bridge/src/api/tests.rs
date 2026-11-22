@@ -3341,9 +3341,11 @@ fn expanding_a_repeater_makes_its_copies_real() {
 
 /// Dragging the left-most point left grows the art's box leftwards, and the
 /// layer's origin **is** that box's corner — so without the position following
-/// it, every point nobody touched would slide the other way.
+/// it, every point nobody touched would slide the other way. Its masks are
+/// drawn from the same corner, so they move back with the art.
 #[test]
 fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
+    use crate::api::layer::{BridgeMask, BridgeMaskMode, BridgeVertex};
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
     let shape = comp
@@ -3377,12 +3379,41 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
         )
     };
     let before = drawn_at(2);
+    // A mask with a point on that one, the far corner of the art's box.
+    let on = |x: f64, y: f64| BridgeVertex {
+        x,
+        y,
+        tan_in_x: 0.0,
+        tan_in_y: 0.0,
+        tan_out_x: 0.0,
+        tan_out_y: 0.0,
+    };
+    shape
+        .add_mask(BridgeMask {
+            id: uuid::Uuid::now_v7(),
+            name: "Mask 1".into(),
+            vertices: vec![on(50.0, 50.0), on(0.0, 50.0), on(0.0, 0.0)],
+            closed: true,
+            inverted: false,
+            opacity: BridgeScalar::Static(100.0),
+            mode: BridgeMaskMode::Add,
+            feather: BridgeScalar::Static(0.0),
+            vertex_feather: Vec::new(),
+            expansion: BridgeScalar::Static(0.0),
+            path_keys: Vec::new(),
+        })
+        .expect("a mask");
+    let mask_at = || {
+        let v = &shape.get_masks().expect("masks")[0].vertices[0];
+        (v.x, v.y)
+    };
 
     let contents = with_first_item(shape.get_shape_contents().expect("contents"), |item| {
         item.vertices[0].x -= 30.0;
         item.vertices[0].y -= 20.0;
     });
     shape.set_shape_contents(contents, None).expect("set");
+    assert_eq!(mask_at(), (80.0, 70.0), "the mask stayed on the art");
 
     let tf = shape.get_transform().expect("transform");
     assert_eq!(
@@ -3404,6 +3435,7 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
         (200.0, 100.0),
         "the art and the layer went back together, in one step"
     );
+    assert_eq!(mask_at(), (50.0, 50.0));
     let contents = shape.get_shape_contents().expect("contents");
     assert_eq!(shape_items(&contents)[0].vertices[0].x, 200.0);
 }

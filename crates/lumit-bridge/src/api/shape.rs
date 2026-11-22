@@ -559,19 +559,19 @@ impl LayerReference {
             }
             lumit_core::grade::versions::respawn(&mut copy.grade_versions);
             // The new layer's picture is its own art's box, so its position
-            // follows that box's corner from the one the art was drawn in.
-            if let (Some((x0, y0, _, _)), Some((x1, y1, _, _))) = (
-                lumit_core::shape::contents_bounds(before, 0.0),
-                lumit_core::shape::contents_bounds(&part, 0.0),
-            ) {
-                for (property, delta) in [
-                    (&mut copy.transform.position_x, x1 - x0),
-                    (&mut copy.transform.position_y, y1 - y0),
-                ] {
-                    if let lumit_core::anim::Animation::Static(value) = property.animation {
-                        property.animation = lumit_core::anim::Animation::Static(value + delta);
-                    }
+            // follows that box's corner from the one the art was drawn in,
+            // and its masks stay on the art.
+            let shift = lumit_core::shape::corner_shift(before, &part);
+            for (property, delta) in [
+                (&mut copy.transform.position_x, shift.0),
+                (&mut copy.transform.position_y, shift.1),
+            ] {
+                if let lumit_core::anim::Animation::Static(value) = property.animation {
+                    property.animation = lumit_core::anim::Animation::Static(value + delta);
                 }
+            }
+            if let Some(masks) = lumit_core::shape::masks_on_art(&copy.masks, shift) {
+                copy.masks = masks;
             }
             copy.kind = lumit_core::model::LayerKind::Shape { contents: part };
             ops.push(lumit_core::ops::Op::AddLayer {
