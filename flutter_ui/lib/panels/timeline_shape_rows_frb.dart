@@ -1865,3 +1865,100 @@ class AnimatorSettingRow extends StatelessWidget {
     );
   }
 }
+
+/// An animator's Link to (another animator whose selection it takes) or its
+/// Link offset, on the Timeline as in the Effect controls panel.
+class AnimatorLinkRow extends StatelessWidget {
+  final LayerReference layer;
+  final int index;
+  final BridgeTextAnimator animator;
+
+  /// The layer's other animators, by name: what Link to offers.
+  final List<String> others;
+
+  /// The offset row rather than the choice.
+  final bool offset;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+  final VoidCallback? onLabelTap;
+
+  const AnimatorLinkRow({
+    super.key,
+    required this.layer,
+    required this.index,
+    required this.animator,
+    required this.others,
+    required this.offset,
+    required this.valueColumn,
+    required this.onChanged,
+    this.onLabelTap,
+  });
+
+  void _put(BridgeTextAnimator next) {
+    try {
+      writeTextAnimator(layer, index, next);
+      onChanged();
+    } catch (_) {
+      // The animator or its layer went away between the draw and the click.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final a = animator;
+    final name = offset ? 'link-offset' : 'link';
+    final control = offset
+        ? DragValueField(
+            key: ValueKey<String>('tl-anim-$index-$name'),
+            value: a.followOffset,
+            min: -60,
+            max: 60,
+            decimals: 2,
+            speed: 0.01,
+            suffix: ' s',
+            resetTo: 0,
+            onChanged: (v) => _put(animatorWith(a, followOffset: v.toDouble())),
+          )
+        : BareDropdown<String?>(
+            key: ValueKey<String>('tl-anim-$index-$name'),
+            value: a.follow,
+            options: [
+              null,
+              ...others.toSet(),
+              if (a.follow != null && !others.contains(a.follow)) a.follow,
+            ],
+            label: (n) => n ?? l10n.none,
+            onChanged: (n) => _put(n == null
+                ? animatorWith(a, clearFollow: true)
+                : animatorWith(a, follow: n)),
+          );
+    return Row(
+      children: [
+        // Where a keyed row's stopwatch stands, so the names line up.
+        const SizedBox(width: iconSize + 8),
+        Expanded(
+          child: GestureDetector(
+            key: ValueKey<String>('tl-anim-$index-$name-label'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onLabelTap,
+            child: Text(
+                t.propertyCase(offset
+                    ? l10n.textAnimatorLinkOffset
+                    : l10n.textAnimatorLink),
+                style: t.body,
+                overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        SizedBox(
+          width: valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 130, child: control),
+          ),
+        ),
+        SizedBox(width: valueColumn.rightInset),
+      ],
+    );
+  }
+}

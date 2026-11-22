@@ -845,6 +845,18 @@ final class FoldAnimatorSettingRow extends LayerFoldRow {
       : super(depth);
 }
 
+/// Animator [index]'s Link to, or its Link offset ([offset]), on a row of
+/// its own as in the Effect controls panel.
+final class FoldAnimatorLinkRow extends LayerFoldRow {
+  final int index;
+  final BridgeTextAnimator animator;
+  final List<String> others;
+  final bool offset;
+  const FoldAnimatorLinkRow(this.index, this.animator, this.others,
+      {required int depth, this.offset = false})
+      : super(depth);
+}
+
 /// The path segment of selector [k]'s rows under its animator: none for the
 /// first, so a file's rows keep the paths they had.
 String animatorSelectorSegment(int k) => k == 0 ? '' : 's$k/';
@@ -1257,6 +1269,8 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
             PuppetValue.scale => 100,
             _ => null,
           }),
+      FoldAnimatorLinkRow(:final animator, :final offset) =>
+        offset ? animator.followOffset != 0 : animator.follow != null,
       // A selector's choice is a change when it is not the fresh one.
       FoldAnimatorSettingRow(:final animator, :final setting, :final selector) =>
         selector > 0 ||
@@ -2481,6 +2495,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${foldRowPath(layerId, parent)}/expression',
       FoldSettingRow(:final setting) =>
         '${transformPath(layerId)}/${setting.name}',
+      FoldAnimatorLinkRow(:final index, :final offset) =>
+        '${animatorPath(layerId, index)}/${offset ? 'linkOffset' : 'link'}',
       FoldAnimatorSettingRow(:final index, :final setting, :final selector) =>
         '${animatorPath(layerId, index)}/'
             '${animatorSelectorSegment(selector)}${setting.name}',
@@ -3261,6 +3277,19 @@ List<LayerFoldRow> layerFoldRows({
         rows.add(FoldAnimatorValueRow(
             i, animator, TextAnimatorValue.animatorAmount,
             depth: 3));
+        // Link to, and its offset once linked, under it as in the Effect
+        // controls panel.
+        final others = [
+          for (var j = 0; j < info.textAnimators.length; j++)
+            if (j != i) info.textAnimators[j].name,
+        ];
+        if (others.isNotEmpty || animator.follow != null) {
+          rows.add(FoldAnimatorLinkRow(i, animator, others, depth: 3));
+        }
+        if (animator.follow != null) {
+          rows.add(FoldAnimatorLinkRow(i, animator, others,
+              depth: 3, offset: true));
+        }
         final many = selectorCount(animator) > 1;
         for (var k = 0; k < selectorCount(animator); k++) {
           final depth = many ? 4 : 3;

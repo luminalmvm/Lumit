@@ -1425,6 +1425,25 @@ class FoldRow extends StatelessWidget {
           },
           onLabelTap: () => onSelectProperty(path),
         ),
+      FoldAnimatorLinkRow(
+        :final index,
+        :final animator,
+        :final others,
+        :final offset
+      ) =>
+        AnimatorLinkRow(
+          layer: layer,
+          index: index,
+          animator: animator,
+          others: others,
+          offset: offset,
+          valueColumn: valueColumn,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+          onLabelTap: () => onSelectProperty(path),
+        ),
       FoldAnimatorValueRow(
         :final index,
         :final animator,
