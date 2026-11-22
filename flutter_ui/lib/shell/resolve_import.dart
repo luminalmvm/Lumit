@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
 import '../state/ui_state.dart';
@@ -25,13 +26,13 @@ Future<void> importResolveSelection(
   final file = File(requestPath);
   final reply = File('${file.parent.path}/imported.json');
   if (_importing) {
-    await _reply(reply, {'error': 'Another Resolve import is running.'});
+    await _reply(reply, {'error': l10n.resolveImportRunning});
     return;
   }
   _importing = true;
   try {
     if (app.busy.value != null || app.opening.value) {
-      throw StateError('Lumit is busy. Finish the current operation first.');
+      throw StateError(l10n.resolveBusy);
     }
     final request =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
@@ -39,7 +40,7 @@ Future<void> importResolveSelection(
     final source = request['source'] as String;
     final comps = await compsInFile(path: source);
     if (comps == null || comps.length != 1) {
-      throw StateError('The selection must contain one composition.');
+      throw StateError(l10n.resolveOneComp);
     }
     if (!context.mounted) {
       await _reply(reply, {'cancelled': '1'});
@@ -49,20 +50,21 @@ Future<void> importResolveSelection(
       final create = await showLumitModal<bool>(
           context: context,
           builder: (close) => QuestionWindow(
-                title: 'Lumit project for Resolve',
-                body:
-                    'Choose a project for ${request['project_name']}. All linked compositions will use it.',
+                title: l10n.resolveProjectTitle,
+                body: l10n.resolveProjectBody(
+                    '${request['project_name']}'),
                 keyPrefix: 'resolve-project',
                 onClose: () => close(null),
                 actions: [
-                  questionPlain('resolve-project-existing', 'Choose existing',
-                      () => close(false)),
-                  questionFilled(
-                      'resolve-project-new', 'Create new', () => close(true)),
+                  questionPlain('resolve-project-existing',
+                      l10n.resolveProjectExisting, () => close(false)),
+                  questionFilled('resolve-project-new',
+                      l10n.resolveProjectNew, () => close(true)),
                 ],
               ));
       if (create != null) {
-        final name = (request['project_name'] as String? ?? 'Resolve project')
+        final name = (request['project_name'] as String? ??
+                l10n.resolveProjectDefaultName)
             .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_')
             .trim();
         path = create
@@ -101,7 +103,7 @@ Future<void> importResolveSelection(
         earlierSave: false,
         source: 'Resolve');
     if (imported == null || imported.length != 1) {
-      throw StateError('Could not import the selected clips.');
+      throw StateError(l10n.resolveImportClipsFailed);
     }
     final comp = imported.single;
     ui.setSelectedComp(comp);
@@ -116,8 +118,9 @@ Future<void> importResolveSelection(
       'name': name,
     });
   } catch (error) {
-    await _reply(reply, {'error': error.toString()});
-    app.postNotice('Resolve import: $error', error: true);
+    await _reply(reply, {'error': resolveErrorText(error)});
+    app.postNotice(l10n.resolveImportFailed(resolveErrorText(error)),
+        error: true);
   } finally {
     _importing = false;
   }

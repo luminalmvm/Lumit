@@ -507,15 +507,14 @@ class _LumitAppViewState extends State<LumitAppView> {
             .where((c) => c.$1.internalid.toString() == name || c.$2 == name)
             .toList();
         if (matches.length != 1) {
-          app.postNotice(
-              'The linked composition was not found. Choose it again in Resolve.',
-              error: true);
+          app.postNotice(l10n.resolveCompNotFound, error: true);
           return;
         }
         final comp = matches.single.$1;
         context.read<LumitUiState>().setSelectedComp(comp);
       } catch (error) {
-        app.postNotice('Resolve link: $error', error: true);
+        app.postNotice(l10n.resolveLinkFailed(resolveErrorText(error)),
+            error: true);
       }
       return;
     }

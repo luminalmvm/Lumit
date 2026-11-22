@@ -32493,5 +32493,104 @@
   "pasteImageFailed": "Couldn't save the picture on the clipboard",
   "@pasteImageFailed": {
     "description": "Status-line error after Paste found a picture on the system clipboard and could not write it to disk, so nothing was imported."
+  },
+  "resolveImportRunning": "Another Resolve import is running.",
+  "@resolveImportRunning": {
+    "description": "Error sent back to DaVinci Resolve when a second Resolve selection import is asked for while one is still running."
+  },
+  "resolveBusy": "Lumit is busy. Finish the current operation first.",
+  "@resolveBusy": {
+    "description": "Error when a Resolve selection import arrives while Lumit is opening a project or doing other work."
+  },
+  "resolveOneComp": "The selection must contain one composition.",
+  "@resolveOneComp": {
+    "description": "Error when the clips sent from DaVinci Resolve did not become exactly one composition."
+  },
+  "resolveProjectTitle": "Lumit project for Resolve",
+  "@resolveProjectTitle": {
+    "description": "Title of the window asking which Lumit project a DaVinci Resolve project links to, shown the first time clips are sent from it."
+  },
+  "resolveProjectBody": "Choose a project for {name}. All linked compositions will use it.",
+  "@resolveProjectBody": {
+    "description": "Body of the window asking which Lumit project a DaVinci Resolve project links to. {name} is the Resolve project's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "resolveProjectExisting": "Choose existing",
+  "@resolveProjectExisting": {
+    "description": "Button in the Lumit project for Resolve window: pick a Lumit project that already exists."
+  },
+  "resolveProjectNew": "Create new",
+  "@resolveProjectNew": {
+    "description": "Button in the Lumit project for Resolve window: save a new Lumit project for the link."
+  },
+  "resolveProjectDefaultName": "Resolve project",
+  "@resolveProjectDefaultName": {
+    "description": "File name suggested for a new Lumit project linked to DaVinci Resolve, when the Resolve project has no name."
+  },
+  "resolveImportClipsFailed": "Could not import the selected clips.",
+  "@resolveImportClipsFailed": {
+    "description": "Error when the clips sent from DaVinci Resolve could not be brought into the Lumit project."
+  },
+  "resolveImportFailed": "Resolve import: {error}",
+  "@resolveImportFailed": {
+    "description": "Status-line error when importing clips sent from DaVinci Resolve failed. {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "resolveNotAProject": "Not a Lumit project",
+  "@resolveNotAProject": {
+    "description": "Error when a file named by a DaVinci Resolve link is not a Lumit project."
+  },
+  "resolveNoIdentity": "Missing Lumit project identity",
+  "@resolveNoIdentity": {
+    "description": "Error when a Lumit project named by a DaVinci Resolve link has no identity to link by."
+  },
+  "resolveInvalidIdentity": "Invalid linked Lumit project identity",
+  "@resolveInvalidIdentity": {
+    "description": "Error when a DaVinci Resolve link carries a Lumit project identity that is not well formed."
+  },
+  "resolvePathAmbiguous": "This path belongs to multiple linked projects. Choose its current path.",
+  "@resolvePathAmbiguous": {
+    "description": "Error when the project path in a DaVinci Resolve link was used by more than one linked Lumit project."
+  },
+  "resolveMissingTitle": "Linked project not found",
+  "@resolveMissingTitle": {
+    "description": "Title of the window shown when the Lumit project a DaVinci Resolve link names cannot be found."
+  },
+  "resolveMissingBody": "The linked Lumit project may have been moved or renamed. Locate it once to reconnect all its linked compositions in Resolve.",
+  "@resolveMissingBody": {
+    "description": "Body of the Linked project not found window."
+  },
+  "resolveMissingLocate": "Locate project",
+  "@resolveMissingLocate": {
+    "description": "Button in the Linked project not found window: pick the project's file."
+  },
+  "resolveDifferentProject": "That file is a different Lumit project. Choose the original project.",
+  "@resolveDifferentProject": {
+    "description": "Notice when the file picked to reconnect a DaVinci Resolve link is another Lumit project."
+  },
+  "resolveInvalidProject": "That file is not a valid Lumit project.",
+  "@resolveInvalidProject": {
+    "description": "Notice when the file picked to reconnect a DaVinci Resolve link is not a Lumit project."
+  },
+  "resolveCompNotFound": "The linked composition was not found. Choose it again in Resolve.",
+  "@resolveCompNotFound": {
+    "description": "Notice when a DaVinci Resolve link opens its Lumit project but the composition it names is not in it."
+  },
+  "resolveLinkFailed": "Resolve link: {error}",
+  "@resolveLinkFailed": {
+    "description": "Status-line error when opening a DaVinci Resolve link in Lumit failed. {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }

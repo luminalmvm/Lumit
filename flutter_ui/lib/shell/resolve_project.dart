@@ -6,6 +6,7 @@ import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart' show showLumitModal;
@@ -19,7 +20,9 @@ bool sameResolveProject(String? actual, String expected) =>
     actual.replaceAll('\\', '/').toLowerCase() ==
         expected.replaceAll('\\', '/').toLowerCase();
 
-String _readIdentity(String path) {
+// The identity, or null and whether the file was a Lumit project at all. The
+// isolate has no strings of its own, so the caller words the error.
+({String? id, bool project}) _readIdentity(String path) {
   // File-backed ZIP access leaves packed footage unread. The short-lived
   // isolate keeps JSON parsing off the editor's UI thread.
   final input = InputFileStream(path);
@@ -27,12 +30,12 @@ String _readIdentity(String path) {
     final archive = ZipDecoder().decodeStream(input);
     try {
       final bytes = archive.find('project.json')?.readBytes();
-      if (bytes == null) throw const FormatException('Not a Lumit project');
+      if (bytes == null) return (id: null, project: false);
       final id = (jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>)['id'];
       if (id is! String || !_identity(id.toLowerCase())) {
-        throw const FormatException('Missing Lumit project identity');
+        return (id: null, project: true);
       }
-      return id.toLowerCase();
+      return (id: id.toLowerCase(), project: true);
     } finally {
       archive.clearSync();
     }
@@ -41,8 +44,19 @@ String _readIdentity(String path) {
   }
 }
 
-Future<String> resolveProjectIdentity(String path) =>
-    compute(_readIdentity, path);
+Future<String> resolveProjectIdentity(String path) async {
+  final read = await compute(_readIdentity, path);
+  return read.id ??
+      (throw FormatException(
+          read.project ? l10n.resolveNoIdentity : l10n.resolveNotAProject));
+}
+
+/// An error's own words, without Dart's "Bad state:" or "FormatException:".
+String resolveErrorText(Object error) => switch (error) {
+      StateError(:final message) => message,
+      FormatException(:final message) => message,
+      _ => '$error',
+    };
 
 Future<String> _rememberLocation(String path, String? hint, String id) async {
   final local = Platform.environment['LOCALAPPDATA'];
@@ -60,7 +74,7 @@ Future<String> _rememberLocation(String path, String? hint, String id) async {
 Future<String?> locateResolveProject(LumitState app, String? hint, String? id,
     {required BuildContext context}) async {
   if (id != null && !_identity(id)) {
-    throw const FormatException('Invalid linked Lumit project identity');
+    throw FormatException(l10n.resolveInvalidIdentity);
   }
   // An explicitly chosen existing file wins over historical path hints.
   if (id == null && hint != null && await File(hint).exists()) {
@@ -81,8 +95,7 @@ Future<String?> locateResolveProject(LumitState app, String? hint, String? id,
         final candidate = entry.uri.pathSegments.last.split('.').first;
         if (!_identity(candidate)) continue;
         if (id != null && id != candidate) {
-          throw const FormatException(
-              'This path belongs to multiple linked projects. Choose its current path.');
+          throw FormatException(l10n.resolvePathAmbiguous);
         }
         id = candidate;
       }
@@ -109,16 +122,15 @@ Future<String?> locateResolveProject(LumitState app, String? hint, String? id,
   final locate = await showLumitModal<bool>(
     context: context,
     builder: (close) => QuestionWindow(
-      title: 'Linked project not found',
-      body: 'The linked Lumit project may have been moved or renamed. '
-          'Locate it once to reconnect all its linked compositions in Resolve.',
+      title: l10n.resolveMissingTitle,
+      body: l10n.resolveMissingBody,
       keyPrefix: 'resolve-project-missing',
       onClose: () => close(false),
       actions: [
         questionPlain(
-            'resolve-project-missing-cancel', 'Cancel', () => close(false)),
-        questionFilled('resolve-project-missing-locate', 'Locate project',
-            () => close(true)),
+            'resolve-project-missing-cancel', l10n.cancel, () => close(false)),
+        questionFilled('resolve-project-missing-locate',
+            l10n.resolveMissingLocate, () => close(true)),
       ],
     ),
   );
@@ -131,11 +143,9 @@ Future<String?> locateResolveProject(LumitState app, String? hint, String? id,
       if (id == null || actual == id) {
         return await _rememberLocation(path, hint, actual);
       }
-      app.postNotice(
-          'That file is a different Lumit project. Choose the original project.',
-          error: true);
+      app.postNotice(l10n.resolveDifferentProject, error: true);
     } catch (_) {
-      app.postNotice('That file is not a valid Lumit project.', error: true);
+      app.postNotice(l10n.resolveInvalidProject, error: true);
     }
   }
 }
