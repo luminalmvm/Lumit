@@ -23,6 +23,7 @@ a radial gradient. Where no circle between the two reaches, the result is clear.
 | **Scatter** | Slider | 0 to 100; any value by typing | 0 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Progression** | Dropdown | Linear · Quadratic · Easing | Linear | - |
 | **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
 | **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
 | **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
@@ -40,6 +41,8 @@ a radial gradient. Where no circle between the two reaches, the result is clear.
 - **Seed**: which random pattern Scatter follows.
 - **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
   **Constant** holds each colour until the next stop.
+- **Progression**: how the ramp is read from end to end. **Quadratic** stretches the start
+  of the ramp, and **Easing** stretches both ends.
 - **Stops**: how many colours are used, from Colour 1.
 - **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour,
   and where it sits on the ramp. Stops are sorted by Position.

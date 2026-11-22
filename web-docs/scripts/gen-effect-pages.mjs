@@ -44,6 +44,13 @@ const begin = (tag) =>
   `{/* GENERATED:${tag} - rewritten by \`npm run docs:effects\`. Edit the prose, not this block. */}`;
 const END = "{/* END GENERATED */}";
 
+// The folder a category's pages and pictures live in. It is the category's own
+// slug, but for Textures: that heading was split out of Generate and its pages
+// stayed where they were, which is where the application's manual links look
+// (flutter_ui/lib/state/external_links.dart).
+const FOLDER = { textures: "generate" };
+const folder = (e) => FOLDER[e.category_slug] ?? e.category_slug;
+
 /** A number as the manual writes it. */
 const n = (v) => String(v);
 
@@ -382,10 +389,10 @@ function exampleFigure(e, shots) {
   // change to the clock, and Matte key wants a screen the example frame does not
   // contain. The harness says so and writes nothing, and an absent file means an
   // absent figure rather than a broken image.
-  const file = join(shots, e.category_slug, `${e.slug}.webp`);
+  const file = join(shots, folder(e), `${e.slug}.webp`);
   if (!existsSync(file)) return "";
   const label = e.label.replaceAll('"', "&quot;");
-  return `<Compare label="${label}" category="${e.category_slug}" slug="${e.slug}" />`;
+  return `<Compare label="${label}" category="${folder(e)}" slug="${e.slug}" />`;
 }
 
 // ---------------------------------------------------------------------------
@@ -437,8 +444,8 @@ export function generate({
       "| Effect | What it does |",
       "| --- | --- |",
       ...effects.map((e) => {
-        const page = join(out, e.category_slug, `${e.slug}.mdx`);
-        const link = `[${e.label}](/effects/${e.category_slug}/${e.slug}/)`;
+        const page = join(out, folder(e), `${e.slug}.mdx`);
+        const link = `[${e.label}](/effects/${folder(e)}/${e.slug}/)`;
         return `| ${cell(link)} | ${cell(description(page))} |`;
       }),
     ].join("\n");
@@ -477,7 +484,7 @@ ${e.params.map((p) => `- **${p.label}**`).join("\n")}
 - [${e.category}](/effects/#${anchor(e.category)})
 - [Effects](/use/effects/)
 `;
-    const path = join(out, e.category_slug, `${e.slug}.mdx`);
+    const path = join(out, folder(e), `${e.slug}.mdx`);
     put(path, "parameters", scaffold, table);
     put(path, "example", scaffold, figure, "## What it does", Boolean(example));
   }
@@ -538,7 +545,7 @@ For applying effects, ordering a stack and using adjustment layers, see
   // and a stale page is worse than a missing one.
   const wanted = new Set([
     "index.mdx",
-    ...ref.effects.map((e) => `${e.category_slug}/${e.slug}.mdx`),
+    ...ref.effects.map((e) => `${folder(e)}/${e.slug}.mdx`),
   ]);
   const orphans = [];
   if (existsSync(out)) {

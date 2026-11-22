@@ -1,0 +1,56 @@
+---
+title: Matrix effect
+description: "Columns of glyphs raining down the layer."
+---
+
+Matrix effect is a **Textures** effect.
+
+## What it does
+
+Draws columns of glyphs falling down the layer, each column at its own speed. A bright head
+leads a trail that fades, and the glyphs in the trail keep changing. A glyph is a random
+pattern of dots, five across and seven down, not a character of a font.
+
+It moves with the layer's time.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Glyph size** | Slider | 4 to 200; any value by typing | 20 | Pixels at composition size |
+| **Speed** | Slider | 0 to 100; any value by typing | 12 | - |
+| **Trail length** | Slider | 1 to 100; any value by typing | 18 | - |
+| **Density** | Slider | 0 to 100 | 70 | - |
+| **Glyph changes** | Slider | 0 to 30; any value by typing | 6 | - |
+| **Text colour** | Colour | Each channel 0 to 1 | 0.2, 1, 0.35 | - |
+| **Head colour** | Colour | Each channel 0 to 1 | 0.85, 1, 0.9 | - |
+| **Background colour** | Colour | Each channel 0 to 1 | Black | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+
+## What each control does
+
+- **Glyph size**: how tall a glyph is. It is three quarters as wide.
+- **Speed**: how fast the heads fall, in glyphs a second. Each column falls at between 0.6
+  and 1.4 times this. At 0 nothing falls.
+- **Trail length**: how many glyphs the trail fades over.
+- **Density**: how many of the columns rain.
+- **Glyph changes**: how many times a second a glyph changes. Each glyph changes at between
+  0.5 and 1.5 times this.
+- **Text colour**: the colour of the trail.
+- **Head colour**: the colour of the glyph at the head.
+- **Background colour**: the colour behind them.
+- **Seed**: which columns rain, where each starts and which glyphs are drawn.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Pixel flow](/effects/generate/pixel-flow/)
+- [Type fill](/effects/generate/type-fill/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)

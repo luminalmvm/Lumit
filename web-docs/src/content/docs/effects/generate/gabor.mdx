@@ -1,0 +1,63 @@
+---
+title: Gabor
+description: "Noise made of short bursts of stripes, lined up or turned every way."
+---
+
+Gabor is a **Textures** effect.
+
+## What it does
+
+Scatters small packets of stripes and adds them together. The result is coloured from the
+ramp. **Evolution** slides the stripes along, and comes back to the start every 360°.
+
+## Parameters
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Packet size** | Slider | 4 to 1000; any value by typing | 80 | Pixels at composition size |
+| **Frequency** | Slider | 0.25 to 8; any value by typing | 2 | - |
+| **Anisotropy** | Slider | 0 to 100 | 100 | - |
+| **Orientation** | Dial | Any angle | 45° | Degrees |
+| **Output** | Dropdown | Value · Intensity · Phase | Value | - |
+| **Evolution** | Dial | Any angle | 0° | Degrees |
+| **Offset** | Point | Any position | 0, 0 | Pixels at composition size |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Paint** | Dropdown | Inside layer · Whole frame | Inside layer | - |
+| **Interpolation** | Dropdown | Linear · Smooth · Constant | Linear | - |
+| **Progression** | Dropdown | Linear · Quadratic · Easing | Linear | - |
+| **Stops** | Slider, whole numbers | 2 to 5 | 3 | - |
+| **Colour 1** to **Colour 5** | Colour | Each channel 0 to 1 | White, amber, blue, magenta, black | - |
+| **Position 1** to **Position 5** | Slider | 0 to 100 | 0, 50, 100, 100, 100 | - |
+
+## What each control does
+
+- **Packet size**: how big each packet is.
+- **Frequency**: how many stripes fit across a packet.
+- **Anisotropy**: how closely the packets line up with Orientation. At 0 each turns its own
+  way.
+- **Orientation**: the direction the stripes are lined up to.
+- **Output**: **Value** is the stripes added together, **Intensity** is how strong they are,
+  and **Phase** is how far along a stripe each pixel is.
+- **Evolution**: slides the stripes of every packet along.
+- **Offset**: slides the whole pattern.
+- **Seed**: where the packets fall.
+- **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
+  the whole of the layer's picture.
+- **Interpolation**: how one stop meets the next. **Smooth** eases between them, and
+  **Constant** holds each colour until the next stop.
+- **Progression**: how the ramp is read from end to end. **Quadratic** stretches the start
+  of the ramp, and **Easing** stretches both ends.
+- **Stops**: how many colours are used, from Colour 1.
+- **Colour 1** to **Colour 5** and **Position 1** to **Position 5**: each stop's colour, and
+  where it sits on the ramp. Stops are sorted by Position.
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+- **Channel**: the channel of the Matte layer that is read.
+
+## Related
+
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Voronoi](/effects/generate/voronoi/)
+- [Textures](/effects/#textures)
+- [Effects](/use/effects/)
