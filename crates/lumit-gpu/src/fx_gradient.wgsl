@@ -22,7 +22,7 @@ struct Params {
     clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha
     mids: u32,              // colours in between in use, 0..3
     mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
-    shape_k: vec4<f32>,     // x = where an angle ramp begins, radians
+    shape_k: vec4<f32>,     // x = where an angle ramp begins, radians; yzw = focal point
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -90,8 +90,20 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dx = f32(xy.x) + 0.5 - p.start_axis.x;
     let dy = f32(xy.y) + 0.5 - p.start_axis.y;
     var t: f32;
-    if (p.shape == 1u) {
+    if (p.shape == 1u && p.shape_k.y == 0.0 && p.shape_k.z == 0.0) {
         t = sqrt(dx * dx + dy * dy) * p.inv_len;
+    } else if (p.shape == 1u) {
+        // == cpu::gradient: the share of the way from the off-centre centre
+        // through the pixel to the outer edge.
+        let ex = dx - p.shape_k.y;
+        let ey = dy - p.shape_k.z;
+        let a = ex * ex + ey * ey;
+        let b = p.shape_k.y * ex + p.shape_k.z * ey;
+        let reach = sqrt(b * b - a * p.shape_k.w) - b;
+        t = 0.0;
+        if (reach > 0.0) {
+            t = a / reach;
+        }
     } else if (p.shape == 2u) {
         // y grows downwards, so a growing angle turns clockwise.
         let turns = (atan2(dy, dx) - p.shape_k.x) / 6.2831855;

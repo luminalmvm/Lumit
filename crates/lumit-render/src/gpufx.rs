@@ -1533,6 +1533,7 @@ fn gradient_op(
         inv_len2: p.inv_len2,
         inv_len: p.inv_len,
         turn: p.turn,
+        focal: p.focal,
         c0: p.c0,
         c1: p.c1,
         scatter: p.scatter,

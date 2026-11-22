@@ -29,6 +29,10 @@ pub struct GradientParams {
     pub inv_len: f32,
     /// The axis's direction, radians, where an angle ramp begins.
     pub turn: f32,
+    /// A radial ramp's centre off the start point, raster pixels, and its
+    /// squared distance from it less the squared radius: see [`focal`].
+    /// Zero is centred.
+    pub focal: [f32; 3],
     /// Scene-linear start colour (alpha ignored: the ramp is opaque).
     pub c0: [f32; 3],
     /// Scene-linear end colour.
@@ -68,6 +72,7 @@ impl GradientParams {
             inv_len2: 1.0 / len2,
             inv_len: 1.0 / len2.sqrt(),
             turn: axis[1].atan2(axis[0]),
+            focal: [0.0; 3],
             c0: [0.0; 3],
             c1: [1.0; 3],
             scatter: 0.0,
@@ -78,6 +83,23 @@ impl GradientParams {
             mid: [[0.0; 4]; 3],
         }
     }
+}
+
+/// Where a radial ramp's bright centre sits for a highlight of `length` per
+/// cent of the radius along `axis`, turned `angle` degrees clockwise from it,
+/// as [`GradientParams::focal`] carries it. Never quite on the edge, where the
+/// ramp would have no inside left.
+#[must_use]
+pub fn focal(axis: [f32; 2], length: f32, angle: f32) -> [f32; 3] {
+    let off = (length / 100.0).clamp(-0.99, 0.99);
+    if off == 0.0 {
+        return [0.0; 3];
+    }
+    let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
+    let turn = axis[1].atan2(axis[0]) + angle.to_radians();
+    let reach = len2.sqrt() * off;
+    let (x, y) = (turn.cos() * reach, turn.sin() * reach);
+    [x, y, x * x + y * y - len2]
 }
 
 /// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
@@ -113,7 +135,22 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             let dx = x as f32 + 0.5 - p.start[0];
             let dy = y as f32 + 0.5 - p.start[1];
             let mut t = match p.shape {
-                RADIAL => (dx * dx + dy * dy).sqrt() * p.inv_len,
+                RADIAL if p.focal[0] == 0.0 && p.focal[1] == 0.0 => {
+                    (dx * dx + dy * dy).sqrt() * p.inv_len
+                }
+                // How far the pixel is from the centre, as a share of the way
+                // from the centre through it to the outer edge.
+                RADIAL => {
+                    let (ex, ey) = (dx - p.focal[0], dy - p.focal[1]);
+                    let a = ex * ex + ey * ey;
+                    let b = p.focal[0] * ex + p.focal[1] * ey;
+                    let reach = (b * b - a * p.focal[2]).sqrt() - b;
+                    if reach > 0.0 {
+                        a / reach
+                    } else {
+                        0.0
+                    }
+                }
                 ANGLE => {
                     // y grows downwards, so a growing angle turns clockwise.
                     let turns = (dy.atan2(dx) - p.turn) / std::f32::consts::TAU;

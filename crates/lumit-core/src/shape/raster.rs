@@ -103,6 +103,7 @@ impl ShapeItem {
             start: [&self.gradient_start_x, &self.gradient_start_y],
             end: [&self.gradient_end_x, &self.gradient_end_y],
             opacity: [&self.gradient_start_opacity, &self.gradient_end_opacity],
+            highlight: [&self.gradient_highlight, &self.gradient_highlight_angle],
             stops: &self.gradient_stops,
         };
         Some(source.ramp(t, to_box, sx, sy))
@@ -122,6 +123,7 @@ impl ShapeItem {
             start: [&g.start_x, &g.start_y],
             end: [&g.end_x, &g.end_y],
             opacity: [&g.start_opacity, &g.end_opacity],
+            highlight: [&g.highlight, &g.highlight_angle],
             stops: &g.stops,
         };
         Some(source.ramp(t, to_box, sx, sy))
@@ -462,6 +464,9 @@ pub(super) struct RampSource<'a> {
     pub(super) start: [&'a Property; 2],
     pub(super) end: [&'a Property; 2],
     pub(super) opacity: [&'a Property; 2],
+    /// How far off the start point a radial ramp's centre is, per cent, and
+    /// at what angle from the axis, degrees.
+    pub(super) highlight: [&'a Property; 2],
     pub(super) stops: &'a [GradientStop],
 }
 
@@ -535,8 +540,18 @@ impl RampSource<'_> {
             ALONG if self.outline => RampShape::Along,
             _ => RampShape::Linear,
         };
+        // The highlight sits on a ray from the start point, never quite on
+        // the edge, where the ramp would have no inside left.
+        let off = (self.highlight[0].value_at(t) / 100.0).clamp(-0.99, 0.99);
+        let focal = (shape == RampShape::Radial && off != 0.0).then(|| {
+            let radius = len2.sqrt();
+            let turn = axis.1.atan2(axis.0) + self.highlight[1].value_at(t).to_radians();
+            let f = (turn.cos() * radius * off, turn.sin() * radius * off);
+            (f, f.0 * f.0 + f.1 * f.1 - len2)
+        });
         Ramp {
             shape,
+            focal,
             start,
             axis,
             inv_len2: 1.0 / len2,
@@ -556,6 +571,9 @@ impl RampSource<'_> {
 /// done sensibly. 256 steps is finer than the 8-bit result can show.
 pub(super) struct Ramp {
     shape: RampShape,
+    /// A radial ramp's centre, off the start point, and its squared distance
+    /// from it less the squared radius. `None` is centred.
+    focal: Option<((f64, f64), f64)>,
     start: (f64, f64),
     axis: (f64, f64),
     inv_len2: f64,
@@ -599,7 +617,21 @@ impl Ramp {
         // epsilon when the ramp was built, so a zero-length axis is one flat
         // colour rather than a division by zero (docs/14 §4).
         let along = match self.shape {
-            RampShape::Radial => (dx * dx + dy * dy).sqrt() * self.inv_len,
+            RampShape::Radial => match self.focal {
+                None => (dx * dx + dy * dy).sqrt() * self.inv_len,
+                // How far the pixel is from the centre, as a share of the way
+                // from the centre through it to the outer edge.
+                Some((f, c)) => {
+                    let (ex, ey) = (dx - f.0, dy - f.1);
+                    let (a, b) = (ex * ex + ey * ey, f.0 * ex + f.1 * ey);
+                    let reach = (b * b - a * c).sqrt() - b;
+                    if reach > 0.0 {
+                        a / reach
+                    } else {
+                        0.0
+                    }
+                }
+            },
             // y grows downwards, so a growing angle turns clockwise.
             RampShape::Angle => {
                 ((dy.atan2(dx) - self.turn) / std::f64::consts::TAU).rem_euclid(1.0)

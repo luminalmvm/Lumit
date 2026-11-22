@@ -841,10 +841,12 @@ High range
 High soft clip
 Highlight
 Highlight amount
+Highlight angle
 Highlight balance
 Highlight boost
 Highlight colour
 Highlight exposure
+Highlight length
 Highlight opacity
 Highlight range
 Highlight saturation

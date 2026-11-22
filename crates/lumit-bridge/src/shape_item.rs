@@ -158,8 +158,10 @@ impl BridgeShapeItem {
                     })
                 })
                 .collect::<Result<_, BridgeError>>()?,
-            // The frontend does not edit an outline's gradient yet.
+            // The frontend does not edit these yet.
             stroke_gradient: None,
+            gradient_highlight: lumit_core::anim::Property::zero(),
+            gradient_highlight_angle: lumit_core::anim::Property::zero(),
             // Five readings and no sixth: a number naming none of them draws
             // the art on its own, which is the answer that shows something.
             combine: if self.combine <= 4 { self.combine } else { 0 },
@@ -185,7 +187,8 @@ impl BridgeShapeItem {
     }
 
     /// [`Self::write_item`], but keeping what `previous` carries and this type
-    /// does not describe: the **shape keyframes**, the outline's gradient and the
+    /// does not describe: the **shape keyframes**, the outline's gradient, the
+    /// fill's highlight and the
     /// forward-compatibility `extra` a newer Lumit may have written (docs/10
     /// §1.1 makes preserving it mandatory).
     ///
@@ -211,6 +214,8 @@ impl BridgeShapeItem {
         let mut written = lumit_core::shape::ShapeItem {
             path_keys: previous.path_keys.clone(),
             stroke_gradient: previous.stroke_gradient.clone(),
+            gradient_highlight: previous.gradient_highlight.clone(),
+            gradient_highlight_angle: previous.gradient_highlight_angle.clone(),
             extra: previous.extra.clone(),
             ..self.write_item(offset)?
         };

@@ -146,6 +146,21 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_full"
     )]
     pub gradient_end_opacity: Property,
+    /// **A radial ramp's highlight**: how far its bright centre sits from
+    /// the start point, per cent of the radius from -100 to 100, and at what
+    /// angle from the line to the end point, degrees clockwise. 0 is centred.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_highlight: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_highlight_angle: Property,
     /// The colours the ramp passes through between its two ends, in any
     /// order, as a stop that animates can pass another. Empty is the plain
     /// two-colour ramp, and is absent from the file.
@@ -289,6 +304,8 @@ impl ShapeItem {
             gradient_end_y: Property::zero(),
             gradient_start_opacity: crate::paint::full(),
             gradient_end_opacity: crate::paint::full(),
+            gradient_highlight: Property::zero(),
+            gradient_highlight_angle: Property::zero(),
             gradient_stops: Vec::new(),
             stroke_gradient: None,
             path_keys: Vec::new(),

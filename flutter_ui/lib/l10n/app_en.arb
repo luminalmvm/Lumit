@@ -4849,6 +4849,14 @@
   "@fxHighlightExposure": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxHighlightAngle": "Highlight angle",
+  "@fxHighlightAngle": {
+    "description": "Effect controls, a control on Gradient: which way a radial ramp's off-centre bright spot sits, in degrees."
+  },
+  "fxHighlightLength": "Highlight length",
+  "@fxHighlightLength": {
+    "description": "Effect controls, a control on Gradient: how far a radial ramp's bright spot sits off its centre, per cent of the radius."
+  },
   "fxHighlightThreshold": "Highlight threshold",
   "@fxHighlightThreshold": {
     "description": "Effect controls — a control on Depth of field."

@@ -13,8 +13,16 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Each colour in between shows only once Colours counts it.
+/// Each colour in between shows only once Colours counts it, and the
+/// highlight only on a radial ramp.
 pub const GRADIENT_GROUPS: &[ParamGroup] = &[
+    ParamGroup {
+        label: "",
+        params: &["highlight", "highlight_angle"],
+        collapsed: false,
+        visible_when: Some(("shape", &[1])),
+        visible_when_lens_elements: None,
+    },
     ParamGroup {
         label: "",
         params: &["colour_2", "position_2"],
@@ -90,6 +98,23 @@ pub struct Gradient {
     /// The colour at End.
     #[colour(label = "End colour", default = [0.0, 0.0, 0.0, 1.0], max = 4.0)]
     pub end_colour: [f32; 4],
+
+    /// Per cent of the radius: how far a radial ramp's bright centre sits
+    /// off Start, for a sphere lit from one side. 0 is centred.
+    #[slider(
+        label = "Highlight length",
+        min = -100.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = -100.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub highlight: f32,
+
+    /// Which way the highlight sits, degrees clockwise from the line to End.
+    #[dial(label = "Highlight angle", default = 0.0, step = 15.0)]
+    pub highlight_angle: f32,
 
     /// How many colours the ramp runs through: Start colour, the colours
     /// in between, End colour.
@@ -209,6 +234,7 @@ impl Gradient {
             clip_to_alpha: self.paint == 0,
             mids: self.colours.min(3),
             mid: self.mids(),
+            focal: cpu::gradient::focal(axis, self.highlight, self.highlight_angle),
             ..cpu::gradient::GradientParams::aimed([self.start_x, self.start_y], axis)
         }
     }

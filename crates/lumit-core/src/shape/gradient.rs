@@ -86,6 +86,20 @@ pub struct StrokeGradient {
         skip_serializing_if = "crate::paint::is_static_full"
     )]
     pub end_opacity: Property,
+    /// A radial ramp's highlight, as the fill's: per cent of the radius off
+    /// the start point, and the angle from the line to the end point.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub highlight: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub highlight_angle: Property,
     /// The colours between the two ends. Empty is a two-colour ramp.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stops: Vec<GradientStop>,

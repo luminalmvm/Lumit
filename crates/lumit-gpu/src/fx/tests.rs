@@ -7325,6 +7325,9 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     radial.start_y = 12.0;
     let mut angle = radial;
     angle.shape = 2;
+    let mut lit = radial;
+    lit.highlight = 60.0;
+    lit.highlight_angle = -135.0;
     let mut scattered = base;
     scattered.scatter = 40.0;
     scattered.seed = 7;
@@ -7341,6 +7344,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         ("linear", base, 1.0f32),
         ("radial", radial, 1.0),
         ("angle", angle, 1.0),
+        ("highlight", lit, 1.0),
         ("scattered", scattered, 1.0),
         ("hdr", hdr, 1.0),
         ("degenerate", degenerate, 1.0),

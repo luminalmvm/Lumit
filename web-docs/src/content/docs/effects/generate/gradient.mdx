@@ -30,6 +30,8 @@ Paints a smooth run of two to five colours over the whole frame between two poin
 | **End x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **End y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
 | **End colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
+| **Highlight length** | Slider | -100 to 100 | 0 | Per cent |
+| **Highlight angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Colours** | Dropdown | Two · Three · Four · Five | Two | - |
 | **Colour 2** | Colour | Each channel 0 to 4, scene-linear | 1, 0.5, 0, 1 | - |
 | **Colour 2 position** | Slider | 0 to 100 | 50 | Per cent |
@@ -61,6 +63,10 @@ In the Effect Controls panel:
 - **Start colour**: the colour at the start point.
 - **End x** and **End y**: the end point.
 - **End colour**: the colour at the end point.
+- **Highlight length**: how far the ramp's centre sits off Start, in per cent of the radius.
+  With **Radial**.
+- **Highlight angle**: which way it sits, in degrees clockwise from the line to End. With
+  **Radial**.
 - **Colours**: how many colours the ramp runs through, from two to five: Start colour, the
   colours in between, End colour.
 - **Colour 2**, **Colour 3** and **Colour 4**: the colours in between, in order from the

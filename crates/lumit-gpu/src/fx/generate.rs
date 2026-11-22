@@ -46,6 +46,8 @@ pub struct GradientOp {
     pub inv_len: f32,
     /// The axis's direction, radians, where an angle ramp begins.
     pub turn: f32,
+    /// A radial ramp's centre off the start point and its reach.
+    pub focal: [f32; 3],
     /// Scene-linear start and end colours.
     pub c0: [f32; 3],
     pub c1: [f32; 3],
@@ -81,7 +83,7 @@ struct GradientParams {
     /// How many of `mid` are in use.
     mids: u32,
     mid: [[f32; 4]; 3],
-    /// x = where an angle ramp begins, radians.
+    /// x = where an angle ramp begins, radians; yzw = the focal point.
     shape_k: [f32; 4],
 }
 
@@ -97,6 +99,7 @@ impl From<&lumit_core::fx::cpu::gradient::GradientParams> for GradientOp {
             inv_len2: p.inv_len2,
             inv_len: p.inv_len,
             turn: p.turn,
+            focal: p.focal,
             c0: p.c0,
             c1: p.c1,
             scatter: p.scatter,
@@ -251,7 +254,7 @@ impl FxEngine {
                 clip_to_alpha: u32::from(op.clip_to_alpha),
                 mids: op.mids.min(3),
                 mid: op.mid,
-                shape_k: [op.turn, 0.0, 0.0, 0.0],
+                shape_k: [op.turn, op.focal[0], op.focal[1], op.focal[2]],
             }),
         );
         out

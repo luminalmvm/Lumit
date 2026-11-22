@@ -186,6 +186,11 @@ an end at 0 is clear.
 The Fill, the points and the opacities are animatable. The Gradient colour and the stops'
 colours are not.
 
+A radial ramp's centre can sit off its first point, as a highlight. `gradient_highlight` is
+how far, as a percentage of the radius from -100 to 100, and `gradient_highlight_angle` which
+way, in degrees clockwise from the line to the second point. Both are set in the file or
+through scripting, and have no row.
+
 An outline takes a gradient from `stroke_gradient` on the shape, set in the file or through
 scripting. It has no row. The ramp runs from the **Stroke** colour to its own `colour`, and
 its `kind` is 1 for linear, 2 for radial, 4 for angle or 3 for along the path. Along the
