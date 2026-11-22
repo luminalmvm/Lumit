@@ -34,26 +34,15 @@ impl TextAnimator {
     pub fn wireable_numbers(&self) -> Vec<(String, String)> {
         let mut out: Vec<(String, String)> = Vec::new();
         let mut add = |name: &str, label: &str| out.push((name.to_owned(), label.to_owned()));
-        match self.selector.kind {
-            SelectorKind::Range => {
-                add("start", "Range start");
-                add("end", "Range end");
-                add("offset", "Range offset");
-            }
-            SelectorKind::Proximity => add("radius", "Radius"),
-            SelectorKind::Wiggly => {
-                add("max_amount", "Max amount");
-                add("min_amount", "Min amount");
-                add("wiggles", "Wiggles/second");
-                add("correlation", "Correlation");
-            }
-            SelectorKind::Stagger => {
-                add("amount", "Amount");
-                add("delay", "Delay");
-                add("delay_ease", "Delay ease");
-                add("bounce_amplitude", "Bounce amplitude");
-                add("bounce_frequency", "Bounce frequency");
-                add("bounce_decay", "Bounce decay");
+        // Each selector's own numbers: the first as they always were, a
+        // later one as `s<k>.<number>`, named after its place in the list.
+        for (k, selector) in self.all_selectors().enumerate() {
+            for (name, label) in selector_numbers(selector.kind) {
+                if k == 0 {
+                    add(name, label);
+                } else {
+                    add(&format!("s{k}.{name}"), &format!("Selector {} · {label}", k + 1));
+                }
             }
         }
         // The groups that came later are listed only once added, even on an
@@ -119,6 +108,36 @@ impl TextAnimator {
                 .iter_mut()
                 .find(|a| a.tag == tag)
                 .map(|a| &mut a.value);
+        }
+        // A later selector's number, `s<k>.<number>`.
+        let (k, name) = match name.strip_prefix('s').and_then(|rest| rest.split_once('.')) {
+            Some((k, rest)) if !k.is_empty() && k.bytes().all(|b| b.is_ascii_digit()) => {
+                (k.parse::<usize>().ok()?, rest)
+            }
+            _ => (0, name),
+        };
+        if k > 0 {
+            let s = self.selector_at_mut(k)?;
+            if !selector_numbers(s.kind).iter().any(|(n, _)| *n == name) {
+                return None;
+            }
+            return Some(match name {
+                "start" => &mut s.start,
+                "end" => &mut s.end,
+                "offset" => &mut s.offset,
+                "radius" => &mut s.radius,
+                "min_amount" => &mut s.min_amount,
+                "max_amount" => &mut s.max_amount,
+                "amount" => &mut s.amount,
+                "delay" => &mut s.delay,
+                "delay_ease" => &mut s.delay_ease,
+                "bounce_amplitude" => &mut s.bounce_amplitude,
+                "bounce_frequency" => &mut s.bounce_frequency,
+                "bounce_decay" => &mut s.bounce_decay,
+                "wiggles" => &mut s.wiggles,
+                "correlation" => &mut s.correlation,
+                _ => return None,
+            });
         }
         let s = &mut self.selector;
         Some(match name {
@@ -202,4 +221,30 @@ pub fn layer_glyph_xforms(
         }
     }
     glyph_xforms_near(&animators, line, lt, spoken, &near)
+}
+
+/// A selector's wireable numbers, by port name and label.
+fn selector_numbers(kind: SelectorKind) -> &'static [(&'static str, &'static str)] {
+    match kind {
+        SelectorKind::Range => &[
+            ("start", "Range start"),
+            ("end", "Range end"),
+            ("offset", "Range offset"),
+        ],
+        SelectorKind::Proximity => &[("radius", "Radius")],
+        SelectorKind::Wiggly => &[
+            ("max_amount", "Max amount"),
+            ("min_amount", "Min amount"),
+            ("wiggles", "Wiggles/second"),
+            ("correlation", "Correlation"),
+        ],
+        SelectorKind::Stagger => &[
+            ("amount", "Amount"),
+            ("delay", "Delay"),
+            ("delay_ease", "Delay ease"),
+            ("bounce_amplitude", "Bounce amplitude"),
+            ("bounce_frequency", "Bounce frequency"),
+            ("bounce_decay", "Bounce decay"),
+        ],
+    }
 }

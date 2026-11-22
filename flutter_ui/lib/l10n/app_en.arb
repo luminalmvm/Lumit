@@ -32598,6 +32598,14 @@
   "@textAnimatorMore": {
     "description": "Button beside a text animator's name opening a menu of what can be done with the whole animator: duplicate, copy, make an out animation, save as preset, move, remove."
   },
+  "textAnimatorMoreTip": "Duplicate, copy, paste, Make out, save as preset, move up or down",
+  "@textAnimatorMoreTip": {
+    "description": "Tooltip of the More button beside a text animator's name, listing what its menu holds."
+  },
+  "textAnimatorDrag": "Drag onto another animator to move it there",
+  "@textAnimatorDrag": {
+    "description": "Tooltip of the grip beside a text animator's name, in the Effect controls panel and the Timeline."
+  },
   "textAnimatorDuplicate": "Duplicate",
   "@textAnimatorDuplicate": {
     "description": "Menu row: adds a copy of the text animator right after it."

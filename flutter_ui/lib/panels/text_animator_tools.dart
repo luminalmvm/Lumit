@@ -20,6 +20,9 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/icons.dart' show iconSize;
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/theme_name_dialog.dart' show askThemeName;
 import '../widgets/controls.dart';
@@ -1048,6 +1051,18 @@ List<Widget> animatorMoreMenuRows({
         index + 1 >= animators.length
             ? null
             : () => write(animatorsMoved(animators, index, index + 1))),
+    const MenuDivider(),
+    row('reverse-menu', l10n.textAnimatorReverse,
+        animatorHasKeys(a)
+            ? () => write([
+                  for (final other in animators)
+                    if (other.name == a.name) reversedAnimator(other) else other,
+                ])
+            : null),
+    row('remove-menu', l10n.textAnimatorRemove, () => write([
+          for (var i = 0; i < animators.length; i++)
+            if (i != index) animators[i],
+        ])),
   ];
 }
 
@@ -1080,22 +1095,8 @@ class AnimatorHeading extends StatelessWidget {
           for (var i = 0; i < animators.length; i++)
             if (i == index) next else animators[i],
         ]);
+    final layerId = layer.internallayerId.toString();
     final renameKey = '${layer.internallayerId}/$index';
-    Widget toggle(String key, String glyph, bool on, String tip,
-            VoidCallback onTap) =>
-        LumitTooltip(
-          message: tip,
-          child: GestureDetector(
-            key: ValueKey<String>('text-animator-$key-$index'),
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(glyph,
-                  style: on ? t.kickerOn : t.kicker.copyWith(color: t.textMuted)),
-            ),
-          ),
-        );
     final name = ValueListenableBuilder<String?>(
       valueListenable: animatorRenaming,
       builder: (context, renaming, _) => renaming == renameKey
@@ -1122,21 +1123,18 @@ class AnimatorHeading extends StatelessWidget {
       context: context,
       name: Row(
         children: [
-          // Drag the grip onto another animator's heading to move it there.
-          Draggable<int>(
-            data: index,
-            feedback: Text(a.name, style: t.kickerOn),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.grab,
-              child: Text('⠿ ',
-                  key: ValueKey<String>('text-animator-grip-$index'),
-                  style: t.kicker),
-            ),
-          ),
-          toggle('eye', a.enabled ? '◉' : '○', a.enabled,
-              l10n.textAnimatorEnabled, () => put(animatorWith(a, enabled: !a.enabled))),
-          toggle('solo', 'S', a.solo, l10n.textAnimatorSolo,
-              () => put(animatorWith(a, solo: !a.solo))),
+          animatorGrip(context,
+              layerId: layerId, index: index, name: a.name, key: 'text-animator-grip-$index'),
+          animatorSwitch(context,
+              key: 'text-animator-eye-$index',
+              solo: false,
+              on: a.enabled,
+              onTap: () => put(animatorWith(a, enabled: !a.enabled))),
+          animatorSwitch(context,
+              key: 'text-animator-solo-$index',
+              solo: true,
+              on: a.solo,
+              onTap: () => put(animatorWith(a, solo: !a.solo))),
           const SizedBox(width: 4),
           Expanded(child: name),
         ],
@@ -1172,24 +1170,12 @@ class AnimatorHeading extends StatelessWidget {
             },
           ),
           const SizedBox(width: 6),
-          RowButton(
-            key: ValueKey<String>('text-animator-more-$index'),
-            label: l10n.textAnimatorMore,
-            arrow: true,
-            onTap: (at) => showMenuAt<void>(
-              context: context,
-              position: at,
-              width: 200,
-              rows: (close) => animatorMoreMenuRows(
-                context: context,
-                close: () => close(null),
-                comp: comp,
-                animators: animators,
-                index: index,
-                write: write,
-              ),
-            ),
-          ),
+          animatorMoreButton(context,
+              key: 'text-animator-more-$index',
+              comp: comp,
+              animators: animators,
+              index: index,
+              write: write),
           if (animatorHasKeys(a))
             HouseButton(
               key: ValueKey<String>('text-animator-reverse-$index'),
@@ -1215,19 +1201,146 @@ class AnimatorHeading extends StatelessWidget {
         ],
       ),
     );
-    return DragTarget<int>(
-      onWillAcceptWithDetails: (d) => d.data != index,
-      onAcceptWithDetails: (d) =>
-          write(animatorsMoved(animators, d.data, index)),
-      builder: (context, over, _) => over.isEmpty
-          ? heading
-          : DecoratedBox(
-              decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: t.accent, width: 2))),
-              child: heading,
-            ),
+    return animatorDropTarget(
+      layerId: layerId,
+      index: index,
+      onMove: (from) => write(animatorsMoved(animators, from, index)),
+      child: heading,
     );
   }
+}
+
+/// More ▸, beside an animator's name: what can be done with the whole
+/// animator. The Timeline heading opens the same menu on a right-click.
+Widget animatorMoreButton(BuildContext context,
+        {required String key,
+        required CompositionReference comp,
+        required List<BridgeTextAnimator> animators,
+        required int index,
+        required ValueChanged<List<BridgeTextAnimator>> write}) =>
+    LumitTooltip(
+      message: l10n.textAnimatorMoreTip,
+      child: RowButton(
+        key: ValueKey<String>(key),
+        label: l10n.textAnimatorMore,
+        arrow: true,
+        onTap: (at) => showAnimatorMoreMenu(context, at,
+            comp: comp, animators: animators, index: index, write: write),
+      ),
+    );
+
+/// The More menu of animator [index], dropped at [at].
+void showAnimatorMoreMenu(BuildContext context, Offset at,
+        {required CompositionReference comp,
+        required List<BridgeTextAnimator> animators,
+        required int index,
+        required ValueChanged<List<BridgeTextAnimator>> write}) =>
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 200,
+      rows: (close) => animatorMoreMenuRows(
+        context: context,
+        close: () => close(null),
+        comp: comp,
+        animators: animators,
+        index: index,
+        write: write,
+      ),
+    );
+
+/// An animator dragged by its grip: whose, and its place in the list, so a
+/// drop moves it only among its own layer's animators.
+class AnimatorDrag {
+  final String layerId;
+  final int index;
+  const AnimatorDrag(this.layerId, this.index);
+}
+
+/// The grip that drags an animator above or below the others, in the Effect
+/// controls panel and the Timeline alike.
+Widget animatorGrip(BuildContext context,
+    {required String layerId,
+    required int index,
+    required String name,
+    required String key}) {
+  final t = ThemeScope.of(context).theme;
+  return LumitTooltip(
+    message: l10n.textAnimatorDrag,
+    child: Draggable<AnimatorDrag>(
+      data: AnimatorDrag(layerId, index),
+      feedback: Text(name, style: t.kickerOn),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Text('⠿',
+              key: ValueKey<String>(key),
+              style: t.kicker.copyWith(color: t.textMuted)),
+        ),
+      ),
+    ),
+  );
+}
+
+/// An animator's heading, taking a grip dropped on it: the dragged
+/// animator moves to this place, a line over the heading showing where.
+Widget animatorDropTarget(
+        {required String layerId,
+        required int index,
+        required ValueChanged<int> onMove,
+        required Widget child}) =>
+    Builder(builder: (context) {
+      final t = ThemeScope.of(context).theme;
+      return DragTarget<AnimatorDrag>(
+        onWillAcceptWithDetails: (d) =>
+            d.data.layerId == layerId && d.data.index != index,
+        onAcceptWithDetails: (d) => onMove(d.data.index),
+        builder: (context, over, _) => over.isEmpty
+            ? child
+            : DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                    border:
+                        Border(top: BorderSide(color: t.accent, width: 2))),
+                child: child,
+              ),
+      );
+    });
+
+/// An animator's eye or solo, drawn as a layer's switches are: the eye
+/// closes when off, the solo mark dims until it is on.
+Widget animatorSwitch(BuildContext context,
+    {required String key,
+    required bool solo,
+    required bool on,
+    required VoidCallback onTap}) {
+  final t = ThemeScope.of(context).theme;
+  return LumitTooltip(
+    message: solo ? l10n.textAnimatorSolo : l10n.textAnimatorEnabled,
+    child: GestureDetector(
+      key: ValueKey<String>(key),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: iconSize + 4,
+        child: Center(
+          child: glyph.LumitIcon(
+              solo
+                  ? LumitIcons.solo
+                  : on
+                      ? LumitIcons.visible
+                      : LumitIcons.hidden,
+              size: iconSize,
+              colour: on
+                  ? t.textPrimary
+                  : solo
+                      ? t.textDisabled
+                      : t.textMuted),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Write [layer]'s animators back as [animators], the rest of the document

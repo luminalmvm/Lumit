@@ -866,3 +866,26 @@ fn an_animator_at_its_defaults_writes_none_of_the_new_rows() {
     assert_eq!(back, a);
     assert!(back.enabled);
 }
+
+#[test]
+fn a_second_selector_has_ports_of_its_own() {
+    let mut a = TextAnimator::new("A");
+    let mut second = a.selector.clone();
+    second.kind = SelectorKind::Stagger;
+    a.selectors.push(second);
+    let names = a.wireable_numbers();
+    assert!(names.iter().any(|(n, l)| n == "start" && l == "Range start"));
+    assert!(names
+        .iter()
+        .any(|(n, l)| n == "s1.delay" && l == "Selector 2 · Delay"));
+    for (name, _) in &names {
+        assert!(a.number_mut(name).is_some(), "{name}");
+    }
+    // The second is a Stagger: no Range numbers, and no third selector.
+    assert!(a.number_mut("s1.start").is_none());
+    assert!(a.number_mut("s2.amount").is_none());
+    // A property starting with "s" is not taken for a selector.
+    assert!(a.number_mut("scale_x").is_some());
+    let port = ports::animator_port(0, "s1.delay");
+    assert_eq!(ports::parse_animator_port(&port), Some((0, "s1.delay")));
+}

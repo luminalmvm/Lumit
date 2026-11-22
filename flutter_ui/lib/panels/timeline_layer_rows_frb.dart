@@ -58,11 +58,18 @@ import 'text_animator_rows_frb.dart'
         DoubleClickListener,
         animatorsRenamed,
         writeTextAnimator,
-        writeTextAnimatorList;
+        writeTextAnimatorList,
+        animatorDropTarget,
+        animatorGrip,
+        animatorSwitch,
+        animatorWith,
+        animatorsMoved,
+        showAnimatorMoreMenu;
 import 'timeline_shape_rows_frb.dart';
 import 'shape_entries.dart';
 import 'template_place.dart' show openTemplate;
 import 'package:lumit_flutter/src/rust/api/shape.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart' show BridgeTextAnimator;
 import 'timeline_retime_row_frb.dart';
 import 'timeline_layer_menu_frb.dart' show audioRows, showMenuEntriesAt;
 import 'viewer_shapes.dart' show shapePath;
@@ -261,7 +268,7 @@ class FoldRow extends StatelessWidget {
     // A *group* row is exempt: twirling one open is navigation, not editing,
     // and a locked layer that could not be looked inside would be worse than
     // one that can.
-    final body = locked && row is! FoldGroupRow && row is! FoldWaveformRow
+    final body_ = locked && row is! FoldGroupRow && row is! FoldWaveformRow
         ? AbsorbPointer(
             child: Opacity(opacity: 0.5, child: _control(context)),
           )
@@ -282,7 +289,20 @@ class FoldRow extends StatelessWidget {
                 ),
               )
             : _control(context);
-    final eye = eyeX == null ? null : _shapeEye(context, t);
+    final animator = locked ? null : _animatorIndexOf(path);
+    final body = animator == null
+        ? body_
+        // An animator's heading takes another's grip dropped on it.
+        : animatorDropTarget(
+            layerId: layer.internallayerId.toString(),
+            index: animator,
+            onMove: (from) => _writeAnimators(
+                (list) => animatorsMoved(list, from, animator)),
+            child: body_,
+          );
+    final eye =
+        eyeX == null ? null : _shapeEye(context, t) ?? _animatorEye(context);
+    final solo = eyeX == null ? null : _animatorSolo(context);
     // **And the row must WIN that press, not merely see it**. The
     // ground under the outline clears the selection on tap, and its comment
     // has always said "a switch or a property still wins its own tap in the
@@ -362,6 +382,14 @@ class FoldRow extends StatelessWidget {
                       bottom: 0,
                       width: switchCellWidth,
                       child: eye),
+                  if (solo != null)
+                    Positioned(
+                        // The solo column, third of the switches.
+                        left: eyeX! + 2 * switchCellWidth,
+                        top: 0,
+                        bottom: 0,
+                        width: switchCellWidth,
+                        child: solo),
                 ]),
         ),
       ),
@@ -441,6 +469,9 @@ class FoldRow extends StatelessWidget {
     }
     if (path == effectsPath(id)) return _effectsMenu;
     if (path == masksPath(id)) return _masksMenu;
+    if (_animatorIndexOf(locked ? null : path) case final index?) {
+      return (context, at) => _animatorMenu(context, at, index);
+    }
     if (path == audioPath(id)) return _audioMenu;
     return null;
   }
@@ -650,6 +681,78 @@ class FoldRow extends StatelessWidget {
     final stem = '${animatorsPath(layer.internallayerId.toString())}/';
     if (!path.startsWith(stem)) return null;
     return int.tryParse(path.substring(stem.length));
+  }
+
+  /// The layer's animators changed by [change], written back as one step.
+  void _writeAnimators(
+      List<BridgeTextAnimator> Function(List<BridgeTextAnimator>) change) {
+    final animators = layer.getText()?.animators;
+    if (animators == null) return;
+    writeTextAnimatorList(layer, change(animators));
+    onChanged();
+  }
+
+  /// The animator an animator heading names, as the document holds it.
+  BridgeTextAnimator? _animatorAt(int index) {
+    final animators = layer.getText()?.animators;
+    return animators == null || index >= animators.length
+        ? null
+        : animators[index];
+  }
+
+  /// An animator heading's eye, in the layer's eye column as a shape
+  /// entry's is. Null on every other row and on a locked layer.
+  Widget? _animatorEye(BuildContext context) {
+    if (row is! FoldGroupRow || locked) return null;
+    final index = _animatorIndexOf(path);
+    final a = index == null ? null : _animatorAt(index);
+    if (index == null || a == null) return null;
+    return Center(
+      child: animatorSwitch(context,
+          key: 'tl-anim-eye-$index',
+          solo: false,
+          on: a.enabled,
+          onTap: () => _writeAnimators((list) => [
+                for (var i = 0; i < list.length; i++)
+                  i == index
+                      ? animatorWith(list[i], enabled: !list[i].enabled)
+                      : list[i],
+              ])),
+    );
+  }
+
+  /// Its solo, in the layer's solo column.
+  Widget? _animatorSolo(BuildContext context) {
+    if (row is! FoldGroupRow || locked) return null;
+    final index = _animatorIndexOf(path);
+    final a = index == null ? null : _animatorAt(index);
+    if (index == null || a == null) return null;
+    return Center(
+      child: animatorSwitch(context,
+          key: 'tl-anim-solo-$index',
+          solo: true,
+          on: a.solo,
+          onTap: () => _writeAnimators((list) => [
+                for (var i = 0; i < list.length; i++)
+                  i == index
+                      ? animatorWith(list[i], solo: !list[i].solo)
+                      : list[i],
+              ])),
+    );
+  }
+
+  /// An animator heading's More menu, from its button or a right-click.
+  void _animatorMenu(BuildContext context, Offset at, int index) {
+    final animators = layer.getText()?.animators;
+    if (animators == null || index >= animators.length) return;
+    showAnimatorMoreMenu(context, at,
+        comp: comp,
+        animators: animators,
+        index: index,
+        write: (next) {
+          writeTextAnimatorList(layer, next);
+          onChanged();
+        });
   }
 
   /// A heading's name, which an effect's Rename turns into its editor in place.
@@ -934,6 +1037,11 @@ class FoldRow extends StatelessWidget {
                     case final index?) ...[
                   // An animator's heading: Add ▸ Property or Selector, as
                   // beside an animator in After Effects.
+                  animatorGrip(context,
+                      layerId: layer.internallayerId.toString(),
+                      index: index,
+                      name: label,
+                      key: 'tl-anim-grip-$index'),
                   Expanded(child: _headingName(context, label, named, lit)),
                   RowButton(
                     key: ValueKey<String>('tl-text-animator-add-$path'),
@@ -965,6 +1073,16 @@ class FoldRow extends StatelessWidget {
                         ),
                       );
                     },
+                  ),
+                  const SizedBox(width: 6),
+                  LumitTooltip(
+                    message: l10n.textAnimatorMoreTip,
+                    child: RowButton(
+                      key: ValueKey<String>('tl-text-animator-more-$path'),
+                      label: l10n.textAnimatorMore,
+                      arrow: true,
+                      onTap: (at) => _animatorMenu(context, at, index),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   SizedBox(width: valueColumn.width),

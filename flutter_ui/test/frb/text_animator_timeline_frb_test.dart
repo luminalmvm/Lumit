@@ -117,6 +117,55 @@ void main() {
           findsOneWidget);
     });
 
+    testWidgets('An animator heading has its eye, solo, grip and More',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = text.internallayerId.toString();
+      await twirl(tester, id);
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animate-scale')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animate-opacity')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators, hasLength(2));
+
+      expect(find.byKey(const ValueKey<String>('tl-anim-grip-1')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey<String>('tl-anim-eye-0')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators[0].enabled, isFalse);
+      await tester.tap(find.byKey(const ValueKey<String>('tl-anim-solo-1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators[1].solo, isTrue);
+
+      // More: the same menu as in the Effect controls panel.
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animator-more-$id/animators/1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animator-move-up-1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.properties?.single),
+          ['opacity', 'scale']);
+
+      // The grip dropped on the other heading moves it there.
+      final from = tester.getCenter(find.byKey(const ValueKey<String>('tl-anim-grip-1')));
+      final to = tester.getCenter(find.byKey(const ValueKey<String>('tl-anim-grip-0')));
+      final g = await tester.startGesture(from);
+      await tester.pump(const Duration(milliseconds: 50));
+      await g.moveTo(to);
+      await tester.pump();
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.properties?.single),
+          ['scale', 'opacity']);
+    });
+
     testWidgets('Delete takes off an animator, a property, or all of them',
         (tester) async {
       final p = withComp();
