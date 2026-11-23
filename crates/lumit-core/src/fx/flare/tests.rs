@@ -119,8 +119,14 @@ fn burn_runs_a_bright_light_to_white() {
     assert_eq!(burnt([6.0, 0.3, 0.1], 0.0), [6.0, 0.3, 0.1], "Burn 0");
     let hot = burnt([6.0, 0.3, 0.1], 1.0);
     assert!(
-        hot[1] > 4.0 && hot[2] > 4.0,
+        hot[1] > 4.0 && hot[2] > 3.0,
         "white where brightest: {hot:?}"
+    );
+    // On the way it is yellow: green past 1 before blue is.
+    let yellow = burnt([2.0, 0.1, 0.04], 1.0);
+    assert!(
+        yellow[1] >= 1.0 && yellow[2] < 0.5,
+        "yellow on the way: {yellow:?}"
     );
     let warm = burnt([1.5, 0.05, 0.0], 1.0);
     assert!(

@@ -500,12 +500,26 @@ fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // == raster::burnt: past 1 in its brightest channel, light runs toward
-// white, the further past the whiter.
+// white, the further past the whiter, the middle channel first and the
+// dimmest last: red, orange, yellow, white.
 fn burnt(c: vec3<f32>, burn: f32) -> vec3<f32> {
     let m = max(max(c.x, c.y), c.z);
     if (burn <= 0.0 || m <= 1.0) {
         return c;
     }
-    let t = burn * (1.0 - 1.0 / m);
+    let lo = min(min(c.x, c.y), c.z);
+    let mid = c.x + c.y + c.z - m - lo;
+    let x = 1.0 - 1.0 / m;
+    let first = burn * x;
+    let last = burn * x * x * x;
+    let apart = clamp((mid - lo) / (0.02 * m), 0.0, 1.0);
+    let even = 0.5 * (first + last);
+    let t_mid = even + (first - even) * apart;
+    let t_lo = even + (last - even) * apart;
+    let t = vec3<f32>(
+        select(t_mid, t_lo, c.x <= lo),
+        select(t_mid, t_lo, c.y <= lo),
+        select(t_mid, t_lo, c.z <= lo),
+    );
     return c + (vec3<f32>(m) - c) * t;
 }

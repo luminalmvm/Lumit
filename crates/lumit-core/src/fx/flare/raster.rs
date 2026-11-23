@@ -50,16 +50,24 @@ pub struct Frame {
 }
 
 /// Light past 1 in its brightest channel, run toward white by `burn`: the
-/// further past, the whiter. A red light goes orange, yellow, then white,
-/// and anything 1 or under is left as it is.
+/// further past, the whiter. The middle channel catches up first and the
+/// dimmest last, so a red light goes orange, yellow, then white, as glowing
+/// metal does. Anything 1 or under is left as it is.
 #[must_use]
 pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
     let m = c[0].max(c[1]).max(c[2]);
     if burn <= 0.0 || m <= 1.0 {
         return c;
     }
-    let t = burn * (1.0 - 1.0 / m);
-    [0, 1, 2].map(|k| c[k] + (m - c[k]) * t)
+    let lo = c[0].min(c[1]).min(c[2]);
+    let mid = c[0] + c[1] + c[2] - m - lo;
+    let x = 1.0 - 1.0 / m;
+    let (first, last) = (burn * x, burn * x * x * x);
+    // Two channels alike share the pace, so nothing jumps as they cross.
+    let apart = ((mid - lo) / (0.02 * m)).clamp(0.0, 1.0);
+    let even = 0.5 * (first + last);
+    let (t_mid, t_lo) = (even + (first - even) * apart, even + (last - even) * apart);
+    [0, 1, 2].map(|k| c[k] + (m - c[k]) * if c[k] <= lo { t_lo } else { t_mid })
 }
 
 impl Frame {
