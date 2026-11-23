@@ -73,3 +73,38 @@ fn every_flare_and_every_element_draws() {
         }
     }
 }
+
+/// Offset moves a streak's lines across, off the light, by its pixels: the
+/// brightest row is that far from the light's, and nought leaves it there.
+#[test]
+fn a_streaks_offset_moves_its_lines_off_the_light() {
+    let (w, h) = (200u32, 100u32);
+    let brightest_row = |offset: f32| {
+        let mut e = Element::new(Kind::Streak);
+        e.set("thickness", 1.0);
+        e.set("offset", offset);
+        let design = Design {
+            lumit_flare: FORMAT,
+            name: String::new(),
+            elements: vec![e],
+        };
+        let f = Frame::preview(w, h, [100.0, 50.0], 1.0);
+        let mut rgba = vec![0.0; (w * h * 4) as usize];
+        draw(&design, &f, w, h, &mut rgba);
+        let row = |y: u32| {
+            (0..w)
+                .map(|x| rgba[((y * w + x) * 4) as usize])
+                .sum::<f32>()
+        };
+        (0..h)
+            .max_by(|&a, &b| row(a).total_cmp(&row(b)))
+            .unwrap_or(0)
+    };
+    let at = brightest_row(0.0);
+    assert!(at.abs_diff(50) <= 1, "on the light at nought: row {at}");
+    let moved = brightest_row(20.0);
+    assert!(
+        moved.abs_diff(at) >= 19 && moved.abs_diff(at) <= 21,
+        "20 px off: row {moved}"
+    );
+}
