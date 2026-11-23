@@ -731,7 +731,8 @@ fn stamp_glyph(
         return None; // scaled or faded to nothing
     }
     // Skew, about the same middle, before the turn; its inverse undoes it.
-    let [kxx, kyx, kxy, kyy] = blur::skew_matrix(x.skew, x.skew_axis).unwrap_or([1.0, 0.0, 0.0, 1.0]);
+    let [kxx, kyx, kxy, kyy] =
+        blur::skew_matrix(x.skew, x.skew_axis).unwrap_or([1.0, 0.0, 0.0, 1.0]);
     #[allow(clippy::cast_precision_loss)]
     let (gw, gh) = (metrics.width as f32, metrics.height as f32);
     let lx0 = metrics.xmin as f32;
@@ -1585,14 +1586,23 @@ mit",
         let still = vec![GlyphXform::default(); 4];
         let plain = |x: &[GlyphXform]| rasterise_line_animated("IIII", 48.0, white(), x);
         let (bx0, _, bx1, _) = ink_box(&plain(&still)).expect("ink");
-        let blurred = plain(&all(GlyphXform { blur: 6.0, ..GlyphXform::default() }));
+        let blurred = plain(&all(GlyphXform {
+            blur: 6.0,
+            ..GlyphXform::default()
+        }));
         let (x0, _, x1, _) = ink_box(&blurred).expect("ink");
         assert!(x0 < bx0 && x1 > bx1, "blur did not spread the ink");
-        let tracked = plain(&all(GlyphXform { tracking: 500.0, ..GlyphXform::default() }));
+        let tracked = plain(&all(GlyphXform {
+            tracking: 500.0,
+            ..GlyphXform::default()
+        }));
         let (_, _, tx1, _) = ink_box(&tracked).expect("ink");
         // Pushed along, as far as the animated margin of one text size lets it.
         assert!(tx1 > bx1 + 30, "tracking did not push the letters along");
-        let skewed = plain(&all(GlyphXform { skew: 30.0, ..GlyphXform::default() }));
+        let skewed = plain(&all(GlyphXform {
+            skew: 30.0,
+            ..GlyphXform::default()
+        }));
         assert_ne!(skewed.rgba, plain(&still).rgba, "skew changed nothing");
 
         // The styled path: a block with a style of its own.
@@ -1610,8 +1620,20 @@ mit",
             boxed: false,
         };
         let base = rasterise(&block, &still);
-        let blurred = rasterise(&block, &all(GlyphXform { blur: 6.0, ..GlyphXform::default() }));
-        let skewed = rasterise(&block, &all(GlyphXform { skew: 30.0, ..GlyphXform::default() }));
+        let blurred = rasterise(
+            &block,
+            &all(GlyphXform {
+                blur: 6.0,
+                ..GlyphXform::default()
+            }),
+        );
+        let skewed = rasterise(
+            &block,
+            &all(GlyphXform {
+                skew: 30.0,
+                ..GlyphXform::default()
+            }),
+        );
         let (sx0, _, sx1, _) = ink_box(&base).expect("ink");
         let (b0, _, b1, _) = ink_box(&blurred).expect("ink");
         assert!(b0 < sx0 && b1 > sx1, "styled blur did not spread the ink");

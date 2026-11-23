@@ -497,8 +497,8 @@ pub fn text_animators_from_json(
     json: String,
     at: crate::api::effect::BridgeRational,
 ) -> Result<Vec<BridgeTextAnimator>, BridgeError> {
-    let offset = lumit_core::time::Rational::new(at.num, at.den)
-        .map_err(|_| BridgeError::InvalidTime)?;
+    let offset =
+        lumit_core::time::Rational::new(at.num, at.den).map_err(|_| BridgeError::InvalidTime)?;
     let core: Vec<lumit_core::text::TextAnimator> =
         serde_json::from_str(&json).map_err(|_| BridgeError::InvalidPreset)?;
     Ok(core

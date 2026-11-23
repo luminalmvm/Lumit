@@ -154,7 +154,10 @@ fn ease_high_and_low_bend_the_ramp() {
         steep_top[9] - steep_top[8] > even[9] - even[8],
         "{even:?} {steep_top:?}"
     );
-    assert!(steep_top.iter().all(|w| (0.0..=1.0).contains(w)), "{steep_top:?}");
+    assert!(
+        steep_top.iter().all(|w| (0.0..=1.0).contains(w)),
+        "{steep_top:?}"
+    );
     // Past the range the letters are moved the whole way, eased or not.
     s.offset = Property::fixed(-100.0);
     assert!(s.weights_at(4, 0.0).iter().all(|w| (*w - 1.0).abs() < 1e-6));
@@ -505,7 +508,11 @@ fn a_stagger_selector_plays_the_amount_one_unit_after_another() {
         assert!((got - want).abs() < 1e-6, "{w:?}");
     }
     // Subtract turns them over.
-    let sub = RangeSelector { invert: true, ..s.clone() }.stagger_weights(3, 0.5);
+    let sub = RangeSelector {
+        invert: true,
+        ..s.clone()
+    }
+    .stagger_weights(3, 0.5);
     for (a, b) in w.iter().zip(&sub) {
         assert!((a + b - 1.0).abs() < 1e-6, "{w:?} {sub:?}");
     }
@@ -631,12 +638,30 @@ fn a_second_selector_is_put_together_by_its_mode() {
             .map(|o| 1.0 - o)
             .collect::<Vec<_>>()
     };
-    assert_eq!(both(SelectorCombine::Add, false), [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]);
-    assert_eq!(both(SelectorCombine::Add, true), [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
-    assert_eq!(both(SelectorCombine::Intersect, false), [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]);
-    assert_eq!(both(SelectorCombine::Min, false), [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]);
-    assert_eq!(both(SelectorCombine::Max, false), [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]);
-    assert_eq!(both(SelectorCombine::Difference, false), [1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
+    assert_eq!(
+        both(SelectorCombine::Add, false),
+        [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+    );
+    assert_eq!(
+        both(SelectorCombine::Add, true),
+        [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+    );
+    assert_eq!(
+        both(SelectorCombine::Intersect, false),
+        [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    );
+    assert_eq!(
+        both(SelectorCombine::Min, false),
+        [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    );
+    assert_eq!(
+        both(SelectorCombine::Max, false),
+        [1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+    );
+    assert_eq!(
+        both(SelectorCombine::Difference, false),
+        [1.0, 1.0, 0.0, 1.0, 1.0, 0.0]
+    );
 }
 
 /// **The eye and solo**: a switched-off animator counts for nothing, and
@@ -784,7 +809,10 @@ fn a_stagger_loops_and_ping_pongs_after_the_last_key() {
     s.repeat = StaggerRepeat::PingPong;
     assert!((s.repeated(1.25) - 0.75).abs() < 1e-9);
     assert!((s.repeated(2.25) - 0.25).abs() < 1e-9);
-    assert!((s.repeated(0.5) - 0.5).abs() < 1e-9, "before the last key, as it is");
+    assert!(
+        (s.repeated(0.5) - 0.5).abs() < 1e-9,
+        "before the last key, as it is"
+    );
 }
 
 /// **Bounce on the last key only** leaves the keys before it unbounced.
@@ -837,7 +865,13 @@ fn the_new_properties_reach_the_letters_by_weight() {
     };
     let x = glyph_xforms(std::slice::from_ref(&a), "ab", 0.0, &[]);
     assert_eq!(
-        (x[0].skew, x[0].skew_axis, x[0].tracking, x[0].blur, x[0].char_offset),
+        (
+            x[0].skew,
+            x[0].skew_axis,
+            x[0].tracking,
+            x[0].blur,
+            x[0].char_offset
+        ),
         (20.0, 30.0, 100.0, 4.0, 1.0)
     );
     assert!(x[1].is_identity());
@@ -874,7 +908,9 @@ fn a_second_selector_has_ports_of_its_own() {
     second.kind = SelectorKind::Stagger;
     a.selectors.push(second);
     let names = a.wireable_numbers();
-    assert!(names.iter().any(|(n, l)| n == "start" && l == "Range start"));
+    assert!(names
+        .iter()
+        .any(|(n, l)| n == "start" && l == "Range start"));
     assert!(names
         .iter()
         .any(|(n, l)| n == "s1.delay" && l == "Selector 2 · Delay"));
@@ -911,7 +947,13 @@ fn the_wires_follow_the_animators_through_an_edit_and_its_undo() {
         },
     };
     let ports = |doc: &Document, comp, layer| -> Vec<String> {
-        let l = doc.comp(comp).unwrap().layers.iter().find(|l| l.id == layer).unwrap();
+        let l = doc
+            .comp(comp)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .unwrap();
         l.graph
             .edges
             .iter()
@@ -989,12 +1031,22 @@ fn the_wires_follow_the_animators_through_an_edit_and_its_undo() {
     let undo = set(&mut doc, vec![b.clone(), a.clone()]);
     assert_eq!(
         ports(&doc, comp, id),
-        ["text.1.offset", "text.0.start", "text.0.s1.delay", "text.0.opacity"]
+        [
+            "text.1.offset",
+            "text.0.start",
+            "text.0.s1.delay",
+            "text.0.opacity"
+        ]
     );
     crate::ops::apply(&mut doc, &undo).unwrap();
     assert_eq!(
         ports(&doc, comp, id),
-        ["text.0.offset", "text.1.start", "text.1.s1.delay", "text.1.opacity"]
+        [
+            "text.0.offset",
+            "text.1.start",
+            "text.1.s1.delay",
+            "text.1.opacity"
+        ]
     );
 
     // A taken out: its wire goes, B's follow it up one place.
@@ -1012,7 +1064,12 @@ fn the_wires_follow_the_animators_through_an_edit_and_its_undo() {
     set(&mut doc, vec![a.clone(), renamed.clone()]);
     assert_eq!(
         ports(&doc, comp, id),
-        ["text.0.offset", "text.1.start", "text.1.s1.delay", "text.1.opacity"]
+        [
+            "text.0.offset",
+            "text.1.start",
+            "text.1.s1.delay",
+            "text.1.opacity"
+        ]
     );
 
     // Its first selector taken out: the second's wire becomes the first's.

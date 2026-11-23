@@ -9,7 +9,6 @@ fn half_width(radius: f32) -> usize {
     b.min(256)
 }
 
-
 /// One running-sum box pass of half width `b` over `n` samples `stride`
 /// apart, four channels each, outside the run counting as nothing.
 fn box_pass(buf: &mut [f32], tmp: &mut Vec<f32>, start: usize, n: usize, stride: usize, b: usize) {

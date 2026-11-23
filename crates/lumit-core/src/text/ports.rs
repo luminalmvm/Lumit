@@ -41,7 +41,10 @@ impl TextAnimator {
                 if k == 0 {
                     add(name, label);
                 } else {
-                    add(&format!("s{k}.{name}"), &format!("Selector {} · {label}", k + 1));
+                    add(
+                        &format!("s{k}.{name}"),
+                        &format!("Selector {} · {label}", k + 1),
+                    );
                 }
             }
         }
@@ -64,10 +67,7 @@ impl TextAnimator {
                 &[("scale_x", "Scale x"), ("scale_y", "Scale y")][..],
             ),
             ("opacity", &[("opacity", "Opacity")][..]),
-            (
-                "skew",
-                &[("skew", "Skew"), ("skew_axis", "Skew axis")][..],
-            ),
+            ("skew", &[("skew", "Skew"), ("skew_axis", "Skew axis")][..]),
             ("tracking", &[("tracking", "Tracking amount")][..]),
             ("blur", &[("blur", "Blur")][..]),
             (

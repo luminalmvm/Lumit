@@ -11639,8 +11639,16 @@ fn turbulent_displace_bulge_warps_unlike_turbulent() {
     assert!(p.bulge > 0.5);
     let mut bulge = picture.clone();
     cpu::turbulent_displace(&mut bulge, w, h, &p, &[]);
-    let moved = bulge.iter().zip(&picture).filter(|(a, b)| (*a - *b).abs() > 1e-3).count();
-    let unlike = bulge.iter().zip(&turbulent).filter(|(a, b)| (*a - *b).abs() > 1e-3).count();
+    let moved = bulge
+        .iter()
+        .zip(&picture)
+        .filter(|(a, b)| (*a - *b).abs() > 1e-3)
+        .count();
+    let unlike = bulge
+        .iter()
+        .zip(&turbulent)
+        .filter(|(a, b)| (*a - *b).abs() > 1e-3)
+        .count();
     assert!(moved > 100, "{moved}");
     assert!(unlike > 100, "{unlike}");
 }

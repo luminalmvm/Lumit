@@ -861,7 +861,12 @@ fn draw(
             let mut ink = |rgba: &mut [u8], how: zeno::Style<'static>, colour: [u8; 4]| {
                 if let Some(r) = paint(rgba, (w, h), path, matrix, how, colour, x.opacity) {
                     inked = Some(inked.map_or(r, |a| {
-                        [a[0].min(r[0]), a[1].min(r[1]), a[2].max(r[2]), a[3].max(r[3])]
+                        [
+                            a[0].min(r[0]),
+                            a[1].min(r[1]),
+                            a[2].max(r[2]),
+                            a[3].max(r[3]),
+                        ]
                     }));
                 }
             };

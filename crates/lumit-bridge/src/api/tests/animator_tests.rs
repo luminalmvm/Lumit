@@ -207,8 +207,8 @@ fn more_selectors_and_the_new_rows_survive_the_bridge() {
     let core = animators::animator_from(a.clone(), zero).expect("written");
     assert_eq!(animators::read_animator(&core, zero), a);
     // A fresh animator written back is the fresh animator: no new keys in the file.
-    let back = animators::animator_from(animators::read_animator(&fresh, zero), zero)
-        .expect("written");
+    let back =
+        animators::animator_from(animators::read_animator(&fresh, zero), zero).expect("written");
     assert_eq!(
         serde_json::to_value(&back).expect("json"),
         serde_json::json!({ "name": "A" })

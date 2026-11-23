@@ -590,7 +590,11 @@ impl RangeSelector {
     fn stagger_ranks(&self, units: usize) -> Vec<usize> {
         #[allow(clippy::cast_precision_loss)] // a line is short
         let mid = (units as f64 - 1.0) * 0.5;
-        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         let from_mid = |i: usize| ((i as f64 - mid).abs() + 0.25).floor() as usize;
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let half = (mid + 0.25).floor() as usize;
