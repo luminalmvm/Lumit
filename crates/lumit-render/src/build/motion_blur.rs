@@ -38,7 +38,20 @@ pub fn samples(
     }
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
     let (w, h) = (comp.width, comp.height);
-    let camera = |t| crate::track::camera_pose(&context.document, comp, t);
+    // Every copy is seen through the camera the frame is seen through, read at
+    // the copy's moment. Asking which camera is active at that moment instead
+    // draws the copies before a camera's in point, as on a comp's first frame,
+    // through the default camera, and smears across a cut to another camera.
+    let held = comp.active_camera(t_comp);
+    let camera = |t| {
+        held.and_then(|cam| {
+            lumit_core::track::camera_pose_of(&context.document, comp, cam, t, &crate::track::Store)
+        })
+        .map_or_else(
+            || crate::track::camera_pose(&context.document, comp, t),
+            |linked| linked.pose,
+        )
+    };
     let frame_camera = layer.switches.three_d.then(|| camera(t_comp));
     let copies_at = |offsets: &[f64]| -> Vec<(MbSample, Mat4)> {
         offsets

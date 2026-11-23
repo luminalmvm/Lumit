@@ -104,6 +104,7 @@ mod framecache;
 mod layered;
 mod light_settings;
 mod live;
+mod mask_shape;
 mod media;
 mod motion_path;
 mod names;

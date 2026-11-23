@@ -40,6 +40,7 @@ pub(super) fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetSequenceClips { comp, layer, .. }
         | Op::SetLayerKind { comp, layer, .. }
         | Op::SetLayerOrient { comp, layer, .. }
+        | Op::SetLayerMotionPath { comp, layer, .. }
         | Op::SetLayerAdjustment { comp, layer, .. }
         | Op::SetLayerPitchFollowsSpeed { comp, layer, .. }
         | Op::SetLayerAudible { comp, layer, .. }

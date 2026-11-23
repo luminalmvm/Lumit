@@ -614,6 +614,7 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
     MenuEntry.divider(),
     ...fitRows(app, ui),
     MenuEntry.submenu(l10n.transformOrient, _orientRows(app, ui)),
+    _curvedPathRow(app, ui),
     MenuEntry.divider(),
     ...axisModeRows(app, ui),
   ];
@@ -644,6 +645,22 @@ List<MenuEntry> _orientRows(LumitState app, LumitUiState ui) {
         checked: first?.info.transform.orient == orient,
       ),
   ];
+}
+
+/// Layer ▸ Transform ▸ Curved motion path, for the selection. It reads as the
+/// first selected layer has it, and sets them all the other way.
+MenuEntry _curvedPathRow(LumitState app, LumitUiState ui) {
+  final curved =
+      selectedEntries(ui).firstOrNull?.info.transform.curvedPath ?? false;
+  return MenuEntry(
+    l10n.transformCurvedPath,
+    onSelection(app, ui, (e) {
+      if (e.info.transform.curvedPath == curved) {
+        e.layer.setCurvedPath(curved: !curved);
+      }
+    }),
+    checked: curved,
+  );
 }
 
 /// The three pairs, each offering to separate its axes or put them back

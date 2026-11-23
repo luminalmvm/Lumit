@@ -12804,6 +12804,10 @@
   "@orientTowardsCamera": {
     "description": "Orient choice on a 3D layer: the layer always faces the camera."
   },
+  "transformCurvedPath": "Curved motion path",
+  "@transformCurvedPath": {
+    "description": "A checked row in Layer > Transform: Position runs along a smooth path through its keys rather than straight from key to key."
+  },
   "transformAnchorPointX": "Anchor point x",
   "@transformAnchorPointX": {
     "description": "A Transform row in the Timeline fold-out and the Effect controls card: the sideways half of the anchor point, shown once its axes have been separated."
@@ -20467,6 +20471,10 @@
   "histSetAxisMode": "Set axis mode",
   "@histSetAxisMode": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetMotionPath": "Set motion path",
+  "@histSetMotionPath": {
+    "description": "A row of the Edit > History window: a layer's motion path was switched between straight and curved. Sent by the engine as English and looked up here."
   },
   "histSetRotationOrder": "Set rotation order",
   "@histSetRotationOrder": {

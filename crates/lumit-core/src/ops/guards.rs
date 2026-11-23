@@ -36,6 +36,7 @@ pub(super) fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetSequenceClips { comp, .. }
         | Op::SetLayerKind { comp, .. }
         | Op::SetLayerOrient { comp, .. }
+        | Op::SetLayerMotionPath { comp, .. }
         | Op::SetLayerAdjustment { comp, .. }
         | Op::SetLayerPitchFollowsSpeed { comp, .. }
         | Op::SetLayerAudible { comp, .. }

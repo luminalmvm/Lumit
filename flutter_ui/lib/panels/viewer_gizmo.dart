@@ -1268,6 +1268,7 @@ BridgeTransform _withPosition(
         BridgeTransform tf, BridgeScalar x, BridgeScalar y) =>
     BridgeTransform(
       orient: tf.orient,
+      curvedPath: tf.curvedPath,
       anchorX: tf.anchorX,
       anchorY: tf.anchorY,
       positionX: x,
@@ -4884,6 +4885,7 @@ BridgeTransform transformWith(
   final depth = tf.depth;
   return BridgeTransform(
     orient: tf.orient,
+    curvedPath: tf.curvedPath,
     anchorX: put(anchorX, tf.anchorX),
     anchorY: put(anchorY, tf.anchorY),
     positionX: put(positionX, tf.positionX),

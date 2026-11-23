@@ -137,7 +137,7 @@ Over MCP, `undo` and `redo` answer `{done}`, false when there was nothing to und
 | Answer | Fields |
 | --- | --- |
 | A comp | `id`, `name`, `width`, `height`, `frame_rate` as `{num, den}`, `duration`, `frames`, `background`, `node_graph`, and `layers`, a count. |
-| A layer | `id`, `name`, `kind`, `index`, `parent`, `in`, `out`, `start_offset`, `three_d`, `after_effects_order`, `two_node` and `switches`. `kind` is `footage`, `solid`, `precomp`, `text`, `camera`, `sequence`, `adjustment`, `null`, `shape`, `light`, `model` or `mesh`. `two_node` is `null` unless the layer is a camera. |
+| A layer | `id`, `name`, `kind`, `index`, `parent`, `in`, `out`, `start_offset`, `three_d`, `after_effects_order`, `curved_path`, `two_node` and `switches`. `kind` is `footage`, `solid`, `precomp`, `text`, `camera`, `sequence`, `adjustment`, `null`, `shape`, `light`, `model` or `mesh`. `two_node` is `null` unless the layer is a camera. |
 | An item | `id`, `name`, `kind`, `folder` and `comment`. `kind` is `footage`, `folder`, `comp` or `solid`. Footage adds `sequence`, `frame_rate`, `path` and `media`, and a solid adds `media`: `{width, height, frame_rate, duration}`, or `null` for footage that cannot be read. |
 | An effect | `id`, `index`, `effect`, `name`, `enabled`, `after_effects` and `params`, a list of `{id, label, kind, value}`. `kind` is `float`, `point`, `colour`, `bool`, `choice`, `seed` or `other`. |
 | A marker | `id`, `time`, `label`, `colour`, `duration` in frames, `chapter`, and `beat`, a beat marker's confidence and `null` on any other. |

@@ -124,6 +124,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         // the comp is the honest scope, not the one row that changed.
         | Op::SetLayerKind { comp, .. }
         | Op::SetLayerOrient { comp, .. }
+        | Op::SetLayerMotionPath { comp, .. }
         | Op::SetLayerAdjustment { comp, .. } => (Some(*comp), None, false),
 
         // One layer's own contents.
