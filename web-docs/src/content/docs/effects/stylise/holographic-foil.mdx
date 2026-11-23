@@ -1,0 +1,612 @@
+---
+title: Holographic foil
+description: "Turns a layer into a sheet of rainbow foil that tips under a set of lights."
+---
+
+import Compare from "../../../../components/Compare.astro";
+import Shot from "../../../../components/Shot.astro";
+
+Holographic foil is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Holographic foil" category="stylise" slug="holographic-foil" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns the layer into a sheet of holographic foil. The layer's alpha is the sheet's outline,
+and its colour is printed on the foil as **Print** says.
+
+The foil is modelled as it is made: fine grooves pressed into aluminium under a clear
+lacquer. Each light splits into a rainbow at the angle the grooves send it, the flat metal
+mirrors the lights and a soft grey studio, and the lacquer adds its own gloss. The lights
+stay fixed to the viewer and the sheet tips under them: as **Tilt x** and **Tilt y**
+change, each rainbow moves across the sheet.
+
+<Shot file="holographic-foil-tilt.webp" caption="The effect as it starts, with Tilt y at -40, -32, -25, -18, -11, -4 and 3." />
+
+The sheet has a real width and is seen from a real distance. The result is scene-linear
+light, brighter than white in the glints.
+
+The model of diffraction foil follows the open-source holospot kit by Dmitry Kurash (MIT
+licensed), reimplemented for Lumit. It also uses Wyman, Sloan and Shirley's colour-matching
+fit, Brian Karis's environment BRDF fit, Sergei Winitzki's inverse error function, Inigo
+Quilez's hexagon and Voronoi edge distances, Jarzynski and Olano's pcg3d hash, the Khronos
+PBR Neutral curve and AgX as published for three.js.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Material** | Dropdown | Prism · Shatter · Glitter · Sparkle · Vortex | Prism | - |
+| **Print** | Dropdown | Ink over foil · Foil only · Opaque print | Ink over foil | - |
+| **Tilt x** | Slider | -60 to 60; down to -89 and up to 89 | -20 | Degrees |
+| **Tilt y** | Slider | -60 to 60; down to -89 and up to 89 | -25 | Degrees |
+| **Spin** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Auto tilt** | Slider | 0 to 25; up to 90 | 0 | Degrees |
+| **Auto tilt speed (Hz)** | Slider | 0 to 2; up to 30 | 0.25 | - |
+| **Follow layer rotation** | Dropdown | Off · On | Off | - |
+| **Motion blur** | Slider | 0 to 100 | 50 | Per cent |
+| **Sheet width (mm)** | Slider | 20 to 1000; down to 1 and higher | 90 | - |
+| **View distance (m)** | Slider | 0.1 to 5; down to 0.05 and higher | 0.35 | - |
+| **Pitch (nm)** | Slider | 500 to 2000; down to 200 and up to 5000 | 1765 | - |
+| **Groove angle** | Slider | 0 to 180; any value by typing | 120 | Degrees |
+| **Pattern** | Dropdown | Linear · Rings · Sunburst · From map | Rings | - |
+| **Centre X** | Slider | 0 to 100; down to -100 and up to 200 | 50 | Per cent |
+| **Centre Y** | Slider | 0 to 100; down to -100 and up to 200 | 50 | Per cent |
+| **Depth (nm)** | Slider | 0 to 200; up to 400 | 50 | - |
+| **Coverage** | Slider | 0 to 100 | 100 | Per cent |
+| **Fan** | Slider | 0 to 30; up to 60 | 7 | Degrees |
+| **Grating › Softness** | Slider | 0 to 3; up to 20 | 0.05 | Degrees |
+| **Orientation jitter** | Slider | 0 to 5; up to 30 | 0.3 | Degrees |
+| **Pitch jitter** | Slider | 0 to 3; up to 20 | 0.5 | Per cent |
+| **Lacquer index** | Slider | 1.4 to 1.7; down to 1.3 and up to 2 | 1.56 | - |
+| **Swirl (mm)** | Slider | 0 to 60; up to 1000 | 15 | - |
+| **Turn** | Dropdown | Anticlockwise · Clockwise | Anticlockwise | - |
+| **Bands** | Slider, whole numbers | 0 to 96; up to 400 | 24 | - |
+| **Band contrast** | Slider | 0 to 100 | 45 | Per cent |
+| **Shard size (mm)** | Slider | 0.5 to 8; down to 0.05 and up to 100 | 2.5 | - |
+| **Shatter › Irregularity** | Slider | 0 to 1 | 0.9 | - |
+| **Splits** | Slider | 0 to 3 | 1.8 | - |
+| **Directions** | Slider, whole numbers | 0 to 24; up to 180 | 0 | - |
+| **Shard tilt** | Slider | 0 to 6; up to 30 | 1 | Degrees |
+| **Pitch A (nm)** | Slider | 500 to 2000; down to 200 and up to 5000 | 1150 | - |
+| **Pitch B (nm)** | Slider | 500 to 2000; down to 200 and up to 5000 | 1080 | - |
+| **Pitch C (nm)** | Slider | 500 to 2000; down to 200 and up to 5000 | 870 | - |
+| **Chirp** | Slider | 0 to 5; up to 50 | 0 | Per cent |
+| **Crease height (µm)** | Slider | -0.4 to 0.4; down to -5 and up to 5 | 0.3 | - |
+| **Crease width (µm)** | Slider | 10 to 200; down to 1 and up to 2000 | 40 | - |
+| **Creased** | Slider | 0 to 100 | 50 | Per cent |
+| **Flake size (µm)** | Slider | 50 to 400; down to 10 and up to 5000 | 200 | - |
+| **Flake shape** | Dropdown | Hex · Square · Round | Hex | - |
+| **Flake layers** | Slider, whole numbers | 1 to 3 | 2 | - |
+| **Flake tilt** | Slider | 0 to 20; up to 45 | 4.6 | Degrees |
+| **Flake curve** | Slider | 0.05 to 3; down to 0 and up to 20 | 0.4 | Degrees |
+| **Finest pitch (nm)** | Slider | 400 to 2000; down to 200 and up to 5000 | 665 | - |
+| **Widest pitch (nm)** | Slider | 400 to 2000; down to 200 and up to 5000 | 740 | - |
+| **Star size (µm)** | Slider | 150 to 1500; down to 20 and up to 20000 | 600 | - |
+| **Stars** | Slider | 0 to 30; up to 100 | 3 | Per cent |
+| **Base colour** | Colour | Each channel 0 to 4, scene-linear | 0.0037, 0.003, 0.0176, 1 | - |
+| **Dot size (µm)** | Slider | 100 to 1500; down to 10 and up to 20000 | 470 | - |
+| **Dot cover** | Slider | 10 to 80; down to 1 and up to 90 | 40 | Per cent |
+| **Sparkle › Irregularity** | Slider | 0 to 1 | 0.8 | - |
+| **Dot tilt** | Slider | 0 to 5; up to 30 | 0.3 | Degrees |
+| **Dome** | Slider | 0.05 to 2; down to 0 and up to 20 | 0.3 | Degrees |
+| **Specks** | Slider | 0 to 30; up to 100 | 9 | Per cent |
+| **Speck colour (nm)** | Slider | 420 to 520; down to 360 and up to 830 | 460 | - |
+| **Speck width (nm)** | Slider | 10 to 60; down to 1 and up to 300 | 25 | - |
+| **Speck floor** | Slider | 0 to 100 | 30 | Per cent |
+| **Base roughness** | Slider | 1 to 20; down to 0 and up to 45 | 8 | Degrees |
+| **Sand size** | Slider | 0.15 to 1; down to 0.02 and up to 10 | 0.5 | - |
+| **Sand tilt** | Slider | 0 to 8; up to 45 | 5 | Degrees |
+| **Tint** | Dropdown | Clear · Gold · Blue · Custom · Auto | Auto | - |
+| **Passes** | Dropdown | Long waves · Short waves | Long waves | - |
+| **Edge (nm)** | Slider | 400 to 700; down to 360 and up to 830 | 505 | - |
+| **Edge width (nm)** | Slider | 5 to 150; down to 1 and up to 300 | 35 | - |
+| **Floor** | Slider | 0 to 100 | 6 | Per cent |
+| **Lighting** | Dropdown | Studio · Spot · Softbox · Strip · Dark · Desk · Office · Raking · Custom · Auto | Auto | - |
+| **Rig rotation** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Spot A › On** | Checkbox | On or off | On | - |
+| **Spot A › Direction x** | Slider | -1 to 1 | -0.38 | - |
+| **Spot A › Direction y** | Slider | -1 to 1 | 0.57 | - |
+| **Spot A › Size** | Slider | 0.2 to 10; down to 0.05 and up to 45 | 1.5 | Degrees |
+| **Spot A › Intensity** | Slider | 0 to 5000; higher | 970 | - |
+| **Spot A › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 1 | - |
+| **Spot A › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Spot B › On** | Checkbox | On or off | On | - |
+| **Spot B › Direction x** | Slider | -1 to 1 | -0.12 | - |
+| **Spot B › Direction y** | Slider | -1 to 1 | -0.17 | - |
+| **Spot B › Size** | Slider | 0.2 to 10; down to 0.05 and up to 45 | 2.5 | Degrees |
+| **Spot B › Intensity** | Slider | 0 to 5000; higher | 485 | - |
+| **Spot B › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 1.2 | - |
+| **Spot B › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Spot C › On** | Checkbox | On or off | On | - |
+| **Spot C › Direction x** | Slider | -1 to 1 | -0.42 | - |
+| **Spot C › Direction y** | Slider | -1 to 1 | 0.71 | - |
+| **Spot C › Size** | Slider | 0.2 to 10; down to 0.05 and up to 45 | 1 | Degrees |
+| **Spot C › Intensity** | Slider | 0 to 5000; higher | 970 | - |
+| **Spot C › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 1 | - |
+| **Spot C › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Panel › On** | Checkbox | On or off | On | - |
+| **Panel › Direction x** | Slider | -1 to 1 | -0.43 | - |
+| **Panel › Direction y** | Slider | -1 to 1 | 0.48 | - |
+| **Width** | Slider | 1 to 80; down to 0.5 and up to 120 | 14 | Degrees |
+| **Length** | Slider | 1 to 90; down to 0.5 and up to 120 | 50 | Degrees |
+| **Panel › Intensity** | Slider | 0 to 50; higher | 1.6 | - |
+| **Panel › Distance (m)** | Slider | 0.3 to 3; down to 0.05 and higher | 0.9 | - |
+| **Panel › Spectrum** | Dropdown | Equal · Daylight · Tungsten · LED · Fluorescent | Equal | - |
+| **Rims** | Slider | 0 to 10; higher | 0.5 | - |
+| **Fill** | Slider | 0 to 3; higher | 0.25 | - |
+| **Scrim** | Slider | 0 to 2; higher | 0.2 | - |
+| **Room** | Slider | 0 to 0.5; higher | 0.04 | - |
+| **Coat roughness** | Slider | 0.01 to 0.5; down to 0.005 and up to 1 | 0.01 | - |
+| **Relief** | Dropdown | Scratches · Brushed · Hammered · Crinkled · Linen · Fingerprint · Sandblast · None · Bevel from alpha | Scratches | - |
+| **Strength** | Slider | 0 to 3; up to 10 | 0.78 | - |
+| **Scale** | Slider | 1 to 12; down to 0.1 and up to 100 | 3.5 | - |
+| **Relief on** | Dropdown | Foil · Varnish | Foil | - |
+| **Surface › Invert** | Checkbox | On or off | On | - |
+| **Bevel width (mm)** | Slider | 0.1 to 5; down to 0.02 and up to 50 | 1.5 | - |
+| **Bevel height (µm)** | Slider | 0 to 500; up to 5000 | 150 | - |
+| **Profile** | Dropdown | Round · Bevel · Dome · Deboss | Round | - |
+| **Surface › Softness** | Slider | 0 to 100 | 20 | Per cent |
+| **Waviness** | Slider | 0 to 1; up to 10 | 0 | Degrees |
+| **Orange peel (µm)** | Slider | 0 to 2; up to 20 | 0 | - |
+| **Lines** | Dropdown | None · Lines · Crosshatch | None | - |
+| **Line pitch (mm)** | Slider | 0.15 to 2; down to 0.01 and up to 20 | 1.17 | - |
+| **Line height (µm)** | Slider | 0 to 15; up to 100 | 0.5 | - |
+| **Bow (mm)** | Slider | 0 to 2; down to -20 and up to 20 | 1.6 | - |
+| **Bow axis** | Dropdown | Across · Along | Across | - |
+| **Wear** | Slider | 0 to 100 | 0 | Per cent |
+| **Height map** | Layer | Any layer in the composition | None | - |
+| **Maps › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | Stretch to fit | - |
+| **Repeats** | Slider | 1 to 12; up to 100 | 1 | - |
+| **Wrap** | Dropdown | Repeat · Mirror · Clamp | Repeat | - |
+| **Foil mask** | Layer | Any layer in the composition | None | - |
+| **Maps › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Direction map** | Layer | Any layer in the composition | None | - |
+| **Maps › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Reading** | Dropdown | Angle · Along edges | Along edges | - |
+| **Pitch map** | Layer | Any layer in the composition | None | - |
+| **Maps › Placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Pitch at white (nm)** | Slider | 500 to 2000; down to 200 and up to 5000 | 1600 | - |
+| **Environment** | Layer | Any layer in the composition | None | - |
+| **Amount** | Slider | 0 to 200; up to 1000 | 100 | Per cent |
+| **Exposure** | Slider | -3 to 3; any value by typing | 0 | - |
+| **Highlights** | Dropdown | Off · Neutral · AgX | Neutral | - |
+| **Quality** | Dropdown | Draft · Normal · High | Normal | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Tilt** groups **Tilt x**, **Tilt y**, **Spin**, **Auto tilt**, **Auto tilt speed (Hz)**, **Follow layer rotation**, **Motion blur**.
+- **Sheet** groups **Sheet width (mm)**, **View distance (m)**, and starts closed.
+- **Grating** groups **Pitch (nm)**, **Groove angle**, **Pattern**, **Centre X**, **Centre Y**, **Depth (nm)**, **Coverage**, **Fan**, **Softness**, **Orientation jitter**, **Pitch jitter**, **Lacquer index**.
+- **Vortex** groups **Swirl (mm)**, **Turn**, **Bands**, **Band contrast**, and appears while **Material** is Vortex.
+- **Shatter** groups **Shard size (mm)**, **Irregularity**, **Splits**, **Directions**, **Shard tilt**, **Pitch A (nm)**, **Pitch B (nm)**, **Pitch C (nm)**, **Chirp**, **Crease height (µm)**, **Crease width (µm)**, **Creased**, and appears while **Material** is Shatter.
+- **Glitter** groups **Flake size (µm)**, **Flake shape**, **Flake layers**, **Flake tilt**, **Flake curve**, **Finest pitch (nm)**, **Widest pitch (nm)**, **Star size (µm)**, **Stars**, **Base colour**, and appears while **Material** is Glitter.
+- **Sparkle** groups **Dot size (µm)**, **Dot cover**, **Irregularity**, **Dot tilt**, **Dome**, **Specks**, **Speck colour (nm)**, **Speck width (nm)**, **Speck floor**, **Base roughness**, **Sand size**, **Sand tilt**, and appears while **Material** is Sparkle.
+- **Tint** groups **Tint**, **Passes**, **Edge (nm)**, **Edge width (nm)**, **Floor**, and starts closed.
+- **Lights** groups **Lighting**, **Rig rotation**.
+- **Spot A** groups **On**, **Direction x**, **Direction y**, **Size**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Spot B** groups **On**, **Direction x**, **Direction y**, **Size**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Spot C** groups **On**, **Direction x**, **Direction y**, **Size**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Panel** groups **On**, **Direction x**, **Direction y**, **Width**, **Length**, **Intensity**, **Distance (m)**, **Spectrum**, and starts closed, and appears while **Lighting** is Custom.
+- **Surroundings** groups **Rims**, **Fill**, **Scrim**, **Room**, and starts closed, and appears while **Lighting** is Custom.
+- **Surface** groups **Coat roughness**, **Relief**, **Strength**, **Scale**, **Relief on**, **Invert**, **Bevel width (mm)**, **Bevel height (µm)**, **Profile**, **Softness**, **Waviness**, **Orange peel (µm)**, **Lines**, **Line pitch (mm)**, **Line height (µm)**, **Bow (mm)**, **Bow axis**, **Wear**, and starts closed.
+- **Maps** groups **Height map**, **Placement**, **Repeats**, **Wrap**, **Foil mask**, **Placement**, **Direction map**, **Placement**, **Reading**, **Pitch map**, **Placement**, **Pitch at white (nm)**, **Environment**, **Amount**, and starts closed.
+- **Output** groups **Exposure**, **Highlights**, **Quality**, **Seed**, and starts closed.
+- **Groove angle** is editable while **Pattern** is set to Linear.
+- **Groove angle** is editable while **Material** is anything but Vortex.
+- **Pattern** is editable while **Material** is anything but Vortex.
+- **Orientation jitter** is editable while **Material** is anything but Vortex.
+- **Pitch jitter** is editable while **Material** is anything but Vortex.
+- **Pitch (nm)** is editable while **Material** is anything but Shatter.
+- **Groove angle** is editable while **Material** is anything but Shatter.
+- **Pattern** is editable while **Material** is anything but Shatter.
+- **Centre X** is editable while **Material** is anything but Shatter.
+- **Centre Y** is editable while **Material** is anything but Shatter.
+- **Orientation jitter** is editable while **Material** is anything but Shatter.
+- **Pitch jitter** is editable while **Material** is anything but Shatter.
+- **Pitch (nm)** is editable while **Material** is anything but Glitter.
+- **Groove angle** is editable while **Material** is anything but Glitter.
+- **Pattern** is editable while **Material** is anything but Glitter.
+- **Centre X** is editable while **Material** is anything but Glitter.
+- **Centre Y** is editable while **Material** is anything but Glitter.
+- **Fan** is editable while **Material** is anything but Glitter.
+- **Softness** is editable while **Material** is anything but Glitter.
+- **Orientation jitter** is editable while **Material** is anything but Glitter.
+- **Pitch jitter** is editable while **Material** is anything but Glitter.
+- **Passes** is editable while **Tint** is set to Custom.
+- **Edge (nm)** is editable while **Tint** is set to Custom.
+- **Edge width (nm)** is editable while **Tint** is set to Custom.
+- **Floor** is editable while **Tint** is set to Custom.
+- **Relief** is editable while **Height map** names no layer.
+- **Scale** is editable while **Height map** names no layer.
+- **Strength** is editable while **Relief** is anything but Bevel from alpha.
+- **Scale** is editable while **Relief** is anything but Bevel from alpha.
+- **Invert** is editable while **Relief** is anything but Bevel from alpha.
+- **Bevel width (mm)** is editable while **Relief** is set to Bevel from alpha.
+- **Bevel height (µm)** is editable while **Relief** is set to Bevel from alpha.
+- **Profile** is editable while **Relief** is set to Bevel from alpha.
+- **Softness** is editable while **Relief** is set to Bevel from alpha.
+- **Bevel width (mm)** is editable while **Height map** names no layer.
+- **Bevel height (µm)** is editable while **Height map** names no layer.
+- **Profile** is editable while **Height map** names no layer.
+- **Softness** is editable while **Height map** names no layer.
+- **Line pitch (mm)** is editable while **Lines** is anything but None.
+- **Line height (µm)** is editable while **Lines** is anything but None.
+- **Placement** is editable while **Height map** names a layer.
+- **Repeats** is editable while **Height map** names a layer.
+- **Wrap** is editable while **Height map** names a layer.
+- **Placement** is editable while **Foil mask** names a layer.
+- **Placement** is editable while **Direction map** names a layer.
+- **Reading** is editable while **Direction map** names a layer.
+- **Placement** is editable while **Pitch map** names a layer.
+- **Pitch at white (nm)** is editable while **Pitch map** names a layer.
+- **Amount** is editable while **Environment** names a layer.
+- **Direction map** is editable while **Pattern** is set to From map.
+- **Placement** is editable while **Pattern** is set to From map.
+- **Reading** is editable while **Pattern** is set to From map.
+- **Direction map** is editable while **Material** is anything but Vortex.
+- **Placement** is editable while **Material** is anything but Vortex.
+- **Reading** is editable while **Material** is anything but Vortex.
+- **Direction map** is editable while **Material** is anything but Shatter.
+- **Placement** is editable while **Material** is anything but Shatter.
+- **Reading** is editable while **Material** is anything but Shatter.
+- **Direction map** is editable while **Material** is anything but Glitter.
+- **Placement** is editable while **Material** is anything but Glitter.
+- **Reading** is editable while **Material** is anything but Glitter.
+- **Pitch map** is editable while **Material** is anything but Shatter.
+- **Placement** is editable while **Material** is anything but Shatter.
+- **Pitch at white (nm)** is editable while **Material** is anything but Shatter.
+- **Pitch map** is editable while **Material** is anything but Glitter.
+- **Placement** is editable while **Material** is anything but Glitter.
+- **Pitch at white (nm)** is editable while **Material** is anything but Glitter.
+- **Matte** scales Coverage per pixel: white keeps the grating, black leaves plain mirror foil. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+### Material
+
+**Material** is what the foil is made of. **Auto** on **Lighting** and on **Tint** follows
+it.
+
+| Material | The foil | Auto lighting | Auto tint |
+| --- | --- | --- | --- |
+| **Prism** | One grating across the whole sheet, as on a card or a compact disc. | Studio | Clear |
+| **Shatter** | Cracked shards, each with its own grooves and its own tilt. They flash one by one. | One spot and a broad tungsten panel | Gold |
+| **Glitter** | Flakes in a binder over a dark ink, with larger stars among them. | Two spots over a dim studio | Blue |
+| **Sparkle** | Dots that share one grating, on matte metal. | Two wide spots over a pale studio | Sky blue |
+| **Vortex** | A spiral of grooves, crossed by bands of plainer foil. | Studio's three spots and a broad tungsten panel | Pale gold |
+
+<Shot file="holographic-foil-materials.webp" caption="Prism, Shatter, Glitter, Sparkle and Vortex as they start." />
+
+The **Vortex** group:
+
+| Row | Sets |
+| --- | --- |
+| **Swirl (mm)** | How far from the centre the grooves have turned to 45 degrees. 0 gives plain rings. |
+| **Turn** | Which way the spiral turns: Anticlockwise or Clockwise. |
+| **Bands** | How many spiral bands of plainer foil cross the vortex. |
+| **Band contrast** | How much plainer the bands are. |
+
+The **Shatter** group:
+
+| Row | Sets |
+| --- | --- |
+| **Shard size (mm)** | The mean size of a shard. |
+| **Irregularity** | How irregular the cracks are. 0 is a square grid. |
+| **Splits** | How many straight cuts split each piece on average, for slivers and T-shaped joins. |
+| **Directions** | How many groove directions the shards choose from. 0 is any. |
+| **Shard tilt** | How far each shard tips under the lacquer. |
+| **Pitch A (nm)**, **Pitch B (nm)**, **Pitch C (nm)** | The groove spacing of the three families of shards. |
+| **Chirp** | How much the groove spacing changes across a shard. |
+| **Crease height (µm)** | How high the creases along the cracks stand. Below 0 they are grooves. |
+| **Crease width (µm)** | How far a crease reaches either side of its crack. |
+| **Creased** | How many of the cracks carry a crease. |
+
+The **Glitter** group:
+
+| Row | Sets |
+| --- | --- |
+| **Flake size (µm)** | How wide a flake is, flat to flat. |
+| **Flake shape** | The outline of a flake: Hex, Square or Round. |
+| **Flake layers** | How many layers of flakes lie over each other. |
+| **Flake tilt** | How far the flakes tip: how far from the mirror angle they still flash. |
+| **Flake curve** | How much a flake bends within itself. More gives bigger, dimmer glints. |
+| **Finest pitch (nm)**, **Widest pitch (nm)** | The range of groove spacing the flakes take. |
+| **Star size (µm)** | How wide a star is on average. Stars are larger dots with round grooves. |
+| **Stars** | How many of the places for a star hold one. |
+| **Base colour** | The ink under the flakes, seen in the gaps. |
+
+The **Sparkle** group:
+
+| Row | Sets |
+| --- | --- |
+| **Dot size (µm)** | How wide a dot is on average. |
+| **Dot cover** | How much of the sheet the dots cover. |
+| **Irregularity** | How lobed and uneven the dots are. 0 is round and even. |
+| **Dot tilt** | How far each dot tips. |
+| **Dome** | How much a dot bulges within itself. |
+| **Specks** | How many of the dots are dyed satin specks. |
+| **Speck colour (nm)** | Where the specks' dye lets most light through. |
+| **Speck width (nm)** | How wide a band of colour the specks' dye lets through. |
+| **Speck floor** | How much the specks' dye lets through away from its colour. |
+| **Base roughness** | How matte the metal between the dots is. |
+| **Sand size** | How big the grains of the matte metal are, as a share of the dot size. |
+| **Sand tilt** | How far the grains tip. Never more than **Base roughness**. |
+
+### Print
+
+**Print** is what the layer's own colour does. The layer's alpha is the sheet's outline
+whichever is chosen.
+
+| Print | The layer's colour |
+| --- | --- |
+| **Ink over foil** | Ink on the foil. White leaves the foil bare, a colour tints it and black hides it. |
+| **Foil only** | Ignored. The whole sheet is foil. |
+| **Opaque print** | Printed on white paper that covers the foil. Foil shows where the **Foil mask** is white. With no Foil mask it shows where the picture itself is bright. |
+
+<Shot file="holographic-foil-print.webp" caption="A printed card on Ink over foil, Foil only, Opaque print, and Opaque print with a Foil mask that is white round the border." />
+
+### Tilt
+
+- **Tilt x** tips the top edge toward the viewer.
+- **Tilt y** turns the face toward the right.
+- **Spin** turns the grooves within the sheet.
+- **Auto tilt** is how far the sheet wobbles by itself. Straight grooves swing mostly about
+  their own axis. Every other pattern traces a slow ellipse.
+- **Auto tilt speed (Hz)** is how many times a second the wobble swings. It runs on the
+  layer's own time.
+- **Follow layer rotation** adds a 3D layer's own rotation, its parents' and the active
+  camera's view to the tilt. A 2D layer's rotation leaves the tilt alone.
+- **Motion blur** is how much of each frame the colours blur over while the sheet or the
+  lights move. 0 is off. It follows this row alone, not the layer's motion blur switch.
+
+Turned past edge-on, by **Follow layer rotation** or by a tilt with **Auto tilt**, the
+sheet shows its plain back: satin grey metal, with no rainbow and no print. Its alpha is
+unchanged.
+
+### Sheet
+
+- **Sheet width (mm)** is how wide the layer's picture is in the world. Shards, flakes,
+  dots, relief and the bevel are measured on it.
+- **View distance (m)** is how far the eye is from the sheet. Nearer gives more bands.
+
+### Grating
+
+- **Pitch (nm)** is the groove spacing. Wider packs the colours nearer the glint.
+- **Groove angle** is which way straight grooves run, from the sheet's x axis.
+- **Pattern**: **Linear** is straight grooves, **Rings** grooves in circles like a compact
+  disc, **Sunburst** grooves that run out from the centre. **From map** follows the
+  **Direction map**, and is Rings until one is named.
+- **Centre X** and **Centre Y** place the centre of the rings, the sunburst and the vortex.
+- **Depth (nm)** is how deep the grooves are. Deeper moves light from the mirror into the
+  rainbow.
+- **Coverage** is how much of the sheet carries the grating. The rest is plain mirror.
+- **Fan** is how far each band spreads along the grooves.
+- **Softness** is how rough the metal is. It softens the bands and the glints.
+- **Orientation jitter** is how far the grooves stray from their direction.
+- **Pitch jitter** is how far the groove spacing strays. It softens the hues.
+- **Lacquer index** is the refractive index of the lacquer over the grooves.
+
+### Tint
+
+**Tint** is a dye in the lacquer: **Clear**, **Gold**, **Blue**, a **Custom** dye, or
+**Auto** for the dye of the Material.
+
+- **Passes** is which side of its edge a custom dye lets through: **Long waves** or
+  **Short waves**.
+- **Edge (nm)** is where a custom dye turns.
+- **Edge width (nm)** is how gradually it turns.
+- **Floor** is how much it lets through on its blocked side.
+
+### Lights
+
+Three spots, a panel and a soft grey studio stand round the viewer and stay there. The
+sheet tips under them.
+
+**Lighting** picks the rig.
+
+| Lighting | The rig |
+| --- | --- |
+| **Studio** | Three spots and a long panel over a dim studio. |
+| **Spot** | One spot in a dark room. |
+| **Softbox** | One square panel. |
+| **Strip** | One long, thin panel. |
+| **Dark** | No lamps. The studio's rims and fill alone. |
+| **Desk** | A tungsten lamp and a daylight window. |
+| **Office** | One fluorescent strip overhead. |
+| **Raking** | One spot far to the side, at a grazing angle. |
+| **Custom** | The rows of **Spot A**, **Spot B**, **Spot C**, **Panel** and **Surroundings**. They start as the Studio rig. |
+| **Auto** | The rig of the Material. |
+
+<Shot file="holographic-foil-lights.webp" caption="Prism under Studio, Spot, Softbox and Strip, then Dark, Desk, Office and Raking." />
+
+**Rig rotation** turns every light and the studio about the view axis. Keyframe it to
+swing the whole rig. A single light keyframes under **Custom** alone, by its **Direction
+x** and **Direction y**.
+
+Each of **Spot A**, **Spot B**, **Spot C** and **Panel**:
+
+- **On** lights the sheet with it.
+- **Direction x** and **Direction y** are where the light is as seen from the sheet, from
+  -1 to 1 across and up. At 0, 0 it is where the viewer is.
+- **Size** is how wide a spot looks from the sheet.
+- **Width** is how wide the panel looks along the line out from the view axis, and
+  **Length** how long it looks across that line.
+- **Intensity** is how bright it is.
+- **Distance (m)** is how far it is from the sheet.
+- **Spectrum** is the colour of its light: **Equal**, **Daylight**, **Tungsten**, **LED**
+  or **Fluorescent**.
+
+The **Surroundings** group is the studio:
+
+- **Rims** is two thin strips low at the sides, for the edges to catch.
+- **Fill** is a broad soft light overhead.
+- **Scrim** is a pale sheet above the viewer. Bare foil reads grey under it.
+- **Room** is the faint light everywhere else in front.
+
+### Surface
+
+- **Coat roughness** is how rough the clear coat is. Low is a sharp gloss.
+- **Relief** is the fine relief pressed into the surface: **Scratches**, **Brushed**,
+  **Hammered**, **Crinkled**, **Linen**, **Fingerprint**, **Sandblast** or **None**.
+  **Bevel from alpha** presses the sheet's own outline into it instead.
+- **Strength** is how strongly the relief bends the surface.
+- **Scale** is how many times the relief repeats across the sheet.
+- **Relief on** is which layer the relief bends: the **Foil** under the lacquer, or the
+  **Varnish** on top alone.
+- **Invert** turns grooves into ridges.
+
+<Shot file="holographic-foil-relief.webp" caption="The reliefs under the Spot rig: Scratches, Brushed, Hammered and Crinkled, then Linen, Fingerprint, Sandblast and None." />
+
+- **Bevel width (mm)** is how far in from the outline the bevel's wall reaches.
+- **Bevel height (µm)** is how high the bevel stands.
+- **Profile** is the wall's shape: **Round**, a flat **Bevel**, a **Dome** that rises from
+  the edge, or **Deboss**, pressed in.
+- **Softness** is how much the outline is rounded before the wall is shaped.
+
+The bevel bends the foil and the varnish together. A stroke thinner than the wall stays
+level along its middle. It looks the same at every preview resolution and export size.
+
+A very wide wall is narrowed until its blur is a quarter of the sheet's longer side. On a
+sheet 90 mm on its longer side that is about 41 mm at **Softness** 20 and 25 mm at 100,
+and half as much for **Dome**.
+
+<Shot file="holographic-foil-bevel.webp" caption="Bevel from alpha on a text layer: Round, Bevel, Dome and Deboss." />
+
+- **Waviness** is how far broad waves in the sheet tip it.
+- **Orange peel (µm)** is how rough the varnish's fine ripple is.
+- **Lines** embosses fine lines across the sheet, on the layer **Relief on** names:
+  **Lines** one way, **Crosshatch** both.
+- **Line pitch (mm)** is the spacing of the lines, and **Line height (µm)** their depth.
+- **Bow (mm)** is how far the sheet bows in its middle. **Bow axis** bows it **Across** its
+  width or **Along** its height.
+- **Wear** adds handling marks: smudges, hairline scratches round the highlights, dust and
+  patchy foil.
+
+### Maps
+
+Each of the five rows names a layer, and Lumit renders that layer on its own. The layer
+can be hidden.
+
+- **Height map**: the layer's brightness is the height of the surface. It takes the place
+  of **Relief**, **Bevel from alpha** included. **Strength**, **Relief on** and **Invert**
+  still apply. White letters on black emboss the letters into the foil.
+- **Repeats** is how many times the Height map repeats across the sheet.
+- **Wrap** is how the Height map meets itself where it repeats: **Repeat** as it is,
+  **Mirror** turned over at each join, **Clamp** held at its edges.
+- **Foil mask**: white shows foil and black shows print. Over an **Opaque print** of a
+  photograph, a text layer sets its words in foil. Under **Ink over foil** black is ink on
+  white paper, and under **Foil only** white paper alone.
+- **Direction map** steers the grooves of Prism and Sparkle while **Pattern** is **From
+  map**. A logo's outlines stand out as bands of their own.
+- **Reading**: **Angle** takes the Direction map's brightness as the groove angle, black 0
+  degrees and white 180. **Along edges** runs the grooves along the edges in it, and
+  leaves rings where it is flat.
+- **Pitch map** sets the groove spacing: black keeps **Pitch (nm)** and white gives
+  **Pitch at white (nm)**. A text layer draws its letters in another colour of the same
+  rainbow.
+- **Environment** is a layer the foil mirrors in place of the studio. A photograph shows
+  in the plain mirror between the bands.
+- **Amount** is how much of the mirror the Environment takes. At 100 it takes the studio's
+  place. Above 100 it is brighter.
+- **Placement**, on the first four rows, is where the layer's picture sits on this one.
+  **As placed in comp** reads it where the layer sits in the composition. **Stretch to
+  fit** stretches it over this layer. **Centre** centres it at its own size.
+
+The Direction map, its **Placement** and **Reading** are greyed unless **Pattern** is From
+map and **Material** is Prism or Sparkle. The Pitch map, its **Placement** and **Pitch at
+white (nm)** are greyed on Shatter and Glitter.
+
+<Shot file="holographic-foil-maps.webp" caption="Top: one text layer as the Height map, as the Foil mask of an Opaque print, and as the Direction map. Bottom: a logo as the Direction map, the text layer as the Pitch map, and a photograph as the Environment." />
+
+### Output
+
+- **Exposure** is a gain on the light, in stops.
+- **Highlights** is how light above white is rolled off: **Neutral** and **AgX** bring it
+  under white, **Off** keeps all of it.
+- **Quality**: **Draft** draws two orders of rainbow in place of three, fewer cells of the
+  panel, and one flake or dot lit on its own in each pixel in place of two. **High** adds
+  cells to the panel and a third order to each flake.
+- **Seed** picks another layout of shards, flakes, dots, relief and wear.
+
+Glare, grain and focus are not part of the effect. [Glow](/effects/stylise/glow/),
+[Add grain](/effects/generate/add-grain/) and
+[Depth of field](/effects/blur-sharpen/depth-of-field/) after it on the layer, in that
+order, add them. With **Highlights** on **Off**, Glow reads the glints at their full
+brightness.
+
+The rows every effect ends with:
+
+- **Mix**: how much of the result replaces the original.
+- **Blend**: the blend mode the result is laid over the original with.
+- **Matte** scales **Coverage** for each pixel: white keeps the grating, black leaves plain
+  mirror foil. **Invert** reads it the other way round.
+- **Channel**: the channel of the Matte layer that is read.
+
+## Presets
+
+On the effect's heading menu, under **Presets**. A preset puts every other row back to how
+the effect starts. The layers the Maps rows name, their Placement and the Seed are kept.
+
+| Preset | Sets |
+| --- | --- |
+| **Card rainbow** | The effect as it starts. |
+| **Compact disc** | Pitch 1600, Bow 0, Depth 90, Fan 1, Orientation jitter 0.1, Pitch jitter 0.2, Relief None, Lighting Spot, Exposure 0.7. |
+| **Sunburst** | Pattern Sunburst, Pitch 1200, Fan 4. |
+| **Gold rainbow foil** | Depth 70, Tint Gold. |
+| **Gold shatter** | Material Shatter, Depth 95, Coverage 70, Fan 5, Softness 0.45, Lacquer index 1.5, Tint Gold, Coat roughness 0.05. |
+| **Silver shatter** | The same as Gold shatter, with Tint Clear. |
+| **Ice blue** | Material Shatter, Shard size 3.5, Depth 80, Coverage 70, Softness 0.3, Tint Blue, Coat roughness 0.03. |
+| **Soft pastel satin** | Depth 35, Fan 15, Softness 1.2, Pitch jitter 2, Relief Brushed, Strength 0.5, Coat roughness 0.15. |
+| **Nebula glitter** | Material Glitter, Flake size 140, Flake shape Round, Flake tilt 2.7, Flake curve 0.05, Finest pitch 870, Widest pitch 1180, Stars 30, an indigo Base colour, Depth 146, Coverage 57, Lacquer index 1.65, a Custom Tint that passes short waves (Edge 525, Edge width 150, Floor 7), Waviness 0.57, Orange peel 1.2, Sheet width 40, Lighting Studio. |
+| **Silver glitter** | Material Glitter, Flake size 320, Depth 100, Coverage 65, Lacquer index 1.5, Tint Clear, Coat roughness 0.04, Lighting Studio. |
+| **Sky sparkle** | Material Sparkle, Depth 55, Fan 12, Softness 0.15, Orientation jitter 2, Pitch jitter 1.5, Lacquer index 1.5, Coat roughness 0.05. |
+| **Gilded vortex** | Material Vortex, Pitch 1250, Depth 45, Fan 1.5, Softness 0.25, Lacquer index 1.5, Coat roughness 0.045. |
+| **Pressed logo** | Print Foil only, Relief Bevel from alpha, Bevel width 1.5, Bevel height 180. |
+
+<Shot file="holographic-foil-presets.webp" caption="The presets on a card, in the order of the table, left to right and top to bottom." />
+
+## Speed and colour depth
+
+The effect is worked out on the graphics card. The times here were measured on an RTX 5080
+on Windows.
+
+- The first frame of each Material waits while its shader is built: about 4 seconds for
+  Prism and Vortex, 5 for Shatter and 9 for Glitter and Sparkle. The other Materials are
+  then built in the background, for about a minute.
+- **Wear**, **Bevel from alpha** and a Height map, Direction map, Pitch map or Environment
+  layer use a larger shader, built the same way. One that a frame needs before the
+  background reaches it takes up to 15 seconds.
+- At **Normal** a 1920×1080 frame takes 3 to 9 ms and a 3840×2160 frame 12 to 32 ms.
+  **Draft** is 1.3 to 1.9 times as fast.
+- A still sheet is drawn once and cached for the layer's span. **Auto tilt** above 0 draws
+  every frame. So does **Motion blur** with **Follow layer rotation** on, or with keyframes
+  on a tilt, **Spin**, **Rig rotation** or a light's direction.
+- Glitter whose flakes are smaller than a pixel reads up to 15 per cent brighter or darker
+  at a lower preview resolution.
+- In a project at 8 bpc [colour depth](/use/colour-management/#colour-depth) nothing is
+  brighter than white, the glints included.
+
+## Related
+
+- [Turning a logo into holographic foil](/tutorials/holographic-foil/)
+- [Hologram](/effects/stylise/hologram/)
+- [Glow](/effects/stylise/glow/)
+- [Texturize](/effects/stylise/texturize/)
+- [Lighting](/effects/stylise/lighting/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

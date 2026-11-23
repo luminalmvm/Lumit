@@ -416,6 +416,22 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("end_x", f(1660.0)),
             ("end_y", f(200.0)),
         ],
+        // The Pressed logo look: the oval pressed into bare rainbow foil.
+        "holographic_foil" => vec![
+            ("print", choice(1)),
+            ("relief_source", choice(8)),
+            ("bevel_height", f(180.0)),
+        ],
+        // A full scene is a dim subject: the plate tinted by the replay and
+        // brightened, a little depth from the Aux gradient with the film
+        // turned to show it, and a seal on the film.
+        "hologram" => vec![
+            ("subject_colour", choice(1)),
+            ("exposure", f(2.5)),
+            ("depth_scale", f(5.0)),
+            ("tilt_y", f(6.0)),
+            ("backdrop", choice(3)),
+        ],
 
         _ => Vec::new(),
     }
@@ -512,13 +528,14 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
 /// from an outline, a light wrap hugs one, and roughening the edges of a frame
 /// that reaches every border roughens nothing. Fill is here for a different
 /// reason: it keeps a layer's shape and replaces its colour, so on a full-frame
-/// plate it produces one flat rectangle and teaches nobody anything. These get
+/// plate it produces one flat rectangle and teaches nobody anything. The
+/// holographic effects take the layer's alpha as the sheet's outline. These get
 /// the oval as a real, gating mask; everything else that wants the oval wants
 /// its geometry only.
 fn wants_alpha_edge(match_name: &str) -> bool {
     matches!(
         match_name,
-        "light_wrap" | "drop_shadow" | "roughen_edges" | "fill"
+        "light_wrap" | "drop_shadow" | "roughen_edges" | "fill" | "holographic_foil" | "hologram"
     )
 }
 
@@ -947,8 +964,8 @@ fn example_doc(
 
 /// Point an effect's auxiliary layer reference at the Aux layer, where it has
 /// one. Depth of field reads its `depth` row, Light wrap its `background`,
-/// Texturize its `texture`; each is unset by default and each renders as a
-/// labelled no-op until something is named.
+/// Texturize its `texture`, Hologram its `depth_map`; each is unset by default
+/// and each renders as a labelled no-op until something is named.
 fn wire_aux(inst: &mut EffectInstance) {
     let aux = id("Aux");
     // Displacement map and Set matte take their second picture from the Matte
@@ -959,7 +976,7 @@ fn wire_aux(inst: &mut EffectInstance) {
     ) {
         &["depth", "background", "texture", "matte"]
     } else {
-        &["depth", "background", "texture"]
+        &["depth", "background", "texture", "depth_map"]
     };
     for row in rows.iter().copied() {
         if let Some(p) = inst.params.iter_mut().find(|p| p.id == row) {

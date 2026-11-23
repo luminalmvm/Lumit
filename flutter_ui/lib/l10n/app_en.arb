@@ -32843,5 +32843,717 @@
   "textAnimatorAnimatorAmount": "Animator amount",
   "@textAnimatorAnimatorAmount": {
     "description": "Row label: per cent of the whole text animator's effect; 50 moves every letter half as far as its selectors say."
+  },
+  "fxAgX": "AgX",
+  "@fxAgX": {
+    "description": "Effect controls: a choice on Holographic foil, Highlights: the AgX curve, a softer filmic roll-off."
+  },
+  "fxClear": "Clear",
+  "@fxClear": {
+    "description": "Effect controls: a choice on Holographic foil, Tint: no dye in the lacquer, plain silver foil."
+  },
+  "fxCoverage": "Coverage",
+  "@fxCoverage": {
+    "description": "Effect controls: a control on Holographic foil, how much of the sheet carries the grating; the rest is plain mirror."
+  },
+  "fxDaylight": "Daylight",
+  "@fxDaylight": {
+    "description": "Effect controls: a choice on Holographic foil, Spectrum: the spectrum of daylight."
+  },
+  "fxDepthNm": "Depth (nm)",
+  "@fxDepthNm": {
+    "description": "Effect controls: a control on Holographic foil, how deep the grooves are, in nanometres. Deeper sends more light into the rainbow."
+  },
+  "fxDesk": "Desk",
+  "@fxDesk": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: a daylight window and a warm desk lamp."
+  },
+  "fxDirectionMap": "Direction map",
+  "@fxDirectionMap": {
+    "description": "Effect controls: a control on Holographic foil, a layer that steers which way the grooves run."
+  },
+  "fxDistanceM": "Distance (m)",
+  "@fxDistanceM": {
+    "description": "Effect controls: a control on Holographic foil, how far a light is from the sheet, in metres."
+  },
+  "fxEdgeNm": "Edge (nm)",
+  "@fxEdgeNm": {
+    "description": "Effect controls: a control on Holographic foil, the wavelength where a custom dye turns from blocking to passing, in nanometres."
+  },
+  "fxEdgeWidthNm": "Edge width (nm)",
+  "@fxEdgeWidthNm": {
+    "description": "Effect controls: a control on Holographic foil, how gradually a custom dye turns, in nanometres."
+  },
+  "fxEnvironment": "Environment",
+  "@fxEnvironment": {
+    "description": "Effect controls: a control on Holographic foil, a layer the foil mirrors."
+  },
+  "fxEqual": "Equal",
+  "@fxEqual": {
+    "description": "Effect controls: a choice on Holographic foil, Spectrum: a flat spectrum, pure white light."
+  },
+  "fxFan": "Fan",
+  "@fxFan": {
+    "description": "Effect controls: a control on Holographic foil, how far each rainbow band spreads along the grooves."
+  },
+  "fxFloor": "Floor",
+  "@fxFloor": {
+    "description": "Effect controls: a control on Holographic foil, how much a custom dye still lets through on its blocked side."
+  },
+  "fxFluorescent": "Fluorescent",
+  "@fxFluorescent": {
+    "description": "Effect controls: a choice on Holographic foil, Spectrum: a fluorescent tube, a few bright narrow lines."
+  },
+  "fxFoilMask": "Foil mask",
+  "@fxFoilMask": {
+    "description": "Effect controls: a control on Holographic foil, a layer whose white shows bare foil through an opaque print."
+  },
+  "fxFoilOnly": "Foil only",
+  "@fxFoilOnly": {
+    "description": "Effect controls: a choice on Holographic foil, Print: the layer's colours are ignored; only its shape is foil."
+  },
+  "fxGlitter": "Glitter",
+  "@fxGlitter": {
+    "description": "Effect controls: a choice on Holographic foil, Material: many tiny tilted flakes that each flash alone."
+  },
+  "fxGrating": "Grating",
+  "@fxGrating": {
+    "description": "Effect controls: a group heading on Holographic foil, the grooves pressed into the foil."
+  },
+  "fxGrooveAngle": "Groove angle",
+  "@fxGrooveAngle": {
+    "description": "Effect controls: a control on Holographic foil, which way the straight grooves run across the sheet."
+  },
+  "fxHeightMap": "Height map",
+  "@fxHeightMap": {
+    "description": "Effect controls: a control on Holographic foil, a layer whose brightness is the height of the surface."
+  },
+  "fxHolographicFoil": "Holographic foil",
+  "@fxHolographicFoil": {
+    "description": "Effect name in the Effects list. The layer becomes a sheet of embossed rainbow foil that tips under lights, its colours sweeping as it moves."
+  },
+  "fxInkOverFoil": "Ink over foil",
+  "@fxInkOverFoil": {
+    "description": "Effect controls: a choice on Holographic foil, Print: the layer's colours are printed as ink over the foil; white shows bare foil."
+  },
+  "fxLED": "LED",
+  "@fxLED": {
+    "description": "Effect controls: a choice on Holographic foil, Spectrum: a white LED, a blue die and a yellow phosphor."
+  },
+  "fxLongWaves": "Long waves",
+  "@fxLongWaves": {
+    "description": "Effect controls: a choice on Holographic foil, Passes: a custom dye that lets the long, warm wavelengths through."
+  },
+  "fxMaps": "Maps",
+  "@fxMaps": {
+    "description": "Effect controls: a group heading on Holographic foil, the layers that can shape the foil."
+  },
+  "fxNeutral": "Neutral",
+  "@fxNeutral": {
+    "description": "Effect controls: a choice on Holographic foil, Highlights: a gentle roll-off of light above white."
+  },
+  "fxOffice": "Office",
+  "@fxOffice": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: one long fluorescent tube overhead."
+  },
+  "fxOpaquePrint": "Opaque print",
+  "@fxOpaquePrint": {
+    "description": "Effect controls: a choice on Holographic foil, Print: the layer is printed on white, with foil where it is white or where the Foil mask says."
+  },
+  "fxOrientationJitter": "Orientation jitter",
+  "@fxOrientationJitter": {
+    "description": "Effect controls: a control on Holographic foil, how far the grooves stray from their direction."
+  },
+  "fxPanel": "Panel",
+  "@fxPanel": {
+    "description": "Effect controls: a group heading on Holographic foil, the large soft panel light."
+  },
+  "fxPitchNm": "Pitch (nm)",
+  "@fxPitchNm": {
+    "description": "Effect controls: a control on Holographic foil, the spacing of the grooves pressed into the foil, in nanometres."
+  },
+  "fxPitchJitter": "Pitch jitter",
+  "@fxPitchJitter": {
+    "description": "Effect controls: a control on Holographic foil, how far the groove spacing strays, which softens the colours."
+  },
+  "fxPitchMap": "Pitch map",
+  "@fxPitchMap": {
+    "description": "Effect controls: a control on Holographic foil, a layer that sets the groove spacing."
+  },
+  "fxPrism": "Prism",
+  "@fxPrism": {
+    "description": "Effect controls: a choice on Holographic foil, Material: one fine grating over the whole sheet, the classic rainbow foil."
+  },
+  "fxRaking": "Raking",
+  "@fxRaking": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: one spot low at the side, skimming the sheet."
+  },
+  "fxRigRotation": "Rig rotation",
+  "@fxRigRotation": {
+    "description": "Effect controls: a control on Holographic foil, turns every light and the studio together around the view axis."
+  },
+  "fxRims": "Rims",
+  "@fxRims": {
+    "description": "Effect controls: a control on Holographic foil, two thin strips of light low at the sides of the studio."
+  },
+  "fxRoom": "Room",
+  "@fxRoom": {
+    "description": "Effect controls: a control on Holographic foil, the faint light everywhere else in front of the sheet."
+  },
+  "fxScrim": "Scrim",
+  "@fxScrim": {
+    "description": "Effect controls: a control on Holographic foil, a pale sheet just above the viewer, so bare foil reads grey."
+  },
+  "fxShatter": "Shatter",
+  "@fxShatter": {
+    "description": "Effect controls: a choice on Holographic foil, Material: cracked-ice foil, each shard its own small grating."
+  },
+  "fxSheet": "Sheet",
+  "@fxSheet": {
+    "description": "Effect controls: a group heading on Holographic foil, the sheet's real size and how far it is seen from."
+  },
+  "fxSheetWidthMm": "Sheet width (mm)",
+  "@fxSheetWidthMm": {
+    "description": "Effect controls: a control on Holographic foil, how wide the sheet is in the real world, in millimetres."
+  },
+  "fxShortWaves": "Short waves",
+  "@fxShortWaves": {
+    "description": "Effect controls: a choice on Holographic foil, Passes: a custom dye that lets the short, cool wavelengths through."
+  },
+  "fxSoftbox": "Softbox",
+  "@fxSoftbox": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: one large soft square light."
+  },
+  "fxSparkle": "Sparkle",
+  "@fxSparkle": {
+    "description": "Effect controls: a choice on Holographic foil, Material: embossed dots that all share one grating, so they light up together."
+  },
+  "fxSpectrum": "Spectrum",
+  "@fxSpectrum": {
+    "description": "Effect controls: a control on Holographic foil, the colour of a light, as the kind of lamp it is."
+  },
+  "fxSpot": "Spot",
+  "@fxSpot": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: one small bright spot in a dark room."
+  },
+  "fxSpotA": "Spot A",
+  "@fxSpotA": {
+    "description": "Effect controls: a group heading on Holographic foil, the first spot light."
+  },
+  "fxSpotB": "Spot B",
+  "@fxSpotB": {
+    "description": "Effect controls: a group heading on Holographic foil, the second spot light."
+  },
+  "fxSpotC": "Spot C",
+  "@fxSpotC": {
+    "description": "Effect controls: a group heading on Holographic foil, the third spot light."
+  },
+  "fxStrip": "Strip",
+  "@fxStrip": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: one long thin soft light."
+  },
+  "fxStudio": "Studio",
+  "@fxStudio": {
+    "description": "Effect controls: a choice on Holographic foil, Lighting: two small spots, a soft panel and a grey studio around."
+  },
+  "fxSunburst": "Sunburst",
+  "@fxSunburst": {
+    "description": "Effect controls: a choice on Holographic foil, Pattern: grooves that run out from a centre like rays."
+  },
+  "fxSurroundings": "Surroundings",
+  "@fxSurroundings": {
+    "description": "Effect controls: a group heading on Holographic foil, the soft grey studio around the sheet."
+  },
+  "fxTilt": "Tilt",
+  "@fxTilt": {
+    "description": "Effect controls: a group heading on Holographic foil, how the sheet is tipped toward the viewer."
+  },
+  "fxTiltX": "Tilt x",
+  "@fxTiltX": {
+    "description": "Effect controls: a control on Holographic foil, how far the top edge of the sheet tips toward the viewer, in degrees."
+  },
+  "fxTiltY": "Tilt y",
+  "@fxTiltY": {
+    "description": "Effect controls: a control on Holographic foil, how far the face of the sheet turns toward the right, in degrees."
+  },
+  "fxTungsten": "Tungsten",
+  "@fxTungsten": {
+    "description": "Effect controls: a choice on Holographic foil, Spectrum: the warm spectrum of a tungsten bulb."
+  },
+  "fxViewDistanceM": "View distance (m)",
+  "@fxViewDistanceM": {
+    "description": "Effect controls: a control on Holographic foil, how far the eye is from the sheet, in metres."
+  },
+  "fxAlong": "Along",
+  "@fxAlong": {
+    "description": "Effect controls: a choice on Holographic foil, Bow axis: the sheet bows along its height."
+  },
+  "fxAlongEdges": "Along edges",
+  "@fxAlongEdges": {
+    "description": "Effect controls: a choice on Holographic foil, Reading: the grooves run along the edges drawn in the Direction map."
+  },
+  "fxBowMm": "Bow (mm)",
+  "@fxBowMm": {
+    "description": "Effect controls: a control on Holographic foil, how far the sheet bows in its middle, in millimetres."
+  },
+  "fxBowAxis": "Bow axis",
+  "@fxBowAxis": {
+    "description": "Effect controls: a control on Holographic foil, whether the sheet bows across its width or along its height."
+  },
+  "fxBrushed": "Brushed",
+  "@fxBrushed": {
+    "description": "Effect controls: a choice on Holographic foil, Relief: fine streaks running one way, like brushed metal."
+  },
+  "fxCrinkled": "Crinkled",
+  "@fxCrinkled": {
+    "description": "Effect controls: a choice on Holographic foil, Relief: small flat facets each tipped its own way, like crumpled foil."
+  },
+  "fxCrosshatch": "Crosshatch",
+  "@fxCrosshatch": {
+    "description": "Effect controls: a choice on Holographic foil, Lines: two sets of fine embossed lines crossing at right angles."
+  },
+  "fxFingerprint": "Fingerprint",
+  "@fxFingerprint": {
+    "description": "Effect controls: a choice on Holographic foil, Relief: a few oily fingerprints on the surface."
+  },
+  "fxFoil": "Foil",
+  "@fxFoil": {
+    "description": "Effect controls: a choice on Holographic foil, Relief on: the relief bends the foil, so it catches coloured light."
+  },
+  "fxFromMap": "From map",
+  "@fxFromMap": {
+    "description": "Effect controls: a choice on Holographic foil, Pattern: the grooves follow the Direction map layer."
+  },
+  "fxHammered": "Hammered",
+  "@fxHammered": {
+    "description": "Effect controls: a choice on Holographic foil, Relief: round dents all over, like hammered metal."
+  },
+  "fxLineHeightUm": "Line height (µm)",
+  "@fxLineHeightUm": {
+    "description": "Effect controls: a control on Holographic foil, how deep the embossed lines are, in micrometres."
+  },
+  "fxLinePitchMm": "Line pitch (mm)",
+  "@fxLinePitchMm": {
+    "description": "Effect controls: a control on Holographic foil, the spacing of the embossed lines, in millimetres."
+  },
+  "fxLinen": "Linen",
+  "@fxLinen": {
+    "description": "Effect controls: a choice on Holographic foil, Relief: a fine woven texture, like linen paper."
+  },
+  "fxOrangePeelUm": "Orange peel (µm)",
+  "@fxOrangePeelUm": {
+    "description": "Effect controls: a control on Holographic foil, how rough the fine ripple in the varnish is, in micrometres."
+  },
+  "fxPitchAtWhiteNm": "Pitch at white (nm)",
+  "@fxPitchAtWhiteNm": {
+    "description": "Effect controls: a control on Holographic foil, the groove spacing where the Pitch map is white, in nanometres."
+  },
+  "fxReading": "Reading",
+  "@fxReading": {
+    "description": "Effect controls: a control on Holographic foil, how the Direction map is read: its brightness as an angle, or grooves along its edges."
+  },
+  "fxReliefOn": "Relief on",
+  "@fxReliefOn": {
+    "description": "Effect controls: a control on Holographic foil, whether the relief bends the foil itself or only the varnish on top."
+  },
+  "fxRepeats": "Repeats",
+  "@fxRepeats": {
+    "description": "Effect controls: a control on Holographic foil, how many times the Height map repeats across the sheet."
+  },
+  "fxSandblast": "Sandblast",
+  "@fxSandblast": {
+    "description": "Effect controls: a choice on Holographic foil, Relief: a fine even grain that makes the foil satin."
+  },
+  "fxVarnish": "Varnish",
+  "@fxVarnish": {
+    "description": "Effect controls: a choice on Holographic foil, Relief on: the relief bends only the clear varnish, so it shows in the gloss."
+  },
+  "fxWaviness": "Waviness",
+  "@fxWaviness": {
+    "description": "Effect controls: a control on Holographic foil, how far broad waves in the sheet tip it, in degrees."
+  },
+  "fxWear": "Wear",
+  "@fxWear": {
+    "description": "Effect controls: a control on Holographic foil, handling marks: smudges, hairline scratches round the highlights, dust and patchy foil."
+  },
+  "fxAutoTilt": "Auto tilt",
+  "@fxAutoTilt": {
+    "description": "Effect controls: a control on Holographic foil, how far the sheet wobbles on its own, in degrees."
+  },
+  "fxAutoTiltSpeedHz": "Auto tilt speed (Hz)",
+  "@fxAutoTiltSpeedHz": {
+    "description": "Effect controls: a control on Holographic foil, how many times a second the built-in wobble swings."
+  },
+  "fxBandContrast": "Band contrast",
+  "@fxBandContrast": {
+    "description": "Effect controls: a control on Holographic foil, how much plainer the spiral bands across a vortex are."
+  },
+  "fxCardRainbow": "Card rainbow",
+  "@fxCardRainbow": {
+    "description": "Effect presets: a Holographic foil look, rainbow rings on a trading card."
+  },
+  "fxFollowLayerRotation": "Follow layer rotation",
+  "@fxFollowLayerRotation": {
+    "description": "Effect controls: a control on Holographic foil, whether the layer's own 3D turn and the comp camera add to the tilt."
+  },
+  "fxGildedVortex": "Gilded vortex",
+  "@fxGildedVortex": {
+    "description": "Effect presets: a Holographic foil look, a spiral grating under gold lacquer."
+  },
+  "fxLacquerIndex": "Lacquer index",
+  "@fxLacquerIndex": {
+    "description": "Effect controls: a control on Holographic foil, the refractive index of the clear lacquer over the grooves."
+  },
+  "fxSwirlMm": "Swirl (mm)",
+  "@fxSwirlMm": {
+    "description": "Effect controls: a control on Holographic foil, how far from the centre a vortex's grooves turn to 45 degrees, in millimetres."
+  },
+  "fxChirp": "Chirp",
+  "@fxChirp": {
+    "description": "Effect controls: a control on Holographic foil, how much the groove spacing changes across a shard, per cent."
+  },
+  "fxCreaseHeightUm": "Crease height (µm)",
+  "@fxCreaseHeightUm": {
+    "description": "Effect controls: a control on Holographic foil, how high the creases along the cracks stand, in micrometres; below 0 they are grooves."
+  },
+  "fxCreaseWidthUm": "Crease width (µm)",
+  "@fxCreaseWidthUm": {
+    "description": "Effect controls: a control on Holographic foil, how far a crease reaches either side of its crack, in micrometres."
+  },
+  "fxCreased": "Creased",
+  "@fxCreased": {
+    "description": "Effect controls: a control on Holographic foil, how many of the cracks between shards carry a crease, per cent."
+  },
+  "fxDirections": "Directions",
+  "@fxDirections": {
+    "description": "Effect controls: a control on Holographic foil, how many groove directions the shards choose from; 0 is any."
+  },
+  "fxGoldShatter": "Gold shatter",
+  "@fxGoldShatter": {
+    "description": "Effect presets: a Holographic foil look, cracked-ice shards under gold lacquer."
+  },
+  "fxIrregularity": "Irregularity",
+  "@fxIrregularity": {
+    "description": "Effect controls: a control on Holographic foil, how irregular the cracks between shards are; 0 is a square grid."
+  },
+  "fxPitchANm": "Pitch A (nm)",
+  "@fxPitchANm": {
+    "description": "Effect controls: a control on Holographic foil, the groove spacing of the first family of shards, in nanometres."
+  },
+  "fxPitchBNm": "Pitch B (nm)",
+  "@fxPitchBNm": {
+    "description": "Effect controls: a control on Holographic foil, the groove spacing of the second family of shards, in nanometres."
+  },
+  "fxPitchCNm": "Pitch C (nm)",
+  "@fxPitchCNm": {
+    "description": "Effect controls: a control on Holographic foil, the groove spacing of the third family of shards, in nanometres."
+  },
+  "fxShardSizeMm": "Shard size (mm)",
+  "@fxShardSizeMm": {
+    "description": "Effect controls: a control on Holographic foil, the mean size of a shard of cracked foil, in millimetres on the sheet."
+  },
+  "fxShardTilt": "Shard tilt",
+  "@fxShardTilt": {
+    "description": "Effect controls: a control on Holographic foil, how far each shard tips under the lacquer, in degrees."
+  },
+  "fxSilverShatter": "Silver shatter",
+  "@fxSilverShatter": {
+    "description": "Effect presets: a Holographic foil look, cracked-ice shards under clear lacquer."
+  },
+  "fxSplits": "Splits",
+  "@fxSplits": {
+    "description": "Effect controls: a control on Holographic foil, how many straight cuts split each piece of cracked foil on average."
+  },
+  "fxDome": "Dome",
+  "@fxDome": {
+    "description": "Effect controls: a control on Holographic foil, how much a sparkle dot bulges within itself, in degrees."
+  },
+  "fxDotCover": "Dot cover",
+  "@fxDotCover": {
+    "description": "Effect controls: a control on Holographic foil, how much of the sheet the sparkle dots cover, per cent."
+  },
+  "fxDotSizeUm": "Dot size (µm)",
+  "@fxDotSizeUm": {
+    "description": "Effect controls: a control on Holographic foil, how wide a sparkle dot is on average, in micrometres."
+  },
+  "fxDotTilt": "Dot tilt",
+  "@fxDotTilt": {
+    "description": "Effect controls: a control on Holographic foil, how far each sparkle dot tips, in degrees."
+  },
+  "fxFinestPitchNm": "Finest pitch (nm)",
+  "@fxFinestPitchNm": {
+    "description": "Effect controls: a control on Holographic foil, the finest groove spacing a glitter flake can have, in nanometres."
+  },
+  "fxFlakeCurve": "Flake curve",
+  "@fxFlakeCurve": {
+    "description": "Effect controls: a control on Holographic foil, how much a glitter flake bends within itself, in degrees."
+  },
+  "fxFlakeShape": "Flake shape",
+  "@fxFlakeShape": {
+    "description": "Effect controls: a control on Holographic foil, the outline of a glitter flake."
+  },
+  "fxFlakeSizeUm": "Flake size (µm)",
+  "@fxFlakeSizeUm": {
+    "description": "Effect controls: a control on Holographic foil, how wide a glitter flake is, flat to flat, in micrometres."
+  },
+  "fxFlakeTilt": "Flake tilt",
+  "@fxFlakeTilt": {
+    "description": "Effect controls: a control on Holographic foil, how far the glitter flakes tip, in degrees."
+  },
+  "fxHex": "Hex",
+  "@fxHex": {
+    "description": "Effect controls: a choice on Holographic foil, glitter flakes with six sides."
+  },
+  "fxLayers": "Layers",
+  "@fxLayers": {
+    "description": "Effect controls: a control on Holographic foil, how many layers of glitter flakes lie over each other."
+  },
+  "fxNebulaGlitter": "Nebula glitter",
+  "@fxNebulaGlitter": {
+    "description": "Effect presets: a Holographic foil look, fine flakes under a blue binder over indigo ink."
+  },
+  "fxRound": "Round",
+  "@fxRound": {
+    "description": "Effect controls: a choice on Holographic foil, round glitter flakes."
+  },
+  "fxSandSize": "Sand size",
+  "@fxSandSize": {
+    "description": "Effect controls: a control on Holographic foil, how big the grains of the matte metal are, as a share of the dot size."
+  },
+  "fxSandTilt": "Sand tilt",
+  "@fxSandTilt": {
+    "description": "Effect controls: a control on Holographic foil, how far the grains of the matte metal tip, in degrees."
+  },
+  "fxSilverGlitter": "Silver glitter",
+  "@fxSilverGlitter": {
+    "description": "Effect presets: a Holographic foil look, large flakes under a clear binder."
+  },
+  "fxSkySparkle": "Sky sparkle",
+  "@fxSkySparkle": {
+    "description": "Effect presets: a Holographic foil look, sparkle dots under a sky-blue lacquer."
+  },
+  "fxSpeckColourNm": "Speck colour (nm)",
+  "@fxSpeckColourNm": {
+    "description": "Effect controls: a control on Holographic foil, the wavelength the specks' dye lets through most, in nanometres."
+  },
+  "fxSpeckFloor": "Speck floor",
+  "@fxSpeckFloor": {
+    "description": "Effect controls: a control on Holographic foil, how much the specks' dye lets through away from its colour, per cent."
+  },
+  "fxSpeckWidthNm": "Speck width (nm)",
+  "@fxSpeckWidthNm": {
+    "description": "Effect controls: a control on Holographic foil, how wide a band of light the specks' dye lets through, in nanometres."
+  },
+  "fxStarSizeUm": "Star size (µm)",
+  "@fxStarSizeUm": {
+    "description": "Effect controls: a control on Holographic foil, how wide a star among the glitter is on average, in micrometres."
+  },
+  "fxStars": "Stars",
+  "@fxStars": {
+    "description": "Effect controls: a control on Holographic foil, how many of the places for a star among the glitter hold one, per cent."
+  },
+  "fxWidestPitchNm": "Widest pitch (nm)",
+  "@fxWidestPitchNm": {
+    "description": "Effect controls: a control on Holographic foil, the widest groove spacing a glitter flake can have, in nanometres."
+  },
+  "fxBackdrop": "Backdrop",
+  "@fxBackdrop": {
+    "description": "Effect controls: a group heading on Hologram, what was recorded behind the subject, and the film's line patterns."
+  },
+  "fxBackdropDepthMm": "Backdrop depth (mm)",
+  "@fxBackdropDepthMm": {
+    "description": "Effect controls: a control on Hologram, how far behind the film the grid, the stars and the backdrop layer sit, in millimetres."
+  },
+  "fxBackdropLayer": "Backdrop layer",
+  "@fxBackdropLayer": {
+    "description": "Effect controls: a control on Hologram, a layer recorded behind the subject."
+  },
+  "fxBandwidthNm": "Bandwidth (nm)",
+  "@fxBandwidthNm": {
+    "description": "Effect controls: a control on Hologram, how wide the reflection hologram's colour band is, in nanometres."
+  },
+  "fxColourNm": "Colour (nm)",
+  "@fxColourNm": {
+    "description": "Effect controls: a control on Hologram, the wavelength the hologram replays in from the reference direction, in nanometres."
+  },
+  "fxDepthScaleMm": "Depth scale (mm)",
+  "@fxDepthScaleMm": {
+    "description": "Effect controls: a control on Hologram, how far the depth map's black lies behind its white, in millimetres."
+  },
+  "fxEfficiency": "Efficiency",
+  "@fxEfficiency": {
+    "description": "Effect controls: a control on Hologram, how much of the light the film sends into the image, per cent."
+  },
+  "fxFullColour": "Full colour",
+  "@fxFullColour": {
+    "description": "Effect controls: a choice on Hologram, the layer's own colours, lit as brightly as the replay."
+  },
+  "fxGlare": "Glare",
+  "@fxGlare": {
+    "description": "Effect controls: a control on Hologram, how strongly the film's mirror shows the lights, per cent."
+  },
+  "fxHologram": "Hologram",
+  "@fxHologram": {
+    "description": "Effect name: turns the layer into a hologram on a film, with depth that moves as the film tilts."
+  },
+  "fxLattice": "Lattice",
+  "@fxLattice": {
+    "description": "Effect controls: a choice on Hologram, line patterns on the film: crossing waves."
+  },
+  "fxOptical": "Optical",
+  "@fxOptical": {
+    "description": "Effect controls: a choice on Hologram, one continuous recording with smooth depth."
+  },
+  "fxPatternDepthMm": "Pattern depth (mm)",
+  "@fxPatternDepthMm": {
+    "description": "Effect controls: a control on Hologram, how far behind the surface the film's line patterns lie, in millimetres."
+  },
+  "fxPatternSizeMm": "Pattern size (mm)",
+  "@fxPatternSizeMm": {
+    "description": "Effect controls: a control on Hologram, how wide the film's line patterns and the grid are, in millimetres."
+  },
+  "fxRainbowHologram": "Rainbow hologram",
+  "@fxRainbowHologram": {
+    "description": "Effect presets: a Hologram look, an embossed rainbow hologram on a mirror."
+  },
+  "fxRecording": "Recording",
+  "@fxRecording": {
+    "description": "Effect controls: a group heading on Hologram, how the hologram was recorded."
+  },
+  "fxReferenceX": "Reference x",
+  "@fxReferenceX": {
+    "description": "Effect controls: a control on Hologram, where the light must be for the clean image, across, as seen from the film."
+  },
+  "fxReferenceY": "Reference y",
+  "@fxReferenceY": {
+    "description": "Effect controls: a control on Hologram, where the light must be for the clean image, up, as seen from the film."
+  },
+  "fxReflection": "Reflection",
+  "@fxReflection": {
+    "description": "Effect controls: a choice on Hologram, a thick reflection hologram that replays in one colour."
+  },
+  "fxReflectionHologram": "Reflection hologram",
+  "@fxReflectionHologram": {
+    "description": "Effect presets: a Hologram look, a reflection hologram in one green over a grid."
+  },
+  "fxReplay": "Replay",
+  "@fxReplay": {
+    "description": "Effect controls: a group heading on Hologram, the colour and the light direction the hologram replays in."
+  },
+  "fxReplayColourOnly": "Replay colour only",
+  "@fxReplayColourOnly": {
+    "description": "Effect controls: a choice on Hologram, the layer's brightness shown in the replay colour alone."
+  },
+  "fxRosette": "Rosette",
+  "@fxRosette": {
+    "description": "Effect controls: a choice on Hologram, line patterns on the film: petalled rings woven together."
+  },
+  "fxSeal": "Seal",
+  "@fxSeal": {
+    "description": "Effect controls: a choice on Hologram, line patterns on the film: a rim of dashes round a woven ring."
+  },
+  "fxSecuritySeal": "Security seal",
+  "@fxSecuritySeal": {
+    "description": "Effect presets: a Hologram look, a rainbow hologram with a seal of fine line patterns."
+  },
+  "fxSelectivity": "Selectivity",
+  "@fxSelectivity": {
+    "description": "Effect controls: a control on Hologram, how far a light can stray from the reference before the image fades, in degrees."
+  },
+  "fxSlit": "Slit",
+  "@fxSlit": {
+    "description": "Effect controls: a control on Hologram, how wide the rainbow hologram's slit was, in degrees."
+  },
+  "fxSpeckle": "Speckle",
+  "@fxSpeckle": {
+    "description": "Effect controls: a control on Hologram, how grainy the laser light makes the image, per cent."
+  },
+  "fxStereogram": "Stereogram",
+  "@fxStereogram": {
+    "description": "Effect controls: a Recording choice and group on Hologram, and a Hologram look: a hologram made of separate views."
+  },
+  "fxSticker": "Sticker",
+  "@fxSticker": {
+    "description": "Effect presets: a Hologram look, a dark sticker film with a seal pattern and stepped views."
+  },
+  "fxSubject": "Subject",
+  "@fxSubject": {
+    "description": "Effect controls: a group heading on Hologram, the recorded picture and how deep it sits."
+  },
+  "fxSubjectColour": "Subject colour",
+  "@fxSubjectColour": {
+    "description": "Effect controls: a control on Hologram, how the layer's colour reaches the hologram's image."
+  },
+  "fxSubjectDepthMm": "Subject depth (mm)",
+  "@fxSubjectDepthMm": {
+    "description": "Effect controls: a control on Hologram, how far behind the film the subject sits, in millimetres."
+  },
+  "fxTintedByTheLayer": "Tinted by the layer",
+  "@fxTintedByTheLayer": {
+    "description": "Effect controls: a choice on Hologram, the layer's colour multiplied by the replay colour."
+  },
+  "fxViewBlend": "View blend",
+  "@fxViewBlend": {
+    "description": "Effect controls: a control on Hologram, how softly one stereogram view hands over to the next, per cent."
+  },
+  "fxViewZone": "View zone",
+  "@fxViewZone": {
+    "description": "Effect controls: a control on Hologram, how wide a fan of angles the stereogram's views cover, in degrees."
+  },
+  "fxViews": "Views",
+  "@fxViews": {
+    "description": "Effect controls: a control on Hologram, how many separate views the stereogram was made from."
+  },
+  "fxBaseRoughness": "Base roughness",
+  "@fxBaseRoughness": {
+    "description": "Effect controls: on Holographic foil's Sparkle material, how matte the metal between the dots is."
+  },
+  "fxFlakeLayers": "Flake layers",
+  "@fxFlakeLayers": {
+    "description": "Effect controls: on Holographic foil's Glitter material, how many layers of flakes lie over each other."
+  },
+  "fxBevelFromAlpha": "Bevel from alpha",
+  "@fxBevelFromAlpha": {
+    "description": "Effect controls: a Relief choice on Holographic foil that presses the layer's own outline into the foil as a bevel."
+  },
+  "fxBevelHeightUm": "Bevel height (µm)",
+  "@fxBevelHeightUm": {
+    "description": "Effect controls: on Holographic foil, how high the bevel stands, in micrometres."
+  },
+  "fxBevelWidthMm": "Bevel width (mm)",
+  "@fxBevelWidthMm": {
+    "description": "Effect controls: on Holographic foil, how far in from the outline the bevel's wall reaches, in millimetres."
+  },
+  "fxCompactDisc": "Compact disc",
+  "@fxCompactDisc": {
+    "description": "Effect presets: a Holographic foil look, thin rainbow spokes on mirror metal like a compact disc."
+  },
+  "fxDeboss": "Deboss",
+  "@fxDeboss": {
+    "description": "Effect controls: a bevel profile on Holographic foil, the outline pressed in rather than raised."
+  },
+  "fxDeepBackdrop": "Deep backdrop",
+  "@fxDeepBackdrop": {
+    "description": "Effect presets: a Hologram look, the subject near the film over a Backdrop layer far behind it."
+  },
+  "fxGoldRainbowFoil": "Gold rainbow foil",
+  "@fxGoldRainbowFoil": {
+    "description": "Effect presets: a Holographic foil look, rainbow foil under a gold lacquer."
+  },
+  "fxIceBlue": "Ice blue",
+  "@fxIceBlue": {
+    "description": "Effect presets: a Holographic foil look, cracked-ice shards under a blue lacquer."
+  },
+  "fxPressedLogo": "Pressed logo",
+  "@fxPressedLogo": {
+    "description": "Effect presets: a Holographic foil look, the layer's outline pressed into rainbow foil as a bevel."
+  },
+  "fxProfile": "Profile",
+  "@fxProfile": {
+    "description": "Effect controls: on Holographic foil, the shape of the bevel's wall."
+  },
+  "fxSoftPastelSatin": "Soft pastel satin",
+  "@fxSoftPastelSatin": {
+    "description": "Effect presets: a Holographic foil look, pale wide bands on soft satin metal."
   }
 }

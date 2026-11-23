@@ -356,6 +356,7 @@ Script: `lumit.markers.set({ ... })`. MCP tool: `markers_set`.
 | `markers[].colour` | integer (0 to 255) |  |  |
 | `markers[].duration` | integer |  | Frames it spans |
 | `markers[].chapter` | boolean |  | Whether it starts a chapter |
+| `markers[].beat` | number (0 to 1) |  | Makes it a beat marker with this confidence, as Detect beats does. Beat trigger fires on beat markers |
 
 ## effect.list
 
@@ -419,6 +420,27 @@ Script: `lumit.effect.set({ ... })`. MCP tool: `effect_set`.
 | `keys[].out.speed` | number |  | Units a second |
 | `keys[].out.influence` | number (0.1 to 100) |  | Per cent of the span |
 | `expression` | string |  | A JavaScript expression, as After Effects writes them |
+
+## layer.drive
+
+Drive an effect's control from a driver on the layer's node graph, as Drive with does: Audio level and Beat trigger through Remap (and Smooth), Wiggle about the control's number, or any other driver straight in.
+
+Script: `lumit.layer.drive({ ... })`. MCP tool: `layer_drive`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `effect` | string or integer (at least 0) | yes | The driven effect's id or name, or its place in the stack, 0 the top |
+| `param` | string | yes | The control's id or name |
+| `driver` | string | yes | The driver's id: audio_level, beat_trigger, wiggle, colour_cycle, expression, oscillator, value_noise, ring_wave and the rest |
+| `listen` | string |  | For Audio level and Beat trigger, the layer whose sound they hear, by id or name. The whole comp when left out |
+| `output` | string |  | The driver's output to wire, its first (Amplitude, Envelope) when left out |
+| `low` | number |  | For a sound: the control's value in silence, its own number when left out |
+| `high` | number |  | For a sound: the control's value at the loud end, the top of its range when left out |
+| `in_high` | number |  | For a sound: the level that reaches high, 0.3 for Audio level and 1 for Beat trigger when left out |
+| `settings` | object |  | The driver's own controls, by id or name, to their values: band, decay, window, frequency, amount and so on |
+| `expression` | string |  | For the Expression driver, its source |
 
 ## grade.get
 

@@ -100,6 +100,9 @@ mcp        Answer MCP on standard input and output, so another program can edit
   --project  The project. Footage comes from its folder, exports go into it,
              and it saves only when asked.
 
+Every command also takes --fonts <folder>, more than once if need be: the
+font files in it are used as if they were installed.
+
 Exit status: 0 done, 1 failed, 2 the arguments were wrong.
 ";
 
@@ -172,7 +175,13 @@ fn main() -> i32 {
     find_brokers();
     #[cfg(feature = "media")]
     lumit_media::encode::quiet_ffmpeg_log();
-    let command = match parse(std::env::args_os().skip(1).collect()) {
+    let mut args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    for folder in take_fonts(&mut args) {
+        if lumit_text::fonts::register_dir(&folder).is_empty() {
+            note!("No fonts found in {}", folder.display());
+        }
+    }
+    let command = match parse(args) {
         Ok(command) => command,
         Err(why) => {
             note!("lumit-cli: {why}\nTry lumit-cli --help.");
@@ -260,6 +269,22 @@ fn find_brokers() {
             std::env::set_var(variable, up);
         }
     }
+}
+
+/// Takes each `--fonts <folder>` out of `args`, for any command: the font
+/// files in those folders are used as if they were installed.
+fn take_fonts(args: &mut Vec<OsString>) -> Vec<PathBuf> {
+    let mut folders = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--fonts" && i + 1 < args.len() {
+            folders.push(PathBuf::from(args.remove(i + 1)));
+            args.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+    folders
 }
 
 fn parse(args: Vec<OsString>) -> Result<Command, String> {
@@ -724,7 +749,13 @@ fn run(
 /// Answer MCP, one message a line on standard input and one reply a line on
 /// standard output, until the client closes its end.
 fn mcp(project: &Path) -> Result<(), String> {
-    let host = open(project)?;
+    // A project that isn't there yet is a new, empty one, saved there.
+    let host = if project.exists() {
+        open(project)?
+    } else {
+        note!("Starting {} as a new project", project.display());
+        Headless::new_at(project)
+    };
     crate::api::extensions::register_effects();
     // Held while the client is there, so Lumit does not open a project the
     // client may still save.

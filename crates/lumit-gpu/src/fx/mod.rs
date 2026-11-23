@@ -35,6 +35,8 @@ pub mod generate;
 pub mod grade_fx;
 pub mod grid_lines;
 pub mod ground;
+pub mod hologram;
+pub mod holographic_foil;
 pub mod jolt;
 pub mod lens_blur;
 mod lens_blur_pipes;
@@ -413,6 +415,10 @@ pub struct FxEngine {
     lens_blur: lens_blur::LazyLensBlur,
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
+    /// Holographic foil, built the first time one is drawn.
+    holographic_foil: holographic_foil::LazyHolographicFoil,
+    /// Hologram, built the first time one is drawn.
+    hologram: hologram::LazyHologram,
     film: film::LazyFilm,
     grade: grade_fx::LazyGrade,
     correction: correction::LazyCorrection,

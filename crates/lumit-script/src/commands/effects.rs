@@ -218,12 +218,22 @@ pub(super) fn add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     let id = instance.id;
     let mut effects = layer.effects.clone();
     effects.push(instance);
-    commit(
-        store,
-        vec![fx::effects::particulate::rows::set_effects(
-            comp.id, layer, effects,
-        )],
-    )?;
+    // A points effect landing below a producer is wired to it in the same
+    // undo step, as Lumit's own Add effect does, so the stack works.
+    let mut graph = layer.graph.clone();
+    let mut ops = vec![fx::effects::particulate::rows::set_effects(
+        comp.id,
+        layer,
+        effects.clone(),
+    )];
+    if graph.wire_points_from_above(&effects, id) {
+        ops.push(lumit_core::ops::Op::SetLayerGraph {
+            comp: comp.id,
+            layer: layer.id,
+            graph: Box::new(graph),
+        });
+    }
+    commit(store, ops)?;
     let mut answer = now(store, comp.id, layer.id, id)?;
     if let Some(ae) = ae {
         answer["after_effects"] = json!(ae);
@@ -240,7 +250,7 @@ pub(super) enum Which {
     Key(String),
 }
 
-fn find_effect(layer: &Layer, which: &Which) -> Result<usize, ScriptError> {
+pub(super) fn find_effect(layer: &Layer, which: &Which) -> Result<usize, ScriptError> {
     let effects = &layer.effects;
     let found = match which {
         Which::Place(n) => (*n < effects.len()).then_some(*n),
@@ -282,7 +292,7 @@ pub(super) struct SetArgs {
 }
 
 /// What a control is set to.
-enum Change {
+pub(super) enum Change {
     Value(Value),
     Keys(Vec<KeyArgs>),
     Expression(String),
@@ -327,7 +337,7 @@ pub(super) fn set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
     now(store, comp.id, layer.id, id)
 }
 
-fn set_param(
+pub(super) fn set_param(
     comp: &Composition,
     layer: &Layer,
     e: &mut EffectInstance,
@@ -387,6 +397,24 @@ fn set_own(
         // An outline: `[[x, y], ...]` in -1..1 of its box, read as the
         // render reads it.
         EffectValue::Shape(points) => {
+            *points = match change {
+                Change::Value(v) => serde_json::from_value::<Vec<[f32; 2]>>(v).ok(),
+                _ => None,
+            }
+            .ok_or_else(|| bad(format!("{what} takes a list of [x, y] points.")))?;
+            return Ok(());
+        }
+        // Another layer of the comp, by id or name, or null for none.
+        EffectValue::Layer(picked) => {
+            *picked = match change {
+                Change::Value(Value::Null) => None,
+                Change::Value(Value::String(key)) => Some(find_layer(comp, &key)?.id),
+                _ => return Err(bad(format!("{what} takes a layer's id or name, or null."))),
+            };
+            return Ok(());
+        }
+        // A curve: `[[x, y], ...]` points in 0..1, as its editor keeps them.
+        EffectValue::Curve(points) => {
             *points = match change {
                 Change::Value(v) => serde_json::from_value::<Vec<[f32; 2]>>(v).ok(),
                 _ => None,

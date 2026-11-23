@@ -1,0 +1,104 @@
+---
+title: Turning a logo into holographic foil
+description: Put foil on a logo, press it in, tip it under the lights, and wire other layers into it.
+sidebar:
+  order: 19
+---
+
+import Shot from "../../../components/Shot.astro";
+
+[Holographic foil](/effects/stylise/holographic-foil/) turns a layer into a sheet of foil
+that tips under a set of lights. This puts it on a logo, then prints a picture with its
+title in foil.
+
+## A foil logo
+
+The logo is a text layer, a shape layer or artwork with an alpha channel.
+
+**1. Add the effect.** Select the logo layer and choose **Effect ▸ Stylise ▸ Holographic
+foil**. The logo is cut from rainbow foil. The first frame takes a few seconds while the
+shader is built.
+
+**2. Leave the logo's colour out.** In [Effect controls](/panels/effect-controls/), set
+**Print** to **Foil only**. The whole logo is foil, whatever colour it was.
+
+**3. Size the sheet.** Open **Sheet** and set **Sheet width (mm)** to 60. The logo is now
+60 mm wide in the world, and its bands are broader.
+
+**4. Pick a Material.** Set **Material** to **Shatter**. The foil breaks into gold shards.
+Set it back to **Prism**.
+
+**5. Press the logo in.** Open **Surface** and set **Relief** to **Bevel from alpha**. Set
+**Bevel width (mm)** to 1.5 and **Bevel height (µm)** to 180. The letters round over at
+their edges and catch the lights there.
+
+<Shot file="holographic-foil-logo.webp" caption="The logo after step 3, as Shatter in step 4, and pressed in at step 5." eager/>
+
+**6. Tip the sheet.** At the first frame, turn on the stopwatch beside **Tilt y** and set
+it to -40. Move the playhead two seconds on and set **Tilt y** to -10. The colours sweep
+across the logo as it plays.
+
+<Shot file="holographic-foil-logo-tilt.webp" caption="Tilt y at -40, -25 and -10."/>
+
+**7. Swing the lights.** In **Lights**, turn on the stopwatch beside **Rig rotation**, move
+the playhead and set it to 60. Every light turns about the view axis.
+
+**8. Sweep one light.** Set **Lighting** to **Custom** and open **Spot A**. Keyframe
+**Direction x** from -0.4 to 0.4. That spot alone crosses the logo.
+
+**9. Add the glow.** Open **Output** and set **Highlights** to **Off**. Add **Effect ▸
+Stylise ▸ Glow** below Holographic foil and set its **Threshold** to 1.5. The glints bloom
+and the rest of the foil does not.
+
+## Wire other layers in
+
+Each row in **Maps** reads another layer. A layer with its **Visible** switch off is still
+read.
+
+**1. Emboss a texture.** Set **Height map** to a layer that holds a texture, such as a
+solid with [Fractal noise](/effects/generate/fractal-noise/). Its brightness becomes the
+height of the surface, in place of the bevel.
+
+**2. Fit the texture.** Set **Repeats** to 3 for a finer grain. Where a seam shows between
+the repeats, set **Wrap** to **Mirror**. **Strength** in **Surface** sets how deep it
+presses.
+
+**3. Steer the grooves.** In **Grating**, set **Pattern** to **From map**. Set **Direction
+map** to a layer of line art or text. The grooves run along its outlines, which show as
+bands of their own.
+
+**4. Vary the colour.** Set **Pitch map** to a layer and **Pitch at white (nm)** to 1000.
+The white parts of that layer take another colour of the rainbow.
+
+## Foil on a printed picture
+
+**1. Add the effect to the picture.** Select a photograph or artwork layer and choose
+**Effect ▸ Stylise ▸ Holographic foil**.
+
+**2. Print it.** Set **Print** to **Opaque print**. The picture is printed over the foil,
+and foil shows where the picture is bright.
+
+**3. Make the mask.** Add a text layer with the title in white, place it over the picture
+and turn off its **Visible** switch.
+
+**4. Mask the foil.** In **Maps**, set **Foil mask** to the text layer. The title is foil
+and everything else is print.
+
+<Shot file="holographic-foil-maps.webp" caption="Top: one text layer as the Height map, as the Foil mask of an Opaque print, and as the Direction map. Bottom: a logo as the Direction map, the text layer as the Pitch map, and a photograph as the Environment."/>
+
+## Export
+
+**1. Check the colour depth.** In **File ▸ Project settings…**, a **Colour depth** of 16
+or 32 bpc keeps the glints brighter than white for Glow. At 8 bpc nothing is brighter than
+white.
+
+**2. Raise the quality.** Set **Quality** in **Output** to **High**.
+
+**3. Export.** Choose **File ▸ Export…**. See [Export](/use/export/).
+
+## Related
+
+- [Holographic foil](/effects/stylise/holographic-foil/)
+- [Making a hologram sticker](/tutorials/hologram-sticker/)
+- [Glow](/effects/stylise/glow/)
+- [Keyframes](/use/keyframes/)
