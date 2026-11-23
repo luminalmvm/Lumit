@@ -33718,6 +33718,6 @@
   },
   "fxDefocus": "Defocus",
   "@fxDefocus": {
-    "description": "Effect controls: a control on Sprite flare, how far out of focus the flare is: its light is blurred before Burn, so a burnt middle is a soft glow."
+    "description": "Effect controls: a control on Sprite flare, how far out of focus its brightest part is: light past full spreads before Burn, so a burnt middle is a soft glow and fainter lines stay sharp."
   }
 }

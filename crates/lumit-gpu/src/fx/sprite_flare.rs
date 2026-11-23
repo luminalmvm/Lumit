@@ -92,6 +92,8 @@ struct Params {
     lights: u32,
     has_layer: u32,
     burn: f32,
+    defocus: f32,
+    _pad: [f32; 3],
 }
 
 /// What `sf_lights` is told.
@@ -116,6 +118,8 @@ struct LightPass {
 pub(super) struct SpriteFlareFx {
     draw: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     add: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    /// The light past 1, for Defocus.
+    over: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     lights: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     /// Lens flare's own detection kernels, built from its shader.
     detect: (
@@ -211,11 +215,19 @@ impl SpriteFlareFx {
                 (0, Slot::Uniform),
                 (3, Slot::Tex),
                 (4, Slot::Tex),
+                (14, Slot::Tex),
                 (5, Slot::Store(ctx.working())),
             ],
             c,
         );
         let add_pipe = compute(&add_bgl, &module, "sf_add");
+        let over_bgl = bind_layout(
+            device,
+            "fx-sprite-flare-over",
+            &[(4, Slot::Tex), (15, Slot::Store(ctx.working()))],
+            c,
+        );
+        let over_pipe = compute(&over_bgl, &module, "sf_over");
         let lights_bgl = bind_layout(
             device,
             "fx-sprite-flare-lights",
@@ -250,6 +262,7 @@ impl SpriteFlareFx {
         Self {
             draw: (draw_bgl, draw),
             add: (add_bgl, add_pipe),
+            over: (over_bgl, over_pipe),
             lights: (lights_bgl, lights_pipe),
             detect: (detect_bgl, tiles, pick),
             textures: OnceLock::new(),
@@ -322,6 +335,8 @@ impl FxEngine {
                 lights: slots as u32,
                 has_layer: u32::from(op.layer.is_some()),
                 burn: op.burn,
+                defocus: op.defocus,
+                _pad: [0.0; 3],
             }),
             B::UNIFORM,
         );
@@ -499,13 +514,27 @@ impl FxEngine {
         rp.set_bind_group(0, &draw_group, &[]);
         rp.draw(0..6, 0..count);
         drop(rp);
-        // Defocus: the light blurred before it is burnt and added, as
-        // `raster::draw_with` does.
-        let (v_added, mut enc) = if op.defocus > 0.0 {
+        // Defocus: the light past 1 taken out, blurred and handed to the add
+        // pass beside the sharp light, as `raster::draw_with` does.
+        let (v_soft, mut enc) = if op.defocus > 0.0 {
+            let over = work_texture(ctx, w, h, "fx-sprite-flare-over");
+            let over_group = group(
+                &fx.over.0,
+                &[
+                    entry(4, R::TextureView(&v_light)),
+                    entry(15, R::TextureView(&view(&over))),
+                ],
+            );
+            pass(
+                &mut enc,
+                &fx.over.1,
+                &over_group,
+                [w.div_ceil(8), h.div_ceil(8)],
+            );
             drop(enc);
             let b = self.blur(
                 ctx,
-                &light,
+                &over,
                 w,
                 h,
                 None,
@@ -515,16 +544,18 @@ impl FxEngine {
                     mix: 1.0,
                 },
             );
+            ctx.recycle(over);
             (view(&b), ctx.encoder("fx-sprite-flare-add"))
         } else {
-            (v_light, enc)
+            (view(&light), enc)
         };
         let add_group = group(
             &fx.add.0,
             &[
                 entry(0, params.as_entire_binding()),
                 entry(3, R::TextureView(&v_src)),
-                entry(4, R::TextureView(&v_added)),
+                entry(4, R::TextureView(&v_light)),
+                entry(14, R::TextureView(&v_soft)),
                 entry(5, R::TextureView(&v_out)),
             ],
         );

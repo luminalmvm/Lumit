@@ -152,3 +152,35 @@ fn burn_runs_a_bright_light_to_white() {
     };
     assert!(green(1.0) > 10.0 * green(0.0), "the middle burns");
 }
+
+/// Defocus blurs only light past 1: a faint streak is drawn as it was, a
+/// bright glow's middle spreads.
+#[test]
+fn defocus_softens_the_hot_middle_and_leaves_faint_lines() {
+    let (w, h) = (64u32, 48u32);
+    let draw_one = |kind: Kind, brightness: f32, defocus: f32| {
+        let mut e = Element::new(kind);
+        e.set("brightness", brightness);
+        let design = Design {
+            lumit_flare: FORMAT,
+            name: String::new(),
+            elements: vec![e],
+        };
+        let mut f = Frame::preview(w, h, [32.0, 24.0], 1.0);
+        f.defocus = defocus;
+        let mut rgba = vec![0.0; (w * h * 4) as usize];
+        draw(&design, &f, w, h, &mut rgba);
+        rgba
+    };
+    let faint = draw_one(Kind::Streak, 0.3, 0.0);
+    let faint_soft = draw_one(Kind::Streak, 0.3, 8.0);
+    let gap = faint
+        .iter()
+        .zip(&faint_soft)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0f32, f32::max);
+    assert!(gap < 1e-5, "a faint streak stays sharp ({gap})");
+    let hot = draw_one(Kind::Glow, 20.0, 0.0);
+    let hot_soft = draw_one(Kind::Glow, 20.0, 8.0);
+    assert_ne!(hot, hot_soft, "the hot middle spreads");
+}

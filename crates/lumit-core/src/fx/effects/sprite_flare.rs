@@ -277,9 +277,9 @@ pub struct SpriteFlare {
     )]
     pub burn: f32,
 
-    /// How far out of focus the flare is, px@comp: its light is blurred as
-    /// a lens out of focus spreads it, before Burn, so a burnt middle is a
-    /// soft glow rather than the sharp shape of the elements.
+    /// How far out of focus the flare's brightest part is, px@comp: light
+    /// past 1 spreads before Burn, so a burnt middle is a soft glow and
+    /// fainter lines and rays stay sharp.
     #[slider(
         min = 0.0,
         max = 100.0,

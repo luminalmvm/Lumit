@@ -17,6 +17,11 @@ struct Frame {
     has_layer: u32,
     // 0..1: how far light too bright for its colour runs to white.
     burn: f32,
+    // Raster pixels light past 1 is blurred by; 0 is sharp.
+    defocus: f32,
+    _p0: f32,
+    _p1: f32,
+    _p2: f32,
 };
 
 struct Inst {
@@ -486,6 +491,21 @@ fn sf_lights(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(0) @binding(3) var src: texture_2d<f32>;
 @group(0) @binding(4) var acc: texture_2d<f32>;
 @group(0) @binding(5) var dst: texture_storage_2d<rgba16float, write>;
+// Under Defocus: the light past 1, blurred.
+@group(0) @binding(14) var soft: texture_2d<f32>;
+@group(0) @binding(15) var over_out: texture_storage_2d<rgba16float, write>;
+
+// The light past 1, for Defocus to blur.
+@compute @workgroup_size(8, 8)
+fn sf_over(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = textureDimensions(acc);
+    if (gid.x >= size.x || gid.y >= size.y) {
+        return;
+    }
+    let at = vec2<i32>(gid.xy);
+    let l = textureLoad(acc, at, 0);
+    textureStore(over_out, at, max(l - vec4<f32>(1.0), vec4<f32>(0.0)));
+}
 
 @compute @workgroup_size(8, 8)
 fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -495,7 +515,11 @@ fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let at = vec2<i32>(gid.xy);
     let base = textureLoad(src, at, 0);
-    let light = burnt(textureLoad(acc, at, 0).rgb, frame.burn);
+    var l = textureLoad(acc, at, 0).rgb;
+    if (frame.defocus > 0.0) {
+        l = min(l, vec3<f32>(1.0)) + textureLoad(soft, at, 0).rgb;
+    }
+    let light = burnt(l, frame.burn);
     textureStore(dst, at, vec4<f32>(base.rgb + light, base.a));
 }
 
