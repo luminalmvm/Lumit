@@ -39,7 +39,9 @@ and backwards in the composition space. See [Transforming layers](/use/transform
 Camera and [Light](/use/layers/#light-layers) layers,
 [Model layers](/use/importing/#3d-models) and [3D shapes](/use/layers/#3d-shapes) are
 always 3D and have no switch. A Text or Shape layer's
-[Geometry options](/use/text/#give-it-depth) make its outline a solid.
+[Geometry options](/use/text/#give-it-depth) make its outline a solid. A 3D Text or Shape
+layer the camera magnifies is drawn at the size the camera shows it, measured over the part
+of it in frame, up to about 4096 × 4096 pixels.
 
 Nearer 3D layers draw in front of farther ones, whatever their stack order, and 3D layers
 that pass through each other cut where they meet. A 2D layer or an adjustment layer between

@@ -31,6 +31,7 @@ use lumit_core::pixels::{px_tile, solid_rgba};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
+use walk::Walk;
 
 pub(crate) mod fx_key;
 pub(crate) mod kept_raster;
@@ -1718,40 +1719,6 @@ pub fn build_comp_draws_at(
     )
 }
 
-/// What a walk carries beyond the frame, handed on to every comp it walks
-/// into.
-#[derive(Clone, Copy)]
-struct Walk<'a> {
-    /// Which copy of how many this walk's layers are rendered as, for their
-    /// Clone index drivers. It goes down into every precomp and node graph
-    /// the walk reaches, so a Clone index anywhere in a clone picture reads
-    /// that picture's number.
-    clone: (u32, u32),
-    /// A placed node graph's own Input values, when the comp being walked is
-    /// that graph (docs/impl/node-graph-comp.md §5.3). Empty on every other
-    /// walk, which is a graph on its own defaults.
-    values: &'a [(String, lumit_core::model::EffectValue)],
-    /// This walk is a comp built again at another moment, for a temporal
-    /// effect further up to read as its neighbour. A neighbour carries no
-    /// neighbours of its own, so nothing in it builds any: otherwise an Echo
-    /// over a Precomp that holds an Echo builds the whole of the inside once
-    /// for every frame of both windows, only to throw it away.
-    rebuild: bool,
-    /// The camera a collapsed precomp's layers are seen through, the one of
-    /// the comp it was collapsed into. `None` is this comp's own.
-    seen_through: Option<lumit_core::model::CameraPose>,
-}
-
-impl Walk<'static> {
-    /// An ordinary walk: the first copy of one, and no values handed in.
-    const PLAIN: Walk<'static> = Walk {
-        clone: lumit_core::fx::drivers::NO_CLONE,
-        values: &[],
-        rebuild: false,
-        seen_through: None,
-    };
-}
-
 /// Something asked of a walk on its own, in place of its draws. Both are
 /// Clone to points': a picture at another moment or as one copy of several,
 /// and the whole list for a stream that was only made during the render.
@@ -1853,15 +1820,15 @@ fn comp_walk(
     // The copy this walk renders its layers as, and what it hands the comps
     // it walks into.
     let clone_number = with.clone;
-    let seen_through = with
-        .seen_through
-        .filter(|_| spliced)
-        .unwrap_or_else(|| crate::track::camera_pose(doc, comp, t_comp));
+    let seen = with.seen_through.filter(|_| spliced).unwrap_or_else(|| {
+        raster_scale::Seen::own(crate::track::camera_pose(doc, comp, t_comp), comp)
+    });
+    let seen_through = seen.camera;
     let inner = Walk {
         clone: clone_number,
         values: &[],
         rebuild: with.rebuild,
-        seen_through: Some(seen_through),
+        seen_through: Some(seen),
     };
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
@@ -2041,8 +2008,9 @@ fn comp_walk(
                 )
             }),
             LayerKind::Text { document } => in_span(layer).then(|| {
+                let times = (lt, t_comp);
                 let (made, at) =
-                    kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context);
+                    kept_raster::text(doc, comp, layer, document, times, &context, &seen);
                 raster_origins
                     .borrow_mut()
                     .insert((layer.id, lt.to_bits()), at);
@@ -2053,7 +2021,7 @@ fn comp_walk(
             // size. Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
-                .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context))
+                .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context, &seen))
                 .flatten()
                 .map(|made| named(layer, lt, made)),
             LayerKind::Precomp { .. } => None, // handled as Nested below
@@ -4372,21 +4340,6 @@ fn comp_walk(
                     lumit_core::model::collapse_state(doc, comp, layer, lt),
                     lumit_core::model::CollapseState::Active
                 ) {
-                    visited.push(*nested_id);
-                    let mut spliced_in = comp_walk(
-                        doc,
-                        nested,
-                        st,
-                        frame_st,
-                        pixels_by_layer,
-                        visited,
-                        keys,
-                        true,
-                        inner,
-                        None,
-                    );
-                    visited.pop();
-
                     // A 2D collapsed Precomp is placed flat too.
                     let own = own_placement(layer, t_comp, &context);
                     // If the collapsed precomp is itself parented, its parent's
@@ -4398,6 +4351,25 @@ fn comp_walk(
                         Some(pw) => lumit_gpu::composite::concat_place(pw, own),
                         None => own,
                     };
+                    // Its shapes and text are drawn as large as they are shown here.
+                    let within = seen.within(parent, layer.switches.three_d);
+                    visited.push(*nested_id);
+                    let mut spliced_in = comp_walk(
+                        doc,
+                        nested,
+                        st,
+                        frame_st,
+                        pixels_by_layer,
+                        visited,
+                        keys,
+                        true,
+                        Walk {
+                            seen_through: Some(within),
+                            ..inner
+                        },
+                        None,
+                    );
+                    visited.pop();
                     let read = lumit_core::model::context_reader(&context, t_comp);
                     let lights = comp.lights_at(t_comp, &read, crate::track::solves_for(doc));
                     for d in &mut spliced_in {
@@ -7274,6 +7246,7 @@ mod moments;
 pub(crate) mod motion_blur;
 mod puppet_warp;
 mod repeats;
+mod walk;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
