@@ -28,6 +28,58 @@ pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
     }
 }
 
+/// What went wrong on the card while it was watched ([`crate::GpuContext::faults`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fault {
+    /// The card had no room for something it was asked to make, or the device
+    /// was lost. The picture is black or half drawn, and drawing it again once
+    /// the card has caught up may mend it.
+    Starved(String),
+    /// Something else the card refused. Drawing it again draws it the same.
+    Refused(String),
+}
+
+impl crate::GpuContext {
+    /// Start watching what the card refuses, until the matching
+    /// [`Self::faults`]. What it refuses meanwhile is answered there rather
+    /// than reported. Pairs nest. The browser build only hears of a lost
+    /// device, as it can't wait for the answer in place.
+    pub fn watch_faults(&self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+            self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        }
+    }
+
+    /// The first thing that went wrong since [`Self::watch_faults`], if
+    /// anything did.
+    pub fn faults(&self) -> Option<Fault> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let (full, refused) = (
+            pollster::block_on(self.device.pop_error_scope()),
+            pollster::block_on(self.device.pop_error_scope()),
+        );
+        #[cfg(target_arch = "wasm32")]
+        let (full, refused): (Option<wgpu::Error>, Option<wgpu::Error>) = (None, None);
+        if self.device_lost() {
+            return Some(Fault::Starved("the graphics device was lost".into()));
+        }
+        if let Some(e) = full {
+            return Some(Fault::Starved(crate::error_chain(&e)));
+        }
+        // wgpu files a descriptor heap that is full as a validation error.
+        refused.map(|e| {
+            let said = crate::error_chain(&e);
+            if said.contains("Not enough memory") {
+                Fault::Starved(said)
+            } else {
+                Fault::Refused(said)
+            }
+        })
+    }
+}
+
 /// An error in the browser build, where nothing may wait for the card: a copy
 /// lands only once the page's event loop runs, so waiting for one in place
 /// never ends. Callers answer it as they answer any failed read-back. Nothing
