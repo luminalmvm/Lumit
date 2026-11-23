@@ -280,11 +280,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "comp.write",
-        summary: "Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them",
+        summary: "Change a comp's motion blur, lighting, blending or node graph, in the form a .lum file keeps them",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
+            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"blending":{"enum":["linear","display"],"description":"What the layers mix in: linear light, or display values as a browser does"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
         ),
     },
     Command {

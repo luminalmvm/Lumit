@@ -640,6 +640,11 @@ pub enum Op {
         comp: Uuid,
         lighting: crate::model::CompLighting,
     },
+    /// Switch what a composition's layers mix in.
+    SetCompBlending {
+        comp: Uuid,
+        blending: crate::model::blending::CompBlending,
+    },
     /// Replace whether a layer casts and accepts shadows, as one undo step.
     SetMaterialSettings {
         comp: Uuid,
@@ -1129,6 +1134,7 @@ impl Op {
             Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
             Op::SetCompLighting { .. } => "Set lighting",
+            Op::SetCompBlending { .. } => "Set blending",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
             Op::SetCompMulticam { .. } => "Set multicam",
@@ -2362,6 +2368,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetCompLighting {
                 comp: *comp,
                 lighting: previous,
+            })
+        }
+        Op::SetCompBlending { comp, blending } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.blending, *blending);
+            Ok(Op::SetCompBlending {
+                comp: *comp,
+                blending: previous,
             })
         }
         Op::SetMaterialSettings {

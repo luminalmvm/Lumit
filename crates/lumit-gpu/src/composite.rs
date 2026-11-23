@@ -11,6 +11,7 @@ use crate::{ColourEngine, GpuContext};
 use glam::Mat4;
 
 mod cut;
+mod display;
 mod join;
 mod motion_blur;
 pub mod order;

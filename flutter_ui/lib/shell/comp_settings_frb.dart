@@ -136,6 +136,7 @@ Future<bool> showCompSettingsFrb({
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final was = comp.lightingLikeAfterEffects();
+  final wasDisplay = comp.blendsInDisplay();
   BridgeRational? start;
   final applied = await showLumitModal<bool>(
     context: context,
@@ -145,9 +146,10 @@ Future<bool> showCompSettingsFrb({
       confirm: l10n.save,
       initial: comp.getSettings(),
       lightsLikeAfterEffects: was,
+      blendsInDisplay: wasDisplay,
       initialStart: comp.getStartTimecode(),
       onStart: (s) => start = s,
-      onConfirm: (settings, likeAfterEffects) {
+      onConfirm: (settings, likeAfterEffects, display) {
         // **The playhead keeps its moment, not its number.** A frame count
         // means nothing without the rate it was counted at, so the time under
         // the playhead is read *before* the rate is written and the nearest
@@ -166,6 +168,9 @@ Future<bool> showCompSettingsFrb({
         asOneUndoStep(project, () {
           if (likeAfterEffects != was) {
             comp.setLightingLikeAfterEffects(on_: likeAfterEffects ?? false);
+          }
+          if (display != wasDisplay) {
+            comp.setBlendsInDisplay(on_: display ?? false);
           }
           comp.setSettings(settings: settings);
           if (start case final s?) comp.setStartTimecode(start: s);
@@ -275,7 +280,8 @@ Future<CompositionReference?> showNewCompositionFrb({
       onStart: (s) => start = s,
       // A node graph has no layers to light.
       lightsLikeAfterEffects: nodeGraph ? null : false,
-      onConfirm: (settings, likeAfterEffects) {
+      blendsInDisplay: nodeGraph ? null : false,
+      onConfirm: (settings, likeAfterEffects, display) {
         late CompositionReference comp;
         asOneUndoStep(project, () {
           comp = nodeGraph
@@ -285,6 +291,7 @@ Future<CompositionReference?> showNewCompositionFrb({
           if (likeAfterEffects ?? false) {
             comp.setLightingLikeAfterEffects(on_: true);
           }
+          if (display ?? false) comp.setBlendsInDisplay(on_: true);
           if (start case final s? when s.num != 0) {
             comp.setStartTimecode(start: s);
           }
@@ -326,9 +333,10 @@ class _CompSettingsBody extends StatefulWidget {
   final String title;
   final String confirm;
   final BridgeCompSettings initial;
-  /// The settings, and whether the comp lights its layers as After Effects
-  /// does (null where the row is hidden).
-  final void Function(BridgeCompSettings, bool?) onConfirm;
+  /// The settings, whether the comp lights its layers as After Effects
+  /// does, and whether it blends in display colours (each null where its row
+  /// is hidden).
+  final void Function(BridgeCompSettings, bool?, bool?) onConfirm;
   final VoidCallback onCancel;
 
   /// The comp's Start timecode, and where the one typed goes before
@@ -340,6 +348,10 @@ class _CompSettingsBody extends StatefulWidget {
   /// row, for a node graph, which has no layers to light.
   final bool? lightsLikeAfterEffects;
 
+  /// Whether the comp's layers mix in display colours. Null hides the row,
+  /// for a node graph.
+  final bool? blendsInDisplay;
+
   const _CompSettingsBody({
     required this.title,
     required this.confirm,
@@ -347,6 +359,7 @@ class _CompSettingsBody extends StatefulWidget {
     required this.onConfirm,
     required this.onCancel,
     this.lightsLikeAfterEffects,
+    this.blendsInDisplay,
     this.initialStart,
     this.onStart,
   });
@@ -367,6 +380,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   late int _samples;
   late int _limit;
   late bool? _likeAfterEffects = widget.lightsLikeAfterEffects;
+  late bool? _display = widget.blendsInDisplay;
 
   /// Keep the shape when one side is edited. On by default, because resizing a
   /// comp to a shape it was never meant to be is nearly always a slip.
@@ -464,7 +478,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       shutterAngle: _shutterAngle,
       motionBlurSamples: _samples,
       motionBlurLimit: _limit,
-    ), _likeAfterEffects);
+    ), _likeAfterEffects, _display);
   }
 
   /// Editing one side of the size, carrying the other with it when locked.
@@ -543,6 +557,20 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                     key: const ValueKey('comp-lights-ae'),
                     value: on,
                     onChanged: (v) => setState(() => _likeAfterEffects = v),
+                  ),
+                )),
+          ]),
+        if (_display case final on?)
+          dialogSection(t, l10n.compGroupBlending, [
+            _row(
+                t,
+                l10n.compBlendInDisplay,
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: HouseCheckbox(
+                    key: const ValueKey('comp-blend-display'),
+                    value: on,
+                    onChanged: (v) => setState(() => _display = v),
                   ),
                 )),
           ]),

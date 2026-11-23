@@ -16977,9 +16977,21 @@
   "@compLightsLikeAfterEffects": {
     "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, rather than adding light to the picture. On for compositions imported from an .aep project."
   },
+  "compGroupBlending": "Blending",
+  "@compGroupBlending": {
+    "description": "Section of the Composition settings window about how the composition's layers mix with each other."
+  },
+  "compBlendInDisplay": "Blend in display colours",
+  "@compBlendInDisplay": {
+    "description": "Composition settings checkbox: mix layers, opacity, blend modes and gradients in display sRGB values, as a web browser, Figma or After Effects in 8 or 16 bit does, rather than in linear light. Off by default."
+  },
   "histSetLighting": "Set lighting",
   "@histSetLighting": {
     "description": "Undo history entry: a composition's lighting was switched between Lumit's and After Effects' way."
+  },
+  "histSetBlending": "Set blending",
+  "@histSetBlending": {
+    "description": "Undo history entry: a composition was switched between blending its layers in linear light and in display colours."
   },
   "compSamples": "Samples",
   "@compSamples": {

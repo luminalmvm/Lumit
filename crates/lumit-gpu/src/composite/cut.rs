@@ -1,5 +1,6 @@
 //! The draws of a run of 3D layers: cut where they meet, and their depth.
 
+use super::display::{display_colour, Seed};
 use super::{
     scaled_size, Blend, CompositeLayer, Compositor, Cut, LayerUniform, Region, CUT_DEPTH,
     PIECE_CORNERS,
@@ -330,6 +331,7 @@ impl Compositor {
             region,
             cuts,
             &[],
+            false,
         )
     }
 
@@ -340,6 +342,10 @@ impl Compositor {
     ///
     /// ponytail: a model draws Normal in a run cut by depth, whatever its
     /// blend mode, and takes no track matte or mask there.
+    ///
+    /// With `display` the layers mix in display values, as a comp that blends
+    /// in display asks: the target holds display values while they go in, and
+    /// what comes back is linear, as it is otherwise.
     #[allow(clippy::too_many_arguments)]
     pub fn composite_joined(
         &self,
@@ -355,7 +361,14 @@ impl Compositor {
         region: Option<Region>,
         cuts: &[Option<Cut>],
         models: &[ModelPicture],
+        display: bool,
     ) -> wgpu::Texture {
+        let shown = f32::from(u8::from(display));
+        let background = if display {
+            display_colour(background)
+        } else {
+            background
+        };
         let model_of = |l: &CompositeLayer<'_>| models.iter().find(|m| &m.colour == l.texture);
         let cut_of = |i: usize| cuts.get(i).copied().flatten();
         let (tw, th) = match region {
@@ -489,9 +502,9 @@ impl Compositor {
                     f32::from(layer.premultiplied),
                 ],
                 cut: match cut_of(i) {
-                    Some(Cut::Depth(z)) => [z, 0.0, 0.0, 0.0],
-                    Some(Cut::Piece { count, .. }) => [0.0, count as f32, 0.0, 0.0],
-                    None => [0.0; 4],
+                    Some(Cut::Depth(z)) => [z, 0.0, shown, 0.0],
+                    Some(Cut::Piece { count, .. }) => [0.0, count as f32, shown, 0.0],
+                    None => [0.0, 0.0, shown, 0.0],
                 },
                 piece: match cut_of(i) {
                     Some(Cut::Piece { corners, .. }) => std::array::from_fn(|k| {
@@ -615,11 +628,12 @@ impl Compositor {
         // counts (trap 1) — so the seed is *drawn* full-frame into the
         // multisample attachment instead, by `fs_seed`, which reads its own
         // pixel with `textureLoad` and so reproduces the seed exactly.
+        // A comp that blends in display draws it too, as display values.
         // `seed_keep` holds the uniform buffer and bind group alive until submit.
         let mut seed_keep: Option<(wgpu::Buffer, wgpu::BindGroup)> = None;
         if let Some(s) = seed {
-            match &msaa_view {
-                None => encoder.copy_texture_to_texture(
+            match (&msaa_view, display) {
+                (None, false) => encoder.copy_texture_to_texture(
                     s.as_image_copy(),
                     target.as_image_copy(),
                     wgpu::Extent3d {
@@ -628,76 +642,16 @@ impl Compositor {
                         depth_or_array_layers: 1,
                     },
                 ),
-                Some(ms) => {
-                    let uniform = LayerUniform {
-                        matrix: self.full_frame_matrix(width, height, None),
-                        params: [1.0, 0.0, 0.0, 0.0],
-                        target: [tw as f32, th as f32, -1.0, 0.0],
-                        cut: [0.0; 4],
-                        piece: [[0.0; 4]; PIECE_CORNERS / 2],
-                    };
-                    let buffer = wgpu::util::DeviceExt::create_buffer_init(
-                        &ctx.device,
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("composite-seed-uniform"),
-                            contents: bytemuck::bytes_of(&uniform),
-                            usage: wgpu::BufferUsages::UNIFORM,
-                        },
-                    );
-                    let white_view = self.white.create_view(&Default::default());
-                    let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("composite-seed"),
-                        layout: &self.layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &s.create_view(&Default::default()),
-                                ),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(&self.sampler),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: buffer.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 3,
-                                resource: wgpu::BindingResource::TextureView(&white_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 5,
-                                resource: wgpu::BindingResource::TextureView(&white_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 4,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &self.black.create_view(&Default::default()),
-                                ),
-                            },
-                        ],
-                    });
-                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("composite-seed"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: ms,
-                            resolve_target: Some(&view),
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        ..Default::default()
-                    });
-                    if let Some(seed) = &pipelines.seed {
-                        rpass.set_pipeline(seed);
-                    }
-                    rpass.set_bind_group(0, &bind, &[0]);
-                    rpass.draw(0..6, 0..1);
-                    drop(rpass);
-                    seed_keep = Some((buffer, bind));
+                _ => {
+                    seed_keep = Some(self.seed_draw(
+                        ctx,
+                        &mut encoder,
+                        pipelines.seed.as_ref(),
+                        s,
+                        attachment(wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
+                        (width, height),
+                        if display { Seed::ToDisplay } else { Seed::Copy },
+                    ));
                 }
             }
         }
@@ -770,7 +724,7 @@ impl Compositor {
                     };
                     let params = [(l.opacity / 100.0).clamp(0.0, 1.0), z, 0.0, 0.0];
                     let matrix = self.full_frame_matrix(width, height, region);
-                    let flags = [0.0, f32::from(u8::from(model.holdout)), 0.0, 0.0];
+                    let flags = [0.0, f32::from(u8::from(model.holdout)), shown, 0.0];
                     let under = plate.as_ref().filter(|_| model.holdout);
                     Some(self.join_group(ctx, model, matrix, params, flags, under))
                 })
@@ -930,6 +884,13 @@ impl Compositor {
                 ..Default::default()
             });
         }
+        // A target of display values goes back to linear before anyone reads it.
+        let (target, linear_keep) = if display {
+            let (linear, keep) = self.to_linear(ctx, &mut encoder, &target, (width, height));
+            (linear, Some(keep))
+        } else {
+            (target, None)
+        };
         // Recording ends here; whether the buffer goes to the driver now or at
         // the end of the frame's batch is the encoder guard's business.
         // The seed's buffer and bind group are released after it either way —
@@ -937,6 +898,7 @@ impl Compositor {
         // the deferred submission still has them.
         drop(encoder);
         drop(seed_keep);
+        drop(linear_keep);
         if let Some(msaa) = msaa {
             self.give_back(ctx, msaa);
         }

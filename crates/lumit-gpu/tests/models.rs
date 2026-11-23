@@ -143,6 +143,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
             None,
             &cuts,
             std::slice::from_ref(&model),
+            false,
         );
         lease.colour().readback_linear_f32(&lease, &out).unwrap()
     };

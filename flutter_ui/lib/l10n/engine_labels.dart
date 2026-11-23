@@ -2825,6 +2825,7 @@ Map<String, String> get _built => {
       "Set material settings": l10n.histSetMaterialSettings,
       "Edit geometry options": l10n.histEditGeometryOptions,
       "Set lighting": l10n.histSetLighting,
+      "Set blending": l10n.histSetBlending,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
       "Edit Retime": l10n.histEditRetime,

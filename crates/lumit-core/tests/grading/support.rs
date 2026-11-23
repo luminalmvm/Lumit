@@ -158,6 +158,7 @@ pub fn comp_of(plates: usize, grade: impl Fn() -> Vec<EffectInstance>) -> (Docum
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         beat_grid: None,
         graph: None,
