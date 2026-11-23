@@ -68,6 +68,7 @@ pub enum OpError {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum Op {
     /// Insert a project item at an index in the Project panel order.
     AddItem {

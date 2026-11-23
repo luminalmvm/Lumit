@@ -482,6 +482,7 @@ fn selector_weights(
 /// of them put together, at `lt`, before its Amount. Following another
 /// animator reads that one's instead; a chain of follows ends after a few,
 /// so two animators following each other reach nothing.
+#[allow(clippy::too_many_arguments)]
 fn animator_selection(
     animators: &[TextAnimator],
     index: usize,
