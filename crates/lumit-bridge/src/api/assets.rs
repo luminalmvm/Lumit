@@ -19,7 +19,7 @@ use crate::api::{effect::BridgeScalar, layer::LayerReference, solid::SolidRefere
 
 pub(crate) mod animators;
 pub(crate) mod style;
-use style::{paragraph_of, read_paragraph, read_style, restyle_shift, style_of};
+use style::{paragraph_of, read_paragraph, read_style, style_of};
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -649,7 +649,7 @@ impl LayerReference {
         };
         let offset = layer.start_offset.0;
         let after = text_document_of(document, offset)?;
-        let shift = restyle_shift(before, &after);
+        let shift = lumit_text::restyle::shift(before, &after);
 
         let set = lumit_core::ops::Op::SetTextDocument {
             comp: self.comp_id,

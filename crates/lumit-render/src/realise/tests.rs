@@ -39,6 +39,7 @@ fn draw(rgba: &std::sync::Arc<Vec<u8>>) -> CompLayerDraw {
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,

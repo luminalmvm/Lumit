@@ -1733,30 +1733,9 @@ fn run(
         );
     }
 
-    // The export renders through the SAME walk the Viewer does — the headless
-    // preview at full decode quality (preview == export by
-    // construction, gated by the bit-identity matrix in `headless::tests`).
-    // Its own renderer on its own device, so an export never contends with the
-    // Viewer's GPU work.
-    let mut renderer =
-        crate::headless::HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
-    // A layer whose model engine will not paint stops the run here rather than
-    // being drawn with the built-in engine and written to the file under the
-    // model's name. The pre-flight turns away everything the document alone can
-    // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
-    renderer.refuse_substitution();
-    renderer.hand_over_prefetched();
-    // The project's colour config, before anything is written: the refusal has
-    // to happen with the config in hand, and it has to happen before a file
-    // exists rather than halfway through one.
-    renderer.sync_colour(doc);
-    spec.check_with_colour(renderer.colour())?;
-    // A config's space is delivered by binding its baked table to the SAME
-    // display blit the Viewer presents through (docs/impl/ocio.md §5.2). Not a
-    // second transform at the pack stage: that would be a second implementation
-    // of one transform in the delivery path, which is the exact structure the
-    // preview-equals-export promise forbids.
-    renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
+    // Made again if its device is lost partway.
+    let open = || write::renderer(doc, spec);
+    let mut renderer = open()?;
     // Every file is opened before the first frame, so one that cannot be
     // stops the export before anything is written. Only the chosen file
     // reports its encoder and its progress.
@@ -1789,6 +1768,7 @@ fn run(
     if result.is_ok() {
         result = write::frames(
             &mut renderer,
+            &open,
             doc,
             comp_id,
             &span,
@@ -2051,6 +2031,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2644,6 +2625,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2724,6 +2706,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2860,6 +2843,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

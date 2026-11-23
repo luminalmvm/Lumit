@@ -98,6 +98,7 @@ fn a_composition_no_picture_could_be_is_refused_rather_than_opened() {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

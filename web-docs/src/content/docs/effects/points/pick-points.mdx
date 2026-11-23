@@ -44,7 +44,7 @@ split its points between two [Clone to points](/effects/points/clone-to-points/)
 | --- | --- | --- | --- | --- |
 | **Result** | Dropdown | Drop the rest · Pick · Add to picked · Remove from picked · Keep in picked | Drop the rest | - |
 | **Group name** | Text | A short line of text | Empty | - |
-| **Pattern** | Dropdown | Index · Random · Noise · Distance · Age · Constant · Across · Down · Image · Picked · Number · Stripes · Checker · Waves | Random | - |
+| **Pattern** | Dropdown | Index · Random · Noise · Distance · Age · Constant · Across · Down · Image · Picked · Number · Stripes · Checker · Waves · Depth | Random | - |
 | **From** | Slider | 0 to 100 | 0 | Per cent |
 | **To** | Slider | 0 to 100 | 100 | Per cent |
 | **Pattern › Invert** | Checkbox | On or off | Off | - |
@@ -52,6 +52,8 @@ split its points between two [Clone to points](/effects/points/clone-to-points/)
 | **Noise speed** | Slider | 0 to 5; higher | 0 | - |
 | **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Centre Z** | Slider | -4000 to 4000; any value by typing | 0 | Pixels at composition size |
+| **Plane** | Dropdown | XY · XZ · YZ · XYZ | XY | - |
 | **Radius** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
 | **Number range** | Slider | 1 to 100; down to 0.001 and higher | 1 | - |
 | **Name** | Text | A short line of text | Empty | - |
@@ -103,7 +105,8 @@ In the Effect Controls panel:
   the point is. **Picked** is 1 for a picked point and 0 for the rest. **Number** is the
   number the point carries over Number range, held to 0 to 1. **Stripes** is 1 inside a
   band and 0 between. **Checker** is 1 and 0 in alternate squares. **Waves** is a wave that
-  repeats over space and can travel over time.
+  repeats over space and can travel over time. **Depth** runs from 0 at Radius in front of
+  the centre to 1 at Radius behind it.
 - **From** and **To**: the range of the pattern's number that is kept. On Random, To is the
   share of the points kept. On Distance they keep a disc or a ring round the centre. On
   Index, To rising from nought brings the points on one at a time.
@@ -114,8 +117,14 @@ In the Effect Controls panel:
   each second. At nought they hold still. It shows for Noise and Waves.
 - **Centre X** and **Centre Y**: the place Distance, Across and Down are measured from, and
   where the stripes, squares and waves start.
-- **Radius**: how far from the centre the number reaches 1. It shows for Distance, Across
-  and Down.
+- **Centre Z**: how far in front of or behind the layer's own plane the centre sits. Depth
+  is measured from it. It shows for Distance, Stripes, Checker, Waves and Depth.
+- **Plane**: the plane Distance, the stripes, the squares and the waves lie in. **XY** is
+  the layer's own plane. **XZ** lies flat, with depth in place of down. **YZ** stands side
+  on, with depth in place of across. **XYZ** measures Distance and the rings through all
+  three axes, and is XY for the rest. It shows for Distance, Stripes, Checker and Waves.
+- **Radius**: how far from the centre the number reaches 1. It shows for Distance, Across,
+  Down and Depth.
 - **Number range**: the number that reads as 1. A point's number is divided by it, and with
   word numbers 0 to 4 a range of 4 spreads the words from 0 to 1. It shows for Number.
 - **Name**: which of a point's numbers the Number pattern reads. Left empty, it is the

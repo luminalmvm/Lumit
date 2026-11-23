@@ -88,8 +88,9 @@ pub struct ShapeItem {
     )]
     pub dash_offset: Property,
     /// **A gradient fill**: 0 draws the flat [`fill`](Self::fill), 1
-    /// ramps from it **linearly** to [`gradient_colour`](Self::gradient_colour)
-    /// and 2 ramps **radially**, `gradient_colour` sitting on the outer edge.
+    /// ramps from it **linearly** to [`gradient_colour`](Self::gradient_colour),
+    /// 2 ramps **radially**, `gradient_colour` sitting on the outer edge, and
+    /// 4 sweeps it round the start point ([`gradient::ANGLE`]).
     ///
     /// A choice rather than a `Property`: what a ramp *is* does not tween, and
     /// a number between linear and radial would have to mean something. The
@@ -97,10 +98,15 @@ pub struct ShapeItem {
     /// aim the ramp are `Property` and animate.
     #[serde(default, skip_serializing_if = "is_flat")]
     pub gradient: u32,
-    /// The colour at the far end of the ramp. `None` is black, which is where
-    /// a gradient nobody has picked a second colour for starts.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gradient_colour: Option<LinearColour>,
+    /// The colour at the far end of the ramp, each channel keyable. `None` is
+    /// black, which is where a gradient nobody has picked a second colour for
+    /// starts.
+    #[serde(
+        default,
+        with = "colour::keyed",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub gradient_colour: Option<[Property; 4]>,
     /// Where the ramp starts and ends, in **layer pixels** — the art's own
     /// coordinates, the same ones its vertices are in. Linear projects onto
     /// the line between them; radial measures out from the start, the end
@@ -145,11 +151,31 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_full"
     )]
     pub gradient_end_opacity: Property,
+    /// **A radial ramp's highlight**: how far its bright centre sits from
+    /// the start point, per cent of the radius from -100 to 100, and at what
+    /// angle from the line to the end point, degrees clockwise. 0 is centred.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_highlight: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_highlight_angle: Property,
     /// The colours the ramp passes through between its two ends, in any
     /// order, as a stop that animates can pass another. Empty is the plain
     /// two-colour ramp, and is absent from the file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gradient_stops: Vec<GradientStop>,
+    /// **A gradient outline**: the stroke's colour ramping to others across
+    /// the art or along the line. `None` is the flat
+    /// [`stroke`](Self::stroke) colour, and is absent from the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_gradient: Option<gradient::StrokeGradient>,
     /// **A morphing path**: the shapes this item's path is keyed to,
     /// in the layer's own time. Empty is the still [`path`](Self::path) above,
     /// which is what every shape is until somebody keys its shape, and is
@@ -240,7 +266,9 @@ pub struct GradientStop {
     /// a hard edge.
     #[serde(with = "crate::mask::still_or_keyed")]
     pub position: Property,
-    pub colour: LinearColour,
+    /// Each channel keyable, as the fill's.
+    #[serde(with = "colour::channels")]
+    pub colour: [Property; 4],
     /// 0..100, like the two ends.
     #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
     pub opacity: Property,
@@ -283,7 +311,10 @@ impl ShapeItem {
             gradient_end_y: Property::zero(),
             gradient_start_opacity: crate::paint::full(),
             gradient_end_opacity: crate::paint::full(),
+            gradient_highlight: Property::zero(),
+            gradient_highlight_angle: Property::zero(),
             gradient_stops: Vec::new(),
+            stroke_gradient: None,
             path_keys: Vec::new(),
             combine: 0,
             taper: None,
@@ -428,6 +459,42 @@ pub fn contents_bounds(contents: &[ShapeEntry], t: f64) -> Option<(f64, f64, f64
     out
 }
 
+/// How far an edit from `before` to `after` moves the corner of the art's
+/// box at the head of the layer, px. A shape layer's own pixels start at that
+/// corner, so this is how far the art moved inside them. (0, 0) when either
+/// side draws nothing, as there is no corner to follow.
+#[must_use]
+pub fn corner_shift(before: &[ShapeEntry], after: &[ShapeEntry]) -> (f64, f64) {
+    match (contents_bounds(before, 0.0), contents_bounds(after, 0.0)) {
+        (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
+        _ => (0.0, 0.0),
+    }
+}
+
+/// `masks` moved back by `shift`, every key with them, so they stay on art
+/// whose box corner moved by `shift`. `None` when nothing moves.
+#[must_use]
+pub fn masks_on_art(
+    masks: &[crate::mask::Mask],
+    shift: (f64, f64),
+) -> Option<Vec<crate::mask::Mask>> {
+    if masks.is_empty() || shift == (0.0, 0.0) {
+        return None;
+    }
+    let mut out = masks.to_vec();
+    for mask in &mut out {
+        let keyed = mask.path_keys.iter_mut().map(|key| &mut key.path);
+        for vertex in std::iter::once(&mut mask.path)
+            .chain(keyed)
+            .flat_map(|path| &mut path.vertices)
+        {
+            vertex.pos.0 -= shift.0;
+            vertex.pos.1 -= shift.1;
+        }
+    }
+    Some(out)
+}
+
 /// `contents` as they are at `t`: every keyed or expression-driven number
 /// replaced by its value then, and every keyed path by its shape then.
 ///
@@ -564,6 +631,23 @@ pub fn rasterise_contents(
     max_y: f64,
     t: f64,
 ) -> Vec<u8> {
+    rasterise_contents_in(contents, w, h, min_x, min_y, max_x, max_y, t, false)
+}
+
+/// [`rasterise_contents`], with gradients mixing their colours as display
+/// values when `display` is set, for a layer in a comp that blends in display.
+#[allow(clippy::too_many_arguments)]
+pub fn rasterise_contents_in(
+    contents: &[ShapeEntry],
+    w: u32,
+    h: u32,
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+    t: f64,
+    display: bool,
+) -> Vec<u8> {
     let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
     if w == 0 || h == 0 {
         return rgba;
@@ -639,7 +723,7 @@ pub fn rasterise_contents(
                 // A gradient fill is the same coverage painted with a
                 // colour that changes across it; the flat fill is the same
                 // walk with the colour worked out once.
-                match item.ramp_at(t, &to_box, sx, sy) {
+                match item.ramp_at(t, &to_box, (sx, sy), display) {
                     None => {
                         let colour = crate::pixels::solid_rgba(fill);
                         let alpha = f32::from(colour[3]) / 255.0;
@@ -669,6 +753,13 @@ pub fn rasterise_contents(
             if let (Some(stroke), true) =
                 (item.stroke_shown().map(|c| colour::at(c, t)), width > 0.0)
             {
+                let outline_ramp = item.stroke_ramp_at(t, &to_box, (sx, sy), display);
+                // A gradient outline marks where it covers in white, and the
+                // ramp colours what it marked.
+                let stroke = match outline_ramp {
+                    Some(_) => LinearColour([1.0; 4]),
+                    None => stroke,
+                };
                 // A stroke is a brush run along the path, which is exactly what the
                 // paint rasteriser already does — one widened-path implementation
                 // for both, rather than two that can disagree.
@@ -718,15 +809,31 @@ pub fn rasterise_contents(
                         extra: serde_json::Map::new(),
                     })
                     .collect();
-                crate::paint::apply_strokes(
-                    &mut rgba,
-                    w,
-                    h,
-                    max_x - min_x,
-                    max_y - min_y,
-                    &brushes,
-                    0.0,
-                );
+                let natural = (max_x - min_x, max_y - min_y);
+                match outline_ramp {
+                    None => crate::paint::apply_strokes(
+                        &mut rgba, w, h, natural.0, natural.1, &brushes, 0.0,
+                    ),
+                    Some(outline_ramp) => {
+                        // Along the line is measured on the lines before the
+                        // dashes cut them, so the colours run on across a gap.
+                        let lines = if outline_ramp.along() {
+                            art.lines(&placed)
+                        } else {
+                            Vec::new()
+                        };
+                        let reach = width * copy.scale() * sx.max(sy) / 2.0;
+                        gradient::paint_ramped(
+                            &mut rgba,
+                            (w, h),
+                            natural,
+                            &brushes,
+                            &outline_ramp,
+                            &lines,
+                            (sx, sy, reach),
+                        );
+                    }
+                }
             }
         }
     }
@@ -737,6 +844,7 @@ mod bend;
 pub mod colour;
 pub mod expand;
 pub mod geometry;
+pub mod gradient;
 pub mod modifier;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

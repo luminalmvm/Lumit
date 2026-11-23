@@ -24,13 +24,14 @@ use crate::draw::{
     LayerInputDraw, MatteDraw, TemporalBelow,
 };
 use crate::export::mask_rgba;
-use crate::placement::{own_placement, parent_world_placement, world_placement};
+use crate::placement::{drawn, own_placement, parent_world_placement, world_placement};
 use crate::realise::Realiser;
 use lumit_core::expression::ExpressionContext;
 use lumit_core::pixels::{px_tile, solid_rgba};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
+use walk::Walk;
 
 pub(crate) mod fx_key;
 pub(crate) mod kept_raster;
@@ -206,33 +207,6 @@ fn outline_like(rgba: &[u8], w: u32, h: u32) -> Option<Vec<u8>> {
         }
     }
     Some(out)
-}
-
-/// What the compositor draws `layer`'s own picture with at layer time `lt`,
-/// each property read under `context`: any Orientation turned into the
-/// rotations and Anchor Z into the position. A 2D layer's hidden 3D values
-/// count as nought, as the compositor draws them.
-fn drawn(
-    layer: &lumit_core::model::Layer,
-    lt: f64,
-    context: &Arc<ExpressionContext>,
-) -> lumit_gpu::composite::MbSample {
-    let p = crate::placement::drawn_placement(layer, lt, context);
-    let at = p.flat_position();
-    // A Shape layer's art moving under keys moves its picture too.
-    let (dx, dy) = lumit_core::model::art_shift(layer, lt);
-    // So does a caption moved off where the layer puts it.
-    let (cx, cy) = lumit_core::captions::show::moved(layer, context);
-    lumit_gpu::composite::MbSample {
-        position: (at.0 as f32, at.1 as f32),
-        anchor: ((p.anchor.0 - dx - cx) as f32, (p.anchor.1 - dy - cy) as f32),
-        scale: (p.scale.0 as f32, p.scale.1 as f32),
-        rotation_deg: p.rotation_deg.2 as f32,
-        z: at.2 as f32,
-        rotation_x_deg: p.rotation_deg.0 as f32,
-        rotation_y_deg: p.rotation_deg.1 as f32,
-        pre: None,
-    }
 }
 
 /// The transform edits that keep `layer` where it is at comp time `t_comp`
@@ -765,7 +739,7 @@ fn made_up(
     let gain = gain.unwrap_or((from + delta) / from);
     match &property.animation {
         Animation::Static(v) => Some(Animation::Static(v + delta)),
-        keyed => lumit_core::ops::remapped(keyed, gain, from + delta - gain * from),
+        keyed => lumit_core::anim::remapped(keyed, gain, from + delta - gain * from),
     }
 }
 
@@ -1745,40 +1719,6 @@ pub fn build_comp_draws_at(
     )
 }
 
-/// What a walk carries beyond the frame, handed on to every comp it walks
-/// into.
-#[derive(Clone, Copy)]
-struct Walk<'a> {
-    /// Which copy of how many this walk's layers are rendered as, for their
-    /// Clone index drivers. It goes down into every precomp and node graph
-    /// the walk reaches, so a Clone index anywhere in a clone picture reads
-    /// that picture's number.
-    clone: (u32, u32),
-    /// A placed node graph's own Input values, when the comp being walked is
-    /// that graph (docs/impl/node-graph-comp.md §5.3). Empty on every other
-    /// walk, which is a graph on its own defaults.
-    values: &'a [(String, lumit_core::model::EffectValue)],
-    /// This walk is a comp built again at another moment, for a temporal
-    /// effect further up to read as its neighbour. A neighbour carries no
-    /// neighbours of its own, so nothing in it builds any: otherwise an Echo
-    /// over a Precomp that holds an Echo builds the whole of the inside once
-    /// for every frame of both windows, only to throw it away.
-    rebuild: bool,
-    /// The camera a collapsed precomp's layers are seen through, the one of
-    /// the comp it was collapsed into. `None` is this comp's own.
-    seen_through: Option<lumit_core::model::CameraPose>,
-}
-
-impl Walk<'static> {
-    /// An ordinary walk: the first copy of one, and no values handed in.
-    const PLAIN: Walk<'static> = Walk {
-        clone: lumit_core::fx::drivers::NO_CLONE,
-        values: &[],
-        rebuild: false,
-        seen_through: None,
-    };
-}
-
 /// Something asked of a walk on its own, in place of its draws. Both are
 /// Clone to points': a picture at another moment or as one copy of several,
 /// and the whole list for a stream that was only made during the render.
@@ -1880,15 +1820,15 @@ fn comp_walk(
     // The copy this walk renders its layers as, and what it hands the comps
     // it walks into.
     let clone_number = with.clone;
-    let seen_through = with
-        .seen_through
-        .filter(|_| spliced)
-        .unwrap_or_else(|| crate::track::camera_pose(doc, comp, t_comp));
+    let seen = with.seen_through.filter(|_| spliced).unwrap_or_else(|| {
+        raster_scale::Seen::own(crate::track::camera_pose(doc, comp, t_comp), comp)
+    });
+    let seen_through = seen.camera;
     let inner = Walk {
         clone: clone_number,
         values: &[],
         rebuild: with.rebuild,
-        seen_through: Some(seen_through),
+        seen_through: Some(seen),
     };
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
@@ -1956,6 +1896,9 @@ fn comp_walk(
     // layer time, for the effect cache. Only looked up, so the map's order
     // decides nothing.
     let raster_names: std::cell::RefCell<HashMap<(Uuid, u64), u128>> = Default::default();
+    // How far up and left of its layer's corner each grown text raster starts.
+    let raster_origins: std::cell::RefCell<HashMap<(Uuid, u64), (f32, f32)>> = Default::default();
+    let origin_of = |id: Uuid, lt: f64| raster_origins.borrow().get(&(id, lt.to_bits())).copied();
     let named = |layer: &lumit_core::model::Layer,
                  lt: f64,
                  (raster, name): (kept_raster::LayerRaster, Option<u128>)| {
@@ -2065,7 +2008,12 @@ fn comp_walk(
                 )
             }),
             LayerKind::Text { document } => in_span(layer).then(|| {
-                let made = kept_raster::text(doc, comp, layer, document, (lt, t_comp), &context);
+                let times = (lt, t_comp);
+                let (made, at) =
+                    kept_raster::text(doc, comp, layer, document, times, &context, &seen);
+                raster_origins
+                    .borrow_mut()
+                    .insert((layer.id, lt.to_bits()), at);
                 named(layer, lt, made)
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
@@ -2073,7 +2021,7 @@ fn comp_walk(
             // size. Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
-                .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context))
+                .then(|| kept_raster::shape(comp, layer, contents, (lt, t_comp), &context, &seen))
                 .flatten()
                 .map(|made| named(layer, lt, made)),
             LayerKind::Precomp { .. } => None, // handled as Nested below
@@ -2114,6 +2062,7 @@ fn comp_walk(
                 lumit_media::decode::PixelFormat::LinearF32 => !layer.masks.is_empty(),
             };
             if !layer.paint.is_empty() || gated {
+                let (masks, paint) = kept_raster::moved_art(layer, origin_of(layer.id, lt));
                 let rgba = Arc::make_mut(&mut rgba);
                 // Paint first, masks second: a stroke is part of the layer's
                 // picture, and a mask gates the picture (docs/06 render
@@ -2134,7 +2083,7 @@ fn comp_walk(
                     h,
                     f64::from(natural.0),
                     f64::from(natural.1),
-                    &layer.paint,
+                    &paint,
                     // The layer's own clock, as a mask's keys are read on:
                     // a stroke keyed to draw itself on travels with the layer.
                     lt,
@@ -2154,7 +2103,7 @@ fn comp_walk(
                     h,
                     f64::from(natural.0),
                     f64::from(natural.1),
-                    &layer.masks,
+                    &masks,
                     lt,
                 );
             }
@@ -3819,6 +3768,7 @@ fn comp_walk(
                 three_d: false,
                 ends_run: false,
                 matte: None,
+                display_blend: false,
                 blend: lumit_gpu::composite::Blend::Normal,
                 mask_cov: None,
                 pre: None,
@@ -4043,7 +3993,7 @@ fn comp_walk(
                     ),
                 )
             };
-            let placed = drawn(src, mlt, &context);
+            let placed = kept_raster::lifted(drawn(src, mlt, &context), origin_of(src.id, mlt));
             Some(MatteDraw {
                 rgba: m_rgba.to_vec(),
                 tex_w: m_w,
@@ -4391,21 +4341,6 @@ fn comp_walk(
                     lumit_core::model::collapse_state(doc, comp, layer, lt),
                     lumit_core::model::CollapseState::Active
                 ) {
-                    visited.push(*nested_id);
-                    let mut spliced_in = comp_walk(
-                        doc,
-                        nested,
-                        st,
-                        frame_st,
-                        pixels_by_layer,
-                        visited,
-                        keys,
-                        true,
-                        inner,
-                        None,
-                    );
-                    visited.pop();
-
                     // A 2D collapsed Precomp is placed flat too.
                     let own = own_placement(layer, t_comp, &context);
                     // If the collapsed precomp is itself parented, its parent's
@@ -4417,6 +4352,25 @@ fn comp_walk(
                         Some(pw) => lumit_gpu::composite::concat_place(pw, own),
                         None => own,
                     };
+                    // Its shapes and text are drawn as large as they are shown here.
+                    let within = seen.within(parent, layer.switches.three_d);
+                    visited.push(*nested_id);
+                    let mut spliced_in = comp_walk(
+                        doc,
+                        nested,
+                        st,
+                        frame_st,
+                        pixels_by_layer,
+                        visited,
+                        keys,
+                        true,
+                        Walk {
+                            seen_through: Some(within),
+                            ..inner
+                        },
+                        None,
+                    );
+                    visited.pop();
                     let read = lumit_core::model::context_reader(&context, t_comp);
                     let lights = comp.lights_at(t_comp, &read, crate::track::solves_for(doc));
                     for d in &mut spliced_in {
@@ -4808,6 +4762,7 @@ fn comp_walk(
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
                     matte,
+                    display_blend: false,
                     blend: lumit_gpu::composite::Blend::Normal,
                     mask_cov: (native && !layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
@@ -5067,7 +5022,8 @@ fn comp_walk(
             _ => None,
         };
 
-        let placed = drawn(layer, lt, &context);
+        let lift = |s| kept_raster::lifted(s, origin_of(layer.id, lt));
+        let placed = lift(drawn(layer, lt, &context));
         draws.push(crate::trails::with_sprites(CompLayerDraw {
             layer: layer.id,
             source,
@@ -5085,6 +5041,7 @@ fn comp_walk(
             matte,
             // A layer showing only its shadows multiplies them into what is
             // under it, so a coloured one tints it and never brightens it.
+            display_blend: false,
             blend: match layer.blend {
                 lumit_core::model::BlendMode::Normal
                     if layer.switches.three_d
@@ -5153,7 +5110,10 @@ fn comp_walk(
             fx_input_key,
             // Per-layer motion blur (docs/06 §4): where the layer is across
             // the open shutter, empty unless it blurs.
-            mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone()),
+            mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone())
+                .into_iter()
+                .map(lift)
+                .collect(),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading::shading_lights(comp, layer, t_comp, &context),
             material: shading::shading_material(comp, layer, t_comp),
@@ -5183,6 +5143,7 @@ fn comp_walk(
     if !spliced {
         crate::haze::add(&mut draws, doc, comp, t_comp);
         crate::environment::add(&mut draws, doc, comp, t_comp, pixels_by_layer);
+        blending::stamp(&mut draws, comp);
     }
     draws
 }
@@ -5366,6 +5327,7 @@ fn graph_comp_draw(
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
@@ -6585,6 +6547,7 @@ pub(crate) fn read_draw(
         three_d: false,
         ends_run: false,
         matte: None,
+        display_blend: false,
         blend: lumit_gpu::composite::Blend::Normal,
         mask_cov: None,
         pre: None,
@@ -7283,12 +7246,14 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
 }
 
 mod audio_spectrum_levels;
+mod blending;
 mod energy_line_path;
 pub(crate) mod follow;
 mod moments;
 pub(crate) mod motion_blur;
 mod puppet_warp;
 mod repeats;
+mod walk;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -7396,6 +7361,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7490,6 +7456,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7630,6 +7597,7 @@ mod render_below_at_tests {
                 master_automation: Default::default(),
                 loudness_target: None,
                 lighting: Default::default(),
+                blending: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -7756,6 +7724,7 @@ mod render_below_at_tests {
                 master_automation: Default::default(),
                 loudness_target: None,
                 lighting: Default::default(),
+                blending: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -7905,6 +7874,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -8064,6 +8034,7 @@ mod render_below_at_tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

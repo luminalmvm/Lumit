@@ -15,7 +15,9 @@ Gradient is a **Generate** effect.
 
 ## What it does
 
-Paints a smooth run of two to five colours over the whole frame between two points.
+Paints a smooth run of two to five colours over the whole frame between two points. The
+colours mix in linear light, or as display values in a composition that
+[blends in display colours](/use/compositions/#the-settings).
 
 ## Parameters
 
@@ -23,13 +25,15 @@ Paints a smooth run of two to five colours over the whole frame between two poin
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Shape** | Dropdown | Linear · Radial | Linear | - |
+| **Shape** | Dropdown | Linear · Radial · Angle | Linear | - |
 | **Start x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Start y** | Slider | 0 to 2160; any value by typing | 0 | Pixels at composition size |
 | **Start colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **End x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **End y** | Slider | 0 to 2160; any value by typing | 1080 | Pixels at composition size |
 | **End colour** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 1 | - |
+| **Highlight length** | Slider | -100 to 100 | 0 | Per cent |
+| **Highlight angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Colours** | Dropdown | Two · Three · Four · Five | Two | - |
 | **Colour 2** | Colour | Each channel 0 to 4, scene-linear | 1, 0.5, 0, 1 | - |
 | **Colour 2 position** | Slider | 0 to 100 | 50 | Per cent |
@@ -55,11 +59,16 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Shape**: **Linear** runs the ramp along the line between two points. **Radial**
-  runs it outward from Start, with End marking the outer edge.
+  runs it outward from Start, with End marking the outer edge. **Angle** sweeps it once
+  round Start, clockwise, starting towards End.
 - **Start x** and **Start y**: the starting point.
 - **Start colour**: the colour at the start point.
 - **End x** and **End y**: the end point.
 - **End colour**: the colour at the end point.
+- **Highlight length**: how far the ramp's centre sits off Start, in per cent of the radius.
+  With **Radial**.
+- **Highlight angle**: which way it sits, in degrees clockwise from the line to End. With
+  **Radial**.
 - **Colours**: how many colours the ramp runs through, from two to five: Start colour, the
   colours in between, End colour.
 - **Colour 2**, **Colour 3** and **Colour 4**: the colours in between, in order from the
@@ -68,7 +77,8 @@ In the Effect Controls panel:
   along the ramp, in per cent. A colour placed before the one ahead of it sits where that
   one does.
 - **Paint**: **Inside layer** paints only where the layer draws, and **Whole frame** fills
-  the whole of the layer's picture.
+  the whole of the layer's picture. Where a colour's alpha is below full the ramp fades
+  towards clear: the layer shows through on Inside layer, and is clear on Whole frame.
 - **Scatter**: displaces a pixel's position to add texture to the ramp.
 - **Seed**: which random pattern the scatter follows.
 - **Mix**: how much of the result replaces the original.

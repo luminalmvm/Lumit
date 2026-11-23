@@ -2030,6 +2030,7 @@ BridgeTransform writeScalar(
   final depth = tf.depth;
   return BridgeTransform(
     orient: tf.orient,
+    curvedPath: tf.curvedPath,
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
     positionX: pick(BridgeTransformProp.positionX, tf.positionX),

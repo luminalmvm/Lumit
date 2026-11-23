@@ -360,6 +360,12 @@ pub enum Op {
         layer: Uuid,
         orient: crate::orient::Orient,
     },
+    /// How a layer's Position travels between keys ([`crate::motion_path`]).
+    SetLayerMotionPath {
+        comp: Uuid,
+        layer: Uuid,
+        path: crate::motion_path::MotionPath,
+    },
     /// Mute or unmute a layer's audio (the audible switch).
     SetLayerAudible {
         comp: Uuid,
@@ -639,6 +645,11 @@ pub enum Op {
     SetCompLighting {
         comp: Uuid,
         lighting: crate::model::CompLighting,
+    },
+    /// Switch what a composition's layers mix in.
+    SetCompBlending {
+        comp: Uuid,
+        blending: crate::model::blending::CompBlending,
     },
     /// Replace whether a layer casts and accepts shadows, as one undo step.
     SetMaterialSettings {
@@ -1052,6 +1063,7 @@ impl Op {
             Op::SetSequenceClips { .. } => "Edit clips",
             Op::SetLayerKind { .. } => "Change layer kind",
             Op::SetLayerOrient { .. } => "Set orient",
+            Op::SetLayerMotionPath { .. } => "Set motion path",
             Op::SetLayerAdjustment { .. } => "Adjustment switch",
             Op::SetLayerPitchFollowsSpeed { .. } => "Keep pitch",
             Op::SetLayerAudible { .. } => "Audible switch",
@@ -1128,6 +1140,7 @@ impl Op {
             Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
             Op::SetCompLighting { .. } => "Set lighting",
+            Op::SetCompBlending { .. } => "Set blending",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::SetCompStart { .. } => "Composition settings",
             Op::SetCompMulticam { .. } => "Set multicam",
@@ -1707,6 +1720,9 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             layer,
             orient,
         } => crate::orient::set(doc, *comp, *layer, *orient),
+        Op::SetLayerMotionPath { comp, layer, path } => {
+            crate::motion_path::set(doc, *comp, *layer, *path)
+        }
         Op::SetLayerPitchFollowsSpeed {
             comp,
             layer,
@@ -2377,6 +2393,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 lighting: previous,
             })
         }
+        Op::SetCompBlending { comp, blending } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.blending, *blending);
+            Ok(Op::SetCompBlending {
+                comp: *comp,
+                blending: previous,
+            })
+        }
         Op::SetMaterialSettings {
             comp,
             layer,
@@ -2809,44 +2833,6 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 name: previous,
             })
         }
-    }
-}
-
-/// `animation` with every value `v` made `gain * v + offset`, or `None` for
-/// an expression, which has no values to move. A key's speed is a slope, so
-/// it takes the gain and not the offset.
-#[must_use]
-pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animation> {
-    use crate::anim::SideInterp as S;
-    let side = |s: S| match s {
-        S::Bezier { speed, influence } => S::Bezier {
-            speed: speed * gain,
-            influence,
-        },
-        S::Auto {
-            clamped,
-            speed,
-            influence,
-        } => S::Auto {
-            clamped,
-            speed: speed * gain,
-            influence,
-        },
-        other => other,
-    };
-    match animation {
-        Animation::Static(v) => Some(Animation::Static(gain * v + offset)),
-        Animation::Keyframed(keys) => Some(Animation::Keyframed(
-            keys.iter()
-                .map(|k| crate::anim::Keyframe {
-                    value: gain * k.value + offset,
-                    interp_in: side(k.interp_in),
-                    interp_out: side(k.interp_out),
-                    ..*k
-                })
-                .collect(),
-        )),
-        Animation::Expression(_) => None,
     }
 }
 

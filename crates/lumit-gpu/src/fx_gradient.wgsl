@@ -1,4 +1,4 @@
-// Gradient (docs/08-EFFECTS.md §3.35): a linear or radial ramp of two to five
+// Gradient (docs/08-EFFECTS.md §3.35): a linear, radial or angle ramp of two to five
 // colours, with scatter. Mirrors lumit_core::fx::cpu::gradient op-for-op (§1.6: the CPU is
 // the oracle).
 //
@@ -11,17 +11,19 @@
 
 struct Params {
     start_axis: vec4<f32>,  // xy = start (raster px), zw = end − start
-    c0: vec4<f32>,          // start colour; alpha lane ignored (the ramp is opaque)
+    c0: vec4<f32>,          // start colour, straight alpha
     c1: vec4<f32>,          // end colour
     inv_len2: f32,          // 1 ÷ |axis|², floored
     inv_len: f32,           // 1 ÷ |axis|, floored
     scatter: f32,           // 0..1 dither of t
     mix_amt: f32,           // 0..1, blended against the unprocessed input
     seed: u32,
-    radial: u32,            // 0 linear, 1 radial
+    shape: u32,             // 0 linear, 1 radial, 2 angle
     clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha
     mids: u32,              // colours in between in use, 0..3
     mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
+    shape_k: vec4<f32>,     // x = where an angle ramp begins, radians; yzw = focal point
+    mid_alpha: vec4<f32>,   // xyz = each colour in between's alpha; w = 1 mixes as display values
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -54,28 +56,47 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
-// == lumit_core::fx::cpu::gradient_ramp: Start colour, the colours in
+// == lumit_core::fx::cpu::gradient's display_value and linear_value, on the
+// colour only, and only in a comp that blends in display.
+fn shown(c: vec4<f32>) -> vec4<f32> {
+    if (p.mid_alpha.w < 0.5) {
+        return c;
+    }
+    let hi = 1.055 * pow(max(c.rgb, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
+    return vec4<f32>(select(hi, c.rgb * 12.92, c.rgb <= vec3<f32>(0.0031308)), c.a);
+}
+
+fn back(c: vec4<f32>) -> vec4<f32> {
+    if (p.mid_alpha.w < 0.5) {
+        return c;
+    }
+    let hi = pow((max(c.rgb, vec3<f32>(0.0)) + 0.055) / 1.055, vec3<f32>(2.4));
+    return vec4<f32>(select(hi, c.rgb / 12.92, c.rgb <= vec3<f32>(0.04045)), c.a);
+}
+
+// == lumit_core::fx::cpu::gradient::gradient_ramp: Start colour, the colours in
 // between that are in use, End colour.
-fn ramp(t: f32) -> vec3<f32> {
+fn ramp(t: f32) -> vec4<f32> {
     var at = 0.0;
-    var prev = p.c0.rgb;
+    var prev = shown(p.c0);
     for (var k = 0u; k < min(p.mids, 3u); k = k + 1u) {
         let m = p.mid[k];
+        let to = shown(vec4<f32>(m.rgb, p.mid_alpha[k]));
         if (t <= m.w) {
             var f = 1.0;
             if (m.w > at) {
                 f = (t - at) / (m.w - at);
             }
-            return prev + (m.rgb - prev) * f;
+            return back(prev + (to - prev) * f);
         }
         at = m.w;
-        prev = m.rgb;
+        prev = to;
     }
     var f = 1.0;
     if (at < 1.0) {
         f = (t - at) / (1.0 - at);
     }
-    return prev + (p.c1.rgb - prev) * f;
+    return back(prev + (shown(p.c1) - prev) * f);
 }
 
 @compute @workgroup_size(8, 8)
@@ -89,8 +110,24 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dx = f32(xy.x) + 0.5 - p.start_axis.x;
     let dy = f32(xy.y) + 0.5 - p.start_axis.y;
     var t: f32;
-    if (p.radial != 0u) {
+    if (p.shape == 1u && p.shape_k.y == 0.0 && p.shape_k.z == 0.0) {
         t = sqrt(dx * dx + dy * dy) * p.inv_len;
+    } else if (p.shape == 1u) {
+        // == cpu::gradient: the share of the way from the off-centre centre
+        // through the pixel to the outer edge.
+        let ex = dx - p.shape_k.y;
+        let ey = dy - p.shape_k.z;
+        let a = ex * ex + ey * ey;
+        let b = p.shape_k.y * ex + p.shape_k.z * ey;
+        let reach = sqrt(b * b - a * p.shape_k.w) - b;
+        t = 0.0;
+        if (reach > 0.0) {
+            t = a / reach;
+        }
+    } else if (p.shape == 2u) {
+        // y grows downwards, so a growing angle turns clockwise.
+        let turns = (atan2(dy, dx) - p.shape_k.x) / 6.2831855;
+        t = turns - floor(turns);
     } else {
         t = (dx * p.start_axis.z + dy * p.start_axis.w) * p.inv_len2;
     }
@@ -102,13 +139,21 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     // premultiplied form of "this ramp at this coverage", and the layer's own
     // alpha is then left exactly as it was — the whole difference between the
     // Gradient overlay style and the generator this kernel also serves.
+    let r = ramp(tc);
     var cover = 1.0;
-    var outa = o.a * (1.0 - p.mix_amt) + p.mix_amt;
+    var outa = o.a * (1.0 - p.mix_amt) + r.a * p.mix_amt;
+    var under = 0.0;
     if (p.clip_to_alpha != 0u) {
         cover = o.a;
         outa = o.a;
+        under = 1.0 - r.a;
     }
-    let g = ramp(tc) * cover;
+    // == cpu::gradient: a clear part of the ramp shows the layer inside it,
+    // nothing on the whole frame.
+    var g = r.rgb * r.a * cover;
+    if (under > 0.0) {
+        g = g + o.rgb * under;
+    }
     let outv = o.rgb * (1.0 - p.mix_amt) + g * p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, outa));
 }

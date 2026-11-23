@@ -669,6 +669,7 @@ fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -811,6 +812,7 @@ fn composition(
         loudness_target: None,
         // Lit as After Effects lights it, so the comp looks as it did there.
         lighting,
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

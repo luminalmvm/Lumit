@@ -947,6 +947,7 @@ fn close(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: scope.groups,
         beat_grid: None,

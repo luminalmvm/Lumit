@@ -155,6 +155,7 @@ pub fn document_with(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         // A scratch composition is never a mix: it is one item on its own, and
         // the Audio timeline has nothing to show of it.
         sound_mix: false,

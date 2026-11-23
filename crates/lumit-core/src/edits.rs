@@ -389,12 +389,6 @@ pub struct LinkCopies {
     pub outside_ids: std::collections::HashMap<Uuid, Uuid>,
 }
 
-impl LinkCopies {
-    pub fn is_empty(&self) -> bool {
-        self.inside.is_empty() && self.outside.is_empty()
-    }
-}
-
 /// The copies [`LinkCopies`] describes, for `moving` leaving `layers`.
 ///
 /// A copy is hidden and silent, so the picture keeps one of each layer, and
@@ -706,6 +700,7 @@ pub fn precompose_ops(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -1137,6 +1132,7 @@ pub fn new_comp_ops(
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -1347,6 +1343,7 @@ pub fn transform_ops_with_keys(
 }
 
 mod comp_settings;
+mod link_copies;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

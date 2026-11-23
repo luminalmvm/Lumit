@@ -4824,7 +4824,7 @@ fn apply_text_preview(
         // Keys the seam cannot read are a preview nobody can draw, so the
         // layer keeps the document it has rather than the frame failing.
         if let Ok(mut written) = crate::api::assets::text_document_of(document, offset) {
-            let shift = crate::api::assets::style::restyle_shift(existing, &written);
+            let shift = lumit_text::restyle::shift(existing, &written);
             // The preview leaves captions as they are, as the committed write does.
             written.captions = existing.captions.clone();
             *existing = written;
@@ -5058,15 +5058,12 @@ fn render_comp_with_preview(
             if let Ok(written) = crate::api::shape::write_entries(&items, contents, offset, at) {
                 // The position follows the art's corner, as the commit's
                 // does, or a growing stroke slides the art while it is
-                // dragged and jumps back on release.
-                let shift = match (
-                    lumit_core::shape::contents_bounds(contents, 0.0),
-                    lumit_core::shape::contents_bounds(&written, 0.0),
-                ) {
-                    (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
-                    _ => (0.0, 0.0),
-                };
+                // dragged and jumps back on release. The masks stay on the art.
+                let shift = lumit_core::shape::corner_shift(contents, &written);
                 *contents = written;
+                if let Some(masks) = lumit_core::shape::masks_on_art(&layer.masks, shift) {
+                    layer.masks = masks;
+                }
                 for (property, delta) in [
                     (&mut layer.transform.position_x, shift.0),
                     (&mut layer.transform.position_y, shift.1),
@@ -6117,6 +6114,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

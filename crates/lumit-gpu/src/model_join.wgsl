@@ -9,7 +9,7 @@ struct Join {
     // is counted from, w: metres per clip w.
     params: vec4<f32>,
     // x: 1 to clear what a later run covers, for scene depth, y: 1 for a
-    // holdout.
+    // holdout, z: 1 when the run's target holds display values.
     flags: vec4<f32>,
 };
 
@@ -51,9 +51,23 @@ struct Drawn {
     @builtin(frag_depth) depth: f32,
 };
 
+// The colour as display values, alpha left alone (composite.wgsl's
+// display_premul).
+fn display_premul(c: vec4<f32>) -> vec4<f32> {
+    if (c.a <= 0.0) {
+        return c;
+    }
+    let v = max(c.rgb / c.a, vec3<f32>(0.0));
+    let e = select(1.055 * pow(v, vec3<f32>(1.0 / 2.4)) - 0.055, v * 12.92, v <= vec3<f32>(0.0031308));
+    return vec4<f32>(e * c.a, c.a);
+}
+
 @fragment
 fn fs_join(in: VsOut) -> Drawn {
-    let c = textureSample(colour, samp, in.uv) * u.params.x;
+    var c = textureSample(colour, samp, in.uv) * u.params.x;
+    if (u.flags.z > 0.5) {
+        c = display_premul(c);
+    }
     let iw = inv_w_at(in.uv);
     if (iw <= 0.0) {
         discard;

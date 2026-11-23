@@ -599,6 +599,10 @@ pub struct CompLayerDraw {
     pub ends_run: bool,
     pub matte: Option<MatteDraw>,
     pub blend: lumit_gpu::composite::Blend,
+    /// The comp this draw is composited in blends in display values. Carried
+    /// for the reason `colour_space` is: a collapsed Precomp's draws land in
+    /// their parent's list, and mix as the parent does.
+    pub display_blend: bool,
     /// Layer-space mask coverage (white RGBA, alpha = coverage) for
     /// GPU-sourced layers — Precomps, whose pixels never exist CPU-side.
     pub mask_cov: Option<(Vec<u8>, u32, u32)>,
@@ -852,6 +856,7 @@ impl CompLayerDraw {
             three_d: false,
             ends_run: false,
             matte: None,
+            display_blend: false,
             blend: lumit_gpu::composite::Blend::Normal,
             mask_cov: None,
             pre: None,

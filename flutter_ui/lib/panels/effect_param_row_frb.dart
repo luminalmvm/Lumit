@@ -27,6 +27,7 @@ import 'package:lumit_flutter/src/rust/api/colour.dart'
     show BridgeColourItem, BridgeColourSummary;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart' show BridgeGradientStop;
 import 'package:lumit_flutter/src/rust/api/template.dart' show BridgeRowRef;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart'
@@ -60,6 +61,7 @@ import 'control_rows.dart' show ControlMark;
 import 'expression_editor.dart';
 import 'fx_key_strip.dart';
 import 'gradient_stops_popover.dart';
+import 'layer_fold_frb.dart' show stillColour;
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'graph_panel.dart' show portColour;
@@ -1354,7 +1356,11 @@ class EffectParamRowFrb extends StatelessWidget {
                 RampStop(
                     id: i,
                     position: at(s.position),
-                    colour: s.colour,
+                    colour: BridgeColourRgba(
+                        r: at(s.colour.r),
+                        g: at(s.colour.g),
+                        b: at(s.colour.b),
+                        a: at(s.colour.a)),
                     opacity: at(s.opacity)),
             ],
           );
@@ -1362,7 +1368,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 for (final s in r.between)
                   BridgeGradientStop(
                     position: BridgeScalar.static_(s.position),
-                    colour: s.colour,
+                    colour: stillColour(s.colour),
                     opacity: BridgeScalar.static_(s.opacity),
                   ),
               ]);

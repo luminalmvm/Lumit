@@ -43,9 +43,9 @@ import 'transcript.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `sequenced`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `sequenced`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_fade`, `write_layer`, `write_over`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Where a fixed view looks from, for a comp of this size
@@ -779,32 +779,6 @@ enum BridgeFadeShape {
   /// where it was and then falls away.
   exponential,
   ;
-}
-
-/// A colour part way along a shape's gradient: where it sits as a per cent of
-/// the ramp, and how opaque it is, 0..100. Both animate.
-class BridgeGradientStop {
-  final BridgeScalar position;
-  final BridgeColourRgba colour;
-  final BridgeScalar opacity;
-
-  const BridgeGradientStop({
-    required this.position,
-    required this.colour,
-    required this.opacity,
-  });
-
-  @override
-  int get hashCode => position.hashCode ^ colour.hashCode ^ opacity.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is BridgeGradientStop &&
-          runtimeType == other.runtimeType &&
-          position == other.position &&
-          colour == other.colour &&
-          opacity == other.opacity;
 }
 
 /// Everything the Timeline outline, its bars, and the Hierarchy draw for one
@@ -2230,6 +2204,9 @@ class BridgeShapeItem {
   final BridgeColour? stroke;
   final BridgeScalar strokeWidth;
 
+  /// **A gradient outline**, or `None` for the flat stroke colour.
+  final BridgeStrokeGradient? strokeGradient;
+
   /// 0..100.
   final BridgeScalar opacity;
 
@@ -2241,19 +2218,26 @@ class BridgeShapeItem {
   final BridgeScalar dashOffset;
 
   /// **A gradient fill**: 0 is the flat [`fill`](Self::fill), 1 ramps
-  /// from it linearly to `gradient_colour` and 2 ramps radially, the end
-  /// point sitting on the outer edge. The two points are in layer pixels —
-  /// the art's own coordinates — and animate; what a ramp *is* does not.
-  /// Each end has an opacity of its own, 0..100, and the ramp fades evenly
-  /// from `gradient_start_opacity` to `gradient_end_opacity`.
+  /// from it linearly to `gradient_colour`, 2 radially with the end point on
+  /// the outer edge, 4 round the start point. The two points are in layer
+  /// pixels, the art's own coordinates, and animate, as do the colours;
+  /// what a ramp *is* does not. Each end has an opacity of its own, 0..100,
+  /// and the ramp fades evenly from `gradient_start_opacity` to
+  /// `gradient_end_opacity`.
   final int gradient;
-  final BridgeColourRgba? gradientColour;
+  final BridgeColour? gradientColour;
   final BridgeScalar gradientStartX;
   final BridgeScalar gradientStartY;
   final BridgeScalar gradientEndX;
   final BridgeScalar gradientEndY;
   final BridgeScalar gradientStartOpacity;
   final BridgeScalar gradientEndOpacity;
+
+  /// A radial ramp's **highlight**: how far its centre sits off the start
+  /// point, per cent of the radius, and its angle from the line to the end
+  /// point in degrees. At 0 the ramp is centred.
+  final BridgeScalar gradientHighlight;
+  final BridgeScalar gradientHighlightAngle;
 
   /// The colours the ramp passes through between its two ends, in the order
   /// they were made. Empty is the plain two-colour ramp.
@@ -2298,6 +2282,7 @@ class BridgeShapeItem {
     this.fill,
     this.stroke,
     required this.strokeWidth,
+    this.strokeGradient,
     required this.opacity,
     required this.dashes,
     required this.dashOffset,
@@ -2309,6 +2294,8 @@ class BridgeShapeItem {
     required this.gradientEndY,
     required this.gradientStartOpacity,
     required this.gradientEndOpacity,
+    required this.gradientHighlight,
+    required this.gradientHighlightAngle,
     required this.gradientStops,
     required this.combine,
     required this.hidden,
@@ -2328,6 +2315,7 @@ class BridgeShapeItem {
       fill.hashCode ^
       stroke.hashCode ^
       strokeWidth.hashCode ^
+      strokeGradient.hashCode ^
       opacity.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
@@ -2339,6 +2327,8 @@ class BridgeShapeItem {
       gradientEndY.hashCode ^
       gradientStartOpacity.hashCode ^
       gradientEndOpacity.hashCode ^
+      gradientHighlight.hashCode ^
+      gradientHighlightAngle.hashCode ^
       gradientStops.hashCode ^
       combine.hashCode ^
       hidden.hashCode ^
@@ -2360,6 +2350,7 @@ class BridgeShapeItem {
           fill == other.fill &&
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
+          strokeGradient == other.strokeGradient &&
           opacity == other.opacity &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&
@@ -2371,6 +2362,8 @@ class BridgeShapeItem {
           gradientEndY == other.gradientEndY &&
           gradientStartOpacity == other.gradientStartOpacity &&
           gradientEndOpacity == other.gradientEndOpacity &&
+          gradientHighlight == other.gradientHighlight &&
+          gradientHighlightAngle == other.gradientHighlightAngle &&
           gradientStops == other.gradientStops &&
           combine == other.combine &&
           hidden == other.hidden &&
@@ -2696,6 +2689,9 @@ class BridgeTransform {
   final BridgeScalar scaleY;
   final BridgeOrient orient;
 
+  /// Position runs along a smooth path through its keys.
+  final bool curvedPath;
+
   /// Degrees, about z — the 2D rotation.
   final BridgeScalar rotation;
   final BridgeScalar rotationX;
@@ -2729,6 +2725,7 @@ class BridgeTransform {
     required this.scaleX,
     required this.scaleY,
     required this.orient,
+    this.curvedPath = false,
     required this.rotation,
     required this.rotationX,
     required this.rotationY,
@@ -2749,6 +2746,7 @@ class BridgeTransform {
       scaleX.hashCode ^
       scaleY.hashCode ^
       orient.hashCode ^
+      curvedPath.hashCode ^
       rotation.hashCode ^
       rotationX.hashCode ^
       rotationY.hashCode ^
@@ -2771,6 +2769,7 @@ class BridgeTransform {
           scaleX == other.scaleX &&
           scaleY == other.scaleY &&
           orient == other.orient &&
+          curvedPath == other.curvedPath &&
           rotation == other.rotation &&
           rotationX == other.rotationX &&
           rotationY == other.rotationY &&
@@ -4939,6 +4938,11 @@ class LayerReference {
   void setCueText({required int cue, required String text}) => BridgeLib
       .instance.api
       .crateApiLayerLayerReferenceSetCueText(that: this, cue: cue, text: text);
+
+  /// Run Position along a smooth path through its keys, or straight from
+  /// key to key.
+  void setCurvedPath({required bool curved}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetCurvedPath(that: this, curved: curved);
 
   /// Lower this layer behind another layer or a bus, or stop, as one
   /// undoable step. Refused, with nothing changed, when the sound would go

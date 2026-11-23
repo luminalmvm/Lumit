@@ -249,11 +249,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "shape.add",
-        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest",
+        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient, stroke_gradient and the rest",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"items":{"type":"array","minItems":1,"description":"The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one","items":{"type":"object"}}},"required":["comp","items"],"additionalProperties":false}"#
+            r#","name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"items":{"type":"array","minItems":1,"description":"The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one","items":{"type":"object"}},"anchor":{"oneOf":[{"enum":["corner","centre"]},{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2}],"description":"Where the layer turns from, in the paths' pixels: the corner of the art's box (the default), its centre, or [x, y]. The position goes to the same point, so the art draws where its paths say. The answer adds origin, the point in the paths' pixels where the layer's own pixels start, and the anchor and position it set"},"masks":{"type":"array","description":"Masks as a .lum file keeps them, with paths in the same pixels as the items. They are kept in the layer's own pixels, which start at origin","items":{"type":"object"}}},"required":["comp","items"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -275,16 +275,16 @@ pub const COMMANDS: &[Command] = &[
             comp!(),
             r#","layer":"#,
             layer!(),
-            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
+            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place. A text layer keeps its words where they were when its text, style or animators change, as the app does, unless these set its anchor"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
         ),
     },
     Command {
         name: "comp.write",
-        summary: "Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them",
+        summary: "Change a comp's motion blur, lighting, blending or node graph, in the form a .lum file keeps them",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
+            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"blending":{"enum":["linear","display"],"description":"What the layers mix in: linear light, or display values as a browser does"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -311,7 +311,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.set",
-        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order or place in the stack",
+        summary: "Change a layer's name, parent, span, switches, 3D switch, rotation order, motion path or place in the stack",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
@@ -323,7 +323,7 @@ pub const COMMANDS: &[Command] = &[
             time!(),
             r#","start_offset":"#,
             time!(),
-            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
+            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"after_effects_order":{"type":"boolean","description":"Turn X, Y and Z Rotation in After Effects' order rather than Lumit's. The rotations are rewritten so the layer keeps its pose"},"curved_path":{"type":"boolean","description":"Run Position along a smooth path through its keys, as After Effects' auto bezier does, rather than straight from key to key. Motion blur follows it"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"},"collapse":{"type":"boolean","description":"A precomp's collapse switch: its layers are drawn straight into this comp, its shapes and text as large as they are shown"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -770,6 +770,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
         "start_offset": exact(layer.start_offset.0),
         "three_d": s.three_d,
         "after_effects_order": layer.transform.after_effects_order,
+        "curved_path": !layer.transform.motion_path.is_straight(),
         "switches": {
             "visible": s.visible,
             "audible": s.audible,
@@ -780,6 +781,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
             "motion_blur": s.motion_blur,
             "fx": s.fx,
             "accepts_lights": s.accepts_lights,
+            "collapse": s.collapse,
         },
         "two_node": two_node,
     })

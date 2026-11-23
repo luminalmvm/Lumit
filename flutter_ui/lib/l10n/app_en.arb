@@ -3341,6 +3341,30 @@
   "@fxAcross": {
     "description": "Effect controls — a Pattern option on Vary points and Pick points: a point's number is where it sits from left to right."
   },
+  "fxCentreZ": "Centre Z",
+  "@fxCentreZ": {
+    "description": "Effect controls: a control on Vary points and Pick points. How far in front of or behind the layer's plane the pattern's centre sits."
+  },
+  "fxPlane": "Plane",
+  "@fxPlane": {
+    "description": "Effect controls: a control on Vary points and Pick points. The plane the Distance, Stripes, Checker and Waves patterns lie in."
+  },
+  "fxPlaneXy": "XY",
+  "@fxPlaneXy": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. Across and down, the layer's own plane. Axis letters."
+  },
+  "fxPlaneXz": "XZ",
+  "@fxPlaneXz": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. Across and into depth, lying flat like a floor. Axis letters."
+  },
+  "fxPlaneYz": "YZ",
+  "@fxPlaneYz": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. Down and into depth, standing side on. Axis letters."
+  },
+  "fxPlaneXyz": "XYZ",
+  "@fxPlaneXyz": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. A distance measured through all three axes. Axis letters."
+  },
   "fxPicked": "Picked",
   "@fxPicked": {
     "description": "Effect controls — a Pattern option on Vary points and Pick points, and an Apply to option: the points an earlier Pick points marked. An adjective."
@@ -4849,6 +4873,14 @@
   "@fxHighlightExposure": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxHighlightAngle": "Highlight angle",
+  "@fxHighlightAngle": {
+    "description": "Effect controls, a control on Gradient: which way a radial ramp's off-centre bright spot sits, in degrees."
+  },
+  "fxHighlightLength": "Highlight length",
+  "@fxHighlightLength": {
+    "description": "Effect controls, a control on Gradient: how far a radial ramp's bright spot sits off its centre, per cent of the radius."
+  },
   "fxHighlightThreshold": "Highlight threshold",
   "@fxHighlightThreshold": {
     "description": "Effect controls — a control on Depth of field."
@@ -6300,6 +6332,22 @@
   "fxStartAngle": "Start angle",
   "@fxStartAngle": {
     "description": "Effect controls — a control on Radial wipe: where the sweep begins."
+  },
+  "fxOpenTop": "Open top",
+  "@fxOpenTop": {
+    "description": "Effect controls — a control on Grid's Sphere layout: how much of the ball is left open from the top."
+  },
+  "fxRimWave": "Rim wave",
+  "@fxRimWave": {
+    "description": "Effect controls — a control on Grid's Sphere layout: how far the edge of the open top rises and falls round the ball."
+  },
+  "fxRimWaves": "Rim waves",
+  "@fxRimWaves": {
+    "description": "Effect controls — a control on Grid's Sphere layout: how many times the edge of the open top rises and falls on the way round."
+  },
+  "fxRimPhase": "Rim phase",
+  "@fxRimPhase": {
+    "description": "Effect controls — a control on Grid's Sphere layout: where round the ball the waves of the open top stand."
   },
   "fxStartColour": "Start colour",
   "@fxStartColour": {
@@ -12181,6 +12229,77 @@
   "@shapeStrokeWidth": {
     "description": "Timeline row under a shape layer's art: how wide its outline is, in pixels."
   },
+  "shapeStrokeGradient": "Stroke gradient",
+  "@shapeStrokeGradient": {
+    "description": "Timeline row under a shape layer's art: whether its outline is one colour or a gradient, and which kind."
+  },
+  "shapeStrokeGradientColour": "Stroke gradient colour",
+  "@shapeStrokeGradientColour": {
+    "description": "Timeline row under a shape layer's art: the colour its gradient outline ends at."
+  },
+  "shapeStrokeGradientStops": "Stroke gradient stops",
+  "@shapeStrokeGradientStops": {
+    "description": "Timeline row under a shape layer's art, and the editor it opens: the colours along its gradient outline."
+  },
+  "shapeStrokeGradientStartOpacity": "Stroke gradient start opacity",
+  "@shapeStrokeGradientStartOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque its gradient outline is where it starts, as a percentage."
+  },
+  "shapeStrokeGradientEndOpacity": "Stroke gradient end opacity",
+  "@shapeStrokeGradientEndOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque its gradient outline is where it ends, as a percentage."
+  },
+  "shapeStrokeGradientStartX": "Stroke gradient start x",
+  "@shapeStrokeGradientStartX": {
+    "description": "Timeline row under a shape layer's art: the x its outline's gradient starts at, in pixels."
+  },
+  "shapeStrokeGradientStartY": "Stroke gradient start y",
+  "@shapeStrokeGradientStartY": {
+    "description": "Timeline row under a shape layer's art: the y its outline's gradient starts at, in pixels."
+  },
+  "shapeStrokeGradientEndX": "Stroke gradient end x",
+  "@shapeStrokeGradientEndX": {
+    "description": "Timeline row under a shape layer's art: the x its outline's gradient ends at, in pixels."
+  },
+  "shapeStrokeGradientEndY": "Stroke gradient end y",
+  "@shapeStrokeGradientEndY": {
+    "description": "Timeline row under a shape layer's art: the y its outline's gradient ends at, in pixels."
+  },
+  "shapeStrokeGradientStopPositionRow": "Stroke stop {n} position",
+  "@shapeStrokeGradientStopPositionRow": {
+    "description": "Timeline row under a shape layer's art: how far along its gradient outline one of the stops sits, as a percentage. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "shapeStrokeGradientStopColourRow": "Stroke stop {n} colour",
+  "@shapeStrokeGradientStopColourRow": {
+    "description": "Timeline row under a shape layer's art: the colour of one of the stops along its gradient outline, which keys like the stroke's colour. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "shapeStrokeGradientStopOpacityRow": "Stroke stop {n} opacity",
+  "@shapeStrokeGradientStopOpacityRow": {
+    "description": "Timeline row under a shape layer's art: how opaque one of the stops along its gradient outline is, as a percentage. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "shapeStrokeHighlightLength": "Stroke highlight length",
+  "@shapeStrokeHighlightLength": {
+    "description": "Timeline row under a shape layer's art: how far a radial gradient outline's centre sits off its start point, as a percentage of its radius."
+  },
+  "shapeStrokeHighlightAngle": "Stroke highlight angle",
+  "@shapeStrokeHighlightAngle": {
+    "description": "Timeline row under a shape layer's art: the angle a radial gradient outline's centre is moved off its start point at, in degrees."
+  },
   "shapePoints": "Points",
   "@shapePoints": {
     "description": "Timeline row under a polygon or star in a shape layer's art: how many corners or tips it has."
@@ -12233,6 +12352,14 @@
   "@shapeGradientRadial": {
     "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
   },
+  "shapeGradientAlong": "Along the path",
+  "@shapeGradientAlong": {
+    "description": "One choice on a shape layer's Stroke gradient row: the outline's colours run along its own line, from where it starts to where it ends."
+  },
+  "shapeGradientAngle": "Angle",
+  "@shapeGradientAngle": {
+    "description": "One choice on a shape layer's Gradient row: the fill's colours sweep round a point, like a colour wheel."
+  },
   "shapeGradientStartOpacity": "Gradient start opacity",
   "@shapeGradientStartOpacity": {
     "description": "Timeline row under a shape layer's art: how opaque its gradient fill is where it starts, as a percentage."
@@ -12252,6 +12379,15 @@
   "shapeGradientStopOpacity": "Opacity",
   "@shapeGradientStopOpacity": {
     "description": "Gradient editor: label over how opaque the selected stop is, as a percentage."
+  },
+  "shapeGradientStopColourRow": "Stop {n} colour",
+  "@shapeGradientStopColourRow": {
+    "description": "Timeline row under a shape layer's art: the colour of one of the stops along its gradient, which keys like the fill's colour. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
   },
   "shapeGradientStopOpacityRow": "Stop {n} opacity",
   "@shapeGradientStopOpacityRow": {
@@ -12859,6 +12995,10 @@
   "orientTowardsCamera": "Towards camera",
   "@orientTowardsCamera": {
     "description": "Orient choice on a 3D layer: the layer always faces the camera."
+  },
+  "transformCurvedPath": "Curved motion path",
+  "@transformCurvedPath": {
+    "description": "A checked row in Layer > Transform: Position runs along a smooth path through its keys rather than straight from key to key."
   },
   "transformAnchorPointX": "Anchor point x",
   "@transformAnchorPointX": {
@@ -17029,9 +17169,21 @@
   "@compLightsLikeAfterEffects": {
     "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, rather than adding light to the picture. On for compositions imported from an .aep project."
   },
+  "compGroupBlending": "Blending",
+  "@compGroupBlending": {
+    "description": "Section of the Composition settings window about how the composition's layers mix with each other."
+  },
+  "compBlendInDisplay": "Blend in display colours",
+  "@compBlendInDisplay": {
+    "description": "Composition settings checkbox: mix layers, opacity, blend modes and gradients in display sRGB values, as a web browser, Figma or After Effects in 8 or 16 bit does, rather than in linear light. Off by default."
+  },
   "histSetLighting": "Set lighting",
   "@histSetLighting": {
     "description": "Undo history entry: a composition's lighting was switched between Lumit's and After Effects' way."
+  },
+  "histSetBlending": "Set blending",
+  "@histSetBlending": {
+    "description": "Undo history entry: a composition was switched between blending its layers in linear light and in display colours."
   },
   "compSamples": "Samples",
   "@compSamples": {
@@ -20523,6 +20675,10 @@
   "histSetAxisMode": "Set axis mode",
   "@histSetAxisMode": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetMotionPath": "Set motion path",
+  "@histSetMotionPath": {
+    "description": "A row of the Edit > History window: a layer's motion path was switched between straight and curved. Sent by the engine as English and looked up here."
   },
   "histSetRotationOrder": "Set rotation order",
   "@histSetRotationOrder": {
@@ -33066,7 +33222,7 @@
   },
   "fxTilt": "Tilt",
   "@fxTilt": {
-    "description": "Effect controls: a group heading on Holographic foil, how the sheet is tipped toward the viewer."
+    "description": "Effect controls: a group heading on Holographic foil, how the sheet is tipped toward the viewer; and a control on Grid's Sphere layout, how far the ball leans its top towards the camera."
   },
   "fxTiltX": "Tilt x",
   "@fxTiltX": {

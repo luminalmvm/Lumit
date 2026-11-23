@@ -54,7 +54,7 @@ import 'vector.dart';
 import 'wire_tie.dart';
 import 'wireframes.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `layer_switch_op`, `place_footage`, `project`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at`, `add_graph_group`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit_travels`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_layers`, `footage_span_and_size`, `graph_of`, `has_picture`, `insert_row`, `place_footage`, `project`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -1001,6 +1001,13 @@ class CompositionReference {
   /// grid, which only decides whether that backdrop is *drawn*.
   F32Array4 background() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceBackground(
+        that: this,
+      );
+
+  /// Whether the comp's layers mix in display values, as a browser mixes
+  /// them, rather than in linear light.
+  bool blendsInDisplay() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceBlendsInDisplay(
         that: this,
       );
 
@@ -3375,6 +3382,11 @@ class CompositionReference {
   void setBeatGrid({BridgeBeatGrid? grid}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
           that: this, grid: grid);
+
+  /// Switch it, as one undo step.
+  void setBlendsInDisplay({required bool on_}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetBlendsInDisplay(
+          that: this, on_: on_);
 
   /// Look at this comp in Viewer view `view` through `pose` rather than its
   /// active camera, or through the active camera again with `None`, and

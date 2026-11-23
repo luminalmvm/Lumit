@@ -86,6 +86,7 @@ fn doc_with_four() -> (Document, Uuid, Vec<Uuid>) {
         master_automation: Default::default(),
         loudness_target: None,
         lighting: Default::default(),
+        blending: Default::default(),
         sound_mix: false,
         beat_grid: None,
         extra: serde_json::Map::new(),

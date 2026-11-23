@@ -73,6 +73,8 @@ pub mod split;
 pub mod walk;
 pub mod wiggle;
 
+mod arena_pool;
+
 /// How many driver nodes one frame's evaluation may visit.
 ///
 /// ponytail: a flat budget instead of memoising each `(node, port, time)`. A
@@ -660,28 +662,6 @@ struct ArenaPool {
     reuses: usize,
     #[cfg(test)]
     high_water: usize,
-}
-
-impl ArenaPool {
-    #[cfg(test)]
-    fn checked_out(&mut self, reused: bool) {
-        if reused {
-            self.reuses += 1;
-        } else {
-            self.allocations += 1;
-        }
-    }
-
-    #[cfg(not(test))]
-    fn checked_out(&mut self, _reused: bool) {}
-
-    #[cfg(test)]
-    fn returned(&mut self) {
-        self.high_water = self.high_water.max(self.arenas.len());
-    }
-
-    #[cfg(not(test))]
-    fn returned(&mut self) {}
 }
 
 struct Eval<'a> {
@@ -2309,6 +2289,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -2832,6 +2813,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

@@ -14,9 +14,11 @@ use uuid::Uuid;
 
 mod axis_modes;
 mod blend_mode;
+pub mod blending;
 mod light;
 mod light_file;
 mod material;
+mod media_ref;
 mod parent_placement;
 
 /// Linear-light RGBA (docs/10-FILE-FORMAT.md §1.1).
@@ -84,48 +86,6 @@ pub struct MediaRef {
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
-}
-
-impl MediaRef {
-    /// The path to *show* for this reference — the Project panel's Path column
-    /// (docs/07 §3.1, docs/15 §12A.3a).
-    ///
-    /// The relative path, which is the one a saved project actually carries,
-    /// falling back to the absolute path when there is no relative one — a
-    /// project that has never been saved has nothing to be relative to, and
-    /// showing the file's real location then is more use than showing nothing.
-    ///
-    /// Display data, and only that: it says where the reference *points*, not
-    /// whether anything is there. Resolving it against the project folder and
-    /// deciding whether the file exists is [`crate::model`]'s business no more
-    /// than probing is — `lumit_project::resolve_media` answers that.
-    #[must_use]
-    pub fn display_path(&self) -> &str {
-        if self.relative_path.is_empty() {
-            &self.absolute_path
-        } else {
-            &self.relative_path
-        }
-    }
-
-    /// The path to *open* for this reference — the other way round from
-    /// [`Self::display_path`].
-    ///
-    /// The session's absolute path, falling back to the stored relative one
-    /// when there is none: an unsaved project has nothing to be relative to,
-    /// and a project just loaded has not had its media resolved yet.
-    ///
-    /// Says where to look, not whether anything is there — the same division
-    /// [`Self::display_path`] keeps, and `lumit_project::resolve_media` is
-    /// still what answers the second question.
-    #[must_use]
-    pub fn on_disk(&self) -> &str {
-        if self.absolute_path.is_empty() {
-            &self.relative_path
-        } else {
-            &self.absolute_path
-        }
-    }
 }
 
 /// A footage item that is a folder of numbered stills rather than one file
@@ -517,6 +477,9 @@ pub struct Composition {
     /// the picture; After Effects' lights a layer from black.
     #[serde(default, skip_serializing_if = "CompLighting::is_default")]
     pub lighting: CompLighting,
+    /// What the comp's layers mix in. Linear light unless set.
+    #[serde(default, skip_serializing_if = "blending::CompBlending::is_default")]
+    pub blending: blending::CompBlending,
     /// **The mix mark** (docs/impl/audio-timeline.md §2): set by the first
     /// edit made in the Audio timeline, and never by looking at the comp.
     ///
@@ -731,6 +694,11 @@ pub struct TransformGroup {
     pub axis_modes: AxisModes,
     #[serde(default, skip_serializing_if = "crate::orient::Orient::is_off")]
     pub orient: crate::orient::Orient,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::motion_path::MotionPath::is_straight"
+    )]
+    pub motion_path: crate::motion_path::MotionPath,
     /// How the layer takes the comp's lights. Kept beside the transform
     /// because it is animated the same way and read in the same places; a
     /// file from before it existed reads as the lights it had then, and a
@@ -891,6 +859,7 @@ impl Default for TransformGroup {
             anchor_z: Property::zero(),
             scale_z: Property::fixed(100.0),
             orient: crate::orient::Orient::Off,
+            motion_path: crate::motion_path::MotionPath::Straight,
             after_effects_order: false,
             opacity: Property::fixed(100.0),
             axis_modes: AxisModes::default(),
@@ -1198,11 +1167,7 @@ impl TransformGroup {
             self.orientation_at(lt, read)
         };
         Placement {
-            position: (
-                read(&self.position_x),
-                read(&self.position_y),
-                hidden(&self.position_z, 0.0),
-            ),
+            position: crate::motion_path::position(self, lt, flat, read),
             anchor: (
                 read(&self.anchor_x),
                 read(&self.anchor_y),
@@ -2778,11 +2743,7 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
         return None;
     };
     let tr = &layer.transform;
-    let position = (
-        tr.position_x.value_at(lt),
-        tr.position_y.value_at(lt),
-        tr.position_z.value_at(lt),
-    );
+    let position = crate::motion_path::position(tr, lt, false, &|p| p.value_at(lt));
     let stored = crate::camera::oriented(
         tr.orientation_at(lt, &|p: &Property| p.value_at(lt)),
         (
@@ -5343,6 +5304,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -5675,6 +5637,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

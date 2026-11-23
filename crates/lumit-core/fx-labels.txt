@@ -253,6 +253,7 @@ Cells
 Centre
 Centre X
 Centre Y
+Centre Z
 Centre bias
 Change
 Change above
@@ -841,10 +842,12 @@ High range
 High soft clip
 Highlight
 Highlight amount
+Highlight angle
 Highlight balance
 Highlight boost
 Highlight colour
 Highlight exposure
+Highlight length
 Highlight opacity
 Highlight range
 Highlight saturation
@@ -1219,6 +1222,7 @@ Opacity layer
 Opacity over life
 Opaque print
 Open graph
+Open top
 Operate on alpha
 Operation
 Optical
@@ -1323,6 +1327,7 @@ Place x
 Place y
 Placement
 Planar track
+Plane
 Planes
 Plasma
 Plastic
@@ -1492,6 +1497,9 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Rim phase
+Rim wave
+Rim waves
 Rims
 Ring
 Ring wave
@@ -2072,6 +2080,9 @@ X frequency
 X wave
 X wave frequency
 X wave phase
+XY
+XYZ
+XZ
 Y
 Y amount
 Y edges
@@ -2079,6 +2090,7 @@ Y frequency
 Y wave
 Y wave frequency
 Y wave phase
+YZ
 Yellow
 Yellows
 Z

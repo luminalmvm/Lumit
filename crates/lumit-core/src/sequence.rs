@@ -1592,7 +1592,7 @@ fn scale_mix(effects: &mut [EffectInstance], share: f64) {
                 continue;
             }
             if let crate::model::EffectValue::Float(mix) = &mut param.value {
-                if let Some(scaled) = crate::ops::remapped(&mix.animation, share, 0.0) {
+                if let Some(scaled) = crate::anim::remapped(&mix.animation, share, 0.0) {
                     mix.animation = scaled;
                 }
             }

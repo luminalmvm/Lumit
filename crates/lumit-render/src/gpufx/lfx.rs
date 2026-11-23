@@ -454,6 +454,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

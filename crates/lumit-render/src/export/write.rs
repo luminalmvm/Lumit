@@ -1,12 +1,14 @@
 //! The frame loop every picture export runs, and the files it writes into.
 //! Runs on the export's thread, with the writing on a thread of its own.
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Document};
+use lumit_gpu::device::Fault;
 use lumit_media::encode::BitDepth;
 use uuid::Uuid;
 
@@ -41,12 +43,45 @@ impl Out {
     }
 }
 
+/// The renderer an export draws with, set up to write files.
+pub(super) fn renderer(
+    doc: &Arc<Document>,
+    spec: &ExportSpec,
+) -> Result<crate::headless::HeadlessRenderer, String> {
+    // The export renders through the SAME walk the Viewer does — the headless
+    // preview at full decode quality (preview == export by
+    // construction, gated by the bit-identity matrix in `headless::tests`).
+    // Its own renderer on its own device, so an export never contends with the
+    // Viewer's GPU work.
+    let mut renderer =
+        crate::headless::HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
+    // A layer whose model engine will not paint stops the run here rather than
+    // being drawn with the built-in engine and written to the file under the
+    // model's name. The pre-flight turns away everything the document alone can
+    // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
+    renderer.refuse_substitution();
+    renderer.hand_over_prefetched();
+    // The project's colour config, before anything is written: the refusal has
+    // to happen with the config in hand, and it has to happen before a file
+    // exists rather than halfway through one.
+    renderer.sync_colour(doc);
+    spec.check_with_colour(renderer.colour())?;
+    // A config's space is delivered by binding its baked table to the SAME
+    // display blit the Viewer presents through (docs/impl/ocio.md §5.2). Not a
+    // second transform at the pack stage: that would be a second implementation
+    // of one transform in the delivery path, which is the exact structure the
+    // preview-equals-export promise forbids.
+    renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
+    Ok(renderer)
+}
+
 /// Render every frame of `span` once and write it to every file in `outs`,
 /// with the sound and captions that go beside it. The files share the first
 /// one's depth, rate and quality.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn frames(
     renderer: &mut crate::headless::HeadlessRenderer,
+    open: &dyn Fn() -> Result<crate::headless::HeadlessRenderer, String>,
     doc: &Arc<Document>,
     comp_id: Uuid,
     span: &frame::Span,
@@ -151,6 +186,65 @@ pub(super) fn frames(
                 |p, px| p.frame(px),
             ))
         };
+        // A frame the card could not draw comes back black or half drawn, so
+        // each is watched, and one that faulted is drawn again once the card
+        // has finished with everything before it, on a new device if it was
+        // lost. One that still can't be drawn fails the export: a file is
+        // never written with a frame missing from it.
+        let guarded = |renderer: &mut crate::headless::HeadlessRenderer,
+                       src: usize|
+         -> Result<Result<Rendered, String>, String> {
+            renderer.watch_faults();
+            let frame = render(renderer, src);
+            match renderer.faults() {
+                Some(Fault::Starved(why)) => Ok(Err(why)),
+                // Reported, and the frame kept as drawn, as it always was.
+                Some(Fault::Refused(why)) => {
+                    let _ = writeln!(std::io::stderr(), "export: frame {src}: {why}");
+                    frame.map(Ok)
+                }
+                None => frame.map(Ok),
+            }
+        };
+        let redo = |renderer: &mut crate::headless::HeadlessRenderer,
+                    src: usize,
+                    mut why: String|
+         -> Result<Vec<Vec<u8>>, String> {
+            for _ in 0..FRAME_TRIES {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "export: drawing frame {src} again ({why})"
+                );
+                if renderer.device_lost() {
+                    *renderer = open()?;
+                } else {
+                    renderer.clear_frame_textures();
+                    renderer.drop_attachments();
+                    renderer.settle_gpu();
+                }
+                why = match guarded(renderer, src)? {
+                    Err(why) => why,
+                    Ok(frame) => match finish(renderer, frame) {
+                        Ok(_) | Err(_) if renderer.device_lost() => {
+                            "the graphics device was lost".into()
+                        }
+                        done => return done,
+                    },
+                };
+            }
+            Err(format!("frame {src} could not be drawn: {why}"))
+        };
+        // A frame read back from a device lost meanwhile is drawn again.
+        let deliver = |renderer: &mut crate::headless::HeadlessRenderer,
+                       (src, frame): (usize, Rendered)|
+         -> Result<Vec<Vec<u8>>, String> {
+            match finish(renderer, frame) {
+                Ok(_) | Err(_) if renderer.device_lost() => {
+                    redo(renderer, src, "the graphics device was lost".into())
+                }
+                done => done,
+            }
+        };
         let src_of = |n: usize| span.source(n);
         // The footage is decoded a couple of frames ahead, on the threads
         // playback reads with, so one frame decodes while another renders.
@@ -166,8 +260,11 @@ pub(super) fn frames(
         let mut asked = std::collections::VecDeque::new();
         let mut asked_to = 0usize;
         let mut rendered = Ok(());
-        let mut waiting = None;
-        for frame_n in 0..total {
+        let mut waiting: Option<(usize, Rendered)> = None;
+        // Once a frame has faulted, the card is let finish each frame before
+        // the next is drawn. Slower, and the same pictures.
+        let mut careful = false;
+        'frames: for frame_n in 0..total {
             held::wait(cancel);
             if cancel.load(Ordering::Relaxed) {
                 break;
@@ -247,38 +344,66 @@ pub(super) fn frames(
                     renderer.keep_decoded(item, frame, width);
                 }
             }
-            let frame = match render(&mut *renderer, src) {
-                Ok(frame) => frame,
+            let frame = match guarded(&mut *renderer, src) {
+                Ok(Ok(frame)) => frame,
+                Ok(Err(why)) => {
+                    careful = true;
+                    // The frame before is read back first, from the device it
+                    // was drawn on, as the redo may replace it.
+                    if let Some(before) = waiting.take() {
+                        match deliver(&mut *renderer, before) {
+                            Ok(packed) => {
+                                if frames.send(packed).is_err() {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                rendered = Err(e);
+                                break;
+                            }
+                        }
+                    }
+                    match redo(&mut *renderer, src, why) {
+                        Ok(packed) => Rendered::Bytes(packed),
+                        Err(e) => {
+                            rendered = Err(e);
+                            break;
+                        }
+                    }
+                }
                 Err(e) => {
                     rendered = Err(e);
                     break;
                 }
             };
+            if careful {
+                renderer.settle_gpu();
+            }
             // An eight-bit frame waits a turn, so its read-back runs while
-            // the next one renders. Any other goes at once.
-            let ready = match frame {
-                Rendered::Coming(_) => waiting.replace(frame),
-                Rendered::Bytes(_) => Some(frame),
+            // the next one renders. Any other goes at once, after the one
+            // still waiting.
+            let ready: Vec<(usize, Rendered)> = match frame {
+                Rendered::Coming(_) => waiting.replace((src, frame)).into_iter().collect(),
+                Rendered::Bytes(_) => waiting.take().into_iter().chain([(src, frame)]).collect(),
             };
-            let Some(before) = ready else {
-                continue;
-            };
-            let packed = match finish(&mut *renderer, before) {
-                Ok(packed) => packed,
-                Err(e) => {
-                    rendered = Err(e);
-                    break;
+            for before in ready {
+                let packed = match deliver(&mut *renderer, before) {
+                    Ok(packed) => packed,
+                    Err(e) => {
+                        rendered = Err(e);
+                        break 'frames;
+                    }
+                };
+                // Refused only when the writer has stopped, and it says why below.
+                if frames.send(packed).is_err() {
+                    break 'frames;
                 }
-            };
-            // Refused only when the writer has stopped, and it says why below.
-            if frames.send(packed).is_err() {
-                break;
             }
         }
         // And the last, when nothing stopped the loop.
         if let Some(last) = waiting.filter(|_| rendered.is_ok() && !cancel.load(Ordering::Relaxed))
         {
-            match finish(&mut *renderer, last) {
+            match deliver(&mut *renderer, last) {
                 Ok(packed) => {
                     let _ = frames.send(packed);
                 }
@@ -316,6 +441,10 @@ pub(super) fn frames(
     }
     Ok(())
 }
+
+/// How many more times a frame the card could not draw is tried before the
+/// export fails.
+const FRAME_TRIES: usize = 2;
 
 /// One frame packed for every file: copied for each but the last, which
 /// takes it, so a single file costs no copy.

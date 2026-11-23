@@ -7323,6 +7323,15 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     radial.shape = 1;
     radial.start_x = 16.0;
     radial.start_y = 12.0;
+    let mut angle = radial;
+    angle.shape = 2;
+    let mut clear = base;
+    clear.end_colour = [0.0, 0.2, 1.0, 0.0];
+    let mut clear_inside = clear;
+    clear_inside.paint = 0;
+    let mut lit = radial;
+    lit.highlight = 60.0;
+    lit.highlight_angle = -135.0;
     let mut scattered = base;
     scattered.scatter = 40.0;
     scattered.seed = 7;
@@ -7338,34 +7347,25 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     for (name, gradient, mix) in [
         ("linear", base, 1.0f32),
         ("radial", radial, 1.0),
+        ("angle", angle, 1.0),
+        ("highlight", lit, 1.0),
+        ("clear", clear, 1.0),
+        ("clear inside", clear_inside, 1.0),
         ("scattered", scattered, 1.0),
         ("hdr", hdr, 1.0),
         ("degenerate", degenerate, 1.0),
         ("three colours", three, 1.0),
+        ("three colours in display", three, 1.0),
         ("mixed", base, 0.6),
         ("mix-zero", base, 0.0),
     ] {
         let mut g = gradient;
         g.mix = mix * 100.0;
-        let p = g.packed();
-        let op = GradientOp {
-            radial: p.radial,
-            start: p.start,
-            axis: p.axis,
-            inv_len2: p.inv_len2,
-            inv_len: p.inv_len,
-            c0: p.c0,
-            c1: p.c1,
-            scatter: p.scatter,
-            seed: p.seed,
-            mix: p.mix,
-            clip_to_alpha: p.clip_to_alpha,
-            mids: p.mids,
-            mid: p.mid,
-        };
+        let p = g.packed().in_display(name.ends_with("in display"));
+        let op = GradientOp::from(&p);
 
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::gradient(&mut cpu, w, h, &p);
+        lumit_core::fx::cpu::gradient::gradient(&mut cpu, w, h, &p);
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let out = fx.gradient(&ctx, &tex, w, h, &op);
@@ -7379,8 +7379,8 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         } else {
             assert!(gpu != img, "{name}: the ramp must actually do something");
         }
-        if mix == 1.0 {
-            // A generator writes opaque pixels edge to edge (§3.35).
+        if mix == 1.0 && !name.starts_with("clear") {
+            // Opaque colours write opaque pixels edge to edge (§3.35).
             for g in gpu.chunks_exact(4) {
                 assert_eq!(g[3], 1.0, "{name}: the ramp must be opaque");
             }

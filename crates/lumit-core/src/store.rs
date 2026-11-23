@@ -190,48 +190,6 @@ struct Journal {
     shared: Option<Shared>,
 }
 
-impl Journal {
-    /// An edit made here has moved the document. A guest queues it until the
-    /// host answers, a guest without its host keeps it for the merge, and the
-    /// tap is told either way.
-    fn moved_locally(&mut self, op: &Op, inverse: &Op) {
-        let Some(shared) = self.shared.as_mut() else {
-            return;
-        };
-        shared.next_id += 1;
-        let id = shared.next_id;
-        match &mut shared.link {
-            Link::Host => {}
-            Link::Guest { pending } => pending.push_back(Pending {
-                id,
-                op: op.clone(),
-                was: inverse.clone(),
-                landed: Some((op.clone(), inverse.clone())),
-            }),
-            Link::Adrift { since, .. } => {
-                since.push((op.clone(), inverse.clone()));
-                return;
-            }
-        }
-        let was = inverse;
-        (shared.tap)(Moved::Local { id, op, was });
-    }
-    /// Whether moving the document from `before` to `after` would write over
-    /// something another person changed after revision `at`. Undo and redo
-    /// skip a step that would.
-    fn overwrites_others(&self, before: &Document, after: &Document, at: u64) -> bool {
-        let Some(shared) = self.shared.as_ref() else {
-            return false;
-        };
-        if shared.touched.is_empty() {
-            return false;
-        }
-        let keys = footprint(before, after);
-        let later = shared.touched.iter().filter(|(_, rev)| **rev > at);
-        any_overlap(&keys, later.map(|(key, _)| key))
-    }
-}
-
 /// One row of the **History** list: what the step is called, and
 /// whether it has been undone — a step that has been undone is still on the
 /// road, greyed, until a fresh commit clears the forward history.
@@ -1113,6 +1071,7 @@ impl DocumentStore {
 }
 
 mod history;
+mod journal;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -1433,6 +1392,7 @@ mod tests {
             master_automation: Default::default(),
             loudness_target: None,
             lighting: Default::default(),
+            blending: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

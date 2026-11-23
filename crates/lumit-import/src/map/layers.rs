@@ -574,6 +574,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
     };
     TransformGroup {
         orient: lumit_core::orient::Orient::Off,
+        motion_path: lumit_core::motion_path::MotionPath::Straight,
         anchor_x: scalar(conv, path, props, "ADBE Anchor Point", 0, 0.0),
         anchor_y: scalar(conv, path, props, "ADBE Anchor Point", 1, 0.0),
         position_x: scalar(conv, path, props, "ADBE Position", 0, 0.0),
