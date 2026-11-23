@@ -253,6 +253,7 @@ Cells
 Centre
 Centre X
 Centre Y
+Centre Z
 Centre bias
 Change
 Change above
@@ -1326,6 +1327,7 @@ Place x
 Place y
 Placement
 Planar track
+Plane
 Planes
 Plasma
 Plastic
@@ -2078,6 +2080,9 @@ X frequency
 X wave
 X wave frequency
 X wave phase
+XY
+XYZ
+XZ
 Y
 Y amount
 Y edges
@@ -2085,6 +2090,7 @@ Y frequency
 Y wave
 Y wave frequency
 Y wave phase
+YZ
 Yellow
 Yellows
 Z

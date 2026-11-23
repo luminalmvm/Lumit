@@ -3341,6 +3341,30 @@
   "@fxAcross": {
     "description": "Effect controls — a Pattern option on Vary points and Pick points: a point's number is where it sits from left to right."
   },
+  "fxCentreZ": "Centre Z",
+  "@fxCentreZ": {
+    "description": "Effect controls: a control on Vary points and Pick points. How far in front of or behind the layer's plane the pattern's centre sits."
+  },
+  "fxPlane": "Plane",
+  "@fxPlane": {
+    "description": "Effect controls: a control on Vary points and Pick points. The plane the Distance, Stripes, Checker and Waves patterns lie in."
+  },
+  "fxPlaneXy": "XY",
+  "@fxPlaneXy": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. Across and down, the layer's own plane. Axis letters."
+  },
+  "fxPlaneXz": "XZ",
+  "@fxPlaneXz": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. Across and into depth, lying flat like a floor. Axis letters."
+  },
+  "fxPlaneYz": "YZ",
+  "@fxPlaneYz": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. Down and into depth, standing side on. Axis letters."
+  },
+  "fxPlaneXyz": "XYZ",
+  "@fxPlaneXyz": {
+    "description": "Effect controls: a Plane option on Vary points and Pick points. A distance measured through all three axes. Axis letters."
+  },
   "fxPicked": "Picked",
   "@fxPicked": {
     "description": "Effect controls — a Pattern option on Vary points and Pick points, and an Apply to option: the points an earlier Pick points marked. An adjective."

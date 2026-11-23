@@ -117,6 +117,7 @@ pub mod pick_points;
 pub mod pixel_sort;
 pub mod planar_track;
 pub mod point_control;
+pub mod point_pattern;
 pub mod points_along_path;
 pub mod points_field;
 pub mod polar_coordinates;
