@@ -47,6 +47,9 @@ pub struct Frame {
     /// 0..1: how far light too bright for its colour runs to white. 0
     /// leaves it as drawn.
     pub burn: f32,
+    /// How far the light is blurred before Burn, raster pixels. 0 leaves it
+    /// sharp.
+    pub defocus: f32,
 }
 
 /// Light past 1 in its brightest channel, run toward white by `burn`: the
@@ -90,6 +93,7 @@ impl Frame {
             time_s: 0.0,
             edge_fade: 0.0,
             burn: 0.0,
+            defocus: 0.0,
         }
     }
 }
@@ -437,6 +441,29 @@ pub fn draw_with(
     // Burn the light is summed apart first, as the GPU does, then burnt
     // and added.
     let burn = frame.burn;
+    // Under Defocus the whole light is summed apart and blurred before it is
+    // burnt, as a lens out of focus spreads it before the film takes it.
+    if frame.defocus > 0.0 {
+        let stride = w as usize * 4;
+        let n = stride * h as usize;
+        let mut light = vec![0.0f32; n];
+        light
+            .par_chunks_mut(stride)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for (i, p) in &placed {
+                    splat_row(i, p, w, y as u32, row, layer.as_ref());
+                }
+            });
+        crate::fx::cpu::blur_gaussian(&mut light, w, h, frame.defocus, 0, 1.0);
+        for (px, l) in rgba[..n].chunks_exact_mut(4).zip(light.chunks_exact(4)) {
+            let b = burnt([l[0], l[1], l[2]], burn);
+            for k in 0..3 {
+                px[k] += b[k];
+            }
+        }
+        return;
+    }
     rgba.par_chunks_mut(w as usize * 4)
         .take(h as usize)
         .enumerate()

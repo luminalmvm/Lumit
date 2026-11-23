@@ -70,6 +70,8 @@ pub struct SpriteFlareOp<'a> {
     pub edge_fade: f32,
     /// 0..1: how far light too bright for its colour runs to white.
     pub burn: f32,
+    /// Raster pixels the light is blurred by before Burn; 0 is sharp.
+    pub defocus: f32,
     pub spots: Option<SpotsOp>,
     pub hide: Option<HideOp<'a>>,
     pub depth: Option<DepthOp<'a>>,
@@ -481,15 +483,6 @@ impl FxEngine {
                 entry(12, R::TextureView(&v_layer)),
             ],
         );
-        let add_group = group(
-            &fx.add.0,
-            &[
-                entry(0, params.as_entire_binding()),
-                entry(3, R::TextureView(&v_src)),
-                entry(4, R::TextureView(&v_light)),
-                entry(5, R::TextureView(&v_out)),
-            ],
-        );
         let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("fx-sprite-flare-draw"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -506,6 +499,35 @@ impl FxEngine {
         rp.set_bind_group(0, &draw_group, &[]);
         rp.draw(0..6, 0..count);
         drop(rp);
+        // Defocus: the light blurred before it is burnt and added, as
+        // `raster::draw_with` does.
+        let (v_added, mut enc) = if op.defocus > 0.0 {
+            drop(enc);
+            let b = self.blur(
+                ctx,
+                &light,
+                w,
+                h,
+                None,
+                &super::blur::BlurOp {
+                    radius_px: op.defocus,
+                    edge: 0,
+                    mix: 1.0,
+                },
+            );
+            (view(&b), ctx.encoder("fx-sprite-flare-add"))
+        } else {
+            (v_light, enc)
+        };
+        let add_group = group(
+            &fx.add.0,
+            &[
+                entry(0, params.as_entire_binding()),
+                entry(3, R::TextureView(&v_src)),
+                entry(4, R::TextureView(&v_added)),
+                entry(5, R::TextureView(&v_out)),
+            ],
+        );
         pass(
             &mut enc,
             &fx.add.1,

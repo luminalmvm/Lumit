@@ -6701,6 +6701,7 @@ fn every_parameter_declares_a_unit() {
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
             ("sprite_flare", "light_z"),
+            ("sprite_flare", "defocus"),
             ("sprite_flare", "centre_x"),
             ("sprite_flare", "centre_y"),
             ("sprite_flare", "light_size"),

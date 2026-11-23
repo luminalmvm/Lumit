@@ -277,6 +277,19 @@ pub struct SpriteFlare {
     )]
     pub burn: f32,
 
+    /// How far out of focus the flare is, px@comp: its light is blurred as
+    /// a lens out of focus spreads it, before Burn, so a burnt middle is a
+    /// soft glow rather than the sharp shape of the elements.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 500.0,
+        unit = Px
+    )]
+    pub defocus: f32,
+
     /// What turns rays' shimmer and orbs' drift. A full turn comes back to
     /// the start.
     #[dial(label = "Evolution", default = 0.0)]
@@ -461,6 +474,8 @@ impl SpriteFlare {
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
             burn: (s.burn / 100.0).clamp(0.0, 1.0),
+            // The row arrives at the raster's size, as the blur wants it.
+            defocus: s.defocus.max(0.0),
         }
     }
 

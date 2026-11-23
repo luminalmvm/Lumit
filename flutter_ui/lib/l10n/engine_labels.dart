@@ -1474,6 +1474,7 @@ Map<String, String> get _built => {
       "NTSC": l10n.fxNtsc,
       "Offset": l10n.fxOffset,
       "Burn": l10n.fxBurn,
+      "Defocus": l10n.fxDefocus,
       "Offset x": l10n.fxOffsetX,
       "Offset y": l10n.fxOffsetY,
       "Opacity": l10n.fxOpacity,

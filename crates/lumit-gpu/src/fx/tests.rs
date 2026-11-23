@@ -5581,6 +5581,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
             centre: f.centre,
             edge_fade: f.edge_fade * f.px_scale,
             burn: f.burn,
+            defocus: f.defocus,
             spots: None,
             hide,
             depth,
@@ -5680,6 +5681,18 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         cool
     }), "Burn changes the bright light");
 
+    // Defocus: the light blurred before Burn, the same on both sides.
+    let mut soft = hot.clone();
+    soft.defocus = 6.0;
+    let (cpu_soft, gpu_soft) = (cpu_of(&soft), gpu_of(&soft));
+    let worst_soft = cpu_soft
+        .iter()
+        .zip(&gpu_soft)
+        .map(|(a, b)| (a - b).abs() / a.abs().max(1.0))
+        .fold(0.0f32, f32::max);
+    assert!(worst_soft < 1e-2, "defocused worst |Δ| {worst_soft}");
+    assert_ne!(gpu_soft, gpu_hot, "Defocus changes the light");
+
     // Nudging the light by a pixel nudges the light drawn by a little: no
     // element pops in or out.
     let total = |lx: f32| {
@@ -5733,6 +5746,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         centre: spotted.centre,
         edge_fade: spotted.edge_fade * spotted.px_scale,
         burn: spotted.burn,
+        defocus: spotted.defocus,
         spots: Some(crate::fx::sprite_flare::SpotsOp {
             threshold: 0.3,
             softness: 0.1,
