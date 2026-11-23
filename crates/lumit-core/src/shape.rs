@@ -428,6 +428,42 @@ pub fn contents_bounds(contents: &[ShapeEntry], t: f64) -> Option<(f64, f64, f64
     out
 }
 
+/// How far an edit from `before` to `after` moves the corner of the art's
+/// box at the head of the layer, px. A shape layer's own pixels start at that
+/// corner, so this is how far the art moved inside them. (0, 0) when either
+/// side draws nothing, as there is no corner to follow.
+#[must_use]
+pub fn corner_shift(before: &[ShapeEntry], after: &[ShapeEntry]) -> (f64, f64) {
+    match (contents_bounds(before, 0.0), contents_bounds(after, 0.0)) {
+        (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
+        _ => (0.0, 0.0),
+    }
+}
+
+/// `masks` moved back by `shift`, every key with them, so they stay on art
+/// whose box corner moved by `shift`. `None` when nothing moves.
+#[must_use]
+pub fn masks_on_art(
+    masks: &[crate::mask::Mask],
+    shift: (f64, f64),
+) -> Option<Vec<crate::mask::Mask>> {
+    if masks.is_empty() || shift == (0.0, 0.0) {
+        return None;
+    }
+    let mut out = masks.to_vec();
+    for mask in &mut out {
+        let keyed = mask.path_keys.iter_mut().map(|key| &mut key.path);
+        for vertex in std::iter::once(&mut mask.path)
+            .chain(keyed)
+            .flat_map(|path| &mut path.vertices)
+        {
+            vertex.pos.0 -= shift.0;
+            vertex.pos.1 -= shift.1;
+        }
+    }
+    Some(out)
+}
+
 /// `contents` as they are at `t`: every keyed or expression-driven number
 /// replaced by its value then, and every keyed path by its shape then.
 ///

@@ -5058,15 +5058,12 @@ fn render_comp_with_preview(
             if let Ok(written) = crate::api::shape::write_entries(&items, contents, offset, at) {
                 // The position follows the art's corner, as the commit's
                 // does, or a growing stroke slides the art while it is
-                // dragged and jumps back on release.
-                let shift = match (
-                    lumit_core::shape::contents_bounds(contents, 0.0),
-                    lumit_core::shape::contents_bounds(&written, 0.0),
-                ) {
-                    (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
-                    _ => (0.0, 0.0),
-                };
+                // dragged and jumps back on release. The masks stay on the art.
+                let shift = lumit_core::shape::corner_shift(contents, &written);
                 *contents = written;
+                if let Some(masks) = lumit_core::shape::masks_on_art(&layer.masks, shift) {
+                    layer.masks = masks;
+                }
                 for (property, delta) in [
                     (&mut layer.transform.position_x, shift.0),
                     (&mut layer.transform.position_y, shift.1),
