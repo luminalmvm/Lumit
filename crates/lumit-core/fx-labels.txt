@@ -1219,6 +1219,7 @@ Opacity layer
 Opacity over life
 Opaque print
 Open graph
+Open top
 Operate on alpha
 Operation
 Optical
@@ -1492,6 +1493,9 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Rim phase
+Rim wave
+Rim waves
 Rims
 Ring
 Ring wave
