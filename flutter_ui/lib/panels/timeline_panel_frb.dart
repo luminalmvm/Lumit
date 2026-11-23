@@ -121,7 +121,12 @@ import 'timeline_outline_row_frb.dart' show renameLayerInView;
 import 'transform_rows_frb.dart';
 import 'viewer_tool_cursor.dart' show handPanLayer;
 import 'text_animator_rows_frb.dart'
-    show TextAnimatorValue, removeTextAnimatorValue, removeTextAnimators;
+    show
+        TextAnimatorValue,
+        animatorsMovedNote,
+        watchAnimatorOrder,
+        removeTextAnimatorValue,
+        removeTextAnimators;
 
 // The parts this file was split into (the split rule): every name they
 // hold was reachable through this file before the split, and still is.
@@ -1696,6 +1701,24 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The keys picked on [path]'s row, by index, in whichever view is up. A
   /// graph key on either axis of a row counts for the row, as a lane key does.
+  /// A Text layer's animators moved, renamed or taken out (or one of their
+  /// selectors): the keys picked on their rows go with them, and those of an
+  /// animator that is gone are let go.
+  void _onAnimatorsMoved() {
+    final note = animatorsMovedNote.value;
+    if (note == null || !mounted) return;
+    for (final picked in [_laneKeySelection, _graphKeySelection]) {
+      final kept = {
+        for (final id in picked)
+          if (note.timelineKey(id) case final m?) m,
+      };
+      picked
+        ..clear()
+        ..addAll(kept);
+    }
+    setState(() {});
+  }
+
   Set<int> _keysPickedOn(String path) {
     final channels = graphChannels(
         layers: Provider.of<LumitUiState>(context, listen: false).model.layers,
@@ -2318,6 +2341,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void initState() {
     super.initState();
     renameLayerInView = _renameInView;
+    animatorsMovedNote.addListener(_onAnimatorsMoved);
     _zoomMotion = SmoothZoom(vsync: this, initial: 1, min: 1, max: 64)
       ..addListener(_onZoomTick);
     _vOutline.addListener(() => _followScroll(_vOutline, _vLane));
@@ -2336,6 +2360,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    // Folds and picks follow the animators through undo and redo too.
+    watchAnimatorOrder(_ui!);
     // The columns as they were left, or the defaults.
     final columns = columnsFromJson(_ui!.workspace.timelineColumns);
     _groupOrder = columns.order;
@@ -2894,7 +2920,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       try {
         if (all.contains(id)) {
           if (entry.layer.getText()?.animators.isEmpty ?? true) continue;
-          removeTextAnimators(entry.layer);
+          removeTextAnimators(entry.layer, ui: _ui);
           deleted = true;
           continue;
         }
@@ -2909,7 +2935,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final gone = (whole[id]?.toList() ?? [])..sort((a, b) => b - a);
         for (final index in gone) {
           if (index < entry.layer.getText()!.animators.length) {
-            removeTextAnimators(entry.layer, index: index);
+            removeTextAnimators(entry.layer, index: index, ui: _ui);
             deleted = true;
           }
         }
@@ -3995,6 +4021,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   @override
   void dispose() {
     if (renameLayerInView == _renameInView) renameLayerInView = null;
+    animatorsMovedNote.removeListener(_onAnimatorsMoved);
     _mixRetry?.cancel();
     _itemChanges?.cancel();
     _captions.removeListener(_onCaptions);

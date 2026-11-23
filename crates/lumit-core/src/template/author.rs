@@ -293,6 +293,7 @@ fn layer_ops(comp: Uuid, settings: &[Setting], before: &Layer, after: &Layer, ma
                 comp,
                 layer,
                 document: document.clone(),
+                graph: None,
             },
             LayerKind::Shape { contents } => Op::SetShapeContents {
                 comp,

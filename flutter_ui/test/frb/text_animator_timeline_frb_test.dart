@@ -84,15 +84,19 @@ void main() {
           find.byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')),
           findsNothing,
           reason: 'the animator heading shows once Animators is open');
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
       expect(
           find.byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')),
           findsOneWidget);
 
       // The animator open shows its whole selector, as Effect controls does.
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/0')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/0')), matching: find.byType(Text)).first);
+      await tester.pumpAndSettle();
+      // Based on and Shape fold under the selector's Advanced.
+      expect(find.byKey(const ValueKey<String>('tl-anim-0-basis')), findsNothing);
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-group-$id/animators/0/advanced')));
       await tester.pumpAndSettle();
       for (final setting in ['selector', 'basis', 'shape']) {
         expect(
@@ -110,6 +114,142 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey<String>('text-animate-preset-typeOn')),
           findsOneWidget);
+    });
+
+    testWidgets('An animator heading has its eye, solo, grip and More',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = text.internallayerId.toString();
+      await twirl(tester, id);
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animate-scale')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animate-opacity')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators, hasLength(2));
+
+      expect(find.byKey(const ValueKey<String>('tl-anim-grip-1')), findsOneWidget);
+      // Named after what it was added for.
+      expect(text.getText()!.animators.map((a) => a.name),
+          ['Animator 1 (Scale)', 'Animator 2 (Opacity)']);
+      // Under an open animator, Animator amount then Link to, as in the
+      // Effect controls panel; Link offset once it is linked.
+      await twirl(tester, '$id/animators/0');
+      final amountY = tester.getTopLeft(find.byKey(
+          const ValueKey<String>('tl-anim-0-animatorAmount-label'))).dy;
+      final linkY = tester.getTopLeft(find.byKey(
+          const ValueKey<String>('tl-anim-0-link-label'))).dy;
+      expect(linkY, greaterThan(amountY));
+      expect(find.byKey(const ValueKey<String>('tl-anim-0-link-offset')),
+          findsNothing);
+      final linked = text.getText()!.animators;
+      writeTextAnimatorList(text, [
+        animatorWith(linked[0], follow: linked[1].name),
+        linked[1],
+      ]);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey<String>('tl-anim-0-link-offset')),
+          findsOneWidget);
+      writeTextAnimatorList(text, linked);
+      p.uiState.model.refresh();
+      await twirl(tester, '$id/animators/0');
+
+      // Add on each animator starts in the column of Add animator.
+      final addAnimator = tester.getTopLeft(
+          find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      final add0 = tester.getTopLeft(find
+          .byKey(ValueKey<String>('tl-text-animator-add-$id/animators/0')));
+      expect(add0.dx, closeTo(addAnimator.dx, 1));
+      await tester.tap(find.byKey(const ValueKey<String>('tl-anim-eye-0')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators[0].enabled, isFalse);
+      await tester.tap(find.byKey(const ValueKey<String>('tl-anim-solo-1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators[1].solo, isTrue);
+
+      // Animator 2 open: it stays open as it moves.
+      await twirl(tester, '$id/animators/1');
+      expect(p.uiState.folds.timelineOpen, contains('$id/animators/1'));
+
+      // More: the same menu as in the Effect controls panel.
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animator-more-$id/animators/1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animator-move-up-1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.properties?.single),
+          ['opacity', 'scale']);
+      expect(p.uiState.folds.timelineOpen, contains('$id/animators/0'));
+      expect(p.uiState.folds.timelineOpen,
+          isNot(contains('$id/animators/1')));
+
+      // The grip dropped on the other heading moves it there.
+      final from = tester.getCenter(find.byKey(const ValueKey<String>('tl-anim-grip-1')));
+      final to = tester.getCenter(find.byKey(const ValueKey<String>('tl-anim-grip-0')));
+      final g = await tester.startGesture(from);
+      await tester.pump(const Duration(milliseconds: 50));
+      await g.moveTo(to);
+      await tester.pump();
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.properties?.single),
+          ['scale', 'opacity']);
+      // Remove on the heading.
+      await tester.tap(find.byKey(
+          ValueKey<String>('tl-text-animator-remove-$id/animators/1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.properties?.single),
+          ['scale']);
+      // The next is numbered past the one left, never taking its name.
+      await tester.tap(find.byKey(ValueKey<String>('tl-text-animate-$id/animators')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animate-scale')));
+      await tester.pumpAndSettle();
+      final names = text.getText()!.animators.map((a) => a.name).toList();
+      expect(names.toSet(), hasLength(names.length), reason: '$names');
+    });
+
+    testWidgets('an open animator stays open through a move and its undo',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      writeTextAnimatorList(text, [
+        freshTextAnimator('Rise'),
+        freshTextAnimator('Fade'),
+      ]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = text.internallayerId.toString();
+      await twirl(tester, id);
+      await twirl(tester, '$id/animators');
+      await twirl(tester, '$id/animators/1');
+      final open = p.uiState.folds.timelineOpen;
+      expect(open, contains('$id/animators/1'));
+
+      await tester.tap(find.byKey(
+          ValueKey<String>('tl-text-animator-more-$id/animators/1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('text-animator-move-up-1')));
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.name), ['Fade', 'Rise']);
+      expect(open, contains('$id/animators/0'));
+      expect(open, isNot(contains('$id/animators/1')));
+
+      // Undo puts Fade back second, and its open row with it.
+      p.state.project!.undo();
+      p.uiState.model.refreshIfMoved();
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.map((a) => a.name), ['Rise', 'Fade']);
+      expect(open, contains('$id/animators/1'));
+      expect(open, isNot(contains('$id/animators/0')));
     });
 
     testWidgets('Delete takes off an animator, a property, or all of them',
@@ -136,10 +276,9 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
       await twirl(tester, id);
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/0')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/0')), matching: find.byType(Text)).first);
       await tester.pumpAndSettle();
 
       // A property row: Rotation comes off the list, the axis off the
@@ -158,15 +297,14 @@ void main() {
       expect(first.axes, isEmpty);
 
       // An animator's heading takes that animator.
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-group-$id/animators/1')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators/1')), matching: find.byType(Text)).first);
       await tester.pump();
       await delete(tester, p);
       expect(text.getText()!.animators.map((a) => a.name),
           ['Animator 1', 'Animator 3']);
 
       // Animators takes every one.
-      await tester.tap(find.byKey(ValueKey<String>('tl-group-$id/animators')));
+      await tester.tap(find.descendant(of: find.byKey(ValueKey<String>('tl-group-$id/animators')), matching: find.byType(Text)).first);
       await tester.pump();
       await delete(tester, p);
       expect(text.getText()!.animators, isEmpty);

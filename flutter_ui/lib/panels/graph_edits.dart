@@ -187,6 +187,7 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits,
       writeTextAnimatorScalar(
         layer: channel.entry.layer,
         index: channel.animator,
+        selector: channel.animatorSelector,
         value: value,
         to: next,
       );

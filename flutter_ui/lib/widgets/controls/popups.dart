@@ -168,6 +168,10 @@ Future<T?> showLumitPopup<T>({
   // navigated — and nothing else does: a dropdown that let the panel behind it
   // light up under the pointer would be answering to a click it will not get.
   bool hoverThrough = false,
+  // Where a click does not count as a click away, in window coordinates: the
+  // submenu row a flyout opened from, so clicking that row leaves the menu
+  // open rather than closing the whole chain.
+  Rect? keepOpenOn,
 }) {
   final overlay = Overlay.of(context);
   var anchor = overlayLocal(context, position);
@@ -252,7 +256,10 @@ Future<T?> showLumitPopup<T>({
                     : HitTestBehavior.opaque,
                 // One click away is one dismissal: the whole chain goes, not
                 // just the popup whose barrier caught the click.
-                onTap: closeLumitPopups,
+                onTapUp: (d) {
+                  if (keepOpenOn?.contains(d.globalPosition) ?? false) return;
+                  closeLumitPopups();
+                },
               ),
             ),
           ),

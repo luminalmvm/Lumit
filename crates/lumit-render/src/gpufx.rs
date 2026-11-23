@@ -1665,6 +1665,7 @@ impl GpuEffect for TurbulentDisplace {
                 pin: t.pin,
                 inv_pin_band: t.inv_pin_band,
                 mix: t.mix,
+                bulge: t.bulge,
             },
         )
     }

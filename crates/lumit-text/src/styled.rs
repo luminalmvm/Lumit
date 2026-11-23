@@ -592,9 +592,15 @@ fn glyph_matrix(glyph: &Placed, laid: &Laid, slanted: bool) -> Transform {
 /// What an animator does to a letter, about its own middle on the baseline.
 fn animated(matrix: Transform, advance: f32, x: &GlyphXform) -> Transform {
     let middle = advance * 0.5;
-    matrix
+    let scaled = matrix
         .then_translate(-middle, 0.0)
-        .then_scale(x.scale[0], x.scale[1])
+        .then_scale(x.scale[0], x.scale[1]);
+    // Skew slants the letter about the same middle, before it is turned.
+    let slanted = match crate::blur::skew_matrix(x.skew, x.skew_axis) {
+        Some([xx, yx, xy, yy]) => scaled.then(&Transform::new(xx, yx, xy, yy, 0.0, 0.0)),
+        None => scaled,
+    };
+    slanted
         .then_rotate(Angle::from_degrees(x.rotation))
         .then_translate(middle + x.position[0], x.position[1])
 }
@@ -652,10 +658,22 @@ fn placements(
 ) -> Vec<(usize, Transform, GlyphXform)> {
     let mut out = Vec::with_capacity(laid.glyphs.len());
     let mut flat = 0.0f32;
+    // Tracking an animator adds: the room after each letter pushes on the
+    // letters after it on its line (along a path, all of them).
+    let em = laid.size / 1000.0;
+    let (mut tracked, mut on_line) = (0.0f32, usize::MAX);
     for (i, glyph) in laid.glyphs.iter().enumerate() {
-        let flat_x = flat;
+        if matches!(run, Run::Straight { .. }) && glyph.line != on_line {
+            on_line = glyph.line;
+            tracked = 0.0;
+        }
+        let shift = tracked;
+        let flat_x = flat + shift;
         flat += glyph.advance;
         let x = xforms.get(glyph.ch).copied().unwrap_or_default();
+        if x.tracking.is_finite() {
+            tracked += x.tracking * em;
+        }
         let (sx, sy) = (x.scale[0], x.scale[1]);
         if !(x.opacity > 0.0 && sx.abs() >= 1e-4 && sy.abs() >= 1e-4) {
             continue; // scaled or faded to nothing
@@ -668,6 +686,10 @@ fn placements(
             glyph.advance,
             &x,
         );
+        let matrix = match run {
+            Run::Straight { .. } => matrix.then_translate(shift, 0.0),
+            Run::Along { .. } => matrix,
+        };
         out.push((i, matrix.then(&place), x));
     }
     out
@@ -702,15 +724,22 @@ fn paint<'s>(
     style: impl Into<zeno::Style<'s>>,
     colour: [u8; 4],
     opacity: f32,
-) {
+) -> Option<[u32; 4]> {
     let alpha = f32::from(colour[3]) / 255.0 * opacity.clamp(0.0, 1.0);
     if alpha <= 0.0 {
-        return;
+        return None;
     }
     let (mask, at) = Mask::new(path)
         .style(style)
         .transform(Some(matrix))
         .render();
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)] // clipped to the raster
+    let rect = [
+        at.left.clamp(0, w as i32) as u32,
+        at.top.clamp(0, h as i32) as u32,
+        (i64::from(at.left) + i64::from(at.width)).clamp(0, i64::from(w)) as u32,
+        (i64::from(at.top) + i64::from(at.height)).clamp(0, i64::from(h)) as u32,
+    ];
     for row in 0..at.height {
         let Some(y) = i64::from(at.top)
             .checked_add(i64::from(row))
@@ -741,6 +770,7 @@ fn paint<'s>(
             }
         }
     }
+    Some(rect)
 }
 
 /// Draw the laid words into a `w` × `h` raster, `zoom` raster pixels to each
@@ -786,6 +816,7 @@ fn draw(
         &[(true, true)]
     };
 
+    let mut scratch: Vec<u8> = Vec::new();
     for &(lower, upper) in passes {
         let (fill_now, stroke_now) = if style.stroke_over {
             (lower, upper)
@@ -822,20 +853,40 @@ fn draw(
                 ]);
                 lumit_core::pixels::solid_rgba(tinted)
             };
-            let ink = |rgba: &mut [u8], how: zeno::Style<'static>, colour: [u8; 4]| {
-                paint(rgba, (w, h), path, matrix, how, colour, x.opacity);
+            // A blurred letter is drawn alone, blurred, then laid over.
+            let blur = x.blur * zoom;
+            let blurred = blur.is_finite() && blur >= 0.5;
+            if blurred && scratch.is_empty() {
+                scratch = vec![0u8; rgba.len()];
+            }
+            let mut inked: Option<[u32; 4]> = None;
+            let mut ink = |rgba: &mut [u8], how: zeno::Style<'static>, colour: [u8; 4]| {
+                if let Some(r) = paint(rgba, (w, h), path, matrix, how, colour, x.opacity) {
+                    inked = Some(inked.map_or(r, |a| {
+                        [
+                            a[0].min(r[0]),
+                            a[1].min(r[1]),
+                            a[2].max(r[2]),
+                            a[3].max(r[3]),
+                        ]
+                    }));
+                }
             };
+            let target: &mut Vec<u8> = if blurred { &mut scratch } else { &mut rgba };
             if stroked && stroke_now && !style.stroke_over {
-                ink(&mut rgba, outline.into(), stroke_colour);
+                ink(target, outline.into(), stroke_colour);
             }
             if style.fill_on && fill_now {
                 if style.faux_bold {
-                    ink(&mut rgba, bold.into(), fill);
+                    ink(target, bold.into(), fill);
                 }
-                ink(&mut rgba, Fill::NonZero.into(), fill);
+                ink(target, Fill::NonZero.into(), fill);
             }
             if stroked && stroke_now && style.stroke_over {
-                ink(&mut rgba, outline.into(), stroke_colour);
+                ink(target, outline.into(), stroke_colour);
+            }
+            if let (true, Some(rect)) = (blurred, inked) {
+                crate::blur::blur_over(&mut scratch, &mut rgba, (w, h), rect, blur);
             }
         }
     }

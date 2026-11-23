@@ -4038,6 +4038,26 @@ class _GraphPainter extends CustomPainter {
       }
       canvas.drawPath(path, paint);
 
+      // A Stagger's Amount: every unit's own copy of the curve, a delay
+      // later, faint, so the spread of the cascade can be seen.
+      if (chLens == GraphLens.value && channel.staggerCopies.isNotEmpty) {
+        final faint = Paint()
+          ..color = paint.color.withValues(alpha: 0.18)
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke;
+        for (final later in channel.staggerCopies) {
+          final copy = Path();
+          var start = true;
+          for (var x = 0.0; x <= size.width; x += step) {
+            final seconds = axis.frameAtExact(x) / f - later;
+            final y = _yOf(channel.drawnValueAt(keys, seconds), range, size);
+            start ? copy.moveTo(x, y) : copy.lineTo(x, y);
+            start = false;
+          }
+          canvas.drawPath(copy, faint);
+        }
+      }
+
       // Speed and acceleration lenses: the vertical join at each key, where
       // the in and out sides step — drawn faint so a discontinuity reads as
       // one key, not two. Acceleration almost always steps at a key.

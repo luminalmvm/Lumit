@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 // The Animators section on frb: a text layer's letters moved one at a time.
 //
 // Driven through the Effect controls panel, like the Source rows beside it,
@@ -44,15 +45,40 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('text-animate-blank')));
     }
 
-    Future<void> mount(WidgetTester tester, dynamic p) async {
+    Future<void> mount(WidgetTester tester, dynamic p,
+        {double width = 800}) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
         child: const EffectControlsPanelFrb(),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
-        size: const Size(560, 900),
+        size: Size(width, 900),
       ));
       await tester.pump();
     }
+
+    testWidgets('a narrow panel folds Remove into More rather than cut it',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      writeTextAnimatorList(text, [freshTextAnimator('A')]);
+      p.uiState.model.refresh();
+      p.uiState.selectedLayer.value = text;
+      await mount(tester, p, width: 300);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'nothing overflows');
+      expect(find.byKey(const ValueKey('text-animator-more-0')), findsOneWidget);
+      // Remove is there only where it ends inside the panel.
+      final remove = find.byKey(const ValueKey('text-animator-remove-0'));
+      if (remove.evaluate().isNotEmpty) {
+        expect(tester.getTopRight(remove).dx, lessThanOrEqualTo(300));
+      }
+      await mount(tester, p, width: 700);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('text-animator-remove-0')), findsOneWidget);
+    });
 
     testWidgets('the animators section adds, edits and removes an animator',
         (tester) async {
@@ -102,6 +128,53 @@ void main() {
       expect(text.getText()!.text, 'Lumit');
       expect(text.getText()!.size, 72);
 
+      // The heading's Add starts in the column Add animator does.
+      expect(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('text-animator-add-to-0')))
+              .dx,
+          closeTo(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('text-animator-add')))
+                  .dx,
+              1));
+      // Its rows sit in from the heading, each at the section's pitch.
+      final heading = tester.getTopLeft(find.text('Animators'));
+      final amount = tester.getTopLeft(find.text('Animator amount'));
+      expect(amount.dx, greaterThan(heading.dx + 10));
+      final end = tester.getTopLeft(find.text('Range end'));
+      final offset = tester.getTopLeft(find.text('Range offset'));
+      expect(offset.dy - end.dy,
+          tester.getSize(find.byKey(const ValueKey('text-animator-heading-0'))).height + 5,
+          reason: 'a row steps at the section pitch, its 2 + 2 and hairline');
+      // Advanced's rows step at the same pitch, further in.
+      await tester.tap(find.byKey(const ValueKey('text-animator-advanced-0')));
+      await tester.pump();
+      final based = tester.getTopLeft(find.text('Based on'));
+      final mode = tester.getTopLeft(find.text('Mode'));
+      expect(mode.dy - based.dy, offset.dy - end.dy);
+      expect(based.dx, greaterThan(amount.dx + 10));
+      await tester.tap(find.byKey(const ValueKey('text-animator-advanced-0')));
+      await tester.pump();
+      // The twirl folds the animator to its heading.
+      await tester.tap(find.byKey(const ValueKey('text-animator-fold-0')));
+      await tester.pump();
+      expect(find.text('Animator amount'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('text-animator-fold-0')));
+      await tester.pump();
+      expect(find.text('Animator amount'), findsOneWidget);
+      // A right-click on the heading offers Rename.
+      await tester.tap(find.byKey(const ValueKey('text-animator-name-0')),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('text-animator-rename-0')));
+      await tester.pumpAndSettle();
+      expect(find.byType(EditableText), findsWidgets);
+      await tester.enterText(find.byType(EditableText).last, 'Wave');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(text.getText()!.animators.first.name, 'Wave');
+
       await tester.tap(find.byKey(const ValueKey('text-animator-remove-0')));
       await tester.pump();
       expect(text.getText()!.animators, isEmpty);
@@ -135,8 +208,13 @@ void main() {
       );
       expect(
         rows.whereType<FoldAnimatorValueRow>().map((r) => r.value).toSet(),
-        textAnimatorValuesOf(entry.info.textAnimators.single, solid: false)
-            .toSet(),
+        {
+          for (final item in selectorItemsOf(
+              entry.info.textAnimators.single.selector, 0))
+            if (item is SelectorValueItem) item.value,
+          ...textAnimatorValuesOf(entry.info.textAnimators.single,
+              solid: false),
+        },
         reason: 'every number an animator has needs a row to key it on',
       );
 
@@ -199,8 +277,11 @@ void main() {
           .getModel()
           .layers
           .firstWhere((e) => e.layer.internallayerId == text.internallayerId);
-      final values =
-          textAnimatorValuesOf(entry.info.textAnimators.single, solid: false);
+      final values = [
+        for (final item in selectorItemsOf(
+            entry.info.textAnimators.single.selector, 0))
+          if (item is SelectorValueItem) item.value,
+      ];
       expect(values, contains(TextAnimatorValue.radius));
       expect(values, isNot(contains(TextAnimatorValue.rangeStart)));
     });

@@ -36,6 +36,8 @@ struct Moved {
     anchor: [f32; 2],
     /// The bitmap's top-left corner in the glyph's own pixels.
     corner: [f32; 2],
+    /// The skew, as the matrix [xx, yx, xy, yy] applied before the turn.
+    skew: [f32; 4],
     bounds: [f32; 4],
 }
 
@@ -56,6 +58,9 @@ fn moved(
     if x.opacity <= 0.0 || sx.abs() < 1e-4 || sy.abs() < 1e-4 || !x.opacity.is_finite() {
         return None; // scaled or faded to nothing
     }
+    // Skew, about the same middle, before the turn; its inverse undoes it.
+    let skew = crate::blur::skew_matrix(x.skew, x.skew_axis).unwrap_or([1.0, 0.0, 0.0, 1.0]);
+    let [kxx, kyx, kxy, kyy] = skew;
     #[allow(clippy::cast_precision_loss)]
     let (gw, gh) = (metrics.width as f32, metrics.height as f32);
     let lx0 = metrics.xmin as f32;
@@ -71,6 +76,7 @@ fn moved(
     ];
     let to_world = |lx: f32, ly: f32| {
         let (ax, ay) = ((lx - anchor[0]) * sx, (ly - anchor[1]) * sy);
+        let (ax, ay) = (kxx * ax + kxy * ay, kyx * ax + kyy * ay);
         [
             origin[0] + ax * along[0] + ay * down[0],
             origin[1] + ax * along[1] + ay * down[1],
@@ -97,6 +103,7 @@ fn moved(
         down,
         anchor,
         corner: [lx0, ly0],
+        skew,
         bounds,
     })
 }
@@ -128,18 +135,16 @@ fn stamp_glyph(
     nrm: [f32; 2],
     x: &GlyphXform,
     rgb8: [u8; 3],
-) {
-    let Some(Moved {
+) -> Option<[u32; 4]> {
+    let Moved {
         origin,
         along,
         down,
         anchor,
         corner: [lx0, ly0],
+        skew: [kxx, kyx, kxy, kyy],
         bounds: [x0, y0, x1, y1],
-    }) = moved(metrics, pen, tan, nrm, x)
-    else {
-        return;
-    };
+    } = moved(metrics, pen, tan, nrm, x)?;
     let (sx, sy) = (x.scale[0], x.scale[1]);
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let (px0, py0, px1, py1) = (
@@ -154,8 +159,11 @@ fn stamp_glyph(
         for px in px0..px1 {
             #[allow(clippy::cast_precision_loss)]
             let (dx, dy) = (px as f32 + 0.5 - origin[0], py as f32 + 0.5 - origin[1]);
-            let u = (dx * along[0] + dy * along[1]) / sx + anchor[0];
-            let v = (dx * down[0] + dy * down[1]) / sy + anchor[1];
+            let (ax, ay) = (dx * along[0] + dy * along[1], dx * down[0] + dy * down[1]);
+            // The skew's inverse: its determinant is one.
+            let (ax, ay) = (kyy * ax - kxy * ay, -kyx * ax + kxx * ay);
+            let u = ax / sx + anchor[0];
+            let v = ay / sy + anchor[1];
             let cov = sample_coverage(bitmap, metrics.width, metrics.height, u - lx0, v - ly0);
             if cov == 0 {
                 continue;
@@ -178,6 +186,7 @@ fn stamp_glyph(
             }
         }
     }
+    Some([px0, py0, px1, py1])
 }
 
 /// This letter's fill: the layer's own, plus whatever the animators added,
@@ -253,22 +262,35 @@ pub(crate) fn rasterise_line_grown(
     let height =
         ((max_y - min_y).ceil().max(1.0) + 2.0 * margin + top + bottom).min(MAX_PATH_BOX_PX) as u32;
     let mut rgba = vec![0u8; (width as usize) * (height as usize) * 4];
+    let mut scratch: Vec<u8> = Vec::new();
+    // Tracking an animator adds pushes on the letters after.
+    let mut tracked = 0.0f32;
 
     for (i, (ch, x0, metrics)) in glyphs.into_iter().enumerate() {
         let (_, bitmap) = font.rasterize(ch, size);
         let x = xforms.get(i).copied().unwrap_or_default();
-        stamp_glyph(
-            &mut rgba,
+        let blurred = x.blur.is_finite() && x.blur >= 0.5;
+        if blurred && scratch.is_empty() {
+            scratch = vec![0u8; rgba.len()];
+        }
+        let rect = stamp_glyph(
+            if blurred { &mut scratch } else { &mut rgba },
             width,
             height,
             &bitmap,
             &metrics,
-            [x0 + margin + left, -min_y + margin + top],
+            [x0 + tracked + margin + left, -min_y + margin + top],
             [1.0, 0.0],
             [0.0, 1.0],
             &x,
             tinted(fill, &x),
         );
+        if let (true, Some(rect)) = (blurred, rect) {
+            crate::blur::blur_over(&mut scratch, &mut rgba, (width, height), rect, x.blur);
+        }
+        if x.tracking.is_finite() {
+            tracked += x.tracking * size / 1000.0;
+        }
     }
     RasterText {
         width,
@@ -311,11 +333,15 @@ fn line_reach(text: &str, size: f32, xforms: &[GlyphXform]) -> [u32; 4] {
     let width = pen_x.ceil().max(1.0) + 2.0 * margin;
     let height = (max_y - min_y).ceil().max(1.0) + 2.0 * margin;
     let mut ink = [0.0, 0.0, width, height];
+    let mut tracked = 0.0f32;
     for (i, (_, x0, metrics)) in glyphs.iter().enumerate() {
         let x = xforms.get(i).copied().unwrap_or_default();
-        let pen = [x0 + margin, -min_y + margin];
+        let pen = [x0 + tracked + margin, -min_y + margin];
         if let Some(m) = moved(metrics, pen, [1.0, 0.0], [0.0, 1.0], &x) {
             ink = joined(ink, m.bounds);
+        }
+        if x.tracking.is_finite() {
+            tracked += x.tracking * size / 1000.0;
         }
     }
     beyond(ink, (width, height))
@@ -410,10 +436,15 @@ pub fn rasterise_on_path_animated(
     }
 
     let mut pen = 0.0f32;
+    let mut scratch: Vec<u8> = Vec::new();
     for (i, ch) in text.chars().enumerate() {
         let (metrics, bitmap) = font.rasterize(ch, size);
+        let x = xforms.get(i).copied().unwrap_or_default();
         let wanted = offset + pen;
         pen += metrics.advance_width;
+        if x.tracking.is_finite() {
+            pen += x.tracking * size / 1000.0;
+        }
         let s = if path.closed {
             if total > 0.0 {
                 wanted.rem_euclid(total)
@@ -426,9 +457,12 @@ pub fn rasterise_on_path_animated(
             wanted
         };
         let tan = path.tangent_at(s);
-        let x = xforms.get(i).copied().unwrap_or_default();
-        stamp_glyph(
-            &mut rgba,
+        let blurred = x.blur.is_finite() && x.blur >= 0.5;
+        if blurred && scratch.is_empty() {
+            scratch = vec![0u8; rgba.len()];
+        }
+        let rect = stamp_glyph(
+            if blurred { &mut scratch } else { &mut rgba },
             w,
             h,
             &bitmap,
@@ -439,6 +473,9 @@ pub fn rasterise_on_path_animated(
             &x,
             tinted(fill, &x),
         );
+        if let (true, Some(rect)) = (blurred, rect) {
+            crate::blur::blur_over(&mut scratch, &mut rgba, (w, h), rect, x.blur);
+        }
     }
     RasterText {
         width: w,

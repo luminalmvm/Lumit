@@ -72,10 +72,12 @@ pub const TURBULENT_DISPLACE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
 pub struct TurbulentDisplace {
     /// Which components of the warp survive. Turbulent uses both, which swirls;
     /// Horizontal and Vertical keep one axis, which shears the picture into
-    /// ripples along the other.
+    /// ripples along the other. Bulge pulls each pixel up the
+    /// slope of one field instead, toward its peaks, which swells the picture
+    /// into lenses there, as After Effects' Bulge.
     #[choice(
         label = "Displacement",
-        options = ["Turbulent", "Horizontal", "Vertical"],
+        options = ["Turbulent", "Horizontal", "Vertical", "Bulge"],
         default = 0
     )]
     pub displacement: u32,
@@ -217,6 +219,7 @@ impl TurbulentDisplace {
             // The pin ramp is |Amount| wide, so a pinned edge cannot be reached
             // from outside the frame. Floored so a zero Amount does not divide.
             inv_pin_band: 1.0 / self.amount.abs().max(1e-3),
+            bulge: f32::from(u8::from(self.displacement == 3)),
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }

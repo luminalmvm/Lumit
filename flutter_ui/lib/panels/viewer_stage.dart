@@ -74,6 +74,7 @@ import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
 import 'viewer_prefix_chip.dart';
 import 'viewer_puppet.dart';
+import 'viewer_range_handles.dart';
 import 'viewer_region.dart';
 import 'viewer_rotate.dart';
 import 'viewer_roto.dart';
@@ -1053,6 +1054,16 @@ class ViewerStage extends StatelessWidget {
                         accent: t.accent,
                         onChanged: onChanged,
                         viewId: viewId,
+                      ),
+                      // A selected Text layer's Range selectors: Start, End
+                      // and Offset as handles under its words.
+                      ViewerRangeHandles(
+                        active: uiState.tools.tool.group == ToolGroup.select,
+                        comp: comp,
+                        uiState: uiState,
+                        boxes: boxes,
+                        accent: t.accent,
+                        onChanged: onChanged,
                       ),
                       // The painting tools: a drag paints a stroke on the
                       // selected layer, under their brush ring.

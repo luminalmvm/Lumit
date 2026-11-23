@@ -22,7 +22,6 @@ import '../theme/theme.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
-import '../widgets/layer_picker.dart';
 import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'control_rows.dart' show ControlMark, shapeControlRow;
@@ -906,6 +905,9 @@ class AnimatorValueRow extends StatefulWidget {
   final int index;
   final BridgeTextAnimator animator;
   final TextAnimatorValue value;
+
+  /// Which of the animator's selectors a selector's number is on.
+  final int selector;
   final ValueColumn valueColumn;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -920,6 +922,7 @@ class AnimatorValueRow extends StatefulWidget {
     required this.index,
     required this.animator,
     required this.value,
+    this.selector = 0,
     required this.valueColumn,
     required this.playheadFrame,
     required this.onSeek,
@@ -934,10 +937,17 @@ class AnimatorValueRow extends StatefulWidget {
 class _AnimatorValueRowState extends State<AnimatorValueRow> {
   double? _staged;
 
-  BridgeScalar get _scalar =>
-      textAnimatorScalarOf(widget.animator, widget.value);
+  BridgeScalar get _scalar => textAnimatorScalarOf(widget.animator, widget.value,
+      selector: widget.selector);
 
-  String get _rowKey => 'tl-anim-${widget.index}-${widget.value.name}';
+  String get _rowKey => widget.selector == 0
+      ? 'tl-anim-${widget.index}-${widget.value.name}'
+      : 'tl-anim-${widget.index}-s${widget.selector}-${widget.value.name}';
+
+  /// A Stagger's Delay shown in frames is kept in seconds.
+  double get _scale => widget.value == TextAnimatorValue.staggerDelay
+      ? delayScale(selectorAt(widget.animator, widget.selector), widget.comp)
+      : 1;
 
   void _write(BridgeScalar v) {
     setState(() => _staged = null);
@@ -947,6 +957,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
         index: widget.index,
         value: widget.value,
         to: v,
+        selector: widget.selector,
       );
       widget.onChanged();
     } catch (_) {
@@ -954,7 +965,8 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
     }
   }
 
-  void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
+  void _commitStatic(num v) =>
+      _write(BridgeScalar.static_(v.toDouble() / _scale));
 
   @override
   Widget build(BuildContext context) {
@@ -967,7 +979,11 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
       rowKey: _rowKey,
       navigatorApart: true,
     );
-    return ParamRowMenu(
+    // A row that does nothing as the selector stands is drawn faint.
+    final idle = isSelectorValue(widget.value) &&
+        selectorItemIdle(selectorAt(widget.animator, widget.selector),
+            SelectorValueItem(widget.value));
+    final row = ParamRowMenu(
       menu: scalarRowMenu(context, keys,
           defaults: [textAnimatorDefault(widget.value)]),
       child: Row(
@@ -1018,20 +1034,21 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
         ],
       ),
     );
+    return idle ? Opacity(opacity: 0.4, child: row) : row;
   }
 
   Widget _field() {
     final key = ValueKey<String>(_rowKey);
     final scalar = _scalar;
     if (scalar is! BridgeScalar_Keyframed) {
-      final stored =
-          _staged ?? (scalar is BridgeScalar_Static ? scalar.field0 : 0.0);
+      final stored = _staged ??
+          (scalar is BridgeScalar_Static ? scalar.field0 * _scale : 0.0);
       return DragValueField(
         key: key,
         value: stored,
         min: -100000,
         max: 100000,
-        resetTo: textAnimatorDefault(widget.value),
+        resetTo: textAnimatorDefault(widget.value) * _scale,
         decimals: 1,
         onChanged: _commitStatic,
         onChangeLive: (v) => setState(() => _staged = v.toDouble()),
@@ -1833,6 +1850,9 @@ class AnimatorSettingRow extends StatelessWidget {
   final int index;
   final BridgeTextAnimator animator;
   final AnimatorSetting setting;
+
+  /// Which of the animator's selectors the choice is on.
+  final int selector;
   final ValueColumn valueColumn;
   final VoidCallback onChanged;
 
@@ -1845,6 +1865,7 @@ class AnimatorSettingRow extends StatelessWidget {
     required this.index,
     required this.animator,
     required this.setting,
+    this.selector = 0,
     required this.valueColumn,
     required this.onChanged,
     this.onLabelTap,
@@ -1852,99 +1873,28 @@ class AnimatorSettingRow extends StatelessWidget {
 
   void _put(BridgeRangeSelector next) {
     try {
-      writeTextAnimator(layer, index, animatorWith(animator, selector: next));
+      writeTextAnimator(
+          layer, index, animatorWithSelectorAt(animator, selector, next));
       onChanged();
     } catch (_) {
       // The animator or its layer went away between the draw and the click.
     }
   }
 
-  String get _label => switch (setting) {
-        AnimatorSetting.selector => l10n.textAnimatorSelector,
-        AnimatorSetting.target => l10n.textAnimatorTarget,
-        AnimatorSetting.basis => l10n.textAnimatorBasis,
-        AnimatorSetting.shape => l10n.textAnimatorShape,
-        AnimatorSetting.invert => l10n.textAnimatorInvert,
-        AnimatorSetting.seed => l10n.textAnimatorSeed,
-      };
+  String get _tag => selector == 0 ? '$index' : '$index-s$selector';
 
-  Widget _control(BuildContext context) {
-    final s = animator.selector;
-    final key = ValueKey<String>('tl-anim-$index-${setting.name}');
-    return switch (setting) {
-      AnimatorSetting.selector => BareDropdown<BridgeSelectorKind>(
-          key: key,
-          dense: true,
-          value: s.kind,
-          options: BridgeSelectorKind.values,
-          label: (k) => switch (k) {
-            BridgeSelectorKind.range => l10n.textAnimatorSelectorRange,
-            BridgeSelectorKind.proximity => l10n.textAnimatorSelectorProximity,
-            BridgeSelectorKind.wiggly => l10n.textAnimatorSelectorWiggly,
-          },
-          onChanged: (k) =>
-              _put(animatorWithSelectorKind(animator, k).selector),
-        ),
-      AnimatorSetting.target => LayerPicker(
-          key: key,
-          dense: true,
-          layers:
-              Provider.of<LumitUiState>(context, listen: false).model.layers,
-          value: s.target,
-          empty: l10n.none,
-          missing: l10n.missingLayer,
-          offered: (l) => l.layer.internallayerId != layer.internallayerId,
-          onChanged: (picked) => _put(picked == null
-              ? selectorWith(s, clearTarget: true)
-              : selectorWith(s, target: picked)),
-        ),
-      AnimatorSetting.basis => BareDropdown<BridgeSelectorBasis>(
-          key: key,
-          dense: true,
-          value: s.basis,
-          options: BridgeSelectorBasis.values,
-          label: (b) => switch (b) {
-            BridgeSelectorBasis.characters => l10n.textAnimatorBasisCharacters,
-            BridgeSelectorBasis.words => l10n.textAnimatorBasisWords,
-          },
-          onChanged: (b) => _put(selectorWith(s, basis: b)),
-        ),
-      AnimatorSetting.shape => BareDropdown<BridgeSelectorShape>(
-          key: key,
-          dense: true,
-          value: s.shape,
-          options: BridgeSelectorShape.values,
-          label: (v) => switch (v) {
-            BridgeSelectorShape.square => l10n.textAnimatorShapeSquare,
-            BridgeSelectorShape.ramp => l10n.textAnimatorShapeRamp,
-            BridgeSelectorShape.smooth => l10n.textAnimatorShapeSmooth,
-            BridgeSelectorShape.bounce => l10n.textAnimatorShapeBounce,
-          },
-          onChanged: (v) => _put(selectorWith(s, shape: v)),
-        ),
-      AnimatorSetting.invert => Align(
-          alignment: Alignment.centerLeft,
-          child: HouseCheckbox(
-            key: key,
-            value: s.invert,
-            onChanged: (on) => _put(selectorWith(s, invert: on)),
-          ),
-        ),
-      AnimatorSetting.seed => SizedBox(
-          width: 72,
-          child: DragValueField(
-            key: key,
-            value: s.seed,
-            min: 0,
-            max: 99999,
-            resetTo: 0,
-            decimals: 0,
-            onChanged: (v) =>
-                _put(selectorWith(s, seed: v.round().clamp(0, 99999).toInt())),
-          ),
-        ),
-    };
-  }
+  String get _label => animatorSettingLabel(setting);
+
+  Widget _control(BuildContext context) => animatorSettingControl(
+        context,
+        layer: layer,
+        s: selectorAt(animator, selector),
+        k: selector,
+        setting: setting,
+        put: _put,
+        keyName: 'tl-anim-$_tag-${setting.name}',
+        dense: true,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -1955,7 +1905,7 @@ class AnimatorSettingRow extends StatelessWidget {
         const SizedBox(width: iconSize + 8),
         Expanded(
           child: GestureDetector(
-            key: ValueKey<String>('tl-anim-$index-${setting.name}-label'),
+            key: ValueKey<String>('tl-anim-$_tag-${setting.name}-label'),
             behavior: HitTestBehavior.opaque,
             onTap: onLabelTap,
             child: Text(t.propertyCase(_label),
@@ -1967,6 +1917,103 @@ class AnimatorSettingRow extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: SizedBox(width: 130, child: _control(context)),
+          ),
+        ),
+        SizedBox(width: valueColumn.rightInset),
+      ],
+    );
+  }
+}
+
+/// An animator's Link to (another animator whose selection it takes) or its
+/// Link offset, on the Timeline as in the Effect controls panel.
+class AnimatorLinkRow extends StatelessWidget {
+  final LayerReference layer;
+  final int index;
+  final BridgeTextAnimator animator;
+
+  /// The layer's other animators, by name: what Link to offers.
+  final List<String> others;
+
+  /// The offset row rather than the choice.
+  final bool offset;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+  final VoidCallback? onLabelTap;
+
+  const AnimatorLinkRow({
+    super.key,
+    required this.layer,
+    required this.index,
+    required this.animator,
+    required this.others,
+    required this.offset,
+    required this.valueColumn,
+    required this.onChanged,
+    this.onLabelTap,
+  });
+
+  void _put(BridgeTextAnimator next) {
+    try {
+      writeTextAnimator(layer, index, next);
+      onChanged();
+    } catch (_) {
+      // The animator or its layer went away between the draw and the click.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final a = animator;
+    final name = offset ? 'link-offset' : 'link';
+    final control = offset
+        ? DragValueField(
+            key: ValueKey<String>('tl-anim-$index-$name'),
+            value: a.followOffset,
+            min: -60,
+            max: 60,
+            decimals: 2,
+            speed: 0.01,
+            suffix: ' s',
+            resetTo: 0,
+            onChanged: (v) => _put(animatorWith(a, followOffset: v.toDouble())),
+          )
+        : BareDropdown<String?>(
+            key: ValueKey<String>('tl-anim-$index-$name'),
+            value: a.follow,
+            options: [
+              null,
+              ...others.toSet(),
+              if (a.follow != null && !others.contains(a.follow)) a.follow,
+            ],
+            label: (n) => n ?? l10n.none,
+            onChanged: (n) => _put(n == null
+                ? animatorWith(a, clearFollow: true)
+                : animatorWith(a, follow: n)),
+          );
+    return Row(
+      children: [
+        // Where a keyed row's stopwatch stands, so the names line up.
+        const SizedBox(width: iconSize + 8),
+        Expanded(
+          child: GestureDetector(
+            key: ValueKey<String>('tl-anim-$index-$name-label'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onLabelTap,
+            child: Text(
+                t.propertyCase(offset
+                    ? l10n.textAnimatorLinkOffset
+                    : l10n.textAnimatorLink),
+                style: t.body,
+                overflow: TextOverflow.ellipsis),
+          ),
+        ),
+        SizedBox(
+          width: valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 130, child: control),
           ),
         ),
         SizedBox(width: valueColumn.rightInset),

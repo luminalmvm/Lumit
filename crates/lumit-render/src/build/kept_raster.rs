@@ -119,9 +119,23 @@ fn text_name(
             turn,
             plate,
             axes,
+            skew,
+            skew_axis,
+            tracking,
+            blur,
+            char_offset,
         } = *x;
         let pairs = position.into_iter().chain(scale).chain(turn);
-        let lone = [rotation, opacity, depth];
+        let lone = [
+            rotation,
+            opacity,
+            depth,
+            skew,
+            skew_axis,
+            tracking,
+            blur,
+            char_offset,
+        ];
         for v in pairs.chain(lone).chain(fill).chain(plate) {
             h.update(&v.to_le_bytes());
         }
@@ -239,7 +253,8 @@ pub(super) fn text(
     let world = world_placement(comp, layer, t_comp, context.clone());
     let spine = spine.as_ref();
     let at = (doc, comp, layer, document, t_comp, spine, (seen, world));
-    let words = laid(at, &line, &spoken);
+    let mut offset_words = None;
+    let words = laid(at, &line, &spoken, &mut offset_words);
     let Some((other, w)) = document.resolved_blend(context) else {
         let name = text_name(
             &words.block,
@@ -259,7 +274,8 @@ pub(super) fn text(
     // own, at the same zoom and grown the same, then mixed. Named by both and
     // the weight, so a kept raster of one frame of the fade is never served
     // for another.
-    let fade = laid(at, &other, &[]);
+    let mut offset_fade = None;
+    let fade = laid(at, &other, &[], &mut offset_fade);
     let zoom = words.zoom.min(fade.zoom);
     let wider = (words.own.0.max(fade.own.0), words.own.1.max(fade.own.1));
     let most = std::array::from_fn(|i| words.grow[i].max(fade.grow[i]));
@@ -316,6 +332,7 @@ fn laid<'a>(
     (doc, comp, layer, document, t_comp, spine, (seen, world)): LaidAt<'a>,
     line: &'a str,
     spoken: &[lumit_core::text::SpokenWord],
+    offset_line: &'a mut Option<String>,
 ) -> Laid<'a> {
     // **The letters move separately**. What each one is
     // asked to do is worked out here, from the animators' own
@@ -325,6 +342,11 @@ fn laid<'a>(
     let xforms = lumit_core::text::ports::layer_glyph_xforms(
         doc, comp, layer, document, line, t_comp, spoken,
     );
+    // Character offset sets a reached letter as another character.
+    let line: &'a str = match lumit_core::text::offset_text(line, &xforms) {
+        Some(other) => offset_line.insert(other).as_str(),
+        None => line,
+    };
     // An unstyled single line draws the way it always has. A
     // styled one, or one with a line break, is set by the shaper.
     let block = lumit_text::TextBlock::of(document, line);

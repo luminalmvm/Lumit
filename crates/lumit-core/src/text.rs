@@ -38,7 +38,7 @@ mod spoken;
 #[cfg(test)]
 mod tests;
 
-use selector::{Near, RangeSelector, SelectorBasis, SelectorKind, SelectorMode};
+use selector::{Near, RangeSelector, SelectorBasis, SelectorCombine, SelectorKind, SelectorMode};
 
 /// One spoken word: which characters of the resolved text it is, and when it
 /// is said, in the layer's own seconds.
@@ -74,6 +74,36 @@ pub struct TextAnimator {
     pub name: String,
     #[serde(default, skip_serializing_if = "is_default_selector")]
     pub selector: RangeSelector,
+    /// **More selectors** after the first, as After Effects' Add ▸ Selector
+    /// stacks them: each is put together with the ones above it by its own
+    /// [`RangeSelector::combine`] (or Subtract, its `invert`), top to bottom.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selectors: Vec<RangeSelector>,
+    /// Off leaves every letter as if the animator were not there, as the eye
+    /// beside an animator in After Effects.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+    /// While any animator of a layer is soloed, only the soloed ones count.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub solo: bool,
+    /// Per cent, the whole animator's strength: every letter's weight times
+    /// this, so 50 moves every letter half as far as its selectors say.
+    #[serde(
+        default = "hundred",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_hundred"
+    )]
+    pub amount: Property,
+    /// **Follow**: the name of another animator of the layer whose selectors
+    /// pick this one's letters too, read [`Self::follow_offset`] seconds
+    /// later, so one curve drives both (a fade that trails a drop). Its own
+    /// selectors are then not read. A name no animator has, or this one's
+    /// own, follows nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow: Option<String>,
+    /// Seconds the followed selection is read later; negative reads ahead.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub follow_offset: f64,
     /// How far a moved letter is pushed, px@comp — measured in the letter's own
     /// frame, so a letter on a curve is pushed along and away from the curve
     /// rather than across the picture.
@@ -193,6 +223,46 @@ pub struct TextAnimator {
     /// and a layer moves at most [`MAX_ANIMATED_AXES`] of them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub axes: Vec<AnimatorAxis>,
+    /// Degrees a reached letter is slanted, and the angle of the line it is
+    /// slanted along, After Effects' Skew and Skew Axis: about the letter's
+    /// own middle on the baseline, 0 for the axis leaning the letter sideways.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub skew: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub skew_axis: Property,
+    /// Extra room after a reached letter, in thousandths of an em as the
+    /// layer's own tracking, After Effects' Tracking Amount: the letters after
+    /// it move along by it.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub tracking: Property,
+    /// Px a reached letter is blurred by, as After Effects' Blur.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub blur: Property,
+    /// A reached letter is set as the character this many further on, After
+    /// Effects' Character Offset: 1 turns an a into a b. Only letters and
+    /// digits are moved, each round its own run (z goes on to a, 9 to 0).
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub character_offset: Property,
     /// **Which property groups the animator shows**, by name (`position`,
     /// `rotation`, `scale`, `opacity`, `fill`, `position_z`, `rotation_x`,
     /// `rotation_y`), in the order they were added, as After Effects' Add ▸
@@ -285,6 +355,17 @@ impl TextAnimator {
         Self {
             name: name.into(),
             selector: RangeSelector::default(),
+            selectors: Vec::new(),
+            enabled: true,
+            solo: false,
+            amount: hundred(),
+            follow: None,
+            follow_offset: 0.0,
+            skew: Property::zero(),
+            skew_axis: Property::zero(),
+            tracking: Property::zero(),
+            blur: Property::zero(),
+            character_offset: Property::zero(),
             position_x: Property::zero(),
             position_y: Property::zero(),
             rotation: Property::zero(),
@@ -312,6 +393,193 @@ impl TextAnimator {
     pub fn has_box(&self) -> bool {
         !is_static_zero(&self.box_opacity)
     }
+
+    /// The first selector, then the ones added after it, top to bottom.
+    pub fn all_selectors(&self) -> impl Iterator<Item = &RangeSelector> {
+        std::iter::once(&self.selector).chain(&self.selectors)
+    }
+
+    /// Selector `k`, the first being 0.
+    #[must_use]
+    pub fn selector_at(&self, k: usize) -> Option<&RangeSelector> {
+        if k == 0 {
+            Some(&self.selector)
+        } else {
+            self.selectors.get(k - 1)
+        }
+    }
+
+    /// The same, to change.
+    pub fn selector_at_mut(&mut self, k: usize) -> Option<&mut RangeSelector> {
+        if k == 0 {
+            Some(&mut self.selector)
+        } else {
+            self.selectors.get_mut(k - 1)
+        }
+    }
+}
+
+/// How animator weights `acc` from the selectors above and `w` from the next
+/// one are put together under that one's mode. `w` is the selector's own
+/// weight, not turned over.
+fn combine(acc: f32, w: f32, subtract: bool, mode: SelectorCombine) -> f32 {
+    if subtract {
+        // Down to nothing, not below, unless the weights above were already.
+        return (acc - w).max(acc.min(0.0));
+    }
+    match mode {
+        // Up to the whole way, not past it, unless a weight already was.
+        SelectorCombine::Add => (acc + w).min(acc.max(w).max(1.0)),
+        SelectorCombine::Intersect => acc * w,
+        SelectorCombine::Min => acc.min(w),
+        SelectorCombine::Max => acc.max(w),
+        SelectorCombine::Difference => (acc - w).abs(),
+    }
+}
+
+/// Each of `text`'s `count` characters' weight from one selector at `lt`,
+/// turned over when it is set to Subtract.
+fn selector_weights(
+    selector: &RangeSelector,
+    text: &str,
+    count: usize,
+    lt: f64,
+    spoken: &[SpokenWord],
+    near: &Near,
+) -> Vec<f32> {
+    if selector.mode != SelectorMode::Range {
+        return spoken::weights(selector, count, lt, spoken);
+    }
+    let (units, total) = unit_indices(text, selector.basis);
+    let weights = match selector.kind {
+        SelectorKind::Range => selector.weights_at(total, lt),
+        SelectorKind::Wiggly => selector.wiggly_weights(total, lt),
+        SelectorKind::Stagger => selector.stagger_weights(total, lt),
+        SelectorKind::Proximity => {
+            // A unit's middle is the mean of its characters' middles, so
+            // a word is measured from its own middle.
+            let mut sums = vec![([0.0f32; 2], 0u32); total];
+            for (ch, unit) in units.iter().enumerate() {
+                if let (Some(Some(m)), Some(sum)) = (near.middles.get(ch), sums.get_mut(*unit)) {
+                    sum.0[0] += m[0];
+                    sum.0[1] += m[1];
+                    sum.1 += 1;
+                }
+            }
+            #[allow(clippy::cast_precision_loss)] // a word is short
+            let middles: Vec<Option<[f32; 2]>> = sums
+                .iter()
+                .map(|(s, n)| (*n > 0).then(|| [s[0] / *n as f32, s[1] / *n as f32]))
+                .collect();
+            selector.proximity_weights(&middles, near.target(selector.target), lt)
+        }
+    };
+    let at = |u: &usize| weights.get(*u).copied().unwrap_or(0.0);
+    units.iter().map(at).collect()
+}
+
+/// How far each character is reached by `animators[index]`'s selectors, all
+/// of them put together, at `lt`, before its Amount. Following another
+/// animator reads that one's instead; a chain of follows ends after a few,
+/// so two animators following each other reach nothing.
+#[allow(clippy::too_many_arguments)]
+fn animator_selection(
+    animators: &[TextAnimator],
+    index: usize,
+    text: &str,
+    count: usize,
+    lt: f64,
+    spoken: &[SpokenWord],
+    near: &Near,
+    depth: u8,
+) -> Vec<f32> {
+    let animator = &animators[index];
+    if let Some(name) = &animator.follow {
+        if depth >= 8 {
+            return Vec::new();
+        }
+        let followed = animators
+            .iter()
+            .enumerate()
+            .find(|(i, a)| *i != index && a.name == *name);
+        if let Some((other, _)) = followed {
+            let at = lt - animator.follow_offset;
+            return animator_selection(animators, other, text, count, at, spoken, near, depth + 1);
+        }
+    }
+    let mut out: Vec<f32> = Vec::new();
+    for (k, selector) in animator.all_selectors().enumerate() {
+        let mut w = selector_weights(selector, text, count, lt, spoken, near);
+        if k == 0 {
+            out = w;
+            continue;
+        }
+        // A selector reaching nothing (spoken words with no words) is all
+        // nought.
+        w.resize(count, if selector.invert { 1.0 } else { 0.0 });
+        if out.is_empty() {
+            out = vec![0.0; count];
+        }
+        for (acc, w) in out.iter_mut().zip(&w) {
+            // The selector's own weight, not turned over.
+            let own = if selector.invert { 1.0 - w } else { *w };
+            *acc = combine(*acc, own, selector.invert, selector.combine);
+        }
+    }
+    out
+}
+
+/// The animators that count: those switched on, and of those only the
+/// soloed ones while any is.
+#[must_use]
+pub fn counting_animators(animators: &[TextAnimator]) -> Vec<usize> {
+    let solo = animators.iter().any(|a| a.enabled && a.solo);
+    (0..animators.len())
+        .filter(|&i| animators[i].enabled && (!solo || animators[i].solo))
+        .collect()
+}
+
+/// `ch` moved `by` places round its own run: a–z, A–Z, 0–9, or the
+/// Unicode letters and digits next to it. Anything else stays.
+#[must_use]
+pub fn offset_char(ch: char, by: i32) -> char {
+    if by == 0 {
+        return ch;
+    }
+    let round = |first: char, len: u32| {
+        let i = (ch as i64 - first as i64 + i64::from(by)).rem_euclid(i64::from(len));
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // under len
+        char::from_u32(first as u32 + i as u32).unwrap_or(ch)
+    };
+    match ch {
+        'a'..='z' => round('a', 26),
+        'A'..='Z' => round('A', 26),
+        '0'..='9' => round('0', 10),
+        c if c.is_alphanumeric() => {
+            let moved = char::from_u32((c as i64 + i64::from(by)).clamp(0, 0x10_FFFF) as u32);
+            moved.filter(|m| m.is_alphanumeric()).unwrap_or(c)
+        }
+        c => c,
+    }
+}
+
+/// `text` with every character moved by its [`GlyphXform::char_offset`].
+/// `None` when no character is moved, so the words are laid out as they are.
+#[must_use]
+pub fn offset_text(text: &str, xforms: &[GlyphXform]) -> Option<String> {
+    if xforms.iter().all(|x| x.char_offset.round() == 0.0) {
+        return None;
+    }
+    Some(
+        text.chars()
+            .enumerate()
+            .map(|(i, ch)| {
+                #[allow(clippy::cast_possible_truncation)] // a few hundred places
+                let by = xforms.get(i).map_or(0, |x| x.char_offset.round() as i32);
+                offset_char(ch, by)
+            })
+            .collect(),
+    )
 }
 
 /// What one letter is asked to do, once every animator has had its say.
@@ -339,6 +607,15 @@ pub struct GlyphXform {
     /// Where the letter is set on its font's axes, relative to the layer's own
     /// setting, which only the font knows.
     pub axes: GlyphAxes,
+    /// Degrees of slant, and the degrees of the line it slants along.
+    pub skew: f32,
+    pub skew_axis: f32,
+    /// Extra room after the letter, thousandths of an em.
+    pub tracking: f32,
+    /// Px of blur.
+    pub blur: f32,
+    /// Places the character is moved on, rounded when it is set.
+    pub char_offset: f32,
 }
 
 impl Default for GlyphXform {
@@ -353,6 +630,11 @@ impl Default for GlyphXform {
             turn: [0.0, 0.0],
             plate: [0.0; 4],
             axes: GlyphAxes::default(),
+            skew: 0.0,
+            skew_axis: 0.0,
+            tracking: 0.0,
+            blur: 0.0,
+            char_offset: 0.0,
         }
     }
 }
@@ -427,9 +709,36 @@ impl GlyphXform {
 /// and **the spaces between words go with the word before them**, so a range
 /// sweeping across a sentence does not leave the gaps behaving like a word of
 /// their own. Leading spaces go with the first word, for the same reason.
+/// Counting characters without spaces, a space goes with the letter before
+/// it the same way; counting lines, a line break ends the line it is on.
 #[must_use]
 pub fn unit_indices(text: &str, basis: SelectorBasis) -> (Vec<usize>, usize) {
     match basis {
+        SelectorBasis::CharactersExcludingSpaces => {
+            let mut out = Vec::with_capacity(text.len());
+            let mut n = 0usize;
+            for ch in text.chars() {
+                if ch.is_whitespace() {
+                    out.push(n.saturating_sub(1));
+                } else {
+                    out.push(n);
+                    n += 1;
+                }
+            }
+            (out, n)
+        }
+        SelectorBasis::Lines => {
+            let mut out = Vec::with_capacity(text.len());
+            let mut line = 0usize;
+            for ch in text.chars() {
+                out.push(line);
+                if ch == '\n' {
+                    line += 1;
+                }
+            }
+            let n = if out.is_empty() { 0 } else { line + 1 };
+            (out, n)
+        }
         SelectorBasis::Characters => {
             let n = text.chars().count();
             ((0..n).collect(), n)
@@ -502,45 +811,29 @@ pub fn glyph_xforms_near(
         return Vec::new();
     }
     let mut out = vec![GlyphXform::default(); count];
-    for animator in animators {
-        let weights: Vec<f32> = if animator.selector.mode == SelectorMode::Range {
-            let (units, total) = unit_indices(text, animator.selector.basis);
-            let weights = match animator.selector.kind {
-                SelectorKind::Range => animator.selector.weights_at(total, lt),
-                SelectorKind::Wiggly => animator.selector.wiggly_weights(total, lt),
-                SelectorKind::Proximity => {
-                    // A unit's middle is the mean of its characters' middles, so
-                    // a word is measured from its own middle.
-                    let mut sums = vec![([0.0f32; 2], 0u32); total];
-                    for (ch, unit) in units.iter().enumerate() {
-                        if let (Some(Some(m)), Some(sum)) =
-                            (near.middles.get(ch), sums.get_mut(*unit))
-                        {
-                            sum.0[0] += m[0];
-                            sum.0[1] += m[1];
-                            sum.1 += 1;
-                        }
-                    }
-                    #[allow(clippy::cast_precision_loss)] // a word is short
-                    let middles: Vec<Option<[f32; 2]>> = sums
-                        .iter()
-                        .map(|(s, n)| (*n > 0).then(|| [s[0] / *n as f32, s[1] / *n as f32]))
-                        .collect();
-                    animator.selector.proximity_weights(
-                        &middles,
-                        near.target(animator.selector.target),
-                        lt,
-                    )
-                }
-            };
-            let at = |u: &usize| weights.get(*u).copied().unwrap_or(0.0);
-            units.iter().map(at).collect()
-        } else {
-            spoken::weights(&animator.selector, count, lt, spoken)
-        };
+    for index in counting_animators(animators) {
+        let animator = &animators[index];
+        let mut weights = animator_selection(animators, index, text, count, lt, spoken, near, 0);
         if weights.is_empty() {
             continue;
         }
+        // The animator's own Amount scales every letter's weight.
+        if !is_static_hundred(&animator.amount) {
+            #[allow(clippy::cast_possible_truncation)] // a weight
+            let amount = (animator.amount.value_at(lt) / 100.0) as f32;
+            let amount = if amount.is_finite() { amount } else { 0.0 };
+            for w in &mut weights {
+                *w *= amount;
+            }
+        }
+        #[allow(clippy::cast_possible_truncation)] // degrees, px and em/1000, f32 pictures
+        let (skew, skew_axis, tracking, blur, char_offset) = (
+            animator.skew.value_at(lt) as f32,
+            animator.skew_axis.value_at(lt) as f32,
+            animator.tracking.value_at(lt) as f32,
+            animator.blur.value_at(lt) as f32,
+            animator.character_offset.value_at(lt) as f32,
+        );
         #[allow(clippy::cast_possible_truncation)] // a place on a font's axis
         let axes: Vec<([u8; 4], f32)> = animator
             .axes
@@ -593,6 +886,14 @@ pub fn glyph_xforms_near(
             x.fill[0] += w * fr;
             x.fill[1] += w * fg;
             x.fill[2] += w * fb;
+            x.skew += w * skew;
+            if w * skew != 0.0 {
+                // The line it slants along is not an amount: the latest wins.
+                x.skew_axis = skew_axis;
+            }
+            x.tracking += w * tracking;
+            x.blur += (w * blur).max(0.0);
+            x.char_offset += w * char_offset;
             for (tag, value) in &axes {
                 x.axes.mix(*tag, *value, w);
             }

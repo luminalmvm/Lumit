@@ -77,11 +77,27 @@ List<BridgeTextAnimator> textPresetAnimators(
         kind: BridgeSelectorKind.range,
         radius: const BridgeScalar.static_(200),
         invert: false,
+        easeHigh: const BridgeScalar.static_(0),
+        easeLow: const BridgeScalar.static_(0),
+        amount: const BridgeScalar.static_(100),
+        delay: const BridgeScalar.static_(0.1),
+        delayEase: const BridgeScalar.static_(0),
+        order: BridgeStaggerOrder.forward,
+        bounceAmplitude: const BridgeScalar.static_(0),
+        bounceFrequency: const BridgeScalar.static_(2),
+        bounceDecay: const BridgeScalar.static_(3),
         minAmount: const BridgeScalar.static_(0),
         maxAmount: const BridgeScalar.static_(100),
         wiggles: const BridgeScalar.static_(2),
         correlation: const BridgeScalar.static_(50),
         seed: 0,
+        combine: BridgeSelectorCombine.add,
+        units: BridgeSelectorUnits.percentage,
+        randomize: false,
+        delayFrames: false,
+        total: false,
+        repeat: BridgeStaggerRepeat.once,
+        bounceLast: false,
       );
 
   final fresh = freshTextAnimator(preset.title);
@@ -109,11 +125,27 @@ List<BridgeTextAnimator> textPresetAnimators(
             kind: BridgeSelectorKind.range,
             radius: const BridgeScalar.static_(200),
             invert: false,
+            easeHigh: const BridgeScalar.static_(0),
+            easeLow: const BridgeScalar.static_(0),
+            amount: const BridgeScalar.static_(100),
+            delay: const BridgeScalar.static_(0.1),
+            delayEase: const BridgeScalar.static_(0),
+            order: BridgeStaggerOrder.forward,
+            bounceAmplitude: const BridgeScalar.static_(0),
+            bounceFrequency: const BridgeScalar.static_(2),
+            bounceDecay: const BridgeScalar.static_(3),
             minAmount: const BridgeScalar.static_(0),
             maxAmount: const BridgeScalar.static_(100),
             wiggles: const BridgeScalar.static_(2),
             correlation: const BridgeScalar.static_(50),
             seed: 0,
+            combine: BridgeSelectorCombine.add,
+            units: BridgeSelectorUnits.percentage,
+            randomize: false,
+            delayFrames: false,
+            total: false,
+            repeat: BridgeStaggerRepeat.once,
+            bounceLast: false,
           ),
           opacity: hidden,
         )
@@ -153,11 +185,27 @@ List<BridgeTextAnimator> textPresetAnimators(
             kind: BridgeSelectorKind.range,
             radius: const BridgeScalar.static_(200),
             invert: false,
+            easeHigh: const BridgeScalar.static_(0),
+            easeLow: const BridgeScalar.static_(0),
+            amount: const BridgeScalar.static_(100),
+            delay: const BridgeScalar.static_(0.1),
+            delayEase: const BridgeScalar.static_(0),
+            order: BridgeStaggerOrder.forward,
+            bounceAmplitude: const BridgeScalar.static_(0),
+            bounceFrequency: const BridgeScalar.static_(2),
+            bounceDecay: const BridgeScalar.static_(3),
             minAmount: const BridgeScalar.static_(0),
             maxAmount: const BridgeScalar.static_(100),
             wiggles: const BridgeScalar.static_(2),
             correlation: const BridgeScalar.static_(50),
             seed: 0,
+            combine: BridgeSelectorCombine.add,
+            units: BridgeSelectorUnits.percentage,
+            randomize: false,
+            delayFrames: false,
+            total: false,
+            repeat: BridgeStaggerRepeat.once,
+            bounceLast: false,
           ),
           positionX: sweep(_spread, 0),
         ),
@@ -206,8 +254,9 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
               axis,
       ];
   axesNow();
-  BridgeTextAnimator fresh(LayerReference layer) => freshTextAnimator(l10n
-      .textAnimatorDefaultName((layer.getText()?.animators.length ?? 0) + 1));
+  BridgeTextAnimator fresh(LayerReference layer, [String? what]) =>
+      freshTextAnimator(
+          animatorNameFor(layer.getText()?.animators ?? const [], what));
   return [
     MenuEntry(
         l10n.textAnimatorBlank,
@@ -222,7 +271,7 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
             app,
             ui,
             (entry) => addTextAnimator(entry.layer,
-                adding: [animatorWithProperty(fresh(entry.layer), p)]),
+                adding: [animatorWithProperty(fresh(entry.layer, p.label), p)]),
             when: isText,
             name: 'Animate text',
           ),
@@ -240,7 +289,7 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
                 app,
                 ui,
                 (entry) => addTextAnimator(entry.layer, adding: [
-                  animatorWith(fresh(entry.layer), axes: [
+                  animatorWith(fresh(entry.layer, axis.name), axes: [
                     BridgeAnimatorAxis(
                         tag: axis.tag, value: BridgeScalar.static_(axis.face)),
                   ])
@@ -371,46 +420,21 @@ BridgeScalar reversedScalar(BridgeScalar scalar) {
 
 /// [a] played backwards, so an in becomes an out.
 BridgeTextAnimator reversedAnimator(BridgeTextAnimator a) {
-  final s = a.selector;
-  return animatorWith(
-    a,
-    selector: BridgeRangeSelector(
+  // A selector's timing (Delay, its ease, the bounce) plays the same way
+  // backwards; its range and amounts run the other way round.
+  BridgeRangeSelector sel(BridgeRangeSelector s) => selectorWith(s,
       start: reversedScalar(s.start),
       end: reversedScalar(s.end),
       offset: reversedScalar(s.offset),
-      basis: s.basis,
-      shape: s.shape,
-      mode: s.mode,
-      ease: s.ease,
-      kind: s.kind,
-      target: s.target,
       radius: reversedScalar(s.radius),
-      invert: s.invert,
+      easeHigh: reversedScalar(s.easeHigh),
+      easeLow: reversedScalar(s.easeLow),
+      amount: reversedScalar(s.amount),
       minAmount: reversedScalar(s.minAmount),
       maxAmount: reversedScalar(s.maxAmount),
       wiggles: reversedScalar(s.wiggles),
-      correlation: reversedScalar(s.correlation),
-      seed: s.seed,
-    ),
-    positionX: reversedScalar(a.positionX),
-    positionY: reversedScalar(a.positionY),
-    rotation: reversedScalar(a.rotation),
-    positionZ: reversedScalar(a.positionZ),
-    rotationX: reversedScalar(a.rotationX),
-    rotationY: reversedScalar(a.rotationY),
-    scaleX: reversedScalar(a.scaleX),
-    scaleY: reversedScalar(a.scaleY),
-    opacity: reversedScalar(a.opacity),
-    fillR: reversedScalar(a.fillR),
-    fillG: reversedScalar(a.fillG),
-    fillB: reversedScalar(a.fillB),
-    boxOpacity: reversedScalar(a.boxOpacity),
-    boxR: reversedScalar(a.boxR),
-    boxG: reversedScalar(a.boxG),
-    boxB: reversedScalar(a.boxB),
-    axes: [
-      for (final x in a.axes)
-        BridgeAnimatorAxis(tag: x.tag, value: reversedScalar(x.value)),
-    ],
-  );
+      correlation: reversedScalar(s.correlation));
+  return animatorWith(animatorMapped(a, reversedScalar),
+      selector: sel(a.selector),
+      selectors: [for (final s in a.selectors) sel(s)]);
 }

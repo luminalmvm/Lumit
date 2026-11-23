@@ -17,6 +17,7 @@ use lumit_core::text::{GlyphXform, ParagraphStyle, TextAnimator, TextStyle};
 pub mod animated;
 pub mod blend;
 mod block_key;
+mod blur;
 pub mod fonts;
 pub mod restyle;
 mod styled;
@@ -1270,6 +1271,70 @@ mit",
             x0 > wx0 + width / 3,
             "the wrong half faded (ink {x0}..{x1}, whole {wx0}..{wx1})"
         );
+    }
+
+    /// **Blur, skew and tracking reach the picture**, on the plain line and on
+    /// the styled one: a blurred letter spreads its ink wider, a skewed one
+    /// leans it, tracking pushes the letters after it along.
+    #[test]
+    fn blur_skew_and_tracking_reach_the_letters() {
+        use lumit_core::text::GlyphXform;
+        let all = |x: GlyphXform| vec![x; 4];
+        let still = vec![GlyphXform::default(); 4];
+        let plain = |x: &[GlyphXform]| rasterise_line_animated("IIII", 48.0, white(), x);
+        let (bx0, _, bx1, _) = ink_box(&plain(&still)).expect("ink");
+        let blurred = plain(&all(GlyphXform {
+            blur: 6.0,
+            ..GlyphXform::default()
+        }));
+        let (x0, _, x1, _) = ink_box(&blurred).expect("ink");
+        assert!(x0 < bx0 && x1 > bx1, "blur did not spread the ink");
+        let tracked = plain(&all(GlyphXform {
+            tracking: 500.0,
+            ..GlyphXform::default()
+        }));
+        let (_, _, tx1, _) = ink_box(&tracked).expect("ink");
+        // Pushed along, as far as the animated margin of one text size lets it.
+        assert!(tx1 > bx1 + 30, "tracking did not push the letters along");
+        let skewed = plain(&all(GlyphXform {
+            skew: 30.0,
+            ..GlyphXform::default()
+        }));
+        assert_ne!(skewed.rgba, plain(&still).rgba, "skew changed nothing");
+
+        // The styled path: a block with a style of its own.
+        let style = TextStyle {
+            tracking: 1.0,
+            ..TextStyle::default()
+        };
+        let paragraph = ParagraphStyle::default();
+        let block = TextBlock {
+            text: "IIII",
+            size: 48.0,
+            fill: white(),
+            style: &style,
+            paragraph: &paragraph,
+            boxed: false,
+        };
+        let base = rasterise(&block, &still);
+        let blurred = rasterise(
+            &block,
+            &all(GlyphXform {
+                blur: 6.0,
+                ..GlyphXform::default()
+            }),
+        );
+        let skewed = rasterise(
+            &block,
+            &all(GlyphXform {
+                skew: 30.0,
+                ..GlyphXform::default()
+            }),
+        );
+        let (sx0, _, sx1, _) = ink_box(&base).expect("ink");
+        let (b0, _, b1, _) = ink_box(&blurred).expect("ink");
+        assert!(b0 < sx0 && b1 > sx1, "styled blur did not spread the ink");
+        assert_ne!(skewed.rgba, base.rgba, "styled skew changed nothing");
     }
 
     /// Same document, same frame, same bytes — the rule the frame cache lives

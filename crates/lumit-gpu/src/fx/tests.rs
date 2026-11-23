@@ -7757,6 +7757,7 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
             pin: p.pin,
             inv_pin_band: p.inv_pin_band,
             mix: p.mix,
+            bulge: p.bulge,
         }
     };
 
@@ -7764,6 +7765,8 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
     horizontal.displacement = 1;
     let mut vertical = base;
     vertical.displacement = 2;
+    let mut bulge = base;
+    bulge.displacement = 3;
     let mut unpinned = base;
     unpinned.pinning = 0;
     let mut sideways = base;
@@ -7792,6 +7795,7 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
         ("default", base),
         ("horizontal", horizontal),
         ("vertical", vertical),
+        ("bulge", bulge),
         ("unpinned", unpinned),
         ("left-and-right", sideways),
         ("negative", negative),
@@ -7893,6 +7897,7 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
             pin: p.pin,
             inv_pin_band: p.inv_pin_band,
             mix: p.mix,
+            bulge: p.bulge,
         }
     };
 

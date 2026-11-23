@@ -966,6 +966,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                     open: _animatorsOpen,
                     onToggle: () =>
                         setState(() => _animatorsOpen = !_animatorsOpen),
+                    renameScope: 'node',
                   ),
                 ],
               ),
