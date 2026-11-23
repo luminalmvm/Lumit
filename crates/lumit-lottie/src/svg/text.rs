@@ -151,7 +151,7 @@ impl Svg<'_> {
         let Some(line) = laid.lines.first() else {
             return Ok(());
         };
-        let margin = lumit_text::animator_margin(document.size as f32);
+        let margin = lumit_text::animated::animator_margin(document.size as f32);
         let chars: Vec<char> = text.chars().collect();
         let clock = Svg::layer_clock(scope, layer);
         let frames: Vec<Vec<lumit_core::text::GlyphXform>> = self

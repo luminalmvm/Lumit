@@ -269,6 +269,9 @@ A layer's animators move at most 8 font axes.
 
 A letter half inside the range gets half the offset. A letter turns about its own middle
 on the baseline, and everything an animator does happens inside the letter's own frame.
+A letter moved, turned or scaled well past the words is drawn in full, until the layer's
+picture holds as much as 4,096 by 4,096 pixels or is 16,384 on a side. A letter thrown
+further is clipped, as is one on a path that leaves its layer.
 
 Several animators on one layer **compose**: pushes, turns and tints add, scales and
 opacities multiply, and boxes lie one over the other. On a font axis each animator moves a

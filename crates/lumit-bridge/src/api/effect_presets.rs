@@ -337,7 +337,7 @@ impl LayerReference {
                 // The first animators grow the box the words are drawn in, so
                 // the anchor moves with them and the words stay put, as
                 // `set_text` does. An axis the preset keys keeps its keys.
-                let shift = crate::api::assets::style::restyle_shift(before, &document);
+                let shift = lumit_text::restyle::shift(before, &document);
                 ops.push(Op::SetTextDocument {
                     comp: self.comp_id,
                     layer: self.layer_id,

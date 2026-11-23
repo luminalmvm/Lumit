@@ -275,7 +275,7 @@ pub const COMMANDS: &[Command] = &[
             comp!(),
             r#","layer":"#,
             layer!(),
-            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
+            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place. A text layer keeps its words where they were when its text, style or animators change, as the app does, unless these set its anchor"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
         ),
     },
     Command {

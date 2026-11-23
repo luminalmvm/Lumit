@@ -556,8 +556,8 @@ fn text_shown_larger_is_drawn_larger_in_the_same_place() {
     let paragraph = ParagraphStyle::default();
     for style in [TextStyle::default(), kerned()] {
         let b = block("Lumit", &style, &paragraph);
-        let (small, size) = crate::rasterise_at(&b, &[], 1.0);
-        let (large, own) = crate::rasterise_at(&b, &[], 4.0);
+        let (small, size) = crate::rasterise_at(&b, &[], 1.0, [0; 4]);
+        let (large, own) = crate::rasterise_at(&b, &[], 4.0, [0; 4]);
         assert_eq!(size, own, "the layer keeps its own size");
         assert_eq!((small.width, small.height), size);
         assert!(
@@ -575,4 +575,22 @@ fn text_shown_larger_is_drawn_larger_in_the_same_place() {
             "{a:?} {b:?}"
         );
     }
+}
+
+/// A styled letter thrown past the block's room reaches past it on that side
+/// only, and letters nobody moves reach nowhere.
+#[test]
+fn a_thrown_styled_letter_reaches_past_its_room() {
+    let paragraph = ParagraphStyle::default();
+    let style = kerned();
+    let b = block("AB", &style, &paragraph);
+    let still = vec![GlyphXform::default(); 2];
+    assert_eq!(crate::animated::overhang(&b, &still), [0; 4]);
+    let mut thrown = still;
+    thrown[1].position = [400.0, 0.0];
+    let reach = crate::animated::overhang(&b, &thrown);
+    assert!(
+        reach[2] > 300 && [reach[0], reach[1], reach[3]] == [0; 3],
+        "{reach:?}"
+    );
 }
