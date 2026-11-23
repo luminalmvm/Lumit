@@ -10756,7 +10756,7 @@
       "slug": "gradient",
       "match_name": "gradient",
       "label": "Gradient",
-      "version": 1,
+      "version": 2,
       "category": "Generate",
       "category_slug": "generate",
       "params": [
@@ -10768,7 +10768,8 @@
           "default": 0,
           "options": [
             "Linear",
-            "Radial"
+            "Radial",
+            "Angle"
           ],
           "dividers_after": []
         },
@@ -10835,6 +10836,25 @@
           ],
           "slider_min": 0.0,
           "slider_max": 4.0
+        },
+        {
+          "id": "highlight",
+          "label": "Highlight length",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "highlight_angle",
+          "label": "Highlight angle",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
         },
         {
           "id": "colours",
@@ -11032,6 +11052,20 @@
         }
       ],
       "groups": [
+        {
+          "label": "",
+          "params": [
+            "highlight",
+            "highlight_angle"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "shape",
+            "values": [
+              1
+            ]
+          }
+        },
         {
           "label": "",
           "params": [

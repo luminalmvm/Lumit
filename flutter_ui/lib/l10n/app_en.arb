@@ -4849,6 +4849,14 @@
   "@fxHighlightExposure": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxHighlightAngle": "Highlight angle",
+  "@fxHighlightAngle": {
+    "description": "Effect controls, a control on Gradient: which way a radial ramp's off-centre bright spot sits, in degrees."
+  },
+  "fxHighlightLength": "Highlight length",
+  "@fxHighlightLength": {
+    "description": "Effect controls, a control on Gradient: how far a radial ramp's bright spot sits off its centre, per cent of the radius."
+  },
   "fxHighlightThreshold": "Highlight threshold",
   "@fxHighlightThreshold": {
     "description": "Effect controls — a control on Depth of field."
@@ -12125,6 +12133,77 @@
   "@shapeStrokeWidth": {
     "description": "Timeline row under a shape layer's art: how wide its outline is, in pixels."
   },
+  "shapeStrokeGradient": "Stroke gradient",
+  "@shapeStrokeGradient": {
+    "description": "Timeline row under a shape layer's art: whether its outline is one colour or a gradient, and which kind."
+  },
+  "shapeStrokeGradientColour": "Stroke gradient colour",
+  "@shapeStrokeGradientColour": {
+    "description": "Timeline row under a shape layer's art: the colour its gradient outline ends at."
+  },
+  "shapeStrokeGradientStops": "Stroke gradient stops",
+  "@shapeStrokeGradientStops": {
+    "description": "Timeline row under a shape layer's art, and the editor it opens: the colours along its gradient outline."
+  },
+  "shapeStrokeGradientStartOpacity": "Stroke gradient start opacity",
+  "@shapeStrokeGradientStartOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque its gradient outline is where it starts, as a percentage."
+  },
+  "shapeStrokeGradientEndOpacity": "Stroke gradient end opacity",
+  "@shapeStrokeGradientEndOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque its gradient outline is where it ends, as a percentage."
+  },
+  "shapeStrokeGradientStartX": "Stroke gradient start x",
+  "@shapeStrokeGradientStartX": {
+    "description": "Timeline row under a shape layer's art: the x its outline's gradient starts at, in pixels."
+  },
+  "shapeStrokeGradientStartY": "Stroke gradient start y",
+  "@shapeStrokeGradientStartY": {
+    "description": "Timeline row under a shape layer's art: the y its outline's gradient starts at, in pixels."
+  },
+  "shapeStrokeGradientEndX": "Stroke gradient end x",
+  "@shapeStrokeGradientEndX": {
+    "description": "Timeline row under a shape layer's art: the x its outline's gradient ends at, in pixels."
+  },
+  "shapeStrokeGradientEndY": "Stroke gradient end y",
+  "@shapeStrokeGradientEndY": {
+    "description": "Timeline row under a shape layer's art: the y its outline's gradient ends at, in pixels."
+  },
+  "shapeStrokeGradientStopPositionRow": "Stroke stop {n} position",
+  "@shapeStrokeGradientStopPositionRow": {
+    "description": "Timeline row under a shape layer's art: how far along its gradient outline one of the stops sits, as a percentage. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "shapeStrokeGradientStopColourRow": "Stroke stop {n} colour",
+  "@shapeStrokeGradientStopColourRow": {
+    "description": "Timeline row under a shape layer's art: the colour of one of the stops along its gradient outline, which keys like the stroke's colour. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "shapeStrokeGradientStopOpacityRow": "Stroke stop {n} opacity",
+  "@shapeStrokeGradientStopOpacityRow": {
+    "description": "Timeline row under a shape layer's art: how opaque one of the stops along its gradient outline is, as a percentage. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "shapeStrokeHighlightLength": "Stroke highlight length",
+  "@shapeStrokeHighlightLength": {
+    "description": "Timeline row under a shape layer's art: how far a radial gradient outline's centre sits off its start point, as a percentage of its radius."
+  },
+  "shapeStrokeHighlightAngle": "Stroke highlight angle",
+  "@shapeStrokeHighlightAngle": {
+    "description": "Timeline row under a shape layer's art: the angle a radial gradient outline's centre is moved off its start point at, in degrees."
+  },
   "shapePoints": "Points",
   "@shapePoints": {
     "description": "Timeline row under a polygon or star in a shape layer's art: how many corners or tips it has."
@@ -12177,6 +12256,14 @@
   "@shapeGradientRadial": {
     "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
   },
+  "shapeGradientAlong": "Along the path",
+  "@shapeGradientAlong": {
+    "description": "One choice on a shape layer's Stroke gradient row: the outline's colours run along its own line, from where it starts to where it ends."
+  },
+  "shapeGradientAngle": "Angle",
+  "@shapeGradientAngle": {
+    "description": "One choice on a shape layer's Gradient row: the fill's colours sweep round a point, like a colour wheel."
+  },
   "shapeGradientStartOpacity": "Gradient start opacity",
   "@shapeGradientStartOpacity": {
     "description": "Timeline row under a shape layer's art: how opaque its gradient fill is where it starts, as a percentage."
@@ -12196,6 +12283,15 @@
   "shapeGradientStopOpacity": "Opacity",
   "@shapeGradientStopOpacity": {
     "description": "Gradient editor: label over how opaque the selected stop is, as a percentage."
+  },
+  "shapeGradientStopColourRow": "Stop {n} colour",
+  "@shapeGradientStopColourRow": {
+    "description": "Timeline row under a shape layer's art: the colour of one of the stops along its gradient, which keys like the fill's colour. {n} counts the stops up from 1.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
   },
   "shapeGradientStopOpacityRow": "Stop {n} opacity",
   "@shapeGradientStopOpacityRow": {

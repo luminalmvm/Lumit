@@ -345,10 +345,17 @@ fn baked_item(item: &ShapeItem, (m, fade): &(Affine, f64), n: usize) -> ShapeIte
     scaled(&mut out.opacity, *fade);
     // The ramp's two points go with the copy, where both stand still; a
     // keyed point has no one place to move.
-    for (x, y) in [
+    let mut points = vec![
         (&mut out.gradient_start_x, &mut out.gradient_start_y),
         (&mut out.gradient_end_x, &mut out.gradient_end_y),
-    ] {
+    ];
+    if let Some(g) = &mut out.stroke_gradient {
+        points.extend([
+            (&mut g.start_x, &mut g.start_y),
+            (&mut g.end_x, &mut g.end_y),
+        ]);
+    }
+    for (x, y) in points {
         if let (Animation::Static(px), Animation::Static(py)) = (&x.animation, &y.animation) {
             let (nx, ny) = m.apply((*px, *py));
             x.animation = Animation::Static(nx);

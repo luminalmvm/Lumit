@@ -154,19 +154,24 @@ fn text_name(
 }
 
 /// The name of a Shape layer's raster: the art as it stands at this time, the
-/// raster size and the box it fills, and the time `at` for art that still
-/// moves. `None` when the art will not serialise, and then nothing is kept.
+/// raster size and the box it fills, the time `at` for art that still moves,
+/// and whether its gradients mix in display. `None` when the art will not
+/// serialise, and then nothing is kept.
 fn shape_name(
     contents: &[ShapeEntry],
     (w, h): (u32, u32),
     bounds: [f64; 4],
     at: Option<f64>,
+    display: bool,
 ) -> Option<u128> {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"shape/1/");
     hasher.update(&serde_json::to_vec(contents).ok()?);
     if let Some(lt) = at {
         hasher.update(&lt.to_le_bytes());
+    }
+    if display {
+        hasher.update(b"display/");
     }
     hasher.update(&w.to_le_bytes());
     hasher.update(&h.to_le_bytes());
@@ -432,11 +437,13 @@ pub(super) fn shape(
     let k = f64::from(shown).clamp(1.0, most);
     let w = (natural_w * k).round().max(1.0) as u32;
     let h = (natural_h * k).round().max(1.0) as u32;
-    let make = || lumit_core::shape::rasterise_contents(&contents, w, h, x0, y0, x1, y1, lt);
+    let display = comp.blending == lumit_core::model::blending::CompBlending::Display;
+    let make =
+        || lumit_core::shape::rasterise_contents_in(&contents, w, h, x0, y0, x1, y1, lt, display);
     // Art that came back unfrozen draws differently at each time, so its
     // name carries the time.
     let at = (matches!(contents, Cow::Borrowed(_)) && still_moves(&contents)).then_some(lt);
-    let name = shape_name(&contents, (w, h), [x0, y0, x1, y1], at);
+    let name = shape_name(&contents, (w, h), [x0, y0, x1, y1], at, display);
     let rgba = match name {
         Some(name) => {
             let r = kept(name, || KeptRaster {

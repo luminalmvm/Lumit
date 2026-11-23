@@ -455,7 +455,7 @@ impl GradientOverlay {
     // already have to. Trigger: an import comparison or a report where the
     // overlay reads flat.
     #[must_use]
-    pub fn packed(self, w: u32, h: u32) -> cpu::GradientParams {
+    pub fn packed(self, w: u32, h: u32) -> cpu::gradient::GradientParams {
         let theta = self.angle.to_radians();
         let (sin, cos) = theta.sin_cos();
         // "From straight up, clockwise" on a raster whose y grows downward —
@@ -477,20 +477,15 @@ impl GradientOverlay {
                 [dir[0] * half * 2.0, dir[1] * half * 2.0],
             )
         };
-        let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
         let (a, b) = if self.reverse {
             (self.colour_b, self.colour_a)
         } else {
             (self.colour_a, self.colour_b)
         };
-        cpu::GradientParams {
-            radial: self.gradient_type == 1,
-            start,
-            axis,
-            inv_len2: 1.0 / len2,
-            inv_len: 1.0 / len2.sqrt(),
-            c0: [a[0], a[1], a[2]],
-            c1: [b[0], b[1], b[2]],
+        cpu::gradient::GradientParams {
+            shape: u32::from(self.gradient_type == 1),
+            c0: [a[0], a[1], a[2], 1.0],
+            c1: [b[0], b[1], b[2], 1.0],
             // The style has no Scatter: dither is the generator's cure for
             // banding across a whole frame, and an overlay rides whatever the
             // layer under it already does.
@@ -498,8 +493,7 @@ impl GradientOverlay {
             seed: 0,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
             clip_to_alpha: true,
-            mids: 0,
-            mid: [[0.0; 4]; 3],
+            ..cpu::gradient::GradientParams::aimed(start, axis)
         }
     }
 }
@@ -513,7 +507,9 @@ impl EffectDef for GradientOverlayDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::gradient(rgba, w, h, &GradientOverlay::read(p).packed(w, h));
+        let display = crate::fx::effects::gradient::in_display(p);
+        let g = GradientOverlay::read(p).packed(w, h).in_display(display);
+        cpu::gradient::gradient(rgba, w, h, &g);
     }
 }
 

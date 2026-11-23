@@ -578,13 +578,14 @@ List<GraphChannel> graphChannels({
               path: path,
               id: '$path#$channel',
               label: '${entry.info.name} · ${item.name} · '
-                  '${shapeValueLabel(value)} $letter',
+                  '${shapeValueLabel(value, stop: stop)} $letter',
               colourIndex: out.length,
-              scalar: shapeScalarOf(item, value, stop: channel),
+              scalar: shapeScalarOf(item, value,
+                  stop: shapeSlot(value, stop, channel)),
               entry: entry,
               shape: item,
               shapeValue: value,
-              shapeStop: channel,
+              shapeStop: shapeSlot(value, stop, channel),
             ));
           }
           break;

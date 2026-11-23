@@ -249,7 +249,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "shape.add",
-        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest",
+        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient, stroke_gradient and the rest",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),

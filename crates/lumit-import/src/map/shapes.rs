@@ -472,7 +472,7 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<Art> {
     }
     if gradient && !stroke {
         item.fill = Some(colour::still(ramp.colour_at(0.0)));
-        item.gradient_colour = Some(ramp.colour_at(1.0));
+        item.gradient_colour = Some(colour::still(ramp.colour_at(1.0)));
         item.gradient_start_opacity = LumProperty::fixed(ramp.alpha_at(0.0) * 100.0);
         item.gradient_end_opacity = LumProperty::fixed(ramp.alpha_at(1.0) * 100.0);
         item.gradient_stops = ramp
@@ -480,7 +480,7 @@ fn paint(conv: &mut Conv<'_>, node: &Property, drawn: &Drawn) -> Option<Art> {
             .into_iter()
             .map(|at| lumit_core::shape::GradientStop {
                 position: LumProperty::fixed(at * 100.0),
-                colour: ramp.colour_at(at),
+                colour: colour::still(ramp.colour_at(at)),
                 opacity: LumProperty::fixed(ramp.alpha_at(at) * 100.0),
             })
             .collect();

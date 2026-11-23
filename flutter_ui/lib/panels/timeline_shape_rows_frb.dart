@@ -1068,7 +1068,7 @@ class ShapeValueRow extends StatefulWidget {
   final BridgeShapeModifier? modifier;
   final ShapeValue value;
 
-  /// Which gradient stop the row is for, on the two values a stop has.
+  /// Which gradient stop the row is for, on the values a stop has.
   final int stop;
   final ValueColumn valueColumn;
   final int playheadFrame;
@@ -1103,28 +1103,27 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
 
   bool get _isColour => isColourValue(widget.value);
 
-  BridgeColour? get _colour => widget.value == ShapeValue.fillColour
-      ? widget.item?.fill
-      : widget.item?.stroke;
-
   /// What the stopwatch keys: a colour's red, green and blue together, the
   /// one number otherwise.
-  List<BridgeScalar> get _scalars => switch (_colour) {
-        final c? when _isColour => [c.r, c.g, c.b],
-        _ => [_scalar],
-      };
+  List<BridgeScalar> get _scalars => _isColour && widget.item != null
+      ? [
+          for (final channel in const [0, 1, 2])
+            shapeScalarOf(widget.item!, widget.value,
+                stop: shapeSlot(widget.value, widget.stop, channel)),
+        ]
+      : [_scalar];
 
   /// [i] with the row's values replaced by [to], in [_scalars]' order.
   BridgeShapeItem _with(BridgeShapeItem i, List<BridgeScalar> to) {
     if (!_isColour) {
       return shapeWithScalar(i, widget.value, to.first, stop: widget.stop);
     }
-    final was = widget.value == ShapeValue.fillColour ? i.fill : i.stroke;
-    if (was == null || to.length < 3) return i;
-    final c = BridgeColour(r: to[0], g: to[1], b: to[2], a: was.a);
-    return widget.value == ShapeValue.fillColour
-        ? shapeItemWith(i, fill: c)
-        : shapeItemWith(i, stroke: c);
+    if (to.length < 3) return i;
+    final alpha = shapeColourOf(i, widget.value, stop: widget.stop)?.a ??
+        const BridgeScalar.static_(1);
+    return shapeWithColour(i, widget.value,
+        BridgeColour(r: to[0], g: to[1], b: to[2], a: alpha),
+        stop: widget.stop);
   }
 
   String get _rowKey =>
@@ -1183,7 +1182,11 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         // the stopwatch and its diamonds.
         ShapeValue.path ||
         ShapeValue.fillColour ||
-        ShapeValue.strokeColour =>
+        ShapeValue.gradientColour ||
+        ShapeValue.gradientStopColour ||
+        ShapeValue.strokeColour ||
+        ShapeValue.strokeGradientColour ||
+        ShapeValue.strokeGradientStopColour =>
           (0, 0, ''),
         ShapeValue.strokeWidth => (0, 1000, ' px'),
         // A parametric shape's size and place in the art's own pixels, the
@@ -1209,14 +1212,29 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStartX ||
         ShapeValue.gradientStartY ||
         ShapeValue.gradientEndX ||
-        ShapeValue.gradientEndY =>
+        ShapeValue.gradientEndY ||
+        ShapeValue.strokeGradientStartX ||
+        ShapeValue.strokeGradientStartY ||
+        ShapeValue.strokeGradientEndX ||
+        ShapeValue.strokeGradientEndY =>
           (-10000, 10000, ' px'),
         // How opaque each end of the ramp is.
         ShapeValue.gradientStartOpacity ||
         ShapeValue.gradientEndOpacity ||
         ShapeValue.gradientStopPosition ||
-        ShapeValue.gradientStopOpacity =>
+        ShapeValue.gradientStopOpacity ||
+        ShapeValue.strokeGradientStartOpacity ||
+        ShapeValue.strokeGradientEndOpacity ||
+        ShapeValue.strokeGradientStopPosition ||
+        ShapeValue.strokeGradientStopOpacity =>
           (0, 100, '%'),
+        // Per cent of the radius off the start point, either way.
+        ShapeValue.gradientHighlight ||
+        ShapeValue.strokeGradientHighlight =>
+          (-100, 100, '%'),
+        ShapeValue.gradientHighlightAngle ||
+        ShapeValue.strokeGradientHighlightAngle =>
+          (-3600, 3600, '°'),
         ShapeValue.smoothAmount => (0, 1000, ' px'),
         ShapeValue.twistAngle ||
         ShapeValue.twistRotation ||
@@ -1425,10 +1443,10 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   }
 }
 
-/// A shape item's gradient choice or the gradient's second colour, and the
-/// other choices an item has, or a deform entry's Displace or Scale. None of
-/// them is a number, so this row carries a swatch or a dropdown where the
-/// others carry a value field, and no stopwatch, because none of them keys.
+/// A shape item's gradient choice and its ramp, and the other choices an item
+/// has, or a deform entry's Displace or Scale. None of them is a number, so
+/// this row carries a dropdown or the ramp where the others carry a value
+/// field, and no stopwatch, because none of them keys.
 class ShapePaintRow extends StatelessWidget {
   final LayerReference layer;
 
@@ -1452,6 +1470,21 @@ class ShapePaintRow extends StatelessWidget {
   /// that is not, and never reads this.
   BridgeShapeItem get item => _item!;
 
+  /// Whether the row is the outline's ramp rather than the fill's.
+  bool get _outline =>
+      which == ShapePaint.strokeGradient ||
+      which == ShapePaint.strokeGradientStops;
+
+  /// [i] as the ramp's code reads it: on the outline's rows, with the
+  /// outline's paint where the fill's is.
+  BridgeShapeItem _view(BridgeShapeItem i) =>
+      _outline ? shapeOutlineAsFill(i) : i;
+
+  /// [i] with [change] made to the row's ramp.
+  BridgeShapeItem _onRamp(
+          BridgeShapeItem i, BridgeShapeItem Function(BridgeShapeItem) change) =>
+      _outline ? shapeOutlineFrom(i, change(_view(i))) : change(i);
+
   /// The whole list back with this item changed, which is how every shape
   /// edit is written, so this is one op and one undo step.
   void _write(BridgeShapeItem Function(BridgeShapeItem) change) =>
@@ -1462,20 +1495,10 @@ class ShapePaintRow extends StatelessWidget {
   /// what the engine draws for a gradient with no second colour.
   static const _defaultEnd = BridgeColourRgba(r: 0, g: 0, b: 0, a: 1);
 
-  Color _shown(BridgeColourRgba c) => documentColour(
-        (c.r.clamp(0.0, 1.0) * 255).round(),
-        (c.g.clamp(0.0, 1.0) * 255).round(),
-        (c.b.clamp(0.0, 1.0) * 255).round(),
-        255,
-      );
-
-  BridgeColourRgba _picked(PickedColour p, double alpha) =>
-      BridgeColourRgba(r: p.r, g: p.g, b: p.b, a: alpha);
-
   /// Where a ramp nobody has aimed should start and end: down the art's own
-  /// box for a linear one, out from its middle for a radial one. A gradient
-  /// that read as one flat colour the moment it was switched on would look
-  /// broken rather than unaimed.
+  /// box for a linear one, out from its middle for a radial or angle one. A
+  /// gradient that read as one flat colour the moment it was switched on would
+  /// look broken rather than unaimed.
   BridgeShapeItem _aimed(BridgeShapeItem i, int kind) {
     final aimed = i.gradientStartX != const BridgeScalar.static_(0) ||
         i.gradientEndX != const BridgeScalar.static_(0) ||
@@ -1485,7 +1508,7 @@ class ShapePaintRow extends StatelessWidget {
     final box = shapeContentsRect(
         [BridgeShapeEntry(depth: 0, kind: BridgeShapeEntryKind.item(i))]);
     if (box == null) return shapeItemWith(i, gradient: kind);
-    final (start, end) = kind == 2
+    final (start, end) = kind == 2 || kind == 4
         ? (box.center, Offset(box.right, box.center.dy))
         : (Offset(box.center.dx, box.top), Offset(box.center.dx, box.bottom));
     return shapeItemWith(
@@ -1507,23 +1530,26 @@ class ShapePaintRow extends StatelessWidget {
     return sampledScalar(scalar, timeOfFrame(comp, ui.playheadFrame.value));
   }
 
+  /// One of the gradient's colours as it reads under the playhead.
+  BridgeColourRgba _nowColour(BridgeColour? c, LumitUiState ui) => switch (c) {
+        final c? => BridgeColourRgba(
+            r: _now(c.r, ui), g: _now(c.g, ui), b: _now(c.b, ui), a: _now(c.a, ui)),
+        null => _defaultEnd,
+      };
+
   /// The gradient as its editor holds it, each stop named by where it is in
   /// the item's list.
   GradientRamp _rampOf(BridgeShapeItem i, LumitUiState ui) => GradientRamp(
-        startColour: switch (i.fill) {
-          final c? => BridgeColourRgba(
-              r: _now(c.r, ui), g: _now(c.g, ui), b: _now(c.b, ui), a: _now(c.a, ui)),
-          null => _defaultEnd,
-        },
+        startColour: _nowColour(i.fill, ui),
         startOpacity: _now(i.gradientStartOpacity, ui),
-        endColour: i.gradientColour ?? _defaultEnd,
+        endColour: _nowColour(i.gradientColour, ui),
         endOpacity: _now(i.gradientEndOpacity, ui),
         between: [
           for (final (index, s) in i.gradientStops.indexed)
             RampStop(
               id: index,
               position: _now(s.position, ui),
-              colour: s.colour,
+              colour: _nowColour(s.colour, ui),
               opacity: _now(s.opacity, ui),
             ),
         ],
@@ -1539,21 +1565,27 @@ class ShapePaintRow extends StatelessWidget {
     return scalarWithValueAt(was, to, comp, ui.playheadFrame.value);
   }
 
+  /// [was] holding [to] now, channel by channel as [_held] holds a number.
+  /// The alpha is left as it is: the ramp's opacities fade it.
+  BridgeColour _heldColour(
+          BridgeColour? was, BridgeColourRgba to, LumitUiState ui) =>
+      switch (was) {
+        final c? => BridgeColour(
+            r: _held(c.r, to.r, ui),
+            g: _held(c.g, to.g, ui),
+            b: _held(c.b, to.b, ui),
+            a: c.a),
+        null => stillColour(to),
+      };
+
   /// [i] with the editor's ramp written into it. [known] is each of the
   /// editor's stops as it was last written, which is where a stop's keys are.
   BridgeShapeItem _withRamp(BridgeShapeItem i, GradientRamp ramp,
           LumitUiState ui, Map<int, BridgeGradientStop> known) =>
       shapeItemWith(
         i,
-        fill: switch (i.fill) {
-          final c? => BridgeColour(
-              r: _held(c.r, ramp.startColour.r, ui),
-              g: _held(c.g, ramp.startColour.g, ui),
-              b: _held(c.b, ramp.startColour.b, ui),
-              a: c.a),
-          null => stillColour(ramp.startColour),
-        },
-        gradientColour: ramp.endColour,
+        fill: _heldColour(i.fill, ramp.startColour, ui),
+        gradientColour: _heldColour(i.gradientColour, ramp.endColour, ui),
         gradientStartOpacity:
             _held(i.gradientStartOpacity, ramp.startOpacity, ui),
         gradientEndOpacity: _held(i.gradientEndOpacity, ramp.endOpacity, ui),
@@ -1562,12 +1594,12 @@ class ShapePaintRow extends StatelessWidget {
             switch (known[s.id]) {
               final was? => BridgeGradientStop(
                   position: _held(was.position, s.position, ui),
-                  colour: s.colour,
+                  colour: _heldColour(was.colour, s.colour, ui),
                   opacity: _held(was.opacity, s.opacity, ui),
                 ),
               null => BridgeGradientStop(
                   position: BridgeScalar.static_(s.position),
-                  colour: s.colour,
+                  colour: stillColour(s.colour),
                   opacity: BridgeScalar.static_(s.opacity),
                 ),
             },
@@ -1578,17 +1610,21 @@ class ShapePaintRow extends StatelessWidget {
   /// gradient's numbers is keyed, as a still one has nothing to follow.
   Widget _rampChip(BuildContext context, String key) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    final view = _view(item);
     Widget chip() => RampChip(
           key: ValueKey<String>(key),
-          ramp: _rampOf(item, ui),
+          ramp: _rampOf(view, ui),
           onOpen: (at) => _editStops(context, at),
         );
-    final fill = item.fill;
+    final fill = view.fill;
+    final end = view.gradientColour;
     final still = [
       if (fill != null) ...[fill.r, fill.g, fill.b],
-      item.gradientStartOpacity,
-      item.gradientEndOpacity,
-      for (final s in item.gradientStops) ...[s.position, s.opacity],
+      if (end != null) ...[end.r, end.g, end.b],
+      view.gradientStartOpacity,
+      view.gradientEndOpacity,
+      for (final s in view.gradientStops)
+        ...[s.position, s.colour.r, s.colour.g, s.colour.b, s.opacity],
     ].every((s) => s is BridgeScalar_Static);
     if (still) return chip();
     return ValueListenableBuilder<int>(
@@ -1603,15 +1639,17 @@ class ShapePaintRow extends StatelessWidget {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final throttle = PreviewThrottle();
     final known = {
-      for (final (index, s) in item.gradientStops.indexed) index: s,
+      for (final (index, s) in _view(item).gradientStops.indexed) index: s,
     };
-    List<BridgeShapeEntry> contents(GradientRamp ramp) => layer
-        .getShapeContents()
-        .withItem(item.id, (other) => _withRamp(other, ramp, ui, known));
+    List<BridgeShapeEntry> contents(GradientRamp ramp) =>
+        layer.getShapeContents().withItem(
+            item.id,
+            (other) =>
+                _onRamp(other, (v) => _withRamp(v, ramp, ui, known)));
     showGradientStopsPopover(
       context: context,
       position: at,
-      ramp: _rampOf(item, ui),
+      ramp: _rampOf(_view(item), ui),
       onPreview: (ramp) => throttle.request(() {
         try {
           ui.selectedComp?.renderFrameWithShapePreview(
@@ -1630,9 +1668,9 @@ class ShapePaintRow extends StatelessWidget {
           final written = contents(ramp);
           layer.setShapeContents(contents: written, at: null);
           // What each stop is now, for the next edit to start from.
-          final stops = written.items
-              .firstWhere((i) => i.id == item.id)
-              .gradientStops;
+          final stops =
+              _view(written.items.firstWhere((i) => i.id == item.id))
+                  .gradientStops;
           known.clear();
           for (final (index, s) in ramp.between.indexed) {
             known[s.id] = stops[index];
@@ -1684,25 +1722,46 @@ class ShapePaintRow extends StatelessWidget {
                   width: 96,
                   child: BareDropdown<int>(
                     key: ValueKey<String>(key),
-                    value: item.gradient <= 2 ? item.gradient : 0,
-                    options: const [0, 1, 2],
+                    value: const [1, 2, 4].contains(item.gradient)
+                        ? item.gradient
+                        : 0,
+                    options: const [0, 1, 2, 4],
                     label: (k) => switch (k) {
                       1 => l10n.shapeGradientLinear,
                       2 => l10n.shapeGradientRadial,
+                      4 => l10n.shapeGradientAngle,
                       _ => l10n.shapeGradientFlat,
                     },
                     onChanged: (k) => _write((i) => _aimed(i, k)),
                   ),
                 ),
-              ShapePaint.gradientColour => ColourSwatchButton(
-                  key: ValueKey<String>(key),
-                  colour: _shown(item.gradientColour ?? _defaultEnd),
-                  linear: true,
-                  scale: ColourScale.unit,
-                  onPicked: (p) => _write((i) => shapeItemWith(i,
-                      gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
+              // The outline's, with along the path, which only a line has.
+              ShapePaint.strokeGradient => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: switch (item.strokeGradient?.kind) {
+                      final k? when k >= 1 && k <= 4 => k,
+                      _ => 0,
+                    },
+                    options: const [0, 1, 2, 4, 3],
+                    label: (k) => switch (k) {
+                      1 => l10n.shapeGradientLinear,
+                      2 => l10n.shapeGradientRadial,
+                      3 => l10n.shapeGradientAlong,
+                      4 => l10n.shapeGradientAngle,
+                      _ => l10n.shapeGradientFlat,
+                    },
+                    onChanged: (k) {
+                      // Flat on an outline with no ramp is what it already is.
+                      if (k == 0 && item.strokeGradient == null) return;
+                      _write((i) => _onRamp(i, (v) => _aimed(v, k)));
+                    },
+                  ),
                 ),
-              ShapePaint.gradientStops => _rampChip(context, key),
+              ShapePaint.gradientStops ||
+              ShapePaint.strokeGradientStops =>
+                _rampChip(context, key),
               // Displace or Scale, on the deform entry.
               ShapePaint.deformMode => SizedBox(
                   width: 96,

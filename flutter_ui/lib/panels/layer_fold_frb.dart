@@ -307,9 +307,11 @@ enum ShapeValue {
   gradientStartOpacity,
   gradientEndOpacity,
 
-  /// One of the stops between the ends: where it sits, and how opaque it is.
-  /// Which stop comes from the row, as a gradient can hold several.
+  /// One of the stops between the ends: where it sits, its colour, and how
+  /// opaque it is. Which stop comes from the row, as a gradient can hold
+  /// several.
   gradientStopPosition,
+  gradientStopColour,
   gradientStopOpacity,
 
   /// The **shape itself**. It has no number, so its row carries the
@@ -334,6 +336,24 @@ enum ShapeValue {
   gradientStartY,
   gradientEndX,
   gradientEndY,
+
+  /// A radial ramp's highlight: how far its centre sits off the start point,
+  /// and at what angle.
+  gradientHighlight,
+  gradientHighlightAngle,
+
+  /// The outline's ramp, one for each of the fill's above ([fillTwin]).
+  strokeGradientStartOpacity,
+  strokeGradientEndOpacity,
+  strokeGradientStopPosition,
+  strokeGradientStopColour,
+  strokeGradientStopOpacity,
+  strokeGradientStartX,
+  strokeGradientStartY,
+  strokeGradientEndX,
+  strokeGradientEndY,
+  strokeGradientHighlight,
+  strokeGradientHighlightAngle,
   smoothAmount,
   twistAngle,
   twistRotation,
@@ -372,21 +392,60 @@ enum ShapeValue {
   /// together, and the row's `stop` names one channel where a single number
   /// is meant: the graph's curves and a lane drag's writes.
   fillColour,
+  gradientColour,
   strokeColour,
+  strokeGradientColour,
   strokeWidth,
   opacity,
 }
 
+/// The fill's value an outline gradient's [value] mirrors, or null for one
+/// that is not the outline's ramp. The outline's ramp is read and written as
+/// the fill's is, through [shapeOutlineAsFill].
+ShapeValue? fillTwin(ShapeValue value) => switch (value) {
+      ShapeValue.strokeGradientColour => ShapeValue.gradientColour,
+      ShapeValue.strokeGradientStartOpacity => ShapeValue.gradientStartOpacity,
+      ShapeValue.strokeGradientEndOpacity => ShapeValue.gradientEndOpacity,
+      ShapeValue.strokeGradientStopPosition => ShapeValue.gradientStopPosition,
+      ShapeValue.strokeGradientStopColour => ShapeValue.gradientStopColour,
+      ShapeValue.strokeGradientStopOpacity => ShapeValue.gradientStopOpacity,
+      ShapeValue.strokeGradientStartX => ShapeValue.gradientStartX,
+      ShapeValue.strokeGradientStartY => ShapeValue.gradientStartY,
+      ShapeValue.strokeGradientEndX => ShapeValue.gradientEndX,
+      ShapeValue.strokeGradientEndY => ShapeValue.gradientEndY,
+      ShapeValue.strokeGradientHighlight => ShapeValue.gradientHighlight,
+      ShapeValue.strokeGradientHighlightAngle =>
+        ShapeValue.gradientHighlightAngle,
+      _ => null,
+    };
+
 /// Which of a shape item's values are its colours, three numbers under one
 /// stopwatch.
-bool isColourValue(ShapeValue value) =>
-    value == ShapeValue.fillColour || value == ShapeValue.strokeColour;
+bool isColourValue(ShapeValue value) => switch (value) {
+      ShapeValue.fillColour ||
+      ShapeValue.gradientColour ||
+      ShapeValue.gradientStopColour ||
+      ShapeValue.strokeColour ||
+      ShapeValue.strokeGradientColour ||
+      ShapeValue.strokeGradientStopColour =>
+        true,
+      _ => false,
+    };
+
+/// Where one channel of a colour sits in the `stop` its numbers are read and
+/// written by. A gradient stop's colour packs the stop and the channel, four
+/// to a stop; every other colour is its channel alone, and a number is its
+/// stop.
+int shapeSlot(ShapeValue value, int stop, int channel) =>
+    isColourValue(value) ? stop * 4 + channel : stop;
 
 /// Which of a shape item's values are its paint, given rows of their own
 /// before the numbers that change the path.
 bool isPaintValue(ShapeValue value) => switch (value) {
       ShapeValue.fillColour ||
+      ShapeValue.gradientColour ||
       ShapeValue.strokeColour ||
+      ShapeValue.strokeGradientColour ||
       ShapeValue.strokeWidth ||
       ShapeValue.opacity =>
         true,
@@ -537,11 +596,15 @@ bool isDashValue(ShapeValue value) => switch (value) {
 /// a slider dragged to its end asks for a frame that arrives.
 const double maxShapeCopies = 100;
 
-/// The two numbers a stop between a gradient's ends has, which take the stop
-/// they belong to from their row.
-bool isGradientStopValue(ShapeValue value) =>
-    value == ShapeValue.gradientStopPosition ||
-    value == ShapeValue.gradientStopOpacity;
+/// The values a stop between a gradient's ends has, which take the stop they
+/// belong to from their row.
+bool isGradientStopValue(ShapeValue value) => switch (fillTwin(value) ?? value) {
+      ShapeValue.gradientStopPosition ||
+      ShapeValue.gradientStopColour ||
+      ShapeValue.gradientStopOpacity =>
+        true,
+      _ => false,
+    };
 
 /// Which of a shape item's numbers aim or fade its **gradient** — shown only
 /// where there is a ramp to aim.
@@ -549,7 +612,25 @@ bool isGradientValue(ShapeValue value) => switch (value) {
       ShapeValue.gradientStartOpacity ||
       ShapeValue.gradientEndOpacity ||
       ShapeValue.gradientStopPosition ||
+      ShapeValue.gradientStopColour ||
       ShapeValue.gradientStopOpacity ||
+      ShapeValue.gradientStartX ||
+      ShapeValue.gradientStartY ||
+      ShapeValue.gradientEndX ||
+      ShapeValue.gradientEndY ||
+      ShapeValue.gradientHighlight ||
+      ShapeValue.gradientHighlightAngle =>
+        true,
+      _ => false,
+    };
+
+/// Which of a gradient's numbers only a radial ramp has.
+bool isHighlightValue(ShapeValue value) =>
+    value == ShapeValue.gradientHighlight ||
+    value == ShapeValue.gradientHighlightAngle;
+
+/// Which of a gradient's numbers are its two points.
+bool isGradientPointValue(ShapeValue value) => switch (value) {
       ShapeValue.gradientStartX ||
       ShapeValue.gradientStartY ||
       ShapeValue.gradientEndX ||
@@ -557,6 +638,62 @@ bool isGradientValue(ShapeValue value) => switch (value) {
         true,
       _ => false,
     };
+
+/// An outline with no ramp yet: flat, both ends opaque, nothing aimed.
+const BridgeStrokeGradient _flatOutline = BridgeStrokeGradient(
+  kind: 0,
+  startX: BridgeScalar.static_(0),
+  startY: BridgeScalar.static_(0),
+  endX: BridgeScalar.static_(0),
+  endY: BridgeScalar.static_(0),
+  startOpacity: BridgeScalar.static_(100),
+  endOpacity: BridgeScalar.static_(100),
+  highlight: BridgeScalar.static_(0),
+  highlightAngle: BridgeScalar.static_(0),
+  stops: [],
+);
+
+/// [item] with its outline's paint where its fill's is: the stroke colour as
+/// the fill, and the outline's ramp as the fill's gradient. The fill's rows
+/// and the gradient editor then work on the outline as they are, and
+/// [shapeOutlineFrom] puts the result back.
+BridgeShapeItem shapeOutlineAsFill(BridgeShapeItem item) {
+  final g = item.strokeGradient ?? _flatOutline;
+  return shapeItemWith(
+    item,
+    fill: item.stroke,
+    gradient: g.kind,
+    gradientColour: g.colour ?? _black,
+    gradientStartX: g.startX,
+    gradientStartY: g.startY,
+    gradientEndX: g.endX,
+    gradientEndY: g.endY,
+    gradientStartOpacity: g.startOpacity,
+    gradientEndOpacity: g.endOpacity,
+    gradientHighlight: g.highlight,
+    gradientHighlightAngle: g.highlightAngle,
+    gradientStops: g.stops,
+  );
+}
+
+/// [item] with its outline's paint taken from the fill of [view], an item
+/// [shapeOutlineAsFill] made.
+BridgeShapeItem shapeOutlineFrom(BridgeShapeItem item, BridgeShapeItem view) =>
+    shapeItemWith(item, stroke: view.fill, strokeGradient: _outlineOf(view));
+
+BridgeStrokeGradient _outlineOf(BridgeShapeItem view) => BridgeStrokeGradient(
+      kind: view.gradient,
+      colour: view.gradientColour,
+      startX: view.gradientStartX,
+      startY: view.gradientStartY,
+      endX: view.gradientEndX,
+      endY: view.gradientEndY,
+      startOpacity: view.gradientStartOpacity,
+      endOpacity: view.gradientEndOpacity,
+      highlight: view.gradientHighlight,
+      highlightAngle: view.gradientHighlightAngle,
+      stops: view.gradientStops,
+    );
 
 /// Which of a repeater's numbers describe the **step** it takes: everything
 /// but the count itself, which is the row that is always there to find.
@@ -614,20 +751,23 @@ List<ShapeValue> modifierValues(BridgeShapeModifier modifier) =>
       BridgeShapeModifierKind_Smooth() => const [ShapeValue.smoothAmount],
     };
 
-/// Which of a shape item's **colours and choices** a [FoldShapePaintRow]
-/// carries. None of the three is a number, so none of them keys, which
-/// is why they are a row kind of their own rather than more [ShapeValue]s.
+/// Which of a shape item's **choices** a [FoldShapePaintRow] carries. None
+/// of them is a number, so none of them keys, which is why they are a row
+/// kind of their own rather than more [ShapeValue]s.
 enum ShapePaint {
   /// How this item joins the one before it: apart, union, subtract, intersect
   /// or exclude. First, because it decides what the rest of the rows
   /// are painting.
   combine,
 
-  /// Flat, linear or radial.
+  /// Flat, linear, radial or angle.
   gradient,
 
-  /// The colour the ramp ends at.
-  gradientColour,
+  /// The outline's: flat, linear, radial, angle or along the path.
+  strokeGradient,
+
+  /// The outline's ramp, which opens the editor for its stops.
+  strokeGradientStops,
 
   /// The ramp itself, which opens the editor for the stops along it.
   gradientStops,
@@ -639,8 +779,8 @@ enum ShapePaint {
   taperScope,
 }
 
-/// A shape item's fill colour, its gradient choice, or its gradient's second
-/// colour, on a row of its own. A deform entry's Displace or Scale choice is
+/// A shape item's gradient choice, its ramp, or how it joins the item before
+/// it, on a row of its own. A deform entry's Displace or Scale choice is
 /// the one that belongs to a [modifier] rather than to an item.
 final class FoldShapePaintRow extends LayerFoldRow {
   final BridgeShapeItem? item;
@@ -655,8 +795,9 @@ final class FoldShapePaintRow extends LayerFoldRow {
 String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.combine => l10n.shapeCombine,
       ShapePaint.gradient => l10n.shapeGradient,
-      ShapePaint.gradientColour => l10n.shapeGradientColour,
       ShapePaint.gradientStops => l10n.shapeGradientStops,
+      ShapePaint.strokeGradient => l10n.shapeStrokeGradient,
+      ShapePaint.strokeGradientStops => l10n.shapeStrokeGradientStops,
       ShapePaint.deformMode => l10n.shapeDeform,
       ShapePaint.taperScope => l10n.shapeTaperScope,
     };
@@ -671,7 +812,7 @@ final class FoldShapeValueRow extends LayerFoldRow {
   final BridgeShapeModifier? modifier;
   final ShapeValue value;
 
-  /// Which gradient stop the row is for, on the two values a stop has.
+  /// Which gradient stop the row is for, on the values a stop has.
   final int stop;
   const FoldShapeValueRow(this.item, this.value,
       {this.modifier, required int depth, this.stop = 0})
@@ -683,7 +824,7 @@ final class FoldShapeValueRow extends LayerFoldRow {
   /// The number itself, from whichever the row belongs to.
   BridgeScalar get scalar => switch (modifier) {
         final m? => modifierScalarOf(m, value),
-        null => shapeScalarOf(item!, value, stop: stop),
+        null => shapeScalarOf(item!, value, stop: shapeSlot(value, stop, 0)),
       };
 }
 
@@ -1307,7 +1448,7 @@ bool _differs(BridgeScalar scalar, double? fresh) => switch (scalar) {
 /// What a shape's number is made with: an item's own, and a modifier's as the
 /// Add menu puts one down. Null where that depends on the art, a size or a
 /// centre, or where nothing is put down until somebody picks one.
-double? shapeValueDefault(ShapeValue value) => switch (value) {
+double? shapeValueDefault(ShapeValue value) => switch (fillTwin(value) ?? value) {
       ShapeValue.opacity ||
       ShapeValue.gradientStartOpacity ||
       ShapeValue.gradientEndOpacity ||
@@ -1320,6 +1461,8 @@ double? shapeValueDefault(ShapeValue value) => switch (value) {
       ShapeValue.taperStart ||
       ShapeValue.taperEnd =>
         100,
+      ShapeValue.gradientHighlight ||
+      ShapeValue.gradientHighlightAngle ||
       ShapeValue.roundness ||
       ShapeValue.shapeRotation ||
       ShapeValue.outerRoundness ||
@@ -1645,11 +1788,14 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.outerRoundness => l10n.shapeOuterRoundness,
       ShapeValue.innerRoundness => l10n.shapeInnerRoundness,
       ShapeValue.fillColour => l10n.shapeFill,
+      ShapeValue.gradientColour => l10n.shapeGradientColour,
       ShapeValue.strokeColour => l10n.shapeStroke,
       ShapeValue.strokeWidth => l10n.shapeStrokeWidth,
       ShapeValue.opacity => l10n.shapeOpacity,
       ShapeValue.gradientStopPosition =>
         l10n.shapeGradientStopPositionRow(stop + 1),
+      ShapeValue.gradientStopColour =>
+        l10n.shapeGradientStopColourRow(stop + 1),
       ShapeValue.gradientStopOpacity =>
         l10n.shapeGradientStopOpacityRow(stop + 1),
       ShapeValue.gradientStartOpacity => l10n.shapeGradientStartOpacity,
@@ -1658,6 +1804,24 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
       ShapeValue.gradientEndY => l10n.shapeGradientEndY,
+      ShapeValue.gradientHighlight => l10n.fxHighlightLength,
+      ShapeValue.gradientHighlightAngle => l10n.fxHighlightAngle,
+      ShapeValue.strokeGradientColour => l10n.shapeStrokeGradientColour,
+      ShapeValue.strokeGradientStartOpacity =>
+        l10n.shapeStrokeGradientStartOpacity,
+      ShapeValue.strokeGradientEndOpacity => l10n.shapeStrokeGradientEndOpacity,
+      ShapeValue.strokeGradientStopPosition =>
+        l10n.shapeStrokeGradientStopPositionRow(stop + 1),
+      ShapeValue.strokeGradientStopColour =>
+        l10n.shapeStrokeGradientStopColourRow(stop + 1),
+      ShapeValue.strokeGradientStopOpacity =>
+        l10n.shapeStrokeGradientStopOpacityRow(stop + 1),
+      ShapeValue.strokeGradientStartX => l10n.shapeStrokeGradientStartX,
+      ShapeValue.strokeGradientStartY => l10n.shapeStrokeGradientStartY,
+      ShapeValue.strokeGradientEndX => l10n.shapeStrokeGradientEndX,
+      ShapeValue.strokeGradientEndY => l10n.shapeStrokeGradientEndY,
+      ShapeValue.strokeGradientHighlight => l10n.shapeStrokeHighlightLength,
+      ShapeValue.strokeGradientHighlightAngle => l10n.shapeStrokeHighlightAngle,
       ShapeValue.smoothAmount => l10n.shapeModifierAmount,
       ShapeValue.twistAngle => l10n.shapeTwistAngle,
       ShapeValue.twistRotation => l10n.shapeTwistRotation,
@@ -1695,6 +1859,53 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
 
 const BridgeScalar _none = BridgeScalar.static_(0);
 
+/// The far end of a ramp nobody has given a colour: black, which is what the
+/// engine draws.
+const _black = BridgeColour(
+    r: _none, g: _none, b: _none, a: BridgeScalar.static_(1));
+
+/// Which of [item]'s colours [value] names, every channel as it is stored,
+/// for a gradient stop's colour the stop's. Null where there is none: no fill,
+/// no outline, a gradient with no end colour yet, or a stop that has gone.
+BridgeColour? shapeColourOf(BridgeShapeItem item, ShapeValue value,
+        {int stop = 0}) =>
+    switch (value) {
+      ShapeValue.fillColour => item.fill,
+      ShapeValue.strokeColour => item.stroke,
+      ShapeValue.gradientColour => item.gradientColour,
+      ShapeValue.gradientStopColour => stop < item.gradientStops.length
+          ? item.gradientStops[stop].colour
+          : null,
+      _ => switch (fillTwin(value)) {
+          final twin? =>
+            shapeColourOf(shapeOutlineAsFill(item), twin, stop: stop),
+          null => null,
+        },
+    };
+
+/// [item] with the colour [value] names replaced by [to]. A gradient's end
+/// colour is made by the first write; a stop that has gone takes nothing.
+BridgeShapeItem shapeWithColour(
+        BridgeShapeItem item, ShapeValue value, BridgeColour to,
+        {int stop = 0}) =>
+    switch (value) {
+      ShapeValue.fillColour => shapeItemWith(item, fill: to),
+      ShapeValue.strokeColour => shapeItemWith(item, stroke: to),
+      ShapeValue.gradientColour => shapeItemWith(item, gradientColour: to),
+      ShapeValue.gradientStopColour => shapeItemWith(item, gradientStops: [
+          for (final (index, s) in item.gradientStops.indexed)
+            index != stop
+                ? s
+                : BridgeGradientStop(
+                    position: s.position, colour: to, opacity: s.opacity),
+        ]),
+      _ => switch (fillTwin(value)) {
+          final twin? => shapeOutlineFrom(item,
+              shapeWithColour(shapeOutlineAsFill(item), twin, to, stop: stop)),
+          null => item,
+        },
+    };
+
 /// The first pair of an item's dash list, or a still zero where it has none —
 /// which is what a solid outline reads as.
 BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
@@ -1713,6 +1924,11 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.gradientStopOpacity => stop < item.gradientStops.length
           ? item.gradientStops[stop].opacity
           : const BridgeScalar.static_(100),
+      // A gradient's colours read as one channel each, named by the slot.
+      ShapeValue.gradientColour ||
+      ShapeValue.gradientStopColour =>
+        colourChannel(
+            shapeColourOf(item, value, stop: stop ~/ 4) ?? _black, stop % 4),
       // The shape is not a number and asks for the still zero nobody reads,
       // exactly as a mask's path row does.
       ShapeValue.path => const BridgeScalar.static_(0),
@@ -1734,6 +1950,22 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.gradientStartY => item.gradientStartY,
       ShapeValue.gradientEndX => item.gradientEndX,
       ShapeValue.gradientEndY => item.gradientEndY,
+      ShapeValue.gradientHighlight => item.gradientHighlight,
+      ShapeValue.gradientHighlightAngle => item.gradientHighlightAngle,
+      // The outline's ramp reads as the fill's does.
+      ShapeValue.strokeGradientColour ||
+      ShapeValue.strokeGradientStartOpacity ||
+      ShapeValue.strokeGradientEndOpacity ||
+      ShapeValue.strokeGradientStopPosition ||
+      ShapeValue.strokeGradientStopColour ||
+      ShapeValue.strokeGradientStopOpacity ||
+      ShapeValue.strokeGradientStartX ||
+      ShapeValue.strokeGradientStartY ||
+      ShapeValue.strokeGradientEndX ||
+      ShapeValue.strokeGradientEndY ||
+      ShapeValue.strokeGradientHighlight ||
+      ShapeValue.strokeGradientHighlightAngle =>
+        shapeScalarOf(shapeOutlineAsFill(item), fillTwin(value)!, stop: stop),
       // A modifier's number is on the modifier's own row; asked of the item
       // it reads as the still zero nobody draws, as a gone stop does.
       ShapeValue.smoothAmount ||
@@ -1799,14 +2031,17 @@ BridgeShapeItem shapeItemWith(
   BridgeScalar? to,
   BridgeColour? fill,
   BridgeColour? stroke,
+  BridgeStrokeGradient? strokeGradient,
   int? gradient,
-  BridgeColourRgba? gradientColour,
+  BridgeColour? gradientColour,
   BridgeScalar? gradientStartX,
   BridgeScalar? gradientStartY,
   BridgeScalar? gradientEndX,
   BridgeScalar? gradientEndY,
   BridgeScalar? gradientStartOpacity,
   BridgeScalar? gradientEndOpacity,
+  BridgeScalar? gradientHighlight,
+  BridgeScalar? gradientHighlightAngle,
   List<BridgeGradientStop>? gradientStops,
   int? combine,
   int stop = 0,
@@ -1845,9 +2080,21 @@ BridgeShapeItem shapeItemWith(
               final c => c,
             },
     strokeWidth: at(ShapeValue.strokeWidth, item.strokeWidth),
+    strokeGradient: strokeGradient ??
+        switch (value == null ? null : fillTwin(value)) {
+          // One of the outline's numbers, written as the fill's would be.
+          final twin? => _outlineOf(shapeItemWith(shapeOutlineAsFill(item),
+              value: twin, to: to, stop: stop)),
+          null => item.strokeGradient,
+        },
     opacity: at(ShapeValue.opacity, item.opacity),
     gradient: gradient ?? item.gradient,
-    gradientColour: gradientColour ?? item.gradientColour,
+    gradientColour: gradientColour ??
+        switch (value) {
+          ShapeValue.gradientColour => colourWithChannel(
+              item.gradientColour ?? _black, stop % 4, to!),
+          _ => item.gradientColour,
+        },
     gradientStartX:
         gradientStartX ?? at(ShapeValue.gradientStartX, item.gradientStartX),
     gradientStartY:
@@ -1860,8 +2107,24 @@ BridgeShapeItem shapeItemWith(
         at(ShapeValue.gradientStartOpacity, item.gradientStartOpacity),
     gradientEndOpacity: gradientEndOpacity ??
         at(ShapeValue.gradientEndOpacity, item.gradientEndOpacity),
+    gradientHighlight: gradientHighlight ??
+        at(ShapeValue.gradientHighlight, item.gradientHighlight),
+    gradientHighlightAngle: gradientHighlightAngle ??
+        at(ShapeValue.gradientHighlightAngle, item.gradientHighlightAngle),
     gradientStops: gradientStops ??
         switch (value) {
+          // A stop's colour names the stop and the channel together.
+          ShapeValue.gradientStopColour => [
+              for (final (index, s) in item.gradientStops.indexed)
+                if (index != stop ~/ 4)
+                  s
+                else
+                  BridgeGradientStop(
+                    position: s.position,
+                    colour: colourWithChannel(s.colour, stop % 4, to!),
+                    opacity: s.opacity,
+                  ),
+            ],
           ShapeValue.gradientStopPosition || ShapeValue.gradientStopOpacity => [
               for (final (index, s) in item.gradientStops.indexed)
                 if (index != stop)
@@ -2082,7 +2345,8 @@ List<BridgeShapeEntry> shapeEntriesWithScalar(
       null => entries.withItem(
           row.item!.id,
           (was) =>
-              shapeWithScalar(was, row.value, to, stop: row.stop)),
+              shapeWithScalar(was, row.value, to,
+                  stop: shapeSlot(row.value, row.stop, 0))),
     };
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
@@ -2396,7 +2660,10 @@ bool moveLaneKeys({
         return true;
       }
       var written = item!;
-      for (final channel in isColourValue(value) ? const [0, 1, 2] : [stop]) {
+      final slots = isColourValue(value)
+          ? [for (final channel in const [0, 1, 2]) shapeSlot(value, stop, channel)]
+          : [stop];
+      for (final channel in slots) {
         final shapeScalar = shapeScalarOf(item, value, stop: channel);
         if (shapeScalar is! BridgeScalar_Keyframed) return false;
         final shapeNext = moved(shapeScalar.field0);
@@ -3146,7 +3413,7 @@ List<LayerFoldRow> layerFoldRows({
               rows.add(FoldShapePaintRow(item, ShapePaint.gradient,
                   depth: depth + 1));
               if (item.gradient != 0) {
-                rows.add(FoldShapePaintRow(item, ShapePaint.gradientColour,
+                rows.add(FoldShapeValueRow(item, ShapeValue.gradientColour,
                     depth: depth + 1));
                 rows.add(FoldShapePaintRow(item, ShapePaint.gradientStops,
                     depth: depth + 1));
@@ -3155,6 +3422,16 @@ List<LayerFoldRow> layerFoldRows({
             if (item.stroke != null) {
               rows.add(FoldShapeValueRow(item, ShapeValue.strokeColour,
                   depth: depth + 1));
+              rows.add(FoldShapePaintRow(item, ShapePaint.strokeGradient,
+                  depth: depth + 1));
+              if ((item.strokeGradient?.kind ?? 0) != 0) {
+                rows.add(FoldShapeValueRow(
+                    item, ShapeValue.strokeGradientColour,
+                    depth: depth + 1));
+                rows.add(FoldShapePaintRow(
+                    item, ShapePaint.strokeGradientStops,
+                    depth: depth + 1));
+              }
               rows.add(FoldShapeValueRow(item, ShapeValue.strokeWidth,
                   depth: depth + 1));
             }
@@ -3180,7 +3457,22 @@ List<LayerFoldRow> layerFoldRows({
               if (isDashValue(value) && item.stroke == null) continue;
               // The gradient's two points aim a ramp and its two opacities
               // fade one; with no ramp there is nothing for them to work on.
+              // The outline's ramp shows under an outline that has one, as
+              // the fill's does, and along the path has no points to aim.
+              if (fillTwin(value) case final twin?) {
+                final kind = item.stroke == null
+                    ? 0
+                    : item.strokeGradient?.kind ?? 0;
+                if (kind == 0 ||
+                    (isHighlightValue(twin) && kind != 2) ||
+                    (isGradientPointValue(twin) && kind == 3)) {
+                  continue;
+                }
+              }
               if (isGradientValue(value) && item.gradient == 0) continue;
+              // The highlight moves a radial ramp's centre, so only a radial
+              // ramp shows it.
+              if (isHighlightValue(value) && item.gradient != 2) continue;
               // A taper narrows the outline, so it shows only where there is
               // one, as the dashes do, and only once it has been added.
               if (isTaperValue(value) &&
@@ -3191,15 +3483,29 @@ List<LayerFoldRow> layerFoldRows({
                 rows.add(FoldShapePaintRow(item, ShapePaint.taperScope,
                     depth: depth + 1));
               }
-              // A stop between the ends has two rows of its own, so these
+              // A stop between the ends has three rows of its own, so these
               // are made once for each stop rather than once for the item.
-              if (value == ShapeValue.gradientStopOpacity) continue;
-              if (value == ShapeValue.gradientStopPosition) {
-                for (var stop = 0; stop < item.gradientStops.length; stop++) {
-                  for (final each in const [
-                    ShapeValue.gradientStopPosition,
-                    ShapeValue.gradientStopOpacity,
-                  ]) {
+              if (isGradientStopValue(value)) {
+                final outline = fillTwin(value) != null;
+                if ((fillTwin(value) ?? value) !=
+                    ShapeValue.gradientStopPosition) {
+                  continue;
+                }
+                final stops = outline
+                    ? item.strokeGradient?.stops ?? const []
+                    : item.gradientStops;
+                for (var stop = 0; stop < stops.length; stop++) {
+                  for (final each in outline
+                      ? const [
+                          ShapeValue.strokeGradientStopPosition,
+                          ShapeValue.strokeGradientStopColour,
+                          ShapeValue.strokeGradientStopOpacity,
+                        ]
+                      : const [
+                          ShapeValue.gradientStopPosition,
+                          ShapeValue.gradientStopColour,
+                          ShapeValue.gradientStopOpacity,
+                        ]) {
                     rows.add(FoldShapeValueRow(item, each,
                         depth: depth + 1, stop: stop));
                   }

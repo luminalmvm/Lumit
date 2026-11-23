@@ -195,7 +195,7 @@ Script: `lumit.layer.add({ ... })`. MCP tool: `layer_add`.
 
 ## shape.add
 
-Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest.
+Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient, stroke_gradient and the rest.
 
 Script: `lumit.shape.add({ ... })`. MCP tool: `shape_add`.
 
