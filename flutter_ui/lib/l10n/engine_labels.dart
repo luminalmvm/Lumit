@@ -1473,6 +1473,7 @@ Map<String, String> get _built => {
       "Normal": l10n.fxNormal,
       "NTSC": l10n.fxNtsc,
       "Offset": l10n.fxOffset,
+      "Burn": l10n.fxBurn,
       "Offset x": l10n.fxOffsetX,
       "Offset y": l10n.fxOffsetY,
       "Opacity": l10n.fxOpacity,

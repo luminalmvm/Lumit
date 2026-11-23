@@ -231,6 +231,7 @@ Brushed
 Brushed metal
 Bulge
 Buoyancy
+Burn
 Burst
 Burst count
 Burst interval

@@ -44,6 +44,22 @@ pub struct Frame {
     /// How far past the frame's edge a light fades out, comp pixels. 0 is
     /// no fade.
     pub edge_fade: f32,
+    /// 0..1: how far light too bright for its colour runs to white. 0
+    /// leaves it as drawn.
+    pub burn: f32,
+}
+
+/// Light past 1 in its brightest channel, run toward white by `burn`: the
+/// further past, the whiter. A red light goes orange, yellow, then white,
+/// and anything 1 or under is left as it is.
+#[must_use]
+pub fn burnt(c: [f32; 3], burn: f32) -> [f32; 3] {
+    let m = c[0].max(c[1]).max(c[2]);
+    if burn <= 0.0 || m <= 1.0 {
+        return c;
+    }
+    let t = burn * (1.0 - 1.0 / m);
+    [0, 1, 2].map(|k| c[k] + (m - c[k]) * t)
 }
 
 impl Frame {
@@ -65,6 +81,7 @@ impl Frame {
             evolution_deg: 0.0,
             time_s: 0.0,
             edge_fade: 0.0,
+            burn: 0.0,
         }
     }
 }
@@ -408,13 +425,29 @@ pub fn draw_with(
         })
         .collect();
     // A row at a time across threads, each adding the quads in the same
-    // order, so every pixel sums exactly as it would on one thread.
+    // order, so every pixel sums exactly as it would on one thread. Under
+    // Burn the light is summed apart first, as the GPU does, then burnt
+    // and added.
+    let burn = frame.burn;
     rgba.par_chunks_mut(w as usize * 4)
         .take(h as usize)
         .enumerate()
         .for_each(|(y, row)| {
+            if burn <= 0.0 {
+                for (i, p) in &placed {
+                    splat_row(i, p, w, y as u32, row, layer.as_ref());
+                }
+                return;
+            }
+            let mut light = vec![0.0f32; row.len()];
             for (i, p) in &placed {
-                splat_row(i, p, w, y as u32, row, layer.as_ref());
+                splat_row(i, p, w, y as u32, &mut light, layer.as_ref());
+            }
+            for (px, l) in row.chunks_exact_mut(4).zip(light.chunks_exact(4)) {
+                let b = burnt([l[0], l[1], l[2]], burn);
+                for k in 0..3 {
+                    px[k] += b[k];
+                }
             }
         });
 }

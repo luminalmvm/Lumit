@@ -108,3 +108,41 @@ fn a_streaks_offset_moves_its_lines_off_the_light() {
         "20 px off: row {moved}"
     );
 }
+
+/// Burn runs light too bright for its colour toward white: a bright red
+/// light gains green and blue where it is brightest, keeps its red where it
+/// is dim, and Burn 0 leaves it as drawn.
+#[test]
+fn burn_runs_a_bright_light_to_white() {
+    use super::raster::burnt;
+    assert_eq!(burnt([0.8, 0.05, 0.0], 1.0), [0.8, 0.05, 0.0], "dim stays");
+    assert_eq!(burnt([6.0, 0.3, 0.1], 0.0), [6.0, 0.3, 0.1], "Burn 0");
+    let hot = burnt([6.0, 0.3, 0.1], 1.0);
+    assert!(
+        hot[1] > 4.0 && hot[2] > 4.0,
+        "white where brightest: {hot:?}"
+    );
+    let warm = burnt([1.5, 0.05, 0.0], 1.0);
+    assert!(
+        warm[1] > warm[2] && warm[1] < 1.0,
+        "orange a little past: {warm:?}"
+    );
+    let (w, h) = (64u32, 64u32);
+    let mut e = Element::new(Kind::Glow);
+    e.set("brightness", 8.0);
+    let design = Design {
+        lumit_flare: FORMAT,
+        name: String::new(),
+        elements: vec![e],
+    };
+    let mut f = Frame::preview(w, h, [32.0, 32.0], 1.0);
+    f.lights[0].colour = [1.0, 0.05, 0.02];
+    let green = |burn: f32| {
+        let mut f = f.clone();
+        f.burn = burn;
+        let mut rgba = vec![0.0; (w * h * 4) as usize];
+        draw(&design, &f, w, h, &mut rgba);
+        rgba[((32 * w + 32) * 4 + 1) as usize]
+    };
+    assert!(green(1.0) > 10.0 * green(0.0), "the middle burns");
+}

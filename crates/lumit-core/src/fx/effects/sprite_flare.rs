@@ -264,6 +264,19 @@ pub struct SpriteFlare {
     #[colour(label = "Colour", default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub tint: [f32; 4],
 
+    /// How far light too bright for its colour runs to white, per cent, as
+    /// a real one does on film: a red light goes orange, yellow, then white
+    /// where it is brightest, and stays red where it is dim.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub burn: f32,
+
     /// What turns rays' shimmer and orbs' drift. A full turn comes back to
     /// the start.
     #[dial(label = "Evolution", default = 0.0)]
@@ -447,6 +460,7 @@ impl SpriteFlare {
             time_s: time,
             // The row arrives at the raster's size, the frame wants comp px.
             edge_fade: s.edge_fade.max(0.0) / px_scale,
+            burn: (s.burn / 100.0).clamp(0.0, 1.0),
         }
     }
 

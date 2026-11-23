@@ -33711,5 +33711,9 @@
   "fxSoftPastelSatin": "Soft pastel satin",
   "@fxSoftPastelSatin": {
     "description": "Effect presets: a Holographic foil look, pale wide bands on soft satin metal."
+  },
+  "fxBurn": "Burn",
+  "@fxBurn": {
+    "description": "Effect controls: a control on Sprite flare, how far light too bright for its colour runs to white, as on film: red goes orange, yellow, then white."
   }
 }

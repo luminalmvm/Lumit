@@ -68,6 +68,8 @@ pub struct SpriteFlareOp<'a> {
     pub centre: [f32; 2],
     /// Raster pixels; 0 is no fade.
     pub edge_fade: f32,
+    /// 0..1: how far light too bright for its colour runs to white.
+    pub burn: f32,
     pub spots: Option<SpotsOp>,
     pub hide: Option<HideOp<'a>>,
     pub depth: Option<DepthOp<'a>>,
@@ -87,7 +89,7 @@ struct Params {
     edge_fade: f32,
     lights: u32,
     has_layer: u32,
-    _pad: f32,
+    burn: f32,
 }
 
 /// What `sf_lights` is told.
@@ -204,6 +206,7 @@ impl SpriteFlareFx {
             device,
             "fx-sprite-flare-add",
             &[
+                (0, Slot::Uniform),
                 (3, Slot::Tex),
                 (4, Slot::Tex),
                 (5, Slot::Store(ctx.working())),
@@ -316,7 +319,7 @@ impl FxEngine {
                 edge_fade: op.edge_fade,
                 lights: slots as u32,
                 has_layer: u32::from(op.layer.is_some()),
-                _pad: 0.0,
+                burn: op.burn,
             }),
             B::UNIFORM,
         );
@@ -481,6 +484,7 @@ impl FxEngine {
         let add_group = group(
             &fx.add.0,
             &[
+                entry(0, params.as_entire_binding()),
                 entry(3, R::TextureView(&v_src)),
                 entry(4, R::TextureView(&v_light)),
                 entry(5, R::TextureView(&v_out)),

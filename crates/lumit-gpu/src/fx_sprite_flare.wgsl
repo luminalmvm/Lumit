@@ -15,7 +15,8 @@ struct Frame {
     lights: u32,
     // 1 when the Texture layer's picture is bound.
     has_layer: u32,
-    _pad: f32,
+    // 0..1: how far light too bright for its colour runs to white.
+    burn: f32,
 };
 
 struct Inst {
@@ -494,6 +495,17 @@ fn sf_add(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let at = vec2<i32>(gid.xy);
     let base = textureLoad(src, at, 0);
-    let light = textureLoad(acc, at, 0);
-    textureStore(dst, at, vec4<f32>(base.rgb + light.rgb, base.a));
+    let light = burnt(textureLoad(acc, at, 0).rgb, frame.burn);
+    textureStore(dst, at, vec4<f32>(base.rgb + light, base.a));
+}
+
+// == raster::burnt: past 1 in its brightest channel, light runs toward
+// white, the further past the whiter.
+fn burnt(c: vec3<f32>, burn: f32) -> vec3<f32> {
+    let m = max(max(c.x, c.y), c.z);
+    if (burn <= 0.0 || m <= 1.0) {
+        return c;
+    }
+    let t = burn * (1.0 - 1.0 / m);
+    return c + (vec3<f32>(m) - c) * t;
 }

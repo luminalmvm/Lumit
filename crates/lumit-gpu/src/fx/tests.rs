@@ -5580,6 +5580,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
             lights: &lights,
             centre: f.centre,
             edge_fade: f.edge_fade * f.px_scale,
+            burn: f.burn,
             spots: None,
             hide,
             depth,
@@ -5655,6 +5656,28 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
     );
     assert_eq!(gpu, gpu_of(&f), "the sprite flare must be bit-stable");
 
+    // Burn: a bright red light runs to white the same on both sides.
+    let mut hot = f.clone();
+    hot.burn = 1.0;
+    hot.brightness *= 6.0;
+    for l in &mut hot.lights {
+        l.colour = [1.0, 0.05, 0.02];
+    }
+    let (cpu_hot, gpu_hot) = (cpu_of(&hot), gpu_of(&hot));
+    let mut worst_hot = 0.0f32;
+    for (i, (a, b)) in cpu_hot.iter().zip(&gpu_hot).enumerate() {
+        let (x, y) = ((i / 4) as u32 % w, (i / 4) as u32 / w);
+        if x.abs_diff(24) > 2 || y.abs_diff(20) > 2 {
+            worst_hot = worst_hot.max((a - b).abs() / a.abs().max(1.0));
+        }
+    }
+    assert!(worst_hot < 5e-3, "burnt worst |Δ| {worst_hot}");
+    assert_ne!(gpu_hot, gpu_of(&{
+        let mut cool = hot.clone();
+        cool.burn = 0.0;
+        cool
+    }), "Burn changes the bright light");
+
     // Nudging the light by a pixel nudges the light drawn by a little: no
     // element pops in or out.
     let total = |lx: f32| {
@@ -5707,6 +5730,7 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
         lights: &[],
         centre: spotted.centre,
         edge_fade: spotted.edge_fade * spotted.px_scale,
+        burn: spotted.burn,
         spots: Some(crate::fx::sprite_flare::SpotsOp {
             threshold: 0.3,
             softness: 0.1,
