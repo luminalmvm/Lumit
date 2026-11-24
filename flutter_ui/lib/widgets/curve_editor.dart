@@ -405,10 +405,18 @@ class _CurveEditorState extends State<CurveEditor> {
     final lo = _held == 0 ? 0.0 : points[_held - 1][0] + _minGap;
     final hi =
         _held == points.length - 1 ? 1.0 : points[_held + 1][0] - _minGap;
-    setState(() {
-      points[_held] = [at[0].clamp(math.min(lo, hi), math.max(lo, hi)), at[1]];
-    });
-    widget.onLive(_dropped(d.localPosition) ?? points);
+    // A new list each tick, never the old one changed in place: the painter
+    // compares what it drew with what it is given, and the same list compares
+    // equal to itself, so a popup's plot (which nothing else redraws) stood
+    // still through the whole drag and after it.
+    final next = [
+      for (var i = 0; i < points.length; i++)
+        i == _held
+            ? [at[0].clamp(math.min(lo, hi), math.max(lo, hi)).toDouble(), at[1]]
+            : points[i],
+    ];
+    setState(() => _dragging = next);
+    widget.onLive(_dropped(d.localPosition) ?? next);
   }
 
   /// The list this gesture would leave behind if it ended here: the point gone

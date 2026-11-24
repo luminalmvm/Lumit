@@ -95,6 +95,34 @@ void main() {
         reason: 'the white point came down');
   });
 
+  testWidgets('a drag redraws the plot while nothing else rebuilds it',
+      (tester) async {
+    // As in the Timeline's popup: the points handed in never change.
+    const size = 150.0;
+    await tester.pumpWidget(host(
+      CurveEditor(
+        points: curveIdentity,
+        size: size,
+        onLive: (_) {},
+        onCommit: (_) {},
+      ),
+    ));
+    await tester.pump();
+    final plot = find.descendant(
+        of: find.byType(CurveEditor), matching: find.byType(CustomPaint));
+    final topLeft = tester.getTopLeft(find.byType(CurveEditor));
+    final gesture = await tester.startGesture(topLeft + const Offset(size - 3, 3));
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    final first = tester.widget<CustomPaint>(plot).painter!;
+    await gesture.moveBy(const Offset(0, 20));
+    await tester.pump();
+    final second = tester.widget<CustomPaint>(plot).painter!;
+    expect(second.shouldRepaint(first), isTrue,
+        reason: 'the point moved, so the plot must repaint');
+    await gesture.up();
+  });
+
   testWidgets('a lone curve names itself with a label, not a button',
       (tester) async {
     await tester.pumpWidget(host(CurveChannelEditor(
