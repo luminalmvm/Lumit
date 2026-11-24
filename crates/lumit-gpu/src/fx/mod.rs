@@ -24,6 +24,7 @@ pub mod depth_points;
 pub mod distort;
 pub mod dof;
 pub mod energy_line;
+pub mod turbiniu;
 mod engine;
 pub mod environment;
 /// Film's passes, built on first use.
@@ -91,6 +92,7 @@ pub struct FxEngine {
     sprite_flare: sprite_flare::LazySpriteFlare,
     /// Energy line, compiled in the background as the engine starts.
     energy_line: energy_line::LazyEnergyLine,
+    turbiniu: std::sync::OnceLock<turbiniu::TurbiniuPipelines>,
     audio_spectrum: audio_spectrum::LazyAudioSpectrum,
     /// The mesh pass, built the first time a model is drawn.
     pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,

@@ -33711,5 +33711,453 @@
   "fxSoftPastelSatin": "Soft pastel satin",
   "@fxSoftPastelSatin": {
     "description": "Effect presets: a Holographic foil look, pale wide bands on soft satin metal."
+  },
+  "fxTurbiniu": "Turbiniu",
+  "@fxTurbiniu": {
+    "description": "Effect name: strokes or markers drawn along a vector mask, or between two masks on the same layer."
+  },
+  "fxOverlapMode": "Overlap mode",
+  "@fxOverlapMode": {
+    "description": "Effect controls: a choice on Turbiniu, how strokes that cross are drawn over one another."
+  },
+  "fxSourceOver": "Source over",
+  "@fxSourceOver": {
+    "description": "Choice on Turbiniu's Overlap mode: a stroke covers the ones under it."
+  },
+  "fxAdditive": "Additive",
+  "@fxAdditive": {
+    "description": "Choice on Turbiniu's Overlap mode: crossing strokes add their light together."
+  },
+  "fxEdgeSampling": "Edge sampling",
+  "@fxEdgeSampling": {
+    "description": "Effect controls: a choice on Turbiniu, how many samples smooth the edges of the strokes."
+  },
+  "fxSingleSample": "Single sample",
+  "@fxSingleSample": {
+    "description": "Choice on Turbiniu's Edge sampling: one sample per pixel, faster, harder edges."
+  },
+  "fxFiveSamples": "Five samples",
+  "@fxFiveSamples": {
+    "description": "Choice on Turbiniu's Edge sampling: five samples per pixel, smoother edges."
+  },
+  "fxStrokeCount": "Stroke count",
+  "@fxStrokeCount": {
+    "description": "Effect controls: a control on Turbiniu, how many strokes are drawn along or between the guides."
+  },
+  "fxPathResolution": "Path resolution",
+  "@fxPathResolution": {
+    "description": "Effect controls: a control on Turbiniu, how many pieces each drawn path is cut into; more follows curves closer."
+  },
+  "fxStrokeSpacing": "Stroke spacing",
+  "@fxStrokeSpacing": {
+    "description": "Effect controls: a group heading on Turbiniu, the controls that spread the strokes between the guides."
+  },
+  "fxSpacingProfile": "Spacing profile",
+  "@fxSpacingProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how the strokes are spread between the first and second guide."
+  },
+  "fxPathWarp": "Path warp",
+  "@fxPathWarp": {
+    "description": "Effect controls: a group heading on Turbiniu, a noise that pushes each path sideways."
+  },
+  "fxSamplingDomain": "Sampling domain",
+  "@fxSamplingDomain": {
+    "description": "Effect controls: a choice on Turbiniu, what a noise pattern is laid over: the picture, each path's own length, or the order of the samples."
+  },
+  "fxImageCoordinates": "Image coordinates",
+  "@fxImageCoordinates": {
+    "description": "Choice on Turbiniu's Sampling domain: the pattern is fixed to the picture."
+  },
+  "fxPathCoordinates": "Path coordinates",
+  "@fxPathCoordinates": {
+    "description": "Choice on Turbiniu's Sampling domain: the pattern runs along each path's length."
+  },
+  "fxSampleOrder": "Sample order",
+  "@fxSampleOrder": {
+    "description": "Choice on Turbiniu's Sampling domain: the pattern follows the order the samples are drawn in."
+  },
+  "fxWarpDistance": "Warp distance",
+  "@fxWarpDistance": {
+    "description": "Effect controls: a control on Turbiniu, how far the noise pushes each path sideways, in pixels."
+  },
+  "fxPatternFrequency": "Pattern frequency",
+  "@fxPatternFrequency": {
+    "description": "Effect controls: a control on Turbiniu, how fine a noise pattern is."
+  },
+  "fxHorizontalStretch": "Horizontal stretch",
+  "@fxHorizontalStretch": {
+    "description": "Effect controls: a control on Turbiniu, how much a noise pattern is stretched across."
+  },
+  "fxVerticalStretch": "Vertical stretch",
+  "@fxVerticalStretch": {
+    "description": "Effect controls: a control on Turbiniu, how much a noise pattern is stretched up and down."
+  },
+  "fxHorizontalShift": "Horizontal shift",
+  "@fxHorizontalShift": {
+    "description": "Effect controls: a control on Turbiniu, how far a noise pattern is moved across."
+  },
+  "fxVerticalShift": "Vertical shift",
+  "@fxVerticalShift": {
+    "description": "Effect controls: a control on Turbiniu, how far a noise pattern is moved up and down."
+  },
+  "fxPatternPhase": "Pattern phase",
+  "@fxPatternPhase": {
+    "description": "Effect controls: a control on Turbiniu, where a noise pattern is in its change; key it to animate the pattern."
+  },
+  "fxPhasePeriod": "Phase period",
+  "@fxPhasePeriod": {
+    "description": "Effect controls: a control on Turbiniu, after how much Pattern phase the pattern comes round again, so it loops; 0 never loops."
+  },
+  "fxHorizontalStepPerStroke": "Horizontal step per stroke",
+  "@fxHorizontalStepPerStroke": {
+    "description": "Effect controls: a control on Turbiniu, how far the warp pattern moves across from one stroke to the next."
+  },
+  "fxPhaseStepPerStroke": "Phase step per stroke",
+  "@fxPhaseStepPerStroke": {
+    "description": "Effect controls: a control on Turbiniu, how far a pattern's phase moves on from one stroke to the next."
+  },
+  "fxPatternSeed": "Pattern seed",
+  "@fxPatternSeed": {
+    "description": "Effect controls: a control on Turbiniu, which noise pattern is drawn."
+  },
+  "fxStrengthProfile": "Strength profile",
+  "@fxStrengthProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how strong a noise is along each path."
+  },
+  "fxProfileShift": "Profile shift",
+  "@fxProfileShift": {
+    "description": "Effect controls: a control on Turbiniu, how far a strength profile is moved along the path, per cent."
+  },
+  "fxProfileSpan": "Profile span",
+  "@fxProfileSpan": {
+    "description": "Effect controls: a control on Turbiniu, how much of the path a strength profile covers, per cent."
+  },
+  "fxRepeatProfile": "Repeat profile",
+  "@fxRepeatProfile": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether a strength profile repeats past its span."
+  },
+  "fxDrawAs": "Draw as",
+  "@fxDrawAs": {
+    "description": "Effect controls: a choice on Turbiniu, whether each path is drawn as a stroke or as markers along it."
+  },
+  "fxMarkShape": "Mark shape",
+  "@fxMarkShape": {
+    "description": "Effect controls: a group heading on Turbiniu, the controls for how strokes or markers are drawn."
+  },
+  "fxMarkerSides": "Marker sides",
+  "@fxMarkerSides": {
+    "description": "Effect controls: a control on Turbiniu, how many sides each marker has."
+  },
+  "fxMarkerFillRate": "Marker fill rate",
+  "@fxMarkerFillRate": {
+    "description": "Effect controls: a control on Turbiniu, what share of the places along a path get a marker, per cent."
+  },
+  "fxMarkerHeading": "Marker heading",
+  "@fxMarkerHeading": {
+    "description": "Effect controls: a dial on Turbiniu, which way the markers point."
+  },
+  "fxFollowTangent": "Follow tangent",
+  "@fxFollowTangent": {
+    "description": "Effect controls: a control on Turbiniu, how far the markers turn to follow the path's direction, per cent."
+  },
+  "fxHeadingVariation": "Heading variation",
+  "@fxHeadingVariation": {
+    "description": "Effect controls: a group heading on Turbiniu, a noise that turns the markers."
+  },
+  "fxHeadingDeviation": "Heading deviation",
+  "@fxHeadingDeviation": {
+    "description": "Effect controls: a control on Turbiniu, how far the noise turns the markers, in degrees."
+  },
+  "fxCoverageWave": "Coverage wave",
+  "@fxCoverageWave": {
+    "description": "Effect controls: a group heading on Turbiniu, a wave that makes the strokes come and go along their length."
+  },
+  "fxCoverageTexture": "Coverage texture",
+  "@fxCoverageTexture": {
+    "description": "Effect controls: a group heading on Turbiniu, a noise that makes the strokes come and go along their length."
+  },
+  "fxCoverageVariation": "Coverage variation",
+  "@fxCoverageVariation": {
+    "description": "Effect controls: a control on Turbiniu, how strongly the noise thins the strokes out."
+  },
+  "fxBaseCoverage": "Base coverage",
+  "@fxBaseCoverage": {
+    "description": "Effect controls: a control on Turbiniu, how much of a stroke is drawn before the noise or the wave thins it."
+  },
+  "fxWaveDepth": "Wave depth",
+  "@fxWaveDepth": {
+    "description": "Effect controls: a control on Turbiniu, how strongly the wave thins the strokes out."
+  },
+  "fxWaveRate": "Wave rate",
+  "@fxWaveRate": {
+    "description": "Effect controls: a control on Turbiniu, how many waves run along a stroke."
+  },
+  "fxWavePhase": "Wave phase",
+  "@fxWavePhase": {
+    "description": "Effect controls: a control on Turbiniu, where the wave is along the stroke; key it to make it travel."
+  },
+  "fxCoverageBias": "Coverage bias",
+  "@fxCoverageBias": {
+    "description": "Effect controls: a control on Turbiniu, how much coverage is added to the wave, so less or more of each stroke shows."
+  },
+  "fxPathTrim": "Path trim",
+  "@fxPathTrim": {
+    "description": "Effect controls: a group heading on Turbiniu, the controls that draw only part of each path."
+  },
+  "fxPathTravel": "Path travel",
+  "@fxPathTravel": {
+    "description": "Effect controls: a control on Turbiniu, how far the drawn part is moved along each path."
+  },
+  "fxTrimIn": "Trim in",
+  "@fxTrimIn": {
+    "description": "Effect controls: a control on Turbiniu, where along each path the drawn part starts, per cent."
+  },
+  "fxTrimOut": "Trim out",
+  "@fxTrimOut": {
+    "description": "Effect controls: a control on Turbiniu, where along each path the drawn part ends, per cent."
+  },
+  "fxWrapTrim": "Wrap trim",
+  "@fxWrapTrim": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether a drawn part moved past the end comes round from the start."
+  },
+  "fxStrokeTips": "Stroke tips",
+  "@fxStrokeTips": {
+    "description": "Effect controls: a group heading on Turbiniu, the shape of each stroke's two ends."
+  },
+  "fxLeadingTip": "Leading tip",
+  "@fxLeadingTip": {
+    "description": "Effect controls: a choice on Turbiniu, the shape of each stroke's start."
+  },
+  "fxTrailingTip": "Trailing tip",
+  "@fxTrailingTip": {
+    "description": "Effect controls: a choice on Turbiniu, the shape of each stroke's end."
+  },
+  "fxFlat": "Flat",
+  "@fxFlat": {
+    "description": "Choice on Turbiniu's Leading tip and Trailing tip: the stroke ends square."
+  },
+  "fxSolidArrow": "Solid arrow",
+  "@fxSolidArrow": {
+    "description": "Choice on Turbiniu's Leading tip and Trailing tip: the stroke ends in a filled arrowhead."
+  },
+  "fxOpenArrow": "Open arrow",
+  "@fxOpenArrow": {
+    "description": "Choice on Turbiniu's Leading tip and Trailing tip: the stroke ends in an arrowhead drawn as two lines."
+  },
+  "fxRounded": "Rounded",
+  "@fxRounded": {
+    "description": "Choice on Turbiniu's Leading tip and Trailing tip: the stroke ends in a half circle."
+  },
+  "fxLeadingTipReach": "Leading tip reach",
+  "@fxLeadingTipReach": {
+    "description": "Effect controls: a control on Turbiniu, how far the start's arrowhead reaches."
+  },
+  "fxLeadingTipSpread": "Leading tip spread",
+  "@fxLeadingTipSpread": {
+    "description": "Effect controls: a control on Turbiniu, how wide the start's arrowhead opens."
+  },
+  "fxTrailingTipReach": "Trailing tip reach",
+  "@fxTrailingTipReach": {
+    "description": "Effect controls: a control on Turbiniu, how far the end's arrowhead reaches."
+  },
+  "fxTrailingTipSpread": "Trailing tip spread",
+  "@fxTrailingTipSpread": {
+    "description": "Effect controls: a control on Turbiniu, how wide the end's arrowhead opens."
+  },
+  "fxStrokeVariation": "Stroke variation",
+  "@fxStrokeVariation": {
+    "description": "Effect controls: a group heading on Turbiniu, random differences between the strokes."
+  },
+  "fxSpacingJitter": "Spacing jitter",
+  "@fxSpacingJitter": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' spacing differs at random."
+  },
+  "fxTravelJitter": "Travel jitter",
+  "@fxTravelJitter": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' Path travel differs at random."
+  },
+  "fxPaletteJitter": "Palette jitter",
+  "@fxPaletteJitter": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' place in the palette differs at random."
+  },
+  "fxWidthJitter": "Width jitter",
+  "@fxWidthJitter": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' width differs at random."
+  },
+  "fxCoverageJitter": "Coverage jitter",
+  "@fxCoverageJitter": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' coverage differs at random."
+  },
+  "fxVariationSeed": "Variation seed",
+  "@fxVariationSeed": {
+    "description": "Effect controls: a control on Turbiniu, which random differences the strokes get."
+  },
+  "fxAcrossStrokeColour": "Across-stroke colour",
+  "@fxAcrossStrokeColour": {
+    "description": "Effect controls: a group heading on Turbiniu, a palette laid across the strokes, from the first to the last."
+  },
+  "fxPaletteCombine": "Palette combine",
+  "@fxPaletteCombine": {
+    "description": "Effect controls: a choice on Turbiniu, how the across-stroke and along-path palettes are put together."
+  },
+  "fxSum": "Sum",
+  "@fxSum": {
+    "description": "Choice on Turbiniu: two palettes or two waves are added together."
+  },
+  "fxProduct": "Product",
+  "@fxProduct": {
+    "description": "Choice on Turbiniu: two palettes or two waves are multiplied together."
+  },
+  "fxPaletteSize": "Palette size",
+  "@fxPaletteSize": {
+    "description": "Effect controls: a control on Turbiniu, how many of the palette's swatches are used."
+  },
+  "fxPaletteSwatch1": "Palette swatch 1",
+  "@fxPaletteSwatch1": {
+    "description": "Effect controls: the first colour of a Turbiniu palette."
+  },
+  "fxPaletteSwatch2": "Palette swatch 2",
+  "@fxPaletteSwatch2": {
+    "description": "Effect controls: the second colour of a Turbiniu palette."
+  },
+  "fxPaletteSwatch3": "Palette swatch 3",
+  "@fxPaletteSwatch3": {
+    "description": "Effect controls: the third colour of a Turbiniu palette."
+  },
+  "fxPaletteSwatch4": "Palette swatch 4",
+  "@fxPaletteSwatch4": {
+    "description": "Effect controls: the fourth colour of a Turbiniu palette."
+  },
+  "fxPaletteSwatch5": "Palette swatch 5",
+  "@fxPaletteSwatch5": {
+    "description": "Effect controls: the fifth colour of a Turbiniu palette."
+  },
+  "fxAcrossStrokeColourProfile": "Across-stroke colour profile",
+  "@fxAcrossStrokeColourProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how the palette is spread across the strokes."
+  },
+  "fxAcrossStrokePaletteShift": "Across-stroke palette shift",
+  "@fxAcrossStrokePaletteShift": {
+    "description": "Effect controls: a control on Turbiniu, how far the across-stroke palette is moved, per cent."
+  },
+  "fxAcrossStrokePaletteSpan": "Across-stroke palette span",
+  "@fxAcrossStrokePaletteSpan": {
+    "description": "Effect controls: a control on Turbiniu, how many strokes the across-stroke palette covers, per cent."
+  },
+  "fxRepeatAcrossStrokePalette": "Repeat across-stroke palette",
+  "@fxRepeatAcrossStrokePalette": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether the across-stroke palette repeats past its span."
+  },
+  "fxFirstGuide": "First guide",
+  "@fxFirstGuide": {
+    "description": "Effect controls: a group heading on Turbiniu, the first mask the strokes follow and its style."
+  },
+  "fxSecondGuide": "Second guide",
+  "@fxSecondGuide": {
+    "description": "Effect controls: a group heading on Turbiniu, the second mask; the strokes are spread between it and the first."
+  },
+  "fxFirstPath": "First path",
+  "@fxFirstPath": {
+    "description": "Effect controls: a mask menu on Turbiniu, the mask the strokes follow."
+  },
+  "fxSecondPath": "Second path",
+  "@fxSecondPath": {
+    "description": "Effect controls: a mask menu on Turbiniu, a second mask; left empty, the strokes are stacked along the first."
+  },
+  "fxReverseGuide": "Reverse guide",
+  "@fxReverseGuide": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether the guide is followed from its other end."
+  },
+  "fxInheritFirstGuideStyle": "Inherit first guide style",
+  "@fxInheritFirstGuideStyle": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether the second guide uses the first guide's width, coverage and colours."
+  },
+  "fxEdgeSoftness": "Edge softness",
+  "@fxEdgeSoftness": {
+    "description": "Effect controls: a control on Turbiniu, how soft the strokes' edges are."
+  },
+  "fxWidthProfile": "Width profile",
+  "@fxWidthProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how a stroke's width changes along its length."
+  },
+  "fxWidthProfileShift": "Width profile shift",
+  "@fxWidthProfileShift": {
+    "description": "Effect controls: a control on Turbiniu, how far the width profile is moved along the stroke, per cent."
+  },
+  "fxWidthProfileSpan": "Width profile span",
+  "@fxWidthProfileSpan": {
+    "description": "Effect controls: a control on Turbiniu, how much of the stroke the width profile covers, per cent."
+  },
+  "fxRepeatWidthProfile": "Repeat width profile",
+  "@fxRepeatWidthProfile": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether the width profile repeats past its span."
+  },
+  "fxCoverageProfile": "Coverage profile",
+  "@fxCoverageProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how much of a stroke shows along its length."
+  },
+  "fxCoverageProfileShift": "Coverage profile shift",
+  "@fxCoverageProfileShift": {
+    "description": "Effect controls: a control on Turbiniu, how far the coverage profile is moved along the stroke, per cent."
+  },
+  "fxCoverageProfileSpan": "Coverage profile span",
+  "@fxCoverageProfileSpan": {
+    "description": "Effect controls: a control on Turbiniu, how much of the stroke the coverage profile covers, per cent."
+  },
+  "fxRepeatCoverageProfile": "Repeat coverage profile",
+  "@fxRepeatCoverageProfile": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether the coverage profile repeats past its span."
+  },
+  "fxAlongPathColourProfile": "Along-path colour profile",
+  "@fxAlongPathColourProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how the palette is spread along each stroke."
+  },
+  "fxAlongPathPaletteShift": "Along-path palette shift",
+  "@fxAlongPathPaletteShift": {
+    "description": "Effect controls: a control on Turbiniu, how far the along-path palette is moved along the stroke, per cent."
+  },
+  "fxRepeatAlongPathPalette": "Repeat along-path palette",
+  "@fxRepeatAlongPathPalette": {
+    "description": "Effect controls: a checkbox on Turbiniu, whether the along-path palette repeats past its span."
+  },
+  "fxWaveCombine": "Wave combine",
+  "@fxWaveCombine": {
+    "description": "Effect controls: a choice on Turbiniu, how the two coverage waves are put together."
+  },
+  "fxWave1Depth": "Wave 1 depth",
+  "@fxWave1Depth": {
+    "description": "Effect controls: a control on Turbiniu, how strongly the first wave thins the strokes out."
+  },
+  "fxWave1Rate": "Wave 1 rate",
+  "@fxWave1Rate": {
+    "description": "Effect controls: a control on Turbiniu, how many of the first waves run along a stroke."
+  },
+  "fxWave1Phase": "Wave 1 phase",
+  "@fxWave1Phase": {
+    "description": "Effect controls: a control on Turbiniu, where the first wave is along the stroke."
+  },
+  "fxWave2Depth": "Wave 2 depth",
+  "@fxWave2Depth": {
+    "description": "Effect controls: a control on Turbiniu, how strongly the second wave thins the strokes out."
+  },
+  "fxWave2Rate": "Wave 2 rate",
+  "@fxWave2Rate": {
+    "description": "Effect controls: a control on Turbiniu, how many of the second waves run along a stroke."
+  },
+  "fxWave2Phase": "Wave 2 phase",
+  "@fxWave2Phase": {
+    "description": "Effect controls: a control on Turbiniu, where the second wave is along the stroke."
+  },
+  "fxSampleSpacingProfile": "Sample spacing profile",
+  "@fxSampleSpacingProfile": {
+    "description": "Effect controls: a curve on Turbiniu, how the samples are spread along each path."
+  },
+  "fxEffectAmount": "Effect amount",
+  "@fxEffectAmount": {
+    "description": "Effect controls: a control on Turbiniu, how much of the effect is mixed over the layer, per cent."
+  },
+  "fxPaletteShiftJitter": "Palette shift jitter",
+  "@fxPaletteShiftJitter": {
+    "description": "Effect controls: a control on Turbiniu, how much the strokes' shift along the palette differs at random."
   }
 }

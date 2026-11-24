@@ -120,6 +120,7 @@ use super::effects::{
     emboss::{Emboss, EmbossDef},
     emit_from_image::{EmitFromImage, EmitFromImageDef},
     energy_line::{EnergyLine, EnergyLineDef},
+    turbiniu::{Turbiniu, TurbiniuDef},
     exposure::{Exposure, ExposureDef},
     extract_channels::{ExtractChannels, ExtractChannelsDef},
     fill::{Fill, FillDef},
@@ -332,6 +333,7 @@ crate::catalogue![
     // Draws its own light along a line, a mask, a shape or text.
     AudioSpectrumDef => AudioSpectrum,
     EnergyLineDef => EnergyLine,
+    TurbiniuDef => Turbiniu,
     // Particulate, at the Generate family's end: it makes its own pixels
     // rather than changing the ones that arrived, which is what the Generate
     // family is for, and it is the first entry to declare a data output

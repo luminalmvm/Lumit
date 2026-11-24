@@ -30,6 +30,7 @@ use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
 mod audio_spectrum;
 mod energy_line;
+mod turbiniu;
 pub mod lfx;
 pub mod ofx;
 mod stabilise;
@@ -480,6 +481,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &energy_line::EnergyLine,
+    &turbiniu::Turbiniu,
     &stabilise::Stabilise,
     &audio_spectrum::AudioSpectrum,
     &crate::gpufx_particulate::Particulate,

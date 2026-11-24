@@ -6854,6 +6854,17 @@ fn every_parameter_declares_a_unit() {
             ("energy_line", "core_distortion"),
             ("energy_line", "glow_distortion"),
             ("energy_line", "distortion_size"),
+            ("turbiniu", "distortion_amplitude"),
+            ("turbiniu", "arrow_length_begin"),
+            ("turbiniu", "arrow_length_end"),
+            ("turbiniu", "mask_1_feather"),
+            ("turbiniu", "mask_1_thickness"),
+            ("turbiniu", "mask_1_sine_1_amplitude"),
+            ("turbiniu", "mask_1_sine_2_amplitude"),
+            ("turbiniu", "mask_2_feather"),
+            ("turbiniu", "mask_2_thickness"),
+            ("turbiniu", "mask_2_sine_1_amplitude"),
+            ("turbiniu", "mask_2_sine_2_amplitude"),
             // Particulate (px@comp through a particle system): eleven, all
             // px@comp, and every one of them has to follow the raster or a
             // half-resolution preview would show a different picture from the

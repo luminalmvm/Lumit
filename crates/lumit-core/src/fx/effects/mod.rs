@@ -61,6 +61,7 @@ pub mod echo;
 pub mod emboss;
 pub mod emit_from_image;
 pub mod energy_line;
+pub mod turbiniu;
 pub mod exposure;
 pub mod extract_channels;
 pub mod fill;
