@@ -1,0 +1,285 @@
+---
+title: Turbiniu
+description: Draws a family of strokes or markers along a mask, or between two masks.
+---
+
+Turbiniu is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turbiniu draws a family of strokes along a vector mask on the layer, or a family that runs
+from one mask to another, filling the space between them. Each stroke can be a line or a row
+of polygon markers, with its own width, coverage, colour and tips, so a few controls give
+ribbons, hatching, flowing lines, dotted trails or arrows.
+
+1. Draw one or two masks, open or closed. Set their **Mode** to **None** to use them only as
+   guides, without cutting the layer.
+2. Add Turbiniu and pick **First path** under **First guide**. Leave **Second path** on
+   **First mask** to stack the strokes along the first path, or pick another mask to draw
+   them between the two.
+3. Set **Stroke count** and **Path resolution**, and under **Mark shape** pick **Strokes** or
+   **Markers** in **Draw as**.
+
+The guides follow the masks' keys, so the strokes move as the masks do.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Overlap mode** | Dropdown | Source over · Additive | Source over | - |
+| **Edge sampling** | Dropdown | Single sample · Five samples | Five samples | - |
+| **Stroke count** | Slider, whole numbers | 1 to 100; up to 10000 | 3 | - |
+| **Path resolution** | Slider, whole numbers | 1 to 250; down to 0 and up to 10000 | 250 | - |
+| **Spacing profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Path warp › Sampling domain** | Dropdown | Image coordinates · Path coordinates · Sample order | Path coordinates | - |
+| **Warp distance** | Slider | 0 to 10; higher | 0 | Pixels at composition size |
+| **Path warp › Pattern frequency** | Slider | 0 to 10; higher | 1 | - |
+| **Path warp › Horizontal stretch** | Slider | 0 to 10; higher | 1 | - |
+| **Path warp › Vertical stretch** | Slider | 0 to 10; higher | 1 | - |
+| **Path warp › Horizontal shift** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Path warp › Vertical shift** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Path warp › Pattern phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Path warp › Phase period** | Slider | 0 to 10; higher | 0 | - |
+| **Horizontal step per stroke** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Path warp › Pattern seed** | Slider, whole numbers | 0 to 1000; up to 32768 | 0 | - |
+| **Path warp › Strength profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Path warp › Profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Path warp › Profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **Path warp › Repeat profile** | Checkbox | On or off | Off | - |
+| **Draw as** | Dropdown | Strokes · Markers | Strokes | - |
+| **Marker sides** | Slider, whole numbers | 3 to 32; up to 128 | 8 | - |
+| **Marker fill rate** | Slider, whole numbers | 0 to 100 | 100 | - |
+| **Marker heading** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Follow tangent** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Heading variation › Sampling domain** | Dropdown | Image coordinates · Path coordinates · Sample order | Path coordinates | - |
+| **Heading deviation** | Slider | 0 to 10; higher | 0 | Degrees |
+| **Heading variation › Pattern frequency** | Slider | 0 to 10; higher | 1 | - |
+| **Heading variation › Horizontal stretch** | Slider | 0 to 10; higher | 1 | - |
+| **Heading variation › Vertical stretch** | Slider | 0 to 10; higher | 1 | - |
+| **Heading variation › Horizontal shift** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Heading variation › Vertical shift** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Heading variation › Pattern phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Heading variation › Phase period** | Slider | 0 to 10; higher | 0 | - |
+| **Heading variation › Phase step per stroke** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Heading variation › Pattern seed** | Slider, whole numbers | 0 to 1000; up to 32768 | 0 | - |
+| **Heading variation › Strength profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Heading variation › Profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Heading variation › Profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **Heading variation › Repeat profile** | Checkbox | On or off | Off | - |
+| **Coverage texture › Sampling domain** | Dropdown | Image coordinates · Path coordinates · Sample order | Path coordinates | - |
+| **Coverage variation** | Slider | 0 to 10; higher | 0 | - |
+| **Coverage texture › Pattern frequency** | Slider | 0 to 10; higher | 1 | - |
+| **Coverage texture › Horizontal stretch** | Slider | 0 to 10; higher | 1 | - |
+| **Coverage texture › Vertical stretch** | Slider | 0 to 10; higher | 1 | - |
+| **Coverage texture › Horizontal shift** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Coverage texture › Vertical shift** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Coverage texture › Pattern phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Coverage texture › Phase period** | Slider | 0 to 10; higher | 0 | - |
+| **Coverage texture › Phase step per stroke** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Coverage texture › Pattern seed** | Slider, whole numbers | 0 to 1000; up to 32768 | 0 | - |
+| **Coverage texture › Base coverage** | Slider | -1 to 1; down to -2 and up to 2 | 1 | - |
+| **Coverage texture › Strength profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Coverage texture › Profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Coverage texture › Profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **Coverage texture › Repeat profile** | Checkbox | On or off | Off | - |
+| **Wave depth** | Slider | -1 to 1; any value by typing | 0 | - |
+| **Wave rate** | Slider | -20 to 20; down to -1000 and up to 1000 | 0 | - |
+| **Wave phase** | Slider | -1 to 1; any value by typing | 0 | - |
+| **Coverage wave › Phase step per stroke** | Slider | -1 to 1; any value by typing | 0 | - |
+| **Coverage bias** | Slider | -1 to 1; any value by typing | 0 | - |
+| **Path travel** | Slider | -100 to 100; down to -10000 and up to 10000 | 0 | Per cent |
+| **Trim in** | Slider | -100 to 100 | 0 | Per cent |
+| **Trim out** | Slider | 0 to 100; up to 200 | 100 | Per cent |
+| **Wrap trim** | Checkbox | On or off | Off | - |
+| **Leading tip** | Dropdown | Flat · Solid arrow · Open arrow · Rounded | Flat | - |
+| **Leading tip reach** | Slider | 0 to 100; up to 1000 | 15 | Pixels at composition size |
+| **Leading tip spread** | Slider | -180 to 180 | 45 | Degrees |
+| **Trailing tip** | Dropdown | Flat · Solid arrow · Open arrow · Rounded | Flat | - |
+| **Trailing tip reach** | Slider | 0 to 100; up to 1000 | 15 | Pixels at composition size |
+| **Trailing tip spread** | Slider | -180 to 180 | 45 | Degrees |
+| **Spacing jitter** | Slider | 0 to 100 | 0 | Per cent |
+| **Travel jitter** | Slider | 0 to 100 | 0 | Per cent |
+| **Palette jitter** | Slider | 0 to 100 | 0 | Per cent |
+| **Width jitter** | Slider | 0 to 100 | 0 | Per cent |
+| **Coverage jitter** | Slider | 0 to 100 | 0 | Per cent |
+| **Variation seed** | Slider, whole numbers | 0 to 1000; up to 32768 | 0 | - |
+| **Palette combine** | Dropdown | Sum · Product | Sum | - |
+| **Across-stroke colour › Palette size** | Slider, whole numbers | 1 to 5 | 1 | - |
+| **Across-stroke colour › Palette swatch 1** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 0 | - |
+| **Across-stroke colour › Palette swatch ...** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 0 | - |
+| **Across-stroke colour › Palette swatch 5** | Colour | Each channel 0 to 4, scene-linear | 0, 0, 0, 0 | - |
+| **Across-stroke colour profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Across-stroke palette shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Across-stroke palette span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **Repeat across-stroke palette** | Checkbox | On or off | Off | - |
+| **First path** | Masks | This layer's masks | First mask | - |
+| **First guide › Edge softness** | Slider | 0 to 10; up to 1000 | 1 | Pixels at composition size |
+| **First guide › Sample spacing profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **First guide › Stroke width** | Slider | 0 to 10; higher | 1 | Pixels at composition size |
+| **First guide › Width profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **First guide › Width profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **First guide › Width profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **First guide › Repeat width profile** | Checkbox | On or off | Off | - |
+| **First guide › Reverse guide** | Checkbox | On or off | Off | - |
+| **First guide › Base coverage** | Slider | 0 to 1 | 1 | - |
+| **First guide › Coverage profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **First guide › Coverage profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **First guide › Coverage profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **First guide › Repeat coverage profile** | Checkbox | On or off | Off | - |
+| **First guide › Palette size** | Slider, whole numbers | 1 to 5 | 1 | - |
+| **First guide › Palette swatch 1** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **First guide › Palette swatch ...** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **First guide › Palette swatch 5** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **First guide › Along-path colour profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **First guide › Along-path palette shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **First guide › Palette shift jitter** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **First guide › Repeat along-path palette** | Checkbox | On or off | Off | - |
+| **First guide › Wave combine** | Dropdown | Sum · Product | Sum | - |
+| **First guide › Wave 1 depth** | Slider | -100 to 100; down to -10000 and up to 10000 | 0 | Pixels at composition size |
+| **First guide › Wave 1 rate** | Slider | -10 to 10; any value by typing | 1 | - |
+| **First guide › Wave 1 phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **First guide › Wave 2 depth** | Slider | -100 to 100; down to -10000 and up to 10000 | 0 | Pixels at composition size |
+| **First guide › Wave 2 rate** | Slider | -10 to 10; any value by typing | 1 | - |
+| **First guide › Wave 2 phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Second path** | Masks | This layer's masks | None | - |
+| **Inherit first guide style** | Checkbox | On or off | Off | - |
+| **Second guide › Edge softness** | Slider | 0 to 10; up to 1000 | 1 | Pixels at composition size |
+| **Second guide › Sample spacing profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Second guide › Stroke width** | Slider | 0 to 10; higher | 1 | Pixels at composition size |
+| **Second guide › Width profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Second guide › Width profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Second guide › Width profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **Second guide › Repeat width profile** | Checkbox | On or off | Off | - |
+| **Second guide › Reverse guide** | Checkbox | On or off | Off | - |
+| **Second guide › Base coverage** | Slider | 0 to 1 | 1 | - |
+| **Second guide › Coverage profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Second guide › Coverage profile shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Second guide › Coverage profile span** | Slider | -100 to 100; any value by typing | 100 | Per cent |
+| **Second guide › Repeat coverage profile** | Checkbox | On or off | Off | - |
+| **Second guide › Palette size** | Slider, whole numbers | 1 to 5 | 1 | - |
+| **Second guide › Palette swatch 1** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Second guide › Palette swatch ...** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Second guide › Palette swatch 5** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Second guide › Along-path colour profile** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Second guide › Along-path palette shift** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Second guide › Palette shift jitter** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Second guide › Repeat along-path palette** | Checkbox | On or off | Off | - |
+| **Second guide › Wave combine** | Dropdown | Sum · Product | Sum | - |
+| **Second guide › Wave 1 depth** | Slider | -100 to 100; down to -10000 and up to 10000 | 0 | Pixels at composition size |
+| **Second guide › Wave 1 rate** | Slider | -10 to 10; any value by typing | 1 | - |
+| **Second guide › Wave 1 phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Second guide › Wave 2 depth** | Slider | -100 to 100; down to -10000 and up to 10000 | 0 | Pixels at composition size |
+| **Second guide › Wave 2 rate** | Slider | -10 to 10; any value by typing | 1 | - |
+| **Second guide › Wave 2 phase** | Slider | -10 to 10; any value by typing | 0 | - |
+| **Effect amount** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Stroke spacing** groups **Spacing profile**.
+- **Path warp** groups **Sampling domain**, **Warp distance**, **Pattern frequency**, **Horizontal stretch**, **Vertical stretch**, **Horizontal shift**, **Vertical shift**, **Pattern phase**, **Phase period**, **Horizontal step per stroke**, **Pattern seed**, **Strength profile**, **Profile shift**, **Profile span**, **Repeat profile**, and starts closed.
+- **Mark shape** groups **Draw as**, **Marker sides**, **Marker fill rate**, **Marker heading**, **Follow tangent**.
+- **Heading variation** groups **Sampling domain**, **Heading deviation**, **Pattern frequency**, **Horizontal stretch**, **Vertical stretch**, **Horizontal shift**, **Vertical shift**, **Pattern phase**, **Phase period**, **Phase step per stroke**, **Pattern seed**, **Strength profile**, **Profile shift**, **Profile span**, **Repeat profile**, and starts closed.
+- **Coverage texture** groups **Sampling domain**, **Coverage variation**, **Pattern frequency**, **Horizontal stretch**, **Vertical stretch**, **Horizontal shift**, **Vertical shift**, **Pattern phase**, **Phase period**, **Phase step per stroke**, **Pattern seed**, **Base coverage**, **Strength profile**, **Profile shift**, **Profile span**, **Repeat profile**, and starts closed.
+- **Coverage wave** groups **Wave depth**, **Wave rate**, **Wave phase**, **Phase step per stroke**, **Coverage bias**, and starts closed.
+- **Path trim** groups **Path travel**, **Trim in**, **Trim out**, **Wrap trim**, and starts closed.
+- **Stroke tips** groups **Leading tip**, **Leading tip reach**, **Leading tip spread**, **Trailing tip**, **Trailing tip reach**, **Trailing tip spread**, and starts closed.
+- **Stroke variation** groups **Spacing jitter**, **Travel jitter**, **Palette jitter**, **Width jitter**, **Coverage jitter**, **Variation seed**, and starts closed.
+- **Across-stroke colour** groups **Palette combine**, **Palette size**, **Palette swatch 1**, **Palette swatch 2**, **Palette swatch 3**, **Palette swatch 4**, **Palette swatch 5**, **Across-stroke colour profile**, **Across-stroke palette shift**, **Across-stroke palette span**, **Repeat across-stroke palette**, and starts closed.
+- **First guide** groups **First path**, **Edge softness**, **Sample spacing profile**, **Stroke width**, **Width profile**, **Width profile shift**, **Width profile span**, **Repeat width profile**, **Reverse guide**, **Base coverage**, **Coverage profile**, **Coverage profile shift**, **Coverage profile span**, **Repeat coverage profile**, **Palette size**, **Palette swatch 1**, **Palette swatch 2**, **Palette swatch 3**, **Palette swatch 4**, **Palette swatch 5**, **Along-path colour profile**, **Along-path palette shift**, **Palette shift jitter**, **Repeat along-path palette**, **Wave combine**, **Wave 1 depth**, **Wave 1 rate**, **Wave 1 phase**, **Wave 2 depth**, **Wave 2 rate**, **Wave 2 phase**.
+- **Second guide** groups **Second path**, **Inherit first guide style**, **Edge softness**, **Sample spacing profile**, **Stroke width**, **Width profile**, **Width profile shift**, **Width profile span**, **Repeat width profile**, **Reverse guide**, **Base coverage**, **Coverage profile**, **Coverage profile shift**, **Coverage profile span**, **Repeat coverage profile**, **Palette size**, **Palette swatch 1**, **Palette swatch 2**, **Palette swatch 3**, **Palette swatch 4**, **Palette swatch 5**, **Along-path colour profile**, **Along-path palette shift**, **Palette shift jitter**, **Repeat along-path palette**, **Wave combine**, **Wave 1 depth**, **Wave 1 rate**, **Wave 1 phase**, **Wave 2 depth**, **Wave 2 rate**, **Wave 2 phase**.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+### Strokes
+
+- **Stroke count** is how many strokes there are, and **Path resolution** how many points
+  each one is built from.
+- **Spacing profile**, under **Stroke spacing**, spreads the strokes between the guides:
+  the diagonal spaces them evenly, a curve gathers them on one side.
+- **Stroke variation** gives each stroke a little of its own: **Spacing jitter**, **Travel
+  jitter**, **Palette jitter**, **Width jitter** and **Coverage jitter**. **Variation seed**
+  picks another set.
+- **Overlap mode** is how strokes meet: **Source over** covers the ones beneath, **Additive**
+  adds their light. **Edge sampling** **Five samples** smooths the edges.
+- **Effect amount** fades the strokes only; the layer shows unchanged where there is no
+  stroke.
+
+### Guides
+
+- **First guide** and **Second guide** each have **Edge softness**, **Stroke width**,
+  **Base coverage** and profiles along the path for width and coverage, with a shift, a
+  span and a repeat. A negative span reads its profile backwards.
+- **Sample spacing profile** spreads the points along a path, and **Reverse guide** runs it
+  the other way.
+- Each guide has two waves that push the path sideways. **Wave 1 depth** and **Wave 2
+  depth** are in pixels, the rate counts whole waves along the path and the phase is in
+  waves. **Wave combine** **Sum** adds the two, **Product** multiplies them.
+- **Inherit first guide style** makes the second guide take the first one's style, but keep
+  its own **Sample spacing profile** and **Reverse guide**.
+
+### Path warp and heading
+
+- **Path warp** pushes each path across itself with noise: **Warp distance** is how far.
+  **Sampling domain** reads the noise in **Image coordinates**, **Path coordinates** or
+  **Sample order**. The frequency, stretch and shift shape the noise, **Pattern phase**
+  animates it and **Phase period** makes it loop. **Strength profile** sets how strong the
+  warp is along the path.
+- **Heading variation** turns markers with the same kind of noise, by up to **Heading
+  deviation**.
+
+### Markers
+
+- **Draw as** **Markers** draws polygons along the path instead of a line. **Marker sides**
+  is their shape and **Marker fill rate** how many show. Each place on the path keeps its own
+  chance, so a trim shows or hides markers without reshuffling the rest.
+- **Marker heading** turns them, and **Follow tangent** turns them along the path.
+
+### Coverage
+
+- **Coverage texture** thins the strokes with noise, by up to **Coverage variation**, and
+  **Coverage wave** with a wave along the path. **Phase step per stroke** makes each stroke a
+  little different.
+- Coverage only goes down from **Base coverage**, which starts at full: lower it, to 0.5 say,
+  to see the texture or the wave at low values.
+
+### Trim and tips
+
+- **Trim in** and **Trim out** are the part of the path that shows, **Path travel** moves it
+  and **Wrap trim** lets it go round. A stroke covers its path once at most, and keeps the
+  outline it has on the whole path as it is trimmed or moved.
+- **Leading tip** and **Trailing tip** are **Flat**, **Rounded**, **Open arrow** or **Solid
+  arrow**. An arrow's arms land on the stroke's end, its reach is how long it is and its
+  spread is in degrees.
+
+### Colour
+
+- Each guide has a palette of up to five swatches along its path, set by **Palette size**,
+  with **Along-path colour profile**, **Along-path palette shift**, **Palette shift jitter**
+  and **Repeat along-path palette**.
+- **Across-stroke colour** is a second palette across the family of strokes, which
+  **Palette combine** **Sum** adds to the first and **Product** multiplies with it.
+
+When a frame would need more geometry than the renderer allows, it lowers the path
+resolution and the marker sides, and keeps fewer strokes at even intervals across the family.
+
+## Related
+
+- [Stroke](/effects/generate/stroke/)
+- [Scribble](/effects/generate/scribble/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)
