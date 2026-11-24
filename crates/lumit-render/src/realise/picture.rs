@@ -275,6 +275,16 @@ impl Realiser<'_> {
         let tex = if l.fx.is_empty() {
             tex
         } else {
+            // A layer's own pixels come with their colour apart from their
+            // alpha, and every effect works on premultiplied colour: multiplied
+            // out once here, so light an effect spreads past the layer keeps
+            // its brightness, and the composite reads the stack's picture as
+            // premultiplied ([`CompLayerDraw::picture_premultiplied`]).
+            let tex = if l.premultiplied() {
+                tex
+            } else {
+                self.fx.premultiply(&self.ctx, &tex)
+            };
             let (w, h) = (tex.width(), tex.height());
             // Neighbour source frames a temporal effect (echo) reads;
             // empty for a plain stack, so this uploads nothing then.
@@ -308,7 +318,14 @@ impl Realiser<'_> {
                     };
                     // A frame read last time is the picture made of it then.
                     let upload = |rgba: &[u8], nw, nh| {
-                        self.upload_source(rgba, nw, nh, format, &colour_space)
+                        // Multiplied out as the frame beside it was, so a trail
+                        // and the picture it trails agree.
+                        let up = self.upload_source(rgba, nw, nh, format, &colour_space);
+                        if l.premultiplied() {
+                            up
+                        } else {
+                            self.fx.premultiply(&self.ctx, &up)
+                        }
                     };
                     let neighbours: Vec<(i32, wgpu::Texture)> = match self.flow {
                         Some(kept) if !l.neighbours.is_empty() => {

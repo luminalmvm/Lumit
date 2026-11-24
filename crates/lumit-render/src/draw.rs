@@ -893,6 +893,14 @@ impl CompLayerDraw {
         !matches!(self.source, DrawSource::Pixels { .. })
     }
 
+    /// Whether the picture the composite draws for it, after its effect
+    /// stack, has its alpha in its colour: a layer's own pixels are
+    /// multiplied out before a stack runs on them, so a stack's picture
+    /// always is.
+    pub(crate) fn picture_premultiplied(&self) -> bool {
+        self.premultiplied() || !self.fx.is_empty()
+    }
+
     /// Whether this draw reads the comp's picture away from its own pixels,
     /// so a frame with it can't be drawn as a cropped region: an adjustment
     /// layer, the haze, the environment, a motion-blurred layer, or a 3D

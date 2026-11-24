@@ -339,6 +339,8 @@ pub struct FxEngine {
     light_leak: wgpu::ComputePipeline,
     /// Flicker: this frame's gains on the picture in one pass.
     flicker: wgpu::ComputePipeline,
+    /// A layer's own pixels multiplied out by their alpha before a stack.
+    premultiply: wgpu::ComputePipeline,
     /// Slices: strips read back along their length, one pass.
     slices: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,

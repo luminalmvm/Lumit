@@ -286,3 +286,53 @@ fn a_float_plates_neighbours_are_read_as_floats() {
         );
     }
 }
+
+/// **A stack's picture is multiplied out once.** A layer's own pixels arrive
+/// with their colour apart from their alpha; the stack is handed them
+/// multiplied out and the composite reads what it made as such. Before, the
+/// composite multiplied the stack's picture by its alpha a second time, so
+/// any light an effect laid where the layer was part clear came out dimmed:
+/// here a Fill on a half-clear pixel drew a quarter of the light, and Light
+/// rays past an opaque solid's edge fell off a cliff there.
+#[test]
+fn a_stack_on_a_layers_own_pixels_is_multiplied_out_once() {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+    let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
+    let realiser = realiser(&ctx, &lut_cache, &fx_cache);
+    let fill = {
+        let inst = lumit_core::fx::builtins::instantiate("fill").expect("a built-in");
+        lumit_core::fx::resolved::resolve_stack(
+            &[inst],
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::markers::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        )
+    };
+    let centre = |alpha: u8| {
+        let rgba = std::sync::Arc::new([255u8, 255, 255, alpha].repeat((W * H) as usize));
+        let mut l = draw(&rgba);
+        l.fx = fill.clone();
+        let (px, _) = made(&ctx, || {
+            realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&l))
+        });
+        let i = (((H / 2) * W + W / 2) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2], px[i + 3]]
+    };
+    let full = centre(255);
+    let half = centre(128);
+    let a = 128.0 / 255.0;
+    assert!(full[0] + full[1] + full[2] > 0.1, "the fill draws: {full:?}");
+    for c in 0..3 {
+        assert!(
+            (half[c] - full[c] * a).abs() < 4e-3,
+            "a half-clear pixel carries half the light, channel {c}: {half:?} of {full:?}"
+        );
+    }
+    assert!((half[3] - a).abs() < 4e-3, "and half the cover: {half:?}");
+}

@@ -2227,7 +2227,7 @@ impl Realiser<'_> {
                         width,
                         height,
                         tex,
-                        l.premultiplied(),
+                        l.picture_premultiplied(),
                         grow_size(l.natural_size, *g),
                         if mb.is_empty() { &l.mb } else { &mb },
                         l.three_d,
@@ -2343,7 +2343,7 @@ impl Realiser<'_> {
                         blend: l.blend,
                         layer_mask: mask_tex.as_ref(),
                         pre: l.pre,
-                        premultiplied: l.premultiplied(),
+                        premultiplied: l.picture_premultiplied(),
                     },
                 }
             })
@@ -2610,7 +2610,7 @@ pub(crate) fn placed_in_3d<'a>(
         blend: l.blend,
         layer_mask: None,
         pre: l.pre,
-        premultiplied: l.premultiplied(),
+        premultiplied: l.picture_premultiplied(),
     }
 }
 

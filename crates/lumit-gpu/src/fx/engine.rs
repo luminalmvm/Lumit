@@ -459,6 +459,7 @@ impl FxEngine {
         let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
         let jolt_mod = module(include_str!("../fx_jolt.wgsl"), "fx-jolt");
         let flicker_mod = module(include_str!("../fx_flicker.wgsl"), "fx-flicker");
+        let premultiply_mod = module(include_str!("../fx_premultiply.wgsl"), "fx-premultiply");
         let light_leak_mod = module(
             &format!("{noise_core}{}", include_str!("../fx_light_leak.wgsl")),
             "fx-light-leak",
@@ -617,6 +618,7 @@ impl FxEngine {
         let jolt = pipeline(&jolt_mod, "fx-jolt", "jolt");
         let light_leak = pipeline(&light_leak_mod, "fx-light-leak", "light_leak");
         let flicker = pipeline(&flicker_mod, "fx-flicker", "flicker");
+        let premultiply = pipeline(&premultiply_mod, "fx-premultiply", "premultiply");
         let slices = pipeline(&slices_mod, "fx-slices", "slices");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
@@ -781,6 +783,7 @@ impl FxEngine {
             jolt: jolt.wait(),
             light_leak: light_leak.wait(),
             flicker: flicker.wait(),
+            premultiply: premultiply.wait(),
             slices: slices.wait(),
             glow_bright: glow_bright.wait(),
             glow_combine: glow_combine.wait(),
