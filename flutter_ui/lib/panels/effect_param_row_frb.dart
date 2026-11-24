@@ -1228,7 +1228,7 @@ class EffectParamRowFrb extends StatelessWidget {
       // engine a compile error rather than a blank row.
       case BridgeParamKind_Action():
         return const SizedBox.shrink();
-      case BridgeParamKind_Curve():
+      case BridgeParamKind_Curve(:final default_):
         if (value case BridgeEffectValue_Curve(:final field0)) {
           // The lone-curve case. Curves' five channels fold into one tabbed
           // editor before they ever reach here (the panel's `_paramRows`),
@@ -1249,6 +1249,7 @@ class EffectParamRowFrb extends StatelessWidget {
           Widget editor(double size) => CurveEditor(
                 key: ValueKey<String>('fx-curve-$id-${param.id}-$size'),
                 points: curvePointsOf(field0),
+                rest: curvePointsOf(default_),
                 size: size,
                 warp: warp,
                 onLive: (p) => _setLive(curveValue(p)),
@@ -1266,6 +1267,11 @@ class EffectParamRowFrb extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
                 key: ValueKey<String>('fx-curve-thumb-$id-${param.id}'),
+                // The plot under it ignores the pointer (it is a picture
+                // here), so the box itself has to take the press: deferring
+                // to a child that refuses every hit left the click to the
+                // Timeline row, which only selected itself.
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
                   // The popup keeps what it last committed, so the plot
                   // stays where the drag left it.
@@ -1288,6 +1294,7 @@ class EffectParamRowFrb extends StatelessWidget {
                       child: StatefulBuilder(
                         builder: (context, again) => CurveEditor(
                           points: points,
+                          rest: curvePointsOf(default_),
                           size: 210,
                           warp: warp,
                           onLive: (p) => _setLive(curveValue(p)),
@@ -1300,11 +1307,14 @@ class EffectParamRowFrb extends StatelessWidget {
                     ),
                   );
                 },
+                // Square, as the plot it opens is: stretched to twice its
+                // width the curve read as a different shape from the
+                // Effect Controls one.
                 child: SizedBox(
-                  width: side * 2,
+                  width: side,
                   height: side,
                   child: IgnorePointer(
-                    child: FittedBox(fit: BoxFit.fill, child: editor(150)),
+                    child: FittedBox(fit: BoxFit.contain, child: editor(150)),
                   ),
                 ),
               ),

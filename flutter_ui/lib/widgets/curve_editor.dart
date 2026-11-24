@@ -204,19 +204,28 @@ class _CurveEditorState extends State<CurveEditor> {
     return live.length >= 2 ? live : curveIdentity;
   }
 
-  /// Plot coordinates → curve coordinates. y is flipped: up is more light.
+  /// How far the square sits in from the widget's edge: a grab radius, so a
+  /// corner point's whole knob is inside what takes a press — or less on a
+  /// plot too small to spare it.
+  double get _inset => math.min(_grabRadius, widget.size / 6);
+
+  /// The square's side.
+  double get _side => widget.size - 2 * _inset;
+
+  /// Widget coordinates → curve coordinates. y is flipped: up is more light.
   List<double> _toCurve(Offset local) => [
-        (local.dx / widget.size).clamp(0.0, 1.0),
-        (1 - local.dy / widget.size).clamp(0.0, 1.0),
+        ((local.dx - _inset) / _side).clamp(0.0, 1.0),
+        (1 - (local.dy - _inset) / _side).clamp(0.0, 1.0),
       ];
 
   Offset _toPlot(List<double> p) =>
-      Offset(p[0] * widget.size, (1 - p[1]) * widget.size);
+      Offset(_inset + p[0] * _side, _inset + (1 - p[1]) * _side);
 
-  /// How far outside the plot [local] is, in logical pixels — zero inside.
+  /// How far outside the square [local] is, in logical pixels — zero inside.
   double _outsideBy(Offset local) {
-    final dx = math.max(math.max(-local.dx, local.dx - widget.size), 0.0);
-    final dy = math.max(math.max(-local.dy, local.dy - widget.size), 0.0);
+    final x = local.dx - _inset, y = local.dy - _inset;
+    final dx = math.max(math.max(-x, x - _side), 0.0);
+    final dy = math.max(math.max(-y, y - _side), 0.0);
     return math.max(dx, dy);
   }
 
@@ -464,18 +473,26 @@ class _CurveEditorState extends State<CurveEditor> {
       onHorizontalDragUpdate: update,
       onHorizontalDragEnd: (_) => _onPanEnd(_lastLocal),
       onHorizontalDragCancel: () => _onPanEnd(null),
+      // The square sits a grab radius in from every edge of the widget: the
+      // two end points live on its corners, and with the square flush to the
+      // edge half of each knob lay outside anything that takes a press, so
+      // grabbing it there fell through and scrolled the panel instead.
       child: SizedBox(
         width: widget.size,
         height: widget.size,
-        child: CustomPaint(
-          painter: _CurvePainter(
+        child: Padding(
+          padding: EdgeInsets.all(_inset),
+          child: CustomPaint(
+            size: Size.square(_side),
+            painter: _CurvePainter(
             points: _points,
             plot: t.surface0,
             grid: t.hairline,
             diagonal: t.hairlineStrong,
             line: widget.line ?? t.textPrimary,
-            knob: t.accent,
-            warp: widget.warp,
+              knob: t.accent,
+              warp: widget.warp,
+            ),
           ),
         ),
       ),
@@ -837,13 +854,30 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
     final channels = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ChannelButtons(
-          labels: widget.labels,
-          channel: channel,
-          onChannel: (i) => setState(() => _channel = i),
-          keyPrefix: widget.keyPrefix,
-          colours: widget.channelColours,
-        ),
+        // One curve has no channel to switch to, so its name is a plain label
+        // rather than a button that does nothing when pressed.
+        if (widget.labels.length == 1)
+          LumitTooltip(
+            message: widget.labels.single,
+            child: SizedBox(
+              key: ValueKey<String>('${widget.keyPrefix}-label'),
+              width: columnWidth,
+              child: Text(
+                widget.labels.single,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: t.small.copyWith(color: t.textMuted),
+              ),
+            ),
+          )
+        else
+          ChannelButtons(
+            labels: widget.labels,
+            channel: channel,
+            onChannel: (i) => setState(() => _channel = i),
+            keyPrefix: widget.keyPrefix,
+            colours: widget.channelColours,
+          ),
         if (!curveIs(widget.curves[channel], rest))
           LumitTooltip(
             message: widget.resetTip,
