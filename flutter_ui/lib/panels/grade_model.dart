@@ -34,14 +34,11 @@ mixin _GradeModel on State<GradePanelFrb> {
   /// in one scroll and size by width alone.
   Size? _room;
 
-  // --- The shot and its stack ------------------------------------------------
-
   GradeShot? get _shot => ui.gradeShot.value;
 
   BridgeLayerInfo? _layerInfo(GradeShot? s) =>
       s == null ? null : ui.model.byId(s.layer.internallayerId)?.info;
 
-  /// Whether the shot draws a picture a grade can sit on.
   bool _gradeable(GradeShot? s) {
     final info = _layerInfo(s);
     return info != null && gradeable(info.kind);
@@ -107,8 +104,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     return read;
   }
 
-  /// The live handles of [s]'s stack, or of the group grade in view, for an
-  /// edit.
   List<BridgeEffectInstance> _handles(GradeShot s) {
     if (_scopeOn(s) case final scope?) {
       return s.layer
@@ -117,7 +112,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     return shotHandles(s);
   }
 
-  /// [handles] from [_handles] written back as one op.
   void _commitHandles(GradeShot s, List<BridgeEffectInstance> handles) =>
       s.layer.setEffects(
           effects: handles, clip: _scopeOn(s) == null ? s.clip : null);
@@ -171,7 +165,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     return _stack.where((e) => e.id == want).firstOrNull;
   }
 
-  /// The shared node's list, for the editor and the preview.
   ({UuidValue group, BridgeGradePart part})? get _sharedList =>
       switch (_shared) {
         final s? => (group: s.id, part: BridgeGradePart.pre),
@@ -205,12 +198,10 @@ mixin _GradeModel on State<GradePanelFrb> {
 
   BridgeEffectInstanceInfo? get _node => _nodeIn(_stack);
 
-  /// The effect the current node is, a new Correction when there is none.
   String get _nodeName => _aside ?? _node?.name ?? correctionName;
   bool get _onCorrection => _nodeName == correctionName;
   Map<String, BridgeParamInfo> get _schema => _schemaOf(_nodeName);
 
-  /// The whole grade on [s]: every grade node in its stack.
   Set<UuidValue> _gradeIds([GradeShot? s]) =>
       {for (final e in gradeNodesOf(_stackOf(s ?? _shot))) e.id};
 
@@ -220,8 +211,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     final nodes = gradeNodesOf(_stack);
     return nodes.isNotEmpty && nodes.every((e) => !e.enabled);
   }
-
-  // --- Values at the playhead ------------------------------------------------
 
   BridgeEffectValue? _value(String id, [BridgeEffectInstanceInfo? on]) {
     final node = on ?? _node;
@@ -355,7 +344,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     return d is BridgeEffectValue_Curve ? curvePointsOf(d.field0) : curveIdentity;
   }
 
-  /// Whether row [id] has left its default on the current node.
   bool _changed(String id) {
     if (_node == null) return false;
     return switch (_kind(id)) {
@@ -386,9 +374,6 @@ mixin _GradeModel on State<GradePanelFrb> {
   bool get _nodeChanged => _node != null &&
       _schema.keys.where((id) => !_structure.contains(id)).any(_changed);
 
-  // --- Undo groups -------------------------------------------------------------
-
-  /// Undo groups opened by a gesture and not yet closed.
   int _touches = 0;
 
   /// Whether the open gesture added a node, which a cancel takes back.
@@ -440,8 +425,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     app.notifyDocumentChanged();
     ui.model.refresh();
   }
-
-  // --- Where a write lands -----------------------------------------------------
 
   /// The shots an edit lands on: the one shown first, then every other picked
   /// shot of its kind that can wear a grade.
@@ -506,7 +489,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     return made;
   }
 
-  /// Effect [name] added to the end of a group's grade.
   UuidValue? _addToGroup(GradeShot s,
       ({UuidValue group, BridgeGradePart part}) scope, String name) {
     try {
@@ -521,7 +503,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     }
   }
 
-  /// Effect [name] added to [s] right after [after], or first.
   UuidValue? _addEffectAfter(GradeShot s, String name, UuidValue? after) {
     try {
       final before = {for (final e in _handles(s)) e.id()};
@@ -540,7 +521,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     }
   }
 
-  /// The layer's name, or for a clip the name of what it plays.
   String _shotName(GradeShot shot) {
     final info = _layerInfo(shot);
     if (info == null) return '';
@@ -550,7 +530,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     return info.name;
   }
 
-  /// Point the editor at the stack [s]'s ids live in.
   void _aim(GradeShot s) {
     final clip = s.clip;
     final shown = _shot;
@@ -716,11 +695,9 @@ mixin _GradeModel on State<GradePanelFrb> {
     };
   }
 
-  /// Every row of the node bar what it is, back to its default.
   void _resetNode() =>
       _reset(_schema.keys.where((id) => !_structure.contains(id)));
 
-  /// Every grade node on every target back to its defaults, as one step.
   void _resetGrade() {
     final targets = _targets;
     if (targets.isEmpty) return;
@@ -752,8 +729,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     _tell();
   }
 
-  /// [run] on every target with the grade nodes [pick] chooses there, as one
-  /// step.
   void _eachTarget(String name, Set<UuidValue> Function(GradeShot s) pick,
       void Function(GradeShot s, BridgeEffectInstance h) run) {
     final targets = _targets;
@@ -825,7 +800,6 @@ mixin _GradeModel on State<GradePanelFrb> {
         : _engine.canAdd(kind, shot);
   }
 
-  /// Pick the current node in Effect controls and bring the panel up.
   void _reveal({bool whole = false}) {
     final shot = _shot;
     if (shot == null) return;
@@ -838,9 +812,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     ui.workspace.touch();
   }
 
-  // --- Before ------------------------------------------------------------------
-
-  /// Whether the before picture is being held up.
   bool _before = false;
 
   /// The picture without the grade, for as long as the button is held: the
@@ -872,8 +843,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     setState(() => _before = false);
     ui.requestFrame();
   }
-
-  // --- Menus -------------------------------------------------------------------
 
   MenuRow _row(String key, String label, VoidCallback close, VoidCallback run,
           {bool ticked = false, bool enabled = true, String? action}) =>
@@ -913,7 +882,6 @@ mixin _GradeModel on State<GradePanelFrb> {
     ]);
   }
 
-  /// The panel's own menu: the node's rows, then the grade's.
   List<Widget> _groundMenu(VoidCallback close) =>
       menuGroups(_groundGroups(close));
 

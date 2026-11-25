@@ -1,14 +1,7 @@
-// The Grade panel's Windows page: the node's four shapes, each turned on as
-// an ellipse, a rectangle, a polygon or a gradient, and tracking for the one
-// picked.
-//
-// The shapes themselves are drawn and moved on the Viewer; here are the
-// rows that aren't a place on the picture, and the tracker.
 
 part of 'grade_panel_frb.dart';
 
 mixin _GradeWindows on _GradeModel, _GradePrimaries {
-  /// A window track in hand, and how far it has got.
   StreamSubscription<GradeTrackProgress>? _track;
   GradeTrackProgress? _trackAt;
 
@@ -31,8 +24,6 @@ mixin _GradeWindows on _GradeModel, _GradePrimaries {
   List<String> _rowsOfSlot(int n) =>
       ['win${n}_shape', for (final r in _slotRows) 'win${n}_$r'];
 
-  /// The slots as a list, with the picked one's rows under it; in a wide
-  /// pane the list stands on the left and the rows beside it.
   Widget _windowsPage(LumitTheme t, bool enabled) {
     final picked = ui.grade.window.value;
     final open = picked > 0 && _choice('win${picked}_shape') != 0;
@@ -77,9 +68,6 @@ mixin _GradeWindows on _GradeModel, _GradePrimaries {
     });
   }
 
-  /// A slot's line: its number, then a button for each shape, the one in
-  /// force lit. Pressing it again turns the slot off. A click on the line
-  /// picks the slot, whose handles the Viewer then shows.
   Widget _slotHeader(LumitTheme t, int n, bool enabled, bool picked) {
     final shape = _choice('win${n}_shape');
     final rows = _rowsOfSlot(n);
@@ -133,8 +121,6 @@ mixin _GradeWindows on _GradeModel, _GradePrimaries {
                       ? null
                       : () {
                           final shot = _shot;
-                          // Turned on for the first time, it starts in the
-                          // middle of the shot's own picture.
                           final placed = shape == 0 &&
                                   shot != null &&
                                   !_anyChanged(['x', 'y', 'w', 'h']
@@ -185,8 +171,6 @@ mixin _GradeWindows on _GradeModel, _GradePrimaries {
     ];
   }
 
-  /// Track the picked window back to the start of the shot or forwards to
-  /// its end, with Stop and how far it has got while it runs.
   Widget _trackRow(LumitTheme t, int n, bool enabled) {
     // A group's or shared node's window is every member's, so it can't
     // follow one shot's picture.

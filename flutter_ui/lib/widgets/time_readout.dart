@@ -54,8 +54,6 @@ double monoSlotWidth(TextStyle style, int characters) {
 
 final Map<(String?, double, int), double> _slotWidths = {};
 
-/// The padding inside a readout's slot, so the numbers on a bar sit apart from
-/// each other and from whatever is beside them.
 const EdgeInsets readoutPadding = EdgeInsets.symmetric(horizontal: 6);
 
 /// A readout drawn as a **value well** stands this tall, whatever size its own
@@ -65,7 +63,6 @@ const EdgeInsets readoutPadding = EdgeInsets.symmetric(horizontal: 6);
 /// they sit in with two clear above and below.
 const double readoutWellHeight = 15;
 
-/// How many pixels of drag move a draggable readout by one frame.
 const double _pixelsPerFrame = 4;
 
 /// A clock readout in a fixed slot: click it to type a new time.
@@ -76,13 +73,10 @@ const double _pixelsPerFrame = 4;
 /// showing where things really are. A parsed frame is clamped into
 /// `[minFrame, maxFrame]` before it is handed to [onCommit].
 class TimeReadout extends StatefulWidget {
-  /// What the readout is showing.
   final int frame;
 
-  /// The frame as this readout writes it.
   final String Function(int frame) format;
 
-  /// Typed text back to a frame, or null when it cannot be read.
   final int? Function(String text) parse;
 
   /// How wide the slot is, in characters — the longest thing this readout can
@@ -97,7 +91,6 @@ class TimeReadout extends StatefulWidget {
   final int minFrame;
   final int maxFrame;
 
-  /// Whether the readout can be dragged left and right to change it.
   final bool draggable;
 
   /// The live frame during a drag, for a caller that shows the value it is
@@ -108,7 +101,6 @@ class TimeReadout extends StatefulWidget {
   /// what a caller staging a live value uses to put its staging back.
   final VoidCallback? onDragCancel;
 
-  /// What hovering says. Null for no tooltip.
   final String? tooltip;
 
   /// Draw the readout as a **value well** — the inset `surface_0` face inside
@@ -162,8 +154,6 @@ class _TimeReadoutState extends State<TimeReadout>
   bool _editing = false;
   bool _hovered = false;
 
-  /// The open editor, for the selection gestures — pressing places the caret
-  /// and dragging highlights, like any text box.
   final GlobalKey<EditableTextState> textFieldKey = GlobalKey();
 
   @override
@@ -175,10 +165,8 @@ class _TimeReadoutState extends State<TimeReadout>
   @override
   bool get selectionEnabled => true;
 
-  /// Pixels dragged since the last whole frame was ticked.
   double _dragAccum = 0;
 
-  /// The last frame ticked this drag, or null when nothing has ticked yet.
   int? _dragged;
 
   int get _low => widget.minFrame;
@@ -191,7 +179,6 @@ class _TimeReadoutState extends State<TimeReadout>
     super.dispose();
   }
 
-  /// The time as text, in and out, as a field's menu has it.
   void _menu(Offset at) {
     showLumitPopup<void>(
       context: context,
@@ -242,8 +229,6 @@ class _TimeReadoutState extends State<TimeReadout>
     });
   }
 
-  /// Take what was typed, or leave the readout as it was when what is there
-  /// does not read as a time.
   void _commitTyped() {
     if (!_editing) return;
     final parsed = widget.parse(_controller.text);
@@ -328,7 +313,6 @@ class _TimeReadoutState extends State<TimeReadout>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _editing ? null : _beginEdit,
-        // Being typed into, the field has its own menu.
         onSecondaryTapUp: (d) {
           if (!_editing) _menu(d.globalPosition);
         },

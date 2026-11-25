@@ -47,12 +47,10 @@ void _tell(LumitState app, LumitUiState ui) {
   ui.model.refresh();
 }
 
-/// The live handles of [shot]'s stack, for an edit.
 List<BridgeEffectInstance> shotHandles(GradeShot shot) => shot.clip == null
     ? shot.layer.getEffects()
     : shot.layer.getClipEffects(clip: shot.clip!, onCompClock: true);
 
-/// The layer's name, or for a clip the name of what it plays.
 String gradeShotName(LumitUiState ui, GradeShot shot) {
   final info = ui.model.byId(shot.layer.internallayerId)?.info;
   if (info == null) return '';
@@ -62,10 +60,7 @@ String gradeShotName(LumitUiState ui, GradeShot shot) {
   return info.name;
 }
 
-/// A name a file can take.
 String fileSafe(String name) => name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
-
-// --- Group grades ------------------------------------------------------------
 
 /// [shot]'s group, read once per document revision.
 (int?, String, UuidValue?)? _groupRead;
@@ -97,8 +92,6 @@ String fileSafe(String name) => name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
   return group == null ? null : (group: group, part: part);
 }
 
-// --- Shared nodes ------------------------------------------------------------
-
 /// Every shared node, read once per document revision.
 (int?, List<BridgeSharedNode>)? _sharedRead;
 
@@ -116,7 +109,6 @@ List<BridgeSharedNode> sharedGradeNodes(LumitUiState ui) {
   return read;
 }
 
-/// The shared node a reference in a shot's stack stands for, if it is one.
 BridgeSharedNode? sharedNodeOf(LumitUiState ui, UuidValue? reference) =>
     reference == null
         ? null
@@ -133,8 +125,6 @@ BridgeSharedNode? sharedNodeOf(LumitUiState ui, UuidValue? reference) =>
   final shared = sharedNodeOf(ui, ui.gradeNode.value);
   return shared == null ? null : (group: shared.id, part: BridgeGradePart.pre);
 }
-
-// --- Nodes -------------------------------------------------------------------
 
 /// The node the Grade panel edits on [shot]: the one picked there while it is
 /// still in the stack, else the last Correction.
@@ -176,7 +166,6 @@ UuidValue? addGradeNode(LumitState app, LumitUiState ui, GradeNodeKind kind,
   return made;
 }
 
-/// Whether a node of another Colour effect can go on the current shot now.
 bool canAddGradeEffect(LumitUiState ui) {
   final shot = ui.gradeShot.value;
   return shot != null && shotStackOf(ui, shot) != null;
@@ -234,13 +223,11 @@ bool gradeBypassed(LumitUiState ui) {
   return nodes.isNotEmpty && nodes.every((e) => !e.enabled);
 }
 
-/// Whether the current shot has a grade to act on.
 bool hasGrade(LumitUiState ui) {
   final shot = ui.gradeShot.value;
   return shot != null && shotGradeIds(ui, shot).isNotEmpty;
 }
 
-/// Switch the grade off on every picked shot, or on again when it is off.
 void bypassGrade(LumitState app, LumitUiState ui) {
   final off = !gradeBypassed(ui);
   final targets = gradeTargets(ui);
@@ -270,7 +257,6 @@ void resetNodesOn(GradeShot shot, Set<UuidValue> ids) {
   shot.layer.setEffects(effects: handles, clip: shot.clip);
 }
 
-/// [resetNodesOn] on staged [handles], for the caller to commit.
 void resetNodesOnHandles(
     List<BridgeEffectInstance> handles, Set<UuidValue> ids) {
   for (final h in handles) {
@@ -284,8 +270,6 @@ void resetNodesOnHandles(
   }
 }
 
-/// Every grade node on every picked shot, or on [onto], back to its
-/// defaults.
 void resetGrade(LumitState app, LumitUiState ui, {List<GradeShot>? onto}) {
   final targets = onto ?? gradeTargets(ui);
   if (targets.isEmpty) return;
@@ -300,8 +284,6 @@ void resetGrade(LumitState app, LumitUiState ui, {List<GradeShot>? onto}) {
   }, name: 'Reset grade');
   _tell(app, ui);
 }
-
-// --- The Viewer --------------------------------------------------------------
 
 /// Off, Highlight, Key and round again, on the current node.
 void cycleMatteView(LumitUiState ui) {
@@ -349,8 +331,6 @@ void toggleGradeGrid(LumitUiState ui, GradeGrid what) {
   g.value = g.value == what ? null : what;
   ui.requestFrame();
 }
-
-// --- Stills, looks and LUTs --------------------------------------------------
 
 bool canGrabStill(LumitUiState ui) =>
     ui.selectedComp != null && ui.gradeShot.value != null;
@@ -416,7 +396,6 @@ Future<String?> saveShotLook(BuildContext context, LumitState app,
     LumitUiState ui, GradeShot shot) async {
   final ids = shotGradeIds(ui, shot);
   if (ids.isEmpty) return null;
-  // The shot's name to start from, less a file's extension.
   final name = await askThemeName(context,
       title: l10n.gradeSaveLookTitle,
       suggested: gradeShotName(ui, shot)
@@ -452,8 +431,6 @@ Future<String?> saveShotLook(BuildContext context, LumitState app,
   return name;
 }
 
-/// Ask where, then write [shot]'s grade (the current shot's when null) as a
-/// `.cube`.
 Future<void> exportShotLut(LumitState app, LumitUiState ui,
     {GradeShot? shot,
     int size = 33,
@@ -478,8 +455,6 @@ Future<void> exportShotLut(LumitState app, LumitUiState ui,
   }
   app.postNotice(l10n.gradeLutExported);
 }
-
-// --- CDL ----------------------------------------------------------------------
 
 /// Ask for a `.cdl`, `.cc` or `.ccc` and lay it on the current shot as a CDL
 /// node after [after] (the current node, else the shot's last grade node),
@@ -524,7 +499,6 @@ Future<void> importCdlFile(
   _tell(app, ui);
 }
 
-/// Whether node [e] can be written as a CDL: a Correction or a CDL node.
 bool cdlExportable(String effectName) =>
     effectName == correctionName || effectName == 'cdl';
 
@@ -554,7 +528,6 @@ Future<void> exportCdlFile(LumitState app, LumitUiState ui, UuidValue node,
   app.postNotice(exact ? l10n.gradeCdlExported : l10n.gradeCdlFitted);
 }
 
-/// A still's grade in place of the grade on [onto].
 Future<void> applyStillGrade(LumitState app, LumitUiState ui, String path,
     List<GradeShot> onto) async {
   if (onto.isEmpty) return;
@@ -566,8 +539,6 @@ Future<void> applyStillGrade(LumitState app, LumitUiState ui, String path,
   }
   layGrade(app, ui, text, name: 'Apply grade', to: onto);
 }
-
-// --- Solvers -----------------------------------------------------------------
 
 /// [rows] written into [node] on [shot] as one step with what came before
 /// it in the open undo group.
@@ -618,7 +589,6 @@ Future<void> _solveOn(
   if (wrote) _tell(app, ui);
 }
 
-/// Neutralise the current shot's cast and set its black and white points.
 Future<void> autoBalanceShot(LumitState app, LumitUiState ui) async {
   final shot = ui.gradeShot.value;
   final comp = ui.selectedComp;
@@ -628,7 +598,6 @@ Future<void> autoBalanceShot(LumitState app, LumitUiState ui) async {
       (node) => _engine.autoBalance(comp, shot, frame, node));
 }
 
-/// Bring [shot] to look like [to] at comp frame [toFrame].
 Future<void> matchShotTo(LumitState app, LumitUiState ui, BridgeShot shot,
     GradeShot to, int toFrame) async {
   final comp = ui.selectedComp;
@@ -640,8 +609,6 @@ Future<void> matchShotTo(LumitState app, LumitUiState ui, BridgeShot shot,
   await _solveOn(app, ui, s, 'Match shot',
       (node) => _engine.matchShot(comp, s, frame, node, reference));
 }
-
-// --- Shots -------------------------------------------------------------------
 
 /// The comp's shots, read once per document revision.
 (Object?, int?, List<BridgeShot>)? _shotsRead;
@@ -781,8 +748,6 @@ bool applyPreviousGrade(LumitState app, LumitUiState ui,
   }
   return true;
 }
-
-// --- Keys --------------------------------------------------------------------
 
 /// Run grading [action] from a key. False when it was not one, or could not
 /// act, so the key goes on to whatever else wants it.

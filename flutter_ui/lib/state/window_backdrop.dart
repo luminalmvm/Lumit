@@ -15,15 +15,11 @@ import 'package:flutter/services.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/window');
 
-/// What a style's `--backdrop` asks for.
 enum Backdrop {
-  /// A solid window.
   none,
 
-  /// The desktop picture's colour, soft and still.
   tint,
 
-  /// Whatever is behind the window, blurred.
   blur,
 }
 
@@ -31,14 +27,12 @@ abstract final class WindowBackdrop {
   static Backdrop _asked = Backdrop.none;
   static bool _dark = true;
 
-  /// Whether the window is see-through now.
   static bool showing = false;
 
   /// What the window's root paints over it while [showing]: the style's
   /// room colour, clear unless it tints it.
   static Color tint = const Color(0x00000000);
 
-  /// Called when [showing] changes, to redraw the room.
   static VoidCallback? onChange;
 
   /// Ask for [kind], made dark or light to match the colour scheme. Only a
@@ -50,7 +44,6 @@ abstract final class WindowBackdrop {
     _send();
   }
 
-  /// Ask again, when the system's settings changed under the window.
   static void refresh() => _send();
 
   static Future<void> _send() async {
@@ -68,7 +61,6 @@ abstract final class WindowBackdrop {
               'backdrop', {'kind': kind.name, 'dark': _dark}) ??
           false;
     } catch (_) {
-      // No runner listening: a test.
       now = false;
     }
     // A later ask has gone out since; its answer is the one that counts.

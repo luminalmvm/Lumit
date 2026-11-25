@@ -67,7 +67,6 @@ double volumeBandY(double db, double height, {double topDb = volumeBandTopDb}) {
   return 1 + unit * (height - 2);
 }
 
-/// The dB such a band reads at [y], which is [volumeBandY] the other way round.
 double volumeBandDbOfY(double y, double height,
         {double topDb = volumeBandTopDb}) =>
     topDb - (y - 1) / (height - 2) * (topDb - volumeBandFloorDb);
@@ -88,7 +87,6 @@ class BandScale {
   final double Function(double value) unitOf;
   final double Function(double unit) valueOf;
 
-  /// How far the line may move before Thin keeps a key.
   final double hair;
 
   const BandScale({
@@ -126,7 +124,6 @@ double _volumeOfUnit(double u) =>
 double _panUnit(double pan) => (pan + 100) / 200;
 double _panOfUnit(double u) => -100 + u * 200;
 
-/// Points of travel from the foot against dB.
 const List<(double, double)> _taper = [
   (0.0, volumeBandFloorDb),
   (0.1, -40),
@@ -157,18 +154,13 @@ double _faderOfUnit(double u) {
   return _taper.last.$2;
 }
 
-/// What a band reads and writes: one scalar, how it is written back, and the
-/// scale its line is read on. A layer's own Volume or Pan, a send's level, or
-/// the master, so the band over a clip and an automation lane are one widget.
 class BandTarget {
   final BridgeScalar scalar;
   final BandKind kind;
   final BandScale scale;
 
-  /// A locked layer shows its line and takes no hold of it.
   final bool locked;
 
-  /// Names the band's widget key, so a test or a lane can find it.
   final String id;
 
   /// Writes the next value; throws where the engine refuses.
@@ -197,7 +189,6 @@ class BandTarget {
     this.extent,
   });
 
-  /// This target with its drags handed to the live mix.
   BandTarget withLive(
           {required bool Function(double value) touch,
           required VoidCallback release}) =>
@@ -213,12 +204,9 @@ class BandTarget {
         extent: extent,
       );
 
-  /// The comp frames [entry] is heard between.
   static (int, int) extentOf(BridgeLayerEntry entry) =>
       (entry.info.inFrame.toInt(), entry.info.outFrame.toInt());
 
-  /// [entry]'s own Volume or Pan, written through the setter every other
-  /// control uses.
   BandTarget.layer(BridgeLayerEntry entry, BandKind kind,
       {String? id, BandScale? scale})
       : scalar = kind == BandKind.pan ? entry.info.pan : entry.info.volumeDb,
@@ -235,7 +223,6 @@ class BandTarget {
         extent = extentOf(entry);
 }
 
-/// The line Copy volume or Copy pan took last, for Paste on another track.
 final Map<BandKind, BridgeScalar> _bandClipboard = {};
 
 /// Which rows draw their volume and pan lines: a line shows once asked for or
@@ -271,14 +258,9 @@ class EnvelopesShown {
   }
 }
 
-/// The layer's Volume (or Pan) as a band over its lane, or any [BandTarget]
-/// as the line of an automation lane.
 class VolumeBand extends StatefulWidget {
-  /// A layer's own Volume or Pan, named by [entry] and [kind]. Null where a
-  /// [target] is handed over instead.
   final BridgeLayerEntry? entry;
 
-  /// What the band reads and writes, where it is not a layer's own band.
   final BandTarget? target;
   final TimelineAxis axis;
   final double fps;
@@ -298,8 +280,6 @@ class VolumeBand extends StatefulWidget {
 
   final BandKind kind;
 
-  /// Hides the line from its own menu, as the head's switch does, where the
-  /// view can.
   final VoidCallback? onHide;
 
   /// The keys picked in a lane, by index, drawn lit; a plain press on a
@@ -349,20 +329,14 @@ class VolumeBandState extends State<VolumeBand> {
   double _grabbedAt = 0;
   double _travelled = 0;
 
-  /// How far the held key has been carried sideways, in pixels.
   double _dx = 0;
 
-  /// The drag holds a key itself, so it moves in time too.
   bool _timed = false;
 
-  /// The drag holds the line between key [_drag]'s index and the next, and
-  /// moves both by the same amount.
   bool _span = false;
 
-  /// Where a static level was taken hold of, so its readout sits there.
   double _grabX = 0;
 
-  /// The live mix took this drag's moves, so its release writes nothing.
   bool _live = false;
 
   /// The last plain click, so a second one close by makes a double-click
@@ -387,7 +361,6 @@ class VolumeBandState extends State<VolumeBand> {
     }
   }
 
-  /// A drag the live mix took, let go of without a release of its own.
   void _dropLive() {
     if (!_live) return;
     _live = false;
@@ -420,14 +393,12 @@ class VolumeBandState extends State<VolumeBand> {
         _ => 0,
       };
 
-  /// Where [value] draws, a pixel in from the top and the foot.
   double _y(double value) =>
       1 + _target.scale.unitOf(value).clamp(0.0, 1.0) * (widget.rowHeight - 2);
 
   double _valueOfY(double y) =>
       _clamped(_target.scale.valueOf((y - 1) / (widget.rowHeight - 2)));
 
-  /// [v] held inside the band's own range.
   double _clamped(double v) => v.clamp(_target.scale.min, _target.scale.max);
 
   /// A key's x, on the comp clock its times cross in, carried along
@@ -435,7 +406,6 @@ class VolumeBandState extends State<VolumeBand> {
   double _xOfKey(BridgeKeyframe key) =>
       widget.axis.xOf(laneKeyFrame(key, widget.fps) + widget.barShift);
 
-  /// The keys as drawn right now, with the drag in flight applied.
   List<BridgeKeyframe> _shown() {
     final keys = _keys;
     final held = _drag;
@@ -443,8 +413,6 @@ class VolumeBandState extends State<VolumeBand> {
     return _reshaped(_dragged(keys, held.index!, held.value));
   }
 
-  /// [keys] with the drag applied: key [i] to [value] and carried in time,
-  /// or the span from it to the next moved up or down as one.
   List<BridgeKeyframe> _dragged(
       List<BridgeKeyframe> keys, int i, double value) {
     final by = value - _grabbedAt;
@@ -496,7 +464,6 @@ class VolumeBandState extends State<VolumeBand> {
     return (from, to);
   }
 
-  /// The diamonds: each key's (x, y), or the two ends of the static level.
   List<Offset> _points(List<BridgeKeyframe> keys) {
     if (keys.isEmpty) {
       final y = _y(_drag?.value ?? _staticValue);
@@ -531,8 +498,6 @@ class VolumeBandState extends State<VolumeBand> {
     return out..add(points.last);
   }
 
-  /// The span under [x]: the index of the key it starts at, or null outside
-  /// the keys.
   int? _spanAt(double x) {
     final keys = _keys;
     for (var i = 0; i + 1 < keys.length; i++) {
@@ -626,7 +591,6 @@ class VolumeBandState extends State<VolumeBand> {
     _write(BridgeScalar.keyframed(next));
   }
 
-  /// [keys] with key [index] set to [value], its time and easing kept.
   BridgeScalar _withKey(List<BridgeKeyframe> keys, int index, double value) =>
       BridgeScalar.keyframed([
         for (var i = 0; i < keys.length; i++)
@@ -641,7 +605,6 @@ class VolumeBandState extends State<VolumeBand> {
     try {
       _target.write(next);
     } catch (_) {
-      // A locked layer refuses, and quietly.
       return;
     }
     widget.onChanged();
@@ -670,7 +633,6 @@ class VolumeBandState extends State<VolumeBand> {
       return;
     }
     if (!keyboard.isControlPressed && !keyboard.isMetaPressed) {
-      // In a lane a plain press on a diamond picks it, as a lane key's does.
       if ((widget.onSelectKey, _keyNear(local)) case (final pick?, final i?)) {
         pick(i, keyboard.isShiftPressed);
       }
@@ -799,9 +761,6 @@ class VolumeBandState extends State<VolumeBand> {
     if (typed != keys[index].value) _write(_withKey(keys, index, typed));
   }
 
-  /// Right-click a key to type its value, reset or delete it, or the line for
-  /// a point, the span's curve, Thin, Flip on pan, the clipboard, Reset, and
-  /// the switch that hides it.
   Future<void> _menu(Offset local, Offset global) async {
     final keys = _keys;
     final key = keys.isEmpty ? null : _keyNear(local);
@@ -858,7 +817,6 @@ class VolumeBandState extends State<VolumeBand> {
                 key: const ValueKey('band-thin'),
                 onPressed: () => close('thin'),
                 child: MenuLabel(l10n.envelopeThin, ticked: false)),
-          // A band at its centre with no points: nothing to flip or reset.
           if (_pan)
             MenuRow(
                 key: const ValueKey('band-flip'),
@@ -918,7 +876,6 @@ class VolumeBandState extends State<VolumeBand> {
       case 'add':
         _plant(local);
       case 'flip':
-        // Volume mirrors about 0 dB inside the band; pan swaps sides.
         _write(keys.isEmpty
             ? BridgeScalar.static_(_clamped(-_staticValue))
             : BridgeScalar.keyframed(
@@ -1007,7 +964,6 @@ class VolumeBandState extends State<VolumeBand> {
             keyed: _keys.isNotEmpty,
             hover: _hover,
             held: held != null,
-            // A locked layer shows its line and takes no hold of it.
             grabbable: !_target.locked,
           ),
         )),
@@ -1022,7 +978,6 @@ class VolumeBandState extends State<VolumeBand> {
           : '${value.toStringAsFixed(1)} ${l10n.unitSymbolDb}';
 }
 
-/// [k] with whichever of its parts are given replaced.
 BridgeKeyframe _key(BridgeKeyframe k,
         {double? value,
         BridgeRational? time,
@@ -1042,9 +997,6 @@ BridgeKeyframe _key(BridgeKeyframe k,
 // the second. A steep side's speed depends on the span, so [_reshaped] works
 // it out again on every write.
 
-/// The reach that marks a steep side. Beside a third so it can be read back.
-// ponytail: a side eased elsewhere to exactly this reach reads as steep; give
-// the curve a field of its own on the key if that is ever met.
 const double _steepReach = 0.34;
 
 bool _isSteep(BridgeSideInterp side) =>
@@ -1056,8 +1008,6 @@ bool _isFlat(BridgeSideInterp side) =>
     side.field0.speed == 0 &&
     (side.field0.influence - 1 / 3).abs() < 1e-3;
 
-/// The curve span [span] of [keys] is in, or null when it was eased some
-/// other way.
 SpeedCurve? _curveOf(List<BridgeKeyframe> keys, int span) {
   final out = keys[span].interpOut, into = keys[span + 1].interpIn;
   if (out is BridgeSideInterp_Hold) return SpeedCurve.hold;
@@ -1076,7 +1026,6 @@ SpeedCurve? _curveOf(List<BridgeKeyframe> keys, int span) {
   };
 }
 
-/// [keys] with span [span] in [curve].
 List<BridgeKeyframe> _withCurve(
     List<BridgeKeyframe> keys, int span, SpeedCurve curve) {
   const linear = BridgeSideInterp.linear();
@@ -1127,40 +1076,30 @@ List<BridgeKeyframe> _reshaped(List<BridgeKeyframe> keys) {
 class VolumeBandPainter extends CustomPainter {
   final List<Offset> points;
 
-  /// The line itself, through [points] and along each span's curve.
   final List<Offset> curve;
 
-  /// Where the line starts and ends, level with its first and last point.
   final double from;
   final double to;
   final Color line;
   final Color diamond;
 
-  /// The picked diamonds, by index, and the colour they wear.
   final Set<int> selected;
   final Color? chosen;
   final String? readout;
   final TextStyle readoutStyle;
 
-  /// The held point the readout sits beside.
   final Offset? readoutAt;
 
   /// A drag is held: the band answers everywhere until it lets go, so the
   /// line stays lit and the cursor stays put.
   final bool held;
 
-  /// False on a locked layer: the line draws and takes no pointer.
   final bool grabbable;
 
-  /// A darker edge drawn under the line, so it reads over a busy waveform.
   final Color? halo;
 
-  /// Whether the points are keyframes (drawn as diamonds) or the flat static
-  /// level (drawn bare).
   final bool keyed;
 
-  /// The pointer on the band: the line thickens, and the diamond under it
-  /// grows.
   final ValueListenable<({int? key})?>? hover;
 
   const VolumeBandPainter({
@@ -1207,8 +1146,6 @@ class VolumeBandPainter extends CustomPainter {
     canvas.drawPath(path, stroke);
 
     if (keyed) {
-      // The board's two-diamond grammar: a filled diamond per key, in the
-      // animated gold every other keyframe diamond wears.
       final fill = Paint()..color = diamond;
       final lit = Paint()..color = chosen ?? diamond;
       for (var i = 0; i < points.length; i++) {
@@ -1232,8 +1169,6 @@ class VolumeBandPainter extends CustomPainter {
         text: TextSpan(text: text, style: readoutStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      // Just right of the held point and above the line, flipped left where
-      // it would run off the end and below where it would leave the top.
       var x = at.dx + 8;
       if (x + painter.width > size.width) x = at.dx - 8 - painter.width;
       final above = at.dy - painter.height - 2;
@@ -1250,7 +1185,6 @@ class VolumeBandPainter extends CustomPainter {
     for (final p in points) {
       if ((p - position).distance <= 7) return true;
     }
-    // Against the segment run, x-clamped the way the drawn line extends.
     var previous = Offset(from, curve.first.dy);
     for (final p in [...curve, Offset(to, curve.last.dy)]) {
       final to = p.dx.isFinite ? p : Offset(position.dx + 1, p.dy);

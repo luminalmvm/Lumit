@@ -1,5 +1,3 @@
-// The Grade panel's look picker: the presets in the library's Looks group, with
-// Save look at the foot.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -11,7 +9,6 @@ import '../widgets/controls.dart';
 import 'grade_clipboard.dart' show looksGroup;
 
 class LookPicker extends StatefulWidget {
-  /// The look the layer is wearing, by name, if the panel knows of one.
   final String? current;
   final bool enabled;
 

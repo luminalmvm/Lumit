@@ -46,8 +46,6 @@ void writeSend(LayerReference layer, UuidValue bus,
   );
 }
 
-/// **Mute send**, the tick row a send's menu wears: the send silenced or heard
-/// again, one undo step.
 Widget muteSendRow(LayerReference layer, BridgeSend send,
         {required VoidCallback close, required VoidCallback onChanged}) =>
     MenuRow(
@@ -93,8 +91,6 @@ bool levelMoved(BridgeScalar scalar, CompositionReference comp, int frame) =>
         : sampledScalar(scalar, timeOfFrame(comp, frame))) !=
     0;
 
-/// The audio effects, sorted, as a flyout. Opened from a strip, a track head or
-/// a clip, and [onAdd] puts the one picked where that row means.
 Widget audioEffectFlyout(VoidCallback dismiss, ValueChanged<String> onAdd) {
   final effects = [
     for (final e in listEffects())
@@ -328,7 +324,6 @@ List<Widget> audioLayerRows({
         onLoudness: (lufs) => normaliseTogether(app, lufs,
             layers: sounding, then: onChanged, loudness: true),
       ),
-    // Composition ▸ Detect beats, from the music where a cutter looks for it.
     if (!isBus)
       MenuRow(
         key: const ValueKey<String>('audio-menu-beats'),
@@ -475,7 +470,6 @@ List<Widget> soundClipRows({
   ];
 }
 
-/// Normalise loudness \u25b8, a list of targets in LUFS, for a clip and a layer.
 Widget loudnessRow({
   required String key,
   required VoidCallback close,
@@ -554,7 +548,6 @@ List<Widget> soundHeadRows({
   ];
 }
 
-/// What an automation mode is called.
 String automationModeLabel(BridgeAutomationMode mode) => switch (mode) {
       BridgeAutomationMode.read => l10n.automationRead,
       BridgeAutomationMode.touch => l10n.automationTouch,
@@ -686,7 +679,6 @@ List<Widget> audioRouteRows({
         ),
         child: MenuLabel(l10n.audioRouteSendTo, ticked: false),
       ),
-    // Each of the clicked layer's sends, ticked while it is silenced.
     if (info.sends.isNotEmpty)
       SubmenuRow(
         key: const ValueKey<String>('atl-route-mute'),

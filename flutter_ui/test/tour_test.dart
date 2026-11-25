@@ -1,9 +1,3 @@
-// The guided tour: a step with nothing on screen to point at is passed over,
-// and a tour that has been finished does not open by itself again.
-//
-// Both are once-only or never-visible failures. A card pointing at nothing is
-// what a new user sees on a window too narrow for a panel, and a tour that
-// came back on the second launch would be worse than not having one.
 
 import 'dart:io';
 
@@ -32,8 +26,6 @@ void main() {
         side: TourSide.right,
       );
 
-  /// A window with one keyed box for each name in [on], as it stands, and a
-  /// place to raise the tour from.
   Widget host(ValueNotifier<List<String>> on) => Directionality(
         textDirection: TextDirection.ltr,
         child: ThemeScope(
@@ -69,7 +61,6 @@ void main() {
   testWidgets(
       'a missing target is passed over, and finishing stops it reopening',
       (tester) async {
-    // A machine with no settings file, which is the one the tour opens on.
     final workspace = Workspace()..load();
     expect(workspace.tourDone, isFalse);
     final steps = [step('a'), step('gone'), step('c')];
@@ -82,8 +73,6 @@ void main() {
     expect(find.text('Step a'), findsOneWidget);
     expect(lumitModalOpen, isTrue, reason: 'the panels stand down under it');
 
-    // Next goes past the step with nothing to point at, and that leaves the
-    // one it lands on as the last.
     await tester.tap(find.byKey(const ValueKey('tour-next')));
     await tester.pump();
     expect(find.text('Step gone'), findsNothing);
@@ -93,11 +82,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('tour-next')));
     await tester.pump();
     expect(find.byKey(const ValueKey('tour-card')), findsNothing);
-    // Written down, so the next launch reads it and leaves the tour to Help.
     expect((Workspace()..load()).tourDone, isTrue);
 
-    // Asked for, as Help does, and then the window loses everything the
-    // tour could point at: it ends, and leaves nothing of itself behind.
     expect(showTour(shell(), workspace, steps: steps), isTrue);
     await tester.pump();
     expect(find.text('Step a'), findsOneWidget);

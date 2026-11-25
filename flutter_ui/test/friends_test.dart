@@ -1,7 +1,3 @@
-// The friends list as the server sends it, read into the three lists the
-// Account page draws. A person the answer cannot name is left out rather
-// than drawn as a blank row. And a link's owner, who is left out of the
-// friends it can be sent to.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/account.dart';
@@ -23,7 +19,6 @@ void main() {
     });
     expect(read.friends, [(username: 'ana', name: 'Ana')]);
     expect(read.asked, [(username: 'ben', name: 'Ben')]);
-    // No name: the username stands in for one.
     expect(read.asking, [(username: 'cy', name: 'cy')]);
 
     final empty = Friends.from({'error': 'offline'});

@@ -1,8 +1,3 @@
-// The Node panel inside a Custom shader's graph: the shader's boxes, a click
-// from being picked on the canvas, and the picked one under the shader's name.
-// A picked box lists its sockets and what each is wired to, and a Parameter
-// box also shows the facts its control is made from. An edit is one commit,
-// one undo step, as every gesture on the canvas is.
 
 import 'dart:convert';
 
@@ -21,7 +16,6 @@ import 'shader_editor.dart' show InstanceHome;
 import 'shader_graph.dart'
     show shaderMenuKey, shaderNodeWord, shaderPortColour, shaderPortWord;
 
-/// The header the Node panel draws, so this view wears the same strip.
 typedef ShaderNodeHeader = Widget Function(String name,
     {String? crumb, VoidCallback? onCrumb, void Function(Offset at)? onMenu});
 
@@ -81,7 +75,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
     super.dispose();
   }
 
-  /// The stored graph, as maps, and the shader's instance in a fresh stack.
   (List<BridgeEffectInstance>, BridgeEffectInstance, Map<String, dynamic>)?
       _read() {
     try {
@@ -94,7 +87,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
         return (stack, inst, graph.cast<String, dynamic>());
       }
     } catch (_) {
-      // The effect has gone from under the view; the canvas leaves too.
     }
     return null;
   }
@@ -129,7 +121,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
     });
   }
 
-  /// One box's settings, changed by [edit], as one commit.
   void _write(int id, void Function(Map<String, dynamic> settings) edit) {
     final read = _read();
     if (read == null) return;
@@ -232,7 +223,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
     );
   }
 
-  /// Every box, a click from being picked: the layer index's rows.
   Widget _index() {
     final t = ThemeScope.of(context).theme;
     return EdgeFade(
@@ -284,12 +274,8 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
     );
   }
 
-  /// A box's sockets, as the card has them: each input with the box that
-  /// feeds it, then each output with every box it feeds. A click on the
-  /// other box picks it.
   List<Widget> _portRows(BridgeShaderGraphNode box) {
     final byId = {for (final n in _nodes) n.id: n};
-    // The far box, and its socket's word where it has more than one.
     String far(BridgeShaderGraphNode n, int port, {required bool isInput}) {
       final ports = isInput ? n.inputs : n.outputs;
       return ports.length > 1 && port < ports.length
@@ -327,8 +313,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
     ];
   }
 
-  /// One socket's row: its dot in its type's colour, filled while wired, then
-  /// its word and the box at the wire's other end.
   Widget _portRow(BridgeShaderPort port, int index,
       {required bool isInput,
       BridgeShaderGraphNode? other,
@@ -392,8 +376,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
         _ => l10n.unitRaw,
       };
 
-  /// A Parameter box's facts: what kind of control it is, where it starts, and
-  /// for a slider its range and unit. The name is the box's own, from Rename.
   List<Widget> _paramRows(int id) {
     final s = _settings[id] ?? const <String, dynamic>{};
     final kind = _kinds.contains(s['kind']) ? s['kind'] as String : 'slider';
@@ -419,7 +401,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
           value: kind,
           options: _kinds,
           label: _kindWord,
-          // Another kind takes its own default, of its own width.
           onChanged: (next) => _write(id, (s) {
             s['kind'] = next;
             s.remove('default');
@@ -468,8 +449,6 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
     ];
   }
 
-  /// One row on the Node panel's own columns: the name where a layer's rows
-  /// put theirs, the control in their value column.
   Widget _row(String name, Widget control) {
     final t = ThemeScope.of(context).theme;
     return fxTwoColumnRow(

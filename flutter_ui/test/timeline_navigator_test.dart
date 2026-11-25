@@ -1,5 +1,3 @@
-// The time navigator's arithmetic (T5): what window a scroll position implies,
-// and what window a drag on it asks for.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/timeline_navigator.dart';
@@ -7,8 +5,6 @@ import 'package:lumit_flutter/panels/timeline_navigator.dart';
 void main() {
   group('the window a scroll position implies', () {
     test('zoomed in, it is the slice the lanes are showing', () {
-      // Four times in: the content is four viewports wide, so a quarter of the
-      // comp is on screen, and an offset of one viewport starts it a quarter in.
       final w = navigatorWindow(
           offset: 612, viewport: 612, content: 612 * 4, frames: 100);
       expect(w.start, closeTo(25, 0.5));
@@ -30,8 +26,6 @@ void main() {
           frames: 100);
       expect(d.span, 20, reason: 'a pan is not a zoom');
       expect(d.start, 45);
-      // A press on the bare track has no frame to keep: the caller asks for
-      // half the span and the window arrives centred.
       expect(
         navigatorDrag(
             grab: NavigatorGrab.body,

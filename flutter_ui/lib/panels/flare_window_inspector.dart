@@ -1,5 +1,3 @@
-// The Flare window's right side: the selected element's name, its controls
-// in twirls by group, and its colour.
 
 part of 'flare_window.dart';
 

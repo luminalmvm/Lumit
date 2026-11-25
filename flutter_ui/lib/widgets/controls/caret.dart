@@ -1,4 +1,3 @@
-// The small quiet chevron that says a thing opens.
 
 import 'package:flutter/widgets.dart';
 

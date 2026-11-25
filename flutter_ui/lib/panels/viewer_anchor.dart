@@ -46,8 +46,6 @@ const double anchorSnapDistance = 12;
 /// The size of the drawn pointer's crosshair, in screen pixels.
 const double anchorCursorSize = 9;
 
-/// The layer's own key points, in layer space: the four corners, the four edge
-/// midpoints, and the centre — nine places a pivot is usually wanted.
 List<Offset> anchorKeyPoints(Size bounds) => [
       for (final y in const [0.0, 0.5, 1.0])
         for (final x in const [0.0, 0.5, 1.0])
@@ -85,8 +83,6 @@ Offset constrainToAxis(Offset delta) => delta.dx.abs() >= delta.dy.abs()
     ? Offset(delta.dx, 0)
     : Offset(0, delta.dy);
 
-/// Ctrl (Cmd on a Mac): the snap modifier, spelled the way the keymap spells
-/// its primary modifier (state/keymap.dart).
 bool isPrimaryModifierHeld() => defaultTargetPlatform == TargetPlatform.macOS
     ? HardwareKeyboard.instance.isMetaPressed
     : HardwareKeyboard.instance.isControlPressed;
@@ -179,7 +175,6 @@ void setPannedBehind(LayerBox box, Offset anchor,
   );
 }
 
-/// [tf] with the pan-behind to [anchor] in it, for a preview.
 BridgeTransform transformPannedBehind(
     LayerBox box, BridgeTransform tf, Offset anchor) {
   final (:position, :z) = panBehindFor(box, anchor);
@@ -193,9 +188,7 @@ BridgeTransform transformPannedBehind(
   );
 }
 
-/// The Anchor point tool over the picture.
 class ViewerAnchorLayer extends StatefulWidget {
-  /// Whether the tool is armed. Inert otherwise.
   final bool active;
 
   final CompositionReference comp;
@@ -333,12 +326,9 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
           comp: widget.comp, frame: widget.uiState.playheadFrame.value);
       widget.onChanged();
     } catch (_) {
-      // The layer went away between the press and the release.
     }
   }
 
-  /// Whether [box]'s pivot must stay where it is because moving it would
-  /// write over keys, said in a notice when it must.
   bool _refusedFor(LayerBox box) {
     if (!panBehindHitsKeys(box)) return false;
     Provider.of<LumitState>(context, listen: false)
@@ -414,11 +404,6 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
   }
 }
 
-/// The pan-behind pointer: the anchor mark itself, with a small arrow at its
-/// tail — After Effects' own pairing, and it says exactly what the tool moves.
-///
-/// The mark at the *pointer* is the cursor; the ring drawn at the layer's anchor
-/// is where that pivot actually is, which is the thing being aimed.
 class _AnchorCursorPainter extends CustomPainter {
   final Offset? at;
   final Offset? anchor;
@@ -482,7 +467,6 @@ class _AnchorCursorPainter extends CustomPainter {
       old.accent != accent;
 }
 
-/// Straight-line distance, for the tests' convenience.
 @visibleForTesting
 double distanceBetween(Offset a, Offset b) =>
     math.sqrt(math.pow(a.dx - b.dx, 2) + math.pow(a.dy - b.dy, 2));

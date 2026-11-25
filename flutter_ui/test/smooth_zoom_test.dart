@@ -1,6 +1,4 @@
 
-// The shared zoom motion (docs/07-UI-SPEC.md §4.6): the acceleration rule on
-// its own, and the flight it drives.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/theme/motion.dart';
@@ -43,7 +41,6 @@ void main() {
       final zoom = SmoothZoom(vsync: tester, initial: 1, clock: () => now);
       addTearDown(zoom.dispose);
 
-      // Two notches a long way apart: no boost, so each is worth exactly 2×.
       zoom.nudge(2, motion: flight);
       now += const Duration(seconds: 1);
       await tester.pump();
@@ -85,7 +82,6 @@ void main() {
   /// The Timeline's zoom slider (owner, 2026-08-06): its left end is the whole
   /// composition, its right end is twenty frames across the lanes.
   group('Where the zoom slider sits', () {
-    // A 1200-frame comp: twenty frames across the lanes is 60x.
     const maxZoom = 60.0;
 
     test('it round-trips, so dragging the handle does not drift', () {

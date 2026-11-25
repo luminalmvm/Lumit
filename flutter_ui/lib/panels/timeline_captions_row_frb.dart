@@ -43,12 +43,10 @@ BridgeRational _timeOf(double frame, int fpsNum, int fpsDen) {
       num: (frame * fpsDen * 1000).round(), den: fpsNum * 1000);
 }
 
-/// How near an edge counts as taking hold of it rather than the middle.
 const double _edgeGrab = 6;
 
 enum _Grab { body, start, end }
 
-/// A caption layer's captions under its bar, while it is open.
 class CaptionsRowFrb extends StatefulWidget {
   final BridgeLayerEntry entry;
   final CaptionTrack track;
@@ -56,22 +54,17 @@ class CaptionsRowFrb extends StatefulWidget {
   final int fpsNum;
   final int fpsDen;
 
-  /// The lanes' sideways scroll, so only the captions in view are drawn.
   final ScrollController? hScroll;
 
-  /// What a drag can land on, the Timeline's own list, and whether the
-  /// magnet is on.
   final List<SnapTarget> snapTargets;
   final bool magnet;
 
-  /// The razor is armed, and where its cut at screen x lands.
   final bool razor;
   final double Function(double x)? razorFrameAt;
 
   final VoidCallback onSelect;
   final VoidCallback onClose;
 
-  /// An edit went in; read the captions again.
   final VoidCallback onChanged;
 
   const CaptionsRowFrb({
@@ -107,15 +100,11 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
   /// something else being picked.
   bool _picking = false;
 
-  /// The caption a Shift click runs from, by its place in the track.
   int? _anchor;
 
-  /// Each caption's words laid out once, by its index and text.
   final Map<int, (String, TextPainter)> _words = {};
   TextStyle? _wordsStyle;
 
-  /// The drag in flight: which caption, what it holds, where the pointer
-  /// went down, how far it has travelled, and where that puts the caption.
   ({
     int at,
     _Grab grab,
@@ -195,8 +184,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     return painter;
   }
 
-  // --- Where the pointer is ------------------------------------------------
-
   /// The caption under screen x, by its place in the track, allowing a few
   /// pixels round one too thin to aim at.
   int? _cueAtX(double x) {
@@ -234,8 +221,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     if (cursor != _cursor) setState(() => _cursor = cursor);
   }
 
-  // --- Picking -------------------------------------------------------------
-
   Set<int> get _picked =>
       _selection.layer == _layerId ? _selection.cues : const {};
 
@@ -253,7 +238,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     _pickLayer();
     if (at == null) {
       _selection.choose(_layerId, const {});
-      // Double-clicking the room shuts it, the gesture that opened it.
       if (twice) widget.onClose();
       return;
     }
@@ -285,8 +269,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     _ui.scrubTo((widget.track.starts[at] - 1e-6).ceil());
   }
 
-  // --- Dragging ------------------------------------------------------------
-
   void _dragStart(DragStartDetails details) {
     final at = _cueAtX(_downX);
     if (at == null || _locked || widget.razor) return;
@@ -298,8 +280,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     }
     final start = widget.track.starts[at];
     final end = widget.track.ends[at];
-    // The Timeline's own targets, less this caption's ends, and the ends of
-    // the captions in view.
     final edges = <SnapTarget>[];
     final (from, to) = _inView();
     for (var i = widget.track.firstFrom(from);
@@ -352,7 +332,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
             controlPressed: HardwareKeyboard.instance.isControlPressed);
     final low = at > 0 ? track.ends[at - 1] : 0.0;
     final high = at + 1 < track.length ? track.starts[at + 1] : double.infinity;
-    // A caption is at least one frame long.
     const shortest = 1.0;
     SnapResult land(double frame) => snapFrame(
         frame: frame,
@@ -389,7 +368,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     }
   }
 
-  /// Put the caption back where the drag found it.
   void _abandon() {
     if (!mounted) return;
     setState(() {
@@ -398,7 +376,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     });
   }
 
-  /// One write for the whole drag, so one undo step.
   void _commit() {
     final drag = _drag;
     setState(() {
@@ -423,7 +400,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
         widget.entry.layer.setCueSpan(cue: cue.index, start: start, end: end));
   }
 
-  /// An edit on this layer's captions, said on the status line if it fails.
   bool _edit(void Function() call) {
     try {
       call();
@@ -435,8 +411,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     widget.onChanged();
     return true;
   }
-
-  // --- The menu ------------------------------------------------------------
 
   Future<void> _menu(TapDownDetails details) async {
     final at = _cueAtX(details.localPosition.dx);
@@ -500,9 +474,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     }
   }
 
-  // --- Drawing -------------------------------------------------------------
-
-  /// The stretch of frames in view, from the lanes' scroll.
   (double, double) _inView() {
     final axis = widget.axis;
     final scroll = widget.hScroll;
@@ -560,7 +531,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
                     ground: t.surface1,
                     fill: label.withValues(alpha: clipFillAlpha),
                     edge: label,
-                    // A picked caption is lit the way a picked bar is.
                     pickedFill: Color.lerp(label, t.textPrimary, 0.35)!
                         .withValues(alpha: clipFillSelectedAlpha),
                     seam: t.surface0,
@@ -604,8 +574,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
     );
   }
 
-  /// The pill beside the pointer while a caption is moved or retimed: where
-  /// it starts and ends now, and how long it is, as a bar's drag says it.
   Widget _hint(
       ({
         int at,
@@ -631,7 +599,6 @@ class _CaptionsRowFrbState extends State<CaptionsRowFrb> {
 
 typedef _Dragged = ({int at, double start, double end});
 
-/// The captions in view, each a block with its words inside.
 class _BlocksPainter extends CustomPainter {
   _BlocksPainter({
     required this.track,
@@ -664,7 +631,6 @@ class _BlocksPainter extends CustomPainter {
   final TextStyle text;
   final double radius;
 
-  /// Narrower than this, a block has no room for words.
   static const double _wordsFrom = 18;
 
   @override
@@ -703,8 +669,6 @@ class _BlocksPainter extends CustomPainter {
       final shape = RRect.fromRectAndRadius(box, Radius.circular(radius));
       canvas.drawRRect(shape, body);
       reach = math.max(reach, right);
-      // Where one caption runs straight into the next, a seam of the ground
-      // keeps them two.
       if (!moving &&
           i > 0 &&
           (track.starts[i] - track.ends[i - 1]).abs() < 1e-6 &&
@@ -716,12 +680,10 @@ class _BlocksPainter extends CustomPainter {
       canvas.clipRRect(shape);
       canvas.drawRect(
           Rect.fromLTWH(left, top, clipEdgeWidth, box.height), lead);
-      // Raised to the top of the picture: its top edge at full strength.
       if (track.raised(i)) {
         canvas.drawRect(Rect.fromLTWH(left, top, box.width, 2), lead);
       }
       if (box.width >= _wordsFrom) {
-        // Clear of the far end, so the words never run into the next one.
         canvas.clipRect(Rect.fromLTRB(left, top, right - 3, bottom));
         words(i, text).paint(canvas, Offset(left + clipEdgeWidth + 4, top + 3));
       }
@@ -743,7 +705,6 @@ class _BlocksPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// The caption under the playhead, ringed in the accent.
 class _NowPainter extends CustomPainter {
   _NowPainter({
     required this.track,

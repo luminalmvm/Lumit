@@ -60,8 +60,6 @@ double viewerRulerStep(double viewScale,
   return decade * 10;
 }
 
-/// Where a guide sits on screen, given the picture's rectangle and the comp's
-/// own size — the one conversion everything here shares.
 double viewerGuideScreen(
   ViewerGuide guide, {
   required Rect picture,
@@ -75,7 +73,6 @@ double viewerGuideScreen(
   return picture.top + guide.at * scale;
 }
 
-/// The inverse: where a point on screen falls in comp pixels along one axis.
 double viewerGuideComp(
   double screen, {
   required bool vertical,
@@ -102,12 +99,9 @@ class ViewerRulers extends StatefulWidget {
   /// you placed is a thing you placed.
   final bool rulers;
 
-  /// Where the picture is drawn in the stage, and how big the comp is — the two
-  /// halves of every conversion above.
   final Rect picture;
   final Size compSize;
 
-  /// The comp's guides, and how to write a new set back.
   final List<ViewerGuide> guides;
   final ValueChanged<List<ViewerGuide>> onGuides;
 
@@ -123,15 +117,11 @@ class ViewerRulers extends StatefulWidget {
   /// still answers, which is how it's unlocked.
   final bool locked;
 
-  /// Whether the rulers count percent of the frame rather than pixels.
   final bool percent;
 
-  /// The right clicks: on a strip, with whether it's the left one, and on a
-  /// guide, by its place in the list.
   final void Function(bool vertical, TapUpDetails details)? onRulerMenu;
   final void Function(int index, TapUpDetails details)? onGuideMenu;
 
-  /// The numbers' type: mono, as every number in the application is.
   final TextStyle? labelStyle;
 
   const ViewerRulers({
@@ -209,8 +199,6 @@ class _ViewerRulersState extends State<ViewerRulers> {
     );
   }
 
-  /// The guides as they are drawn this instant: the stored set, with the one in
-  /// flight standing where the pointer has it.
   List<ViewerGuide> _drawnGuides() {
     final drag = _drag;
     if (drag == null) return widget.guides;
@@ -426,7 +414,6 @@ class ViewerRulerPainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, viewerRulerBand), fill);
     canvas.drawRect(
         Rect.fromLTWH(0, viewerRulerBand, viewerRulerBand, size.height), fill);
-    // The seam between each strip and the picture beside it.
     canvas
       ..drawLine(Offset(0, viewerRulerBand),
           Offset(size.width, viewerRulerBand), hairline)
@@ -463,8 +450,6 @@ class ViewerRulerPainter extends CustomPainter {
       final screen = viewerGuideScreen((at: at, vertical: vertical),
           picture: picture, compSize: compSize);
       if (screen < viewerRulerBand) continue;
-      // A minor tick every fifth of the step, unlabelled: the count between
-      // two numbers, which is what makes a ruler readable without doing sums.
       for (var m = 1; m < 5; m++) {
         final minor = screen + step * scale * m / 5;
         if (minor < viewerRulerBand) continue;

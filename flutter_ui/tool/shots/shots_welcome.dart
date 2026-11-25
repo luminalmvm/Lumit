@@ -23,8 +23,6 @@ import 'package:lumit_flutter/state/workspace.dart';
 
 import 'shots_common.dart';
 
-/// A believable little save-time preview: a soft two-stop gradient in the
-/// given hues, 128×72 like the real capture writes.
 Future<Uint8List> _paintedThumb(Color a, Color b) async {
   final rec = ui.PictureRecorder();
   final canvas = Canvas(rec);
@@ -43,7 +41,6 @@ Future<Uint8List> _paintedThumb(Color a, Color b) async {
 Future<void> main() async {
   final (state, ui2) = await bootLumit();
 
-  // Three recents, newest first once remembered in this order.
   const older = 'C:/Users/edit/Videos/Client sting/Client sting.lum';
   const yesterday = 'C:/Users/edit/Videos/Lower thirds/Lower thirds.lum';
   const today = 'C:/Users/edit/Videos/Opening titles/Opening titles.lum';
@@ -55,13 +52,11 @@ Future<void> main() async {
       await _paintedThumb(const Color(0xff2d3f6b), const Color(0xff6b3f5c)));
   Workspace.writeThumbnail(yesterday,
       await _paintedThumb(const Color(0xff1d4a44), const Color(0xff33406b)));
-  // `older` gets no file, so its row wears the placeholder.
 
   runApp(shotRoot(LumitAppNew(state, ui2, welcome: true)));
 
   await pause(2);
   await sizeWindow(1280, 800);
-  // The splash hands over to the welcome on its own; give it room to.
   await pause(4);
   await captureUi('welcome.png');
   exit(0);

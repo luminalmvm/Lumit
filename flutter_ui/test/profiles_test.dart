@@ -1,8 +1,3 @@
-// Profiles put one person's settings away and take another's out. A mistake
-// there loses somebody's shortcuts or theme without a word, so this checks
-// the round trip: a profile comes back as it was left, its library stays its
-// own, the machine's own settings never move, and two machines' edits merge
-// without one eating the other.
 
 import 'dart:convert';
 import 'dart:io' hide Platform;
@@ -16,7 +11,6 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// A settings folder of this test's own, emptied first.
 Workspace _workspace(String name) {
   final dir = Directory('${Directory.systemTemp.path}'
       '${Platform.pathSeparator}lumit-test-$name');
@@ -47,8 +41,6 @@ void main() {
         reason: 'a new profile starts with the settings in force');
     w.setScheme(LumitColorScheme.light);
     w.setAutosave(3, 5);
-    // The machine's, not the profile's: set while one profile is in use and
-    // still there under the other.
     w.setAudioDevice('speakers');
 
     await profiles.switchTo(mine);
@@ -61,7 +53,6 @@ void main() {
     expect(w.colorScheme, LumitColorScheme.light);
     expect(w.autosaveMinutes, 3);
 
-    // What the next launch reads: the same list, on the same profile.
     final next = ProfilesState(Workspace()..load(), AccountState(),
         afterApply: () {});
     expect(next.all.map((p) => p.name), ['Mack', 'Client desk']);
@@ -113,7 +104,6 @@ void main() {
     expect(themes(), ['Dusk']);
     expect(w.customThemeName, 'Dusk');
 
-    // A new profile starts with the library in use, then goes its own way.
     final added = profiles.add('Desk');
     await profiles.switchTo(added);
     expect(themes(), ['Dusk']);
@@ -149,9 +139,7 @@ void main() {
     expect(mergeSettings(base, here, there), {
       // Changed on both: this machine's is kept.
       'theme': 'light',
-      // Changed on one each, inside the same group: both are kept.
       'interface': {'compact': true, 'tooltips': false},
-      // Added there, and removed there.
       'new': 2,
     });
 

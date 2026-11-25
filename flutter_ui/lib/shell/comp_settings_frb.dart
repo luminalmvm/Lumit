@@ -63,14 +63,11 @@ const double compLabelColumn = 110;
 const double compRowGap = 12;
 const double compRowHeight = 30;
 
-/// The widths the drawing gives this dialog's wells and its rate list.
 const double compSizeWell = 80;
 const double compDurationWell = 120;
 const double compSamplesWell = 60;
 const double compRateList = 90;
 
-/// The background swatch, and the room between the shutter angle and the
-/// sample counts beside it.
 const Size compSwatch = Size(20, 16);
 const double compShutterGap = 24;
 
@@ -123,13 +120,10 @@ Future<CompositionReference?> duplicateCompositionFrb(
     }
     return comp.duplicate(separate: separate);
   } catch (_) {
-    // The project closed, or the comp went, while the question was up.
     return null;
   }
 }
 
-/// Edit an existing comp. Returns true when settings were applied, so the caller
-/// can refresh; false when cancelled.
 Future<bool> showCompSettingsFrb({
   required BuildContext context,
   required CompositionReference comp,
@@ -162,7 +156,6 @@ Future<bool> showCompSettingsFrb({
         final mine = ui.selectedComp?.internalid == comp.internalid;
         final at =
             mine ? comp.timeOfFrame(frame: ui.playheadFrame.value) : null;
-        // The button is one undo step however much it changed.
         asOneUndoStep(project, () {
           if (likeAfterEffects != was) {
             comp.setLightingLikeAfterEffects(on_: likeAfterEffects ?? false);
@@ -201,7 +194,6 @@ Future<CompositionReference?> showNewCompositionFrb({
   /// same way and for the same reason.
   BridgeStreamsArrival? arrival,
 
-  /// Lay the items end to end rather than all at the start.
   bool endToEnd = false,
 
   /// Make a **node graph** rather than a layer stack
@@ -269,11 +261,8 @@ Future<CompositionReference?> showNewCompositionFrb({
         motionBlurSamples: initial.motionBlurSamples,
         motionBlurLimit: initial.motionBlurLimit,
       ),
-      // Where its timecode starts, as in After Effects' Composition
-      // Settings: 00:00:00:00 unless changed.
       initialStart: const BridgeRational(num: 0, den: 1),
       onStart: (s) => start = s,
-      // A node graph has no layers to light.
       lightsLikeAfterEffects: nodeGraph ? null : false,
       onConfirm: (settings, likeAfterEffects) {
         late CompositionReference comp;
@@ -288,7 +277,6 @@ Future<CompositionReference?> showNewCompositionFrb({
           if (start case final s? when s.num != 0) {
             comp.setStartTimecode(start: s);
           }
-          // A node graph has no layers, so nothing is dropped on this door.
           placed = comp.addFootageLayers(
               footage: footage,
               asSequence: asSequence,
@@ -326,8 +314,6 @@ class _CompSettingsBody extends StatefulWidget {
   final String title;
   final String confirm;
   final BridgeCompSettings initial;
-  /// The settings, and whether the comp lights its layers as After Effects
-  /// does (null where the row is hidden).
   final void Function(BridgeCompSettings, bool?) onConfirm;
   final VoidCallback onCancel;
 
@@ -336,8 +322,6 @@ class _CompSettingsBody extends StatefulWidget {
   final BridgeRational? initialStart;
   final void Function(BridgeRational)? onStart;
 
-  /// Whether the comp lights its layers as After Effects does. Null hides the
-  /// row, for a node graph, which has no layers to light.
   final bool? lightsLikeAfterEffects;
 
   const _CompSettingsBody({
@@ -406,7 +390,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     super.dispose();
   }
 
-  /// The preset label matching what is typed, or null for a rate of one's own.
   String? get _presetLabel {
     final rate = parseRate(_fps.text);
     if (rate == null) return null;
@@ -416,8 +399,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         .firstOrNull;
   }
 
-  /// The whole-frame preset the fields currently say, or null when they say
-  /// something of their own.
   (String, int, int, int, int)? get _compPreset {
     final rate = parseRate(_fps.text);
     if (rate == null) return null;
@@ -443,8 +424,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     final duration = frames != null
         ? secondsOfFrames(frames, rate.$1, rate.$2)
         : parseDurationHms(_duration.text) ?? widget.initial.duration;
-    // The Start timecode reads the same way; one that cannot be read keeps
-    // the one there was.
     if (widget.onStart case final onStart?) {
       final at = framesOfTimecode(_start.text, rate.$1, rate.$2);
       onStart(at != null
@@ -467,7 +446,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     ), _likeAfterEffects);
   }
 
-  /// Editing one side of the size, carrying the other with it when locked.
   void _setSize({int? width, int? height}) {
     setState(() {
       if (width != null) {
@@ -572,8 +550,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       ],
     );
   }
-
-  // ---- the rows ------------------------------------------------------------
 
   Widget _presetRow(LumitTheme t) {
     final current = _compPreset;
@@ -701,8 +677,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         ],
       );
 
-  /// The Start timecode: the time the comp's first frame reads, typed as
-  /// `HH:MM:SS:FF` at the rate above, like the duration.
   Widget _startRow(LumitTheme t) => Row(
         children: [
           SizedBox(
@@ -740,9 +714,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           ),
         ),
         const SizedBox(width: 6),
-        // The drawing's reading, which is also the note the old dialog spent a
-        // whole line on: what the timecode above means, said in frames and
-        // seconds rather than explained in a sentence.
         Flexible(
           child: Text(
             l10n.compDurationReading(
@@ -839,8 +810,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         ],
       );
 
-  // ---- the pieces ----------------------------------------------------------
-
   Widget _row(LumitTheme t, String label, Widget control) => dialogRow(
         t,
         label,
@@ -920,7 +889,6 @@ String formatRate(int num, int den) {
   return (num ~/ g, den ~/ g);
 }
 
-/// A duration in exact seconds as `HH:MM:SS:FF` timecode at `fpsNum/fpsDen`.
 String timecodeOfDuration(BridgeRational seconds, int fpsNum, int fpsDen) {
   final den = seconds.den.toInt();
   final fps = fpsDen == 0 ? 0.0 : fpsNum / fpsDen;
@@ -940,7 +908,6 @@ BridgeRational secondsOfFrames(int frames, int fpsNum, int fpsDen) {
   );
 }
 
-/// `HH:MM:SS.mmm` for an exact number of seconds.
 String formatDurationHms(BridgeRational seconds) {
   final den = seconds.den.toInt();
   final total = den == 0 ? 0 : (seconds.num.toInt() * 1000 / den).round();

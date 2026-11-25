@@ -101,8 +101,6 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  // The one difference from sweep 1: the shape the review is about. This is
-  // the call Settings ▸ Appearance makes, against the sweep's throwaway store.
   ui.workspace.setShape(ThemeShape.lantern);
   // The layout preset the default layout already is, applied so the workspace
   // strip has an active member to show. Without it nothing in that strip is
@@ -110,14 +108,12 @@ Future<void> main() async {
   // strip where none of them is.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.edit);
 
-  // The sweeps photograph the shell; the welcome screen has its own sweep.
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
 
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(6);
 
-  // ---- Shot: the whole workspace, in Round --------------------------------
   await captureUi('round-workspace.png');
 
   // ---- Shot: the Viewer bar as a strip of its own -------------------------

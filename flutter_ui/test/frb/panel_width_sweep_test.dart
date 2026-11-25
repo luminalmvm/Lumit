@@ -134,7 +134,6 @@ void main() {
       final comp = p.state.project!.newComposition(name: 'Scene');
       final layer = comp.addSolidLayer();
       layer.addEffect(name: 'blur');
-      // Nothing is at this path, which is what makes the row say `missing`.
       final clip = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
       comp.addFootageLayer(footage: clip, asSequence: false);
       p.uiState
@@ -197,8 +196,6 @@ void main() {
           uiState: p.uiState);
     });
 
-    /// The Graph panel's third subject: the same panel drawing a node graph
-    /// composition rather than a layer's own graph.
     testWidgets('Graph (node graph)', (tester) async {
       final p = populated();
       final graph = p.state.project!.newNodeGraph(name: 'Graph');
@@ -272,7 +269,6 @@ void main() {
           uiState: p.uiState);
     });
 
-    /// With a caption layer, so the bar and the rows are what is squeezed.
     testWidgets('Captions', (tester) async {
       final p = populated();
       final dir = Directory.systemTemp.createTempSync('lumit-sweep-');
@@ -302,7 +298,6 @@ void main() {
           uiState: p.uiState);
     });
 
-    /// Every layout, as the four-up halves the room each header has.
     testWidgets('Scopes', (tester) async {
       final p = populated();
       for (final layout in ScopeLayout.values) {
@@ -315,7 +310,6 @@ void main() {
       }
     });
 
-    /// Every page on a Correction, in a tall pane and a short one.
     testWidgets('Grade', (tester) async {
       final p = populated();
       p.uiState.selectedLayer.value!.addEffect(name: 'correction');
@@ -342,8 +336,6 @@ void main() {
           uiState: p.uiState);
     });
 
-    /// Two serial nodes with a parallel one beside the second, so a run's
-    /// column is what is squeezed, in a tall pane and a short one.
     testWidgets('Grade nodes', (tester) async {
       final p = populated();
       final layer = p.uiState.selectedLayer.value!;
@@ -362,7 +354,6 @@ void main() {
       }
     });
 
-    /// Down the pane while it is taller than wide, across once it is not.
     testWidgets('Shots', (tester) async {
       final p = populated();
       for (final height in const [600.0, 140.0]) {
@@ -375,8 +366,6 @@ void main() {
       }
     });
 
-    // The results bar in each of its modes: a tight panel lays it out in
-    // two rows and wraps, and never clips.
     for (final mode in TranscriptFindMode.values) {
       testWidgets('Transcript, ${mode.name} review', (tester) async {
         final p = populated();

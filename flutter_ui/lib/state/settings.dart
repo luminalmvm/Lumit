@@ -33,7 +33,6 @@ enum LoopMode {
   /// Stop at the work area's end.
   once,
 
-  /// Run the work area backwards, then forwards again, and so on.
   pingPong,
 }
 
@@ -219,13 +218,10 @@ enum ViewerBars {
   /// and Lantern. What a fresh install has.
   auto,
 
-  /// The drawing's own: pickers above, everything else below.
   split,
 
-  /// One strip, above the picture.
   top,
 
-  /// One strip, below the picture.
   bottom,
 
   /// The ways of looking above the picture, and everything about playing in
@@ -243,14 +239,11 @@ enum ToolBarPosition {
   /// fresh install has.
   auto,
 
-  /// A strip under the menu bar, spanning the window.
   top,
 
-  /// A rail down the left edge, buttons in a full-height column.
   left,
 }
 
-/// What Lumit puts in the person's Discord status.
 enum DiscordStatus {
   off,
 
@@ -275,13 +268,10 @@ enum StreamsArrival {
   /// One layer plays every stream mixed. What a fresh install has.
   mixed,
 
-  /// A layer to each stream.
   split,
 }
 
-/// How a waveform's height follows its level.
 enum WaveformScale {
-  /// The level straight through.
   linear,
 
   /// The square root of the level, which lifts the quiet end.
@@ -291,16 +281,13 @@ enum WaveformScale {
   logarithmic,
 }
 
-/// Which room Lantern's cards stand in.
 enum LanternRoom {
   /// The style's own room, which is the night room for every scheme. A dark
   /// scheme used to get the day room here, a bright frame round the picture.
   auto,
 
-  /// A light neutral ground, the cards dark against it.
   day,
 
-  /// The canvas colour, the cards a step above it.
   night,
 }
 
@@ -317,13 +304,11 @@ enum LanternRoom {
 /// and the owner's answer on seeing them was that a row of three short words
 /// is a sentence to read where three marks are a thing to aim at.
 enum ChromeLabels {
-  /// The word, everywhere.
   words,
 
   /// Buttons, tabs and toggles become glyphs; panel titles stay text.
   icons,
 
-  /// Panel titles too.
   iconsEverywhere,
 }
 
@@ -341,8 +326,6 @@ const double uiScaleBaseline = 1.1;
 /// half, so its percentages are against the new 100% rather than the old one.
 double effectiveUiScale(double userScale) => userScale * uiScaleBaseline;
 
-/// Interface (Settings → Interface): UI scale and tooltips, plus the two
-/// editing preferences that make Lumit behave the Vegas way.
 class InterfaceSettings {
   /// The user's own scale factor, 1.0 being the shipped size — *not* what the
   /// interface is scaled by, which is this over [uiScaleBaseline].
@@ -409,7 +392,6 @@ class InterfaceSettings {
   /// milliseconds is part of the words round it, not a pause of its own.
   int transcriptPauseMs;
 
-  /// Whether the Transcript panel keeps the word being played in view.
   bool transcriptFollow;
 
   /// Whether the Transcript panel shows the words that were cut out,
@@ -454,7 +436,6 @@ class InterfaceSettings {
   /// snapping off. Turned on with the Vegas key preset.
   bool cutVegasDrags;
 
-  /// How wide the Cut timeline's track heads are, dragged at their edge.
   double cutHeadWidth;
 
   /// The Frames switch on the Cut and Audio timelines: sound moves in whole
@@ -465,8 +446,6 @@ class InterfaceSettings {
   /// Nought draws no line, and a negative number holds it until reset.
   int peakHoldSeconds;
 
-  /// What a file with more than one audio stream becomes when it is added to
-  /// a composition.
   StreamsArrival streamsArrival;
 
   /// Whether a video placed in the Cut timeline keeps its sound on its
@@ -522,7 +501,6 @@ class InterfaceSettings {
   /// the single wave and the stack alike.
   bool waveformsFromBottom;
 
-  /// How a waveform's height follows its level. Square root by default.
   WaveformScale waveformScale;
 
   /// Whether the Viewer bar carries its tone map button.
@@ -539,15 +517,12 @@ class InterfaceSettings {
   /// dragged, and a layer dragged under one still snaps to it.
   bool viewerGuidesLocked;
 
-  /// Whether the Viewer's rulers count in percent of the frame, not in pixels.
   bool viewerRulerPercent;
 
   /// Whether lining the selection up goes to the first picked layer's edge,
   /// rather than the edge of the box round them all.
   bool alignToFirstPicked;
 
-  /// Whether an orbit in the Viewer turns the other way across, and up and
-  /// down. Off by default.
   bool invertOrbitAcross;
   bool invertOrbitUpDown;
 
@@ -620,7 +595,6 @@ class InterfaceSettings {
         final bars => bars,
       };
 
-  /// Where the toolbar stands under `shape`, by the same rule.
   ToolBarPosition toolBarPositionFor(ThemeShape shape) =>
       switch (toolBarPosition) {
         ToolBarPosition.auto => shape == ThemeShape.desk
@@ -641,20 +615,16 @@ class InterfaceSettings {
   /// as the next, for anyone who types and scrubs and never touches a track.
   bool rangeSliders;
 
-  /// Whether the top line carries the command box that opens the palette.
   bool commandBox;
 
   /// Whether a right-click on empty node graph canvas opens node search. On by
   /// default, and each of the three ways in turns off on its own.
   bool rightClickOpensNodeSearch;
 
-  /// Whether Tab over a focused node graph canvas opens node search.
   bool tabOpensNodeSearch;
 
-  /// Whether Shift+A over a focused node graph canvas opens node search.
   bool shiftAOpensNodeSearch;
 
-  /// How node graph wires run: curved by default.
   WireStyle wireStyle;
 
   /// Which weight the icon set draws at, or the style's own.

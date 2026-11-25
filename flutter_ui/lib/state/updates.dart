@@ -50,15 +50,8 @@ import 'package:lumit_flutter/state/win32.dart'
 // here because the updater's own tests name it.
 export 'download.dart' show AssetDownloader;
 
-/// The repository releases are published from (the website reads the same one).
 const String updatesRepository = 'luminalmvm/lumit';
 
-/// The recent releases, pre-releases among them. Both channels read it: the
-/// newest is picked out of it, and every release skipped on the way there
-/// lists its changes under the update button.
-// ponytail: one page of 100. A stable build only misses its update if a
-// hundred nightlies go out between two releases; page through if that ever
-// happens.
 Uri get recentReleasesUrl => Uri.parse(
     'https://api.github.com/repos/$updatesRepository/releases?per_page=100');
 
@@ -77,22 +70,16 @@ const Duration updateCheckInterval = Duration(hours: 24);
 /// The order is the order a successful update walks through them; [upToDate]
 /// and [failed] are both endings that go back to being able to check again.
 enum UpdateStage {
-  /// Nothing has been asked yet this session.
   idle,
 
-  /// A check is in flight.
   checking,
 
-  /// Checked, and this is the newest Lumit there is.
   upToDate,
 
-  /// A newer release exists and has an installer for this machine.
   available,
 
-  /// That installer is coming down now.
   downloading,
 
-  /// It is on disk, verified, and waiting for a restart.
   ready,
 
   /// The check or the download did not finish. Recoverable: the menu goes back
@@ -100,7 +87,6 @@ enum UpdateStage {
   failed,
 }
 
-/// How a downloaded release gets applied.
 enum UpdateDelivery {
   /// Unpacked beside the installation and swapped in on restart — no installer,
   /// no elevation, the way Chrome and VS Code do it. What a per-user
@@ -116,7 +102,6 @@ enum UpdateDelivery {
   flatpakBundle,
 }
 
-/// A release that is newer than this build, and the file to fetch for it.
 @immutable
 class UpdateRelease {
   /// The version without its leading `v` — `0.2.0`.
@@ -125,10 +110,8 @@ class UpdateRelease {
   /// The tag as GitHub has it — `v0.2.0`.
   final String tag;
 
-  /// The release's page, for the notes.
   final String pageUrl;
 
-  /// The attachment that suits this machine.
   final String assetName;
   final Uri assetUrl;
 
@@ -136,7 +119,6 @@ class UpdateRelease {
   /// truncated file is caught before anything is run.
   final int assetBytes;
 
-  /// What will be done with the attachment once it is here.
   final UpdateDelivery delivery;
 
   /// The attachment's SHA-256 as `sha256:…`, when the API gives one. Newer
@@ -275,7 +257,6 @@ class UpdateRelease {
   }
 }
 
-/// [bytes] in whole MB, for a sentence a human reads.
 String megabytes(int bytes) => '${(bytes / (1 << 20)).round()} MB';
 
 /// The heading a release puts over what to read before it is applied.
@@ -287,7 +268,6 @@ String megabytes(int bytes) => '${(bytes / (1 << 20)).round()} MB';
 /// the release page after the event reaches the window on the next check.
 const String updateNoticeHeading = 'Before you update';
 
-/// One line of that section: a bullet, or a paragraph.
 typedef UpdateNoticeLine = ({bool bullet, String text});
 
 /// What a release says to read before it is applied.
@@ -360,8 +340,6 @@ List<String> releaseChangesFrom(String body) {
   return changes.reversed.toList();
 }
 
-/// Bold, code and link marks off a line: `**Glow**` reads as Glow, and a link
-/// keeps its words and loses its address.
 String _plainNotes(String line) => line
     .replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^)]*\)'), (m) => m[1]!)
     .replaceAll(RegExp(r'\*\*|__|`'), '');
@@ -506,7 +484,6 @@ int compareVersions(String a, String b) {
   return left.length.compareTo(right.length);
 }
 
-/// One build's own changes, as the update button lists them.
 typedef UpdateBuild = ({String version, List<String> changes});
 
 /// Asking GitHub what the latest release is. Injected so a test can answer
@@ -528,10 +505,8 @@ typedef ArchiveExtractor = Future<void> Function(File archive, Directory into);
 /// server that says otherwise is not one to keep reading from.
 typedef SmallFileFetcher = Future<List<int>> Function(Uri url, int maxBytes);
 
-/// Starting the freshly swapped-in Lumit, once the old one is about to go.
 typedef Relauncher = Future<void> Function(File launcher);
 
-/// Ending the process so the installer can replace the files underneath it.
 typedef Quitter = void Function();
 
 /// The whole update state machine, shared by the Help menu and Settings.
@@ -556,7 +531,6 @@ class UpdateService extends ChangeNotifier {
   /// Which Mac build to look for ([currentMacArch]); set outright in tests.
   final String macArch;
 
-  /// Where this copy of Lumit lives and whether it may replace itself.
   final InstallSite site;
 
   final ReleaseFetcher _fetch;
@@ -616,7 +590,6 @@ class UpdateService extends ChangeNotifier {
   UpdateRelease? _release;
   List<UpdateBuild> _builds = const [];
 
-  /// The notice of the release that is running, when the last check saw it.
   List<UpdateNoticeLine> _said = const [];
   File? _downloaded;
   double _progress = 0;
@@ -633,10 +606,8 @@ class UpdateService extends ChangeNotifier {
   /// without anybody finding a switch first.
   bool get followsNightly => _nightlyChoice() ?? runningNightly;
 
-  /// Whether the Lumit that is running is a nightly build.
   bool get runningNightly => isNightlyVersion(currentVersion() ?? '');
 
-  /// The release that is waiting, once one has been found.
   UpdateRelease? get release => _release;
 
   /// What the waiting update brings, a build at a time and newest first: the
@@ -655,19 +626,14 @@ class UpdateService extends ChangeNotifier {
   /// How far the download has got, 0 to 1. Zero at every other stage.
   double get progress => _progress;
 
-  /// How much the download in progress fetches: the whole file, or only the
-  /// pieces a patch needs.
   int get downloadBytes => _downloadBytes;
 
   /// Why the last attempt did not finish, in a sentence fit for the status
   /// line. Null unless [stage] is [UpdateStage.failed].
   String? get failure => _failure;
 
-  /// The installer on disk, once [UpdateStage.ready].
   File? get downloadedInstaller => _downloaded;
 
-  /// Whether something is in flight, and so neither the menu row nor the
-  /// Settings button should be pressable.
   bool get busy =>
       _stage == UpdateStage.checking || _stage == UpdateStage.downloading;
 
@@ -689,7 +655,6 @@ class UpdateService extends ChangeNotifier {
         _ => l10n.updateCheckFor,
       };
 
-  /// Whether enough time has passed to look again.
   bool dueForCheck(int lastCheckedMillis) =>
       _now() - lastCheckedMillis >= updateCheckInterval.inMilliseconds;
 
@@ -772,7 +737,6 @@ class UpdateService extends ChangeNotifier {
         _builds = const [];
       }
     } on HttpException catch (e) {
-      // GitHub's answer, such as a 403 when its hourly limit is used up.
       _fail(e.message);
       return;
     } catch (_) {
@@ -921,14 +885,11 @@ class UpdateService extends ChangeNotifier {
         return true;
       }
     } catch (_) {
-      // Whatever went wrong, the whole file is still there to fetch.
     }
     _discard(into);
     return false;
   }
 
-  /// Abandon a download in progress. Safe at any other stage, where it does
-  /// nothing.
   void cancelDownload() {
     if (_stage != UpdateStage.downloading) return;
     _cancelRequested = true;
@@ -1036,8 +997,6 @@ class UpdateService extends ChangeNotifier {
       return l10n.updateNotInManifest;
     }
 
-    // The signature held up. Now the file has to be one the manifest names,
-    // at the size and digest it names it at.
     final signed = manifest?.assetNamed(release.assetName);
     if (signed == null || signed.size != length || signed.sha256 != digest) {
       return l10n.updateNotInManifest;
@@ -1050,11 +1009,6 @@ class UpdateService extends ChangeNotifier {
   /// answer.
   UpdateDelivery get delivery => _release?.delivery ?? UpdateDelivery.installer;
 
-  /// Whether finishing the update means leaving the application.
-  ///
-  /// True for the two that replace what is running — the in-place swap and the
-  /// installer. False for a Flatpak, where Lumit only hands the file over and
-  /// carries on.
   bool get installQuits => delivery != UpdateDelivery.flatpakBundle;
 
   /// Apply the update that is waiting, whichever of the three ways this
@@ -1146,7 +1100,6 @@ class UpdateService extends ChangeNotifier {
     await _restart();
   }
 
-  /// Start the new Lumit and leave.
   Future<void> _restart() async {
     try {
       await _relaunch(site.launcher);
@@ -1183,8 +1136,6 @@ class UpdateService extends ChangeNotifier {
     notifyListeners();
   }
 }
-
-// --- The real implementations ---------------------------------------------
 
 int _epochMillis() => DateTime.now().millisecondsSinceEpoch;
 

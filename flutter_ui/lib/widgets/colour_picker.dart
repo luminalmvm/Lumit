@@ -48,8 +48,6 @@ import 'screen_dropper.dart';
 /// A hue/saturation/value triple: `h` in [0, 360), `s` and `v` in [0, 1].
 typedef Hsv = (double h, double s, double v);
 
-/// Convert HSV to an opaque RGB colour. Thin wrapper over [hsvToChannels] so
-/// tests can pin an exact conversion table.
 Color hsvToRgb(double h, double s, double v) {
   final (r, g, b) = hsvToChannels(h, s, v);
   int ch(double f) => (f * 255).round().clamp(0, 255);
@@ -157,7 +155,6 @@ double screenOf(double linear) {
   return linear < 0 ? -e : e;
 }
 
-/// The inverse of [screenOf]: what a screen shows, back to scene-linear light.
 double linearOf(double screen) {
   final a = screen.abs();
   final l =
@@ -178,8 +175,6 @@ abstract final class ColourClipboard {
   /// as a screen shows it.
   static void copy(PickedColour colour, {bool linear = false}) {
     _copied = colour;
-    // The hex goes on the system clipboard as well, so the colour can be
-    // pasted outside Lumit too.
     _text = '#${formatHex((linear ? colour.onScreen : colour).clipped)}';
     Clipboard.setData(ClipboardData(text: _text!));
   }
@@ -212,8 +207,6 @@ abstract final class ColourClipboard {
   }
 }
 
-/// A colour well's right-click at [at]: back to its default where it has
-/// one, then its colour to and from the shared clipboard.
 Future<void> showColourWellMenu(
   BuildContext context,
   Offset at, {
@@ -312,15 +305,11 @@ class PickedColour {
         0xff,
       );
 
-  /// True when a channel lies outside what a screen can show, so the swatch and
-  /// the hex are both standing in for something bigger.
   bool get outOfGamut => r < 0 || g < 0 || b < 0 || r > 1 || g > 1 || b > 1;
 
-  /// This scene-linear colour as a screen shows it ([screenOf]).
   PickedColour get onScreen =>
       PickedColour(screenOf(r), screenOf(g), screenOf(b));
 
-  /// This colour as a screen shows it, back to scene-linear ([linearOf]).
   PickedColour get inLinear =>
       PickedColour(linearOf(r), linearOf(g), linearOf(b));
 
@@ -492,15 +481,12 @@ Future<void> showColourPicker({
 /// this is here so the next one does not, and so the picker is opened the same
 /// way everywhere.
 class ColourSwatchButton extends StatelessWidget {
-  /// What the chip shows, and what the picker opens on.
   final Color colour;
 
   /// Called with each colour chosen. The picker applies as it goes, so this
   /// runs on every change and once more when the choice settles.
   final ValueChanged<PickedColour> onPicked;
 
-  /// Which numbers the picker shows: a display colour is 0—255, a
-  /// scene-linear one is 0—1 and may leave it.
   final ColourScale scale;
 
   /// The exact numbers the picker opens on, where [colour] is only what a
@@ -508,7 +494,6 @@ class ColourSwatchButton extends StatelessWidget {
   /// been rounded to a byte. Null opens on [colour].
   final PickedColour? initial;
 
-  /// How far past white the picker may go, under [ColourScale.unit].
   final double max;
 
   /// Called on every tick of a drag, to show it before it settles. Null calls
@@ -594,7 +579,6 @@ class _ColourPickerBody extends StatefulWidget {
   final PickedColour initial;
   final List<Color> presets;
 
-  /// The project's colour shelf, or null when no project is open.
   final SwatchShelf? shelf;
 
   /// The last colours applied through the picker, newest first, and where the
@@ -637,7 +621,6 @@ class _ColourPickerBody extends StatefulWidget {
 
 class _ColourPickerBodyState extends State<_ColourPickerBody>
     implements TextSelectionGestureDetectorBuilderDelegate {
-  /// The hex field, for the press, drag and right-click every field has.
   final GlobalKey<EditableTextState> _hexKey = GlobalKey();
   @override
   GlobalKey<EditableTextState> get editableTextKey => _hexKey;
@@ -697,14 +680,10 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
     return (s > 0 ? h : _ring.$1, v > 0 ? s : _ring.$2, v);
   }
 
-  /// Push the current colour back into the hex field unless the user is
-  /// typing there right now.
   void _syncHex() {
     if (!_hexFocus.hasFocus) _hexController.text = formatHex(_colour.clipped);
   }
 
-  /// Take a new colour and show it everywhere: the square, the strip, the
-  /// numbers, the hex box — and the thing being coloured.
   void _apply(PickedColour next, {required bool settled, required Hsv ring}) {
     final clamped = PickedColour(
       next.r.clamp(widget.min, widget.max),
@@ -751,11 +730,9 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
     );
   }
 
-  /// A colour arriving whole — a preset, a hex, Cancel's restore.
   void _setColour(PickedColour colour, {required bool settled}) =>
       _apply(colour, settled: settled, ring: _ringFor(colour));
 
-  /// One of the three channel numbers, in the scale being edited.
   void _setChannel(int index, double value, {required bool settled}) {
     final v = widget.scale == ColourScale.bytes
         ? value / 255
@@ -787,13 +764,9 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
   void _commitHex() {
     final parsed = parseHex(_hexController.text);
     if (parsed != null) _setColour(PickedColour.of(parsed), settled: true);
-    // Snap the field back to the canonical form (or the unchanged colour on a
-    // rejected entry).
     _hexController.text = formatHex(_colour.clipped);
   }
 
-  /// What a channel field shows: bytes under the 8-bit scale, the value itself
-  /// under the unit one, in linear light for a scene-linear colour.
   double _shown(double channel) => widget.scale == ColourScale.bytes
       ? (channel * 255).roundToDouble()
       : widget.linear
@@ -809,9 +782,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // The three numbers, above the graph, as the egui picker had them:
-        // each draggable and typeable, and each one changes the colour under
-        // the pointer immediately.
         Row(
           children: [
             _channelField(t, 'R', 0, _colour.r),
@@ -822,7 +792,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
           ],
         ),
         const SizedBox(height: 8),
-        // Saturation / value square.
         GestureDetector(
           key: const Key('colour-picker-square'),
           behavior: HitTestBehavior.opaque,
@@ -839,7 +808,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
           ),
         ),
         const SizedBox(height: 8),
-        // Hue strip.
         GestureDetector(
           key: const Key('colour-picker-strip'),
           behavior: HitTestBehavior.opaque,
@@ -854,8 +822,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
           ),
         ),
         const SizedBox(height: 8),
-        // What it was beside what it is now, then the hex field. Clicking the
-        // old half goes back to it.
         Row(
           children: [
             _beforeAndAfter(t),
@@ -896,8 +862,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
             ),
           ),
         ],
-        // The project's own colours, and the way to keep one. Only with a
-        // project open: with none there is no shelf to keep them on.
         if (widget.shelf != null) ...[
           const SizedBox(height: 8),
           _shelfStrip(t),
@@ -934,8 +898,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
     );
   }
 
-  /// One channel: a drag-and-type field, labelled by its letter, over whatever
-  /// the scale and the parameter's own bounds allow.
   Widget _channelField(LumitTheme t, String label, int index, double channel) {
     final bytes = widget.scale == ColourScale.bytes;
     return Expanded(
@@ -1042,8 +1004,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
           const SizedBox(width: 2),
           SizedBox(
             width: 72,
-            // The whole well answers a press, a drag and a right-click, as
-            // every field does.
             child: _hexGestures.buildGestureDetector(
               child: Container(
                 padding:
@@ -1208,8 +1168,6 @@ class _ColourPickerBodyState extends State<_ColourPickerBody>
       );
 }
 
-/// The saturation/value field: a white→pure-hue horizontal gradient under a
-/// transparent→black vertical overlay, with a ring at the current pick.
 class _SvSquarePainter extends CustomPainter {
   final double hue, s, v;
   const _SvSquarePainter({required this.hue, required this.s, required this.v});
@@ -1247,7 +1205,6 @@ class _SvSquarePainter extends CustomPainter {
       old.hue != hue || old.s != s || old.v != v;
 }
 
-/// The six-stop HSV rainbow, with a ring at the current hue.
 class _HueStripPainter extends CustomPainter {
   final double hue;
   const _HueStripPainter({required this.hue});
@@ -1270,8 +1227,6 @@ class _HueStripPainter extends CustomPainter {
   bool shouldRepaint(_HueStripPainter old) => old.hue != hue;
 }
 
-/// A two-tone marker ring: a black outer stroke over a white inner one, so it
-/// stays visible on any underlying colour.
 void _drawRing(Canvas canvas, Offset centre) {
   final black = documentColour(0, 0, 0, 0xff);
   final white = documentColour(0xff, 0xff, 0xff, 0xff);

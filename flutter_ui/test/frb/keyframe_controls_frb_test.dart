@@ -55,7 +55,6 @@ void main() {
       await tester.pump();
     }
 
-    /// The opacity row's animation, whatever shape it is in.
     BridgeScalar opacityOf(LayerReference layer) =>
         layer.getTransform().opacity;
 
@@ -87,7 +86,6 @@ void main() {
         (tester) async {
       final p = withLayer();
 
-      // A ramp from 0 at frame 0 to 100 at frame 100.
       p.layer.setTransform(
         prop: BridgeTransformProp.opacity,
         value: BridgeScalar.keyframed([
@@ -122,7 +120,6 @@ void main() {
       p.uiState.playheadFrame.value = 0;
       await mount(tester, p);
 
-      // Animate, then move on and add a second key.
       await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
       await tester.pump();
       p.uiState.playheadFrame.value = 60;
@@ -138,7 +135,6 @@ void main() {
         reason: 'keys stay strictly ascending in time',
       );
 
-      // The same button removes the key it just added.
       await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-opacity')));
       await tester.pump();
       keys = (opacityOf(p.layer) as BridgeScalar_Keyframed).field0;
@@ -176,7 +172,6 @@ void main() {
       await tester.pump();
       expect(p.uiState.playheadFrame.value, 90);
 
-      // Past the last key there is nowhere to go, and the arrow is inert.
       await tester.tap(find.byKey(const ValueKey('kf-next-tf-opacity')));
       await tester.pump();
       expect(p.uiState.playheadFrame.value, 90,
@@ -196,7 +191,6 @@ void main() {
       expect(before.positionX, isA<BridgeScalar_Static>());
       expect(before.positionY, isA<BridgeScalar_Static>());
 
-      // Position's stopwatch — one control, two properties.
       await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-positionX')));
       await tester.pump();
 
@@ -231,7 +225,6 @@ void main() {
     // a single scalar, so a colour row asked for no controls and drew none.
     // -------------------------------------------------------------------
 
-    /// The four channels of a `colour_control` effect's colour parameter.
     BridgeColour colourOf(LayerReference layer) {
       final info = layer.getEffects().single.getInfo();
       for (final p in info.values) {
@@ -243,8 +236,6 @@ void main() {
     List<BridgeKeyframe> keysOf(BridgeScalar s) =>
         s is BridgeScalar_Keyframed ? s.field0 : const [];
 
-    /// The whole flow the owner asked for: key it, move on, change it, and
-    /// find two keys with the picture between them interpolating.
     testWidgets('keyframing a colour: one key, then a second, then a ramp',
         (tester) async {
       final p = withLayer();
@@ -271,14 +262,12 @@ void main() {
       expect(keysOf(keyed.r).single.value, closeTo(wasRed, 1e-6),
           reason: 'turning animation on must not move the picture');
 
-      // Move on, and change the colour through the swatch's own picker.
       p.uiState.playheadFrame.value = 48;
       await tester.pump();
       await tester.tap(find.byKey(ValueKey<String>('fx-colour-$id-colour')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('colour-picker-R')));
       await tester.pumpAndSettle();
-      // Down to nothing, which the default red is not.
       await tester.enterText(find.byType(EditableText).first, '0');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
@@ -293,14 +282,11 @@ void main() {
       expect(red.first.value, closeTo(wasRed, 1e-6));
       expect(red.last.value, closeTo(0, 1e-6));
 
-      // And between them the channel really ramps — a curve, not a step.
       final middle =
           sampleScalar(scalar: ramped.r, time: p.comp.timeOfFrame(frame: 24));
       expect(middle, lessThan(red.first.value));
       expect(middle, greaterThan(red.last.value));
     });
 
-    // Without the built library there is nothing to test against; the harness
-    // throws with the command to run.
   }, skip: !engineAvailable);
 }

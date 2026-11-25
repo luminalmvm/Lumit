@@ -34,15 +34,10 @@ library;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 
-/// The translation of an engine-supplied label, or [english] unchanged if there
-/// is no entry for it.
 String engineLabel(String english) => _table[english] ?? english;
 
-/// Whether [english] is a label this table knows — what the sync test asserts.
 bool hasEngineLabel(String english) => _table.containsKey(english);
 
-/// What deleting the things called [names] reads as in Edit > History: the
-/// thing's own name for one, else the command's.
 String deleteStepName(List<String> names) =>
     names.length == 1 ? l10n.histDeleteNamed(names.single) : 'Delete';
 
@@ -367,7 +362,6 @@ Map<String, String> get _built => {
       "Edge": l10n.fxEdge,
       "Edge margin": l10n.fxEdgeMargin,
       "Edit lens…": l10n.fxEditLens,
-      // Denoise: its controls, views and groups.
       "Denoise": l10n.fxDenoise,
       "Removed noise": l10n.fxRemovedNoise,
       "Frames blended": l10n.fxFramesBlended,
@@ -397,7 +391,6 @@ Map<String, String> get _built => {
       "Spatial": l10n.fxSpatial,
       "Spatial by size": l10n.fxSpatialBySize,
       "Finish": l10n.fxFinish,
-      // Energy line: its controls, its noise types and its looks.
       "Paths": l10n.fxPaths,
       "One after another": l10n.fxOneAfterAnother,
       "All at once": l10n.fxAllAtOnce,
@@ -433,8 +426,6 @@ Map<String, String> get _built => {
       "Toxic": l10n.fxToxic,
       "Wind direction": l10n.fxWindDirection,
       "Wind speed": l10n.fxWindSpeed,
-      // The Flare window: kinds, places, controls and colour modes the
-      // engine's flare tables send.
       "Edit flare…": l10n.fxEditFlare,
       "Fringe": l10n.fxFringe,
       "Thickness": l10n.fxThickness,
@@ -1097,7 +1088,6 @@ Map<String, String> get _built => {
       "Pulse": l10n.fxPulse,
       "Envelope": l10n.fxEnvelope,
       "Time since last": l10n.fxTimeSinceLast,
-      // A Model layer's Animation and parts' rows.
       "Animation": l10n.fxAnimation,
       "Freeze": l10n.fxFreeze,
       "Part": l10n.fxPart,
@@ -2205,7 +2195,6 @@ Map<String, String> get _built => {
       "Z wave phase": l10n.fxZWavePhase,
       "Zebra": l10n.fxZebra,
       "Zoom": l10n.fxZoom,
-      // A Model layer's material rows, and their presets.
       "Material": l10n.fxMaterial,
       "Geometry options": l10n.fxGeometryOptions,
       "Extrusion depth": l10n.fxExtrusionDepth,
@@ -2246,7 +2235,6 @@ Map<String, String> get _built => {
       "Plastic": l10n.fxPlastic,
       "Rubber": l10n.fxRubber,
       "Emissive": l10n.fxEmissive,
-      // The looks a cut's Transition menu offers.
       "Flip": l10n.fxFlip,
       "Shutters": l10n.fxShutters,
       "Dip to black": l10n.fxDipToBlack,
@@ -2257,7 +2245,6 @@ Map<String, String> get _built => {
       "Glitch": l10n.fxGlitch,
       "Glitch slices": l10n.fxGlitchSlices,
       "Pixelate": l10n.fxPixelate,
-      // Move, and its looks. Zoom in and Zoom out share the keymap's words.
       "Move": l10n.fxMove,
       "Moves": l10n.fxMoves,
       "Outgoing": l10n.fxOutgoing,
@@ -2281,21 +2268,16 @@ Map<String, String> get _built => {
       "RGB whip": l10n.fxRgbWhip,
       "Zoom spin": l10n.fxZoomSpin,
       "Hit": l10n.fxHit,
-      // Light leak, and its looks.
       "Light leak": l10n.fxLightLeak,
       "Film burn": l10n.fxFilmBurn,
-      // Slices, and its looks.
       "Slices": l10n.fxSlices,
       "Slice glitch": l10n.fxSliceGlitch,
       "Alternate": l10n.fxAlternate,
       "Random order": l10n.fxRandomOrder,
-      // Luma fade's patterns, and its looks.
       "Diamonds": l10n.fxDiamonds,
       "Blocks": l10n.fxBlocks,
       "Noise dissolve": l10n.fxNoiseDissolve,
       "Soft iris": l10n.fxSoftIris,
-      // Settings -> Keymap: what each shortcut does, and the headings saying
-      // where it is live (crates/lumit-keymap/src/lib.rs).
       "Play or pause": l10n.keyPlayOrPause,
       "Shuttle backwards": l10n.keyShuttleBackwards,
       "Shuttle pause": l10n.keyShuttlePause,
@@ -2675,9 +2657,6 @@ Map<String, String> get _built => {
       "Show or hide the Audio panel": l10n.keyShowOrHideTheAudioPanel,
       "Show or hide the Text panel": l10n.keyShowOrHideTheTextPanel,
       "Show or hide the Paragraph panel": l10n.keyShowOrHideTheParagraphPanel,
-      // Edit > History: what each edit calls itself
-      // (crates/lumit-core/src/ops.rs `Op::name`). One phrase per operation
-      // the engine has, in the voice of the menu row that makes it.
       "Add item": l10n.histAddItem,
       "Delete item": l10n.histDeleteItem,
       "Relink footage": l10n.histRelinkFootage,
@@ -2844,8 +2823,6 @@ Map<String, String> get _built => {
       "Set loudness target": l10n.histSetLoudnessTarget,
       "Record automation": l10n.histRecordAutomation,
       "Normalise mix": l10n.histNormaliseMix,
-      // The mark the Audio timeline writes, which reads in the history under
-      // the same words the row carries.
       "Sound mix": l10n.timelineSoundMix,
       "Set beat grid": l10n.histSetBeatGrid,
       "Several changes": l10n.histSeveralChanges,
@@ -2876,7 +2853,6 @@ Map<String, String> get _built => {
 String? importReason(String key, Map<String, String> args) {
   String a(String name) => engineLabel(args[name] ?? '');
   switch (key) {
-    // Items and compositions.
     case 'item_unreadable':
       return l10n.aeItemUnreadable;
     case 'comp_missing':
@@ -2909,7 +2885,6 @@ String? importReason(String key, Map<String, String> args) {
     case 'ocio_config_not_found':
       return l10n.aeOcioConfigNotFound(a('config'));
 
-    // Layers.
     case 'layer_unreadable':
       return l10n.aeLayerUnreadable;
     case 'layer_kind_unsupported':
@@ -2961,7 +2936,6 @@ String? importReason(String key, Map<String, String> args) {
     case 'control_value_not_carried':
       return l10n.aeControlValueNotCarried(a('control'));
 
-    // Properties and keyframes.
     case 'spatial_tangents_flattened':
       return l10n.aeSpatialTangentsFlattened;
     case 'expression_carried':
@@ -2979,13 +2953,11 @@ String? importReason(String key, Map<String, String> args) {
     case 'structure_unreadable':
       return l10n.aeStructureUnreadable(a('count'));
 
-    // Masks.
     case 'mask_feather_axes_differ':
       return l10n.aeMaskFeatherAxesDiffer(a('x'), a('y'));
     case 'mask_roto_bezier_flattened':
       return l10n.aeMaskRotoBezierFlattened;
 
-    // Effects.
     case 'effect_placeholder':
       return l10n.aeEffectPlaceholder(a('match_name'));
     case 'effect_params_unreadable':
@@ -3004,7 +2976,6 @@ String? importReason(String key, Map<String, String> args) {
     case 'effect_param_rebased':
       return l10n.aeEffectParamRebased(a('effect'), a('param'));
 
-    // Third-party effects.
     case 'effect_as_plugin':
       return l10n.aeEffectAsPlugin(
           a('match_name'), a('plugin'), a('carried'), a('controls'));
@@ -3014,7 +2985,6 @@ String? importReason(String key, Map<String, String> args) {
   }
 }
 
-/// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasImportReason(String key) => importReason(key, const {}) != null;
 
 /// The one-line reason for a line of the Lottie and SVG window's check
@@ -3176,8 +3146,6 @@ String? _colourRefusal(String key, String Function(String) a) {
     case 'config_unreadable':
       return l10n.ocioConfigUnreadable(a('path'));
 
-    // Things a config may legitimately contain that Lumit's v1 transform set
-    // does not implement. Each names what it refused.
     case 'unsupported_transform':
       return l10n.ocioUnsupportedTransform(a('name'));
     case 'unsupported_builtin':
@@ -3199,7 +3167,6 @@ String? _colourRefusal(String key, String Function(String) a) {
     case 'unsupported_config_version':
       return l10n.ocioUnsupportedConfigVersion(a('version'));
 
-    // The config is supported in principle but does not hold up.
     case 'unknown_colour_space':
       return l10n.ocioUnknownColourSpace(a('name'));
     case 'unknown_role':
@@ -3226,7 +3193,6 @@ String? _colourRefusal(String key, String Function(String) a) {
   }
 }
 
-/// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasColourProblem(String key) => colourProblem(key, const {}) != null;
 
 // ---------------------------------------------------------------------------
@@ -3283,7 +3249,6 @@ String? effectBadge(String key, [String? detail]) {
   }
 }
 
-/// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasEffectBadge(String key) => effectBadge(key) != null;
 
 /// What a model pack does, for the line under its name on the Addons page.

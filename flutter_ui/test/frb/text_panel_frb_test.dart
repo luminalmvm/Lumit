@@ -1,5 +1,3 @@
-// The Text and Paragraph panels on frb: what they write to a selected text
-// layer, and what they keep for new text when none is selected.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,7 +34,6 @@ void main() {
     await tester.pump();
   }
 
-  /// Type [value] into the value well keyed [name].
   Future<void> typeInto(WidgetTester tester, String name, String value) async {
     await tester.tap(find.byKey(ValueKey<String>(name)));
     await tester.pump();
@@ -115,7 +112,6 @@ void main() {
       await typeInto(tester, 'text-scale-x', '50');
       expect(text.getText()!.style.scaleX, 50);
 
-      // Auto leading shows the number it comes to, and unticking keeps it.
       expect(text.getText()!.style.leading, isNull);
       await tester.tap(find.byKey(const ValueKey('text-leading-auto')));
       await tester.pump();
@@ -162,7 +158,6 @@ void main() {
       );
       p.uiState.selectedLayer.value = text;
       await mount(tester, p, const TextPanelFrb());
-      // The font list arrives a moment after the panel does.
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pump();
@@ -186,7 +181,6 @@ void main() {
       );
       p.uiState.selectedLayer.value = text;
       await mount(tester, p, const TextPanelFrb());
-      // The axes arrive a moment after the panel does.
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pump();
@@ -198,7 +192,6 @@ void main() {
       expect(style.axes.single.tag, 'wght');
       expect(style.axes.single.value, 650);
 
-      // Reset puts every axis back where the face sets it.
       await tester.tap(find.byKey(const ValueKey('text-axes-reset')));
       await tester.pump();
       expect(text.getText()!.style.axes, isEmpty);
@@ -238,8 +231,6 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p, const ParagraphPanelFrb());
 
-      // Right-aligned text holds its right edge, so the anchor follows the
-      // edge across to the other side of the words.
       final before = anchorX(text);
       await tester.tap(find.byKey(const ValueKey('paragraph-align-right')));
       await tester.pump();

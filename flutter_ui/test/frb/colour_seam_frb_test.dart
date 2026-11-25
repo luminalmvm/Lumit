@@ -21,8 +21,6 @@ import 'frb_test_support.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
-/// A small, complete config: one space that is not the reference, one display
-/// with one view, and the roles the resolution walk reads.
 const goodConfig = '''
 ocio_profile_version: 1
 roles:

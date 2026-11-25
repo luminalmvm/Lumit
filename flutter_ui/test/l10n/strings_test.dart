@@ -1,10 +1,3 @@
-// The localisation seam: choosing a language, falling back when a
-// translation is missing, and surviving a settings file that names a language
-// Lumit has never heard of.
-//
-// These do not check any particular translation — a translator's work is theirs
-// to get right — only that the machinery around it cannot leave the interface
-// blank, English-when-it-should-not-be, or unable to open.
 
 import 'dart:ui' show Locale;
 

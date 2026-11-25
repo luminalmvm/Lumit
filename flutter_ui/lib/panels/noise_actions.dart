@@ -13,11 +13,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'effect_param_row_frb.dart' show EffectStackEditor;
 import 'viewer_noise_sample.dart' show learnNoise;
 
-/// The effects with a Learn button.
 const Set<String> _learns = {'denoise', 'audio_denoise'};
 
-/// Each clean-up effect's switch for "only what it takes away": Denoise's
-/// view menu, and each sound effect's own box.
 const Map<String, String> _onlyRow = {
   'denoise': 'view',
   'audio_denoise': 'noise_only',
@@ -28,12 +25,10 @@ const Map<String, String> _onlyRow = {
   'audio_voice': 'background_only',
 };
 
-/// Denoise's view menu: Result, then Removed noise.
 const int _result = 0, _removed = 1;
 
 typedef _Found = (LayerReference, BridgeEffectInstanceInfo);
 
-/// The clean-up effect the commands act on, if there is one.
 _Found? _target(LumitUiState ui, bool Function(String name) wanted) {
   final owner = ui.selectedEffectsLayer;
   if (owner != null) {
@@ -53,14 +48,11 @@ _Found? _target(LumitUiState ui, bool Function(String name) wanted) {
   return null;
 }
 
-/// Whether Learn has something to press.
 bool canLearnNoise(LumitUiState ui) => _target(ui, _learns.contains) != null;
 
-/// Whether Removed only has something to turn.
 bool canShowRemoved(LumitUiState ui) =>
     _target(ui, _onlyRow.containsKey) != null;
 
-/// Whether the effect found shows or plays only what it takes away.
 bool removedOnlyOn(LumitUiState ui) {
   final found = _target(ui, _onlyRow.containsKey);
   if (found == null) return false;
@@ -72,7 +64,6 @@ bool removedOnlyOn(LumitUiState ui) {
   };
 }
 
-/// Press Learn on the effect found. False when there is none.
 bool learnSelectedNoise(LumitUiState ui) {
   final found = _target(ui, _learns.contains);
   if (found == null) return false;
@@ -80,8 +71,6 @@ bool learnSelectedNoise(LumitUiState ui) {
   return true;
 }
 
-/// Turn the effect found over to only what it takes away, or back. False
-/// when there is none.
 bool toggleRemovedOnly(LumitUiState ui) {
   final found = _target(ui, _onlyRow.containsKey);
   if (found == null) return false;

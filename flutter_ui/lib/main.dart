@@ -1,6 +1,3 @@
-// Lumit's Flutter frontend (the frontend alternative experiment).
-// The engine stays in the Rust crates; this application is the chrome —
-// see docs/archive/flutter-port/ for the plan and the parity checklist.
 
 import 'dart:async';
 
@@ -69,10 +66,8 @@ Future<void> main(List<String> args) async {
   }
 }
 
-/// The boot splash, while it is up.
 BootSplash? _splash;
 
-/// Everything that has to happen before the shell can go on screen.
 Future<void> _start(List<String> args) async {
   // Sweep up after an update before anything else happens: delete the
   // version we have just replaced, now that nothing is holding its files, and
@@ -112,11 +107,8 @@ Future<void> _start(List<String> args) async {
   // An invite link clicked in a browser starts Lumit with the link, and the
   // Shared project window opens on it once there is a window to open it in.
   state.launchInvite = inviteFromArgs(args);
-  // And a double-clicked extension package asks to be installed.
   state.launchPackage = packagePathFromArgs(args);
-  // And a double-clicked style asks to be used.
   state.launchStyle = stylePathFromArgs(args);
-  // And a double-clicked graphics template asks to join the library.
   state.launchTemplate = templatePathFromArgs(args);
   final ui = LumitUiState(state);
   // A double-clicked theme is in use before anything is drawn.
@@ -167,7 +159,6 @@ Future<void> _start(List<String> args) async {
     clearVramCache();
   });
   unawaited(applyBackground(ui.workspace));
-  // The main window takes over from the splash once it has something on it.
   WidgetsBinding.instance.addPostFrameCallback((_) => BootSplash.handOver());
   // Somebody who double-clicked a `.lum` has already answered the welcome
   // screen's question, so it is not put to them.

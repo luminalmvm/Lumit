@@ -9,10 +9,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-/// The instruments a Scopes slot can show.
 enum ScopeKind { waveform, parade, vectorscope, histogram, chromaticity }
 
-/// How a waveform or histogram is numbered: 0 to 100, or 10-bit code values.
 enum ScopeScale { percent, tenBit }
 
 /// The vectorscope's reach: the engine plots Cb and Cr at 0.9 of the plot's
@@ -30,7 +28,6 @@ const double _xySpan = 0.9;
   return ((b - y) / 1.8556, (r - y) / 1.5748);
 }
 
-/// Where a colour lands on a vectorscope drawn in [plot], at [zoom].
 Offset vectorscopePoint(Rect plot, double r, double g, double b,
     {double zoom = 1}) {
   final (cb, cr) = _cbcr(r, g, b);
@@ -38,7 +35,6 @@ Offset vectorscopePoint(Rect plot, double r, double g, double b,
   return plot.center + Offset(cb * reach, -cr * reach);
 }
 
-/// Where an xy chromaticity lands on the CIE plot drawn in [plot].
 Offset chromaticityPoint(Rect plot, double x, double y) => Offset(
       plot.left + (x - _xyMin) / _xySpan * plot.width,
       plot.top + (1 - (y - _xyMin) / _xySpan) * plot.height,
@@ -47,7 +43,6 @@ Offset chromaticityPoint(Rect plot, double x, double y) => Offset(
 /// A 75% bar, as an 8-bit picture carries it.
 const double _bar = 191 / 255;
 
-/// The six targets: each bar's colour and the mark the trade gives it.
 const List<(double, double, double, String)> _targets = [
   (_bar, 0, 0, 'R'),
   (_bar, 0, _bar, 'Mg'),
@@ -131,15 +126,12 @@ const List<(double, double)> _locus = [
   (0.7347, 0.2653),
 ];
 
-/// The three gamuts drawn on the CIE plot, red, green and blue primaries, and
-/// the name each is known by.
 const List<(List<(double, double)>, String)> _gamuts = [
   ([(0.640, 0.330), (0.300, 0.600), (0.150, 0.060)], '709'),
   ([(0.680, 0.320), (0.265, 0.690), (0.150, 0.060)], 'P3'),
   ([(0.708, 0.292), (0.170, 0.797), (0.131, 0.046)], '2020'),
 ];
 
-/// The D65 white point.
 const (double, double) _d65 = (0.3127, 0.3290);
 
 /// The scale a trace is read against: levels for the waveform and parade, the
@@ -183,8 +175,6 @@ class ScopeGraticulePainter extends CustomPainter {
           canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), paint);
           _text(canvas, name, Offset(plot.left - 3, y), align: _Align.right);
         }
-        // The parade's three cells, so it reads as R, G and B rather than one
-        // wide trace. Each channel fills its own third in its own colour.
         if (kind == ScopeKind.parade) {
           for (var i = 1; i < 3; i++) {
             final x = plot.left + plot.width * i / 3;
@@ -232,9 +222,6 @@ class ScopeGraticulePainter extends CustomPainter {
           ],
       };
 
-  /// Hue round, saturation out from the middle: the rings and the cross are
-  /// the frame of reference, the boxes are where 75% bars land, and the skin
-  /// tone line is the one every colourist looks for.
   void _vectorscope(Canvas canvas, Paint paint) {
     final centre = plot.center;
     final radius = plot.shortestSide / 2;
@@ -253,7 +240,6 @@ class ScopeGraticulePainter extends CustomPainter {
       final p = vectorscopePoint(plot, r, g, b, zoom: z);
       canvas.drawRect(
           Rect.fromCenter(center: p, width: half * 2, height: half * 2), paint);
-      // The name sits just outside its box, away from the centre.
       final out = p - centre;
       final away = out.distance == 0 ? Offset.zero : out / out.distance;
       _text(canvas, name, p + away * (half + 8), align: _Align.centre);
@@ -264,8 +250,6 @@ class ScopeGraticulePainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// The horseshoe of pure spectral colours closed by the line of purples,
-  /// the three gamuts inside it, and the white point.
   void _chromaticity(Canvas canvas, Paint paint) {
     Offset at((double, double) xy) => chromaticityPoint(plot, xy.$1, xy.$2);
     final locus = Path()..addPolygon([for (final xy in _locus) at(xy)], true);

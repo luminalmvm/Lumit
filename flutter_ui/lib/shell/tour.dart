@@ -23,7 +23,6 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 
-/// Which side of its target a step's card stands on.
 enum TourSide { left, right, above, below }
 
 /// A state of the window that some steps need and the tour has to make: a
@@ -34,10 +33,8 @@ class TourScene {
   /// passed over while there is not.
   final bool Function() offered;
 
-  /// Put the window into this state.
   final VoidCallback enter;
 
-  /// Put the window back as the tour found it.
   final VoidCallback leave;
 
   const TourScene({
@@ -47,9 +44,7 @@ class TourScene {
   });
 }
 
-/// One stop on the tour.
 class TourStep {
-  /// The `ValueKey<String>` of the widget this step is about.
   final String target;
 
   /// Whether a key is only how the widget's own key starts. A layer's twirl is
@@ -66,7 +61,6 @@ class TourStep {
   /// one has no room for it.
   final TourSide side;
 
-  /// Whether the card points at the target, for one small enough to miss.
   final bool pointer;
 
   /// For a step that shows something shut away: what puts [target] on screen.
@@ -81,8 +75,6 @@ class TourStep {
   /// what takes that down again. Run as the tour leaves the step or ends.
   final VoidCallback? close;
 
-  /// The state of the window this step is shown in, when that is not the one
-  /// the tour found.
   final TourScene? scene;
 
   const TourStep({
@@ -102,32 +94,23 @@ class TourStep {
       prefix ? key.startsWith(wanted) : key == wanted;
 }
 
-/// The card's width. Its height is whatever the words need.
 const double _cardWidth = 288;
 
 /// How far the hole stands off its target, so the target's own edge is inside
 /// the clear part instead of under the ring.
 const double _holePad = 4;
 
-/// The air between the hole and the card, which the pointer reaches across.
 const double _cardGap = 12;
 
-/// How close to the window's edge the card may stand.
 const double _edge = 8;
 
-/// The pointer: how far it reaches from the card, and half its width there.
 const double _pointerReach = 7;
 const double _pointerHalf = 7;
 
-/// The least of a target that has to show for its step to be worth taking.
 const double _leastShown = 6;
 
-/// How many frames a step that opens something waits for its target to
-/// arrive before the tour moves on without it.
 const int _openPatience = 30;
 
-/// How far through a move the card changes its words. It has faded out by
-/// then, and fades back in over the rest.
 const double _cardSwap = 0.4;
 
 /// The tour that is up, so asking for it twice raises one.
@@ -167,8 +150,6 @@ bool showTour(
   return true;
 }
 
-/// What is on screen for the tour: where each step's target stands, by the
-/// step's place in the list, and which steps could open theirs.
 typedef _Shown = ({Map<int, Rect> rects, Set<int> openable});
 
 /// Where each step's target stands in [overlay]'s own coordinates. A step with
@@ -240,7 +221,6 @@ typedef _Placed = ({Rect card, TourSide? side});
 /// fits there, then opposite, then on either of the other two.
 _Placed _place(Size room, Size card, Rect hole, TourSide want) {
   final cut = hole.inflate(_holePad);
-  // Level with the middle of the hole, and kept inside the window.
   double along(double centre, double length, double most) =>
       (centre - length / 2)
           .clamp(_edge, math.max(_edge, most - _edge - length))
@@ -286,7 +266,6 @@ class _Tour extends StatefulWidget {
   final List<TourStep> steps;
   final OverlayState overlay;
 
-  /// What [showTour] measured before raising this.
   final _Shown shown;
   final VoidCallback onEnd;
 
@@ -302,10 +281,8 @@ class _Tour extends StatefulWidget {
 }
 
 class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
-  /// What is on screen, as of the last frame.
   late _Shown _shown = widget.shown;
 
-  /// The first step with something to point at in the window as it stands.
   late int _index = () {
     final found = [
       for (final i in _shown.rects.keys)
@@ -314,7 +291,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
     return (found.isEmpty ? _shown.rects.keys : found).reduce(math.min);
   }();
 
-  /// The scene the window is in, null for as the tour found it.
   TourScene? _scene;
 
   /// Where the step being shown was last seen. The hole stays there while the
@@ -327,7 +303,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
   late final AnimationController _move =
       AnimationController(vsync: this, value: 1);
 
-  /// The curve [_move] is read through, which is the style's own.
   Curve _curve = Curves.linear;
 
   /// Where the move set off from: the hole as it stood, and the step whose
@@ -335,22 +310,16 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
   Rect? _fromHole;
   int? _fromIndex;
 
-  /// A step that is waiting for its target to arrive, how many more frames it
-  /// will wait, and whether its own [TourStep.open] has been run yet.
   int? _opening;
   int _patience = 0;
   bool _asked = false;
 
-  /// The step whose [TourStep.open] has put something up that its
-  /// [TourStep.close] has yet to take down.
   int? _put;
 
-  /// Steps whose target never arrived after being opened. Not offered again.
   final Set<int> _unopened = {};
 
   bool _ended = false;
 
-  /// Where the card was last laid out, for the pointer drawn from it.
   final ValueNotifier<_Placed?> _placed = ValueNotifier(null);
 
   VoidCallback? _escapeRelease;
@@ -363,8 +332,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    // A surface that has taken the window: the panels' keys stand down while
-    // it is up, and Escape ends it from the dialogue rung.
     markModalMounted();
     _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
       _end();
@@ -424,7 +391,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
       if (--_patience > 0) {
         WidgetsBinding.instance.scheduleFrame();
       } else {
-        // It was asked for and nothing came of it. On past it.
         _opening = null;
         _unopened.add(opening);
         _leave(opening);
@@ -440,7 +406,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
       setState(() => _shown = shown);
       return;
     }
-    // The target has left the screen under the card.
     _shown = shown;
     _leave(_index);
   }
@@ -471,8 +436,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
     return null;
   }
 
-  /// Go to step [to], setting its scene first when the window is in another,
-  /// and opening its target when that is shut away.
   void _go(int to) {
     if (_put != to) _takeDown();
     final scene = widget.steps[to].scene;
@@ -485,7 +448,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
       _scene = scene;
       scene?.enter();
     }
-    // The follower takes it from here, a frame at a time.
     setState(() {
       _opening = to;
       _asked = false;
@@ -494,11 +456,8 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
     WidgetsBinding.instance.scheduleFrame();
   }
 
-  /// Step [to]'s target is on screen: move the hole and the card to it.
   void _arrive(int to) {
     final motion = ThemeScope.of(context).motion.tour;
-    // Nowhere to come from when the last step's target has left the screen:
-    // the hole and the card are then simply at the new one.
     final from = _holeNow;
     setState(() {
       _opening = null;
@@ -527,13 +486,9 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
     }
   }
 
-  /// Where the step being shown has its target: on screen, or where it last
-  /// was while the next step's scene is taking it away.
   Rect? get _target =>
       _shown.rects[_index] ?? (_opening == null ? null : _held);
 
-  /// The hole where it is drawn this instant, part of the way through a move
-  /// or at rest.
   Rect? get _holeNow {
     final to = _target;
     final from = _fromHole;
@@ -555,7 +510,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
     if (to != null) _go(to);
   }
 
-  /// Take down whatever a step's [TourStep.open] put up for it.
   void _takeDown() {
     final put = _put;
     if (put == null) return;
@@ -601,7 +555,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
       _index: _card(t, widget.steps[_index], _index),
       if (_fromIndex case final from?) from: _card(t, widget.steps[from], from),
     };
-    // The last step's card fades out up to the swap, and this one's in after.
     final fade = _fromIndex == null
         ? kAlwaysCompleteAnimation
         : _move.drive(TweenSequence<double>([
@@ -625,8 +578,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
             builder: (context, _) {
               final at = _move.value;
               final hole = _holeNow;
-              // Before the swap the card is still the last step's, on its way
-              // out; after it, this step's, on its way in.
               final leaving = at < _cardSwap && _fromIndex != null;
               final showing = leaving ? _fromIndex! : _index;
               final step = widget.steps[showing];
@@ -733,7 +684,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
                     small: true,
                     primary: true,
                     onPressed: _next,
-                    // The last step with anything to point at says so.
                     child:
                         Text(_after(index) == null ? l10n.done : l10n.tourNext),
                   ),
@@ -745,8 +695,6 @@ class _TourState extends State<_Tour> with SingleTickerProviderStateMixin {
       );
 }
 
-/// Stands the card beside the hole and says where it put it. Part of the way
-/// through a move it stands part of the way between its two places.
 class _CardLayout extends SingleChildLayoutDelegate {
   final Rect? from;
   final TourSide? fromSide;
@@ -756,7 +704,6 @@ class _CardLayout extends SingleChildLayoutDelegate {
   /// How far the move has got along its curve, 1 at rest.
   final double travelled;
 
-  /// Whether the card being laid out is still the last step's.
   final bool leaving;
   final ValueNotifier<_Placed?> placed;
 
@@ -803,7 +750,6 @@ class _CardLayout extends SingleChildLayoutDelegate {
       old.leaving != leaving;
 }
 
-/// The dimmed window with the hole cut in it, and the ring round the hole.
 class _WashPainter extends CustomPainter {
   final Rect? hole;
   final Color wash;
@@ -847,15 +793,12 @@ class _WashPainter extends CustomPainter {
       old.radius != radius;
 }
 
-/// The pointer from the card to the hole: a small triangle on the card's near
-/// edge, in the card's own fill and edge so the two read as one piece.
 class _PointerPainter extends CustomPainter {
   final ValueNotifier<_Placed?> placed;
   final Rect hole;
   final Color fill;
   final Color edge;
 
-  /// The card's corner, which the pointer keeps clear of.
   final double corner;
 
   _PointerPainter(
@@ -873,7 +816,6 @@ class _PointerPainter extends CustomPainter {
     if (at == null || side == null) return;
     final card = at.card;
     final clear = corner + _pointerHalf + 2;
-    // Level with the middle of the hole, as far as the card's edge reaches.
     double level(double centre, double from, double to) =>
         from + clear > to - clear
             ? (from + to) / 2

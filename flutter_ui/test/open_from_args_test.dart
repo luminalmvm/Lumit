@@ -1,6 +1,3 @@
-// The command line can name a .lum to open (the installer's file association
-// passes the document path as an argument). projectPathFromArgs picks it out:
-// the first existing .lum on the line, nothing else.
 
 import 'dart:io' hide Platform;
 
@@ -46,11 +43,9 @@ void main() {
       return taken;
     });
     try {
-      // Started by a double-click: read as the argument it is elsewhere.
       expect(projectPathFromArgs(await takeOpenRequests()), real);
       expect(await takeOpenRequests(), isEmpty, reason: 'taken once');
 
-      // Then one that came before anything was listening, and one after.
       waiting = ['lumit://join/early'];
       final asked = <List<String>>[];
       listenForOpenRequests(asked.add);

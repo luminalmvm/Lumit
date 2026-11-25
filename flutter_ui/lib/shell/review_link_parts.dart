@@ -51,13 +51,11 @@ String reviewWhen(int seconds) {
   }
 }
 
-/// What a version is, in a line: its size, how long it runs, what it weighs.
 String reviewFacts(ReviewVersion version) =>
     '${version.width} × ${version.height}'
     ' · ${timecodeOfRate(version.frames, version.fpsNum, version.fpsDen)}'
     ' · ${writtenBytes(version.size)}';
 
-/// A small boxed word in mono: a version's name.
 Widget reviewTag(LumitTheme t, String word) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
@@ -108,7 +106,6 @@ Widget _timecode(LumitTheme t, String id, String timecode,
       ),
     );
 
-/// A small frameless word that does something, for a row's own actions.
 Widget reviewAction(
         LumitTheme t, String id, Widget child, VoidCallback onPressed) =>
     HouseButton(
@@ -173,7 +170,6 @@ void reviewRowMenu(BuildContext row, Offset at, List<ReviewMenuItem?> items) {
   ));
 }
 
-/// The three dots at the end of a row, which open its menu under themselves.
 Widget _more(LumitTheme t, String id, void Function(Offset at) menu) =>
     Builder(
       builder: (context) => LumitTooltip(
@@ -194,8 +190,6 @@ Widget _more(LumitTheme t, String id, void Function(Offset at) menu) =>
       ),
     );
 
-/// The mark of the row the arrow keys are on: the accent edge the chosen
-/// link has, standing in the margin beside it.
 Widget _chosenMark(LumitTheme t, bool chosen, Widget row) => !chosen
     ? row
     : Stack(
@@ -254,7 +248,6 @@ class _ReviewScrollState extends State<ReviewScroll> {
     super.dispose();
   }
 
-  /// Which edges have more past them, as the column is laid out now.
   void _read() {
     if (!mounted || !widget.controller.hasClients) return;
     final at = widget.controller.position;
@@ -359,7 +352,6 @@ class ReviewPicture extends StatelessWidget {
     final window = MediaQuery.sizeOf(context);
     final (wide, tall) =
         whole ? (window.width - 96, window.height - 96) : (160.0, 72.0);
-    // Never drawn larger than it is.
     final scale = math.min(1.0, math.min(wide / w, tall / h));
     final empty = CustomPaint(painter: ProWashPainter(t.surface2, 0.2));
     final radius = BorderRadius.circular(t.tokens.controlRadius);
@@ -381,14 +373,7 @@ class ReviewPicture extends StatelessWidget {
           ),
           child: Image.network(
             review.pictureUrl(comment),
-            // With its maker's key, as the still is asked for.
             headers: {'X-Lumit-Owner': review.ownerKey},
-            // The server keeps the one file, so on a row it is read no
-            // larger than it is drawn. Whole, it is read as it is, and
-            // whoever shows it lets it go again.
-            // ponytail: every picture on the listed comments is asked for
-            // at once, up to the 200 a link may hold. Ask as each comes
-            // into view if links grow that many.
             cacheWidth: whole
                 ? null
                 : (w * scale * MediaQuery.devicePixelRatioOf(context)).ceil(),
@@ -406,21 +391,14 @@ class ReviewPicture extends StatelessWidget {
   }
 }
 
-/// How tall a link's row in the list stands.
 const double reviewLinkRowHeight = 56;
 
-/// One link in the window's list: its still, its title and how long ago
-/// something was last said on it, and under those what state it is in.
 class ReviewLinkRow extends StatelessWidget {
   final Review link;
 
-  /// Whether it is the one on the right, whether it has comments nobody has
-  /// looked at, and whether its composition has been edited since it went
-  /// out.
   final bool chosen, unseen, moved;
   final VoidCallback onPick;
 
-  /// Asked for its menu, with where on the screen the press was.
   final ValueChanged<Offset> onMenu;
 
   const ReviewLinkRow({
@@ -443,8 +421,6 @@ class ReviewLinkRow extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onPick,
         onSecondaryTapDown: (press) => onMenu(press.globalPosition),
-        // The same mark the Settings window gives the page in force: an
-        // accent edge, and the padding gives up what the edge takes.
         child: AnimatedContainer(
           duration: scope.motion.mark.duration,
           curve: scope.motion.mark.curve,
@@ -469,7 +445,6 @@ class ReviewLinkRow extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // What it is, and when something was last said on it.
                     Row(
                       children: [
                         Expanded(
@@ -512,7 +487,6 @@ class ReviewLinkRow extends StatelessWidget {
                             Text(l10n.reviewOpenCount(link.openCount),
                                 style:
                                     t.small.copyWith(color: t.textSecondary)),
-                          // A reviewer has said yes to the newest version.
                           if (newest.approvals.isNotEmpty)
                             Row(
                               key: ValueKey<String>(
@@ -546,9 +520,6 @@ class ReviewLinkRow extends StatelessWidget {
   }
 }
 
-/// The chosen link's still, wide, falling away into the window's own surface
-/// under its title and what the version is, with the way to another version
-/// once there is one.
 class ReviewStill extends StatelessWidget {
   final Review review;
   final ReviewVersion version;
@@ -635,11 +606,9 @@ class ReviewStill extends StatelessWidget {
   }
 }
 
-/// A link's address, with the way to copy it and the way to open it.
 class ReviewAddress extends StatefulWidget {
   final Review review;
 
-  /// Pick a friend to send it to, from a menu under [button].
   final void Function(BuildContext button)? onSendToFriend;
   const ReviewAddress({super.key, required this.review, this.onSendToFriend});
 
@@ -698,7 +667,6 @@ class _ReviewAddressState extends State<ReviewAddress> {
             ],
           ),
         ),
-        // As whoever made it, which is what the key after the address says.
         action(
             'open',
             () => unawaited(openExternalLink(widget.review.ownerUrl)),
@@ -720,7 +688,6 @@ class ReviewCommentRow extends StatefulWidget {
   final Review review;
   final ReviewComment comment;
 
-  /// Where its words mention somebody, as [reviewMentions] has it.
   final List<({int start, int end, bool me})> mentions;
 
   /// Whether it came in while the window was open, and so plays in, and
@@ -731,18 +698,14 @@ class ReviewCommentRow extends StatefulWidget {
   /// when it is a range. Null on a reply.
   final String? timecode, until;
 
-  /// The layer under the place it points at, when it points at one.
   final String? layer;
 
-  /// What was drawn with it, over the frame it was drawn on, while that is
-  /// being shown.
   final Widget? drawing;
 
   /// Null when the composition is not in the open project.
   final VoidCallback? onJump;
   final VoidCallback? onChoose, onResolve, onReply, onDrawing, onCopyLink;
 
-  /// Show its picture whole.
   final VoidCallback? onPicture;
   final VoidCallback onDelete;
 
@@ -774,7 +737,6 @@ class ReviewCommentRow extends StatefulWidget {
 class _ReviewCommentRowState extends State<ReviewCommentRow> {
   bool _hover = false;
 
-  /// Everything there is to do with the comment, at [at] on the screen.
   void _menu(Offset at) {
     final c = widget.comment;
     reviewRowMenu(context, at, [
@@ -979,8 +941,6 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
         ],
       );
 
-  /// The mark that says something was drawn, pressed to see it over its
-  /// frame and again to put it away.
   Widget _pen(LumitTheme t) {
     final shown = widget.drawing != null;
     return LumitTooltip(
@@ -1019,8 +979,6 @@ class ReviewLikeRow extends StatefulWidget {
   final List<ReviewComment> likes;
   final String timecode;
 
-  /// Whether one of them came in while the window was open, and whether the
-  /// line is the one the arrow keys are on.
   final bool arrived, chosen;
 
   /// Null when the composition is not in the open project.

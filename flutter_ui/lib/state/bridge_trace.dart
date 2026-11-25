@@ -1,5 +1,3 @@
-// The debug-build tracer for calls that cross into Rust, lifted out of
-// main.dart unchanged. See CustomHandler for why it is debug-only.
 
 import 'dart:async';
 

@@ -1,8 +1,3 @@
-// What a waveform lane asks for, and what it draws.
-//
-// No engine here: the request rule and the painter are both plain arithmetic
-// over data the bridge hands over, and both are the parts that decide whether
-// a zoomed-in wave gains detail or turns into a staircase.
 
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -31,7 +26,6 @@ BridgeAudioPeaks peaks({
       channels: 1,
     );
 
-/// One full-scale bucket, repeated.
 List<double> loud(int buckets) =>
     [for (var i = 0; i < buckets; i++) ...[-1.0, 1.0, 0.5]];
 
@@ -39,7 +33,6 @@ void main() {
   group('what a lane asks for', () {
     test('a zoomed-in view asks for a shorter window, not more buckets',
         (() {
-      // The same 800-pixel lane, showing ten seconds and then one.
       final wide = WaveformRequest.forView(
           startSeconds: 0, endSeconds: 10, pixels: 800)!;
       final close = WaveformRequest.forView(
@@ -51,7 +44,6 @@ void main() {
       // could not do.
       expect(wide.buckets, greaterThanOrEqualTo(800));
       expect(close.buckets, greaterThanOrEqualTo(800));
-      // And the close view has far more buckets per second of audio.
       final wideDensity = wide.buckets / (wide.endSeconds - wide.startSeconds);
       final closeDensity =
           close.buckets / (close.endSeconds - close.startSeconds);
@@ -104,7 +96,6 @@ void main() {
       expect(lines, isNotEmpty);
       expect(lines.every((l) => sameHue(l.colour, colours.rest)), isTrue,
           reason: 'the plain wave draws in the waveform colour, not the accent');
-      // Every stroke straddles the middle of the one lane it has.
       for (final line in lines) {
         expect(line.a.dy, lessThanOrEqualTo(16));
         expect(line.b.dy, greaterThanOrEqualTo(16));
@@ -130,8 +121,6 @@ void main() {
       );
       final lines = strokes(painter, const Size(24, 30));
       expect(lines, isNotEmpty);
-      // All three bands present, and every one of them spanning most of the
-      // lane rather than a third of it.
       for (final c in [colours.low, colours.mid, colours.high]) {
         final band = lines.where((l) => sameHue(l.colour, c));
         expect(band, isNotEmpty);
@@ -148,7 +137,6 @@ void main() {
         peaks: peaks(start: 0, end: 1, bands: 1, values: loud(32)),
         originSeconds: 0,
         secondsPerPixel: 1 / 32,
-        // The bar covers only the right half of the canvas.
         left: 16,
         right: 32,
         colours: colours,
@@ -201,7 +189,6 @@ void main() {
   });
 }
 
-/// One recorded stroke.
 class _Stroke {
   final Offset a;
   final Offset b;
@@ -209,12 +196,9 @@ class _Stroke {
   const _Stroke(this.a, this.b, this.colour);
 }
 
-/// A [Canvas] that keeps the lines instead of drawing them.
 class _RecordingCanvas implements Canvas {
   final List<_Stroke> lines = [];
 
-  /// How many times the painter asked the canvas for anything — the number
-  /// the batching is about.
   int calls = 0;
 
   @override

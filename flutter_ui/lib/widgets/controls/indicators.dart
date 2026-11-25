@@ -1,13 +1,9 @@
-// The two readouts that only report: the progress bar and the gesture pill.
 
 import 'package:flutter/material.dart';
 
 import 'base.dart';
 import 'motion.dart';
 
-/// The house progress bar: a fraction of accent fill on a `surface3` track.
-/// One shape for the status line's export and cache meters and the update
-/// download, which had each hand-rolled their own.
 class HouseProgressBar extends StatelessWidget {
   final double fraction;
   final double height;
@@ -89,7 +85,6 @@ class HintPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final tap = onTap;
     if (tap == null) return IgnorePointer(child: face(context, text));
-    // One that opens something says so under the pointer.
     return HoverMark(
       swells: true,
       builder: (context, lit) => GestureDetector(

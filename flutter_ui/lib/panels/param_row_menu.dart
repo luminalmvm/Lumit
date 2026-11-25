@@ -74,8 +74,6 @@ class ParamMenu {
   /// on a row the graph has no curve for.
   final bool onCurves;
 
-  /// Commands that only this kind of row has, at the top of the menu: a pair's
-  /// link, a rotation's order.
   final List<Widget> Function(VoidCallback close)? own;
 
   /// A menu of the row's own that opens instead and takes these rows after its
@@ -83,7 +81,6 @@ class ParamMenu {
   final void Function(BuildContext context, Offset at,
       List<Widget> Function(VoidCallback close) rows)? host;
 
-  /// The row's stopwatch, for adding and removing keyframes.
   final RowKeys? keys;
   final VoidCallback? reset;
 
@@ -107,13 +104,11 @@ class ParamMenu {
   final List<({String axis, VoidCallback set})> axisExpressions;
   final VoidCallback? removeExpression;
 
-  /// The row's expression, opened in its editor.
   final VoidCallback? editExpression;
 
   /// The expression baked into a key a frame, across the layer.
   final VoidCallback? convertExpression;
 
-  /// The row's path in the Timeline's selection.
   final String? graphPath;
 }
 
@@ -163,7 +158,6 @@ String copiedAxes(Iterable<double> values) => values
     .map((v) => double.parse(v.toStringAsFixed(4)).toString())
     .join(', ');
 
-/// The X, Y and Z of a row's axes, by place.
 String axisName(int i) => switch (i) {
       0 => l10n.viewportAxisX,
       1 => l10n.viewportAxisY,
@@ -318,7 +312,6 @@ List<Widget> paramKeyRows(
   ];
 }
 
-/// Set or remove an expression, and go to the row's curve.
 List<Widget> paramLastRows(
     BuildContext context, ParamMenu menu, VoidCallback close,
     {bool tickColumn = false}) {
@@ -397,7 +390,6 @@ List<Widget> _driveRows(
     ui.model.refresh();
   }
 
-  // A transform row: the wobble as an expression, and nothing else fits.
   if (drive.instance == null) {
     final wiggle = drive.wiggle;
     if (wiggle == null) return const [];
@@ -456,8 +448,6 @@ List<Widget> _driveRows(
     }
   }
 
-  // What a sound driver listens to: the mix, or one layer that can carry
-  // sound.
   final sources = [
     for (final e in ui.model.heldLayers)
       if (const {
@@ -556,7 +546,6 @@ Widget _pasteLink(BuildContext context, PropertyLink link, VoidCallback done) {
   }, enabled: got != null);
 }
 
-/// The groups in order, with the menu divider between those that have rows.
 List<Widget> menuGroups(List<List<Widget>> groups) {
   final out = <Widget>[];
   for (final group in groups) {

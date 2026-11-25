@@ -1,6 +1,3 @@
-// Which layers of the fronted composition are caption layers, and the few
-// things every caption surface needs from them: the one the Captions panel
-// shows, where a caption sits in frames, and the way to bring the panel up.
 
 import 'package:uuid/uuid.dart' show UuidValue;
 import 'package:lumit_flutter/main.dart';
@@ -30,11 +27,9 @@ bool isCaptionLayer(BridgeLayerEntry entry) {
   }
 }
 
-/// Note a layer just made with captions, so nobody has to ask.
 void noteCaptionLayer(LayerReference layer) =>
     _known[layer.internallayerId] = true;
 
-/// The fronted composition's caption layers, top of the stack first.
 List<BridgeLayerEntry> captionLayersIn(LumitUiState ui) => [
       for (final entry in ui.model.layers)
         if (isCaptionLayer(entry)) entry,
@@ -68,8 +63,6 @@ int captionFrame(BridgeRational t, (int, int) fps) {
   return q;
 }
 
-/// Put the Captions panel up and in front, where it is in the arrangement or
-/// beside Text and Paragraph where it is not.
 void frontCaptionsPanel(LumitUiState ui) {
   setPanelVisible(ui.split, Panel.captions, true);
   activatePanelTab(ui.split, Panel.captions);
@@ -77,8 +70,6 @@ void frontCaptionsPanel(LumitUiState ui) {
   ui.workspace.touch();
 }
 
-/// Move the playhead to the start of the caption before or after it, on the
-/// caption layer the panel would show. Says whether there was one.
 bool stepToCaption(LumitUiState ui, {required bool forward}) {
   final comp = ui.selectedComp;
   if (comp == null) return false;

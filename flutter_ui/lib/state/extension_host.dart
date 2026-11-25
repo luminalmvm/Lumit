@@ -93,23 +93,18 @@ String extensionRules(String origin, List<String> hosts) {
   ]);
 }
 
-/// The most of an answer [ExtensionHost] fetches for a page.
 const int _fetchLimit = 8 << 20;
 
-/// How often the export and a watched folder are looked at.
 const Duration _exportBeat = Duration(milliseconds: 500);
 const Duration _watchBeat = Duration(seconds: 2);
 
-/// The most often a page's line on the bottom strip changes.
 const Duration _statusBeat = Duration(milliseconds: 250);
 
-/// How often Windows is asked which window is in front.
 const Duration _focusBeat = Duration(milliseconds: 500);
 
 /// How long after an edit the page is told, so a drag is one event.
 const Duration _editSettle = Duration(milliseconds: 400);
 
-/// Why a call was refused, as the page sees it.
 class ExtensionRefusal implements Exception {
   /// `not-allowed`, `unknown-method`, `bad-params` or `failed`.
   final String code;
@@ -118,8 +113,6 @@ class ExtensionRefusal implements Exception {
   const ExtensionRefusal(this.code, this.message);
 }
 
-/// What the panel does for a host that needs a window: the Shared project
-/// window, and a folder picker.
 abstract class ExtensionSurface {
   /// Open the Shared project window, on the Join page with [invite] in it,
   /// or on the Share page with [relay] offered. The person presses the
@@ -158,7 +151,6 @@ abstract class EffectChannel {
   /// went elsewhere, or is gone.
   void cancel();
 
-  /// Where the panel's events go, while the page is up.
   void Function(String event, Map<String, Object?> data)? onEvent;
 }
 
@@ -172,7 +164,6 @@ class ExtensionHost with WidgetsBindingObserver {
   final Set<String> approvedFolders;
   final void Function() onFoldersChanged;
 
-  /// Where messages for the page go. Null until the page is up.
   void Function(Map<String, Object?> message)? post;
 
   /// The effect an LFX interface page drives. Null for every other page,
@@ -188,7 +179,6 @@ class ExtensionHost with WidgetsBindingObserver {
     this.effect,
   });
 
-  /// A permission as a manifest spells it.
   static String _word(BridgeExtensionPermission permission) =>
       permission.name.replaceAll('_', '');
 
@@ -213,8 +203,6 @@ class ExtensionHost with WidgetsBindingObserver {
   /// the fingerprint of.
   String? _exported;
 
-  /// The folder being watched, the files seen in it by their last size, and
-  /// the ones already brought in or there from the start.
   String? _watched;
   final Map<String, int> _settling = {};
   final Set<String> _known = {};
@@ -263,7 +251,6 @@ class ExtensionHost with WidgetsBindingObserver {
     post = null;
   }
 
-  /// Take this extension's line off the bottom strip now.
   void clearStatus() {
     _statusTimer?.cancel();
     _statusTimer = null;
@@ -283,12 +270,9 @@ class ExtensionHost with WidgetsBindingObserver {
   void _emit(String event, [Map<String, Object?> data = const {}]) =>
       post?.call({'event': event, 'data': data});
 
-  // --- What the page is told --------------------------------------------
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) => _tellFocus();
 
-  /// Whether Lumit is the app in front.
   bool _focused() => Platform.isWindows
       ? lumitInFront()
       : WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -311,7 +295,6 @@ class ExtensionHost with WidgetsBindingObserver {
       id = project?.shareId();
       dirty = project?.isDirty() ?? false;
     } catch (_) {
-      // The project closed between the question and the answer.
     }
     final file = path?.split(RegExp(r'[\\/]')).last;
     return {
@@ -342,7 +325,6 @@ class ExtensionHost with WidgetsBindingObserver {
       final entries = app.project?.historyEntries() ?? const [];
       step = entries.where((e) => !e.undone).lastOrNull?.name;
     } catch (_) {
-      // No project to read a history from.
     }
     _emit('activity.edit', {
       'step': step,
@@ -401,7 +383,6 @@ class ExtensionHost with WidgetsBindingObserver {
         for (final person in share.people)
           {'id': person.id, 'name': person.name, 'me': person.me},
       ],
-      // Whether someone far away can get in, for a host.
       'open': share.reach is BridgeShareReach_Open ||
           share.relayed == BridgeShareRelayed.open,
     };
@@ -465,12 +446,9 @@ class ExtensionHost with WidgetsBindingObserver {
         if (entity is File) _known.add(entity.path);
       }
     } catch (_) {
-      // Nothing is listed, so everything in it will be new.
     }
     _watchTimer ??= Timer.periodic(_watchBeat, (_) => _pollWatch());
   }
-
-  // --- What the page asks -----------------------------------------------
 
   /// One message from the page. Anything that is not a call is dropped.
   Future<void> handle(Object? message) async {
@@ -809,18 +787,15 @@ String extensionBootstrap({required String origin, required String key}) =>
         .replaceFirst('__ORIGIN__', jsonEncode(origin))
         .replaceFirst('__KEY__', jsonEncode(key));
 
-/// A message for a WebKit page, as the script that hands it over.
 String extensionDeliver(Map<String, Object?> message) =>
     'window.__lumitDeliver&&window.__lumitDeliver(${jsonEncode(message)})';
 
-/// What a WebKit page sent, or null when it does not carry [key].
 Object? extensionUnwrap(Object? text, String key) {
   if (text is! String) return null;
   try {
     final sent = jsonDecode(text);
     if (sent is Map && sent['key'] == key) return sent['message'];
   } catch (_) {
-    // Not something the bootstrap wrote.
   }
   return null;
 }

@@ -27,7 +27,6 @@ void main() {
         BridgeSideInterp.bezier(BridgeBezierSide(speed: 40, influence: 0.3));
     final lead = BridgeScalar.keyframed([key(0, 100), key(1, 200)]);
     final partner = BridgeScalar.keyframed([key(0, 50), key(1, 100)]);
-    // The lead rewritten: a key moved, a key eased.
     final next = BridgeScalar.keyframed(
         [key(0, 100, interpOut: eased), key(2, 300, interpIn: eased)]);
 

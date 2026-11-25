@@ -74,25 +74,17 @@ const double toolBarHeight = 30;
 const double _toolButtonWidth = 44;
 const double _toolButtonHeight = 28;
 
-/// How wide the rail is when the toolbar stands on the left: the full 44 the
-/// strip gives up down the page.
 const double toolRailWidth = 44;
 
-/// The strip's height under [shape]. Studio keeps its 30; Desk draws it at 32
-/// on the module; Lantern's is a 44 band in the room with 32 pills on it.
 double toolBarHeightFor(ThemeShape shape) => switch (shape) {
       ThemeShape.studio => toolBarHeight,
       ThemeShape.desk => 32,
       ThemeShape.lantern => 44,
     };
 
-/// Lantern's pills: the tool and options pills on the strip, and the workspace
-/// pill, which is shorter because it also rides the 40 band under Left.
 const double _lanternPill = 32;
 const double _workspacePill = 28;
 
-/// The last of the simple pointer tools. The rail draws a seam after it, and
-/// so does the strip once it is grouped into pills.
 const ToolGroup _seamAfter = ToolGroup.razor;
 
 /// The tool groups in the order the strip lists them: the pointer tools first,
@@ -115,7 +107,6 @@ const List<ToolGroup> toolBarOrder = [
   ToolGroup.camera,
 ];
 
-/// The keymap action that arms each group, for the tooltips' shortcut text.
 String _actionFor(ToolGroup group) =>
     toolActions.entries.firstWhere((e) => e.value == group).key;
 
@@ -157,8 +148,6 @@ class LumitToolBarFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
-    // Lantern groups the row into three pills standing in the room; Studio
-    // and Desk keep the flat strip, welded under the menu bar by a hairline.
     final pills = t.tokens.roomed;
     // Named, so a style can dress the toolbar's buttons apart from others.
     return StylePart(name: 'toolbar', child: GestureDetector(
@@ -180,14 +169,10 @@ class LumitToolBarFrb extends StatelessWidget {
         listenable: Listenable.merge([ui.tools, ui.model]),
         builder: (context, _) {
           final options = _toolOptions(t, ui, height: _lanternPill);
-          // The tool pill keeps the magnet at its end; the flat strip keeps
-          // the magnet after the options, where it has always stood.
           final tools = Row(
             key: const ValueKey('tool-bar-tools'),
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Folds from the end into the overflow mark on a narrow
-              // window, keeping Selection and the tool in your hand.
               Flexible(
                 child: FoldingRow(
                   markKey: const ValueKey('tool-bar-overflow'),
@@ -290,9 +275,6 @@ class LumitTopLineToolsFrb extends StatelessWidget {
   }
 }
 
-/// The bar's own menu, on its empty stretch and on the rail: where the tools
-/// stand, which Settings also has. Option rows, so the positions can be
-/// compared without reopening it.
 List<MenuEntry> _barRows(LumitUiState ui) {
   final settings = ui.workspace.interface;
   return [
@@ -314,8 +296,6 @@ List<MenuEntry> _barRows(LumitUiState ui) {
   ];
 }
 
-/// What stands between two groups on the row: air between pills, a hairline
-/// on the flat strip.
 Widget _gap(bool pills) =>
     pills ? const SizedBox(width: 8) : const _ToolBarDivider();
 
@@ -354,7 +334,6 @@ class _RenderToolsFirst extends RenderBox
     } else {
       gap.layout(upTo(room), parentUsesSize: true);
       final free = room - gap.size.width;
-      // Each at the most it could have, to learn what it wants.
       tools.layout(upTo(free), parentUsesSize: true);
       options.layout(upTo(free), parentUsesSize: true);
       final left = free - tools.size.width;
@@ -416,8 +395,6 @@ Widget? _toolOptions(LumitTheme t, LumitUiState ui, {required double height}) {
   );
 }
 
-/// The workspace strip, as a 28 pill under Lantern whose padding is the inset
-/// the fronted capsule keeps from its edge on every side.
 Widget _workspaces(LumitTheme t) => _pill(
       t,
       'workspace-pill',
@@ -426,9 +403,6 @@ Widget _workspaces(LumitTheme t) => _pill(
       padding: EdgeInsets.all(t.tokens.pillInset),
     );
 
-/// A capsule on the room colour, under Lantern; [child] untouched otherwise.
-/// The fill is surface1 with the card's own shadow, so the three read as the
-/// same kind of object as the panes below them.
 Widget _pill(
   LumitTheme t,
   String key,
@@ -450,10 +424,6 @@ Widget _pill(
   );
 }
 
-/// The toolbar as a rail (docs/design-alt/15-DESIGN-DESK.md §12B.1): the
-/// thirteen groups in a 44px column, a seam after the six pointer tools, and
-/// the magnet at the foot. The shell mounts it beside the dock while the
-/// position is Left, and the top line takes the options and the workspaces.
 class LumitToolRailFrb extends StatelessWidget {
   const LumitToolRailFrb({super.key});
 
@@ -475,8 +445,6 @@ class LumitToolRailFrb extends StatelessWidget {
                 : t.surface2,
         border: pills ? null : Border(right: BorderSide(color: t.hairline)),
       ),
-      // Under Lantern the pill stands level with the cards' top and bottom;
-      // the rail itself stays flush to the window edge.
       padding: EdgeInsets.symmetric(vertical: t.tokens.windowInset),
       child: ListenableBuilder(
         listenable: ui.tools,
@@ -534,7 +502,6 @@ class _SnapButton extends StatelessWidget {
     return LumitTooltip(
       message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
       child: GestureDetector(
-        // What the magnet reaches for, as View ▸ has it.
         onSecondaryTapUp: (d) => showMenuEntries(context, d.globalPosition, [
           MenuEntry.toggle(
             l10n.viewerOverlaySnap,
@@ -567,11 +534,9 @@ class _SnapButton extends StatelessWidget {
   }
 }
 
-/// Which options the armed tool puts on the strip.
 enum ToolOptions {
   none,
 
-  /// Fill and size: what the Type tool sets a new line in.
   type,
 
   /// Fill and stroke: what a shape tool draws with. Both live since shape
@@ -579,8 +544,6 @@ enum ToolOptions {
   /// stroke colour and a stroke width, and a width of zero draws no outline.
   shape,
 
-  /// The brush: the colour it lays down, and its size, hardness and opacity.
-  /// All four live — painting is built.
   paint,
 
   /// The puppet mesh: **Density** and **Expansion**. No fill —
@@ -597,11 +560,9 @@ enum ToolOptions {
   /// while the comp has a 3D layer, a light or a camera.
   axes,
 
-  /// The camera tools: what an orbit swings round.
   camera,
 }
 
-/// The options [tool] shows on the toolbar.
 ToolOptions toolOptionsFor(ToolMode tool, {bool inDepth = false}) =>
     switch (tool.group) {
       ToolGroup.type => ToolOptions.type,
@@ -614,7 +575,6 @@ ToolOptions toolOptionsFor(ToolMode tool, {bool inDepth = false}) =>
       _ => ToolOptions.none,
     };
 
-/// The fill, size and stroke controls: After Effects' tool options area.
 class _ToolOptions extends StatelessWidget {
   final ToolsState tools;
   final ToolOptions shows;
@@ -634,7 +594,6 @@ class _ToolOptions extends StatelessWidget {
           ])
             LumitTooltip(
               message: tip,
-              // Lit as the magnet is, the one in use at full strength.
               child: HouseButton(
                 key: ValueKey<String>('tool-axes-${axes.name}'),
                 small: true,
@@ -646,7 +605,6 @@ class _ToolOptions extends StatelessWidget {
                     color: tools.axes == axes ? t.textPrimary : t.textMuted),
               ),
             ),
-          // What the Rotation tool turns, as After Effects' Set menu does.
           if (tools.tool.group == ToolGroup.rotate) ...[
             const _ToolBarDivider(),
             for (final (sets, label, tip) in [
@@ -860,7 +818,6 @@ class _ToolOptions extends StatelessWidget {
   }
 }
 
-/// A labelled number on the options strip.
 class _Number extends StatelessWidget {
   final String label;
   final String tip;
@@ -920,7 +877,6 @@ class _Swatch extends StatelessWidget {
   final bool on;
   final ValueChanged<bool>? onToggle;
 
-  /// What the well's menu resets to.
   final ToolColour resetTo;
 
   const _Swatch({
@@ -985,7 +941,6 @@ class _Swatch extends StatelessWidget {
           ),
           child: on ? null : CustomPaint(painter: _NoneSlash(t.error)),
         );
-    // With a label of its own to click, the well alone opens the picker.
     final split = onToggle != null;
     Widget row(double lit) => Row(
           children: [
@@ -999,7 +954,6 @@ class _Swatch extends StatelessWidget {
       message: l10n.tipSwatchColour(label),
       child: HoverMark(
         builder: (context, lit) => GestureDetector(
-          // The menu every colour well has.
           onSecondaryTapUp: (details) => showColourWellMenu(
             context,
             details.globalPosition,
@@ -1017,7 +971,6 @@ class _Swatch extends StatelessWidget {
             linear: true,
             onCommit: (picked) {
               onPicked!(ToolColour(picked.r, picked.g, picked.b));
-              // Picking a colour is asking for one.
               onToggle?.call(true);
             },
           ),
@@ -1036,7 +989,6 @@ class _Swatch extends StatelessWidget {
   }
 }
 
-/// The red diagonal a None well wears, as in After Effects.
 class _NoneSlash extends CustomPainter {
   final Color colour;
   const _NoneSlash(this.colour);
@@ -1054,7 +1006,6 @@ class _NoneSlash extends CustomPainter {
   bool shouldRepaint(_NoneSlash old) => old.colour != colour;
 }
 
-/// A hairline seam on the strip, turned on its side for the rail.
 class _ToolBarDivider extends StatelessWidget {
   final bool vertical;
   const _ToolBarDivider({this.vertical = false});
@@ -1073,13 +1024,10 @@ class _ToolBarDivider extends StatelessWidget {
   }
 }
 
-/// One group's button: the member it stands for, armed by a click, with the
-/// rest of the group behind a press-and-hold or a right-click.
 class _ToolButton extends StatefulWidget {
   final ToolGroup group;
   final ToolsState tools;
 
-  /// Standing on the rail: a taller cell, and the flyout opens to the right.
   final bool rail;
 
   const _ToolButton({
@@ -1127,10 +1075,6 @@ class _ToolButtonState extends State<_ToolButton> {
             : _hover
                 ? t.textPrimary
                 : t.textSecondary;
-    // Studio tints the armed button; Desk gives it no fill and a 2px accent
-    // index on the bar's outer edge, the top of a strip button and the left
-    // of a rail one. Lantern leaves the cell bare and fills a disc inside it,
-    // drawn below, so the cell's own fill is never used there.
     final Color? fill = filled
         ? null
         : active
@@ -1138,8 +1082,6 @@ class _ToolButtonState extends State<_ToolButton> {
             : _hover
                 ? t.surface4
                 : null;
-    // Lantern's disc: the pill's 32 less the inset either side, so on the
-    // strip it sits 3 in from the pill's edge, and the rail draws the same one.
     final disc = _lanternPill - 2 * t.tokens.pillInset;
     final index = BorderSide(color: t.accent, width: 2);
     final decoration = desk
@@ -1153,7 +1095,6 @@ class _ToolButtonState extends State<_ToolButton> {
             color: fill,
             borderRadius: BorderRadius.circular(t.tokens.actionRadius),
           );
-    // The rail's cell: the full 44 on Desk's module, 36 in Lantern's pill.
     final height = !widget.rail
         ? _toolButtonHeight
         : desk
@@ -1180,9 +1121,6 @@ class _ToolButtonState extends State<_ToolButton> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? () => widget.tools.select(member) : null,
-          // A press-and-hold opens the group's flyout, as it always has.
-          // The right button opens the button's own menu: the group, and
-          // what else there is to do with the tool.
           onLongPress:
               enabled && members.length > 1 ? () => _openFlyout(context) : null,
           onSecondaryTapUp: (d) => _openMenu(context, d.globalPosition),
@@ -1222,8 +1160,6 @@ class _ToolButtonState extends State<_ToolButton> {
                         size: iconSize, color: ink ?? colour),
                   ),
                 ),
-                // The corner mark that says there is more under this button —
-                // the same promise After Effects' little triangle makes.
                 if (members.length > 1)
                   Positioned(
                     right: 4,
@@ -1252,9 +1188,6 @@ class _ToolButtonState extends State<_ToolButton> {
       ? member.label
       : '${member.label} · ${l10n.tipNotBuiltYet}';
 
-  /// The button's menu: every tool in the group, the one in hand ticked,
-  /// then the options' reset where the tool has options, and the way to
-  /// its key. One list for every button, so a lone tool has a menu too.
   void _openMenu(BuildContext context, Offset at) {
     final tools = widget.tools;
     final face = tools.memberOf(widget.group);
@@ -1267,8 +1200,6 @@ class _ToolButtonState extends State<_ToolButton> {
           member.ready && tools.arms(widget.group)
               ? () => tools.select(member)
               : null,
-          // The key arms the member on the button's face, so it is that row
-          // that shows it.
           action: member == face ? _actionFor(widget.group) : null,
           checked: member == armed,
           icon: member.icon,
@@ -1288,7 +1219,6 @@ class _ToolButtonState extends State<_ToolButton> {
   void _openFlyout(BuildContext context) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
-    // Under the button on the strip, to the right of it on the rail.
     final origin = box.localToGlobal(
         widget.rail ? Offset(box.size.width, 0) : Offset(0, box.size.height));
     final tools = widget.tools;
@@ -1307,7 +1237,6 @@ class _ToolButtonState extends State<_ToolButton> {
   }
 }
 
-/// The hidden tools under a group button.
 class _ToolFlyout extends StatelessWidget {
   final ToolGroup group;
   final ToolMode armed;
@@ -1328,14 +1257,10 @@ class _ToolFlyout extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The tools not built yet are left out. They come back by themselves
-          // the day [ToolMode.ready] says they work.
           for (final member in ToolMode.builtMembersOf(group))
             MenuRow(
               key: ValueKey<String>('tool-flyout-${member.name}'),
               selected: member == armed,
-              // A member that is not built is listed and does nothing when
-              // clicked — the same rule the buttons follow.
               enabled: member.ready,
               onPressed: () => onPick(member),
               child: Row(
@@ -1368,7 +1293,6 @@ class _ToolFlyout extends StatelessWidget {
   }
 }
 
-/// The little triangle in a group button's corner.
 class _FlyoutMarkPainter extends CustomPainter {
   final Color colour;
   const _FlyoutMarkPainter(this.colour);
@@ -1402,8 +1326,6 @@ String _arrangement(DockNode node) => switch (node) {
         }(),
     };
 
-/// The workspace switcher docs/07 §1.4 requires in the window chrome: the
-/// shipped presets as mono-caps kickers, the current one ticked in the accent.
 class _WorkspaceStrip extends StatelessWidget {
   const _WorkspaceStrip();
 
@@ -1413,8 +1335,6 @@ class _WorkspaceStrip extends StatelessWidget {
     final ui = context.watch<LumitUiState>();
     final app = context.read<LumitState>();
     final active = ui.workspace.activePreset;
-    // The preset in force wears the settings' dot once it has been moved
-    // from how it ships, and its menu's Reset workspace puts it back.
     final moved = active != null &&
         _arrangement(ui.workspace.dock) != _arrangement(presetLayout(active));
     final row = Row(
@@ -1495,10 +1415,8 @@ class _StripEntry extends StatelessWidget {
   final bool active;
   final VoidCallback onPressed;
 
-  /// Moved from how its preset ships: the settings' dot in its corner.
   final bool moved;
 
-  /// Opens the name's own menu at a right-click.
   final void Function(BuildContext context, Offset at) onMenu;
 
   const _StripEntry({
@@ -1544,7 +1462,6 @@ class _StripEntry extends StatelessWidget {
                 t.body.copyWith(
                   fontSize: 12,
                   height: 1.0,
-                  // A style that dresses the fronted button names its ink.
                   color: active
                       ? partStyle(context, t, 'button', states: const {'on'})
                               .colour ??
@@ -1574,8 +1491,6 @@ class _StripEntry extends StatelessWidget {
             ),
           ),
         ),
-      // A segment of the track: the fronted one wears the button's own
-      // active fill, so the strip reads as one control with one choice made.
       ThemeShape.studio => HouseButton(
           frameless: true,
           active: active,
@@ -1602,7 +1517,6 @@ class _StripEntry extends StatelessWidget {
                 width: 4,
                 height: 4,
                 decoration: BoxDecoration(
-                  // On Lantern's accent capsule, in the capsule's ink.
                   color: t.shape == ThemeShape.lantern ? accentInk(t) : t.accent,
                   shape: BoxShape.circle,
                 ),
@@ -1614,11 +1528,6 @@ class _StripEntry extends StatelessWidget {
   }
 }
 
-/// The pointer the Viewer shows while [tool] is armed.
-///
-/// The one place the armed tool changes anything today, and it is worth having
-/// on its own: a cursor is how a toolbar tells you it is listening, and it
-/// costs nothing to be honest about which tools are only a cursor so far.
 MouseCursor viewerCursorFor(ToolMode tool) => switch (tool) {
       // The Hand and the Zoom draw their own over the picture: Windows
       // has no grab or magnifier pointer, and Flutter's names for them fall

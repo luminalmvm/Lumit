@@ -1,5 +1,3 @@
-// A key's two eases as four typed numbers (docs/07 §5.3): what is read off a
-// key, and what writing them back does to each side.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
@@ -21,8 +19,6 @@ const BridgeSideInterp bezier40 =
     BridgeSideInterp.bezier(BridgeBezierSide(speed: 40, influence: 0.25));
 
 void main() {
-  /// A ramp of three keys, a second apart, rising 100 a second: the middle
-  /// key's straight sides read at the chord, and its ends have one side each.
   final ramp = [key(0, 1, 0), key(1, 1, 100), key(2, 1, 200)];
 
   group('keyEaseOf', () {

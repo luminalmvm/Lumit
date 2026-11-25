@@ -61,8 +61,6 @@ File get _ownTitleBarFile => File('${Workspace.storeFile().parent.path}'
 /// start.
 final bool _startedWithOwnTitleBar = _ownTitleBarFile.existsSync();
 
-/// Whether Lumit opens with its own title bar on Linux, which Settings shows
-/// and switches.
 bool get linuxOwnTitleBar => _ownTitleBarFile.existsSync();
 
 set linuxOwnTitleBar(bool on) {
@@ -73,26 +71,17 @@ set linuxOwnTitleBar(bool on) {
       _ownTitleBarFile.deleteSync();
     }
   } catch (_) {
-    // A folder that would not take the file leaves the title bar as it was.
   }
 }
 
-/// One button's width, and so a third of what the menu bar leaves clear at its
-/// right end.
 const double _buttonWidth = 40;
 
-/// The room the three buttons take at the right end of the top line, or none
-/// where the system draws them.
 double get windowButtonsWidth => windowFrameDrawn ? _buttonWidth * 3 : 0;
 
-/// The same for a floating window, which has no minimise button.
 double get floatingButtonsWidth => windowFrameDrawn ? _buttonWidth * 2 : 0;
 
-/// Whether the main window is maximised, which decides the middle button's
-/// drawing.
 final ValueNotifier<bool> _maximised = ValueNotifier<bool>(false);
 
-/// The same for each floating window, by its native handle.
 final Map<int, ValueNotifier<bool>> _floatingMaximised = {};
 
 ValueNotifier<bool> _maximisedOf(int? window) => window == null
@@ -108,13 +97,9 @@ Future<void> _ask(String what, {int? window}) async {
             what, window == null ? null : {'window': window}) ??
         false;
   } catch (_) {
-    // No runner listening, which is a test.
   }
 }
 
-/// A part of the top line that moves the window when dragged, and maximises
-/// it or puts it back on a double click. [window] names a floating window,
-/// and [onMenu] gives its right-click a menu of its own.
 class WindowDragArea extends StatelessWidget {
   final Widget? child;
   final int? window;
@@ -135,7 +120,6 @@ class WindowDragArea extends StatelessWidget {
   }
 }
 
-/// What a title bar's right-click offers: the three buttons, by name.
 void _menu(BuildContext context, Offset at) {
   showLumitPopup<void>(
     context: context,
@@ -176,9 +160,6 @@ void _menu(BuildContext context, Offset at) {
   );
 }
 
-/// A floating window's title line's right-click: the window's buttons by
-/// name, full screen, keeping it above other programs, and its panels back
-/// in the main window.
 void showFloatingWindowMenu(
   BuildContext context,
   Offset at, {
@@ -233,11 +214,9 @@ void showFloatingWindowMenu(
   );
 }
 
-/// A floating window's buttons where Lumit draws them.
 class FloatingWindowButtons extends StatelessWidget {
   final LumitTheme theme;
 
-  /// The floating window, by its native handle.
   final int window;
 
   const FloatingWindowButtons(
@@ -248,13 +227,9 @@ class FloatingWindowButtons extends StatelessWidget {
       _WindowButtons(theme: theme, window: window);
 }
 
-/// A floating window's own top line, for when the pane in its top right
-/// corner has no line to carry the buttons: the empty line moves the window,
-/// and the buttons stand at its end.
 class FloatingTitleLine extends StatelessWidget {
   final LumitTheme theme;
 
-  /// The floating window, by its native handle.
   final int window;
   final bool onTop;
   final void Function(BuildContext context, Offset at) onMenu;
@@ -290,7 +265,6 @@ class FloatingResizeEdges extends StatelessWidget {
   const FloatingResizeEdges(
       {super.key, required this.window, required this.child});
 
-  /// How far in from each side an edge reaches.
   static const double _reach = 5;
 
   @override
@@ -329,8 +303,6 @@ class FloatingResizeEdges extends StatelessWidget {
   }
 }
 
-/// [child] with a strip along its top that moves the window, for a screen
-/// that is the whole window and has no menu bar to move it by.
 class WindowDragStrip extends StatelessWidget {
   final LumitTheme theme;
   final Widget child;
@@ -353,8 +325,6 @@ class WindowDragStrip extends StatelessWidget {
   }
 }
 
-/// [child] as the window, with the window's buttons over the end of its top
-/// line.
 class WindowFrame extends StatelessWidget {
   final LumitTheme theme;
   final Widget child;
@@ -379,7 +349,6 @@ class WindowFrame extends StatelessWidget {
 class _WindowButtons extends StatefulWidget {
   final LumitTheme theme;
 
-  /// A floating window's native handle, or null for the main window.
   final int? window;
 
   const _WindowButtons({required this.theme, this.window});
@@ -487,8 +456,6 @@ class _WindowButtonsState extends State<_WindowButtons>
   }
 }
 
-/// The four marks. Each style draws its own (tool/icons/glyphs.json, Window): Studio in the
-/// set's ordinary hand, Desk square and mitred, Lantern smaller and rounder.
 enum _Mark {
   windowMinimise,
   windowMaximise,
@@ -546,7 +513,6 @@ class _WindowButtonState extends State<_WindowButton> {
   Widget build(BuildContext context) {
     final t = widget.theme;
     final hover = _hover || widget.hovered;
-    // Close warns in the theme's own error colour, as the system's goes red.
     final closing = hover && widget.mark == _Mark.windowClose;
     // Lantern lights a round plate under the pointer, as it does for every
     // action. The flat styles light the button edge to edge.

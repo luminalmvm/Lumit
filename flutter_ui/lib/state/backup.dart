@@ -49,13 +49,11 @@ import 'package:lumit_flutter/state/platform.dart'
 /// limit. A packed project past this stays on the machine.
 const int backupLargest = 95000000;
 
-/// What the interface's record calls the id inside a project file.
 const String _key = 'backup';
 
 DateTime _at(Object? seconds) =>
     DateTime.fromMillisecondsSinceEpoch((seconds is int ? seconds : 0) * 1000);
 
-/// One save of a project, as the server keeps it.
 class BackupVersion {
   final int n;
   final String hash;
@@ -65,11 +63,8 @@ class BackupVersion {
   /// person gave it, which is empty until they do.
   final String device, app, note;
 
-  /// Whether it has a picture.
   final bool thumb;
 
-  /// Whether it was sent from an autosave between two saves, and not from
-  /// a save.
   final bool auto;
 
   /// The version its machine last had when it made this one, which is what
@@ -106,7 +101,6 @@ class BackupVersion {
             )
           : null;
 
-  /// The same version once its picture has been sent.
   BackupVersion get pictured => BackupVersion(
       n: n,
       hash: hash,
@@ -119,19 +113,15 @@ class BackupVersion {
       auto: auto,
       base: base);
 
-  /// An autosave nobody has named, which the history shows more quietly.
   bool get quiet => auto && note.isEmpty;
 }
 
-/// A project the account has in backup.
 class BackupProject {
   final String id, name;
   final DateTime updated;
 
-  /// How many versions are kept, and what they come to.
   final int versions, bytes;
 
-  /// The newest version.
   final BackupVersion? head;
 
   const BackupProject({
@@ -155,13 +145,9 @@ class BackupProject {
       : null;
 }
 
-/// How the open project stands with its backup.
 enum BackupStatus { off, backedUp, sending, waiting, failed, tooLarge }
 
-/// One save waiting to be sent.
 class _Save {
-  /// The project's backup id, the file to send, the project's name, and
-  /// the id of the document inside.
   final String id, path, named, doc;
   final ProjectReference project;
 
@@ -172,8 +158,6 @@ class _Save {
   /// Asks the server even when the file is what this machine last sent.
   final bool sure;
 
-  /// The file is an autosave from between two saves, and not the project's
-  /// own file.
   final bool auto;
   const _Save(this.id, this.path, this.named, this.doc, this.project,
       {this.pictured, this.sure = false, this.auto = false});
@@ -188,16 +172,10 @@ bool _samePath(String a, String b) {
   return fold(a) == fold(b);
 }
 
-/// How big the file at [path] is and what it hashes to, worked out off the UI
-/// thread.
-// ponytail: the whole file is read in to hash it, which the size limit keeps
-// affordable. Hash it a piece at a time if that limit ever goes up.
 Future<(int, String)> _measure(String path) => Isolate.run(() {
       final bytes = File(path).readAsBytesSync();
       return (bytes.length, sha256.convert(bytes).toString());
     });
-
-// --- What a picture says it shows --------------------------------------------
 
 /// The text chunk a picture's caption is in, up to where its words start:
 /// the kind of chunk, its key, and the empty fields an `iTXt` has before
@@ -207,7 +185,6 @@ final List<int> _captionHead = [...'iTXtLumit'.codeUnits, 0, 0, 0, 0, 0];
 /// The most of a composition's name a picture carries, in bytes.
 const int _longestCaptionName = 240;
 
-/// The check a PNG keeps on each of its chunks.
 int _crc32(List<int> bytes) {
   var crc = 0xffffffff;
   for (final byte in bytes) {
@@ -285,14 +262,11 @@ Uint8List stillCaptioned(Uint8List png, String name, String timecode) {
   return null;
 }
 
-/// The open project's backup, the account's backed-up projects, and every
-/// call made to the server about either.
 class BackupState extends ChangeNotifier {
   final LumitState app;
   final AccountState account;
   final ProfilesState profiles;
 
-  /// The composition a save's picture is taken of, and the frame.
   final (CompositionReference?, int) Function() looking;
 
   BackupState(this.app, this.account, this.profiles, {required this.looking}) {
@@ -337,8 +311,6 @@ class BackupState extends ChangeNotifier {
   String? _profile, _who;
   bool _pro = false;
 
-  // --- What this machine knows ---------------------------------------------
-
   /// Whether backup is on, the folder a fetched project was last put in, and
   /// for each backup id: the path it was last seen at here, the newest
   /// version number this machine has seen, the hash of what it last sent,
@@ -381,7 +353,6 @@ class BackupState extends ChangeNotifier {
     return _known[id] = <String, dynamic>{};
   }
 
-  /// The id whose file on this machine is at [path].
   String? _idAt(String path) {
     for (final MapEntry(:key, :value) in _known.entries) {
       if (value is Map &&
@@ -393,14 +364,6 @@ class BackupState extends ChangeNotifier {
     return null;
   }
 
-  /// The id the file at [path] goes by, given the one written [inFile].
-  ///
-  /// A path this machine already knows keeps its id. A file carrying the id
-  /// of another file that is still where it was is a copy of it, and a copy
-  /// starts a history of its own the next time it is saved.
-  // ponytail: a copy is only told from its original on the machine that has
-  // both. Copied to a machine that has never seen the original, the two share
-  // one history until either is saved somewhere new.
   String? _idFor(String path, String? inFile) {
     final here = _idAt(path);
     if (here != null || inFile == null) return here;
@@ -438,7 +401,6 @@ class BackupState extends ChangeNotifier {
     _keep();
   }
 
-  /// Where [id]'s file is on this machine, if it is still there.
   String? localPath(String id) {
     final known = _known[id];
     final path = known is Map ? known['path'] : null;
@@ -465,7 +427,6 @@ class BackupState extends ChangeNotifier {
     resend();
   }
 
-  /// Whether the open project is kept out of backup.
   bool get out {
     final known = _known[id];
     return known is Map && known['out'] == true;
@@ -483,10 +444,7 @@ class BackupState extends ChangeNotifier {
     resend();
   }
 
-  /// Whether a save of the open project is sent.
   bool get sends => account.pro && on && !out;
-
-  // --- Following the profile and the account -------------------------------
 
   void _follow() {
     final profile = profiles.current.id;
@@ -527,8 +485,6 @@ class BackupState extends ChangeNotifier {
     _look();
   }
 
-  // --- The open project ----------------------------------------------------
-
   ProjectReference? _project;
 
   /// The open project's backup id, or null when it has none yet.
@@ -563,7 +519,6 @@ class BackupState extends ChangeNotifier {
     }
   }
 
-  /// The hash of the open project's file as this machine last sent it.
   String? get held {
     final known = _known[id];
     final sent = known is Map ? known['sent'] : null;
@@ -599,7 +554,6 @@ class BackupState extends ChangeNotifier {
     _look();
   }
 
-  /// Work out what the open project goes by, and ask how it stands.
   void _look() {
     final project = _project;
     id = _stamped = newer = backedUp = error = null;
@@ -714,7 +668,6 @@ class BackupState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Put the open project's file in line to be sent, if it is one that is.
   void _queue(String path, {bool sure = false}) {
     final to = id, project = _project;
     if (to == null || project == null) return;
@@ -799,8 +752,6 @@ class BackupState extends ChangeNotifier {
         _save(to, path, project, pictured: version.n, sure: true));
   }
 
-  // --- Autosaves between saves ----------------------------------------------
-
   /// How often the open project is looked at for an autosave worth sending.
   /// Lumit writes one beside the project every few minutes while there are
   /// unsaved changes.
@@ -846,8 +797,6 @@ class BackupState extends ChangeNotifier {
     }
   }
 
-  // --- Sending -------------------------------------------------------------
-
   /// The newest save of each project that has not gone yet.
   final Map<String, _Save> _waiting = {};
   Future<void>? _pumping;
@@ -858,10 +807,6 @@ class BackupState extends ChangeNotifier {
         _later();
       });
 
-  /// What could not go is tried again in a while, and at the next save.
-  // ponytail: the wait is only kept while Lumit runs. After a restart a save
-  // that never went is found again when its project is next opened, not
-  // before.
   void _later() {
     _retry?.cancel();
     if (_waiting.isEmpty || _gone) return;
@@ -1064,13 +1009,10 @@ class BackupState extends ChangeNotifier {
     throw CloudError(code, response.statusCode);
   }
 
-  // --- The account's projects ----------------------------------------------
-
   /// The account's backed-up projects, most recently saved first, as the
   /// server last listed them.
   List<BackupProject> projects = const [];
 
-  /// How much of the account's storage is used, and how much it has.
   int used = 0, limit = 0;
 
   /// How much of what is used is these backups. Review links and footage

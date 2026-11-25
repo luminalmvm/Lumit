@@ -25,7 +25,6 @@ class LumitIcon extends StatelessWidget {
   /// surrounding text.
   final Color? colour;
 
-  /// The chrome word this glyph stands for, for screen readers.
   final String? semanticLabel;
 
   const LumitIcon(
@@ -75,8 +74,8 @@ const _mirrored = {LumitIcons.expand, LumitIcons.undo, LumitIcons.redo};
 /// Grey, at less than half strength: a coloured icon on a control that
 /// can't be pressed.
 const _greyed = ColorFilter.matrix([
-  0.2126, 0.7152, 0.0722, 0, 0, //
-  0.2126, 0.7152, 0.0722, 0, 0, //
-  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0,
+  0.2126, 0.7152, 0.0722, 0, 0,
+  0.2126, 0.7152, 0.0722, 0, 0,
   0, 0, 0, 0.4, 0,
 ]);

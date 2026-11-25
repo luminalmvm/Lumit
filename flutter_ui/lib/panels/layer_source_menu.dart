@@ -1,5 +1,3 @@
-// Replace source: the selected layers take another item of the project, and keep
-// everything else they have.
 
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -35,7 +33,6 @@ class ReplaceSourceEntry extends PickListEntry {
   List<MenuEntry> get children => _rows();
 }
 
-/// Point [targets] at [item], as one undo step, and say what didn't come along.
 void replaceLayerSources(LumitState app, List<BridgeLayerEntry> targets,
     ItemReference item) {
   var refused = false;
@@ -43,7 +40,6 @@ void replaceLayerSources(LumitState app, List<BridgeLayerEntry> targets,
   asOneUndoStep(app.project, () {
     for (final entry in targets) {
       try {
-        // The source it already has makes no undo step.
         if (entry.layer.getSourceItem()?.equals(item: item) ?? false) continue;
         // A solid has no time to remap, so a swap to one takes the Retime.
         if (entry.layer.setSourceItem(item: item) &&
@@ -61,7 +57,6 @@ void replaceLayerSources(LumitState app, List<BridgeLayerEntry> targets,
   app.notifyDocumentChanged();
 }
 
-/// Every footage item, solid and composition under [roots].
 Iterable<ItemReference> _sources(List<ItemReference> roots) sync* {
   for (final item in roots) {
     if (item case ItemReference_Folder(:final field0)) {
@@ -72,14 +67,11 @@ Iterable<ItemReference> _sources(List<ItemReference> roots) sync* {
   }
 }
 
-/// The project's items under their folders for the selected layers, then
-/// Choose… for a file.
 List<MenuEntry> replaceSourceRows(LumitState app, LumitUiState ui) {
   final project = app.project;
   if (project == null) return const [];
   final targets = selectedEntries(ui).where(canReplaceSource).toList();
   final current = targets.firstOrNull?.layer.getSourceItem();
-  // Only what every picked layer can take, by the engine's own test.
   bool takes(ItemReference item) => targets.every((e) {
         try {
           return e.layer.canTakeSource(item: item);
@@ -117,8 +109,6 @@ List<MenuEntry> replaceSourceRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-/// Bring a file in and point the layers at it, as one undo step with the
-/// import.
 Future<void> _choose(LumitState app, List<BridgeLayerEntry> targets) async {
   final project = app.project;
   if (project == null) return;

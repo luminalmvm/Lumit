@@ -1,10 +1,3 @@
-// Effects on a group header, on frb (docs/impl/group-effects.md §6-§7
-// test 11): the header's stack crosses on the read model, the Timeline shows
-// the fx tick exactly while it is non-empty and twirls real lanes under the
-// header, a parameter edit round-trips through the shared instance lookup, and
-// the Effect controls panel takes the group as its subject.
-//
-// Every document operation is genuine; see frb_test_support.dart.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,7 +82,6 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fx-card-group-0')),
           findsOneWidget, reason: 'the header\'s stack draws as cards');
 
-      // Choosing a layer stands the group subject down again.
       p.uiState.setSelection([p.comp.getLayers().first]);
       expect(p.uiState.selectedGroupHeader.value, isNull);
     });

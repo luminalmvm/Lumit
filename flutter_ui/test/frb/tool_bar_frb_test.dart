@@ -1,10 +1,3 @@
-// The toolbar as it is mounted in the shell (docs/07 §1.7).
-//
-// It draws from `LumitUiState` — the armed tool, the keymap the tooltips quote,
-// the workspace it rearranges — so it runs against the real engine like every
-// other shell surface here. What is asserted is the gestures a toolbar lives or
-// dies by: a click arms, a right-click reaches the hidden tools, and the button
-// then shows the one that was picked.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -25,9 +18,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Toolbar (frb)', () {
-    /// The strip as the shell mounts it, and under [position] Left the
-    /// shell's own arrangement instead: the menu bar's line carrying the
-    /// options and the workspaces, and the rail beside an empty dock.
     Future<({LumitState state, LumitUiState uiState})> mount(
       WidgetTester tester, {
       ThemeShape shape = ThemeShape.studio,
@@ -116,9 +106,6 @@ void main() {
           reason: 'the button now stands for the star, as AE does');
     });
 
-    /// **The user's own workspaces are on the strip too** (docs/07 §1.4, item
-    /// 7.19), after the presets and drawn by exactly the same rules — a
-    /// workspace somebody saved is a workspace, not a lesser kind of one.
     testWidgets('the strip lists the user\'s own after the presets',
         (tester) async {
       final p = await mount(tester);
@@ -129,14 +116,12 @@ void main() {
 
       expect(find.text('Grading'), findsOneWidget,
           reason: 'saved names join the strip as kickers');
-      // After the last preset, which is where the chords count them from.
       final last = tester.getRect(find.byKey(
           ValueKey<String>('workspace-${WorkspacePreset.values.last.name}')));
       final saved =
           tester.getRect(find.byKey(const ValueKey('workspace-user-Grading')));
       expect(saved.left, greaterThan(last.left));
 
-      // And it is the one fronted, because saving switches to what was saved.
       final button = tester.widget<HouseButton>(find.descendant(
         of: find.byKey(const ValueKey('workspace-user-Grading')),
         matching: find.byType(HouseButton),
@@ -156,9 +141,6 @@ void main() {
           reason: 'and it puts back the arrangement it was saved from');
     });
 
-    /// The tool options area: After Effects shows the settings the
-    /// armed tool draws with, and nothing at all for the tools that draw
-    /// nothing.
     testWidgets('the options area follows the armed tool', (tester) async {
       final p = await mount(tester);
       expect(find.text('Fill'), findsNothing,
@@ -175,8 +157,6 @@ void main() {
       expect(find.text('Fill'), findsOneWidget);
       expect(find.text('Stroke'), findsOneWidget);
 
-      // A painting tool shows the brush's own three settings, all live — no
-      // disabled stroke pair, because painting is built.
       p.uiState.tools.select(ToolMode.brush);
       await tester.pump();
       expect(find.text('Fill'), findsOneWidget);

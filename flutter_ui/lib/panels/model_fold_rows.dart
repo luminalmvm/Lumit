@@ -1,6 +1,3 @@
-// A Model layer's own rows in its fold-out: the Animation group, and the file's
-// node tree under Parts. Every row is an ordinary effect row, so it keys, drags
-// and eases as any does.
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -30,7 +27,6 @@ String modelPartRowsPath(String layerId, String partId) =>
 /// on screen.
 const _deepestIndent = 6;
 
-/// The rows [part] shows: what it keeps, or as nobody has changed them.
 BridgeEffectInstanceInfo? partRowsOf(
         BridgeModelRows rows, BridgeModelPart part) =>
     part.rows ??
@@ -71,8 +67,6 @@ bool? _shown(BridgeModelPart part) {
   return true;
 }
 
-/// Every instance of [rows] by id, for the graph and the panels that find a row
-/// by its path.
 BridgeEffectInstanceInfo? modelRowsById(BridgeModelRows rows, String id) {
   if (rows.playback case final p? when p.id.toString() == id) return p;
   for (final part in rows.parts) {
@@ -81,8 +75,6 @@ BridgeEffectInstanceInfo? modelRowsById(BridgeModelRows rows, String id) {
   return null;
 }
 
-/// The paths to open to see part [partId] under layer [layerId]: Parts and each
-/// part above it, then its own.
 List<String> modelPartReveal(
     String layerId, BridgeModelRows rows, String partId) {
   final at = rows.parts.indexWhere((p) => p.id.toString() == partId);
@@ -102,20 +94,16 @@ List<String> modelPartReveal(
   ];
 }
 
-/// The part [path] names, as one of [layerId]'s Parts paths, or null.
 String? modelPartOfPath(String layerId, String path) {
   final head = '${modelPartsPath(layerId)}/';
   return path.startsWith(head) ? path.substring(head.length) : null;
 }
 
-/// Set a part's Visible row on [layer], as one undo step.
 void setModelPartShown(LayerReference layer, String part, bool shown) {
   EffectStackEditor().write(layer, UuidValue.fromString(part), 'visible',
       BridgeEffectValue.float(BridgeScalar.static_(shown ? 1.0 : 0.0)));
 }
 
-/// Add [info]'s Animation group and Parts tree to [rows]. A model not read yet
-/// has neither.
 void addModelFoldRows({
   required List<LayerFoldRow> rows,
   required BridgeLayerInfo info,
@@ -158,7 +146,6 @@ void addModelFoldRows({
   rows.add(
       FoldGroupRow(path: path, label: l10n.foldParts, open: isOpen, depth: 1));
   if (!isOpen) return;
-  // The depth of a shut part whose children are being passed over.
   int? shutUnder;
   for (final (i, part) in model.parts.indexed) {
     if (shutUnder != null && part.depth > shutUnder) continue;
@@ -168,7 +155,6 @@ void addModelFoldRows({
     final depth = 2 + (part.depth < _deepestIndent ? part.depth : _deepestIndent);
     rows.add(FoldGroupRow(
       path: partPath,
-      // A part its file gives no name is numbered.
       label: part.name.isEmpty ? '${engineLabel('Part')} ${i + 1}' : part.name,
       open: partOpen,
       depth: depth,

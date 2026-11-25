@@ -28,7 +28,6 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
 
-/// The section of source rows for [layer], or nothing when its kind has none.
 class SourceRowsFrb extends StatefulWidget {
   final LayerReference layer;
   final VoidCallback onChanged;
@@ -84,7 +83,6 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
     );
   }
 
-  /// The solid asset behind a solid layer, if that is what this layer is.
   SolidReference? _solidOf(LayerReference layer) {
     final item = layer.getSourceItem();
     return item is ItemReference_Solid ? item.field0 : null;
@@ -164,7 +162,6 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
         t,
         'Expression',
         SizedBox(
-          //width: _cellWidth + 60,
           child: HouseTextField(
             key: const ValueKey('src-text-expression'),
             controller: _expression!,

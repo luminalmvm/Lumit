@@ -1,9 +1,6 @@
-// Also write: other files made from the same frames as the chosen one, each
-// a video or a still sequence with a suffix on the chosen file's name.
 
 part of 'export_dialog_frb.dart';
 
-/// One file written beside the chosen one: its format key and its suffix.
 class _Also {
   String codec;
   final TextEditingController suffix;
@@ -44,7 +41,6 @@ extension _AlsoRows on _ExportDialogState {
           ];
   }
 
-  /// A suffix no other file of the same kind has.
   String _freeSuffix(String codec) {
     final ext = _extensionOf(codec);
     final taken = {
@@ -63,7 +59,6 @@ extension _AlsoRows on _ExportDialogState {
   String _extensionOf(String codec) =>
       _formats.where((f) => f.key == codec).firstOrNull?.extension ?? codec;
 
-  /// A row for each extra file, then one to add another while there is room.
   List<Widget> _alsoRows(LumitTheme t) {
     final remote = _on.isNotEmpty;
     final reason = remote ? l10n.tipExportAlsoRemote : null;
@@ -115,7 +110,6 @@ extension _AlsoRows on _ExportDialogState {
               'export-also-add',
               l10n.exportAlsoAdd,
               () => _edit(() {
-                // A kind of file not written yet, where there is one.
                 final written = {
                   _format.extension,
                   for (final a in _also) _extensionOf(a.codec),
@@ -132,5 +126,4 @@ extension _AlsoRows on _ExportDialogState {
   }
 }
 
-/// The suffix field's width: room for a short word.
 const double exportAlsoSuffixWidth = 96;

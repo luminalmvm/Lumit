@@ -1,6 +1,3 @@
-// The graph editor's keyframe clipboard (docs/07 §5.3): copy, the
-// tab-separated text mirror, and paste. Split out of graph_editor_frb.dart,
-// which re-exports it.
 
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -17,10 +14,6 @@ import 'graph_edits.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
 import 'shape_entries.dart';
-
-// ---------------------------------------------------------------------------
-// The keyframe clipboard (docs/07 §5.3).
-// ---------------------------------------------------------------------------
 
 /// One copied channel: where it came from (for the AE text's property line)
 /// and its keys with full easing fidelity.
@@ -49,7 +42,6 @@ GraphClipChannel _clipOf(GraphChannel channel, List<BridgeKeyframe> keys) {
       shapes = channel.entry.layer.copyMaskPathKeys(
           id: channel.mask!.id, times: [for (final k in keys) k.time]);
     } catch (_) {
-      // The mask has gone, so its shapes have nothing to paste.
     }
   }
   return GraphClipChannel(channel, keys, shapes: shapes);
@@ -204,7 +196,6 @@ bool copyChannels({
   return true;
 }
 
-/// The property line and columns for a transform property's copied axes.
 LumitClipGroup _transformClipGroup(
     GraphChannel lead, List<GraphClipChannel> axes, double fps) {
   final (name, unit) = switch (lead.prop!) {
@@ -458,8 +449,6 @@ Future<bool> pasteKeysAtPlayhead({
   return paste.commit(project, onPasted);
 }
 
-/// Where one pasted key ended up: its row's path, its curve's id, and its
-/// place among that curve's keys.
 typedef PastedKey = ({String path, String id, int index});
 
 /// Paste the in-app clipboard onto whole layers, for when layers are picked
@@ -502,17 +491,13 @@ bool pasteKeysOntoLayers({
   });
 }
 
-/// Aim each of [clips] at the same property on [target], adding the effects
-/// it lacks first.
 void _matchOnLayer(
     _Paste paste, List<GraphClipChannel> clips, BridgeLayerEntry target) {
   var entry = target;
   final to = target.layer.internallayerId.toString();
-  // A copied effect's, mask's or shape item's id, to the target's own.
   final swaps = <String, String?>{};
   final fresh = <String>{};
   final seen = <String>{};
-  // The effects to add, by the layer they came off.
   final missing = <String, (BridgeLayerEntry, List<UuidValue>)>{};
   for (final clip in clips) {
     final source = clip.source;
@@ -562,7 +547,6 @@ void _matchOnLayer(
           text: source.layer.copyEffects(effects: ids), clip: null);
       entry = BridgeLayerEntry(layer: target.layer, info: target.layer.getInfo());
     } catch (_) {
-      // The effect has gone since the copy, so its keys have nowhere to go.
       continue;
     }
     paste.added = true;
@@ -616,10 +600,7 @@ String? _sameItem(
   return at < ours.length ? ours[at].$2 : null;
 }
 
-/// One paste in the making: the copied keys as comp frames, how far they
-/// shift, and the writes gathered target by target until [commit].
 class _Paste {
-  /// The in-app clips the sources came from, or null for keyframe text.
   final List<GraphClipChannel>? clips;
   final List<List<(double, BridgeKeyframe)>> sources;
   final List<double?> statics;
@@ -628,21 +609,16 @@ class _Paste {
   final int fpsNum;
   final int fpsDen;
 
-  /// Whether there is anything to paste at all.
   late final bool any;
   late final double shift;
 
   final _edits = <GraphChannel, BridgeScalar>{};
 
-  /// Mask shapes to copy across: the layer, the row, the mask, its keys
-  /// before the paste, and the clip.
   final _paths =
       <(LayerReference, String, UuidValue, List<BridgeKeyframe>, int)>[];
 
-  /// The frames put down on each row, to select afterwards.
   final _landed = <PastedKey>[];
 
-  /// Whether an effect was added on the way.
   bool added = false;
 
   _Paste({
@@ -712,7 +688,6 @@ class _Paste {
         {for (final (frame, _) in sources[i]) frame + shift});
   }
 
-  /// Clip [i]'s mask shapes onto [mask] of [layer], whose row is [path].
   void putPath(LayerReference layer, String path, UuidValue mask,
           List<BridgeKeyframe> keys, int i) =>
       _paths.add((layer, path, mask, keys, i));
@@ -751,12 +726,9 @@ class _Paste {
             continue;
           }
         } catch (_) {
-          // The mask it was going onto has gone.
           continue;
         }
         pathed = true;
-        // The keys it now has: the ones it had, less any a pasted one
-        // replaced, and the pasted ones.
         bool pasted(double f) => at.any((p) => (p - f).abs() < 1e-3);
         final frames = [
           for (final k in had)
@@ -776,11 +748,6 @@ class _Paste {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Copy ease and Paste ease: the easing of keys, without their values or times.
-// ---------------------------------------------------------------------------
-
-/// What Copy ease took: each copied key's way in and way out, in time order.
 List<(BridgeSideInterp, BridgeSideInterp)> easeClipboard = const [];
 
 /// Copy ease: the sides of the selected keys on the first channel that has
@@ -812,7 +779,6 @@ List<BridgeKeyframe> keysWithCopiedEase(
   final period = copied.length - 1;
   final next = [...keys];
   for (var p = 0; p < picked.length; p++) {
-    // Which copied key lends this one its way in and its way out.
     final into = period == 0 || p == 0 ? 0 : (p - 1) % period + 1;
     final out = period == 0 || p == picked.length - 1 ? into : p % period;
     final key = keys[picked[p]];
@@ -826,8 +792,6 @@ List<BridgeKeyframe> keysWithCopiedEase(
   return next;
 }
 
-/// Paste ease: the copied sides onto each channel's selected keys, as one undo
-/// step.
 bool pasteEaseOnSelection({
   required ProjectReference? project,
   required List<GraphChannel> channels,

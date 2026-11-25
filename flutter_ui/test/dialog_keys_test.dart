@@ -1,6 +1,3 @@
-// The keyboard model of confirmation windows: the default button is focused
-// on open so Enter presses it, Tab walks the window in reading order, and the
-// house controls answer the keyboard at all.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -96,7 +93,6 @@ void main() {
       onChanged: (v) => value = v,
     )));
 
-    // A clean click opens the editor with the whole value selected.
     await tester.tap(find.byType(DragValueField));
     await tester.pump();
     final editable = tester.widget<EditableText>(find.byType(EditableText));
@@ -105,16 +101,11 @@ void main() {
     expect(editable.controller.selection.extentOffset, 2,
         reason: 'the value opens selected, so typing replaces it');
 
-    // Type a new value and commit.
     await tester.enterText(find.byType(EditableText), '55');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(value, 55);
 
-    // Escape is the way back out: the editor shuts and the typed number is
-    // thrown away. Every other exit — Enter, clicking away, losing focus —
-    // commits, so without this a half-typed value could not be undone without
-    // retyping the old one.
     await tester.tap(find.byType(DragValueField));
     await tester.pump();
     await tester.enterText(find.byType(EditableText), '99');

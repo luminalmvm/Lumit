@@ -1,6 +1,3 @@
-// One box on a node canvas: what it shows, where its rows and sockets sit,
-// and how it is drawn. The layer graph, a node graph composition and the
-// Node panel all lay out and draw their boxes with these.
 
 import 'dart:math' as math;
 
@@ -17,8 +14,6 @@ import 'fx_section.dart' show fxEnableMark;
 import 'graph_panel.dart';
 import 'node_menus.dart' show graphPortWord;
 
-/// The picture of its inner graph a Custom shader box carries under its rows:
-/// how tall it is, the air round it, and the room the two take on the box.
 const double graphShaderThumbHeight = 56;
 const double graphFootPad = 6;
 const double graphShaderFoot = graphShaderThumbHeight + graphFootPad * 2;
@@ -34,22 +29,17 @@ typedef GraphCard = ({
   String title,
   String? customName,
 
-  /// A word after the names saying what the box is: a Read box's item kind, an
-  /// Input's kind. Null where the title says it all.
   String? kicker,
   bool enabled,
 
-  /// The bypass tick, the twirl, and whether a double-click renames.
   bool tick,
   bool twirl,
   bool rename,
 
-  /// A box with an inside wears the viz tint on its header.
   bool tinted,
   List<BridgePort> inputs,
   List<BridgePort> outputs,
 
-  /// A box that reads a points stream with none wired in wears a warning.
   bool noStream,
 });
 
@@ -61,13 +51,11 @@ typedef GraphRow = ({
   BridgePort? output,
   String? param,
 
-  /// A group's heading, on a row of its own above the group's first row.
   String? heading,
   double top,
   double height,
 });
 
-/// One box, laid out: where it sits and which sockets it shows.
 class GraphBox {
   final GraphCard card;
   final Rect rect;
@@ -85,7 +73,6 @@ class GraphBox {
 
   String get key => card.key;
 
-  /// Whether the box draws a control on any row, which an open box does.
   bool get hasControls => rows.any((r) => r.param != null);
 
   Offset? socket(String portId, bool isInput) {
@@ -126,8 +113,6 @@ GraphBox graphLayoutBox(
   int colour = 0,
   bool collapsed = false,
 }) {
-  // Folded, a box is its header, and the sockets a shut box draws all meet
-  // at the header's two ends.
   if (collapsed) {
     bool kept(BridgePort p) => _alwaysDrawn(p.portType) || p.wired;
     return GraphBox(
@@ -192,7 +177,6 @@ List<GraphRow> graphRows(
     String? param,
     String? heading,
   })>[];
-  // A group's heading takes a row of its own, above the group's first.
   void controls() => rows.addAll([
         for (final id in params) ...[
           if (kickers[id] case final heading?)
@@ -306,7 +290,6 @@ class GraphNodeCard extends StatelessWidget {
   /// shader's picture of its inner graph. A press on it is its own.
   final Widget? foot;
 
-  /// The socket on this card a wire in hand has snapped to, drawn lit.
   final GraphSocket? snap;
 
   const GraphNodeCard({
@@ -340,8 +323,6 @@ class GraphNodeCard extends StatelessWidget {
       children: [
         Positioned.fill(
           child: GraphNodeFrame(
-            // A bypassed box draws its border dashed, both drawings; the
-            // selected one draws it in `animated`.
             colour: selected ? t.animated : t.hairline,
             dashed: !_card.enabled,
             fill: t.surface1,
@@ -354,8 +335,6 @@ class GraphNodeCard extends StatelessWidget {
           width: box.rect.width - 2,
           child: _header(t),
         ),
-        // Folded, one socket at each end of the header stands for the
-        // wires that meet there.
         if (box.collapsed) ...[
           if (box.inputs.isNotEmpty)
             Positioned(
@@ -395,8 +374,6 @@ class GraphNodeCard extends StatelessWidget {
       ports.where((p) => p.wired).firstOrNull ?? ports.first;
 
   Widget _header(LumitTheme t) {
-    // A box with an inside (a Custom shader, a nested node graph) wears the
-    // viz tint so it reads at a glance; a box given a colour wears that.
     final ground = _card.tinted ? graphShaderHeader(t) : t.surface2;
     return Container(
         key: ValueKey<String>('graph-node-header-$_key'),
@@ -407,7 +384,6 @@ class GraphNodeCard extends StatelessWidget {
               ? ground
               : Color.alphaBlend(
                   t.labelColour(box.colour).withValues(alpha: 0.3), ground),
-          // Folded, the header is the whole card and takes its corners.
           borderRadius: box.collapsed
               ? BorderRadius.circular(math.max(0.0, t.tokens.controlRadius - 1))
               : null,
@@ -487,9 +463,6 @@ class GraphNodeCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            // A box the user has named of their own says so beside its type
-            // name, quieter and less tracked — the same reading the drawing
-            // gives the Audio level box called "Music".
             if (_card.customName case final own?) ...[
               const SizedBox(width: 6),
               Flexible(
@@ -498,8 +471,6 @@ class GraphNodeCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis),
               ),
             ],
-            // And what kind of box it is, where the title does not say: the
-            // item's kind under a Read, the value's kind under an Input.
             if (_card.kicker case final word?) ...[
               const SizedBox(width: 6),
               Flexible(
@@ -669,9 +640,6 @@ class GraphNodeCard extends StatelessWidget {
     );
   }
 
-  /// A filled socket is wired, a hollow one is not (15-DESIGN §12A.7). The
-  /// one a wire in hand has snapped to is filled and ringed. The colour is the
-  /// type, and the tooltip says which.
   Widget _socket(LumitTheme t, BridgePort port, {required bool isInput}) {
     final colour = portColour(t, port.portType);
     final lit = snap?.isInput == isInput && snap?.port.id == port.id;

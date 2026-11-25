@@ -33,7 +33,6 @@ import 'viewer_rulers.dart' show viewerGuideScreen;
 /// tells the caller to draw no indicator.
 typedef ViewerSnap = ({double shift, double? caught});
 
-/// Nothing reached for it.
 const ViewerSnap noViewerSnap = (shift: 0.0, caught: null);
 
 /// How far one axis of a drag has to move for the nearest target to take it.

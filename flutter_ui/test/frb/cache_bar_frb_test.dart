@@ -60,8 +60,6 @@ void main() {
     // Viewer shows leaves bytes behind — the rendered-frame cache is filled by
     // the scope path, which needs CPU pixels and files what it renders.
 
-    /// The whole point of the bar: a frame that has been rendered (here, for a
-    /// trace) reads back as held, and one that has not reads as nothing.
     testWidgets('a rendered frame shows as held, an unrendered one does not',
         (tester) async {
       final p = freshProject();
@@ -137,7 +135,6 @@ void main() {
           height: settings.height,
           fpsNum: settings.fpsNum,
           fpsDen: settings.fpsDen,
-          // 4000 frames at the comp's 60 fps.
           background: settings.background,
           shutterAngle: settings.shutterAngle,
           motionBlurSamples: settings.motionBlurSamples,
@@ -182,8 +179,6 @@ void main() {
       ));
       await tester.pump();
 
-      // Front the other one, exactly as the Timeline's tab bar does — no edit,
-      // no playhead move.
       p.uiState.setSelectedComp(second);
       await tester.pump();
 
@@ -265,8 +260,7 @@ void main() {
     /// budget the cache actually holds to, which is what makes this askable.
     testWidgets('the VRAM budget reaches the cache, whenever it was set',
         (tester) async {
-      // Set before anything renders, exactly as the settings restore does.
-      const wanted = 1 << 30; // 1 GiB, and not the default
+      const wanted = 1 << 30;
       setVramCacheBudget(bytes: wanted);
 
       final p = freshProject();

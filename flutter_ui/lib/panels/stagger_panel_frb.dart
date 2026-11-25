@@ -1,6 +1,3 @@
-// The Stagger panel: start the selected layers one after another, a set
-// number of frames apart, or line them up on one frame again. Its order is
-// also the one a stagger drag on bars or keys follows.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -21,8 +18,6 @@ import 'stagger.dart';
 import 'text_target.dart' show textCell;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// Put the Stagger panel up and in front: what Layer ▸ Stagger layers… and
-/// the row menu do.
 void showStaggerPanel(LumitUiState ui) {
   setPanelVisible(ui.split, Panel.stagger, true);
   activatePanelTab(ui.split, Panel.stagger);
@@ -52,7 +47,6 @@ class _StaggerPanelFrbState extends State<StaggerPanelFrb> {
   /// until the drag ends.
   int? _live;
 
-  /// The overlap while its well is being dragged, the same way.
   int? _liveOverlap;
 
   /// Stagger the picked layers, or line them up with [lineUp]. All of it, the
@@ -168,7 +162,6 @@ class _StaggerPanelFrbState extends State<StaggerPanelFrb> {
     _ui.workspace.setStagger(overlap: v.round());
   }
 
-  /// A frames well, as Offset and Overlap both are.
   Widget _frames(LumitTheme t, String key, int value, int resetTo,
           void Function(int?) live, void Function(num) set) =>
       Row(
@@ -296,8 +289,6 @@ class _StaggerPanelFrbState extends State<StaggerPanelFrb> {
                 ),
               ),
               Padding(
-                // Under the values, so the buttons read as what the two rows
-                // above are for.
                 padding:
                     const EdgeInsetsDirectional.fromSTEB(102, 8, 10, 8),
                 child: Row(

@@ -31,14 +31,12 @@ import 'package:flutter/animation.dart';
 
 import 'theme.dart';
 
-/// One movement: how long it takes and the curve it follows.
 class MotionSpec {
   final Duration duration;
   final Curve curve;
 
   const MotionSpec(this.duration, [this.curve = Curves.easeOutCubic]);
 
-  /// No movement. A widget handed this arrives where it is going.
   static const still = MotionSpec(Duration.zero, Curves.linear);
 
   bool get isStill => duration == Duration.zero;
@@ -60,10 +58,8 @@ const Duration _ms220 = Duration(milliseconds: 220);
 const Duration _ms280 = Duration(milliseconds: 280);
 const Duration _ms320 = Duration(milliseconds: 320);
 
-/// The house ease-out: most of the distance early, a gentle stop.
 const Curve _out = Curves.easeOutCubic;
 
-/// Desk's stop: nearly all the distance at once, then nothing. A detent.
 const Curve _detent = Curves.easeOutQuart;
 
 /// Landing a little past the mark and coming back, once. About a twentieth of
@@ -79,7 +75,6 @@ const Curve _landSoft = Cubic(0.3, 1.6, 0.6, 1.0);
 /// on things hovered tens of times a day, and Studio is quick and quiet.
 const Curve _springSoft = Cubic(0.3, 2.2, 0.5, 1.0);
 
-/// Every named movement, for one shape at one level.
 class Motion {
   final ThemeShape shape;
   final AnimationLevel level;
@@ -109,15 +104,11 @@ class Motion {
   /// Full only, as [scroll] is, since it is how the view travels.
   final MotionSpec zoom;
 
-  /// A state mark changing: the tab that is fronted, the tool that is armed,
-  /// a focus ring.
   final MotionSpec mark;
 
-  /// A tick or a radio dot arriving, and the size it starts from.
   final MotionSpec pop;
   final double popScale;
 
-  /// A switch's knob crossing its track.
   final MotionSpec toggle;
 
   /// A menu, dropdown or picker opening. A rise is where the thing starts, in
@@ -144,30 +135,22 @@ class Motion {
   final MotionSpec tooltip;
   final double tooltipRise;
 
-  /// A dialogue opening, and the wash behind it.
   final MotionSpec modal;
   final double modalRise;
   final double modalScale;
   final MotionSpec scrim;
 
-  /// Rows moving out of the way of something dragged past them.
   final MotionSpec makeWay;
 
-  /// A thing in hand being picked up: its shadow and wash arriving.
   final MotionSpec lift;
 
-  /// A dropped thing landing in its slot.
   final MotionSpec settle;
 
-  /// A drop target lighting up, and moving between the places a drop can go.
   final MotionSpec dropZone;
 
-  /// Content arriving in a place that was already there: a settings page, a
-  /// tab's body.
   final MotionSpec reveal;
   final double revealRise;
 
-  /// One whole surface taking over from another: splash, welcome, shell.
   final MotionSpec swap;
 
   /// The guided tour going from one step to the next: the hole crossing the
@@ -218,7 +201,6 @@ class Motion {
     required this.tie,
   });
 
-  /// Whether nothing moves at all.
   bool get isStill => level == AnimationLevel.none;
 
   /// Whether a row being reordered is carried: it rides the pointer and the
@@ -230,7 +212,6 @@ class Motion {
   static final List<Motion?> _table = List<Motion?>.filled(
       ThemeShape.values.length * AnimationLevel.values.length, null);
 
-  /// The movements for [shape] at [level]. Built once each and kept.
   static Motion of(ThemeShape shape, AnimationLevel level) =>
       _table[shape.index * AnimationLevel.values.length + level.index] ??=
           switch (level) {
@@ -371,21 +352,17 @@ class Motion {
     hoverIn: MotionSpec(_ms50, _detent),
     hoverOut: MotionSpec(_ms90, _detent),
     rowTrail: MotionSpec(_ms60, Curves.easeOut),
-    // A control on an instrument comes up to meet the hand and stops.
     swell: MotionSpec(_ms80, _detent),
     swellScale: 1.04,
     scroll: MotionSpec(_ms90, _detent),
     zoom: MotionSpec(_ms80, _detent),
     mark: MotionSpec(_ms80, _detent),
-    // A tick on an instrument is on or it is off.
     pop: MotionSpec.still,
     popScale: 1,
-    // A slide switch travels at one speed and stops against its end.
     toggle: MotionSpec(_ms80, Curves.linear),
     popup: MotionSpec(_ms80, _detent),
     popupRise: 0,
     popupScale: 1,
-    // What is on an instrument's menu is there when the menu is.
     content: MotionSpec.still,
     contentRise: 0,
     contentBlur: 0,

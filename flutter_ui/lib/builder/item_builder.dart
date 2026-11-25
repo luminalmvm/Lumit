@@ -39,7 +39,6 @@ class _ProjectItemBuilderState extends State<ProjectItemBuilder> {
   }
 
   void onChange(ScopedChange event) {
-    // The scope of this change is below this item, dont rebuild
     if (event.layer != null) return;
 
     if (event.item?.equals(item: widget.item) == true) {

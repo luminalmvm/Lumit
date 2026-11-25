@@ -51,7 +51,6 @@ List<SelectedKey> audioKeyPlaces(List<AudioTrackRow> tracks, double fps,
   var y = 0.0;
   for (final track in tracks) {
     final step = track.rowHeight;
-    // The track's own band comes first, then its lanes, then the rows.
     y += track.laneHeight;
     for (final lane in track.drawnLanes) {
       final row = lane.row;
@@ -92,8 +91,6 @@ List<SelectedKey> audioKeyPlaces(List<AudioTrackRow> tracks, double fps,
   return out;
 }
 
-/// Every keyframe the marquee's box caught, walking the same rows the lanes
-/// draw.
 Set<String> audioKeysIn(
     Rect rect, List<AudioTrackRow> tracks, TimelineAxis axis, double fps) {
   final caught = <String>{};
@@ -129,7 +126,6 @@ List<(double, double)> audioSeamBlanks(List<AudioTrackRow> tracks) {
   return out..add((y, 1e7));
 }
 
-/// The indices of [laneId]'s keys among the picked ids.
 Set<int> laneSelection(Set<String> selected, String laneId) {
   final prefix = '$laneId#';
   return {
@@ -158,8 +154,6 @@ typedef _OwnLane = ({
   void Function(BridgeScalar next) write
 });
 
-/// The lanes among [tracks] whose keys the graph's channels cannot reach:
-/// Pan, the sends and the master's Volume, by lane id.
 Map<String, _OwnLane> _laneOnlyRows(
     List<AudioTrackRow> tracks, MasterLaneKeys? master) {
   return {
@@ -234,7 +228,6 @@ bool deleteLaneKeys({
           : BridgeScalar.keyframed(rest));
       changed = true;
     } catch (_) {
-      // A locked layer refuses, and quietly.
     }
   }
   return changed;
@@ -297,7 +290,6 @@ bool pasteOnLanes({
       found.write(next);
       changed = true;
     } catch (_) {
-      // A locked layer refuses, and quietly.
     }
   }
   return changed;

@@ -6,7 +6,6 @@
 
 import 'package:flutter/widgets.dart';
 
-/// The picture named [textureId].
 Widget viewerPicture(int textureId,
         {FilterQuality filterQuality = FilterQuality.low}) =>
     Texture(textureId: textureId, filterQuality: filterQuality);

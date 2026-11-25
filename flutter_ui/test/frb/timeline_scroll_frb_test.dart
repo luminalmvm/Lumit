@@ -23,7 +23,6 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Timeline scrolling (frb)', () {
-    /// A stack tall enough that both halves have somewhere to scroll to.
     ({LumitState state, LumitUiState uiState}) withManyLayers() {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
@@ -49,7 +48,6 @@ void main() {
       await settleFrb(tester, minRounds: 6);
     }
 
-    /// Every vertical scrollable in the panel, by the position each holds.
     List<ScrollPosition> verticalPositions(WidgetTester tester) => tester
         .stateList<ScrollableState>(find.byType(Scrollable))
         .map((s) => s.position)
@@ -63,7 +61,6 @@ void main() {
       final before = verticalPositions(tester).map((p) => p.pixels).toList();
       expect(before, isNotEmpty, reason: 'there is somewhere to scroll to');
 
-      // The gesture a Mac trackpad makes: a pan-zoom sequence, not a wheel.
       final pad = await tester.createGesture(kind: PointerDeviceKind.trackpad);
       await pad.panZoomStart(tester.getCenter(find.byType(TimelinePanelFrb)));
       await tester.pump();
@@ -81,15 +78,12 @@ void main() {
               'selection box over it');
     });
 
-    /// The lanes' one horizontal position, once there is somewhere to scroll to.
     ScrollPosition horizontalPosition(WidgetTester tester) => tester
         .stateList<ScrollableState>(find.byType(Scrollable))
         .map((s) => s.position)
         .firstWhere(
             (p) => p.axis == Axis.horizontal && p.maxScrollExtent > 0);
 
-    /// Zoom time in far enough that the lanes are wider than the panel, so a
-    /// horizontal pan has room to move.
     Future<void> zoomIn(WidgetTester tester, Offset at) async {
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -102,7 +96,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// A drag over the lanes, on whichever button is asked for.
     Future<void> drag(WidgetTester tester, Offset from, Offset by,
         {required int buttons}) async {
       final pointer = TestPointer(2, PointerDeviceKind.mouse, null, buttons);
@@ -132,12 +125,10 @@ void main() {
       await tester.sendEventToBinding(
           TestPointer(1, PointerDeviceKind.mouse).hover(lanes));
       final position = horizontalPosition(tester);
-      // Back to the start, so there is room to scroll towards the end.
       position.jumpTo(0);
       await tester.pump();
 
       final ruler = find.byKey(const ValueKey('tl-ruler'));
-      // The ruler is as wide as the comp: its visible part is the viewport's.
       final view = tester
           .stateList<ScrollableState>(find.byType(Scrollable))
           .firstWhere((s) => s.position == position)
@@ -156,12 +147,10 @@ void main() {
         await tester.sendEventToBinding(pointer.move(Offset.lerp(from, edge, i / 6)!));
         await tester.pump();
       }
-      // Let the edge scroll run.
       for (var i = 0; i < 20; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
       expect(position.pixels, greaterThan(0), reason: 'the lanes scrolled');
-      // A step back from the edge, which stops the scroll.
       final back = Offset(rect.right - 200, rect.center.dy);
       await tester.sendEventToBinding(pointer.move(back));
       await tester.pump();
@@ -174,9 +163,6 @@ void main() {
       await tester.sendEventToBinding(pointer.up());
       await tester.pumpAndSettle();
     });
-    /// **The middle button drags the view about** (docs/07 §4.6), the way it
-    /// does in After Effects, Blender and Resolve. Both ways at once, and the
-    /// view moves against the drag so the lanes follow the pointer.
     testWidgets('a middle-button drag pans the lanes both ways',
         (tester) async {
       final p = withManyLayers();
@@ -191,7 +177,6 @@ void main() {
       expect(verticalPositions(tester).every((p) => p.pixels == 0), isTrue,
           reason: 'and the rows start at the top');
 
-      // Right and up, so the lanes go left and down under the pointer.
       await drag(tester, lanes, const Offset(60, -80),
           buttons: kMiddleMouseButton);
 

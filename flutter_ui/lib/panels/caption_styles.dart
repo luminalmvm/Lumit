@@ -24,7 +24,6 @@ import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'text_animation_presets.dart';
 import 'text_animator_rows_frb.dart';
 
-/// The looks that come with Lumit.
 enum CaptionStyle {
   plain,
   box,
@@ -74,7 +73,6 @@ BridgeTextDocument captionLook(CaptionStyle style, {required int height}) {
           platePadding: (size * 0.22).roundToDouble(),
           plateRadius: (size * 0.12).roundToDouble(),
         )
-      // The outline is drawn under the fill, so it only thickens the edge.
       : text.copyWith(
           strokeOn: true,
           stroke: _black,
@@ -120,28 +118,23 @@ BridgeTextAnimator _emphasis(CaptionStyle style) {
       fillB: const BridgeScalar.static_(-0.9));
 }
 
-/// A look a person kept with Save style.
 class SavedCaptionStyle {
   final String name;
   final BridgeTextDocument look;
 
-  /// Kept from a layer that showed one word at a time, so it does again.
   final bool single;
   const SavedCaptionStyle(this.name, this.look, {this.single = false});
 }
 
-/// One of the looks on offer: a built-in one or a saved one.
 class CaptionLookChoice {
   final CaptionStyle? builtIn;
   final SavedCaptionStyle? saved;
   const CaptionLookChoice.builtIn(CaptionStyle this.builtIn) : saved = null;
   const CaptionLookChoice.saved(SavedCaptionStyle this.saved) : builtIn = null;
 
-  /// What the choice is remembered by.
   String get key => builtIn?.name ?? 'saved:${saved!.name}';
   String get title => builtIn?.title ?? saved!.name;
 
-  /// Shows one word at a time, and sets the limits to say so.
   bool get single =>
       builtIn == CaptionStyle.oneWord || (saved?.single ?? false);
 
@@ -149,23 +142,18 @@ class CaptionLookChoice {
       saved?.look ?? captionLook(builtIn!, height: height);
 }
 
-/// Every look on offer: the built-in ones, then the saved ones in the order
-/// they were saved.
 List<CaptionLookChoice> captionLookChoices(Workspace workspace) => [
       for (final style in CaptionStyle.values) CaptionLookChoice.builtIn(style),
       for (final saved in savedCaptionStyles(workspace))
         CaptionLookChoice.saved(saved),
     ];
 
-/// The choice remembered as [key], or Plain when it is gone.
 CaptionLookChoice captionLookChoice(Workspace workspace, String? key) {
   for (final choice in captionLookChoices(workspace)) {
     if (choice.key == key) return choice;
   }
   return const CaptionLookChoice.builtIn(CaptionStyle.plain);
 }
-
-// --- Putting a look on a layer ----------------------------------------------
 
 /// Restyle caption [layer] as [choice], as one undo step. Its box width, its
 /// place and its captions stay. A one-word look cuts the captions again a word
@@ -239,9 +227,6 @@ extension CaptionLimitsCopy on BridgeCaptionLimits {
       );
 }
 
-// --- Saved styles -------------------------------------------------------------
-
-/// The saved looks, as the settings file holds them.
 List<SavedCaptionStyle> savedCaptionStyles(Workspace workspace) => [
       for (final raw in workspace.captionStyles)
         if (raw['name'] case final String name)
@@ -250,7 +235,6 @@ List<SavedCaptionStyle> savedCaptionStyles(Workspace workspace) => [
                 single: raw['single'] == true),
     ];
 
-/// Keep [layer]'s look under [name], replacing one already called that.
 void saveCaptionStyle(Workspace workspace, String name, LayerReference layer) {
   final look = layer.getText();
   final captions = layer.captions();
@@ -266,7 +250,6 @@ void saveCaptionStyle(Workspace workspace, String name, LayerReference layer) {
   ]);
 }
 
-/// Call the saved look [from] by [to]. One already called [to] goes.
 void renameCaptionStyle(Workspace workspace, String from, String to) =>
     workspace.setCaptionStyles([
       for (final raw in workspace.captionStyles)
@@ -434,11 +417,6 @@ BridgeTextDocument _decodeLook(Map<String, dynamic> j) {
   );
 }
 
-// --- The tile -------------------------------------------------------------------
-
-/// A look's sample: a short line in that look over the picture's surround,
-/// with the middle word as the one being said. Drawn here from the look's own
-/// numbers, so a saved style shows as truly as a built-in one.
 class CaptionLookTile extends StatelessWidget {
   final CaptionLookChoice choice;
   final bool selected;

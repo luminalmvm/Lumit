@@ -1,5 +1,3 @@
-// Where a control's row sits in the Timeline's fold: the twirls to open on
-// the way to it, and the row itself.
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
@@ -25,7 +23,6 @@ import 'transform_rows_frb.dart';
     final entries = info.shapeContents;
     final at = entries.indexWhere((e) => shapeEntryId(e) == owner);
     if (at < 0) return none;
-    // The groups the shape sits in, each shut until opened.
     final groups = <String>[];
     var depth = entries[at].depth;
     for (var i = at - 1; i >= 0 && depth > 0; i--) {
@@ -61,7 +58,6 @@ import 'transform_rows_frb.dart';
       );
       for (final group in groups) {
         if (group.axes.any((axis) => axis.prop == row.props.first)) {
-          // A transform row shows on its own, with its heading left shut.
           final path = transformGroupPath(id, group);
           return (open: [path], row: path);
         }

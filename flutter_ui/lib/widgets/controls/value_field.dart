@@ -1,5 +1,3 @@
-// The value well: the modifier ladder a scrub runs on, the chip that shows it,
-// and the field itself.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -55,12 +53,10 @@ double scrubFactor() => HardwareKeyboard.instance.isShiftPressed
 /// down and takes it down on release, and the resting panel keeps every pixel
 /// it had.
 class ScrubLadder extends StatelessWidget {
-  /// What [scrubFactor] answers right now — which rung is boxed.
   final double factor;
 
   const ScrubLadder({super.key, required this.factor});
 
-  /// A rung's label. Ordered as [scrubLadder] is.
   static List<String> get labels => [
         l10n.scrubLadderShift,
         l10n.scrubLadderBase,
@@ -145,7 +141,6 @@ void noteSetExpression({bool select = true}) {
   _setExpressionSelects = select;
 }
 
-/// Whether the editor [tookSetExpression] opens should select its text.
 bool get setExpressionSelects => _setExpressionSelects;
 
 /// Whether Set expression was chosen a moment ago. It answers yes once.
@@ -244,8 +239,6 @@ class DragValueField extends StatefulWidget {
   final bool bare;
   final ValueChanged<num> onChanged;
 
-  /// Fired once when a drag begins. Optional — a caller with nothing to do at
-  /// drag-start (the common case) simply omits it.
   final VoidCallback? onChangeStart;
 
   /// Fired with the live value on every accumulated drag tick, in place of
@@ -289,8 +282,6 @@ class DragValueField extends StatefulWidget {
     this.onSubmitted,
   });
 
-  /// Opens with its editor up and the whole value selected, for a small box
-  /// that exists to have one number typed into it.
   final bool autofocus;
 
   /// Fired after [onChanged] when the number was committed with `Enter`, and
@@ -298,8 +289,6 @@ class DragValueField extends StatefulWidget {
   /// box, which shuts once its number is in.
   final VoidCallback? onSubmitted;
 
-  /// Offered in the value's context menu when the property can take one.
-  /// Absent (and the menu entry with it) for a field that cannot.
   final VoidCallback? setExpression;
 
   @override
@@ -317,9 +306,6 @@ class _DragValueFieldState extends State<DragValueField>
   bool _hover = false;
   bool _focused = false;
 
-  /// A scrub is under the pointer right now — the one thing that turns the
-  /// number `accent` (§3.1). Transient and local, like all feedback (§12A.5):
-  /// it goes the moment the pointer lifts and leaves no trace behind.
   bool _dragging = false;
   double _dragAccum = 0;
 
@@ -431,18 +417,13 @@ class _DragValueFieldState extends State<DragValueField>
     return KeyEventResult.ignored;
   }
 
-  /// The idle box's focus — how Tab reaches the field, and what `Enter`
-  /// opens the editor from.
   final ControlFocusNode _idleFocus = ControlFocusNode(debugLabel: 'value');
 
-  /// The open editor, for the selection gestures: pressing in it puts the
-  /// caret down and dragging highlights, the way any text box works.
   final GlobalKey<EditableTextState> textFieldKey = GlobalKey();
 
   @override
   GlobalKey<EditableTextState> get editableTextKey => textFieldKey;
 
-  /// The press, drag and right-click of every field, made once.
   late final _gestures = TextFieldGestures(delegate: this, context: context);
 
   @override
@@ -524,13 +505,11 @@ class _DragValueFieldState extends State<DragValueField>
     return widget.suffix == null ? s : '$s${widget.suffix}';
   }
 
-  /// Hand one edit to the [ValueEditScope] above, if there is one.
   void _edit(bool typed, VoidCallback edit) {
     final scope = context.getInheritedWidgetOfExactType<ValueEditScope>();
     scope == null ? edit() : scope.run(typed, edit);
   }
 
-  /// [submitted] is Enter, as against clicking or tabbing away.
   void _commitText({bool submitted = false}) {
     final raw = _controller.text.replaceAll(widget.suffix ?? '', '').trim();
     final parsed = parseNumberField(raw);
@@ -570,7 +549,6 @@ class _DragValueFieldState extends State<DragValueField>
       ? v.round().toString()
       : v.toDouble().toStringAsFixed(widget.decimals);
 
-  /// Whether the number stands at the default its row declares.
   bool get _atDefault {
     final fallback = widget.resetTo;
     return fallback != null && (widget.value - fallback).abs() < 1e-5;
@@ -637,8 +615,6 @@ class _DragValueFieldState extends State<DragValueField>
                   child: MenuLabel(l10n.paramMenuPasteValue,
                       enabled: pasted != null),
                 ),
-                // Only where the property can actually hold one, so the menu on
-                // a field that cannot never offers it.
                 if (widget.setExpression != null) ...[
                   const MenuDivider(),
                   MenuRow(
@@ -678,9 +654,6 @@ class _DragValueFieldState extends State<DragValueField>
           decoration: dress(BoxDecoration(
             color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.wellRadius),
-            // The accent, as every focused field: `animated` is the keyed
-            // colour. Drawn at the resting face's own width so the edge does
-            // not move either.
             border:
                 Border.all(color: _refused ? t.error : t.accent, width: 1),
           ), widget.bare
@@ -836,8 +809,6 @@ class _DragValueFieldState extends State<DragValueField>
           widget.onDragCancel?.call();
           _closeGroup();
         },
-        // Animated for the edge alone. It lights at once under a scrub, which
-        // is the hand already moving, and eases for hover and focus.
         child: AnimatedContainer(
           duration: _dragging
               ? Duration.zero
@@ -849,7 +820,6 @@ class _DragValueFieldState extends State<DragValueField>
           padding: widget.bare
               ? EdgeInsets.zero
               : const EdgeInsets.symmetric(horizontal: 6),
-          // A style's inner shadows, so a well can sit sunk into its panel.
           foregroundDecoration: widget.bare
               ? null
               : insetDecoration(
@@ -871,7 +841,6 @@ class _DragValueFieldState extends State<DragValueField>
                     width: 1)
                 : wellBorder(
                     t,
-                    // Refused text, typed just now and then clicked away from.
                     _refused
                         ? t.error
                         : _dragging

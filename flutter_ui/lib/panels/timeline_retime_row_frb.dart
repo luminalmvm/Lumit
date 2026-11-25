@@ -1,7 +1,3 @@
-// The Timeline's Retime row.
-//
-// Split out of timeline_panel_frb.dart, where its doc comment had drifted from
-// its class; the two are back together here.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -40,10 +36,6 @@ class RetimeRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  /// Selects the channel, so its curve opens in the graph — the same handle
-  /// every other property row's name is. Retime was built without one, which
-  /// left it the one channel `graphChannels` could build and nobody could
-  /// choose.
   final VoidCallback? onLabelTap;
 
   const RetimeRow({super.key, 
@@ -144,8 +136,6 @@ class _RetimeRowState extends State<RetimeRow> {
     final animated = scalar is BridgeScalar_Keyframed;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final playhead = ui.playheadFrame;
-    // Which face the row wears: the clock by default, seconds for
-    // anyone who asked for them in Settings ▸ Interface ▸ Editing.
     final seconds = ui.workspace.interface.retimeInSeconds;
     // The clock face counts *source* frames, so it runs at the footage's own
     // rate — 600 fps footage counts to :599 whatever the comp's rate says.
@@ -154,7 +144,6 @@ class _RetimeRowState extends State<RetimeRow> {
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
       builder: (context, frame, _) {
-        // Keyed or worked out by an expression, it is read under the playhead.
         final value = _staged ??
             switch (scalar) {
               BridgeScalar_Static(:final field0) => field0,
@@ -191,8 +180,6 @@ class _RetimeRowState extends State<RetimeRow> {
                                 color: Color.lerp(
                                     t.body.color, t.textPrimary, lit))),
                       ),
-                      // The speed under the playhead, once it is not the
-                      // ordinary one.
                       if (_speedAt(frame) case final speed?) ...[
                         const SizedBox(width: 8),
                         Text(
@@ -280,7 +267,6 @@ class _RetimeRowState extends State<RetimeRow> {
             SizedBox(width: widget.valueColumn.rightInset),
           ],
         );
-        // Retime's own commands first, then what any property row has.
         return ParamRowMenu(
           menu: scalarRowMenu(context, keys,
               host: (context, at, rows) => showRetimeMenuFor(

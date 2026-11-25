@@ -37,19 +37,15 @@ import 'status_poller.dart';
 /// It picks two things and no more: the word for an answer that read nothing,
 /// and the prefix on the card's keys, so two cards on one layer are told apart.
 enum PlaneCard {
-  /// The Depth effect: how far away every pixel is.
   depth,
 
-  /// Remove background: how much of each pixel is the subject.
   matte;
 
-  /// What a run that kept no frames leaves the card saying.
   String get _nothing => switch (this) {
         PlaneCard.depth => l10n.planeNoDepth,
         PlaneCard.matte => l10n.planeNoMatte,
       };
 
-  /// The prefix every key on this card carries.
   String get _key => switch (this) {
         PlaneCard.depth => 'fx-depth',
         PlaneCard.matte => 'fx-matte',
@@ -128,13 +124,9 @@ int planeCoveredFrames(BridgePlaneStatus status) {
   return (last - first + 1).clamp(0, status.clipFrames);
 }
 
-/// The lines under a planes-tier effect's Analyse and Cancel buttons: how far
-/// the answer reaches, how the analysis is getting on, and what read it.
 class PlaneDisplayFrb extends StatefulWidget {
-  /// Which effect this card is drawn for. See [PlaneCard].
   final PlaneCard card;
 
-  /// The layer the effect sits on. What the reading is asked about.
   final LayerReference? layer;
 
   /// The node graph the effect is a box in, where it is one rather than an
@@ -145,7 +137,6 @@ class PlaneDisplayFrb extends StatefulWidget {
   /// two of them on one clip with different models are two answers.
   final UuidValue effectId;
 
-  /// Something changed that the rest of the interface should re-read.
   final VoidCallback onChanged;
 
   /// Bumped by the panel every time one of the effect's Action buttons is
@@ -213,9 +204,6 @@ class _PlaneDisplayFrbState extends State<PlaneDisplayFrb>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // The same bar the tracking and Roto brush displays draw, measuring
-          // the same thing in the same two weights: how much of the shot the
-          // answer reaches, in the accent, against how much it does not.
           if (status != null && status.clipFrames > 0)
             TrackSpanBar(
               key: ValueKey<String>('$key-span'),

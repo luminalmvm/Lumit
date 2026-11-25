@@ -1,7 +1,3 @@
-// The workspace controller: everything the egui `Shell` persists (dock
-// layout, colour scheme, shape, accent override, animation level, the
-// settings structs), held in one ChangeNotifier and written to a JSON file —
-// the Flutter counterpart of eframe's storage (docs/archive/flutter-port/03).
 
 import 'dart:async';
 import 'dart:convert';
@@ -37,11 +33,8 @@ import 'package:lumit_flutter/state/platform.dart'
 /// [SavedSession]'s equality needs.
 typedef ViewerLook = ({double stops, bool toneMap});
 
-/// Neither control engaged: the picture is the export.
 const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
 
-/// Which layer a stagger starts first: the top of the stack, the bottom, the
-/// one clicked first, or a new shuffle each time.
 enum LayerStaggerOrder { topDown, bottomUp, clicked, random }
 
 /// Where the user was in one composition when they last left it: the playhead
@@ -55,7 +48,6 @@ enum LayerStaggerOrder { topDown, bottomUp, clicked, random }
 /// behaviour, compared by value.
 typedef CompView = ({int frame, double zoom, double scroll, double scrollY});
 
-/// A comp nobody has been in yet: frame one, fitted, at the top left.
 const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0, scrollY: 0.0);
 
 /// Which of the Viewer's marks are drawn over one composition: the proportional
@@ -67,7 +59,6 @@ const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0, scrollY: 0.0);
 /// compared by value, which is what [SavedSession]'s equality needs.
 typedef ViewerOverlays = ({bool grid, bool safeAreas, bool rulers, bool reach});
 
-/// Nothing drawn: what a composition nobody has asked anything of shows.
 const ViewerOverlays noViewerOverlays =
     (grid: false, safeAreas: false, rulers: false, reach: false);
 
@@ -305,8 +296,6 @@ class SavedSession {
         setupDocks: setupDocksFromJson(j['setup_docks']),
       );
 
-  /// The Cut timeline's row heights out of a session's JSON, dropping what is
-  /// not the shape this build writes.
   static Map<String, Map<String, double>> _heightsFromJson(Object? raw) {
     if (raw is! Map) return const {};
     return {
@@ -666,13 +655,10 @@ class Workspace extends ChangeNotifier {
   /// beside the settings (profiles.dart).
   static String? libraryHome;
 
-  /// The folder a person's own styles are read from.
   static String stylesFolder() => _libraryFolder('styles');
 
-  /// The folder a person's own themes are kept in, a file each.
   static String themesFolder() => _libraryFolder('themes');
 
-  /// The folder saved shortcut sets are kept in, a file each.
   static String shortcutsFolder() => _libraryFolder('shortcuts');
 
   static String _libraryFolder(String kind) =>
@@ -699,7 +685,6 @@ class Workspace extends ChangeNotifier {
     return null;
   }
 
-  /// The style in use, or null.
   StyleSheet? get activeStyle {
     for (final s in styles) {
       if (s.name == customStyle) return s;
@@ -707,7 +692,6 @@ class Workspace extends ChangeNotifier {
     return null;
   }
 
-  /// Read the styles folder again and redraw.
   void reloadStyles() {
     _readStyles();
     recompose();
@@ -779,7 +763,6 @@ class Workspace extends ChangeNotifier {
     IconStyle.reload();
   }
 
-  /// The style's problems as Settings last showed them.
   String _saidProblems = '';
 
   /// Called just before the look changes as a whole: a style or shape
@@ -787,7 +770,6 @@ class Workspace extends ChangeNotifier {
   /// shell fades from the look as it was (shell/look_fade.dart).
   VoidCallback? beforeLookChange;
 
-  /// Use the person's own style called [name].
   void setCustomStyle(String name) {
     beforeLookChange?.call();
     customStyle = name;
@@ -797,10 +779,8 @@ class Workspace extends ChangeNotifier {
   Color? accentOverride;
   AnimationLevel animationLevel = AnimationLevel.all;
 
-  /// The themes the user has made, read from [themesFolder].
   List<CustomTheme> customThemes = [];
 
-  /// Each of [customThemes]' file, by the theme's name.
   final Map<String, File> _themeFiles = {};
 
   /// Read the themes folder again, after something else changed it. A theme
@@ -853,7 +833,6 @@ class Workspace extends ChangeNotifier {
     }
   }
 
-  /// Write [theme] to its own file, a new one when it has none yet.
   void _writeTheme(CustomTheme theme) {
     if (_keepingThemes) {
       _keepThemes();
@@ -894,8 +873,6 @@ class Workspace extends ChangeNotifier {
   /// does, silently, to the built-in that is always there.
   String? customThemeName;
 
-  /// The custom theme in use, or null when a built-in scheme is selected or
-  /// the named one has been deleted.
   CustomTheme? get activeCustomTheme => _customThemeNamed(customThemeName);
 
   CustomTheme? _customThemeNamed(String? name) {
@@ -944,7 +921,6 @@ class Workspace extends ChangeNotifier {
 
   bool isFavouriteEffect(String key) => favouriteEffects.contains(key);
 
-  /// Star it, or take the star off again.
   void toggleFavouriteEffect(String key) {
     if (!favouriteEffects.remove(key)) favouriteEffects.add(key);
     settingsChanged();
@@ -984,7 +960,6 @@ class Workspace extends ChangeNotifier {
             key: expressionLanguageId(value),
       };
 
-  /// Every saved expression as the text of a file to hand to someone.
   String encodeExpressions() => jsonEncode({
         'lumit_expressions': savedExpressions,
         'languages': _encodedExpressionLanguages(),
@@ -1034,7 +1009,6 @@ class Workspace extends ChangeNotifier {
     }
   }
 
-  /// Save [text] under [name], over whatever that name held.
   void saveExpression(String name, String text,
       [BridgeExpressionLanguage language = BridgeExpressionLanguage.rhai]) {
     _storeExpression(name, text, language);
@@ -1102,21 +1076,14 @@ class Workspace extends ChangeNotifier {
   /// when the zoom is being used to frame rather than to inspect.
   bool smoothZoomedViewer = false;
 
-  /// Working preferences for the Pre-compose dialogue (Ctrl+Shift+C).
-  /// Default: Move attributes = true, Adjust duration = true, Open new comp = false.
-  /// If changed by the user, saved straight to the workspace store.
   bool precomposeMoveAttributes = true;
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
-  /// The Create captions dialogue's last answers, as it wrote them.
   Map<String, dynamic> captionSettings = {};
 
-  /// Caption looks kept with Save style, in the order they were kept.
   List<Map<String, dynamic>> captionStyles = [];
 
-  /// The Stagger panel's frames between layers, and the order its button and
-  /// a stagger drag take the layers in.
   int staggerStep = 1;
   LayerStaggerOrder staggerOrder = LayerStaggerOrder.topDown;
 
@@ -1155,17 +1122,12 @@ class Workspace extends ChangeNotifier {
   /// default, since a project's name can be somebody else's secret.
   DiscordStatus discordStatus = DiscordStatus.app;
 
-  /// Whether other programs on this computer may drive Lumit through its
-  /// live endpoint. Off until the person turns it on.
   bool liveEndpoint = false;
 
-  /// Whether Lumit talks to Tangent panels through Tangent's Hub.
   bool tangentPanels = false;
 
-  /// The MIDI input ports kept open, by the names the system gives them.
   List<String> midiInputs = [];
 
-  /// The learned MIDI controls, as `control_surfaces.dart` writes them.
   List<Map<String, dynamic>> midiMappings = [];
 
   /// Whether the welcome screen opens on launch.
@@ -1176,21 +1138,16 @@ class Workspace extends ChangeNotifier {
   /// something is displayed, so turning this off never hides a choice.
   bool showWelcomeOnLaunch = true;
 
-  /// The `.lum` a new project starts as a copy of, or empty for none.
   String projectTemplate = '';
 
   /// The graphics template Insert title places in the Cut timeline, as its
   /// file in the library, or empty for a plain Text layer.
   String titleTemplate = '';
 
-  /// The folder File > Scripts lists, or empty for Lumit's own.
   String scriptsFolder = '';
 
-  /// The Blender picked in Settings, or empty to use the one found.
   String blenderPath = '';
 
-  /// The script run after each event, by its path in the Scripts folder.
-  /// None is set at first.
   final Map<ScriptEvent, String> eventScripts = {};
 
   /// When the last update check finished, in milliseconds since the epoch.
@@ -1222,8 +1179,6 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
-  /// Dismiss the first-run screen without changing anything (skip = Lumit
-  /// defaults, docs/07 §13.1). Recorded so it is not asked again.
   void skipFirstRun() {
     firstRunDone = true;
     settingsChanged();
@@ -1237,8 +1192,6 @@ class Workspace extends ChangeNotifier {
   /// in Lumit for months is not.
   bool tourDone = true;
 
-  /// The tour has been seen to its end, or skipped. Either way it does not
-  /// open by itself again.
   void finishTour() {
     if (tourDone) return;
     tourDone = true;
@@ -1276,13 +1229,11 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// As [setCacheBudgetBytes], for the graphics card's preview cache.
   void setVramBudgetBytes(int bytes) {
     performance.vramBudgetBytes = bytes;
     save();
   }
 
-  /// As [setCacheBudgetBytes], for the frames parked on disk.
   void setDiskBudgetBytes(int bytes) {
     performance.diskBudgetBytes = bytes;
     save();
@@ -1333,7 +1284,6 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// Whether a plain drag on a ruler sounds the comp, as a `Ctrl` drag does.
   bool scrubOnDrag = false;
 
   void setScrubOnDrag(bool on) {
@@ -1491,7 +1441,6 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// The most projects [shareHosted] remembers.
   static const int maxShareHosted = 16;
 
   /// For each project this machine has shared and not stopped sharing, by the
@@ -1501,7 +1450,6 @@ class Workspace extends ChangeNotifier {
   /// oldest goes once there are [maxShareHosted].
   final Map<String, String> shareHosted = {};
 
-  /// Remember how [project] is shared, or forget it for null.
   void setShareHosted(String project, String? how) {
     shareHosted.remove(project);
     if (how != null) shareHosted[project] = how;
@@ -1559,7 +1507,6 @@ class Workspace extends ChangeNotifier {
   int autosaveMinutes = 5;
   int autosaveKeep = 5;
 
-  /// Set the cadence and write the file. A deliberate act, like the keymap.
   void setAutosave(int minutes, int keep) {
     autosaveMinutes = minutes;
     autosaveKeep = keep;
@@ -1574,14 +1521,8 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// The project last opened or saved with a path, restored on the next launch
-  /// (the egui frontend reopens the last project the same way). Null until a
-  /// project has been opened or saved to a file. This is only the *file*;
-  /// [sessions] carries the per-project session beside it.
   String? lastProjectPath;
 
-  /// Per-project sessions keyed by project file path — the Flutter counterpart
-  /// of the egui shell's `SavedSession` map, restored when a project reopens.
   final Map<String, SavedSession> sessions = {};
 
   LumitTheme _theme = LumitTheme.dark();
@@ -1624,7 +1565,6 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
-  /// The accent being hovered in Settings, drawn and not saved the same way.
   Color? _lookingAccent;
 
   void previewAccent(Color? accent) {
@@ -1657,7 +1597,6 @@ class Workspace extends ChangeNotifier {
     // Going solid, the room is solid in this frame, before the material
     // behind it goes, so nothing black shows between the two.
     if (backdrop == Backdrop.none) WindowBackdrop.showing = false;
-    // A style's own colours, if it sets any, go over the scheme.
     LumitTheme dressed(LumitTheme t) =>
         style == null ? t : applyTokens(t, style.colours(t));
     // A room picture shows through wherever the room is painted, and so does
@@ -1728,7 +1667,6 @@ class Workspace extends ChangeNotifier {
         LanternRoom.night => t.copyWith(room: LumitTheme.nightRoom),
       };
 
-  /// One entry in the theme picker: a built-in scheme, or one of the user's.
   List<ThemeChoice> get themeChoices => [
         for (final s in LumitColorScheme.values)
           if (s.mode == ThemeMode2.dark) ThemeChoice.builtIn(s),
@@ -1752,7 +1690,6 @@ class Workspace extends ChangeNotifier {
     }
   }
 
-  /// Select a built-in scheme, leaving any custom theme behind.
   void setScheme(LumitColorScheme s) {
     colorScheme = s;
     customThemeName = null;
@@ -1760,15 +1697,12 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// Select one of the user's themes by name.
   void setCustomTheme(String name) {
     customThemeName = name;
     recompose();
     save();
   }
 
-  /// Save a custom theme — replacing one of the same name, else appending —
-  /// and select it. What the editor's Save does.
   void saveCustomTheme(CustomTheme theme) {
     final at = customThemes.indexWhere((t) => t.name == theme.name);
     if (at >= 0) {
@@ -1910,31 +1844,26 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
-  /// Choose the project every new one starts as a copy of, or none.
   void setProjectTemplate(String path) {
     projectTemplate = path;
     settingsChanged();
   }
 
-  /// Choose the graphics template Insert title places, or none.
   void setTitleTemplate(String path) {
     titleTemplate = path;
     settingsChanged();
   }
 
-  /// Choose the folder File > Scripts lists, or empty for Lumit's own.
   void setScriptsFolder(String path) {
     scriptsFolder = path;
     settingsChanged();
   }
 
-  /// Pick the Blender 3D models open with, or empty to use the one found.
   void setBlenderPath(String path) {
     blenderPath = path;
     settingsChanged();
   }
 
-  /// Run [script] after [event], or nothing when it is null.
   void setEventScript(ScriptEvent event, String? script) {
     if (script == null) {
       eventScripts.remove(event);
@@ -1944,7 +1873,6 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
-  /// Turn the welcome screen on or off for the next launch.
   void setShowWelcomeOnLaunch(bool on) {
     showWelcomeOnLaunch = on;
     settingsChanged();
@@ -2130,8 +2058,6 @@ class Workspace extends ChangeNotifier {
         .where((p) => placed(presetLayout(p)) == now)
         .firstOrNull;
   }
-
-  // --- The user's own workspaces (docs/07 §1.4) ----------------------------
 
   /// The arrangements the user has saved, in name order — which is the order
   /// the strip lists them in, after the shipped presets.
@@ -2397,7 +2323,6 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// Forget the lot — the Clear beside the welcome screen's Recent heading.
   void clearRecentProjects() {
     if (recentProjects.isEmpty) return;
     recentProjects.clear();
@@ -2442,10 +2367,8 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  /// The saved session for the project at [path], or null when none is stored.
   SavedSession? sessionFor(String path) => sessions[path];
 
-  /// Where each floating window was left, keyed by the window's id.
   final Map<String, WindowPlacement> windowPlacements = {};
 
   /// Remember where a window was dragged or resized to. Written straight away
@@ -2456,8 +2379,6 @@ class Workspace extends ChangeNotifier {
     windowPlacements[id] = placement;
     save();
   }
-
-  // --- Persistence ---------------------------------------------------------
 
   /// Somewhere other than the real settings file to read and write — set by
   /// the test harness, null in the application.
@@ -2907,13 +2828,11 @@ class Workspace extends ChangeNotifier {
         }
       });
     }
-    // The left group always opens on Project (activate_panel_tab at start-up).
     activatePanelTab(dock, Panel.project);
     recompose();
   }
 
   void load() {
-    // The profile in use's library, known before anything reads from it.
     libraryHome = _homeOnFile();
     try {
       libraryUseHome(home: libraryHome);
@@ -3122,7 +3041,6 @@ class Workspace extends ChangeNotifier {
     return decoded.future;
   }
 
-  /// The same picture as a PNG.
   static Future<Uint8List?> compStillPng(CompositionReference comp, int frame,
       {int maxEdge = projectThumbnailPixels}) async {
     final image = await compStill(comp, frame, maxEdge: maxEdge);
@@ -3150,8 +3068,6 @@ class Workspace extends ChangeNotifier {
   }
 }
 
-/// A choice in the theme picker: one of the built-in schemes, or one of the
-/// user's own themes by name.
 class ThemeChoice {
   final LumitColorScheme? scheme;
   final String? customName;

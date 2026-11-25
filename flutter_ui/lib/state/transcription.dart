@@ -21,14 +21,11 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/transcript.dart';
 
 class TranscriptionState {
-  /// The running job's latest step, or null while none runs.
   final ValueNotifier<BridgeTranscribeEvent?> progress = ValueNotifier(null);
 
   StreamSubscription<BridgeTranscribeEvent>? _watch;
   ProjectReference? _project;
 
-  /// Follow `project`'s transcriptions, whoever starts them. Called when a
-  /// project becomes the open one.
   void adopt(ProjectReference project) {
     unawaited(_watch?.cancel());
     _project = project;
@@ -44,7 +41,6 @@ class TranscriptionState {
     progress.value = over ? null : event;
   }
 
-  /// Whether a transcription of the open project is running.
   bool get running => progress.value != null;
 
   /// Hear `items`, after [install] has put the speech model in place if it is

@@ -25,7 +25,6 @@ import 'mixer_panel_frb.dart' show meterRows;
 import 'mixer_strip.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The column beside the Master's meter that holds its loudness.
 const double _loudnessColumn = 56;
 
 class MasterStrip extends StatefulWidget {
@@ -36,8 +35,6 @@ class MasterStrip extends StatefulWidget {
   /// How tall the strips' racks stand, so this fader starts level with theirs.
   final double rackHeight;
 
-  /// Whether the loudness has room to stand beside the meter, rather than the
-  /// integrated number alone under the level.
   final bool loudness;
   final VoidCallback onChanged;
 
@@ -264,12 +261,10 @@ class _MasterStripState extends State<MasterStrip> {
                           )),
                   const SizedBox(width: 3),
                   MeterBand(stripId: '', feed: widget.feed),
-                  // Beside the meter, its top level with the fader's.
                   if (widget.loudness) ...[
                     const SizedBox(width: 5),
                     SizedBox(
                       width: _loudnessColumn,
-                      // A short desk cuts the readings rather than the meter.
                       child: SingleChildScrollView(
                         physics: const NeverScrollableScrollPhysics(),
                         child: LoudnessReadout(
@@ -285,15 +280,12 @@ class _MasterStripState extends State<MasterStrip> {
             const SizedBox(height: stripGap),
             _following(keyed, () => DbWell(db: _shown(), onCommit: _commit)),
             const SizedBox(height: stripGap),
-            // With no room beside the meter, the integrated loudness stands
-            // where a strip has its switches.
             SizedBox(
               height: stripSwitchRow,
               child: widget.loudness
                   ? null
                   : Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      // A long target shrinks the line rather than cut it.
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: LoudnessReadout(
@@ -319,8 +311,6 @@ class _MasterStripState extends State<MasterStrip> {
     );
   }
 
-  /// Rebuilt as the fader moves with the automation, with the playhead when
-  /// the master is keyed, and as a pass starts and stops writing it.
   Widget _following(bool keyed, Widget Function() build) => ListenableBuilder(
         listenable: Listenable.merge([
           widget.feed.positions,
@@ -352,8 +342,6 @@ class _LoudnessBar extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // The reading, as the integrated one above it stands, read against
-          // the target the same way.
           ValueListenableBuilder<LoudnessLevels>(
             valueListenable: feed.loudness,
             builder: (context, l, _) {
@@ -420,7 +408,6 @@ class _LoudnessBarPainter extends CustomPainter {
   /// The quietest loudness the bar shows, in LUFS.
   static const double floor = -48;
 
-  /// Where [lufs] stands along a bar [width] wide.
   static double _x(double width, double lufs) =>
       width * (1 - (lufs / floor).clamp(0.0, 1.0));
 

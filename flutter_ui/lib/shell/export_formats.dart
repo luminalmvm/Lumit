@@ -1,9 +1,6 @@
-// The formats an export can be written in.
 
 part of 'export_dialog_frb.dart';
 
-/// One output format: the engine key, the reading label, and the file
-/// extension its picker filters on.
 class _Format {
   final String key;
   final String label;
@@ -80,7 +77,5 @@ List<_Format> get _desktopFormats => [
           ExportOutputType.audioOnly),
     ];
 
-/// The reading name of the format [key], or the key itself for one this build
-/// does not offer.
 String exportFormatLabel(String key) =>
     _formats.where((f) => f.key == key).firstOrNull?.label ?? key;
