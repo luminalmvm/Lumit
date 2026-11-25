@@ -159,7 +159,6 @@ fn bezier_warp(@builtin(global_invocation_id) gid: vec3<u32>) {
         u = u - (fx * pt.sv.y - fy * pt.sv.x) * inv;
         v = v - (pt.su.x * fy - pt.su.y * fx) * inv;
     }
-    // The solve, verified: in range *and* actually solving.
     let back = coons(u, v);
     let miss = max(abs(back.s.x - px), abs(back.s.y - py));
     var val = vec4<f32>(0.0, 0.0, 0.0, 0.0);

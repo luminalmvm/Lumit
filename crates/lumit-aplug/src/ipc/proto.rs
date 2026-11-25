@@ -26,25 +26,19 @@ use crate::process::ParamEvent;
 ///
 /// Two, since a descriptor carries the standard the plugin speaks.
 pub const PROTOCOL_VERSION: u32 = 3;
-// 3 added the handshake: the broker's first word is now `Ready` rather than
-// `Hello`, and neither side says anything of substance until each has proved to
-// the other that it holds the session secret ([`lumit_peer`]).
 
 /// Which instance a message is about — the bits of a
 /// [`Handle`](crate::ipc::handles::Handle), which the host mints and the broker
 /// only ever quotes back.
 pub type InstanceId = u32;
 
-/// Which slot of the ring a block of sound is in.
 pub type Slot = u32;
 
 /// How the ring is laid out. Sent once, after the handshake, because the ring
 /// is sized once per module and never again ([`crate::ipc::ring`]).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RingSpec {
-    /// The backing file both processes map.
     pub path: String,
-    /// How many slots it holds.
     pub slots: u32,
     /// How many bytes each slot is, header included.
     pub slot_bytes: u64,
@@ -57,21 +51,16 @@ pub struct RingSpec {
 /// side may grow fields on for its own reasons.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Bring {
-    /// Which plugin inside the module, by its own stable id.
     pub plugin_id: String,
-    /// The blob the `.lum` saved, if this instance has been here before.
     pub state: Option<Vec<u8>>,
-    /// The values the project holds, by the plugin's own parameter id.
     pub params: Vec<(u32, f64)>,
     /// The rate this bake runs at, in hertz. Carried rather than assumed: a
     /// plugin activated at 48 kHz and handed a 96 kHz export tunes every
     /// filter an octave wrong.
     pub rate: u32,
-    /// Whether this is an export.
     pub offline: bool,
 }
 
-/// What the host says.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HostMessage {
     /// The host's half of the handshake: a nonce for the broker to answer, and
@@ -80,14 +69,10 @@ pub enum HostMessage {
     /// The broker checks the proof **before it opens the module**, so an
     /// impostor at the endpoint never gets the plugin's code to run.
     Challenge {
-        /// For the broker to answer.
         nonce: lumit_peer::Nonce,
-        /// The host's answer to [`BrokerMessage::Ready`]'s nonce.
         proof: lumit_peer::Proof,
     },
-    /// Here is the ring; map it.
     Open {
-        /// The ring's layout.
         ring: RingSpec,
     },
     /// Describe every plugin in the module, except these.
@@ -97,61 +82,42 @@ pub enum HostMessage {
     /// read again at the top of every block batch, on the host's side, where a
     /// switch flicked mid-session can be noticed without asking the broker.
     Describe {
-        /// The plugin identifiers to leave alone.
         disabled: Vec<String>,
     },
-    /// Make an instance of one of them.
     CreateInstance {
-        /// The handle the host will use for it from now on.
         instance: InstanceId,
-        /// Which plugin, and what to bring it up with.
         bring: Bring,
     },
-    /// One block of sound: the input is in `input`, the answer goes in
-    /// `output`.
     Process {
-        /// Which instance.
         instance: InstanceId,
-        /// Where the input block is.
         input: Slot,
-        /// The slot the answer goes in.
         output: Slot,
         /// The parameter values for this block. Need not be sorted — the
         /// boundary sorts, because CLAP calls an unsorted list undefined.
         events: Vec<ParamEvent>,
-        /// The running frame count since the chain started.
         steady: i64,
     },
-    /// Hand back the blob to write into the `.lum`.
     Save {
-        /// Which instance.
         instance: InstanceId,
     },
-    /// Destroy an instance.
     Destroy {
-        /// Which one.
         instance: InstanceId,
     },
-    /// Unload and exit.
     Shutdown,
 }
 
-/// What the broker says.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum BrokerMessage {
     /// The actual first word: a nonce, and nothing else. Whoever connected gets
     /// to say this much; it proves nothing and reveals nothing.
     Ready {
-        /// For the host to answer.
         nonce: lumit_peer::Nonce,
     },
     /// The broker's answer to the host's challenge, with the protocol it
     /// speaks. Checked before the version: a peer that cannot prove who it is
     /// has no version worth hearing.
     Hello {
-        /// The protocol the broker speaks.
         version: u32,
-        /// The broker's answer to [`HostMessage::Challenge`]'s nonce.
         proof: lumit_peer::Proof,
     },
     /// The ring is mapped, and the host may now unlink its path. On Unix a
@@ -162,40 +128,28 @@ pub enum BrokerMessage {
     /// acknowledgement that is never coming; the ring's file is left where it
     /// is, since the host may yet try again through it.
     RingRefused,
-    /// What the module holds.
     Described {
-        /// One per plugin that described itself successfully.
         plugins: Vec<PluginDescriptor>,
-        /// One calm line per plugin turned away, and why.
         rejected: Vec<Refusal>,
     },
-    /// The instance exists.
     Created {
         /// What it reports now that it is active — the number a describe could
         /// not honestly ask for (docs/impl/audio-plugins.md §4).
         latency: u32,
-        /// What went wrong bringing it up that did not stop it coming up: a
-        /// refused state blob, most often.
         warning: Option<String>,
     },
-    /// The block is in the ring.
     Processed {
-        /// Where.
         slot: Slot,
     },
     /// The blob, byte for byte. Never parsed, always round-tripped.
     Saved {
-        /// The plugin's own memory of itself.
         bytes: Vec<u8>,
     },
-    /// The message was carried out and there is nothing to say about it.
     Done,
     /// Something went wrong, as a sentence rather than a status code: the host
     /// puts it on a badge and the user reads it.
     Failed {
-        /// Which action.
         action: String,
-        /// What went wrong.
         message: String,
     },
 }

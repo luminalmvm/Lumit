@@ -16,7 +16,6 @@ use crate::time::Rational;
 use uuid::Uuid;
 use Way::{Over, Steep, Times};
 
-/// Which flyout of the Transition menu a kind sits in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     Wipes,
@@ -24,7 +23,6 @@ pub enum Group {
     Hits,
 }
 
-/// Which of the overlap's two clips an instance runs on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Out,
@@ -35,7 +33,6 @@ pub enum Side {
 /// 1 in its middle.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Way {
-    /// The stored value times the peak.
     Times,
     /// The stored value times the peak cubed: near it only about the middle,
     /// as a flash of light reads.
@@ -45,7 +42,6 @@ pub enum Way {
     Over(f64),
 }
 
-/// What the overlap writes into a kind as it runs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Sweep {
     /// Completion, on the outgoing clip only.
@@ -63,10 +59,8 @@ pub enum Sweep {
     },
 }
 
-/// One kind an overlap can be.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Kind {
-    /// The effect's match name.
     pub name: &'static str,
     pub group: Group,
     pub sweep: Sweep,
@@ -327,7 +321,6 @@ pub const TABLE: &[Kind] = &[
     ),
 ];
 
-/// The kind `name` is, or `None` for a name that is not one.
 #[must_use]
 pub fn kind(name: &str) -> Option<&'static Kind> {
     TABLE.iter().find(|k| k.name == name)
@@ -574,7 +567,6 @@ pub fn keyed(
             continue;
         }
         let keys = if is_dense {
-            // A key between two that hold its value adds nothing.
             let flat = |i: Option<usize>, v: f64| i.and_then(|i| values.get(i)) == Some(&v);
             moments
                 .iter()
@@ -677,7 +669,6 @@ fn turn(out: &mut EffectInstance) {
     }
 }
 
-/// An Iris wipe's hole at `u`.
 fn iris(
     out: &mut EffectInstance,
     u: f64,
@@ -711,7 +702,6 @@ fn iris(
     }
 }
 
-/// One Float row holding `value` at every moment.
 fn put(effect: &mut EffectInstance, id: &str, value: f64) {
     for param in effect.params.iter_mut().filter(|p| p.id == id) {
         if let EffectValue::Float(v) = &mut param.value {
@@ -761,7 +751,6 @@ pub fn dissolve(
     {
         return None;
     }
-    // The whole steps in a length, and the length of that many steps.
     let steps = |length: Rational| {
         let count = length.checked_div(frame).ok()?;
         Some(count.num().div_euclid(count.den()))
@@ -770,8 +759,6 @@ pub fn dissolve(
     let overlap = steps(end.checked_sub(start).ok()?)?;
     let point = end.checked_sub(span(overlap / 2)?).ok()?;
 
-    // How far each edge may go: to the other clip's far end, to a third
-    // clip, and as far as its own source runs.
     let others = || {
         clips
             .iter()

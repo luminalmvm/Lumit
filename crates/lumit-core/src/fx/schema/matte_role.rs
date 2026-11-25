@@ -1,5 +1,3 @@
-//! What a matte role answers about its effect.
-
 use super::*;
 
 impl MatteRole {

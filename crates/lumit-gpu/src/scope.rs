@@ -61,21 +61,15 @@ const COUNTS_LEN: usize = 3 * (GRID as usize) * (GRID as usize);
 /// Which scope one call renders. The `u32` tags match `scope.wgsl`'s `switch`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ScopeKind {
-    /// Brightness (luma) waveform.
     WaveformLuma,
-    /// Red/green/blue waveforms overlaid.
     WaveformRgb,
     /// Chroma on a circle (Rec.709 Cb/Cr).
     Vectorscope,
-    /// Per-channel pixel counts by brightness.
     Histogram,
-    /// Red, green and blue waveforms side by side, each in its own third.
     Parade,
-    /// Pixel counts by brightness, one trace.
     HistogramLuma,
     /// CIE 1931 xy chromaticity, the bytes read as sRGB-encoded Rec.709.
     Chromaticity,
-    /// The vectorscope at twice the size, for pictures with little colour.
     VectorscopeZoom,
 }
 
@@ -200,18 +194,13 @@ pub fn strides(width: usize, height: usize) -> (usize, usize) {
     (s, s)
 }
 
-/// The scope-pass engine: the three compiled kernels plus the counting buffers,
-/// owned alongside the `Compositor`/`FxEngine` by whoever renders. Built once
-/// (shaders compile once); the buffers are re-used every trace.
 pub struct ScopeEngine {
     bin: wgpu::ComputePipeline,
     peak: wgpu::ComputePipeline,
     colourise: wgpu::ComputePipeline,
     bin_layout: wgpu::BindGroupLayout,
     colourise_layout: wgpu::BindGroupLayout,
-    /// The bin counters (`COUNTS_LEN` `u32`), cleared each trace.
     counts: wgpu::Buffer,
-    /// The single peak value, cleared each trace.
     peak_buf: wgpu::Buffer,
 }
 
@@ -254,8 +243,6 @@ impl ScopeEngine {
                 push_constant_ranges: &[],
             });
 
-        // Colourise: counts read-only (4), peak read-only (5), uniform (6), the
-        // trace storage texture (7).
         let colourise_layout =
             ctx.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -343,7 +330,6 @@ impl ScopeEngine {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        // Guard a short buffer so a malformed frame never reads out of bounds.
         let need = (w as usize) * (h as usize) * 4;
         if rgba.len() >= need && need > 0 {
             ctx.queue.write_texture(
@@ -383,9 +369,6 @@ impl ScopeEngine {
         self.trace(ctx, kinds, colours, &src, w, h)
     }
 
-    /// As [`Self::trace_rgba8`], from an already-uploaded `Rgba8Unorm` frame
-    /// texture — the path a fresh render can take to consume the frame it has on
-    /// the GPU without a round trip through bytes.
     pub fn trace(
         &self,
         ctx: &GpuContext,
@@ -404,9 +387,6 @@ impl ScopeEngine {
         readback_traces(ctx, &traces)
     }
 
-    /// Run the three passes into a fresh trace texture, returning it (the shared
-    /// core of [`Self::trace`], the browser build's trace, which reads it back
-    /// on a later turn, and the test count hook).
     pub fn run(
         &self,
         ctx: &GpuContext,
@@ -522,7 +502,6 @@ impl ScopeEngine {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("scope"),
             });
-        // Zero the counters and the peak before binning.
         encoder.clear_buffer(&self.counts, 0, Some((count_len as u64) * 4));
         encoder.clear_buffer(&self.peak_buf, 0, None);
         {
@@ -652,7 +631,6 @@ mod tests {
         blue: [0x53, 0x87, 0xe0],
     };
 
-    /// A `w`×`h` frame of one solid colour, opaque.
     fn solid(w: usize, h: usize, r: u8, g: u8, b: u8) -> Vec<u8> {
         let mut v = Vec::with_capacity(w * h * 4);
         for _ in 0..w * h {
@@ -660,8 +638,6 @@ mod tests {
         }
         v
     }
-
-    // ---- CPU oracle (a verbatim port of the shell/scopes.rs counting) --------
 
     fn luma8(r: u8, g: u8, b: u8) -> f32 {
         (0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32) / 255.0
@@ -704,7 +680,6 @@ mod tests {
     ) -> Vec<u32> {
         let src = engine.upload_frame(ctx, rgba, w, h);
         let _ = engine.run(ctx, kind, STANDARD, &src, w, h);
-        // The counts buffer holds this kind's populated prefix after `run`.
         let len = kind.count_len() as usize;
         let staging = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("scope-counts-readback"),
@@ -733,8 +708,6 @@ mod tests {
         crate::test_support::lease()
     }
 
-    /// A solid grey's luma waveform lands its whole sampled count on one row —
-    /// the GPU bin counts equal the CPU oracle exactly (integers, no rounding).
     #[test]
     fn luma_waveform_counts_match_the_cpu_oracle() {
         let Some(ctx) = ctx() else {
@@ -746,7 +719,6 @@ mod tests {
         let gpu = gpu_counts(engine, &ctx, ScopeKind::WaveformLuma, &frame, 16, 16);
         let cpu = waveform_luma_counts(&frame, 16, 16);
         assert_eq!(gpu, cpu, "GPU luma bins must equal the CPU oracle");
-        // And the CPU maths itself: all 256 samples on the grey's own row.
         let row = value_row(luma8(128, 128, 128));
         let in_row: u32 = (0..g()).map(|x| gpu[row * g() + x]).sum();
         assert_eq!(in_row, 16 * 16);
@@ -764,8 +736,6 @@ mod tests {
             return;
         };
         let engine = ctx.scope();
-        // 256 wide so every column bins (bx = x·256/256 = x); every column of the
-        // grey's row is then fully lit (peak == the per-column count).
         let frame = solid(256, 64, 128, 128, 128);
         let trace = engine
             .trace_rgba8(&ctx, &[ScopeKind::WaveformLuma], STANDARD, &frame, 256, 64)
@@ -775,7 +745,6 @@ mod tests {
         let row = value_row(luma8(128, 128, 128));
         // Software rasterisers land a bit off hardware on the fp maths.
         let tol: i16 = if ctx.software { 2 } else { 1 };
-        // The grey's own row is fully lit (peak == count), so trace = bg + trace.
         for x in 0..g() {
             let cell = (row * g() + x) * 4;
             let got = [trace[cell], trace[cell + 1], trace[cell + 2]];
@@ -795,16 +764,11 @@ mod tests {
             }
             assert_eq!(trace[cell + 3], 0xff, "trace is opaque");
         }
-        // A far-away row is untouched backdrop.
         let empty_row = if row > 10 { 0 } else { g() - 1 };
         let cell = (empty_row * g()) * 4;
         assert_eq!(&trace[cell..cell + 3], &STANDARD.bg);
     }
 
-    /// The parade puts each channel's waveform in its own third: a solid
-    /// (255, 128, 0) frame lands its red at the top of the left cell, its
-    /// green half way up the middle one, and its blue at the foot of the right
-    /// one, and nothing anywhere else.
     #[test]
     fn parade_bins_each_channel_in_its_own_third() {
         let Some(ctx) = ctx() else {
@@ -830,8 +794,6 @@ mod tests {
         assert_eq!(counts.iter().sum::<u32>(), 3 * (w * h) as u32);
     }
 
-    /// The luma histogram is one count per brightness: a solid grey fills
-    /// its own bin and no other.
     #[test]
     fn luma_histogram_counts_one_bin() {
         let Some(ctx) = ctx() else {
@@ -846,9 +808,6 @@ mod tests {
         assert_eq!(counts.iter().sum::<u32>(), 16 * 16);
     }
 
-    /// A malformed (too-short) frame never panics or reads out of bounds: the
-    /// frame texture is left zero-filled (a black frame), so the pass produces a
-    /// valid, opaque `GRID × GRID` trace — the calm-degradation guarantee.
     #[test]
     fn a_short_frame_is_calm() {
         let Some(ctx) = ctx() else {
@@ -856,7 +815,6 @@ mod tests {
             return;
         };
         let engine = ctx.scope();
-        // Two kinds in the one request: both come back, in the order asked.
         let traces = engine
             .trace_rgba8(
                 &ctx,
@@ -897,8 +855,6 @@ mod tests {
         ((cx, cy), row * g() + col)
     }
 
-    /// The cell a colour's Rec.709 Cb/Cr lands in on the vectorscope, or
-    /// `None` off the edge.
     fn vectorscope_cell(r: u8, g_: u8, b: u8, zoom: f32) -> Option<usize> {
         let (r, g_, b) = (
             f32::from(r) / 255.0,
@@ -914,10 +870,6 @@ mod tests {
         (inside(px) && inside(py)).then(|| py as usize * g() + px as usize)
     }
 
-    /// The two plots the graticule draws targets on put each colour where the
-    /// Scopes panel's targets say it goes: the sRGB primaries and white on
-    /// their Rec.709 and D65 points, and the 75% bars on the vectorscope at
-    /// both sizes. A drift here is the trace leaving its boxes.
     #[test]
     fn chromaticity_and_vectorscope_land_where_the_graticule_reads() {
         let Some(ctx) = ctx() else {
@@ -938,12 +890,10 @@ mod tests {
             let counts = gpu_counts(engine, &ctx, ScopeKind::Chromaticity, &frame, 16, 16);
             assert_eq!(counts[cell], n, "{rgb:?} lands on its own xy");
         }
-        // Black has no chromaticity, so it is left off the plot.
         let black = solid(16, 16, 0, 0, 0);
         let counts = gpu_counts(engine, &ctx, ScopeKind::Chromaticity, &black, 16, 16);
         assert_eq!(counts.iter().sum::<u32>(), 0);
 
-        // The bars, and a skin tone that stays on the plot at 2x.
         for rgb in [
             [191, 0, 0],
             [0, 191, 0],

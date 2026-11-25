@@ -73,7 +73,6 @@ use std::io::{BufRead, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-/// Why a peer could not be set up or believed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PeerError {
     /// The operating system would not give us random bytes. There is no
@@ -81,27 +80,21 @@ pub enum PeerError {
     #[error("the system random source is unavailable: {0}")]
     NoRandomness(String),
 
-    /// The secret could not be handed to, or read from, standard input.
     #[error("the broker's credential could not be passed: {0}")]
     Handover(String),
 
-    /// A proof that is not the one this side expected. The peer is not who it
-    /// says it is, or does not hold the secret.
     #[error("the peer on the broker pipe could not prove who it is")]
     NotAuthenticated,
 }
 
-/// A shorthand.
 pub type Result<T> = std::result::Result<T, PeerError>;
 
-/// Random bytes from the operating system.
 fn os_random<const N: usize>() -> Result<[u8; N]> {
     let mut out = [0_u8; N];
     getrandom::fill(&mut out).map_err(|e| PeerError::NoRandomness(e.to_string()))?;
     Ok(out)
 }
 
-/// Bytes as lower-case hex.
 fn hex(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().saturating_mul(2));
     for byte in bytes {
@@ -111,8 +104,6 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
-/// Hex back to bytes, or `None` for anything that is not exactly `N` bytes of
-/// lower- or upper-case hex.
 fn unhex<const N: usize>(text: &str) -> Option<[u8; N]> {
     if text.len() != N.checked_mul(2)? {
         return None;
@@ -128,10 +119,6 @@ fn unhex<const N: usize>(text: &str) -> Option<[u8; N]> {
     Some(out)
 }
 
-// ---------------------------------------------------------------------------
-// The endpoint name
-// ---------------------------------------------------------------------------
-
 /// The unguessable part of one broker's endpoint name.
 ///
 /// 128 bits, which is the same "nobody will meet a collision" figure the roto
@@ -142,25 +129,15 @@ fn unhex<const N: usize>(text: &str) -> Option<[u8; N]> {
 pub struct Token([u8; 16]);
 
 impl Token {
-    /// A fresh token.
-    ///
-    /// # Errors
-    ///
-    /// [`PeerError::NoRandomness`].
     pub fn generate() -> Result<Self> {
         Ok(Token(os_random()?))
     }
 
-    /// The token as the hex that goes in a file or pipe name.
     #[must_use]
     pub fn as_name(&self) -> String {
         hex(&self.0)
     }
 }
-
-// ---------------------------------------------------------------------------
-// The secret
-// ---------------------------------------------------------------------------
 
 /// The shared secret one host and one broker hold, and nobody else does.
 ///
@@ -180,11 +157,6 @@ impl std::fmt::Debug for Secret {
 }
 
 impl Secret {
-    /// A fresh secret.
-    ///
-    /// # Errors
-    ///
-    /// [`PeerError::NoRandomness`].
     pub fn generate() -> Result<Self> {
         Ok(Secret(os_random()?))
     }
@@ -227,11 +199,6 @@ impl Secret {
         Self::read_from(std::io::stdin().lock())
     }
 
-    /// [`Secret::from_stdin`], against any reader, so it can be tested.
-    ///
-    /// # Errors
-    ///
-    /// [`PeerError::Handover`].
     pub fn read_from<R: Read>(from: R) -> Result<Self> {
         let mut line = String::new();
         std::io::BufReader::new(from)
@@ -243,10 +210,6 @@ impl Secret {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The handshake
-// ---------------------------------------------------------------------------
-
 /// A number used once, chosen by whichever side is asking.
 ///
 /// Serialisable, because it travels in the protocol's own messages rather than
@@ -255,17 +218,11 @@ impl Secret {
 pub struct Nonce([u8; 32]);
 
 impl Nonce {
-    /// A fresh nonce.
-    ///
-    /// # Errors
-    ///
-    /// [`PeerError::NoRandomness`].
     pub fn generate() -> Result<Self> {
         Ok(Nonce(os_random()?))
     }
 }
 
-/// One side's answer to the other's nonce.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct Proof([u8; 32]);
 
@@ -284,13 +241,11 @@ impl Proof {
         Proof(*blake3::keyed_hash(&secret.0, &input).as_bytes())
     }
 
-    /// The host's proof that it holds the secret, answering the broker's nonce.
     #[must_use]
     pub fn host(secret: &Secret, broker_nonce: Nonce) -> Self {
         Self::compute(secret, HOST_TAG, broker_nonce)
     }
 
-    /// The broker's proof that it holds the secret, answering the host's nonce.
     #[must_use]
     pub fn broker(secret: &Secret, host_nonce: Nonce) -> Self {
         Self::compute(secret, BROKER_TAG, host_nonce)
@@ -323,14 +278,12 @@ mod tests {
         let line = secret.to_handover();
         assert_eq!(Secret::read_from(line.as_bytes()).unwrap(), secret);
 
-        // Everything a broken or hostile parent could send instead.
         for rubbish in ["", "\n", "not hex\n", "abcd\n", &"f".repeat(63)] {
             assert!(
                 Secret::read_from(rubbish.as_bytes()).is_err(),
                 "{rubbish:?} was accepted as a credential"
             );
         }
-        // The right length of the wrong alphabet.
         assert!(Secret::read_from("z".repeat(64).as_bytes()).is_err());
     }
 
@@ -346,8 +299,6 @@ mod tests {
         assert!(from_host.matches(&Proof::host(&secret, n_broker)));
         assert!(from_broker.matches(&Proof::broker(&secret, n_host)));
 
-        // The tags are what make this true: without them an impostor could
-        // hand the host's own proof straight back as the broker's.
         assert!(!from_host.matches(&Proof::broker(&secret, n_broker)));
         assert!(!Proof::host(&secret, n_host).matches(&from_broker));
     }
@@ -365,7 +316,6 @@ mod tests {
         let secret = Secret::generate().unwrap();
         let recorded = Nonce::generate().unwrap();
         let fresh = Nonce::generate().unwrap();
-        // What an eavesdropper on an earlier handshake would have.
         let old = Proof::broker(&secret, recorded);
         assert!(!old.matches(&Proof::broker(&secret, fresh)));
     }

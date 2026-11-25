@@ -1,6 +1,3 @@
-//! Particulate's walk as the driver graph reads it: its rows, wires and outlines
-//! at any one layer time.
-
 use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 

@@ -1,5 +1,3 @@
-//! Tests for which matte slot each effect binds.
-
 /// **The k-th matte-carrying op binds the k-th matte slot** (the
 /// parallel-list contract with its second predicate).
 ///
@@ -66,8 +64,6 @@ fn the_kth_matte_op_binds_the_kth_slot() {
         &[],
         &[],
         &[],
-        // Slot 0 absent (the first exposure applies in full), slot 1 black
-        // (the second is switched off).
         &[crate::fxops::LayerInput::Absent, off],
         &[],
         &[],

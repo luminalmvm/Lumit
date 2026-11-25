@@ -14,16 +14,11 @@ use lumit_flow::chain::Leg;
 
 use super::{CachedFlow, FlowKey};
 
-/// How a frame was read, beside its number: the channels a layer extracts
-/// and the stamp of a frame in a run of stills, the two things besides the
-/// number that the decoded-frame cache names a frame by.
 pub(super) type Read = (
     Option<[Option<String>; 4]>,
     Option<(u64, std::time::SystemTime)>,
 );
 
-/// A pair of frames of one source, earlier first, each as it was read,
-/// measured at one setting and one decoded size.
 pub(super) type LinkKey = (
     uuid::Uuid,
     (usize, Read),
@@ -32,19 +27,13 @@ pub(super) type LinkKey = (
     (usize, usize),
 );
 
-/// One frame's luma, by source, frame as it was read, setting, decoded size
-/// and whether it was read as floats.
 pub(super) type GrayKey = (uuid::Uuid, (usize, Read), u64, (usize, usize), bool);
 
-/// The motion both ways between two frames, each with its confidence.
 pub(super) struct Link {
-    /// Earlier frame to later.
     pub(super) on: Arc<Leg>,
-    /// Later frame to earlier.
     pub(super) back: Arc<Leg>,
 }
 
-/// A pair as the cache holds it, shared with whoever is reading it.
 pub(super) struct HeldLink(pub(super) Arc<Link>);
 
 impl lumit_cache::ByteSized for HeldLink {
@@ -53,7 +42,6 @@ impl lumit_cache::ByteSized for HeldLink {
     }
 }
 
-/// A frame's luma, held for the next pair that starts from it.
 pub(super) struct HeldGray(pub(super) Arc<lumit_flow::Gray>);
 
 impl lumit_cache::ByteSized for HeldGray {
@@ -66,17 +54,13 @@ impl lumit_cache::ByteSized for HeldGray {
 /// next pair starts from, with room for the two directions of a scrub.
 const GRAYS_HELD: usize = 4;
 
-/// Everything the pool has measured.
 pub(super) struct FlowCache {
-    /// The pairs as measured, which Motion blur, Datamosh and the retime
-    /// policy share.
     pairs: lumit_cache::ByteLru<FlowKey, CachedFlow>,
     /// Denoise's pairs, with their confidences. Its budget follows how many
     /// pairs the widest Denoise playing needs live, so five frames either side
     /// of 4K footage is not measured again every frame ([`Self::want_links`]).
     pub(super) links: lumit_cache::ByteLru<LinkKey, HeldLink>,
     pub(super) grays: lumit_cache::ByteLru<GrayKey, HeldGray>,
-    /// The budget `links` was built with, the least it is ever given.
     floor: usize,
     /// The governor, once the pool is accounted against it: `links` never
     /// grows past a quarter of its memory.

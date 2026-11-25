@@ -25,7 +25,6 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-/// The stocks a camera loads, in the order Film's Stock list shows them.
 pub const FILM_STOCKS: [&str; 17] = [
     "kodak_vision3_50d",
     "kodak_vision3_250d",
@@ -46,8 +45,6 @@ pub const FILM_STOCKS: [&str; 17] = [
     "fujifilm_velvia_100",
 ];
 
-/// The stocks a negative is printed on, in the order the Print stock list
-/// shows them.
 pub const PRINT_STOCKS: [&str; 4] = [
     "kodak_2383",
     "kodak_2393",
@@ -61,7 +58,6 @@ pub const FORMATS_MM: [f32; 6] = [5.79, 10.26, 12.52, 24.89, 36.0, 52.48];
 /// The spectra are sampled from 380 to 780 nm, 5 nm apart.
 pub const WAVES: usize = 81;
 
-/// One stock as `stocks.json` carries it.
 #[derive(Debug, Deserialize)]
 pub struct Stock {
     pub id: String,
@@ -76,7 +72,6 @@ pub struct Stock {
     pub dye: Vec<[f32; 3]>,
     /// The base and fog's density, per wavelength.
     pub base: Vec<f32>,
-    /// The light it is looked at in.
     pub view: String,
     /// Density by log exposure, 256 samples from -3 to 4.
     pub curves: Vec<[f32; 3]>,
@@ -95,7 +90,6 @@ pub struct Stock {
     pub camera: [[f32; 3]; 3],
 }
 
-/// A light to look at a print or a slide in.
 #[derive(Debug, Deserialize)]
 pub struct View {
     pub light: Vec<f32>,
@@ -103,11 +97,9 @@ pub struct View {
     pub to_rec709: [[f32; 3]; 3],
 }
 
-/// Everything `stocks.json` holds.
 #[derive(Debug, Deserialize)]
 pub struct Data {
     pub cmf: Vec<[f32; 3]>,
-    /// The printer's lamp.
     pub enlarger: Vec<f32>,
     pub views: std::collections::BTreeMap<String, View>,
     pub stocks: Vec<Stock>,
@@ -148,7 +140,6 @@ pub fn data() -> Option<&'static Data> {
     .as_ref()
 }
 
-/// How far light spreads in one blur of a pass.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Spread {
     /// A gaussian, σ in raster pixels.
@@ -157,7 +148,6 @@ pub enum Spread {
     Exp { radius_px: f32, falloff: f32 },
 }
 
-/// One spreading pass: the picture kept, plus each blur of it, per channel.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Stage {
     pub keep: [f32; 3],
@@ -186,7 +176,6 @@ impl Stage {
         self.gauss(3f32.sqrt() * lambda_px, weight);
     }
 
-    /// Whether the pass changes anything at all.
     pub fn is_identity(&self) -> bool {
         self.terms.is_empty() && self.keep == [1.0; 3]
     }
@@ -260,9 +249,6 @@ mod tests {
         (0..n * n).flat_map(|_| [v, v, v, 1.0]).collect()
     }
 
-    /// **Every stock prints a grey card as a grey card**, at about the grey it
-    /// was: the printer lights are timed from the stock's spectra, so a
-    /// broken table or timing shows up as a cast here.
     #[test]
     fn every_stock_keeps_grey_grey() {
         for stock in 0..super::FILM_STOCKS.len() as u32 {
@@ -295,8 +281,6 @@ mod tests {
         }
     }
 
-    /// Every part at once, on a ramp with lights in it: nothing comes out
-    /// negative or not a number.
     #[test]
     fn every_part_at_once_stays_finite() {
         let (w, h) = (24u32, 16u32);
@@ -329,7 +313,6 @@ mod tests {
             super::cpu::film(&mut img, w, h, &frame);
             assert!(img.iter().all(|v| v.is_finite() && *v >= 0.0));
         }
-        // The shipped looks are Films too, Halation among them.
         let looks = super::presets::presets();
         assert!(looks.iter().any(|(name, _)| *name == "Halation"));
         assert!(looks

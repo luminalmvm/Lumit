@@ -144,7 +144,6 @@ fn offset_of(j: vec2<i32>) -> vec2<f32> {
     return vec2<f32>(j) + 0.5 - vec2<f32>(f32(p.w), f32(p.h)) * 0.5;
 }
 
-// The unit vector from the frame centre out through pixel `j`.
 fn radial_of(j: vec2<i32>) -> vec2<f32> {
     let o = offset_of(j);
     let l = length(o);
@@ -185,14 +184,12 @@ fn kernel_local(slice: u32, mirror: f32, span: f32, l: vec2<f32>, level: u32) ->
     return mix(a, b, f.y) / (cell * cell);
 }
 
-// Pixel `j`'s kernel, read at raster offset `d` from `j`.
 fn kernel_at(o: vec4<f32>, j: vec2<i32>, d: vec2<f32>) -> vec3<f32> {
     let r = radial_of(j);
     let t = vec2<f32>(-r.y, r.x);
     return kernel_local(u32(o.z), o.w, o.x, vec2<f32>(dot(d, t), dot(d, r)), 0u);
 }
 
-// How much of a pixel is over the highlight threshold.
 fn hi_frac(c: vec4<f32>) -> f32 {
     let l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
     if (l <= p.threshold || l <= 0.0) {
@@ -1400,7 +1397,6 @@ fn scene_colour(r: Ray) -> vec4<f32> {
     let size = scene[0].yz;
     let zoom = scene[0].w;
     let centre = size * 0.5;
-    // Where it crosses the entrance pupil, and its slope there.
     let t_ep = (lens[1].y - r.o.z) / r.d.z;
     let a = r.o.xy + r.d.xy * t_ep;
     let s = r.d.xy / (-r.d.z);

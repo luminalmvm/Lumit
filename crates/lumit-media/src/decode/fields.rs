@@ -1,6 +1,3 @@
-//! Fields lifted out of a frame's planes, and two frames woven back into
-//! one, before either is converted to RGBA.
-
 use rsmpeg::avutil::AVFrame;
 use rsmpeg::ffi;
 

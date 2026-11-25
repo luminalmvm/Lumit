@@ -11,7 +11,6 @@
 use crate::fx::registry::EffectDef;
 use crate::model::{EffectInstance, EffectNamespace};
 
-/// The moments of its own input an effect shows at one frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OwnMoments {
     /// The first moment, layer time in seconds.
@@ -22,7 +21,6 @@ pub struct OwnMoments {
 }
 
 impl OwnMoments {
-    /// The moments as layer times, first first.
     #[must_use]
     pub fn times(&self) -> Vec<f64> {
         std::iter::once(self.a)

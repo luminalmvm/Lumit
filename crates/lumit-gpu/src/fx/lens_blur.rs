@@ -8,7 +8,6 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// One frame's settings, already resolved.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LensBlurOp {
     /// Names the bake; equal keys must mean equal tables.
@@ -67,8 +66,6 @@ pub struct ScenePlane {
     pub opacity: f32,
 }
 
-/// The lens for the Ray traced method, as `lumit_core::fx::lens_blur::RayLens`
-/// has it.
 pub struct RayLensData {
     pub surfaces: Vec<[f32; 6]>,
     pub stop_r: f32,
@@ -83,7 +80,6 @@ pub struct RayLensData {
     pub glass: Vec<f32>,
 }
 
-/// The traced table, as `lumit_core::fx::lens_blur::BokehBake` has it.
 pub struct LensBlurBakeData {
     pub kernels: Vec<[f32; 3]>,
     pub span_mm: Vec<f32>,
@@ -166,7 +162,6 @@ pub(super) struct GpuBake {
     kernel_res: u32,
 }
 
-/// A ray lens and its front glass on the card.
 pub(super) type RayLensGpu = (RayLensData, wgpu::Texture);
 
 pub(super) struct LensBlurFx {
@@ -189,7 +184,6 @@ pub(super) struct LensBlurFx {
     pub(super) ray_cache: Mutex<Vec<(u64, Arc<RayLensGpu>)>>,
 }
 
-/// One binding of a lens pass's layout.
 #[derive(Clone, Copy)]
 pub(super) enum Slot {
     Tex,
@@ -200,7 +194,6 @@ pub(super) enum Slot {
 }
 
 impl LensBlurFx {
-    /// The ray lens for `key` and its front glass, made on a miss.
     fn ray_lens(
         &self,
         ctx: &GpuContext,
@@ -249,7 +242,6 @@ impl LensBlurFx {
         Some(out)
     }
 
-    /// The table for `key`, uploading a fresh bake on a miss.
     fn baked(
         &self,
         ctx: &GpuContext,
@@ -359,7 +351,6 @@ impl LensBlurFx {
     }
 }
 
-/// A bind group layout from `(binding, kind)` pairs.
 pub(super) fn bind_layout(
     device: &wgpu::Device,
     label: &str,
@@ -587,7 +578,6 @@ impl FxEngine {
             &fx.dilate.0,
             &[(6, T(&v_tiles)), (5, T(&v_reach)), (3, u.clone())],
         );
-        // Where one submission's share starts.
         let part = |start: u32| {
             ctx.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -656,7 +646,6 @@ impl FxEngine {
             pass.set_bind_group(0, group, &[]);
             pass.dispatch_workgroups(gx.div_ceil(8), gy.div_ceil(8), 1);
         };
-        // A precomp's own 3D layers, when there are few enough to meet.
         let scene = scene.filter(|s| {
             !s.planes.is_empty()
                 && s.planes.len() <= SCENE_LAYERS_MAX
@@ -919,7 +908,6 @@ impl FxEngine {
         }
         // Highlights go on after, so the smoothing leaves their edges sharp.
         if ray.is_none() && !op.display_depth {
-            // One instance per block at every level.
             let blocks: u32 = (0..SPRITE_LEVELS)
                 .map(|l| w.div_ceil(1 << l) * h.div_ceil(1 << l))
                 .sum();

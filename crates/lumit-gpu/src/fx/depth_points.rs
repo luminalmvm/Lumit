@@ -1,7 +1,3 @@
-//! Depth points: a picture and its depth drawn as points through a camera, with
-//! one over clip w beside the picture for the compositor to join it with the 3D
-//! layers by (`fx_depth_points.wgsl`).
-
 use super::{work_texture, FxEngine};
 use crate::GpuContext;
 
@@ -9,7 +5,6 @@ use crate::GpuContext;
 const INV_W: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-/// How a picture's points are placed and seen.
 #[derive(Debug, Clone, Copy)]
 pub struct DepthPointsOp {
     /// The source camera's eye through the frame's camera, as (X, Y, W).
@@ -53,7 +48,6 @@ struct View {
     grid: [u32; 4],
 }
 
-/// The layout and pipeline, built the first time a shot is drawn as points.
 pub(super) struct Pipeline {
     layout: wgpu::BindGroupLayout,
     draw: wgpu::RenderPipeline,

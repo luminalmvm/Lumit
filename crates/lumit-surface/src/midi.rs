@@ -9,10 +9,8 @@ use std::collections::{HashMap, HashSet};
 use crate::table::{self, Action, Axis, Param};
 use crate::Event;
 
-/// What sort of control sent a message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MidiKind {
-    /// A key or pad: Note on and Note off.
     Note,
     /// A controller sending one 7-bit value.
     Cc,
@@ -21,10 +19,8 @@ pub enum MidiKind {
     Cc14,
 }
 
-/// One control on one device, as MIDI names it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MidiControl {
-    /// The input port it came in on, by the name the system gives it.
     pub port: String,
     /// 0 to 15, shown to people as 1 to 16.
     pub channel: u8,
@@ -33,10 +29,8 @@ pub struct MidiControl {
     pub number: u8,
 }
 
-/// How a controller's value is read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Encoding {
-    /// A knob or fader that says where it is.
     Absolute,
     /// An endless encoder: 1 is one step up, 127 one step down.
     TwosComplement,
@@ -46,16 +40,12 @@ pub enum Encoding {
     Offset64,
 }
 
-/// What a learned control drives.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target {
-    /// A Correction row, and for a wheel which part of it.
     Param { param: String, axis: Option<Axis> },
-    /// One of [`crate::table::ACTIONS`], by name.
     Action(String),
 }
 
-/// A learned control and what it drives.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MidiMapping {
     pub control: MidiControl,
@@ -67,7 +57,6 @@ pub struct MidiMapping {
 /// steps.
 const STEPS_PER_TICK: f64 = 10.0;
 
-/// The steps an endless encoder's `value` stands for.
 pub fn relative_ticks(value: u8, encoding: Encoding) -> i32 {
     let value = i32::from(value & 0x7F);
     match encoding {
@@ -90,7 +79,6 @@ pub fn relative_ticks(value: u8, encoding: Encoding) -> i32 {
     }
 }
 
-/// A channel message we act on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Message {
     Note { channel: u8, number: u8, on: bool },
@@ -137,10 +125,8 @@ struct Bound {
     to: To,
 }
 
-/// A controller on one channel of one port.
 type Place = (String, u8, u8);
 
-/// The learned controls, and what the last messages left behind.
 #[derive(Default)]
 pub(crate) struct Midi {
     bound: Vec<Bound>,
@@ -152,7 +138,6 @@ pub(crate) struct Midi {
     /// there. Keyed by port, channel and number, so it holds one entry for
     /// each control that has moved since Lumit started.
     last: HashMap<Place, u16>,
-    /// The high half of each 14-bit pair, waiting for its low half.
     high: HashMap<Place, u8>,
     /// Absolute controllers driving an action that are held down.
     held: HashSet<Place>,
@@ -177,12 +162,10 @@ impl Midi {
             .collect();
     }
 
-    /// Start or stop listening for the next control moved.
     pub(crate) fn learn(&mut self, on: bool) {
         self.learning = on.then_some(None);
     }
 
-    /// Act on one message from `port`.
     pub(crate) fn take(&mut self, port: &str, bytes: &[u8], events: &mut Vec<Event>) {
         let Some(message) = parse(bytes) else {
             return;
@@ -274,7 +257,6 @@ impl Midi {
                         });
                     }
                 }
-                // A step of an encoder is a press.
                 (_, To::Action(a)) => {
                     if relative_ticks(value, encoding) != 0 {
                         events.push(Event::Action {

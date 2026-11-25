@@ -63,9 +63,6 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: None,
         visible_when_lens_elements: None,
     },
-    // One coating row per glass element, each headerless and
-    // drawn only when the lens in play has that element: four rows on
-    // the Tessar, eighteen on the Canon 70-200.
     ParamGroup {
         label: "",
         params: &["coating_el1"],
@@ -221,9 +218,6 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: None,
         visible_when_lens_elements: None,
     },
-    // The source-colour toggle: headerless, and shown for BOTH the
-    // source modes that HAVE a source colour to take (Matte, and
-    // Lights when it lands).
     ParamGroup {
         label: "",
         params: &["use_source_colour"],
@@ -231,8 +225,6 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: Some(("source_type", &[1, 2])),
         visible_when_lens_elements: None,
     },
-    // The matte rows: headerless (empty label renders them in place,
-    // no twirl), shown only while Source type is Matte.
     ParamGroup {
         label: "",
         params: &["matte", "matte_invert", "threshold", "threshold_softness"],
@@ -240,8 +232,6 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: Some(("source_type", &[1])),
         visible_when_lens_elements: None,
     },
-    // A placed light's own distance: headerless, and only where the light is
-    // placed rather than found in the picture.
     ParamGroup {
         label: "",
         params: &["light_distance_m"],
@@ -251,19 +241,12 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     },
 ];
 
-/// Light distance only means something against a depth.
 pub const LENS_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "light_distance_m",
     on: "depth_m",
     cond: EnabledCond::LayerSet,
 }];
 
-/// The Lens flare's controls.
-///
-/// Parameter order is the owner's panel design: the light point pair, the three
-/// headline dials, the coating character above the lens it colours, then the
-/// collapsed detail groups, the Source mode with its conditional matte rows, and
-/// Quality last.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "lens_flare",
@@ -281,7 +264,6 @@ pub const LENS_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     // moves.
     version = 13,
     category = Stylise,
-    // The one effect that owns a render pass.
     cost = Heavy,
     roi = FullFrame,
     // An additive light overlay, the Glow shape.
@@ -318,7 +300,6 @@ pub struct LensFlare {
     )]
     pub light_x: f32,
 
-    /// See [`light_x`](Self::light_x).
     #[slider(
         label = "Light y",
         min = 0.0,
@@ -342,7 +323,6 @@ pub struct LensFlare {
     )]
     pub source_width: f32,
 
-    /// See [`source_width`](Self::source_width).
     #[slider(
         min = 0.0,
         max = 400.0,
@@ -456,11 +436,9 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 1.0, default = 0.75, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub coating: f32,
 
-    /// Blends the blade polygon toward a circle.
     #[slider(min = 0.0, max = 1.0, default = 0.15, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub roundness: f32,
 
-    /// Softens the iris edge, and with it every ghost's rim.
     #[slider(
         label = "Softness",
         min = 0.0,
@@ -486,7 +464,6 @@ pub struct LensFlare {
     )]
     pub coating_el1: u32,
 
-    /// The coating on glass element 2.
     #[choice(
         label = "Element 2",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -495,7 +472,6 @@ pub struct LensFlare {
     )]
     pub coating_el2: u32,
 
-    /// The coating on glass element 3.
     #[choice(
         label = "Element 3",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -504,7 +480,6 @@ pub struct LensFlare {
     )]
     pub coating_el3: u32,
 
-    /// The coating on glass element 4.
     #[choice(
         label = "Element 4",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -513,7 +488,6 @@ pub struct LensFlare {
     )]
     pub coating_el4: u32,
 
-    /// The coating on glass element 5.
     #[choice(
         label = "Element 5",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -522,7 +496,6 @@ pub struct LensFlare {
     )]
     pub coating_el5: u32,
 
-    /// The coating on glass element 6.
     #[choice(
         label = "Element 6",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -531,7 +504,6 @@ pub struct LensFlare {
     )]
     pub coating_el6: u32,
 
-    /// The coating on glass element 7.
     #[choice(
         label = "Element 7",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -540,7 +512,6 @@ pub struct LensFlare {
     )]
     pub coating_el7: u32,
 
-    /// The coating on glass element 8.
     #[choice(
         label = "Element 8",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -549,7 +520,6 @@ pub struct LensFlare {
     )]
     pub coating_el8: u32,
 
-    /// The coating on glass element 9.
     #[choice(
         label = "Element 9",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -558,7 +528,6 @@ pub struct LensFlare {
     )]
     pub coating_el9: u32,
 
-    /// The coating on glass element 10.
     #[choice(
         label = "Element 10",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -567,7 +536,6 @@ pub struct LensFlare {
     )]
     pub coating_el10: u32,
 
-    /// The coating on glass element 11.
     #[choice(
         label = "Element 11",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -576,7 +544,6 @@ pub struct LensFlare {
     )]
     pub coating_el11: u32,
 
-    /// The coating on glass element 12.
     #[choice(
         label = "Element 12",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -585,7 +552,6 @@ pub struct LensFlare {
     )]
     pub coating_el12: u32,
 
-    /// The coating on glass element 13.
     #[choice(
         label = "Element 13",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -594,7 +560,6 @@ pub struct LensFlare {
     )]
     pub coating_el13: u32,
 
-    /// The coating on glass element 14.
     #[choice(
         label = "Element 14",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -603,7 +568,6 @@ pub struct LensFlare {
     )]
     pub coating_el14: u32,
 
-    /// The coating on glass element 15.
     #[choice(
         label = "Element 15",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -612,7 +576,6 @@ pub struct LensFlare {
     )]
     pub coating_el15: u32,
 
-    /// The coating on glass element 16.
     #[choice(
         label = "Element 16",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -621,7 +584,6 @@ pub struct LensFlare {
     )]
     pub coating_el16: u32,
 
-    /// The coating on glass element 17.
     #[choice(
         label = "Element 17",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -630,7 +592,6 @@ pub struct LensFlare {
     )]
     pub coating_el17: u32,
 
-    /// The coating on glass element 18.
     #[choice(
         label = "Element 18",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -639,7 +600,6 @@ pub struct LensFlare {
     )]
     pub coating_el18: u32,
 
-    /// The coating on glass element 19.
     #[choice(
         label = "Element 19",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -648,7 +608,6 @@ pub struct LensFlare {
     )]
     pub coating_el19: u32,
 
-    /// The coating on glass element 20.
     #[choice(
         label = "Element 20",
         options = *lf::COATING_DESIGN_OPTIONS,
@@ -657,8 +616,6 @@ pub struct LensFlare {
     )]
     pub coating_el20: u32,
 
-    // ---- The Flare options twirl ----
-    /// Gain on the ghost train alone.
     #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub ghost_intensity: f32,
 
@@ -695,7 +652,6 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 2.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub dispersion: f32,
 
-    /// Gain on the starburst alone.
     #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub starburst_intensity: f32,
 
@@ -816,7 +772,6 @@ pub struct LensFlare {
     )]
     pub blend: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

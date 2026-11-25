@@ -63,7 +63,6 @@ fn main() -> ExitCode {
     }
 }
 
-/// Everything, once the arguments are known.
 fn run(module_path: PathBuf, pipe_name: &str) -> Result<(), String> {
     // The credential, first thing, before the pipe and long before the module.
     // It arrives on standard input rather than on the command line, which every
@@ -120,12 +119,10 @@ fn run(module_path: PathBuf, pipe_name: &str) -> Result<(), String> {
     session.serve()
 }
 
-/// Write one message.
 fn say(sender: &mut SendHalf, message: &BrokerMessage) -> Result<(), String> {
     pipe::send(sender, message).map_err(|error| error.to_string())
 }
 
-/// The broker's whole state. One module, one pipe, one ring.
 struct Session {
     module_path: PathBuf,
     module: Option<AnyModule>,
@@ -136,7 +133,6 @@ struct Session {
     /// magic pattern and a kind, and a message quoting one that fails either is
     /// answered rather than followed.
     instances: Registry<LocalHost>,
-    /// The block coming in, allocated once.
     scratch: Vec<f32>,
     /// The block going out, allocated once and never the same buffer as the
     /// one coming in.
@@ -144,7 +140,6 @@ struct Session {
 }
 
 impl Session {
-    /// Read messages until the host stops asking or the pipe closes.
     fn serve(&mut self) -> Result<(), String> {
         loop {
             let message: HostMessage = match pipe::recv(&mut self.receiver) {
@@ -160,7 +155,6 @@ impl Session {
         }
     }
 
-    /// One message.
     fn handle(&mut self, message: HostMessage) -> Result<(), String> {
         match message {
             // The handshake happened before the module was opened, in `run`.
@@ -267,7 +261,6 @@ impl Session {
         }
     }
 
-    /// One block: read the input slot, play it, write the output slot.
     fn process(
         &mut self,
         instance: InstanceId,
@@ -319,7 +312,6 @@ impl Session {
         Ok(())
     }
 
-    /// The plugin's own memory of itself, byte for byte.
     fn save(&mut self, instance: InstanceId) -> Result<(), String> {
         let handle = Handle::from_bits(instance);
         let Some(host) = self.instances.get(handle) else {
@@ -331,7 +323,6 @@ impl Session {
         }
     }
 
-    /// Say that something did not work, in a sentence the host can badge.
     fn failed(&mut self, action: &str, message: &str) -> Result<(), String> {
         say(
             &mut self.sender,

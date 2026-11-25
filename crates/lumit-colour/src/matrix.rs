@@ -27,12 +27,7 @@ use crate::error::{ColourError, Result};
 /// that. Composed in double the residue is 10⁻¹⁶ and the pair cancels.
 pub type Matrix34 = [f64; 12];
 
-/// The matrix that changes nothing.
-pub const IDENTITY: Matrix34 = [
-    1.0, 0.0, 0.0, 0.0, //
-    0.0, 1.0, 0.0, 0.0, //
-    0.0, 0.0, 1.0, 0.0,
-];
+pub const IDENTITY: Matrix34 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
 
 /// The coefficients as the samplers see them: single precision, exactly what
 /// [`crate::bake::bake`] hands the graphics card. Every evaluation goes through this,
@@ -75,7 +70,6 @@ pub fn concat(first: &Matrix34, second: &Matrix34) -> Matrix34 {
             }
             out[row * 4 + col] = acc;
         }
-        // The offset runs through `second`'s linear part and picks up its own.
         let mut acc = second[row * 4 + 3];
         for k in 0..3 {
             acc += second[row * 4 + k] * first[k * 4 + 3];
@@ -110,13 +104,8 @@ pub fn is_identity(m: &Matrix34) -> bool {
         .all(|(a, b)| (a - b).abs() <= IDENTITY_EPSILON)
 }
 
-/// The inverse matrix, or [`ColourError::SingularMatrix`] when there is none.
 pub fn invert(m: &Matrix34) -> Result<Matrix34> {
-    let a = [
-        m[0], m[1], m[2], //
-        m[4], m[5], m[6], //
-        m[8], m[9], m[10],
-    ];
+    let a = [m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]];
     let inv = invert3(&a).ok_or(ColourError::SingularMatrix)?;
     let t = [m[3], m[7], m[11]];
     let mut out = [0.0_f64; 12];
@@ -133,13 +122,10 @@ pub fn invert(m: &Matrix34) -> Result<Matrix34> {
     Ok(out)
 }
 
-/// Build a 3×4 matrix from a 3×3 one (no offsets).
 #[must_use]
 pub fn from_3x3(m: &[f64; 9]) -> Matrix34 {
     [
-        m[0], m[1], m[2], 0.0, //
-        m[3], m[4], m[5], 0.0, //
-        m[6], m[7], m[8], 0.0,
+        m[0], m[1], m[2], 0.0, m[3], m[4], m[5], 0.0, m[6], m[7], m[8], 0.0,
     ]
 }
 
@@ -177,8 +163,6 @@ fn mul3(a: &[f64; 9], b: &[f64; 9]) -> [f64; 9] {
     out
 }
 
-/// The four chromaticity pairs that define an RGB colour space: where its red,
-/// green and blue sit on the CIE diagram, and what it calls white.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Chromaticities {
     pub red: [f64; 2],
@@ -203,7 +187,6 @@ pub const AP0: Chromaticities = Chromaticities {
     white: [0.32168, 0.33767],
 };
 
-/// ACES AP1 (ACEScg / ACEScct working primaries).
 pub const AP1: Chromaticities = Chromaticities {
     red: [0.713, 0.293],
     green: [0.165, 0.830],
@@ -211,7 +194,6 @@ pub const AP1: Chromaticities = Chromaticities {
     white: [0.32168, 0.33767],
 };
 
-/// DCI-P3 primaries with a D65 white — the `DisplayP3` and `P3-D65` displays.
 pub const P3_D65: Chromaticities = Chromaticities {
     red: [0.680, 0.320],
     green: [0.265, 0.690],
@@ -219,8 +201,6 @@ pub const P3_D65: Chromaticities = Chromaticities {
     white: [0.3127, 0.3290],
 };
 
-/// ITU-R BT.2020 primaries, D65: the `REC.2100` displays' container, and the
-/// primaries Apple Log is carried in.
 pub const REC2020: Chromaticities = Chromaticities {
     red: [0.708, 0.292],
     green: [0.170, 0.797],
@@ -272,31 +252,21 @@ pub fn rgb_to_xyz(c: &Chromaticities) -> Result<[f64; 9]> {
     ])
 }
 
-/// The Bradford cone-response matrix, the industry's default chromatic
-/// adaptation and the one OCIO's own `_BFD` built-ins name.
 const BRADFORD: [f64; 9] = [
-    0.8951, 0.2664, -0.1614, //
-    -0.7502, 1.7135, 0.0367, //
-    0.0389, -0.0685, 1.0296,
+    0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296,
 ];
 
 /// The CAT02 cone-response matrix, CIECAM02's. Bradford is the default
 /// everywhere here; the Canon Log built-ins are the one place the reference
 /// library names this one instead, and the two disagree by enough to see.
 const CAT02: [f64; 9] = [
-    0.7328, 0.4296, -0.1624, //
-    -0.7036, 1.6975, 0.0061, //
-    0.0030, 0.0136, 0.9834,
+    0.7328, 0.4296, -0.1624, -0.7036, 1.6975, 0.0061, 0.0030, 0.0136, 0.9834,
 ];
 
-/// The XYZ→XYZ matrix that moves a white point, Bradford-adapted.
 pub fn bradford(src_white: [f64; 2], dst_white: [f64; 2]) -> Result<[f64; 9]> {
     von_kries(&BRADFORD, src_white, dst_white)
 }
 
-/// The XYZ→XYZ matrix that moves a white point through a stated cone response:
-/// the white points into cone space, a scaling that takes one to the other, and
-/// back out again.
 fn von_kries(cone: &[f64; 9], src_white: [f64; 2], dst_white: [f64; 2]) -> Result<[f64; 9]> {
     let xyz = |xy: [f64; 2]| -> Option<[f64; 3]> {
         if xy[1] == 0.0 {
@@ -334,14 +304,10 @@ fn von_kries(cone: &[f64; 9], src_white: [f64; 2], dst_white: [f64; 2]) -> Resul
     Ok(mul3(&inv, &mul3(&scale, cone)))
 }
 
-/// The matrix from one RGB space to another, Bradford-adapted when their white
-/// points differ. This is the derivation behind both interchange bridges
-/// (docs/impl/ocio.md §2.1).
 pub fn rgb_to_rgb(from: &Chromaticities, to: &Chromaticities) -> Result<Matrix34> {
     convert(from, to, &BRADFORD)
 }
 
-/// The same, adapted with CAT02: what the Canon Log built-ins ask for.
 pub fn rgb_to_rgb_cat02(from: &Chromaticities, to: &Chromaticities) -> Result<Matrix34> {
     convert(from, to, &CAT02)
 }
@@ -378,12 +344,10 @@ pub fn xyz_d65_to(to: &Chromaticities) -> Result<Matrix34> {
     Ok(from_3x3(&m))
 }
 
-/// CIE XYZ with a D65 white → linear Rec.709, the `cie_xyz_d65_interchange` bridge.
 pub fn xyz_d65_to_rec709() -> Result<Matrix34> {
     xyz_d65_to(&REC709)
 }
 
-/// ACES2065-1 (AP0, D60) → linear Rec.709 (D65), the `aces_interchange` bridge.
 pub fn ap0_to_rec709() -> Result<Matrix34> {
     rgb_to_rgb(&AP0, &REC709)
 }

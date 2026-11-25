@@ -143,7 +143,6 @@ fn block_glitch(@builtin(global_invocation_id) gid: vec3<u32>) {
     let sx = jpos.x + dx;
     let sy = eff_y + dy;
 
-    // R/B split from the block hash (alpha follows green, like RGB split).
     let r = bilinear(sx - chan, sy, size).r;
     let g = bilinear(sx, sy, size);
     let b = bilinear(sx + chan, sy, size).b;

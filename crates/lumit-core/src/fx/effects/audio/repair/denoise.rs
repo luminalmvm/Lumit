@@ -43,7 +43,6 @@ const REDUCTION_DB: f64 = 12.0;
 const SMOOTHING: f64 = 50.0;
 const TONAL_REDUCTION_DB: f64 = 0.0;
 
-/// Noise reduction's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_denoise",
@@ -84,7 +83,6 @@ pub struct AudioDenoise {
         label = "Tonal reduction"
     )]
     pub tonal: f32,
-    /// Play only what was taken away.
     #[toggle(default = false, label = "Noise only")]
     pub noise_only: bool,
 }
@@ -102,7 +100,6 @@ pub fn learn_profile(interleaved: &[f32], rate: u32) -> Vec<u8> {
     encode(&learned_points(interleaved, AUDIO_CHANNELS, rate))
 }
 
-/// Noise reduction's behaviour.
 pub struct AudioDenoiseDef;
 
 impl EffectDef for AudioDenoiseDef {
@@ -125,7 +122,6 @@ impl EffectDef for AudioDenoiseDef {
     }
 }
 
-/// The floor and the gain rule one channel uses.
 pub(super) struct Channel {
     /// Each bin's expected noise power, or empty for "not known", which
     /// passes the sound through.
@@ -147,7 +143,6 @@ impl Channel {
         }
     }
 
-    /// Take a floor in each bin's expected power.
     pub(super) fn set_floor(&mut self, floor: &[f64]) {
         self.excess = tonal_excess(floor);
         self.floor = floor.iter().map(|&p| p as f32).collect();
@@ -168,7 +163,6 @@ impl Channel {
     }
 }
 
-/// One open Noise reduction.
 struct Denoise {
     state: Mutex<State>,
     latency: u32,
@@ -185,7 +179,6 @@ struct State {
     power: Vec<f32>,
     noise: Vec<f32>,
     channels: Vec<Channel>,
-    /// The rows the lows were last worked out for.
     lows_for: (f64, f64),
 }
 
@@ -349,7 +342,6 @@ mod tests {
             .sqrt()
     }
 
-    /// The level of a tone at `hz` in the left channel.
     fn level(x: &[f32], hz: f64) -> f64 {
         let step = std::f64::consts::TAU * hz / 48_000.0;
         let (mut re, mut im) = (0.0, 0.0);
@@ -361,8 +353,6 @@ mod tests {
         2.0 * re.hypot(im) / frames as f64
     }
 
-    /// **Plan 3**: after Learn on two seconds of hiss, the hiss alone comes
-    /// down by the Reduction and a tone over it stays within a dB.
     #[test]
     fn it_takes_the_hiss_down_and_keeps_the_tone() {
         let rate = 48_000;

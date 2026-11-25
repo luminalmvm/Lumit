@@ -18,17 +18,13 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Where the four generated pieces landed.
 #[derive(Debug, Clone)]
 pub struct RefMedia {
-    /// 1080p60, 20 s, H.264: the plain test pattern.
     pub clip_a: PathBuf,
     /// 1080p60, 20 s, H.264: the same pattern hue-rotated and flipped, so the
     /// two layers are told apart at a glance in a rendered frame.
     pub clip_b: PathBuf,
-    /// 20 s of 48 kHz tone with a fade in and out.
     pub audio: PathBuf,
-    /// A small 3D LUT: warm, lifted blacks, rolled-off blue.
     pub lut: PathBuf,
 }
 
@@ -140,8 +136,6 @@ pub fn generate(dir: &Path) -> Result<RefMedia, String> {
                 "lavfi",
                 "-i",
                 "sine=frequency=440:duration=20:sample_rate=48000",
-                // The envelope: two-second fades either end, so the layer's own
-                // volume keyframes have something to shape.
                 "-af",
                 "afade=t=in:st=0:d=2,afade=t=out:st=18:d=2",
                 "-c:a",
@@ -154,17 +148,14 @@ pub fn generate(dir: &Path) -> Result<RefMedia, String> {
     Ok(media)
 }
 
-/// How many footage items the long-form comp draws on (docs/13 §1).
 pub const LONG_ITEMS: usize = 300;
 
 /// How long each of the long-form comp's files runs, in seconds. A clip can
 /// be no longer than its source, so this is the longest clip the comp holds.
 pub const LONG_FILE_S: i64 = 30;
 
-/// The long-form comp's footage: [`LONG_ITEMS`] files, picture and sound.
 #[derive(Debug, Clone)]
 pub struct LongMedia {
-    /// One path per footage item, in item order.
     pub files: Vec<PathBuf>,
     /// The encoded files the others are copies of. The scenarios warm the
     /// renderer on these, so no file of the comp itself is opened early.
@@ -221,14 +212,12 @@ pub fn generate_long(dir: &Path) -> Result<LongMedia, String> {
     Ok(LongMedia { files, bases })
 }
 
-/// Whether a generated file is already there and worth keeping.
 fn present(path: &Path) -> bool {
     std::fs::metadata(path)
         .map(|m| m.len() > 0)
         .unwrap_or(false)
 }
 
-/// One H.264 encode, skipped when the file is already there.
 fn encode(bin: &str, out: &Path, input: &[&str], filter: &[&str]) -> Result<(), String> {
     if present(out) {
         return Ok(());
@@ -245,7 +234,6 @@ fn encode(bin: &str, out: &Path, input: &[&str], filter: &[&str]) -> Result<(), 
     run(bin, &args, out)
 }
 
-/// Run ffmpeg with `args` writing `out`, turning a non-zero exit into an `Err`.
 fn run(bin: &str, args: &[&str], out: &Path) -> Result<(), String> {
     let output = Command::new(bin)
         .args(args)

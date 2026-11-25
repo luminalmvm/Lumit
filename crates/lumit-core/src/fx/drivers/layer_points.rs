@@ -42,7 +42,6 @@ use lumit_fx_macros::Effect;
 /// producer declares, so a wire cannot tell a tap from a Particulate.
 pub const POINTS_PORT: &str = "points";
 
-/// The layer-reference row the tap reads, by parameter id.
 pub const SOURCE_PARAM: &str = "source";
 
 /// This driver's catalogue name — the one place the walk names it, since a tap
@@ -51,7 +50,6 @@ pub const MATCH_NAME: &str = "layer_points";
 
 const OUTPUTS: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
-/// Layer points' one control.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "layer_points",
@@ -72,7 +70,6 @@ pub struct LayerPoints {
     pub source: bool,
 }
 
-/// Layer points' behaviour.
 pub struct LayerPointsDef;
 
 impl EffectDef for LayerPointsDef {

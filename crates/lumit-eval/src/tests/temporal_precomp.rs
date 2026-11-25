@@ -1,17 +1,8 @@
-//! A temporal effect on a precomp or an adjustment layer keys its neighbours.
-
 use super::*;
 
-/// **A temporal effect on a Precomp or an adjustment layer names its
-/// neighbours.** Neither has source frames to stamp, so the picture a
-/// frame away is named instead: without it, two times that show one
-/// picture now and different ones next would share a name, and the cache
-/// would hand one frame's blur to the other.
 #[test]
 fn a_temporal_effect_on_a_precomp_or_an_adjustment_keys_its_neighbours() {
     let mut doc = Document::new();
-    // Still for five seconds and moving after: 4 s and 5 s show the same
-    // picture, and only at 5 s is the next frame a different one.
     let key_at = |time: i64, value: f64| Keyframe {
         time: Rational::new(time, 1).unwrap(),
         value,
@@ -46,10 +37,6 @@ fn a_temporal_effect_on_a_precomp_or_an_adjustment_keys_its_neighbours() {
         );
     }
 
-    // A Sequence layer's neighbour is whichever clip is live then. One
-    // shot twice and then another: the last frame of each showing is the
-    // same picture, and only the second is followed by the other shot.
-    // Four frames a second, so every time here is exact.
     use lumit_core::sequence::{Clip, ClipSource};
     let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
     let r = |n| Rational::new(n, 1).unwrap();

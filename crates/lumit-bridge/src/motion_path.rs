@@ -1,5 +1,3 @@
-//! A layer's motion path as the Viewer draws it.
-
 use lumit_core::anim::{Animation, Keyframe, Property};
 use lumit_core::model::Layer;
 use lumit_core::time::{CompTime, Rational};
@@ -35,7 +33,6 @@ pub(crate) fn motion_path_of(
     let offset = layer.start_offset.0;
     let comp_time = |t: Rational| CompTime(t.checked_add(offset).unwrap_or(t));
 
-    // Every time either axis has a key at, on the layer's clock, oldest first.
     let mut times: Vec<Rational> = kx
         .into_iter()
         .chain(ky)

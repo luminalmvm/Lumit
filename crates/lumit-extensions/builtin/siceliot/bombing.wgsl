@@ -36,8 +36,6 @@ struct Params {
     seed: u32,
 };
 
-// ---- The SICELIOT texture noise: the same text in every SICELIOT texture ----
-
 // A hash of a lattice cell and a salt, 0 to 1, seeded by Seed and the layer.
 fn sx_hash(c: vec2<i32>, salt: u32) -> f32 {
     var h = (bitcast<u32>(c.x) * 0x8da6b343u) ^ (bitcast<u32>(c.y) * 0xd8163841u) ^ (salt * 0xcb1ab31fu);
@@ -135,7 +133,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             if (col.a <= 0.0) {
                 continue;
             }
-            // Insert by order, keeping the four topmost copies.
             var item = col;
             var ord = sx_hash(c, p.seed * 7u + 6u);
             for (var k = 0; k < 4; k += 1) {
@@ -150,7 +147,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             }
         }
     }
-    // Composite from the lowest kept copy up.
     for (var k = 3; k >= 0; k -= 1) {
         if (orders[k] >= 0.0) {
             acc = layers[k] + acc * (1.0 - layers[k].a);

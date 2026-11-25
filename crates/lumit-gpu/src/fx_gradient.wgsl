@@ -12,7 +12,7 @@
 struct Params {
     start_axis: vec4<f32>,  // xy = start (raster px), zw = end − start
     c0: vec4<f32>,          // start colour; alpha lane ignored (the ramp is opaque)
-    c1: vec4<f32>,          // end colour
+    c1: vec4<f32>,
     inv_len2: f32,          // 1 ÷ |axis|², floored
     inv_len: f32,           // 1 ÷ |axis|, floored
     scatter: f32,           // 0..1 dither of t
@@ -54,8 +54,6 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
-// == lumit_core::fx::cpu::gradient_ramp: Start colour, the colours in
-// between that are in use, End colour.
 fn ramp(t: f32) -> vec3<f32> {
     var at = 0.0;
     var prev = p.c0.rgb;

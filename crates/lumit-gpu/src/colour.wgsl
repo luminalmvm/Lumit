@@ -17,7 +17,6 @@ struct VsOut {
 
 @vertex
 fn vs_fullscreen(@builtin(vertex_index) i: u32) -> VsOut {
-    // One triangle covering the screen: (-1,-1) (3,-1) (-1,3).
     var out: VsOut;
     let x = f32(i32(i & 1u) * 4 - 1);
     let y = f32(i32(i >> 1u) * 4 - 1);
@@ -152,7 +151,6 @@ fn srgb_encode(c: f32) -> f32 {
     return 1.055 * pow(v, 1.0 / 2.4) - 0.055;
 }
 
-/// What both fragment entry points draw, before any encoding.
 fn shade(in: VsOut) -> vec4<f32> {
     let s = textureSample(src, samp, in.uv);
     // The neutral point, bit-exact: the linearise pass and every export take

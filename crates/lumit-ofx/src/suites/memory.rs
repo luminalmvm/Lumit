@@ -114,7 +114,6 @@ impl Block {
         Ok(Self { ptr, size })
     }
 
-    /// The address, for handing to a plugin as `kOfxImagePropData`.
     #[must_use]
     pub fn as_mut_ptr(&self) -> *mut u8 {
         self.ptr
@@ -153,7 +152,6 @@ pub fn plugin_bytes_live() -> usize {
     state().allocated_bytes
 }
 
-/// The table handed out by `fetchSuite`.
 pub static SUITE: OfxMemorySuiteV1 = OfxMemorySuiteV1 {
     memory_alloc,
     memory_free,

@@ -19,7 +19,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Posterize's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "posterize",
@@ -45,7 +44,6 @@ pub struct Posterize {
     #[counter(min = 2, max = 64, default = 8, hard_min = 2, hard_max = 255, unit = Raw)]
     pub levels: i32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -71,7 +69,6 @@ impl Posterize {
     }
 }
 
-/// Posterize's behaviour.
 pub struct PosterizeDef;
 
 impl EffectDef for PosterizeDef {

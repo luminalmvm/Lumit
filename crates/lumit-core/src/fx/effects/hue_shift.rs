@@ -1,12 +1,9 @@
-//! Hue shift (docs/08 §3.10): a rotation about the colour wheel.
-
 use crate::fx::{
     cpu, maths::hue_matrix, maths::hue_matrix_rgb, params::Params, registry::EffectDef,
     registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Hue shift's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "hue_shift",
@@ -38,7 +35,6 @@ pub struct HueShift {
     #[toggle(default = true)]
     pub preserve_luminance: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -71,7 +67,6 @@ impl HueShift {
     }
 }
 
-/// Hue shift's behaviour.
 pub struct HueShiftDef;
 
 impl EffectDef for HueShiftDef {

@@ -12,7 +12,6 @@
 use lumit_eval::epoch::EpochToken;
 use std::cell::{Cell, RefCell};
 
-/// The error a cancelled frame returns, so the worker can tell it from a fault.
 pub const CANCELLED: &str = "cancelled";
 
 thread_local! {
@@ -20,13 +19,10 @@ thread_local! {
     static SHORT: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Note that a stop left this frame's picture unfinished, as a trail that
-/// stopped walking does.
 pub fn cut_short() {
     SHORT.with(|s| s.set(true));
 }
 
-/// Whether the picture was left unfinished since the last ask, and forget it.
 #[must_use]
 pub fn drawn_short() -> bool {
     SHORT.with(|s| s.replace(false))
@@ -53,8 +49,6 @@ impl Drop for Scope {
     }
 }
 
-/// `error` with `what` in front of it, unless it is a stop: that is passed on
-/// as itself, so the worker can still tell it from a fault.
 #[must_use]
 pub fn or_fault(error: String, what: &str) -> String {
     if error == CANCELLED {
@@ -64,7 +58,6 @@ pub fn or_fault(error: String, what: &str) -> String {
     }
 }
 
-/// True when the render on this thread has been asked to stop.
 #[must_use]
 pub fn requested() -> bool {
     TOKEN.with(|slot| slot.borrow().as_ref().is_some_and(EpochToken::cancelled))

@@ -20,7 +20,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Median's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "median",
@@ -55,7 +54,6 @@ pub struct Median {
     #[toggle(label = "Operate on alpha", default = false)]
     pub alpha: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -94,7 +92,6 @@ impl Median {
     }
 }
 
-/// Median's behaviour.
 pub struct MedianDef;
 
 impl EffectDef for MedianDef {

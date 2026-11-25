@@ -18,16 +18,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Warp's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "warp",
     label = "Warp",
     version = 1,
     category = Distortion,
-    // A handful of arithmetic and one bilinear tap a pixel.
     cost = Cheap,
-    // Every style can pull from anywhere in the frame.
     roi = FullFrame,
     premultiplied = true,
     // The matte scales the displacement, inside the kernel (the owner's rule
@@ -87,7 +84,6 @@ pub struct Warp {
     )]
     pub horizontal_distortion: f32,
 
-    /// Per cent: the same taper between top and bottom.
     #[slider(
         label = "Vertical distortion",
         min = -100.0,
@@ -99,7 +95,6 @@ pub struct Warp {
     )]
     pub vertical_distortion: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -135,7 +130,6 @@ impl Warp {
     }
 }
 
-/// Warp's behaviour.
 pub struct WarpDef;
 
 impl EffectDef for WarpDef {

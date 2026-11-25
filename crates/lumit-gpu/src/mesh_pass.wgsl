@@ -50,7 +50,6 @@ struct Material {
 @group(1) @binding(0) var<uniform> mat: Material;
 @group(1) @binding(1) var base_tex: texture_2d<f32>;
 @group(1) @binding(3) var normal_tex: texture_2d<f32>;
-// The samplers a material reads with, in a group of their own.
 @group(2) @binding(0) var base_samp: sampler;
 @group(2) @binding(2) var normal_samp: sampler;
 @group(1) @binding(11) var opacity_tex: texture_2d<f32>;
@@ -88,7 +87,6 @@ fn from_srgb(c: vec3<f32>) -> vec3<f32> {
     return select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
 }
 
-// A surface is there at this pixel, facing `n`, seen through `alpha`.
 fn paint(n: vec3<f32>, at: vec3<f32>, alpha: f32) -> vec4<f32> {
     let what = u32(frame.eye.w + 0.5);
     switch (what) {

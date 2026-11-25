@@ -80,8 +80,6 @@ pub(crate) type FrameKey = u128;
 /// beside the bytes but never part of the name (see [`best_frame`]).
 pub(crate) type Provenance = lumit_render::headless::FrameProvenance;
 
-/// One cached frame: its dimensions, the tightly-packed display bytes, and the
-/// bookkeeping the store and its consumers need.
 struct Entry {
     width: u32,
     height: u32,
@@ -102,13 +100,10 @@ struct Entry {
     last_used: u64,
 }
 
-/// The rendered-frame cache: an LRU of display-encoded frames under a byte
-/// budget, each named by its content hash (see the module docs).
 pub(crate) struct Cache {
     budget: usize,
     used: usize,
     map: HashMap<FrameKey, Entry>,
-    /// Monotonic LRU clock; each access stamps an entry's `last_used`.
     clock: u64,
     hits: u64,
     misses: u64,
@@ -153,7 +148,6 @@ impl Cache {
         if bytes == 0 || bytes > self.budget {
             return;
         }
-        // Replacing an existing key: reclaim its bytes first.
         if let Some(old) = self.map.remove(&key) {
             self.used = self.used.saturating_sub(old.bytes.len());
         }
@@ -170,10 +164,8 @@ impl Cache {
         self.used += bytes;
     }
 
-    /// Drop least-recently-used entries until `incoming` more bytes fit.
     fn evict_until_fits(&mut self, incoming: usize) {
         while !self.map.is_empty() && self.used + incoming > self.budget {
-            // Find the oldest entry (smallest `last_used`).
             let Some(oldest) = self
                 .map
                 .iter()
@@ -188,7 +180,6 @@ impl Cache {
         }
     }
 
-    /// Resize the budget, evicting down to it immediately.
     fn set_budget(&mut self, budget: usize) {
         self.budget = budget;
         self.evict_until_fits(0);
@@ -269,8 +260,6 @@ pub(crate) fn get(key: FrameKey) -> Option<(u32, u32, Vec<u8>)> {
     with_cache(|c| c.get(&key))
 }
 
-/// Bank a freshly rendered frame under its content name — the other half of
-/// [`get`].
 pub(crate) fn put_rendered(
     key: FrameKey,
     provenance: Provenance,
@@ -349,7 +338,6 @@ pub(crate) fn put_loaded(
     });
 }
 
-/// One held frame, ready to be put back on the graphics card.
 pub(crate) struct HeldFrame {
     pub width: u32,
     pub height: u32,
@@ -429,7 +417,6 @@ pub(crate) fn best_frame(
                     && e.provenance.frame == frame
                     && still_current(**k, e.provenance.quality)
             })
-            // The finest one held.
             .max_by_key(|(_, e)| e.provenance.scale_q)
             .map(|(k, _)| k)?;
         let entry = c.map.get_mut(&key)?;
@@ -492,7 +479,6 @@ pub(crate) fn with_best_frame<R>(
     })
 }
 
-/// Resize the RAM budget (Settings → Performance).
 pub(crate) fn set_budget(bytes: usize) {
     CHOSEN.store(true, std::sync::atomic::Ordering::Relaxed);
     with_cache(|c| c.set_budget(bytes));
@@ -554,7 +540,6 @@ pub(crate) fn trim_if_memory_low() -> bool {
     with_cache(|c| c.trim_half())
 }
 
-/// Empty the cache now (Settings → Clear cache).
 pub(crate) fn clear() {
     with_cache(|c| c.clear());
 }
@@ -596,7 +581,6 @@ pub(crate) mod vram {
     static BUDGET: AtomicUsize = AtomicUsize::new(lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES);
     /// Bumped by Clear cache; the worker clears when it sees it move.
     static CLEARS: AtomicU64 = AtomicU64::new(0);
-    /// What the worker last reported holding.
     static USED: AtomicU64 = AtomicU64::new(0);
     static ENTRIES: AtomicU64 = AtomicU64::new(0);
     /// The budget the worker's cache is ACTUALLY holding to, as it last
@@ -621,14 +605,10 @@ pub(crate) mod vram {
         BUDGET.store(bytes, Ordering::Relaxed);
     }
 
-    /// Whether Settings has named a budget, which then stands.
     static CHOSEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-    /// See [`super::size_to_machine`].
     pub(super) fn size_to_machine(bytes: usize) {
         if !CHOSEN.load(Ordering::Relaxed) {
-            // A quarter of the card, whatever its size; the built-in figure
-            // only where the card's size is not known.
             let budget = if bytes == 0 {
                 lumit_render::headless::DEFAULT_VRAM_CACHE_BYTES
             } else {
@@ -650,13 +630,11 @@ pub(crate) mod vram {
         CLEARS.load(Ordering::Relaxed)
     }
 
-    /// The worker's report of what it holds.
     pub(crate) fn publish(used: u64, entries: u64) {
         USED.store(used, Ordering::Relaxed);
         ENTRIES.store(entries, Ordering::Relaxed);
     }
 
-    /// `(used, entries)` as last published.
     pub(crate) fn stats() -> (u64, u64) {
         (
             USED.load(Ordering::Relaxed),
@@ -779,9 +757,6 @@ pub(crate) mod governor {
     }
 }
 
-/// What the graphics driver holds for the worker's device, as it last
-/// published — the layer under every tier in this file, and the one nothing
-/// could see until now.
 pub(crate) mod gpu;
 
 pub(crate) mod disk {
@@ -789,8 +764,6 @@ pub(crate) mod disk {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
 
-    /// Where the parked frames go (docs/07-UI-SPEC.md §15, Settings →
-    /// Performance → Cache).
     #[derive(Clone, PartialEq, Eq, Debug, Default)]
     pub(crate) enum Location {
         /// Under the application's own cache directory, keyed by document id —
@@ -855,8 +828,6 @@ pub(crate) mod disk {
         *guard = Some((epoch, location));
     }
 
-    /// The wanted location and the epoch it was asked at, or `None` if nobody
-    /// has ever chosen one (the worker then uses [`Location::default`]).
     pub(crate) fn location() -> (u64, Location) {
         let guard = LOCATION.lock().unwrap_or_else(|p| p.into_inner());
         guard.clone().unwrap_or((0, Location::default()))
@@ -884,7 +855,6 @@ pub(crate) mod disk {
         guard.clone()
     }
 
-    /// What the cache always leaves free on its drive, for everything else.
     const KEEP_FREE_BYTES: u64 = 10 << 30;
 
     /// The most the cache in `root` may hold while it holds `used`: that plus
@@ -1018,20 +988,16 @@ pub(crate) mod bar {
     /// 4000-frame strip is 4 kB, so the whole store is measured in kilobytes.
     const SLOTS: usize = 4;
 
-    /// Record what the bar is drawing, so the worker knows what to compute.
     pub(crate) fn want(comp: uuid::Uuid, frames: u64, scale_q: u16) {
         let mut guard = WANTED.lock().unwrap_or_else(|p| p.into_inner());
         *guard = Some((comp, frames, scale_q));
     }
 
-    /// What the bar is asking for, if it has asked at all.
     pub(crate) fn wanted() -> Option<(uuid::Uuid, u64, u16)> {
         let guard = WANTED.lock().unwrap_or_else(|p| p.into_inner());
         *guard
     }
 
-    /// Publish a freshly computed strip, replacing any earlier one for the same
-    /// composition and scale and pushing the oldest out.
     pub(crate) fn publish(comp: uuid::Uuid, scale_q: u16, tiers: Vec<u8>) {
         let mut guard = PUBLISHED.lock().unwrap_or_else(|p| p.into_inner());
         guard.retain(|(held, scale, _)| !(*held == comp && *scale == scale_q));
@@ -1122,8 +1088,6 @@ mod tests {
         }
     }
 
-    /// A positional lookup that accepts every candidate — for the tests that
-    /// are about the lookup itself rather than about staleness.
     fn anything(_key: FrameKey, _quality: lumit_render::plan::Quality) -> bool {
         true
     }
@@ -1147,16 +1111,13 @@ mod tests {
         sized(2, 2, bytes, provenance)
     }
 
-    /// The byte budget evicts the least-recently-used frame first.
     #[test]
     fn the_budget_evicts_least_recently_used() {
         let _guard = cache_test_guard();
         let comp = uuid::Uuid::now_v7();
-        // Budget holds exactly two 16-byte frames.
         let mut cache = Cache::new(32);
         cache.put(A, entry(16, at(comp, 0, 1000)));
         cache.put(B, entry(16, at(comp, 1, 1000)));
-        // Touch A so B is now the least-recently-used.
         assert!(cache.get(&A).is_some());
         cache.put(C, entry(16, at(comp, 2, 1000)));
 
@@ -1169,8 +1130,6 @@ mod tests {
         assert_eq!(used, 32);
     }
 
-    /// Short of memory, the least recently used half goes and the budget
-    /// stays, so the cache fills again once the machine has room.
     #[test]
     fn a_trim_gives_back_the_colder_half_and_keeps_the_budget() {
         let _guard = cache_test_guard();
@@ -1225,8 +1184,6 @@ mod tests {
         // content, so an undo that brings it back must find it there.
         assert!(contains(2), "a stale position does not retire the frame");
 
-        // And with nothing current held, the caller renders its own rather than
-        // being handed the old picture.
         with_cache(|c| {
             c.map.remove(&1);
         });
@@ -1303,8 +1260,6 @@ mod tests {
             "and neither is another composition"
         );
 
-        // Two compositions drawn in turn must not knock each other out: a
-        // single slot meant each paint found the other's strip and read blank.
         bar::publish(other, 1000, vec![4, 4, 4]);
         assert_eq!(bar::read(other, 3, 1000), vec![4, 4, 4]);
         assert_eq!(

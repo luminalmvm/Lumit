@@ -17,7 +17,6 @@ pub const LOG_E_MIN: f32 = -3.0;
 pub const LOG_E_SPAN: f32 = 7.0;
 /// Samples in a grain table, from no density to the layer's top.
 pub const GRAIN: usize = 64;
-/// A cube's side.
 pub const LUT: usize = 17;
 /// Where each table starts in the buffer, in floats. Each is laid out three
 /// floats a sample, red first.
@@ -32,7 +31,6 @@ pub const LEN: usize = AT_LUT_SCAN + LUT * LUT * LUT * 3;
 /// take a pixel this far under it.
 pub const DENSITY_FLOOR: f32 = -0.03;
 
-/// What one stock and its print need beyond their curves, worked out once.
 #[derive(Debug, Clone)]
 pub struct Pair {
     /// Negative density to log print exposure, before the printer lights.
@@ -73,7 +71,6 @@ fn log_e(i: usize) -> f64 {
     f64::from(LOG_E_MIN) + f64::from(LOG_E_SPAN) * i as f64 / (CURVE - 1) as f64
 }
 
-/// A curve read at log exposure `x`, `table` laid out as the buffer's.
 pub fn curve_at(table: &[f32], c: usize, x: f32) -> f32 {
     let t = ((x - LOG_E_MIN) / LOG_E_SPAN * (CURVE - 1) as f32).clamp(0.0, (CURVE - 1) as f32);
     let i = (t.floor() as usize).min(CURVE - 2);
@@ -82,7 +79,6 @@ pub fn curve_at(table: &[f32], c: usize, x: f32) -> f32 {
     a + (table[(i + 1) * 3 + c] - a) * f
 }
 
-/// A grain table read at density `d` of a layer whose top is `top`.
 pub fn grain_at(table: &[f32], c: usize, d: f32, top: f32) -> f32 {
     let t = (d / top.max(1e-6) * (GRAIN - 1) as f32).clamp(0.0, (GRAIN - 1) as f32);
     let i = (t.floor() as usize).min(GRAIN - 2);
@@ -126,7 +122,6 @@ pub fn cube_at(cube: &[f32], low: [f32; 3], top: [f32; 3], d: [f32; 3]) -> [f32;
     out
 }
 
-/// The light a stock lets through at dye densities `d`, per wavelength.
 fn transmittance(s: &Stock, d: [f64; 3]) -> [f64; WAVES] {
     let mut out = [0.0; WAVES];
     for (l, o) in out.iter_mut().enumerate() {
@@ -140,8 +135,6 @@ fn transmittance(s: &Stock, d: [f64; 3]) -> [f64; WAVES] {
     out
 }
 
-/// How much each layer of `print` is exposed through the negative `neg` at
-/// densities `d`, under the printer's lamp.
 fn print_exposure(data: &Data, neg: &Stock, print: &Stock, d: [f64; 3]) -> [f64; 3] {
     let t = transmittance(neg, d);
     let mut raw = [0.0f64; 3];
@@ -189,7 +182,6 @@ fn cube(low: [f32; 3], top: [f32; 3], f: impl Fn([f64; 3]) -> [f32; 3]) -> Vec<f
     out
 }
 
-/// Each layer's highest density.
 fn tops(s: &Stock) -> [f32; 3] {
     let mut top = [0.0f32; 3];
     for v in &s.curves {
@@ -200,7 +192,6 @@ fn tops(s: &Stock) -> [f32; 3] {
     top
 }
 
-/// A curve's density at log exposure `x`.
 fn density(s: &Stock, c: usize, x: f64) -> f64 {
     let t = ((x - f64::from(LOG_E_MIN)) / f64::from(LOG_E_SPAN) * (CURVE - 1) as f64)
         .clamp(0.0, (CURVE - 1) as f64);

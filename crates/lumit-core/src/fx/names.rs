@@ -5,7 +5,6 @@
 
 use crate::model::EffectInstance;
 
-/// The name an effect goes by: the user's own for it, or the effect's label.
 #[must_use]
 pub fn name_of(inst: &EffectInstance) -> &str {
     inst.custom_name.as_deref().unwrap_or_else(|| {

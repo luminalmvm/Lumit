@@ -21,10 +21,8 @@ use lumit_render::headless::HeadlessRenderer;
 use lumit_render::plan::Quality;
 use uuid::Uuid;
 
-/// A second of playback at the clip's rate.
 const PLAY: u64 = 60;
 
-/// Measure B41. `Err` when there is no graphics adapter or no media.
 pub fn budgets(
     media_dir: &Path,
     progress: &mut dyn FnMut(Measurement),

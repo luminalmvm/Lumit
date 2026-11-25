@@ -1,5 +1,3 @@
-//! The path of the four-corner stretch.
-
 use super::{
     ends, finite, hops, motions, place, placing, reach, segments, wanted, weighted, Kernel, Placed,
     Pose, Smoothing, UNMOVED,
@@ -7,7 +5,6 @@ use super::{
 use crate::stabilise::analysis::Step;
 use crate::stabilise::motion::{apply, four_point, invert, mul, Mat3, IDENTITY};
 
-/// How many frames in a row share one anchor in the perspective path.
 const BLOCK: usize = 32;
 
 /// The four-corner path is the similarity path with the rest of the
@@ -64,9 +61,6 @@ pub(super) fn perspective_path(
 
     let sigma = |t: usize| s.sigma.get(t).copied().unwrap_or(0.0);
     let mut kernel = Kernel::new();
-    // The block's anchor, the first frame it reaches, where the frames from
-    // there are placed in the anchor, the rest of the motion from the anchor
-    // to each, and the four-corner motion from the anchor to this frame.
     let (mut a, mut base) = (0usize, 0usize);
     let mut placed: Vec<Placed> = Vec::new();
     let mut rest: Vec<Mat3> = Vec::new();
@@ -74,8 +68,6 @@ pub(super) fn perspective_path(
     let mut to_t = IDENTITY;
     let mut out = Vec::with_capacity(frames);
     for t in 0..frames {
-        // Where this frame's corners should be, and the smooth similarity
-        // to follow after that.
         let (target, pose) = if let Some(to) = &locked {
             // M(t, ref) = to(ref → t)⁻¹.
             let m = invert(&to[t]).unwrap_or(IDENTITY);
@@ -98,9 +90,6 @@ pub(super) fn perspective_path(
             }
             let r = kernel.set(sigma(t));
             let (lo, hi) = (t.saturating_sub(r).max(span.0), (t + r).min(span.1));
-            // Each frame round this one as the anchor sees it: its growth and
-            // turn, where it has the centre, and where the rest of the motion
-            // to it takes this frame's corners. Averaged, and brought back.
             let from = invert(&to_t).unwrap_or(IDENTITY);
             let q = corners.map(|p| apply(&from, p).unwrap_or(p));
             let q = [
@@ -209,7 +198,6 @@ fn anchor(
     }
 }
 
-/// A homography scaled so its last entry is one.
 fn normalise(m: Mat3) -> Mat3 {
     let d = m[2][2];
     if !d.is_finite() || d.abs() < 1e-12 {

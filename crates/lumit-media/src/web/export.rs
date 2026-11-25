@@ -58,9 +58,7 @@ pub fn codecs() -> Vec<String> {
         .collect()
 }
 
-/// What a file is written as.
 pub struct Settings<'a> {
-    /// The file's name, which the page offers when it asks where to save it.
     pub name: &'a str,
     /// One of [`codecs`].
     pub codec: &'a str,
@@ -74,9 +72,7 @@ pub struct Settings<'a> {
     pub sound: Option<(u32, u16, i64)>,
 }
 
-/// Where a file being written has got to.
 pub enum State {
-    /// It can take another frame.
     Room,
     /// It can't yet: the user is choosing where it goes, or the encoder is
     /// behind.
@@ -85,7 +81,6 @@ pub enum State {
     Failed(String),
 }
 
-/// A file the page is writing.
 pub struct Page {
     id: u32,
 }
@@ -132,7 +127,6 @@ impl Page {
         page_sound(self.id, samples, first).map_err(why)
     }
 
-    /// Everything is in: the page writes the end of the file.
     pub fn finish(&self) -> Result<(), String> {
         page_finish(self.id).map_err(why)
     }

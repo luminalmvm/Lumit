@@ -24,10 +24,7 @@ use lumit_fx_macros::Effect;
     label = "Posterize time",
     version = 1,
     category = Temporal,
-    // One render at the held time — often the SAME held time across many frames.
     cost = Cheap,
-    // It re-renders the composite below at a held time; no per-pixel ROI applies,
-    // so full-frame is the safe static declaration.
     roi = FullFrame,
 )]
 pub struct PosterizeTime {
@@ -49,7 +46,6 @@ pub struct PosterizeTime {
     pub phase: f32,
 }
 
-/// Posterize time's behaviour: none, by design.
 pub struct PosterizeTimeDef;
 
 impl EffectDef for PosterizeTimeDef {

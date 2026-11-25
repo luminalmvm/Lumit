@@ -16,7 +16,6 @@ pub struct BoxLooks<K> {
     /// box on it isn't listed.
     #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub colours: Vec<(K, u32)>,
-    /// The boxes folded down to their heading.
     #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub collapsed: Vec<K>,
 }
@@ -36,7 +35,6 @@ impl<K: Copy + PartialEq> BoxLooks<K> {
         self.colours.is_empty() && self.collapsed.is_empty()
     }
 
-    /// The chip `key` is tinted with, 0 for none.
     #[must_use]
     pub fn colour(&self, key: K) -> u32 {
         self.colours
@@ -45,7 +43,6 @@ impl<K: Copy + PartialEq> BoxLooks<K> {
             .map_or(0, |(_, c)| *c)
     }
 
-    /// Tint `key` with chip `colour`; chip 0 takes the tint away.
     pub fn set_colour(&mut self, key: K, colour: u32) {
         self.colours.retain(|(k, _)| *k != key);
         if colour != 0 {
@@ -65,7 +62,6 @@ impl<K: Copy + PartialEq> BoxLooks<K> {
         }
     }
 
-    /// Forget every box `keep` turns down, and say whether any went.
     pub fn retain(&mut self, keep: impl Fn(K) -> bool) -> bool {
         let before = (self.colours.len(), self.collapsed.len());
         self.colours.retain(|(k, _)| keep(*k));

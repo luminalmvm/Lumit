@@ -18,7 +18,6 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// One twirl per kind of hit, its switch first.
 const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
     ParamGroup {
         label,
@@ -68,7 +67,6 @@ pub const JOLT_GROUPS: &[ParamGroup] = &[
     group("Time", &["time_on", "time_amount", "time_direction"]),
 ];
 
-/// Jolt's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "jolt",
@@ -138,7 +136,6 @@ pub struct Jolt {
     #[toggle(label = "Jolts only", default = false)]
     pub jolts_only: bool,
 
-    /// Each hit blurs the picture.
     #[toggle(label = "Blur", default = true)]
     pub blur_on: bool,
 
@@ -165,7 +162,6 @@ pub struct Jolt {
     )]
     pub blur_aspect: f32,
 
-    /// Each hit mixes in a colour.
     #[toggle(label = "Colour", default = false)]
     pub colour_on: bool,
 
@@ -194,7 +190,6 @@ pub struct Jolt {
     )]
     pub random_hue: f32,
 
-    /// Each hit turns the light up or down.
     #[toggle(label = "Light", default = true)]
     pub light_on: bool,
 
@@ -218,7 +213,6 @@ pub struct Jolt {
     )]
     pub light_direction: u32,
 
-    /// Each hit scales the picture.
     #[toggle(label = "Scale", default = true)]
     pub scale_on: bool,
 
@@ -239,7 +233,6 @@ pub struct Jolt {
     #[slider(label = "Origin x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub origin_x: f32,
 
-    /// See [`origin_x`](Self::origin_x).
     #[slider(label = "Origin y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub origin_y: f32,
 
@@ -253,7 +246,6 @@ pub struct Jolt {
     )]
     pub random_origin: f32,
 
-    /// Each hit slides the picture.
     #[toggle(label = "Slide", default = true)]
     pub slide_on: bool,
 
@@ -287,7 +279,6 @@ pub struct Jolt {
     )]
     pub rgb_split: f32,
 
-    /// Each hit jumps the layer to another moment and back.
     #[toggle(label = "Time", default = false)]
     pub time_on: bool,
 
@@ -303,11 +294,9 @@ pub struct Jolt {
     )]
     pub time_amount: f32,
 
-    /// Which way a hit jumps: either, only ahead, or only back.
     #[choice(label = "Direction", options = ["Both", "Forward", "Backward"], default = 0)]
     pub time_direction: u32,
 
-    /// The host-uniform Mix every effect ends with, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -319,7 +308,6 @@ pub struct Jolt {
     pub mix: f32,
 }
 
-/// One frame of Jolt, as both render paths draw it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct JoltParams {
     /// The blur's radius across and down, raster pixels.
@@ -332,7 +320,6 @@ pub struct JoltParams {
     pub split: [f32; 2],
     /// The colour mixed in, scene-linear, and how far.
     pub tint: [f32; 4],
-    /// The light, multiplied in.
     pub gain: f32,
     /// The whole pixel, multiplied in. Below 1 only with Jolts only on.
     pub opacity: f32,
@@ -368,8 +355,6 @@ impl Jolt {
     /// only.
     pub const DERIVED_SLIDE: ParamId = ParamId::new("derived.slide");
 
-    /// The numbers both kernels read, from the rows and the derived hits in
-    /// `p`, on a `w` by `h` raster.
     #[must_use]
     pub fn packed(self, p: Params<'_>, w: u32, h: u32) -> JoltParams {
         let [blur, colour, light, scale] = p.vec4(Self::DERIVED_HIT, [0.0; 4]);
@@ -381,7 +366,6 @@ impl Jolt {
         let r = self.blur_amount.max(0.0) * blur * master;
         let aspect = (self.blur_aspect / 100.0).clamp(-1.0, 1.0);
 
-        // Up by the amount, or down by the same factor, about the origin.
         let grow = 1.0 + self.scale_amount.max(0.0) / 100.0 * scale.abs() * master;
         let zoom = if scale < 0.0 { grow } else { 1.0 / grow };
         let wander = share(self.random_origin) * 0.5;
@@ -522,10 +506,8 @@ const KINDS: [(&str, bool); 6] = [
     ("time_on", false),
 ];
 
-/// Which of [`KINDS`] the time hit is.
 const TIME: u32 = 5;
 
-/// Jolt's behaviour.
 pub struct JoltDef;
 
 impl EffectDef for JoltDef {

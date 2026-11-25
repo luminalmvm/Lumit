@@ -29,10 +29,8 @@ use super::{log_grid, on, row, to_grid};
 use crate::fx::effects::audio::dsp::stft::{frame_at, frame_count, hann, Fft};
 use crate::fx::params::ParamId;
 
-/// Points on a display's frequency axis.
 pub const POINTS: usize = 128;
 
-/// The lowest a display value goes, in dB.
 pub const FLOOR_DB: f32 = -150.0;
 
 /// The display's frequency axis: [`POINTS`] points from 20 Hz to 20 kHz,
@@ -46,7 +44,6 @@ pub fn grid_hz() -> Vec<f64> {
 /// [`POINTS`] dB values on [`grid_hz`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpectrumView {
-    /// What arrives at the effect.
     pub input: Vec<f32>,
     /// The unwanted part's level the effect is working from: Noise
     /// reduction's floor, Reverb reduction's late reverb.
@@ -55,11 +52,9 @@ pub struct SpectrumView {
     /// Noise reduction; for the De-esser, the level the band above Frequency
     /// would have to reach, [`FLOOR_DB`] below it.
     pub threshold: Option<Vec<f32>>,
-    /// What the effect is expected to let through.
     pub output: Vec<f32>,
 }
 
-/// What Hum removal's display draws.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HumView {
     /// The mains frequency found in the window, in hertz, or `None` when no
@@ -69,7 +64,6 @@ pub struct HumView {
     pub harmonics: u32,
 }
 
-/// Every frame's power per bin over a mono window, at the shared framing.
 fn powers(window: &[f32], framing: &Framing) -> Vec<Vec<f32>> {
     let mut fft = Fft::new(framing.n);
     let mut frame = vec![0.0f32; framing.n];
@@ -83,7 +77,6 @@ fn powers(window: &[f32], framing: &Framing) -> Vec<Vec<f32>> {
         .collect()
 }
 
-/// The mean of each bin over the frames.
 fn mean(frames: &[Vec<f32>], bins: usize) -> Vec<f64> {
     let mut sum = vec![0.0f64; bins];
     for frame in frames {

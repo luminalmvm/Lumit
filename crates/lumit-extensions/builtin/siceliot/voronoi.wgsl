@@ -168,7 +168,6 @@ fn vo_edge(q: vec2<f32>) -> f32 {
     return edge;
 }
 
-// Half the gap from the nearest point to its own nearest neighbour.
 fn vo_radius(q: vec2<f32>) -> f32 {
     let near = vo_layer(q).near;
     let pt = vo_point(near);
@@ -183,8 +182,6 @@ fn vo_radius(q: vec2<f32>) -> f32 {
     return gap * 0.5;
 }
 
-
-// ---- The SICELIOT ramp: the same text in every SICELIOT gradient ----
 
 // The first Stops colours, sorted by Position, read at t (0 to 1), after
 // Progression has bent t: Quadratic squares it, Easing eases it in and out.

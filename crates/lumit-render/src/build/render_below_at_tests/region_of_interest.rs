@@ -1,5 +1,3 @@
-//! Tests for drawing a region of interest.
-
 use super::*;
 
 /// A region of interest composites a window of the comp, and that window
@@ -14,7 +12,7 @@ use super::*;
 #[test]
 fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
     let Some(ctx) = lumit_gpu::test_support::lease() else {
-        return; // no GPU here — skip, as the gpu crate's own tests do
+        return;
     };
     let engine = ctx.colour();
     let compositor = ctx.compositor();
@@ -79,7 +77,6 @@ fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
     let full = realiser.realise(comp.camera_pose(t), comp.width, comp.height, bg, &draws);
     let full_px = bytes(&full);
 
-    // A window over the busiest quarter of the frame.
     let region = lumit_gpu::composite::Region {
         x: 64.0,
         y: 32.0,
@@ -102,7 +99,6 @@ fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
     );
     let win_px = bytes(&windowed);
 
-    // Every row of the window against the same row of the full frame.
     let stride = comp.width as usize * 4;
     let mut worst = 0u8;
     for row in 0..region.h as usize {
@@ -117,7 +113,6 @@ fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
         "a windowed composite must match the full frame there; worst channel difference {worst}"
     );
 
-    // And it is deterministic, as every composite must be.
     let again = realiser.realise_region(
         comp.camera_pose(t),
         comp.width,

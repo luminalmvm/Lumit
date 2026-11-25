@@ -25,7 +25,6 @@ use crate::model::EffectInstance;
 
 use super::registry::{Catalogue, EffectDef};
 
-/// The nine declarations (docs/impl/layer-styles.md §1).
 pub mod defs;
 
 #[cfg(test)]
@@ -50,24 +49,16 @@ use defs::{
 /// family, not an extension point — but sharing the type is cheaper than a
 /// second one.
 pub static STYLE_DEFS: Catalogue = Catalogue::new(&[
-    // 1. Behind everything.
     &DropShadowStyleDef,
-    // 2. Behind the layer, in front of its shadow.
     &OuterGlowDef,
     //    (the layer's own pixels, post-effect-stack, sit here)
     // 4. Interior, clipped to alpha.
     &GradientOverlayDef,
-    // 5. Interior, over the gradient overlay.
     &ColourOverlayDef,
-    // 6. Interior.
     &SatinDef,
-    // 7. Interior.
     &InnerGlowDef,
-    // 8. Interior.
     &InnerShadowDef,
-    // 9. Straddles the edge, over the interiors.
     &StrokeStyleDef,
-    // 10. Topmost — its highlights sit on everything, stroke included.
     &BevelEmbossDef,
 ]);
 
@@ -131,9 +122,6 @@ pub fn normalise_styles(styles: &mut Vec<EffectInstance>) {
     styles.sort_by_key(|s| style_index(&s.effect.match_name).unwrap_or(usize::MAX));
 }
 
-/// Every style definition, in §2's order — for the tests and for package 3's
-/// "add style" menu, neither of which should have to know [`STYLE_DEFS`] is a
-/// catalogue.
 pub fn all() -> impl Iterator<Item = &'static dyn EffectDef> {
     STYLE_DEFS.builtins()
 }
@@ -148,8 +136,6 @@ pub fn all() -> impl Iterator<Item = &'static dyn EffectDef> {
 /// goes stale.
 pub const UNRENDERED: [&str; 2] = ["style_satin", "style_bevel_emboss"];
 
-/// The styles the **Add style** menu offers — the seven that render (§8), in
-/// §2's order.
 pub fn offered() -> impl Iterator<Item = &'static dyn EffectDef> {
     all().filter(|d| !UNRENDERED.contains(&d.schema().match_name))
 }

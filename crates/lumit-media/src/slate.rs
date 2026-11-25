@@ -27,7 +27,6 @@ const RED: Rgb = [230, 20, 20];
 const BLUE: Rgb = [20, 20, 220];
 const BLACK: Rgb = [0, 0, 0];
 
-/// The seven main bars, left to right — the classic descending-luminance run.
 const BARS: [Rgb; 7] = [WHITE, YELLOW, CYAN, GREEN, MAGENTA, RED, BLUE];
 /// The reversed band beneath them, which is what makes the pattern read as
 /// test bars rather than a plain gradient.
@@ -41,7 +40,6 @@ const BAND_STEPS: f32 = 0.86;
 /// How much of the width the greyscale ramp and the step wedge occupy; the
 /// remainder carries the hue sweep and a black rest field.
 const RAMP_SPLIT: f32 = 0.58;
-/// Discrete steps in the bottom wedge.
 const STEPS: u32 = 12;
 
 /// Interpolated hue sweep (red → yellow → green → cyan → blue → magenta) for
@@ -59,14 +57,11 @@ fn hue_sweep(t: f32) -> Rgb {
     ]
 }
 
-/// The colour of the slate at pixel `(x, y)` of a `w × h` frame. Pure, so the
-/// bands can be asserted directly.
 #[must_use]
 pub fn sample(x: u32, y: u32, w: u32, h: u32) -> Rgb {
     let (w, h) = (w.max(1), h.max(1));
     let fx = x as f32 / w as f32;
     let fy = y as f32 / h as f32;
-    // Which of the seven columns this pixel falls in.
     let col = ((fx * 7.0) as usize).min(6);
 
     if fy < BAND_UNDER {
@@ -75,7 +70,6 @@ pub fn sample(x: u32, y: u32, w: u32, h: u32) -> Rgb {
         UNDER[col]
     } else if fy < BAND_STEPS {
         if fx < RAMP_SPLIT {
-            // Smooth greyscale ramp, white at the left.
             let v = (255.0 * (1.0 - fx / RAMP_SPLIT)) as u8;
             [v, v, v]
         } else {
@@ -119,7 +113,6 @@ mod tests {
         let px = colour_bars(w, h);
         assert_eq!(px.len(), (w * h * 4) as usize);
         assert!(px.chunks_exact(4).all(|p| p[3] == 255), "slate is opaque");
-        // Degenerate sizes are safe, never empty or panicking.
         assert_eq!(colour_bars(0, 0).len(), 4);
     }
 }

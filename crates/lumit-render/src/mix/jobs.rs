@@ -1,12 +1,6 @@
-//! What one sound in the mix is: its job, its retime, its racks, its clip
-//! fades and the Precomp layers it arrives through.
-
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// One audio-bearing layer, as the export thread needs it: where its file
-/// is, its comp-timeline span, its start offset, and its Volume (the same
-/// set the preview mix uses, so export audio matches playback).
 #[derive(Clone, PartialEq)]
 pub struct AudioJob {
     /// The footage item the audio comes from — the key the preview path uses
@@ -84,8 +78,6 @@ pub struct ExpressionScope {
 }
 
 impl ExpressionScope {
-    /// The scope of `layer` in `comp`, whose time 0 sits at `base_s` on the
-    /// mixed timeline, ready to hang on a job or a carrier.
     #[must_use]
     pub fn of(
         doc: &Arc<lumit_core::model::Document>,
@@ -117,7 +109,6 @@ pub struct Retimed {
     pub origin_s: f64,
     /// The source seconds a clip is trimmed to. Silent outside them.
     pub held: Option<(f64, f64)>,
-    /// Pitch rises and falls with the speed, as on tape. Off keeps it.
     pub pitch_follows_speed: bool,
 }
 
@@ -211,7 +202,6 @@ pub struct AudioChain {
     /// The comp the layer sits in — not necessarily the comp being mixed.
     pub comp: Uuid,
     pub layer: Uuid,
-    /// The layer's whole effect stack, in order.
     pub effects: Vec<lumit_core::model::EffectInstance>,
     /// The layer's driver graph, so a **wired** plugin parameter reads the wire
     /// instead of its keyframes, exactly as a wired effect parameter in the
@@ -327,7 +317,6 @@ pub struct Carrier {
     /// through this carrier is summed and the sum read through the map, ahead
     /// of the rack. `None` on a carrier that plays at its own speed.
     pub retime: Option<std::sync::Arc<BusRetime>>,
-    /// Where an expression on this carrier's Volume or Pan is worked out.
     pub scope: Option<Arc<ExpressionScope>>,
 }
 

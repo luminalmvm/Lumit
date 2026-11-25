@@ -37,8 +37,6 @@
 //! Nothing here runs on a particular thread: it is values, made once as a
 //! context opens and copied from then on.
 
-/// One DRM device node, as the kernel numbers it: what `stat()` reports as the
-/// major and minor of `/dev/dri/card0` or `/dev/dri/renderD128`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DrmNode {
     pub major: u32,
@@ -103,7 +101,6 @@ impl DrmDevice {
         }
     }
 
-    /// Whether the driver named the card at all.
     #[must_use]
     pub fn is_known(&self) -> bool {
         self.primary.is_some() || self.render.is_some()
@@ -130,7 +127,6 @@ impl std::fmt::Display for DrmDevice {
 mod tests {
     use super::{DrmDevice, DrmNode};
 
-    /// The laptop in the crash report: NVIDIA on `card1` and `renderD129`.
     #[test]
     fn a_reported_pair_is_kept() {
         let device = DrmDevice::from_vulkan(true, (226, 1), true, (226, 129));
@@ -165,8 +161,6 @@ mod tests {
         assert_eq!(device.to_string(), "DRM node not reported");
     }
 
-    /// One node without the other is ordinary (a driver with no render node),
-    /// and the one that is there is still kept.
     #[test]
     fn one_node_is_kept_without_the_other() {
         let device = DrmDevice::from_vulkan(true, (226, 0), false, (0, 0));

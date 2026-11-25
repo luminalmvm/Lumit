@@ -1,7 +1,3 @@
-//! A material's base colour layer projected from a Camera layer: which camera
-//! at which moment, read fresh for every frame, and which pictures and models
-//! that takes.
-
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -17,10 +13,8 @@ use crate::draw::{DofInputDraw, LayerInputDraw};
 use crate::model::Pictures;
 use crate::model_material::{kept_for, Look};
 
-/// The row a projection reads its picture from.
 const PICTURE_ROW: &str = "base_colour_layer";
 
-/// A material's camera as the mesh pass wants it.
 pub(crate) struct Projector {
     /// Comp pixels to where the camera sees them ([`view_of`]).
     pub view: Mat4,
@@ -38,12 +32,10 @@ pub(crate) struct Projector {
     pub stand_ins: Vec<(Arc<ModelScene>, Mat4, Option<Pose>)>,
 }
 
-/// The moment a Model layer is being drawn at.
 pub(crate) struct Moment<'a> {
     pub t_comp: f64,
     pub lt: f64,
     pub context: &'a Arc<ExpressionContext>,
-    /// The layer, and where it is at `t_comp`.
     pub layer: &'a Layer,
     pub placement: [[f32; 4]; 4],
 }
@@ -75,7 +67,6 @@ impl<'a> Plates<'a> {
         }
     }
 
-    /// Row `row` of `rows` as a picture.
     pub(crate) fn fetch(&self, rows: &EffectInstance, row: &str) -> Option<DofInputDraw> {
         let (now, held) = self.pictures;
         let found = projection(rows, self.comp, self.lt).filter(|_| row == PICTURE_ROW);

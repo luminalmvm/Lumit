@@ -16,7 +16,6 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectParam, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// Wave warp's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "wave_warp",
@@ -24,7 +23,6 @@ use lumit_fx_macros::Effect;
     // 2: Wave speed. An older wave holds still, as it did.
     version = 2,
     category = Distortion,
-    // One wave shape and one bilinear tap a pixel.
     cost = Cheap,
     // Wave height's own reach; its hard maximum is open, so the padding is the
     // slider's 500 px@comp doubled, and the pin ramp only shortens the slide.
@@ -120,7 +118,6 @@ pub struct WaveWarp {
     )]
     pub pinning: u32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -175,7 +172,6 @@ impl WaveWarp {
     }
 }
 
-/// Wave warp's behaviour.
 pub struct WaveWarpDef;
 
 impl EffectDef for WaveWarpDef {

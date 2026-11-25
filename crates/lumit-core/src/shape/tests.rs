@@ -11,12 +11,10 @@ pub(super) fn item(path: BezierPath) -> ShapeItem {
     ShapeItem::filled("Rectangle", path, LinearColour([1.0, 0.0, 0.0, 1.0]))
 }
 
-/// `items` as a layer's contents, with nothing acting on them.
 pub(super) fn entries(items: Vec<ShapeItem>) -> Vec<ShapeEntry> {
     items.into_iter().map(ShapeEntry::Item).collect()
 }
 
-/// A modifier entry of `kind`, named for it.
 pub(super) fn modifier(kind: ModifierKind) -> ShapeEntry {
     ShapeEntry::Modifier(ShapeModifier {
         id: Uuid::now_v7(),
@@ -27,15 +25,12 @@ pub(super) fn modifier(kind: ModifierKind) -> ShapeEntry {
     })
 }
 
-/// One item with `kinds` acting on it, in order.
 pub(super) fn with(it: ShapeItem, kinds: Vec<ModifierKind>) -> Vec<ShapeEntry> {
     let mut out = entries(vec![it]);
     out.extend(kinds.into_iter().map(modifier));
     out
 }
 
-/// The first item's art at `t` once its modifiers have had it, as the
-/// rasteriser sees it: `None` where nothing moved it.
 pub(super) fn points_of(contents: &[ShapeEntry], t: f64) -> Option<Vec<(f64, f64)>> {
     let art = modifier::lowered(contents);
     let first = art.first()?;
@@ -91,7 +86,6 @@ fn a_layers_size_is_the_box_its_art_fills() {
         Some((10.0, 20.0, 40.0, 50.0))
     );
 
-    // Two items: the box holds both.
     let contents = entries(vec![
         item(square(10.0, 20.0, 30.0)),
         item(square(-5.0, 0.0, 8.0)),
@@ -107,12 +101,10 @@ fn a_layers_size_is_the_box_its_art_fills() {
 #[test]
 fn a_filled_shape_draws_its_colour_inside_and_nothing_outside() {
     let contents = entries(vec![item(square(0.0, 0.0, 20.0))]);
-    // Rasterised into its own bounding box at 1:1.
     let rgba = rasterise_contents(&contents, 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
     assert_eq!(alpha_at(&rgba, 20, 10, 10), 255, "inside the square");
     assert_eq!(rgb_at(&rgba, 20, 10, 10), [255, 0, 0]);
 
-    // A smaller square in a bigger box leaves the rest transparent.
     let contents = entries(vec![item(square(5.0, 5.0, 5.0))]);
     let rgba = rasterise_contents(&contents, 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
     assert_eq!(alpha_at(&rgba, 20, 7, 7), 255);
@@ -163,7 +155,6 @@ fn nothing_in_it_draws_nothing_and_never_panics() {
         .all(|&b| b == 0));
     assert!(rasterise_contents(&[], 0, 0, 0.0, 0.0, 1.0, 1.0, 0.0).is_empty());
 
-    // A path with no vertices, and one with a single vertex.
     let empty = item(BezierPath {
         vertices: Vec::new(),
         closed: true,
@@ -176,7 +167,6 @@ fn nothing_in_it_draws_nothing_and_never_panics() {
     );
 }
 
-/// Total length of a polyline, for the trim tests below.
 fn length(points: &[(f64, f64)]) -> f64 {
     points
         .windows(2)
@@ -199,7 +189,6 @@ fn a_trim_cuts_the_path_by_its_own_length() {
         "half the perimeter, got {} of {whole}",
         length(&half)
     );
-    // It starts where the path starts.
     assert_eq!(half.first().copied(), Some(start));
 }
 
@@ -237,8 +226,6 @@ fn paint_from_an_older_file_loads_unchanged_and_a_keyed_fill_moves() {
     it.stroke = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
     it.stroke_width = Property::fixed(3.0);
     it.opacity = Property::fixed(50.0);
-    // A still colour, width and opacity are written as the plain numbers
-    // they always were, so a file from before reads back the same.
     let written = serde_json::to_value(&it).expect("writes");
     assert_eq!(written["fill"], serde_json::json!([1.0, 0.0, 0.0, 1.0]));
     assert_eq!(written["stroke_width"], serde_json::json!(3.0));
@@ -274,7 +261,6 @@ fn paint_from_an_older_file_loads_unchanged_and_a_keyed_fill_moves() {
 
 #[test]
 fn the_dashes_are_cut_by_length_and_the_offset_slides_them() {
-    // A straight line 100 long: 10 on, 10 off gives five dashes of ten.
     let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (100.0, 0.0)];
     let cut = |offset: f64| -> Vec<Vec<(f64, f64)>> {
         dashed(&line, &[], &[10.0, 10.0], offset)
@@ -287,13 +273,10 @@ fn the_dashes_are_cut_by_length_and_the_offset_slides_them() {
     assert_eq!(pieces[0], vec![(0.0, 0.0), (10.0, 0.0)]);
     assert_eq!(pieces[1], vec![(20.0, 0.0), (30.0, 0.0)]);
 
-    // An offset of five slides the pattern back along the path, so the
-    // first dash is the tail of one that began before the line did.
     let slid = cut(5.0);
     assert_eq!(slid[0], vec![(0.0, 0.0), (5.0, 0.0)]);
     assert_eq!(slid[1], vec![(15.0, 0.0), (25.0, 0.0)]);
 
-    // A whole cycle of offset is no offset at all.
     assert_eq!(cut(20.0), pieces);
 }
 
@@ -305,9 +288,6 @@ fn a_pattern_too_fine_to_see_is_drawn_solid_rather_than_cut_to_pieces() {
     assert_eq!(pieces[0].0, line);
 }
 
-/// A tapered outline is full width in the middle and narrows to a point
-/// at each end, a point and not nothing. Dashed, each dash keeps the
-/// width the outline has where it falls.
 #[test]
 fn a_tapered_stroke_narrows_to_a_point_and_its_dashes_follow() {
     let end = |x: f64| Vertex {
@@ -358,8 +338,6 @@ fn a_tapered_stroke_narrows_to_a_point_and_its_dashes_follow() {
     );
 }
 
-/// A linear ramp runs from the fill at one point to the gradient colour at
-/// the other, and everything between is a mix of the two.
 #[test]
 fn a_linear_gradient_ramps_across_the_fill() {
     let mut it = item(square(0.0, 0.0, 20.0));
@@ -385,7 +363,6 @@ fn a_linear_gradient_ramps_across_the_fill() {
         middle[0] > 40 && middle[2] > 40,
         "and a mix of the two between: {middle:?}"
     );
-    // The ramp runs *across* the shape, not down it.
     assert_eq!(
         rgb_at(&rgba, 20, 10, 2),
         middle,
@@ -393,8 +370,6 @@ fn a_linear_gradient_ramps_across_the_fill() {
     );
 }
 
-/// Radial measures how far *out* you are, the end point sitting on the
-/// outer edge, so the middle is the fill and every direction ramps away.
 #[test]
 fn a_radial_gradient_ramps_out_from_its_start() {
     let mut it = item(square(0.0, 0.0, 20.0));
@@ -408,7 +383,6 @@ fn a_radial_gradient_ramps_out_from_its_start() {
     let rgba = rasterise_contents(&entries(vec![it]), 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
 
     assert!(rgb_at(&rgba, 20, 10, 10)[0] > 200, "the fill in the middle");
-    // Every direction ramps the same way, which is what makes it radial.
     let out = [(0u32, 10u32), (19, 10), (10, 0), (10, 19)];
     for (x, y) in out {
         assert!(
@@ -418,8 +392,6 @@ fn a_radial_gradient_ramps_out_from_its_start() {
     }
 }
 
-/// An end faded to nothing is clear there, and the colour stays the same
-/// on the way.
 #[test]
 fn a_gradient_end_fades_to_clear() {
     let mut it = item(square(0.0, 0.0, 20.0));
@@ -446,7 +418,6 @@ fn a_gradient_end_fades_to_clear() {
     assert!((100..160).contains(&middle), "half way between: {middle}");
     assert!(rgb_at(&rgba, 20, 10, 10)[0] > 200, "and still the colour");
 
-    // The other end fades the same way, so the ramp can run clear to solid.
     it.gradient_end_opacity = Property::fixed(100.0);
     it.gradient_start_opacity = Property::fixed(0.0);
     let rgba = rasterise_contents(&entries(vec![it]), 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
@@ -454,8 +425,6 @@ fn a_gradient_end_fades_to_clear() {
     assert!(alpha_at(&rgba, 20, 19, 10) > 240, "solid at the end");
 }
 
-/// A stop between the ends is the colour at its own place, and the ramp
-/// runs to it and away from it.
 #[test]
 fn a_gradient_passes_through_the_stops_between_its_ends() {
     let mut it = item(square(0.0, 0.0, 20.0));
@@ -486,7 +455,6 @@ fn a_gradient_passes_through_the_stops_between_its_ends() {
     );
     assert!(alpha_at(&rgba, 20, 10, 10) < 40, "and clear at the stop");
 
-    // Keyed solid, the stop is its own colour where it sits by then.
     let key = |secs: i64, value: f64| crate::anim::Keyframe {
         time: crate::time::Rational::new(secs, 1).expect("a whole second"),
         value,
@@ -503,8 +471,6 @@ fn a_gradient_passes_through_the_stops_between_its_ends() {
     );
 }
 
-/// The outline pushed out of the path: art where the path is not, filled
-/// as one piece.
 #[test]
 fn an_offset_path_grows_the_shape_and_a_negative_one_shrinks_it() {
     let grown = rasterise_contents(
@@ -546,14 +512,12 @@ fn an_offset_path_grows_the_shape_and_a_negative_one_shrinks_it() {
     );
 }
 
-/// A repeated square is drawn where the step puts it, and nowhere else.
 #[test]
 fn a_repeater_draws_a_copy_at_every_step() {
     let contents = with(
         item(square(0.0, 0.0, 6.0)),
         vec![ModifierKind::Repeat(repeater(3.0, 10.0))],
     );
-    // The box has grown to hold all three, so it is asked for explicitly.
     let rgba = rasterise_contents(&contents, 40, 10, 0.0, 0.0, 40.0, 10.0, 0.0);
     for x in [3, 13, 23] {
         assert_eq!(alpha_at(&rgba, 40, x, 3), 255, "a copy at {x}");
@@ -563,8 +527,6 @@ fn a_repeater_draws_a_copy_at_every_step() {
     }
 }
 
-/// A count nobody could draw is held at the ceiling rather than refused,
-/// and a fractional one is a count of things, so it rounds.
 #[test]
 fn the_copy_count_is_held_at_the_ceiling_and_never_fractional() {
     let copies = |n: f64| {
@@ -578,8 +540,6 @@ fn the_copy_count_is_held_at_the_ceiling_and_never_fractional() {
     assert_eq!(copies(2.6), 3);
 }
 
-/// A modifier acts on the art above it, two of one kind stack, a group keeps
-/// its modifiers to itself, and an older file's fields lift into just that.
 #[test]
 fn modifiers_act_on_the_art_above_them_and_stack() {
     let drawn = |contents: &[ShapeEntry]| {
@@ -592,7 +552,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
     let (a, b) = (item(square(0.0, 0.0, 4.0)), item(square(0.0, 10.0, 4.0)));
     let step = || modifier(ModifierKind::Repeat(repeater(2.0, 10.0)));
 
-    // Below both items, the repeater draws both twice.
     let both = vec![
         ShapeEntry::Item(a.clone()),
         ShapeEntry::Item(b.clone()),
@@ -600,7 +559,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
     ];
     assert_eq!(drawn(&both), 4 * 16);
 
-    // Between them, it reaches only the one above it.
     let one = vec![
         ShapeEntry::Item(a.clone()),
         step(),
@@ -608,7 +566,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
     ];
     assert_eq!(drawn(&one), 3 * 16);
 
-    // Stacked, the second repeats the copies: a grid.
     let grid = vec![
         ShapeEntry::Item(a.clone()),
         step(),
@@ -617,7 +574,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
     let art = modifier::lowered(&grid);
     assert_eq!(modifier::copies_at(&art[0].mods, 0.0).len(), 6);
 
-    // In a group, it reaches nothing outside the group.
     let grouped = vec![
         ShapeEntry::Item(a.clone()),
         ShapeEntry::Group(modifier::ShapeGroup {
@@ -630,8 +586,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
     ];
     assert_eq!(drawn(&grouped), 3 * 16);
 
-    // An older file's fields become that very group, and a first item's
-    // fields stay flat, where there is nothing above them to reach.
     let mut old_a = serde_json::to_value(&a).unwrap();
     old_a["repeat_copies"] = serde_json::json!(2.0);
     old_a["repeat_position_x"] = serde_json::json!(10.0);
@@ -645,8 +599,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
         [ShapeEntry::Item(_), ShapeEntry::Modifier(_), ShapeEntry::Group(g)] if g.entries.len() == 2
     ));
     assert_eq!(drawn(&lifted), 4 * 16);
-    // Lifted twice, the same ids both times, and the new layout written out
-    // carries no old field.
     let again = modifier::read_entries(serde_json::to_value(&lifted).unwrap()).unwrap();
     assert_eq!(lifted, again);
     let written = serde_json::to_string(&lifted).unwrap();
@@ -654,9 +606,6 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
     assert!(written.contains("\"modifier\":\"repeat\""), "{written}");
 }
 
-/// Two overlapping squares, A at 0..20 and B at 10..30, combined by `kind`
-/// and drawn into their shared 30×30 box. The three probes are the corner
-/// only A covers, the middle both cover, and the corner only B covers.
 fn combined(kind: u32) -> (u8, u8, u8) {
     let mut b = item(square(10.0, 10.0, 20.0));
     b.combine = kind;
@@ -682,9 +631,6 @@ fn an_exclude_keeps_what_exactly_one_path_covered() {
 
 #[test]
 fn a_subtracted_hole_is_a_hole_and_the_ring_round_it_is_filled() {
-    // The case a single contour cannot express: one square with another
-    // taken out of its middle is two rings, and the fill has to count the
-    // crossings across both at once.
     let mut hole = item(square(10.0, 10.0, 10.0));
     hole.combine = 2;
     let contents = entries(vec![item(square(0.0, 0.0, 30.0)), hole]);
@@ -697,8 +643,6 @@ fn a_subtracted_hole_is_a_hole_and_the_ring_round_it_is_filled() {
 
 #[test]
 fn a_path_that_crosses_itself_stays_filled_where_it_crosses() {
-    // A star drawn in one stroke goes round its middle twice. Even-odd
-    // left that middle hollow, After Effects fills it.
     let vertices = (0..5)
         .map(|i| {
             let a = (f64::from(i) * 144.0 - 90.0).to_radians();
@@ -728,7 +672,6 @@ fn a_path_that_crosses_itself_stays_filled_where_it_crosses() {
 
 #[test]
 fn a_run_folds_left_to_right_so_three_items_read_in_order() {
-    // (A ∪ B) − C: the union covers 0..30, and C takes 10..20 back out.
     let mut b = item(square(15.0, 0.0, 15.0));
     b.combine = 1;
     let mut c = item(square(10.0, 0.0, 10.0));
@@ -765,13 +708,10 @@ fn the_morph_is_what_the_picture_and_the_box_both_read() {
     let mut it = item(from.clone());
     it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
 
-    // The box follows the shape being drawn, not the still path.
     assert_eq!(it.bounds(&[], 0.0), Some((0.0, 0.0, 10.0, 10.0)));
     assert_eq!(it.bounds(&[], 2.0), Some((20.0, 0.0, 30.0, 10.0)));
     assert_eq!(it.bounds(&[], 1.0), Some((10.0, 0.0, 20.0, 10.0)));
 
-    // And so does the ink: at the far key the art is at the far end of the
-    // box, with nothing left where it started.
     let contents = entries(vec![it]);
     let rgba = rasterise_contents(&contents, 30, 10, 0.0, 0.0, 30.0, 10.0, 2.0);
     assert_eq!(alpha_at(&rgba, 30, 25, 5), 255, "drawn where the key says");
@@ -786,7 +726,6 @@ fn an_unkeyed_shape_is_absent_from_the_file() {
 
     let mut keyed = item(square(0.0, 0.0, 4.0));
     keyed.path_keys = vec![shape_key(1, &square(2.0, 2.0, 4.0))];
-    // A faded gradient with a stop between its ends comes back as it went.
     keyed.gradient = 1;
     keyed.gradient_end_opacity = Property::fixed(0.0);
     keyed.gradient_stops = vec![GradientStop {
@@ -801,8 +740,6 @@ fn an_unkeyed_shape_is_absent_from_the_file() {
     assert_eq!(back, keyed);
 }
 
-/// A parametric rectangle draws the rectangle its numbers make, and a keyed
-/// width moves it, frame by frame.
 #[test]
 fn a_parametric_rectangle_draws_its_numbers_and_a_keyed_width_moves_it() {
     use crate::anim::{Animation, Keyframe, SideInterp};
@@ -851,8 +788,6 @@ fn a_parametric_rectangle_draws_its_numbers_and_a_keyed_width_moves_it() {
     );
 }
 
-/// An eye switched off leaves its part out of the picture and keeps it: an
-/// item, its fill, its outline, a modifier and a group.
 #[test]
 fn an_eye_switched_off_leaves_its_part_out() {
     let draw =
@@ -948,9 +883,6 @@ fn an_items_own_modifier_acts_on_it_alone_and_a_global_one_on_every_item() {
     );
 }
 
-/// A Shape layer whose path is keyed to move sets its picture down where the
-/// art has gone: the anchor is read less by how far the art's box has moved
-/// from where it is at the head of the layer.
 #[test]
 fn a_keyed_path_moves_the_layers_picture_with_it() {
     let (from, to) = (square(20.0, 20.0, 100.0), square(250.0, 250.0, 50.0));
@@ -974,9 +906,6 @@ fn a_keyed_path_moves_the_layers_picture_with_it() {
     assert_eq!((placed.anchor.0, placed.anchor.1), (-230.0, -230.0));
 }
 
-/// Making a repeater's copies real keeps the picture, whatever the copies are
-/// made of, and takes the repeater away. Asked for one that isn't there, it
-/// leaves the contents alone.
 #[test]
 fn expanding_a_repeater_keeps_the_picture() {
     use super::expand;
@@ -1001,7 +930,6 @@ fn expanding_a_repeater_keeps_the_picture() {
         interp_in: crate::anim::SideInterp::Linear,
         interp_out: crate::anim::SideInterp::Linear,
     };
-    // Smaller and fainter each time, so the outline and the fade are baked too.
     let fading = || {
         ModifierKind::Repeat(Repeater {
             scale: Property::fixed(90.0),
@@ -1055,7 +983,6 @@ fn expanding_a_repeater_keeps_the_picture() {
     ];
     same(&trimmed, "a trim above it");
 
-    // A row of three in a group, repeated by a row of two below it.
     let row = modifier::ShapeGroup::new(
         "Row",
         with(
@@ -1072,7 +999,6 @@ fn expanding_a_repeater_keeps_the_picture() {
     let cells = |c: &[ShapeEntry]| format!("{c:?}").matches("ShapeItem {").count();
     assert_eq!(cells(&expand::all_expanded(&grid, 0.0)), 6);
 
-    // One repeater inside its group, with what sits below it left alone.
     let ShapeEntry::Modifier(inner) = &row.entries[1] else {
         panic!("the row's repeater");
     };
@@ -1084,8 +1010,6 @@ fn expanding_a_repeater_keeps_the_picture() {
     assert!(expand::expanded(&beside, missing, 0.0).is_none());
     assert!(expand::split(&beside, missing, 0.0).is_none());
 
-    // Split, each copy is a list of its own and together they draw the same.
-    // The first keeps the item it came from, and only it keeps what's below.
     let parts = expand::split_all(&grid, 0.0);
     assert_eq!(parts.len(), 6);
     let covered = |rgba: &[u8]| -> Vec<bool> { rgba.chunks(4).map(|p| p[3] > 0).collect() };

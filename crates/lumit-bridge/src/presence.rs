@@ -5,7 +5,6 @@
 //! asked for. Closing the pipe is what takes the status down, so quitting
 //! Lumit needs no goodbye.
 
-// Nothing here runs in the browser build, which keeps only its shape.
 #![cfg_attr(target_arch = "wasm32", allow(unused))]
 
 use std::io::{self, Read, Write};
@@ -46,7 +45,6 @@ static THREAD: Once = Once::new();
 pub(crate) fn set(status: Option<Status>) {
     let show = status.is_some();
     *WANTED.lock().unwrap_or_else(|e| e.into_inner()) = status;
-    // The browser build has no Discord on the machine to talk to.
     #[cfg(not(target_arch = "wasm32"))]
     if show {
         THREAD.call_once(|| {
@@ -60,7 +58,6 @@ pub(crate) fn set(status: Option<Status>) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn run() {
-    // When Lumit turned up in the status, for Discord's elapsed clock.
     let since = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64);
@@ -98,7 +95,6 @@ fn activity(status: &Status, since: u64, nonce: u64) -> serde_json::Value {
     let mut activity = json!({ "timestamps": { "start": since } });
     for (key, name) in [("details", &status.project), ("state", &status.comp)] {
         if let Some(name) = name.as_deref().filter(|name| !name.trim().is_empty()) {
-            // Cut and padded to the lengths Discord takes.
             let cut: String = name.chars().take(LINE_MAX).collect();
             activity[key] = format!("{cut:<width$}", width = LINE_MIN).into();
         }
@@ -121,14 +117,6 @@ fn connect() -> Option<Pipe> {
     })
 }
 
-/// Send one frame and read Discord's answer to it.
-///
-/// A frame is the opcode and the body's length, both little-endian `u32`s,
-/// then the JSON. The answer is read and thrown away, since Discord's end of
-/// the pipe would fill up if nobody did.
-//
-// ponytail: the read has no timeout, so a Discord that hangs parks this thread
-// and the status stops following. A read timeout on the pipe if it ever shows.
 #[cfg(not(target_arch = "wasm32"))]
 fn exchange(pipe: &mut Pipe, opcode: u32, body: &serde_json::Value) -> io::Result<()> {
     let body = body.to_string();

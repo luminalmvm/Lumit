@@ -1,8 +1,5 @@
-//! A Model layer's settings: how a 3D model's metres become comp pixels.
-
 use serde::{Deserialize, Serialize};
 
-/// Which way is up in the model's file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UpAxis {
@@ -11,7 +8,6 @@ pub enum UpAxis {
     Z,
 }
 
-/// Which of the file's takes a Model layer plays.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Take {
@@ -127,8 +123,6 @@ pub fn card_layer(
 }
 
 impl crate::model::LayerKind {
-    /// Whether a layer of this kind shows an item of the project, and so can
-    /// be pointed at another one.
     #[must_use]
     pub fn has_source(&self) -> bool {
         matches!(
@@ -165,9 +159,6 @@ mod tests {
         }
     }
 
-    /// A Model layer and its settings save and open as they were, an older
-    /// file with no settings opens with the defaults, and the settings change
-    /// and undo as one op that never swaps the model for another.
     #[test]
     fn a_model_layer_saves_and_opens() {
         let mut doc = Document::new();
@@ -196,7 +187,6 @@ mod tests {
             up_axis: UpAxis::Z,
             units: 250.0,
             fit: false,
-            // A changed material is kept, an unchanged one is nothing.
             materials: vec![None, crate::fx::builtins::instantiate("model_material")],
             parts: vec![crate::fx::builtins::instantiate(crate::model_part::PART_NAME).unwrap()],
             ..ModelSettings::default()

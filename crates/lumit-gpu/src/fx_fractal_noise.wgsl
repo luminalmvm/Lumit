@@ -48,7 +48,6 @@ fn fractal_noise(@builtin(global_invocation_id) gid: vec3<u32>) {
     let qy = py * p.cos_sin_offset.x - px * p.cos_sin_offset.y;
     // Bit 2 is this effect's own Invert and is not the field's business.
     let field = FractalField(p.seed, p.octaves, p.gain, p.lacunarity, p.flags & 3u, p.cycle);
-    // == lumit_core::fx::cpu::distorted.
     var fx = qx * p.inv_scale_z_contrast.x;
     var fy = qy * p.inv_scale_z_contrast.y;
     let fz = p.inv_scale_z_contrast.z;

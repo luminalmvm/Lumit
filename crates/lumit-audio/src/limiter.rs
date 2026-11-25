@@ -15,15 +15,11 @@
 
 use crate::loudness::Upsampler;
 
-/// How far ahead the limiter looks, in seconds.
 const LOOKAHEAD_SECONDS: f64 = 0.0015;
 
-/// The release's time constant, in seconds.
 const RELEASE_SECONDS: f64 = 0.05;
 
-/// The master's lookahead true-peak limiter, with its state.
 pub struct Limiter {
-    /// The look ahead in frames: how late the limiter's output is.
     lookahead: usize,
     /// The input of the last `lookahead` frames, stereo, oldest at `pos`.
     delay: Box<[f32]>,
@@ -33,7 +29,6 @@ pub struct Limiter {
     need: Box<[(u64, f32)]>,
     head: usize,
     len: usize,
-    /// How many frames have gone in.
     frame: u64,
     gain: f32,
     release: f32,
@@ -41,7 +36,6 @@ pub struct Limiter {
 }
 
 impl Limiter {
-    /// A limiter for sound at `rate` frames a second.
     #[must_use]
     pub fn new(rate: u32) -> Self {
         let rate = f64::from(rate.max(1_000));
@@ -60,13 +54,11 @@ impl Limiter {
         }
     }
 
-    /// How many frames late the limiter's output is: its look ahead.
     #[must_use]
     pub fn latency(&self) -> u32 {
         self.lookahead as u32
     }
 
-    /// Forget everything: silence in the look ahead and no gain reduction.
     pub fn reset(&mut self) {
         self.delay.fill(0.0);
         self.pos = 0;
@@ -101,7 +93,6 @@ impl Limiter {
             }
             self.need[(self.head + self.len) % cap] = (self.frame, need);
             self.len += 1;
-            // Out of it: what has fallen out of the look ahead.
             while self.len > 1 && self.need[self.head].0 + (self.lookahead as u64) < self.frame {
                 self.head = (self.head + 1) % cap;
                 self.len -= 1;
@@ -140,9 +131,6 @@ mod tests {
             .collect()
     }
 
-    /// A sine at +6 dBFS comes out with no true peak over the ceiling, as the
-    /// loudness meter measures it. A quiet one comes out untouched, only late
-    /// by the look ahead.
     #[test]
     fn a_hot_sine_stays_under_the_ceiling_and_a_quiet_one_passes() {
         let rate = 48_000;

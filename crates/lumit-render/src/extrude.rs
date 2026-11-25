@@ -77,7 +77,6 @@ where
     made
 }
 
-/// Count kept meshes and scenes against the governor's `ledger` from here on.
 pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
     fn set<T>(shelf: &Shelf<T>, bytes: usize, ledger: &Arc<lumit_budget::Ledger>)
     where
@@ -102,7 +101,6 @@ struct Piece {
     fill: [f32; 4],
     /// Linear, the bevel's and the side's.
     edge: [f32; 4],
-    /// What the text's animators ask of a letter.
     xform: GlyphXform,
     /// How far towards the eye it sits, so art overlapping in one layer stacks
     /// as it paints when the layer turns.
@@ -170,7 +168,6 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
                 let ShapeEntry::Group(group) = entry else {
                     continue;
                 };
-                // The letter it is, for what its animators ask of it.
                 let ch = group.name.chars().next();
                 let at = (chars.iter().skip(cursor)).position(|c| Some(*c) == ch);
                 let at = at.map(|k| k + cursor);
@@ -229,7 +226,6 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
         LayerKind::Shape { contents } => {
             let contents = lumit_core::shape::contents_at(contents, lt, context);
             let solids = lumit_core::shape::solid::solids(&contents, lt);
-            // A quarter of a pixel each, in all no more than a few pixels.
             let step = (8.0 / solids.len().max(1) as f32).min(0.25);
             solids
                 .into_iter()
@@ -250,8 +246,6 @@ fn pieces(layer: &Layer, lt: f64, context: &Arc<ExpressionContext>) -> Vec<Piece
     }
 }
 
-/// A text's front colour and its edge's: its fill and its outline, or the one
-/// it has for both.
 fn text_colours(document: &lumit_core::model::TextDocument) -> [[f32; 4]; 2] {
     let style = &document.style;
     let stroked = style.stroke_on && style.stroke_width > 0.0;
@@ -275,7 +269,6 @@ pub(crate) fn faces(layer: &Layer) -> Vec<Material> {
             base_colour: [0.8, 0.8, 0.8, 1.0],
             metallic: 0.0,
             roughness: 0.5,
-            // A plane is seen from either side.
             double_sided: shape == MeshShape::Plane,
             soft_turns: true,
             ..Material::default()
@@ -339,7 +332,6 @@ pub(crate) fn name_of(h: &blake3::Hasher) -> u128 {
     u128::from_le_bytes(k)
 }
 
-/// A coordinate to the nearest 256th of a pixel.
 fn quantised(v: f64) -> i64 {
     (v * 256.0).round() as i64
 }
@@ -569,8 +561,6 @@ pub(crate) fn may_change(layer: &Layer, lt: f64, context: &Arc<ExpressionContext
         }
 }
 
-/// `layer`'s scene at layer time `lt`, for a shutter sample, coloured as
-/// `made` has it.
 pub(crate) fn scene_at(
     layer: &Layer,
     lt: f64,
@@ -586,7 +576,6 @@ pub(crate) fn scene_at(
     Some(scene_of(&pieces(layer, lt, context), &profile, tinted))
 }
 
-/// A solid layer as the mesh pass takes it.
 pub(crate) struct Made {
     pub scene: Arc<ModelScene>,
     pub looks: Vec<Look>,
@@ -637,7 +626,6 @@ pub(crate) fn made(
             }
         }
     }
-    // A letter part way through fading in blends.
     let fading = pieces.iter().any(|p| p.fill[3] < 1.0);
     if fading {
         for index in 0..4 {
@@ -670,8 +658,6 @@ pub(crate) fn made(
     })
 }
 
-/// Keep `scene` as what layer `layer` was last drawn as, for picking and its
-/// box.
 fn remember(layer: Uuid, scene: &Arc<ModelScene>) {
     if let Ok(mut last) = LAST.lock() {
         let last = last.get_or_insert_with(HashMap::new);
@@ -748,7 +734,6 @@ fn shape_scene(
     })
 }
 
-/// The scene layer `layer` was last drawn as, while it's kept.
 #[must_use]
 pub fn last_scene(layer: Uuid) -> Option<Arc<ModelScene>> {
     LAST.lock().ok()?.as_ref()?.get(&layer)?.upgrade()
@@ -761,7 +746,6 @@ pub fn layer_box(layer: Uuid) -> Option<[[f32; 3]; 8]> {
     Some(corners(last_scene(layer)?.bounds))
 }
 
-/// The box 3D shape `layer` makes at its start, for before it's drawn.
 #[must_use]
 pub fn shape_box(layer: &Layer) -> Option<[[f32; 3]; 8]> {
     let LayerKind::Mesh { shape } = layer.kind else {
@@ -856,8 +840,6 @@ fn list_holds(list: &[EffectInstance], layer: Uuid, i: usize) -> bool {
         .any(|r| lumit_core::model_material::index_of(layer, r.id) == Some(i))
 }
 
-/// Row `index` of layer `layer` as it starts: the options' defaults or a
-/// face's own colours.
 pub(crate) fn file_rows(layer: &Layer, index: usize, file: &[Material]) -> Option<EffectInstance> {
     match index.checked_sub(1) {
         None => lumit_core::fx::builtins::instantiate(options_match(layer))
@@ -866,8 +848,6 @@ pub(crate) fn file_rows(layer: &Layer, index: usize, file: &[Material]) -> Optio
     }
 }
 
-/// What `layer`'s Geometry options are known by: a 3D shape's own, else the
-/// depth and bevel a Text or Shape layer takes.
 fn options_match(layer: &Layer) -> &'static str {
     match layer.kind {
         LayerKind::Mesh { shape } => shape.options(),

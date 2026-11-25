@@ -1,5 +1,3 @@
-//! How much a shape layer's placement scales it, for its raster size.
-
 /// How many comp pixels one of the layer's own pixels covers at most, read
 /// off its world placement: the longest of the two axes' lengths, whichever
 /// way round the matrix is laid out, so a turned or skewed layer is never

@@ -63,8 +63,6 @@ pub(crate) fn invert_sym3(m: &[[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
     Some(out)
 }
 
-// --- The problem ------------------------------------------------------------
-
 /// Which focal parameters a camera reads, and how: the value is
 /// `(1 − t)·focals[a] + t·focals[b]` — one knot for a camera inside a
 /// constant-focal segment (`a == b`), a linear blend of the two bracketing
@@ -80,7 +78,6 @@ pub(crate) struct FocalRef {
 }
 
 impl FocalRef {
-    /// A camera reading exactly one focal parameter.
     pub(crate) fn fixed(index: usize) -> FocalRef {
         FocalRef {
             a: index,
@@ -102,14 +99,12 @@ impl FocalRef {
     }
 }
 
-/// One camera in the bundle: pose plus which focal parameters it reads.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BundleCamera {
     /// World → camera rotation.
     pub(crate) rot: Mat3,
     /// Camera centre in world coordinates.
     pub(crate) pos: [f64; 3],
-    /// The focal knot or pair of knots this camera's frame reads.
     pub(crate) focal: FocalRef,
 }
 
@@ -122,7 +117,6 @@ pub(crate) struct BundleObs {
     pub(crate) image: [f64; 2],
 }
 
-/// What the bundle did, so the caller can report it rather than assert it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BundleReport {
     pub(crate) iterations: usize,
@@ -231,7 +225,6 @@ pub(crate) fn so3_exp(w: [f64; 3]) -> Mat3 {
     out
 }
 
-/// `a · b` for a 2×3 by a 3×3 — the chain rule every Jacobian here is one of.
 fn compose23(a: &[[f64; 3]; 2], b: &Mat3) -> [[f64; 3]; 2] {
     let mut out = [[0.0f64; 3]; 2];
     for (orow, arow) in out.iter_mut().zip(a.iter()) {
@@ -246,7 +239,6 @@ fn compose23(a: &[[f64; 3]; 2], b: &Mat3) -> [[f64; 3]; 2] {
     out
 }
 
-/// One camera's parameter block start, and the layout's total width.
 fn camera_base(index: usize) -> Option<usize> {
     // Camera 0 is the gauge: it holds the world still and takes no parameters.
     index.checked_sub(1).map(|i| i * 6)
@@ -391,7 +383,6 @@ pub(crate) fn bundle_adjust(
         if cancel() {
             break;
         }
-        // --- linearise ------------------------------------------------------
         let mut u = Dense::zero(width);
         let mut bc = vec![0.0f64; width];
         blocks.clear();
@@ -458,7 +449,6 @@ pub(crate) fn bundle_adjust(
         }
         let floor = 1e-9 * (trace / width as f64).max(1e-9);
 
-        // --- trial steps ----------------------------------------------------
         let mut improved = false;
         for _ in 0..8 {
             let mut s = Dense::zero(width);
@@ -506,7 +496,6 @@ pub(crate) fn bundle_adjust(
                 continue;
             }
 
-            // Back-substitution for the points, then a trial state.
             let mut trial_cams = cams.to_vec();
             let mut trial_focals = focals.to_vec();
             let mut trial_points = points.to_vec();

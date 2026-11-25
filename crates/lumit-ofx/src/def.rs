@@ -70,12 +70,10 @@ use crate::props::PropValue;
 use crate::render::{RenderRequest, Rendered};
 use crate::schema::{value_routes, ValueRoute};
 
-/// One rendered frame, and whether it is the plugin's work or a stand-in for it.
 pub struct Rendering {
     /// The picture. On a failure this is the input, unchanged — identity, so
     /// the comp still composites (docs/12 §2.3).
     pub frame: Frame16,
-    /// What went wrong, in a sentence, or `None` when nothing did.
     pub error: Option<String>,
 }
 
@@ -171,7 +169,6 @@ thread_local! {
     };
 }
 
-/// An OFX plugin, as an entry in the effect catalogue.
 pub struct OfxEffectDef {
     schema: &'static EffectSchema,
     routes: Vec<ValueRoute>,
@@ -190,7 +187,6 @@ pub struct OfxEffectDef {
     /// (a path, a vendor blob) keeps.
     defaults: ParamSnapshot,
     host: Arc<dyn PluginHost>,
-    /// Its identifier and version, which is how its graphics card path is found.
     plugin: (String, (u32, u32)),
 }
 
@@ -242,7 +238,6 @@ impl OfxEffectDef {
         Box::leak(Box::new(self))
     }
 
-    /// The bag, as the values the plugin reads.
     fn snapshot(&self, p: Params<'_>) -> ParamSnapshot {
         let mut snapshot = self.assemble(|route| p.get(route.id));
         for (route, id) in self.routes.iter().zip(&self.quiet_ids) {
@@ -289,7 +284,6 @@ impl OfxEffectDef {
         snapshot
     }
 
-    /// Whether the document's row behind `route` changes with time on its own.
     fn moving(&self, inst: &EffectInstance, route: &ValueRoute) -> bool {
         inst.params
             .iter()
@@ -297,8 +291,6 @@ impl OfxEffectDef {
             .is_some_and(|param| moves(&param.value))
     }
 
-    /// What a plugin's answer is as the document keeps it: the rows it wrote,
-    /// and everything else it holds.
     fn kept_from(&self, handed: &ParamSnapshot, after: &Settled) -> Pressed {
         Pressed {
             rows: self.rows_written(handed, &after.params),
@@ -306,8 +298,6 @@ impl OfxEffectDef {
         }
     }
 
-    /// The rows these controls come to, through the groups and pages a hidden
-    /// or greyed one takes its rows with.
     fn rows_of(&self, controls: &Controls) -> RowState {
         RowState {
             hidden: rows_under(&self.routes, &self.owners, &controls.secret),
@@ -321,8 +311,6 @@ impl OfxEffectDef {
         }
     }
 
-    /// The rows whose value the plugin changed while it was pressed, as the
-    /// document's rows.
     fn rows_written(
         &self,
         before: &ParamSnapshot,
@@ -506,10 +494,7 @@ fn frame_in_bag(p: Params<'_>, lt: f64) -> f64 {
     }
 }
 
-/// What an instance's plugin keeps in the document beside its rows
-/// (`EffectInstance::plugin_state`).
 struct Kept {
-    /// The values no row carries, a vendor blob or a text.
     memory: ParamSnapshot,
     /// What the plugin had done to its controls when it last answered, or
     /// `None` for an instance saved before that was kept.
@@ -567,7 +552,6 @@ fn remember(inst: &EffectInstance) -> i32 {
 // ever drawn; prune with the memory table if it ever shows.
 static ROWS: Mutex<BTreeMap<Uuid, (u64, RowState)>> = Mutex::new(BTreeMap::new());
 
-/// Whether a parameter of this type holds whole numbers.
 fn is_whole(param_type: &str) -> bool {
     matches!(
         param_type,
@@ -603,7 +587,6 @@ fn rows_under(
         .collect()
 }
 
-/// Lay a plugin's memory over a snapshot.
 fn recall(snapshot: &mut ParamSnapshot, memory: &ParamSnapshot) {
     for (name, value) in memory.iter() {
         snapshot.set(name, value.clone());
@@ -778,9 +761,6 @@ impl EffectDef for OfxEffectDef {
     /// that can see the comp's rate.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(DERIVED_MEMORY, Value::Int(remember(cx.inst)));
-        // ponytail: a frame the card failed on and the CPU redid is filed under
-        // the card's key, which changes only once the plugin is kept on the
-        // CPU. Exact would need the key after the render.
         let (identifier, version) = &self.plugin;
         let path = crate::gpu::path_of(identifier, *version);
         push(DERIVED_PATH, Value::Int(crate::gpu::GpuApi::key(path)));
@@ -824,10 +804,6 @@ impl EffectDef for OfxEffectDef {
     }
 }
 
-// ----------------------------------------------------------- the two hosts --
-
-/// Whether a row's value changes with time on its own: keyframes or an
-/// expression on any of its properties.
 fn moves(value: &EffectValue) -> bool {
     let moving = |property: &Property| !matches!(property.animation, Animation::Static(_));
     match value {
@@ -875,7 +851,6 @@ impl LocalHost {
         }
     }
 
-    /// Run one render sequence, or say why it could not be run.
     fn attempt(
         &self,
         instance: Uuid,
@@ -985,8 +960,6 @@ impl PluginHost for LocalHost {
     }
 }
 
-/// One bundle's broker, shared by the plugins in it, and whether one of them
-/// is inside a press right now.
 pub struct SharedBroker {
     pub(crate) broker: Mutex<Broker>,
     /// Set for as long as a plugin is inside a press. A render that finds it
@@ -996,7 +969,6 @@ pub struct SharedBroker {
 }
 
 impl SharedBroker {
-    /// Wrap a spawned, described broker.
     #[must_use]
     pub fn new(broker: Broker) -> Self {
         Self {
@@ -1037,7 +1009,6 @@ impl SharedBroker {
 /// render.
 const SETTLE_PATIENCE: Duration = Duration::from_millis(250);
 
-/// What a render answers while the bundle's plugin is in its own window.
 const BUSY: &str = "the plugin is busy in its own window";
 
 /// A plugin hosted **in a broker process** — the shipping arrangement
@@ -1055,15 +1026,12 @@ pub struct BrokerHost {
     /// bundle serialisation described above, now also serialising the bundle's
     /// plugins against each other.
     broker: Arc<SharedBroker>,
-    /// Which plugin of the bundle, by the index the broker's describe used.
     plugin: u32,
     context: Context,
-    /// The broker's own instance ids, by effect instance.
     instances: Mutex<BTreeMap<Uuid, InstanceId>>,
 }
 
 impl BrokerHost {
-    /// Host one plugin of an already-spawned, already-described broker.
     #[must_use]
     pub fn new(broker: Arc<SharedBroker>, plugin: u32, context: Context) -> Self {
         Self {
@@ -1074,8 +1042,6 @@ impl BrokerHost {
         }
     }
 
-    /// The broker's id for this effect instance, making it if this is the first
-    /// frame it has been asked for.
     fn instance_of(
         &self,
         broker: &mut Broker,
@@ -1193,10 +1159,6 @@ impl PluginHost for BrokerHost {
         answer.map_err(|error| error.to_string())
     }
 
-    // ponytail: this is on the edit. It no longer waits out a render in flight,
-    // but a plugin that hangs in its own answer still holds the edit up to the
-    // render deadline. Settle on a thread and fold the answer into the same
-    // undo step if that ever shows.
     fn settle(
         &self,
         instance: Uuid,

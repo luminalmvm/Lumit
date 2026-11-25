@@ -1,12 +1,3 @@
-//! Media probing and the frame index — docs/impl/media-io.md §2, slice 4.
-//!
-//! In plain terms: when footage is imported, Lumit reads the file's vital
-//! statistics (resolution, frame rate, duration — the *probe*) and then scans
-//! every packet without decoding to build the *frame index*: an exact map of
-//! frame number → timestamp → nearest keyframe. The index is what makes
-//! scrubbing land on exactly the right frame in slice 5, and it is cached on
-//! disk keyed by a content *fingerprint* so it is built once per file.
-
 pub mod ai;
 pub mod audio;
 pub mod decode;
@@ -54,10 +45,8 @@ pub enum MediaError {
     /// than any picture, a sidecar claiming more records than a timeline holds.
     #[error("this file is larger than Lumit reads: {0}")]
     TooLarge(#[from] lumit_ingress::IngressError),
-    /// A Photoshop document that is damaged, or of a kind that is not read.
     #[error("photoshop document: {0}")]
     Psd(&'static str),
-    /// An Illustrator document that is damaged, or of a kind that is not read.
     #[error("illustrator document: {0}")]
     Ai(&'static str),
 }
@@ -132,7 +121,6 @@ pub fn read_own(
 ) -> Option<Result<DecodedFrame, MediaError>> {
     let path = src.on_disk();
     let frame = if exr::reads_pass(src) {
-        // A looped run plays its files again.
         let file = match src.run() {
             Some((run, _)) => {
                 let raw = src.interpret.raw_frames(frame, run.count as usize).next();
@@ -151,8 +139,6 @@ pub fn read_own(
     } else {
         return None;
     };
-    // A still has no fields, cadence or loop to read, only its alpha and the
-    // shape of its pixels.
     let it = src.interpret;
     Some(frame.map(|mut frame| {
         if it.pixel_aspect.is_some() {
@@ -184,7 +170,6 @@ impl From<rsmpeg::error::RsmpegError> for MediaError {
     }
 }
 
-/// The linked FFmpeg (libavformat) version, for the boot log.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn ffmpeg_version() -> String {
     format!(
@@ -266,11 +251,6 @@ impl Fingerprint {
 mod tests {
     use super::*;
 
-    /// Regression: `cache_key` used to slice `content_hash[..32]` directly,
-    /// which panics for any `Fingerprint` whose hash is shorter than 32
-    /// bytes — reachable since `Fingerprint`'s fields are all `pub` and it
-    /// derives `Deserialize` (a corrupted index cache file can produce
-    /// one).
     #[test]
     fn cache_key_does_not_panic_on_a_short_hash() {
         let fp = Fingerprint {

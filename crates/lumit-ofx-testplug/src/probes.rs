@@ -1,6 +1,3 @@
-//! The exports no real plugin has, all named `LumitTestPlug`: how a test asks
-//! what the plugins here were given and did.
-
 use std::ffi::{c_char, c_int, c_uint, c_void};
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, PoisonError};
@@ -13,27 +10,21 @@ use crate::{
     RENDER_FAILS, RENDER_RENDEZVOUS, ROD_SAW_SOURCE, SET_HOST_CALLS, SUITE_MASK,
 };
 
-/// How many times a plugin here was given a host.
 #[no_mangle]
 pub extern "C" fn LumitTestPlugSetHostCalls() -> c_int {
     SET_HOST_CALLS.load(Ordering::SeqCst) as c_int
 }
 
-/// Whether a host was already in hand at the first load.
 #[no_mangle]
 pub extern "C" fn LumitTestPlugHostSeenBeforeLoad() -> c_int {
     HOST_SEEN_BEFORE_LOAD.load(Ordering::SeqCst) as c_int
 }
 
-/// Which suites the host handed over, as [`crate::SUITE_PROPERTY`] and friends.
 #[no_mangle]
 pub extern "C" fn LumitTestPlugSuiteMask() -> c_int {
     SUITE_MASK.load(Ordering::SeqCst) as c_int
 }
 
-/// Forget the action log and the concurrency high-water mark, and turn the
-/// rendezvous off. A test calls this immediately before the stretch it means to
-/// observe.
 #[no_mangle]
 pub extern "C" fn LumitTestPlugResetProbes() {
     ACTION_LOG
@@ -54,7 +45,6 @@ pub extern "C" fn LumitTestPlugRodSawSource() -> c_int {
     ROD_SAW_SOURCE.load(Ordering::SeqCst) as c_int
 }
 
-/// Make every render answer `kOfxStatFailed`, or stop doing so.
 #[no_mangle]
 pub extern "C" fn LumitTestPlugSetRenderFails(fails: c_int) {
     RENDER_FAILS.store(fails.max(0) as usize, Ordering::SeqCst);
@@ -143,10 +133,8 @@ pub unsafe extern "C" fn LumitTestPlugFanOut(num_cpus_out: *mut c_int) -> c_int 
     c_int::try_from(seen.len()).unwrap_or(c_int::MAX)
 }
 
-/// The indices the last fan-out handed out.
 static FAN_OUT_SEEN: Mutex<Vec<c_uint>> = Mutex::new(Vec::new());
 
-/// One thread of [`LumitTestPlugFanOut`]: note the index the host says this is.
 unsafe extern "C" fn fan_out_body(thread_index: c_uint, _thread_max: c_uint, _arg: *mut c_void) {
     FAN_OUT_SEEN
         .lock()

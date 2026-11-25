@@ -1,6 +1,3 @@
-//! A model and a 3D layer that pass through each other cut where they meet,
-//! and the model takes the comp's light.
-
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use glam::{Mat4, Vec3};
@@ -88,8 +85,6 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
             )
             .expect("the model draws")
     };
-    // A blue card through the cube's middle, turned so its left side comes
-    // out in front of the cube and its right side goes in behind.
     let blue =
         lumit_gpu::fx::common::upload_linear_f32(&lease, &[0.0, 0.0, 1.0, 1.0].repeat(16), 4, 4);
     let card = CompositeLayer {
@@ -151,7 +146,6 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
         [px[i], px[i + 1], px[i + 2], px[i + 3]]
     };
     let lit = frame(&[key]);
-    // Left of the cube's middle the card is in front, right of it the cube.
     let card_in_front = at(&lit, 160 - 24, 90);
     let cube_in_front = at(&lit, 160 + 15, 90);
     assert!(
@@ -162,11 +156,8 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
         cube_in_front[0] > 0.5 && cube_in_front[2] < 0.2,
         "{cube_in_front:?}"
     );
-    // Past the cube the card shows behind nothing, and off both is empty.
     assert!(at(&lit, 160 + 40, 90)[2] > 0.9);
     assert_eq!(at(&lit, 5, 5), [0.0; 4]);
-    // The face is lit by the light in front of it, and dark with the light
-    // behind it.
     let behind = LightingLight {
         corners: [[40.0, 10.0, 300.0]; 4],
         ..key
@@ -199,7 +190,6 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
         * Mat4::from_rotation_z(std::f32::consts::FRAC_PI_4)
         * Mat4::from_scale(Vec3::splat(60.0))
         * Mat4::from_rotation_x(std::f32::consts::PI);
-    // From in front, straight along the camera, casting a full shadow.
     let key = LightingLight {
         corners: [[160.0, 90.0, -600.0]; 4],
         colour: [1.0; 3],
@@ -222,7 +212,6 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
     };
     let maps = fx.shadow_maps(&lease, &[caster], &[key], 512);
     assert!(maps.is_some(), "a model and a light that casts make maps");
-    // The face looking at the light is as lit with its own shadow as without.
     let front = |maps, accepts_shadows, shading| {
         let material = LightingMaterial {
             eye,
@@ -268,12 +257,8 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
         alone > 0.1 && (alone - shaded).abs() < 1e-3,
         "{alone} {shaded}"
     );
-    // Showing only its shadows it is empty here, unless a view shows it whole.
     let only = |shading| front(maps.as_ref(), LightingShadows::Only, shading);
     assert!(only(Shading::Final) < 1e-3 && only(Shading::Shaded) > 0.1);
-    // A white card behind it and past the map's far depth, facing the light:
-    // dark behind the cube only, lit in the square past the diamond, hard and
-    // soft, out to a texel or two past its edge.
     let n = 32;
     let white = lumit_gpu::fx::common::upload_linear_f32(&lease, &[1.0; 4].repeat(n * n), 32, 32);
     for diffusion in [0.0, 40.0] {
@@ -317,8 +302,6 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
     }
 }
 
-/// Under a white environment and nothing else, a white matte model and a
-/// white card both read white where they face the camera.
 #[test]
 fn a_white_environment_lights_white_things_white() {
     let Some(lease) = lumit_gpu::test_support::lease() else {
@@ -402,8 +385,6 @@ fn a_white_environment_lights_white_things_white() {
     }
 }
 
-/// A rig on bones draws where its pose has it, a moment drawn twice comes out
-/// the same however it was reached, and the shadow it casts follows the pose.
 #[test]
 fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
     use lumit_scene::pose::pose;
@@ -432,7 +413,6 @@ fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
     let at = |t: f64| pose(&rig, Some((take, t)), &[]);
     let (start, bent) = (at(0.0), at(1.0));
     let draw = |poses: &[lumit_scene::pose::Pose]| {
-        // A pose for each shutter sample when there are several.
         let shutter = vec![model_to_comp; if poses.len() > 1 { poses.len() } else { 0 }];
         let picture = lease
             .fx()
@@ -468,7 +448,6 @@ fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
             .readback_linear_f32(&lease, &picture.colour)
             .unwrap()
     };
-    // Where the most of it sits along x, by its alpha.
     let middle = |px: &[f32]| {
         let (mut sum, mut total) = (0.0, 0.0);
         for (i, p) in px.chunks_exact(4).enumerate() {
@@ -494,8 +473,6 @@ fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
         draw(std::slice::from_ref(&bent)),
         "the same moment again"
     );
-    // Across the shutter the picture smears from one pose to the other, where
-    // a blur from the rest pose alone would be sharp.
     let smear = draw(&[start.clone(), bent.clone()]);
     let half = |px: &[f32]| {
         px.chunks_exact(4)
@@ -587,9 +564,6 @@ fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
     );
 }
 
-/// Models are kept while their scenes live, and however many that is the
-/// card keeps room to bind them. There are more materials here than it has
-/// sampler slots, or binding slots for their pictures.
 #[test]
 fn any_number_of_kept_models_still_draw() {
     let Some(lease) = lumit_gpu::test_support::lease() else {

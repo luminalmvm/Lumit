@@ -22,7 +22,6 @@ use uuid::Uuid;
 
 use crate::time::Rational;
 
-/// One timed word.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CueWord {
     /// As shown, punctuation attached, no space in front.
@@ -31,15 +30,12 @@ pub struct CueWord {
     pub end: Rational,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speaker: Option<Uuid>,
-    /// Picked out by hand, for a caption style to colour.
     #[serde(default, skip_serializing_if = "is_false")]
     pub emphasis: bool,
 }
 
-/// Words shown together.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cue {
-    /// When it appears and goes.
     pub start: Rational,
     pub end: Rational,
     pub words: Vec<CueWord>,
@@ -50,7 +46,6 @@ pub struct Cue {
     /// or nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    /// Lines start with a dash, one per speaker, when two people share it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub dashes: bool,
     /// The footage item whose source time these times are in, for captions
@@ -70,26 +65,20 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
-/// How speakers show in the captions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SpeakerLabels {
-    /// Not at all.
     #[default]
     Off,
-    /// The speaker's name in front of what they say, whenever it changes.
     Names,
-    /// A dash in front of each speaker's line, when two share a caption.
     Dashes,
 }
 
-/// What a caption may hold, and how long it stays.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Limits {
     /// The longest a line may be, in characters. A single word longer than
     /// this still gets a line of its own.
     pub chars_per_line: u32,
-    /// How many lines a caption may have.
     pub lines: u32,
     /// The most words a caption may hold. Nought is no limit, one is a word at
     /// a time.
@@ -98,12 +87,10 @@ pub struct Limits {
     pub min_duration: Rational,
     /// The longest a caption may run, in seconds. A single word may run over.
     pub max_duration: Rational,
-    /// The least time between one caption going and the next appearing.
     pub gap: Rational,
     /// Characters a second a caption should be readable at. It stays up longer
     /// to meet it, room permitting. Nought leaves it out.
     pub reading_speed: u32,
-    /// Start a new caption whenever somebody else speaks.
     pub split_on_speaker: bool,
     pub speaker_labels: SpeakerLabels,
 }
@@ -138,17 +125,15 @@ impl Limits {
     }
 }
 
-/// A pause at least this long ends a caption whatever else fits.
 const PAUSE: f64 = 1.5;
 
-/// Whether `c` belongs to a script written without spaces between words.
 #[must_use]
 pub(super) fn unspaced(c: char) -> bool {
     matches!(u32::from(c),
-        0x0E00..=0x0EFF      // Thai and Lao
-        | 0x1000..=0x109F    // Myanmar
-        | 0x1780..=0x17FF    // Khmer
-        | 0x3000..=0x30FF    // CJK punctuation, hiragana, katakana
+        0x0E00..=0x0EFF
+        | 0x1000..=0x109F
+        | 0x1780..=0x17FF
+        | 0x3000..=0x30FF
         | 0x31F0..=0x31FF
         | 0x3400..=0x4DBF
         | 0x4E00..=0x9FFF
@@ -157,8 +142,6 @@ pub(super) fn unspaced(c: char) -> bool {
         | 0x20000..=0x3FFFF)
 }
 
-/// Whether a space goes between `before` and `after` when they are put side
-/// by side: always, unless either side is in a script written without them.
 #[must_use]
 pub fn spaced(before: &str, after: &str) -> bool {
     let last = before.chars().next_back();
@@ -166,7 +149,6 @@ pub fn spaced(before: &str, after: &str) -> bool {
     !(last.is_some_and(unspaced) || first.is_some_and(unspaced))
 }
 
-/// Words put side by side, with spaces where their scripts want them.
 #[must_use]
 pub fn join<'a>(words: impl IntoIterator<Item = &'a str>) -> String {
     let mut out = String::new();
@@ -183,7 +165,6 @@ pub fn join<'a>(words: impl IntoIterator<Item = &'a str>) -> String {
     out
 }
 
-/// How many characters `words` take on one line.
 fn width(words: &[CueWord]) -> usize {
     let mut total = 0;
     for (i, word) in words.iter().enumerate() {
@@ -196,8 +177,6 @@ fn width(words: &[CueWord]) -> usize {
 }
 
 impl Cue {
-    /// The caption as it reads: one string per line, the label in front of
-    /// the first and a dash in front of each when the cue has dashes.
     #[must_use]
     pub fn lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
@@ -223,7 +202,6 @@ impl Cue {
         lines
     }
 
-    /// The caption as one string, its lines on lines of their own.
     #[must_use]
     pub fn text(&self) -> String {
         self.lines().join("\n")
@@ -246,7 +224,6 @@ impl Cue {
         chars / seconds
     }
 
-    /// The cue with its lines broken again to fit `limits`.
     #[must_use]
     pub fn rebroken(mut self, limits: &Limits) -> Self {
         self.breaks = breaks(&self.words, limits, self.dashes);
@@ -289,7 +266,6 @@ pub fn build(
     cues
 }
 
-/// How many different speakers a run of words has.
 fn speakers_in(words: &[CueWord]) -> usize {
     let mut changes = 0;
     for pair in words.windows(2) {
@@ -322,7 +298,6 @@ fn passages(words: &[CueWord], limits: &Limits) -> Vec<(usize, usize)> {
     out
 }
 
-/// Whether a word ends a sentence, or at least a clause.
 fn ending(word: &str) -> (bool, bool) {
     let last = word
         .trim_end_matches(['"', '\'', ')', ']', '”', '’', '»', '」', '』'])
@@ -336,7 +311,6 @@ fn ending(word: &str) -> (bool, bool) {
     (sentence, clause)
 }
 
-/// Whether `words` fit one caption under `limits`.
 fn fits(words: &[CueWord], limits: &Limits) -> bool {
     if words.len() <= 1 {
         return true;
@@ -412,13 +386,11 @@ fn group(words: &[CueWord], limits: &Limits) -> Vec<(usize, usize)> {
     out
 }
 
-/// What one caption of `piece` costs, `next` being the word after it.
 fn cost(piece: &[CueWord], next: Option<&CueWord>, limits: &Limits, room: f64) -> f64 {
     #[allow(clippy::cast_precision_loss)] // a line is never 2^52 characters
     let fill = width(piece) as f64 / room;
     let mut cost = (1.0 - fill.min(1.0)).powi(2);
     let Some(next) = next else {
-        // The last caption of a passage ends where the passage does.
         return cost;
     };
     let pause = next
@@ -442,7 +414,6 @@ fn cost(piece: &[CueWord], next: Option<&CueWord>, limits: &Limits, room: f64) -
         cost += 0.3;
     }
     if limits.words == 1 {
-        // A word at a time has nothing to weigh: every word is its own.
         cost = 0.0;
     }
     cost
@@ -461,7 +432,6 @@ fn breaks(words: &[CueWord], limits: &Limits, dashes: bool) -> Vec<usize> {
             .collect();
     }
     let Some(starts) = lay(words, limits) else {
-        // Too long for the lines: one line per line's worth.
         return greedy(words, limits);
     };
     let lines = starts.len();
@@ -478,7 +448,6 @@ fn breaks(words: &[CueWord], limits: &Limits, dashes: bool) -> Vec<usize> {
     best.map_or_else(|| starts[1..].to_vec(), |(_, cuts)| cuts)
 }
 
-/// Try every next cut from `after`, scoring complete sets into `best`.
 fn search(
     words: &[CueWord],
     per_line: usize,
@@ -516,7 +485,7 @@ fn score(words: &[CueWord], cuts: &[usize], per_line: usize) -> f64 {
         lengths.push(length);
         from = at;
     }
-    #[allow(clippy::cast_precision_loss)] // line lengths
+    #[allow(clippy::cast_precision_loss)]
     let mean = lengths.iter().sum::<usize>() as f64 / lengths.len() as f64;
     let mut score = 0.0;
     for (i, &length) in lengths.iter().enumerate() {
@@ -543,7 +512,6 @@ fn score(words: &[CueWord], cuts: &[usize], per_line: usize) -> f64 {
     score
 }
 
-/// Lines filled one after another, for words too long to fit any other way.
 fn greedy(words: &[CueWord], limits: &Limits) -> Vec<usize> {
     let per_line = limits.chars_per_line.max(1) as usize;
     let mut out = Vec::new();
@@ -557,7 +525,6 @@ fn greedy(words: &[CueWord], limits: &Limits) -> Vec<usize> {
     out
 }
 
-/// Put the speakers' names on the captions where a new one starts talking.
 fn label(cues: &mut [Cue], limits: &Limits, names: &dyn Fn(Uuid) -> Option<String>) {
     if limits.speaker_labels != SpeakerLabels::Names {
         return;
@@ -596,7 +563,6 @@ fn time(cues: &mut [Cue], limits: &Limits) {
                 end = end.min(room);
             }
         }
-        // Never before the caption starts, whatever the gap asked.
         cue.end = end.max(cue.start);
     }
 }
@@ -622,9 +588,6 @@ mod tests {
             .collect()
     }
 
-    /// **Every word lands in exactly one caption, in order, and no line runs
-    /// past the limit.** A word dropped here is a word missing from the
-    /// burned-in picture and the subtitle file alike.
     #[test]
     fn every_word_lands_once_and_every_line_fits() {
         let text = "So what we found was that the people who came early stayed longer. \
@@ -651,7 +614,6 @@ mod tests {
         for pair in cues.windows(2) {
             assert!(pair[0].end <= pair[1].start, "captions overlap");
         }
-        // The first sentence ends a caption rather than running on into the next.
         assert!(
             cues.iter()
                 .any(|c| c.words.last().unwrap().text == "longer."),
@@ -660,10 +622,6 @@ mod tests {
         );
     }
 
-    /// **Speakers reach the captions.** A new speaker starts a new caption
-    /// with their name in front, or shares one with a dash before each line;
-    /// one word a caption holds one word; a short caption stays up long
-    /// enough to read. Wrong here is a line put in the wrong mouth.
     #[test]
     fn speakers_are_named_and_kept_apart() {
         let (ann, bob) = (Uuid::now_v7(), Uuid::now_v7());
@@ -695,7 +653,6 @@ mod tests {
         };
         let cues = build(&all, &one, &names);
         assert_eq!(cues.len(), all.len());
-        // Up for the shortest time, but never into the next caption.
         assert!(cues[0].end <= cues[1].start);
         let last = cues.last().unwrap();
         assert_eq!(

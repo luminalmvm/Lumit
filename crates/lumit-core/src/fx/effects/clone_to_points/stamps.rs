@@ -1,5 +1,3 @@
-//! Where Clone to points puts its copies, and which picture each one shows.
-
 use super::*;
 
 impl CloneToPoints {
@@ -11,13 +9,11 @@ impl CloneToPoints {
     /// How many layer rows are set, which the bag does not otherwise say.
     pub const DERIVED_LAYERS: ParamId = ParamId::new("derived.layers");
 
-    /// Whether the copies are rendered one per clone.
     pub const DERIVED_PER_CLONE: ParamId = ParamId::new("derived.per_clone");
 
     /// Time step as the builder read it, off its own keyframes.
     pub const DERIVED_TIME_STEP: ParamId = ParamId::new("derived.time_step");
 
-    /// This instance's raster factor, read back out of a resolved bag.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
@@ -43,8 +39,6 @@ impl CloneToPoints {
         out.index = (0..in_stream.len())
             .map(|i| self.picture_at(in_stream, i, pictures, numbers).first as f32)
             .collect();
-        // How many pictures deep every point is stamped, and how far apart
-        // they sit in the list. The same for every point.
         let Stamped { step, count, .. } = self.picture_of(in_stream, 0, pictures);
         if self.apply_to != 0 {
             let group = in_stream.group(self.apply_group.as_str());
@@ -146,8 +140,6 @@ impl CloneToPoints {
         self.picture_at(s, i, of, self.numbers(s))
     }
 
-    /// The numbers Choose by and Time offset read under Number, found on
-    /// `s` once for a walk over its points.
     fn numbers(self, s: &PointsStream) -> [Column; 2] {
         [
             s.column(self.choose_name.as_str()),
@@ -155,7 +147,6 @@ impl CloneToPoints {
         ]
     }
 
-    /// [`picture_of`](Self::picture_of), with the two numbers found already.
     fn picture_at(self, s: &PointsStream, i: usize, of: Pictures, numbers: [Column; 2]) -> Stamped {
         let [choose, time] = numbers;
         let one = |first: usize| Stamped {
@@ -165,7 +156,6 @@ impl CloneToPoints {
         };
         let every = self.choose_by == CHOOSE_EVERY;
         let id = s.id.get(i).copied().unwrap_or(0);
-        // Which of `n` the point takes, as Choose by says.
         let chosen = |n: usize| -> usize {
             if n < 2 {
                 return 0;
@@ -181,8 +171,6 @@ impl CloneToPoints {
                     let number = s.read(choose, i).unwrap_or(0.0);
                     (number.floor() as i64).rem_euclid(n as i64) as usize
                 }
-                // The Layer index row, or the copy's own where a driver is
-                // wired into it.
                 CHOOSE_INDEX => {
                     let column = s.column(per_copy::COPY_LAYER_INDEX);
                     let number = s.read(column, i).unwrap_or(self.layer_index);
@@ -218,8 +206,6 @@ impl CloneToPoints {
         one(chosen(of.layers) * of.moments + moment)
     }
 
-    /// Which of `moments` moments a stamp shows, as Time offset says. `place`
-    /// is where it comes in the stream, `number` the number it carries.
     fn moment_of(self, place: usize, id: u64, number: f32, age: f32, moments: usize) -> usize {
         if moments < 2 {
             return 0;
@@ -265,7 +251,6 @@ impl CloneToPoints {
         };
         if per_clone {
             let cap = self.max_renders.clamp(1, most) as usize;
-            // Every layer wants a render for each layer of each point.
             let each = match self.choose_by {
                 CHOOSE_EVERY => layers,
                 _ => 1,
@@ -290,7 +275,6 @@ impl CloneToPoints {
         }
     }
 
-    /// What picture `k` of the list is.
     #[must_use]
     pub fn picture(self, of: Pictures, k: usize) -> Picture {
         if of.renders == 0 {
@@ -315,8 +299,6 @@ impl CloneToPoints {
         }
     }
 
-    /// The composition time a layer is rendered at for moment `m`. `t` is the
-    /// frame's own time and `start` the layer's in point.
     #[must_use]
     pub fn moment_time(self, m: usize, t: f64, start: f64) -> f64 {
         let step = m as f64 * f64::from(self.time_step);
@@ -476,7 +458,6 @@ impl CloneToPoints {
         } else {
             self.dist_position_y
         };
-        // How long each point's place is along the line, by its id.
         let mut places: Vec<(u64, f32)> = Vec::new();
         let mut extents = Vec::with_capacity(stamps.len());
         for i in 0..stamps.len() {
@@ -508,14 +489,11 @@ impl CloneToPoints {
             let Some((_, left, long)) = from.iter().find(|(at, ..)| *at == id) else {
                 continue;
             };
-            // Centred in its place, with its anchor on the point.
             let own = extents.get(i).copied().unwrap_or(0.0);
             p[axis] += left + (long - own) * 0.5 + anchor * own - centre;
         }
     }
 
-    /// The clone layer rows that name a layer, in row order, each with the
-    /// layer it names.
     #[must_use]
     pub fn rows(e: &EffectInstance) -> Vec<(&'static str, Uuid)> {
         let schema: &'static EffectSchema = &<Self as EffectMetadata>::SCHEMA;
@@ -619,14 +597,9 @@ impl CloneToPoints {
             (self.cell_width / k).max(1e-3),
             (self.cell_height / k).max(1e-3),
         ];
-        // How many times the layer's width and height the cell is.
         let (across, down) = (cell[0] / layer[0], cell[1] / layer[1]);
-        // The stamp's own size at a point size of 100, and how much of it the
-        // picture spans.
         let (own, uv) = match self.fit {
             1 => (layer, [1.0; 2]),
-            // One scale for both axes: the smaller fits the layer inside the
-            // cell, the larger covers it.
             2 => (cell, [across / across.min(down), down / across.min(down)]),
             3 => (cell, [across / across.max(down), down / across.max(down)]),
             _ => ([100.0; 2], [1.0; 2]),
@@ -639,7 +612,6 @@ impl CloneToPoints {
         }
     }
 
-    /// How the stamps are drawn — Sprite mode, and the host Mix.
     #[must_use]
     pub fn draw_style(self) -> points::DrawStyle {
         points::DrawStyle {

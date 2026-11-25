@@ -53,7 +53,6 @@ use crate::{
 /// everything else in the file.
 const AUDIO_MODULE_CLASS: &[u8] = b"Audio Module Class";
 
-/// What the other half calls itself.
 const CONTROLLER_CLASS: &[u8] = b"Component Controller Class";
 
 /// The class id of one personality's processor. `LUMI` and `TEST` in the first
@@ -62,12 +61,10 @@ fn processor_cid(kind: Kind) -> TUID {
     uid(0x4C554D49, 0x54455354, 0x50524F43, index_of(kind))
 }
 
-/// The class id of its controller.
 fn controller_cid(kind: Kind) -> TUID {
     uid(0x4C554D49, 0x54455354, 0x4354524C, index_of(kind))
 }
 
-/// Where a personality sits in the factory's order.
 fn index_of(kind: Kind) -> u32 {
     KINDS
         .iter()
@@ -87,9 +84,6 @@ fn class_at(index: i32) -> Option<(Kind, bool)> {
     }
 }
 
-// -------------------------------------------------------------- the factory --
-
-/// The one object a `.vst3` bundle hands out.
 struct Factory;
 
 impl Class for Factory {
@@ -212,14 +206,10 @@ impl IPluginFactory2Trait for Factory {
     }
 }
 
-// ------------------------------------------------------------ the processor --
-
-/// One live copy of one personality's sounding half.
 struct Plug {
     kind: Kind,
     /// [`Kind::Gain`]'s multiplier, in plain units.
     gain: Cell<f64>,
-    /// What [`Kind::StateEcho`] was handed, byte for byte.
     state: RefCell<Vec<u8>>,
     loaded: Cell<bool>,
     block: Cell<u32>,
@@ -576,14 +566,10 @@ impl Plug {
     }
 }
 
-// ----------------------------------------------------------- the controller --
-
-/// One live copy of one personality's parameter half.
 struct Ctrl {
     kind: Kind,
     /// What the host last set, normalised, by parameter id.
     values: RefCell<Vec<(u32, f64)>>,
-    /// What its own `setState` was handed.
     state: RefCell<Vec<u8>>,
 }
 
@@ -744,8 +730,6 @@ impl IEditControllerTrait for Ctrl {
     }
 }
 
-// ------------------------------------------------------------- the exports --
-
 /// The one symbol a `.vst3` bundle must export.
 ///
 /// # Safety
@@ -758,14 +742,12 @@ pub extern "system" fn GetPluginFactory() -> *mut IPluginFactory {
         .map_or(std::ptr::null_mut(), vst3::ComPtr::into_raw)
 }
 
-/// The module's start-up on Windows.
 #[cfg(target_os = "windows")]
 #[no_mangle]
 pub extern "system" fn InitDll() -> bool {
     true
 }
 
-/// And its shutdown.
 #[cfg(target_os = "windows")]
 #[no_mangle]
 pub extern "system" fn ExitDll() -> bool {
@@ -779,30 +761,24 @@ pub extern "system" fn bundleEntry(_bundle: *mut c_void) -> bool {
     true
 }
 
-/// The macOS shutdown.
 #[cfg(target_os = "macos")]
 #[no_mangle]
 pub extern "system" fn bundleExit() -> bool {
     true
 }
 
-/// The Linux start-up.
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 #[no_mangle]
 pub extern "system" fn ModuleEntry(_handle: *mut c_void) -> bool {
     true
 }
 
-/// The Linux shutdown.
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 #[no_mangle]
 pub extern "system" fn ModuleExit() -> bool {
     true
 }
 
-// ------------------------------------------------------------ the plumbing --
-
-/// One declaration's flags, in VST3's word.
 fn vst3_flags_of(decl: &ParamDecl) -> int32 {
     use clap_sys::ext::params::{
         CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_HIDDEN, CLAP_PARAM_IS_READONLY,
@@ -820,7 +796,6 @@ fn vst3_flags_of(decl: &ParamDecl) -> int32 {
     flags
 }
 
-/// A plain value as VST3 carries it.
 fn normalised_of(decl: &ParamDecl, plain: f64) -> f64 {
     let span = decl.max - decl.min;
     if span <= 0.0 {
@@ -829,7 +804,6 @@ fn normalised_of(decl: &ParamDecl, plain: f64) -> f64 {
     ((plain - decl.min) / span).clamp(0.0, 1.0)
 }
 
-/// And back.
 fn plain_of_decl(decl: &ParamDecl, normalised: f64) -> f64 {
     decl.min + normalised.clamp(0.0, 1.0) * (decl.max - decl.min)
 }
@@ -843,7 +817,6 @@ fn plain_of(kind: Kind, id: u32, normalised: f64) -> f64 {
         .map_or(normalised, |decl| plain_of_decl(decl, normalised))
 }
 
-/// Everything in a stream the host handed over.
 fn read_all(stream: &ComRef<'_, IBStream>) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut chunk = [0u8; 256];
@@ -868,7 +841,6 @@ fn read_all(stream: &ComRef<'_, IBStream>) -> Vec<u8> {
     }
 }
 
-/// Everything into a stream the host handed over.
 fn write_all(stream: &ComRef<'_, IBStream>, bytes: &[u8]) -> tresult {
     let mut sent = 0usize;
     while sent < bytes.len() {
@@ -892,12 +864,10 @@ fn write_all(stream: &ComRef<'_, IBStream>, bytes: &[u8]) -> tresult {
     kResultOk
 }
 
-/// A nul-terminated literal without its nul.
 fn trim(text: &'static [u8]) -> &'static [u8] {
     text.strip_suffix(b"\0").unwrap_or(text)
 }
 
-/// Copy bytes into a fixed C char array, nul-terminated and never overrun.
 fn fill(dst: &mut [c_char], text: &[u8]) {
     for (slot, byte) in dst.iter_mut().zip(text.iter()) {
         *slot = *byte as c_char;
@@ -908,7 +878,6 @@ fn fill(dst: &mut [c_char], text: &[u8]) {
     }
 }
 
-/// The same into a VST3 `String128`.
 fn wide(dst: &mut [TChar], text: &str) {
     let mut written = 0;
     for (slot, unit) in dst.iter_mut().zip(text.encode_utf16()) {

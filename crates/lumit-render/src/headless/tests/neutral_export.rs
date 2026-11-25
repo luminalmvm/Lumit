@@ -1,5 +1,3 @@
-//! Tests for an export the Viewer's settings never reach.
-
 use super::*;
 
 /// **The export cannot see the Viewer's view**, and it is neutral by
@@ -40,8 +38,6 @@ fn an_export_renders_neutral_whatever_the_viewer_is_set_to() {
          test would pass on a display transform that does nothing"
     );
 
-    // What the exporter does, in the order it does it (`export::run`): its
-    // own renderer, then `render_preview` per frame at full quality.
     let mut exporter = HeadlessRenderer::new().expect("export renderer");
     assert!(
         exporter.display_view().is_neutral(),

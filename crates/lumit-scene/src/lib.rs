@@ -23,7 +23,6 @@ pub mod parts;
 pub mod pose;
 mod settle;
 
-/// Models built in code, for other crates' tests and the bench.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod fixtures;
 
@@ -31,11 +30,9 @@ pub mod blender;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod vdb;
 
-/// One model: its tree of nodes and everything they point at.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModelScene {
     pub nodes: Vec<Node>,
-    /// The nodes with no parent, in file order.
     pub roots: Vec<usize>,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
@@ -132,8 +129,6 @@ impl ModelScene {
         primitives + pictures
     }
 
-    /// Node `k`'s place in model space: its own transform after all its
-    /// parents'.
     #[must_use]
     pub fn node_world(&self, mut k: usize) -> glam::Mat4 {
         let mut world = glam::Mat4::IDENTITY;
@@ -204,18 +199,15 @@ pub struct Primitive {
     pub joints: Vec<[u16; 4]>,
     pub weights: Vec<[f32; 4]>,
     pub morph_targets: Vec<MorphTarget>,
-    /// Three to a triangle.
     pub indices: Vec<u32>,
     pub material: Option<usize>,
 }
 
-/// What one morph target adds to each vertex at full weight.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MorphTarget {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub tangents: Vec<[f32; 3]>,
-    /// The box round what it adds to each vertex.
     pub reach: Bounds,
 }
 
@@ -227,7 +219,6 @@ pub enum AlphaMode {
     Blend,
 }
 
-/// glTF's metallic-roughness material, with the extensions Lumit draws.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Material {
     pub name: String,
@@ -314,14 +305,10 @@ pub enum Wrap {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Texture {
     pub name: String,
-    /// Where the picture came from: a file beside the model, or none when it
-    /// was packed inside it.
     pub file: Option<PathBuf>,
-    /// The decoded picture, or `None` when it could not be read.
     pub image: Option<Image>,
     pub wrap_u: Wrap,
     pub wrap_v: Wrap,
-    /// Nearest rather than linear filtering.
     pub nearest: bool,
 }
 
@@ -381,7 +368,6 @@ pub struct Skin {
     pub boxes: Vec<Bounds>,
 }
 
-/// One embedded animation, a take.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Clip {
     pub name: String,
@@ -396,7 +382,6 @@ pub enum Path {
     Rotation,
     Scale,
     Weights,
-    /// One morph target's weight alone, one number a key.
     Weight(u16),
     /// A camera's vertical field of view in radians, one number a key.
     YFov,
@@ -446,7 +431,6 @@ pub enum SceneError {
 /// [`is_model`]'s go through Blender.
 pub const EXTENSIONS: [&str; 5] = ["gltf", "glb", "fbx", "obj", "vdb"];
 
-/// Whether the file at `path` is a 3D model [`read`] opens, by its name.
 pub fn is_model(path: impl AsRef<FilePath>) -> bool {
     let ext = extension(path.as_ref());
     EXTENSIONS.contains(&ext.as_str()) || blender::EXTENSIONS.contains(&ext.as_str())
@@ -514,7 +498,6 @@ fn read_native(
     }));
     let mut scene = read.unwrap_or_else(|_| Err(r.fail("the file is damaged")))?;
     scene.missing = std::mem::take(&mut r.missing);
-    // A picture two materials share is named once.
     scene.missing.sort();
     scene.missing.dedup();
     Ok(scene)
@@ -550,7 +533,6 @@ fn extension(path: &FilePath) -> String {
         .unwrap_or_default()
 }
 
-/// Parents from children, the roots, and a refusal for a tree that loops.
 fn link(scene: &mut ModelScene) -> Result<(), &'static str> {
     let count = scene.nodes.len();
     for n in 0..count {
@@ -626,8 +608,6 @@ fn tangents(scene: &mut ModelScene) {
             face: usize,
             vert: usize,
         ) {
-            // ponytail: a vertex shared by faces that disagree keeps the last
-            // face's tangent. Splitting those vertices is the exact answer.
             let i = self.at(face, vert);
             if let (Some(t), Some(slot)) = (t, self.out.get_mut(i)) {
                 *slot = t.tangent_encoded();
@@ -666,7 +646,6 @@ fn tangents(scene: &mut ModelScene) {
     }
 }
 
-/// The box round every mesh in its place at rest.
 fn bounds(scene: &ModelScene) -> Bounds {
     use glam::{Mat4, Quat, Vec3};
     let mut lo = Vec3::splat(f32::INFINITY);

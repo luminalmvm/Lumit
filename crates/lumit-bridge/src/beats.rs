@@ -61,16 +61,12 @@ pub(crate) struct Beat {
     pub confidence: f32,
 }
 
-/// What one analysis found: the beats after every option has had its say, and
-/// the tempo the grid used — the estimate, or the caller's override.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Detected {
     pub beats: Vec<Beat>,
     pub bpm: f64,
 }
 
-/// The rate everything is mixed down and analysed at (docs/impl/beat-detection.md
-/// §1: mono/stereo f32 at 48 kHz).
 const RATE: u32 = 48_000;
 
 /// How much of a detection the mixdown is. It decodes every audible source,
@@ -92,7 +88,6 @@ enum Step {
     Done(Result<Detected, BridgeError>),
 }
 
-/// What the worker is asked to do, and where to send the answer.
 struct Job {
     document: Arc<lumit_core::model::Document>,
     comp: Uuid,
@@ -131,7 +126,6 @@ fn jobs() -> Option<&'static Sender<Job>> {
     .as_ref()
 }
 
-/// The worker loop. Ends when the sender is dropped, which is process exit.
 fn run(rx: &Receiver<Job>) {
     while let Ok(job) = rx.recv() {
         let answer = if job.generation == generation().load(Ordering::Relaxed) {
@@ -146,8 +140,6 @@ fn run(rx: &Receiver<Job>) {
                 },
             )
         } else {
-            // The project this was asked for has closed. Nothing is analysed,
-            // and the caller — if one is still waiting — is told why.
             Err(BridgeError::InvalidProject)
         };
         // Off the queue *before* the answer goes out, so a caller that has its
@@ -214,7 +206,6 @@ fn analyse(
         lumit_audio::beat::delta_from_sensitivity(options.sensitivity_percent.clamp(0, 100) as u8);
     let analysis = lumit_audio::beat::analyse_stereo(&samples, RATE, delta);
 
-    // The grid: the estimate, unless the BPM well (or Tap) handed one in.
     let bpm = if options.bpm_override > 0.0 {
         options.bpm_override
     } else {
@@ -231,8 +222,6 @@ fn analyse(
         .iter()
         .zip(&analysis.onsets)
         .map(|(time, onset)| Beat {
-            // The phase chips: the whole set nudged together, for a grid that
-            // is right but early or late against the cut.
             time_seconds: *time + options.phase_ms / 1000.0,
             confidence: onset.confidence,
         })
@@ -343,7 +332,6 @@ pub(crate) fn clear() {
     generation().fetch_add(1, Ordering::Relaxed);
 }
 
-/// How many jobs are queued or running. Tests only.
 #[cfg(test)]
 pub(crate) fn queue_depth() -> usize {
     depth().lock().map(|held| *held).unwrap_or(0)
@@ -362,10 +350,6 @@ mod tests {
         SERIAL.lock().unwrap_or_else(|held| held.into_inner())
     }
 
-    /// A composition with no audible source answers "no audio" rather than
-    /// analysing silence — and it answers it through the worker, which is the
-    /// path being proved here. The queue is back to empty afterwards, so the
-    /// worker really did take the job and really did finish it.
     #[test]
     fn a_silent_comp_is_answered_by_the_worker() {
         let _serial = serially();
@@ -384,9 +368,6 @@ mod tests {
         assert_eq!(queue_depth(), 0, "the job is done and off the queue");
     }
 
-    /// Closing a project cancels queued detections: a job stamped with a
-    /// generation that has ended is dropped rather than analysed, and its
-    /// caller is told the project it named is gone.
     #[test]
     fn a_job_from_a_closed_project_is_dropped() {
         let _serial = serially();
@@ -405,7 +386,7 @@ mod tests {
             *held += 1;
         }
         let Some(tx) = jobs() else {
-            return; // no worker thread on this machine; nothing to prove
+            return;
         };
         assert!(tx.send(job).is_ok());
         assert!(matches!(
@@ -415,8 +396,6 @@ mod tests {
         assert_eq!(queue_depth(), 0);
     }
 
-    /// The spacing floor keeps the louder of a crowded pair and leaves an
-    /// already-sparse set alone — the board's Min spacing well, pinned.
     #[test]
     fn min_spacing_keeps_the_more_confident_of_a_crowded_pair() {
         let beat = |t: f64, c: f32| Beat {
@@ -425,8 +404,8 @@ mod tests {
         };
         let crowded = vec![
             beat(0.00, 0.9),
-            beat(0.05, 0.4),  // inside 120 ms of the first, quieter: dropped
-            beat(0.10, 0.95), // inside again, louder: replaces the first
+            beat(0.05, 0.4),
+            beat(0.10, 0.95),
             beat(0.50, 0.2),
         ];
         assert_eq!(

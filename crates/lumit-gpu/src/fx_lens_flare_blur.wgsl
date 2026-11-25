@@ -28,7 +28,7 @@ struct BlurParams {
 // (`MAX_BLUR_RADIUS_PX`) — together they size the cache.
 const TILE: u32 = 64u;
 const MAX_R: u32 = 80u;
-const CACHE: u32 = 224u; // TILE + 2 · MAX_R
+const CACHE: u32 = 224u;
 
 var<workgroup> line: array<vec4<f32>, CACHE>;
 
@@ -59,7 +59,6 @@ fn blur(
         across_len = i32(bp.w);
     }
     let across = i32(gid.y);
-    // The first cached texel: the tile's first pixel minus the radius.
     let base = i32(wg.x * TILE) - i32(r);
     let needed = TILE + 2u * r;
     // Four strided loads cover the widest cache; a thread whose slot is past

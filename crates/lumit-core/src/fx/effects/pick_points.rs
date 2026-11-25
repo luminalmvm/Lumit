@@ -33,7 +33,6 @@ const fn group(
     }
 }
 
-/// The pattern and its range, the rows only some patterns read, and the count.
 pub const PICK_GROUPS: &[ParamGroup] = &[
     group("Pattern", &["pattern", "from", "to", "invert"], None),
     group("", &["noise_scale"], Some(("pattern", &[2]))),
@@ -62,14 +61,12 @@ pub const PICK_GROUPS: &[ParamGroup] = &[
     group("", &["seed"], Some(("pattern", &[1, 2]))),
 ];
 
-/// Group name is only read while Result marks points.
 pub const PICK_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "group_name",
     on: "result",
     cond: EnabledCond::ChoiceIsNot(0),
 }];
 
-/// Pick points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "pick_points",
@@ -110,11 +107,9 @@ pub struct PickPoints {
     #[text(label = "Group name", default = "")]
     pub group_name: ShortText,
 
-    /// What gives each point its number.
     #[choice(label = "Pattern", options = *PatternKind::OPTIONS, default = 1)]
     pub pattern: u32,
 
-    /// The lowest number a point that passes may have, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -137,7 +132,6 @@ pub struct PickPoints {
     )]
     pub to: f32,
 
-    /// Keep what would have been dropped, and drop what would have been kept.
     #[toggle(label = "Invert", default = false)]
     pub invert: bool,
 
@@ -170,7 +164,6 @@ pub struct PickPoints {
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// px@comp. See [`centre_x`](Self::centre_x).
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
@@ -232,7 +225,6 @@ pub struct PickPoints {
     )]
     pub band_width: f32,
 
-    /// The shape of each wave.
     #[choice(
         label = "Wave",
         options = ["Sine", "Triangle", "Square", "Sawtooth"],
@@ -240,7 +232,6 @@ pub struct PickPoints {
     )]
     pub wave: u32,
 
-    /// The waves run out from Centre as rings, not across as bands.
     #[toggle(label = "Rings", default = false)]
     pub rings: bool,
 
@@ -249,8 +240,6 @@ pub struct PickPoints {
     #[layer(label = "Image layer")]
     pub image_layer: bool,
 
-    /// Where the Image layer's picture sits on this one: as it sits in the
-    /// comp, stretched over the frame, or centred at its own size.
     #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
     pub image_layer_placement: u32,
 
@@ -267,7 +256,6 @@ pub struct PickPoints {
     )]
     pub every_nth: i32,
 
-    /// Which of each run is the one kept.
     #[counter(
         label = "Offset",
         min = 0,
@@ -279,7 +267,6 @@ pub struct PickPoints {
     )]
     pub nth_offset: i32,
 
-    /// How soft the disc a point is drawn as is, per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -290,7 +277,6 @@ pub struct PickPoints {
     )]
     pub feather: f32,
 
-    /// Which dice, and which noise.
     #[seed]
     pub seed: u32,
 
@@ -311,7 +297,6 @@ impl PickPoints {
     /// The raster factor, since a stream off a wire arrives in px@comp.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// The pattern's own rows, for reading `s`.
     #[must_use]
     pub fn pattern(self, s: &PointsStream) -> Pattern {
         Pattern {
@@ -331,7 +316,6 @@ impl PickPoints {
         }
     }
 
-    /// Whether these settings read the picture under the points.
     #[must_use]
     pub fn needs_picture(self) -> bool {
         PatternKind::from_code(self.pattern) == PatternKind::Image
@@ -389,7 +373,6 @@ impl PickPoints {
     }
 }
 
-/// Pick points' behaviour, the same shape as Vary points'.
 pub struct PickPointsDef;
 
 impl EffectDef for PickPointsDef {
@@ -397,7 +380,6 @@ impl EffectDef for PickPointsDef {
         &<PickPoints as EffectMetadata>::SCHEMA
     }
 
-    /// A stream in and a stream out, beside the picture.
     fn signature(&self) -> Signature {
         Signature::Image {
             inputs: POINTS_IN,

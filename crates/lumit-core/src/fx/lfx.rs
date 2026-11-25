@@ -25,10 +25,8 @@ use super::{
 };
 use crate::model::EffectInstance;
 
-/// The shader contract this build reads.
 pub const API: u32 = 1;
 
-/// The most passes one effect may draw in.
 pub const MAX_PASSES: usize = 8;
 
 /// The one pass an effect that lists none draws in.
@@ -42,19 +40,16 @@ pub const STRIKES_OFF: u32 = 2;
 pub const OWN_PICTURE: super::params::ParamId =
     super::params::ParamId::new("derived.lfx_own_picture");
 
-/// One effect an extension carries, as the engine needs it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LfxEffect {
     /// The extension's id, the first half of the match name.
     pub extension: String,
-    /// The effect's id within its extension.
     pub id: String,
     pub label: String,
     /// One of the picture categories, by its menu label ("Stylise").
     pub category: String,
     /// Bumped by the author when the pixels change.
     pub version: u32,
-    /// The shader contract it was written to.
     pub api: u32,
     /// Empty means one pass called `shade`.
     pub passes: Vec<LfxPass>,
@@ -63,7 +58,6 @@ pub struct LfxEffect {
     /// the effect sits on a layer with a picture; that picture is then the
     /// second input wherever its row picks no other layer.
     pub backdrop: bool,
-    /// The `.wgsl` file's text.
     pub shader: String,
 }
 
@@ -75,7 +69,6 @@ pub struct LfxPass {
     pub scale: f32,
 }
 
-/// The extra picture an effect may take.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LfxInput {
     pub label: String,
@@ -90,7 +83,6 @@ pub enum LfxInputKind {
     Depth,
 }
 
-/// Why an effect was not installed.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LfxError {
     #[error("`{0}` is not a usable effect id")]
@@ -111,15 +103,12 @@ pub enum LfxError {
     LastPassScaled(String),
 }
 
-/// One installed effect: what the extension said, and its shader read and
-/// wrapped.
 #[derive(Debug)]
 pub struct Installed {
     pub match_name: &'static str,
     /// The shader, its passes and its version, hashed: what the frame key
     /// folds, so an edited plugin never serves old frames.
     pub key_hash: u64,
-    /// What that shader built into, kept under its key hash.
     pub built: &'static Built,
 }
 
@@ -143,7 +132,6 @@ impl Built {
         self.passes.iter().map(|(n, s)| (n.as_str(), *s)).collect()
     }
 
-    /// Whether two lost devices have switched this shader off.
     #[must_use]
     pub fn is_off(&self) -> bool {
         self.strikes.load(Ordering::Relaxed) >= STRIKES_OFF
@@ -161,7 +149,6 @@ fn pass_list(effect: &LfxEffect) -> Vec<(&str, f32)> {
         .collect()
 }
 
-/// The installed effects, by match name.
 static TABLE: RwLock<BTreeMap<&'static str, Arc<Installed>>> = RwLock::new(BTreeMap::new());
 
 /// Every shader built, by key hash. Each distinct shader is kept until Lumit
@@ -177,7 +164,6 @@ pub fn match_name(extension: &str, id: &str) -> String {
     format!("{LFX_MATCH_PREFIX}{extension}/{id}")
 }
 
-/// The extension an LFX match name belongs to, for the missing badge.
 #[must_use]
 pub fn extension_of(match_name: &str) -> Option<&str> {
     let rest = match_name.strip_prefix(LFX_MATCH_PREFIX)?;
@@ -244,7 +230,6 @@ pub fn uninstall(match_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// The installed effect under `match_name`, or `None` when it is missing.
 #[must_use]
 pub fn installed(match_name: &str) -> Option<Arc<Installed>> {
     TABLE.read().ok()?.get(match_name).cloned()
@@ -257,7 +242,6 @@ pub fn built(key_hash: u64) -> Option<&'static Built> {
     BUILT.read().ok()?.get(&key_hash).copied()
 }
 
-/// Whether an LFX effect is installed: the panel's "is this missing?".
 #[must_use]
 pub fn is_installed(match_name: &str) -> bool {
     TABLE
@@ -265,7 +249,6 @@ pub fn is_installed(match_name: &str) -> bool {
         .is_ok_and(|table| table.contains_key(match_name))
 }
 
-/// Every installed effect, in match-name order.
 #[must_use]
 pub fn all() -> Vec<Arc<Installed>> {
     TABLE
@@ -338,7 +321,6 @@ pub fn check(effect: &LfxEffect) -> Result<FxCategory, LfxError> {
     Ok(category)
 }
 
-/// The categories a picture effect can be filed under.
 const PICTURE_CATEGORIES: &[FxCategory] = &[
     FxCategory::BlurSharpen,
     FxCategory::Colour,
@@ -351,7 +333,6 @@ const PICTURE_CATEGORIES: &[FxCategory] = &[
     FxCategory::Utility,
 ];
 
-/// Everything that changes the pixels, hashed.
 fn key_of(effect: &LfxEffect) -> u64 {
     let mut bytes = Vec::with_capacity(effect.shader.len() + 64);
     bytes.extend_from_slice(&effect.version.to_le_bytes());
@@ -579,10 +560,6 @@ mod tests {
         }
     }
 
-    /// Every pass swap lands, the manifest facts this build can't take are
-    /// refused, and a changed shader installed over the old one brings its
-    /// own rows and a new key hash. Guards wrong pixels and old frames after
-    /// an update.
     #[test]
     fn an_lfx_effect_builds_refuses_and_reinstalls() {
         let program = shader::build_passes(TWO_PASS, &["bleed", "shade"]).expect("swaps land");
@@ -628,7 +605,6 @@ mod tests {
         assert_ne!(render_term(name), old_key);
         assert_ne!(old_key, 0);
 
-        // A rescan that turns `backdrop` on changes the def it already has.
         assert!(!def.backdrop());
         let mut glass = effect(&TWO_PASS.replace("amount", "strength"));
         glass.backdrop = true;
@@ -636,8 +612,6 @@ mod tests {
         assert!(def.backdrop());
     }
 
-    /// `@enabled_if` greys a row while none of a rule's terms holds, and the
-    /// second input counts as there on a backdrop effect's own picture.
     #[test]
     fn enabled_if_greys_rows_by_shape_and_input() {
         const SHADER: &str = "struct Params {\n\
@@ -654,11 +628,8 @@ mod tests {
         let mut inst = crate::fx::builtins::instantiate("custom_shader").expect("a built-in");
         let greyed =
             |inst: &EffectInstance, picture: bool| def.row_state_on(inst, picture).disabled;
-        // On an adjustment layer with nothing picked: the box's rows.
         assert_eq!(greyed(&inst, false), ["channel"]);
-        // On a layer with a picture, that picture is the shape.
         assert_eq!(greyed(&inst, true), ["width"]);
-        // A box wants its size and no channel, wherever it sits.
         inst.params.push(crate::model::EffectParam {
             id: "shape".into(),
             value: crate::model::EffectValue::Choice(1),
@@ -667,9 +638,6 @@ mod tests {
         assert_eq!(greyed(&inst, true), ["channel"]);
     }
 
-    /// A fresh instance's points land on its own raster, not on 1080p's, so
-    /// a corner pinned to the frame's corner starts with no change. Guards
-    /// wrong pixels on apply.
     #[test]
     fn a_fresh_instance_puts_its_points_on_the_raster() {
         const SHADER: &str = r"

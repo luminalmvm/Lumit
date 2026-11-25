@@ -14,7 +14,6 @@ use super::fx_colour::Fx;
 use super::table::Row;
 use super::Conv;
 
-/// The leaf the effect calls `name`, and its match name.
 fn named(node: &Property, name: &str) -> String {
     fn walk<'a>(props: &'a [Property], out: &mut Vec<&'a Property>) {
         for p in props {
@@ -34,7 +33,6 @@ fn named(node: &Property, name: &str) -> String {
         .unwrap_or_default()
 }
 
-/// The controls the two effects share.
 fn shared(conv: &mut Conv<'_>, fx: &mut Fx<'_>, node: &Property) {
     let id = |name: &str| named(node, name);
     fx.set("source", EffectValue::Choice(SOURCE_LAYER));

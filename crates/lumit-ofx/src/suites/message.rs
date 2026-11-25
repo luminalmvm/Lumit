@@ -1,13 +1,3 @@
-//! `OfxMessageSuiteV1` — what a plugin says to the user.
-//!
-//! # In plain terms
-//!
-//! Plugins occasionally want to tell someone something: an error, a warning,
-//! or a yes/no question. There is nowhere to put those yet — the panel that
-//! shows them arrives with the out-of-process broker — so they are kept in a
-//! short list on the host and a question is answered "you decide", which is
-//! the reply OFX defines for a host that cannot ask.
-
 use std::ffi::{c_char, c_int, c_void};
 
 use crate::ffi::{message_types, OfxMessageSuiteV1, OfxMessageSuiteV2};
@@ -15,7 +5,6 @@ use crate::host::{state, HostMessage};
 use crate::status::Status;
 use crate::suites::{cstr, guard_code};
 
-/// The table handed out by `fetchSuite`.
 pub static SUITE: OfxMessageSuiteV1 = OfxMessageSuiteV1 { message };
 
 /// Version 2: the same `message`, plus a persistent one. A persistent message

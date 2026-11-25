@@ -21,11 +21,8 @@ use lumit_core::stabilise::analysis::{Run, Step};
 
 use super::StabiliseError;
 
-/// Below this many usable steps the clip says too little, and nothing is
-/// corrected.
 const MIN_STEPS: usize = 12;
 
-/// Below this many agreeing specks a step is left out of the fit.
 const MIN_PAIRS: usize = 8;
 
 /// The least squared predicted miss, in pixels of the raster the specks were
@@ -53,7 +50,6 @@ fn moved(s: [f64; 4], q: [f64; 2]) -> [f64; 2] {
     ]
 }
 
-/// The sums one axis gathers over every step.
 #[derive(Default, Clone, Copy)]
 struct Sums {
     /// Σ b⊥·e⊥: the predicted miss against the measured one.
@@ -191,8 +187,6 @@ pub fn readout(
     if used < MIN_STEPS {
         return Ok([0.0; 2]);
     }
-    // The axis whose fit explains more of the misses; the other is left at
-    // nought.
     let signal = MIN_SIGNAL * scale * scale;
     let explained = |s: &Sums| {
         if s.bb > signal * pairs as f64 {

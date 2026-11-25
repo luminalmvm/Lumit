@@ -38,9 +38,7 @@ struct Params {
     ch: u32,
     npx: u32,
     npy: u32,
-    /// Inverse-search iteration cap (Vector detail) — was a shader constant.
     iters: u32,
-    /// Smoothing flow-range sigma² (Smoothness) — was a shader constant.
     flow_sigma2: f32,
     pad0: u32,
     pad1: u32,
@@ -67,7 +65,6 @@ struct Pipelines {
     inverse_search: wgpu::ComputePipeline,
     densify: wgpu::ComputePipeline,
     smooth: wgpu::ComputePipeline,
-    // Variational refinement.
     vr_warp: wgpu::ComputePipeline,
     vr_init_duv: wgpu::ComputePipeline,
     vr_deriv: wgpu::ComputePipeline,
@@ -98,7 +95,6 @@ struct LevelBinds {
     search: wgpu::BindGroup,
     densify: wgpu::BindGroup,
     smooth: wgpu::BindGroup,
-    /// The refinement passes, in dispatch order.
     vr_warp: wgpu::BindGroup,
     vr_init_duv: wgpu::BindGroup,
     vr_deriv: wgpu::BindGroup,
@@ -250,7 +246,6 @@ impl GpuFlow {
         };
         let dummy_ro = mk_dummy("dis-dummy-ro");
         let dummy_rw = mk_dummy("dis-dummy-rw");
-        // The texture entry point's own pipeline (docs/08 §3.2).
         let luma_shader = ctx
             .device
             .create_shader_module(wgpu::include_wgsl!("luma.wgsl"));
@@ -356,7 +351,6 @@ impl GpuFlow {
             return Err(FlowError::Pipeline("plan missing".into()));
         };
 
-        // Upload the two full-res lumas; the pyramid is built on the GPU.
         self.ctx
             .queue
             .write_buffer(&plan.levels[0].luma_a, 0, bytemuck::cast_slice(&a.data));
@@ -466,7 +460,6 @@ impl GpuFlow {
         self.solve()
     }
 
-    /// Build (or rebuild) the plan for this working size and these settings.
     fn ensure_plan(
         &mut self,
         w: usize,
@@ -576,7 +569,6 @@ impl GpuFlow {
         encoder.copy_buffer_to_buffer(&plan.levels[0].dense_ba, 0, &plan.staging, n, n);
         self.ctx.queue.submit([encoder.finish()]);
 
-        // Read both fields back.
         let slice = plan.staging.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
@@ -728,7 +720,6 @@ impl GpuFlow {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        // Prebuild every dispatch's bind group (~70 per resolution).
         let mut pyramid_binds = Vec::new();
         for l in 1..levels.len() {
             let lv = &levels[l];

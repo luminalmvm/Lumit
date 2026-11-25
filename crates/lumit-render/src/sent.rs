@@ -15,8 +15,6 @@ use uuid::Uuid;
 
 use crate::{planes, roto, sidecar, track};
 
-/// Every analysis `doc` could be holding: what it is filed under, and where
-/// this machine keeps its file, there or not.
 #[must_use]
 pub fn files(doc: &Document) -> Vec<(Uuid, PathBuf)> {
     let mut out = Vec::new();
@@ -51,7 +49,6 @@ pub fn adopt(doc: &Document, id: Uuid, bytes: &[u8]) -> bool {
     true
 }
 
-/// What [`keep`] wrote, to be read into the store.
 enum Kept {
     Plane(planes::PlaneJob),
     Brush(roto::RotoJob),

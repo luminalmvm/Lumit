@@ -35,8 +35,6 @@ const W: u32 = 1920;
 const H: u32 = 1080;
 const FPS: u32 = 60;
 
-/// A comp-sized white solid, anchored and placed at the centre, the way
-/// `add_solid_layer` seeds one (`centred_transform`).
 fn solid_layer(def: Uuid) -> Layer {
     use lumit_core::anim::Property;
     Layer {
@@ -84,8 +82,6 @@ fn solid_layer(def: Uuid) -> Layer {
     }
 }
 
-/// The project: one comp, one white solid, and `effects` on it — empty for the
-/// control, one default Particulate for the subject.
 fn project(effects: Vec<lumit_core::model::EffectInstance>) -> (Arc<Document>, Uuid) {
     let def = Uuid::now_v7();
     let mut doc = Document::new();
@@ -133,13 +129,10 @@ fn project(effects: Vec<lumit_core::model::EffectInstance>) -> (Arc<Document>, U
     (Arc::new(doc), comp_id)
 }
 
-/// A fresh Particulate at its declared defaults — `Add effect -> Particulate`
-/// and nothing else, which is exactly what the owner did.
 fn default_particulate() -> lumit_core::model::EffectInstance {
     lumit_core::fx::builtins::instantiate("particulate").expect("particulate is a built-in")
 }
 
-/// Sets one parameter on an instance, for the fiddling half of the report.
 fn set(inst: &mut lumit_core::model::EffectInstance, id: &str, v: EffectValue) {
     for p in &mut inst.params {
         if p.id == id {
@@ -154,7 +147,6 @@ fn f(v: f64) -> EffectValue {
     EffectValue::Float(lumit_core::anim::Property::fixed(v))
 }
 
-/// How many pixels differ from the control render, and by how much at worst.
 fn diff(a: &[u8], b: &[u8]) -> (usize, u8) {
     let mut n = 0;
     let mut worst = 0u8;
@@ -236,8 +228,6 @@ fn a_huge_emit_rate_renders_instead_of_faulting_the_device() {
         .render_rgba(&bare_doc, bare_comp, 60, 1.0)
         .expect("the bare solid renders");
 
-    // Ten million a second, and again with the budget dial at its hard ceiling
-    // so the stream buffer is at its largest at the same time.
     for (what, rate, cap) in [
         ("ten million a second", 10_000_000.0, None),
         ("and at the hard cap", 10_000_000.0, Some(1_000_000.0)),
@@ -284,8 +274,6 @@ fn a_huge_emit_rate_renders_instead_of_faulting_the_device() {
     );
 }
 
-// ------------------------------------------------ the third axis
-
 /// **The generators go through the same door**: dropping Grid or Scatter on a
 /// solid draws something, at the raster the comp asks for.
 ///
@@ -316,13 +304,10 @@ fn the_generators_draw_on_a_solid_through_the_document() {
             "{name} on a solid changed {n} pixels by at most {worst}/255 — that is not a field \
              of points"
         );
-        // Twice is once: there is no clock in either of them.
         let (again, ..) = r
             .render_rgba(&doc, comp, 60, 1.0)
             .expect("the generator renders again");
         assert_eq!(drawn, again, "{name} drew two different pictures");
-        // And no clock means the frame does not matter, which is the whole
-        // claim of a generator against a particle system.
         let (later, ..) = r
             .render_rgba(&doc, comp, 300, 1.0)
             .expect("the generator renders later");
@@ -330,9 +315,6 @@ fn the_generators_draw_on_a_solid_through_the_document() {
     }
 }
 
-/// **Particles in the scene meet a 3D solid by depth**: a row of particles
-/// running from in front of a solid to behind it shows where it is in front
-/// and is hidden where it is behind.
 #[test]
 fn a_3d_solid_hides_the_particles_in_the_scene_behind_it() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -387,8 +369,6 @@ fn a_3d_solid_hides_the_particles_in_the_scene_behind_it() {
     );
 }
 
-/// **A collapsed precomp takes its particles in the scene with it**, as it
-/// takes the layers beside them.
 #[test]
 fn a_collapsed_precomp_carries_its_particles_in_the_scene() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -406,8 +386,6 @@ fn a_collapsed_precomp_carries_its_particles_in_the_scene() {
     ] {
         set(&mut fx, id, v);
     }
-    // Where the bright pixels' middle is across the frame, with the precomp `by`
-    // pixels along.
     let mut middle = |by: f64| {
         let (doc, inner) = project(vec![fx.clone()]);
         let mut doc = Arc::unwrap_or_clone(doc);

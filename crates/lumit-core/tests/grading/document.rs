@@ -15,8 +15,6 @@ use lumit_core::store::DocumentStore;
 
 use crate::support::{comp_of, fx, stack_of};
 
-/// Commit `op`, then check one undo puts back exactly the document before it
-/// and one redo the one after. Answers the document after.
 fn step(store: &DocumentStore, op: Option<Op>) -> Arc<Document> {
     let before = store.snapshot();
     let after = store
@@ -40,7 +38,6 @@ fn versions_groups_shared_nodes_and_memories_survive_save_and_undo() {
     let store = DocumentStore::new(doc);
     let [s0, s1, s2] = [shots[0], shots[1], shots[2]];
 
-    // A group of two: each member wears a Pre and a Post round its grade.
     let (g, op) = groups::create(&store.snapshot(), &[s0, s1]).unwrap();
     let doc = step(&store, Some(op));
     assert_eq!(groups::members(&doc, g), vec![s0, s1]);
@@ -50,7 +47,6 @@ fn versions_groups_shared_nodes_and_memories_survive_save_and_undo() {
     );
     assert_eq!(names(&doc, s2), ["correction"]);
 
-    // The group's Pre list goes where each member's Pre reference stands.
     let exposure = fx("exposure", &[]);
     let op = groups::set_list(&doc, g, Part::Pre, vec![exposure.clone()]).unwrap();
     let doc = step(&store, op);
@@ -72,14 +68,11 @@ fn versions_groups_shared_nodes_and_memories_survive_save_and_undo() {
     assert_eq!(groups::rename(&doc, g, "Faces"), Ok(None));
     assert_eq!(groups::group(&doc, g).unwrap().name, "Faces");
 
-    // The third shot joins, the second leaves.
     let doc = step(&store, groups::set_group(&doc, s2, Some(g)).unwrap());
     let doc = step(&store, groups::set_group(&doc, s1, None).unwrap());
     assert_eq!(groups::members(&doc, g), vec![s0, s2]);
     assert_eq!(names(&doc, s1), ["correction"]);
 
-    // Versions on the second shot: a copy, switched to and back, renamed,
-    // and the live one deleted.
     let original = stack_of(&doc, s1)[0].id;
     let (second, op) = versions::add(&doc, s1, true).unwrap();
     let doc = step(&store, op);
@@ -103,7 +96,6 @@ fn versions_groups_shared_nodes_and_memories_survive_save_and_undo() {
     assert_eq!((set.live, set.versions[0].name.as_str()), (second, "Warm"));
     assert_eq!(stack_of(&doc, s1)[0].id, original, "the original is back");
 
-    // The first shot's grade node shared with the second.
     let node = stack_of(&doc, s0)[1].id;
     let (n, op) = shared::share(&doc, s0, node, &[s1]).unwrap();
     let doc = step(&store, Some(op));
@@ -119,8 +111,6 @@ fn versions_groups_shared_nodes_and_memories_survive_save_and_undo() {
         Err(GradeError::UnknownGroup)
     );
 
-    // A memory in slot 1; slot 9 doesn't exist, and keeping the same again
-    // changes nothing.
     let memory = GradeMemory {
         slot: 0,
         grade: "[]".into(),
@@ -131,14 +121,11 @@ fn versions_groups_shared_nodes_and_memories_survive_save_and_undo() {
     assert!(memories::set(&doc, 9, Some(memory.clone())).is_none());
     assert!(memories::set(&doc, 1, Some(memory)).is_none());
 
-    // Save and open.
     let text = serde_json::to_string(&*doc).unwrap();
     let opened: Document = serde_json::from_str(&text).unwrap();
     assert_eq!(opened, *doc);
     assert_eq!(serde_json::to_string(&opened).unwrap(), text);
 
-    // Unsharing hands each user its own copy; deleting the group takes its
-    // references out of every member.
     let doc = step(&store, Some(shared::unshare(&doc, n).unwrap()));
     assert_eq!(shared::nodes(&doc).count(), 0);
     let doc = step(&store, Some(groups::delete(&doc, g).unwrap()));

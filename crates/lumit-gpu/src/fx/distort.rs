@@ -445,7 +445,6 @@ struct MeshWarpParams {
 /// `lumit_core::fx::cpu::WarpParams`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WarpOp {
-    /// Which of the thirteen bends, in §3.56's table order.
     pub style: u32,
     /// Bend ÷ 100, −1..1.
     pub bend: f32,
@@ -472,9 +471,6 @@ struct WarpParams {
 }
 
 impl FxEngine {
-    /// Apply one Ripple (docs/08 §3.53) to a linear working texture, returning a
-    /// new texture of the same size. One sine and cosine and one bilinear tap a
-    /// pixel.
     pub fn ripple(
         &self,
         ctx: &GpuContext,
@@ -511,9 +507,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Wave warp (docs/08 §3.54) to a linear working texture,
-    /// returning a new texture of the same size. One wave shape and one bilinear
-    /// tap a pixel.
     pub fn wave_warp(
         &self,
         ctx: &GpuContext,
@@ -549,9 +542,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Bezier warp (docs/08 §3.55) to a linear working texture,
-    /// returning a new texture of the same size. Up to twelve Newton steps a
-    /// pixel, each a Coons patch evaluation and its Jacobian.
     pub fn bezier_warp(
         &self,
         ctx: &GpuContext,
@@ -662,9 +652,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Warp (docs/08 §3.56) to a linear working texture, returning a
-    /// new texture of the same size. One style evaluation and one bilinear tap a
-    /// pixel — thirteen styles, one kernel.
     pub fn warp(
         &self,
         ctx: &GpuContext,
@@ -810,9 +797,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Twirl (docs/08 §3.51) to a linear working texture, returning a
-    /// new texture of the same size. One sine/cosine pair and one bilinear tap a
-    /// pixel.
     pub fn twirl(
         &self,
         ctx: &GpuContext,
@@ -845,9 +829,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Spherize (docs/08 §3.52) to a linear working texture, returning
-    /// a new texture of the same size. One arc sine or sine and one bilinear tap
-    /// a pixel.
     pub fn spherize(
         &self,
         ctx: &GpuContext,
@@ -965,8 +946,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Offset (docs/08 §3.40) to a linear working texture, returning a
-    /// new texture of the same size. One wrapped bilinear tap a pixel.
     #[allow(clippy::too_many_arguments)]
     pub fn offset(
         &self,
@@ -1034,9 +1013,6 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Lens distort (docs/08 §3.42) to a linear working texture,
-    /// returning a new texture of the same size. One tangent (or arc tangent)
-    /// and one bilinear tap a pixel.
     pub fn lens_distort(
         &self,
         ctx: &GpuContext,

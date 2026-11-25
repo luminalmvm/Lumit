@@ -49,7 +49,6 @@ pub(super) fn read_gradient(
     leaf
 }
 
-/// The two lists of stops out of one document, or `None` when it has none.
 fn stops(xml: &str) -> Option<Value> {
     let colours_at = xml.find("<key>Color Stops</key>")?;
     let alphas_at = xml.find("<key>Alpha Stops</key>")?;
@@ -71,7 +70,6 @@ fn stops(xml: &str) -> Option<Value> {
     (!colours.is_empty()).then(|| json!({ "colours": colours, "alphas": alphas }))
 }
 
-/// Every `<array>` of `<float>`s in `xml`, in order.
 fn arrays(xml: &str) -> Vec<Vec<f64>> {
     xml.split("<array>")
         .skip(1)

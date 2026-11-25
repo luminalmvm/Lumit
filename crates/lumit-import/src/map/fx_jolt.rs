@@ -11,7 +11,6 @@ use super::fx_colour::Fx;
 use super::props::match_name_of;
 use super::Conv;
 
-/// This file's claim on a match name: the row whose conversion is `twitch`.
 pub(super) fn claim(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -30,7 +29,6 @@ pub(super) fn claim(
     fx.done()
 }
 
-/// Every leaf under `props`, with the groups opened.
 fn leaves<'a>(props: &'a [AeProperty], out: &mut Vec<&'a AeProperty>) {
     for p in props {
         match &p.group {
@@ -56,7 +54,6 @@ const CARRIED: [(&str, &str, f64, f64); 9] = [
     ("Time Amount", "time_amount", 1.0, 0.0),
 ];
 
-/// Twitch's checkboxes onto Jolt's switches.
 const SWITCHES: [(&str, &str); 6] = [
     ("Blur", "blur_on"),
     ("Color", "colour_on"),
@@ -66,8 +63,6 @@ const SWITCHES: [(&str, &str); 6] = [
     ("Time", "time_on"),
 ];
 
-/// Everything Jolt has a row for comes across. Anything else that is set is
-/// reported as not carried.
 fn twitch(conv: &mut Conv<'_>, node: &AeProperty, fx: &mut Fx<'_>) {
     let mut all = Vec::new();
     leaves(node.children(), &mut all);

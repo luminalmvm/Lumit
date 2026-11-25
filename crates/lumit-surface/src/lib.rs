@@ -41,7 +41,6 @@ use std::sync::{Arc, Mutex};
 use midi::{Encoding, MidiControl, MidiMapping};
 use table::Axis;
 
-/// Something a person did on a surface.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     /// Move Correction row `param` by `by`, in the row's own units. For a
@@ -57,18 +56,24 @@ pub enum Event {
         param: &'static str,
         axis: Option<Axis>,
     },
-    /// A button pressed (`down`) or let go.
-    Action { action: &'static str, down: bool },
+    Action {
+        action: &'static str,
+        down: bool,
+    },
     /// Step `menu` by one either way, or with 0 put it back to its first
     /// item.
-    Menu { menu: &'static str, step: i32 },
-    /// Move the playhead by `frames`.
-    Jog { frames: i32 },
+    Menu {
+        menu: &'static str,
+        step: i32,
+    },
+    Jog {
+        frames: i32,
+    },
     /// One step along the playback ladder, 1 forwards or -1 back.
-    Shuttle { step: i32 },
-    /// Where Tangent panels stand now.
+    Shuttle {
+        step: i32,
+    },
     Tangent(TangentStatus),
-    /// The MIDI input ports on the system now, by name.
     Ports(Vec<String>),
     /// MIDI learn heard `control`, which most likely reads as `encoding`.
     /// Learning stops.
@@ -78,7 +83,6 @@ pub enum Event {
     },
 }
 
-/// Where Tangent panels stand.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TangentStatus {
     Off,
@@ -157,7 +161,6 @@ impl Shared {
 /// Every surface this Lumit talks to. One for the whole run.
 pub struct Surfaces {
     shared: Arc<Shared>,
-    /// The Tangent thread's stop flag while panels are on.
     tangent: Mutex<Option<Arc<AtomicBool>>>,
     #[cfg(not(target_arch = "wasm32"))]
     midi: Mutex<Option<std::sync::mpsc::SyncSender<ports::Msg>>>,
@@ -209,7 +212,6 @@ impl Surfaces {
         }
     }
 
-    /// Where Tangent panels stand.
     pub fn tangent_status(&self) -> TangentStatus {
         self.shared
             .status
@@ -236,12 +238,10 @@ impl Surfaces {
             .unwrap_or_default()
     }
 
-    /// Keep the ports called `names` open, opening each when it appears.
     pub fn set_midi_inputs(&self, names: Vec<String>) {
         self.midi_send(Some(MidiOrder::Want(names)));
     }
 
-    /// Drive targets from these learned controls.
     pub fn set_midi_mappings(&self, mappings: Vec<MidiMapping>) {
         self.midi_send(Some(MidiOrder::Mappings(mappings)));
     }
@@ -252,7 +252,6 @@ impl Surfaces {
         self.midi_send(Some(MidiOrder::Learn(on)));
     }
 
-    /// Start the MIDI thread if it is not running, and give it `order`.
     #[cfg(not(target_arch = "wasm32"))]
     fn midi_send(&self, order: Option<MidiOrder>) {
         let Ok(mut midi) = self.midi.lock() else {

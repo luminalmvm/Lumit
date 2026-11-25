@@ -35,13 +35,11 @@ fn size(path: &Path) -> u64 {
 }
 
 impl Carrier {
-    /// Where the file for the analysis held under `id` is put as it arrives.
     fn sent_to(&self, id: Uuid) -> Option<PathBuf> {
         let folder = kept_under(self.root.as_deref())?.join("analyses");
         Some(folder.join(id.to_string()))
     }
 
-    /// This machine's file for `id`, to send.
     pub(super) fn analysis_file(&self, doc: &Document, id: Uuid) -> Option<PathBuf> {
         let (_, _, path) = analyses(doc).into_iter().find(|kept| kept.0 == id)?;
         (GIVE.load(Ordering::Relaxed) && path.is_file()).then_some(path)

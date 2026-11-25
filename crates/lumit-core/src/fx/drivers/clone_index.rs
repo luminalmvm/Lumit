@@ -19,13 +19,11 @@ use crate::model::{Document, EffectInstance, Layer, LayerKind};
 use lumit_fx_macros::Effect;
 use uuid::Uuid;
 
-/// The name the driver is looked up by.
 pub const MATCH_NAME: &str = "clone_index";
 
 /// The dice Random rolls, kept off the numbers the points effects use.
 const RANDOM_ATTR: u32 = 50;
 
-/// Clone index's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "clone_index",
@@ -37,14 +35,12 @@ const RANDOM_ATTR: u32 = 50;
     matte = false,
 )]
 pub struct CloneIndex {
-    /// Which dice Random rolls.
     #[seed]
     pub seed: u32,
 }
 
 /// The port the copy's number leaves by, counted from 0.
 pub const INDEX_PORT: &str = "index";
-/// The port the number of copies leaves by.
 pub const COUNT_PORT: &str = "count";
 /// The port the number as a fraction leaves by: 0 at the first copy, 1 at
 /// the last.
@@ -52,7 +48,6 @@ pub const NORMALISED_PORT: &str = "normalised";
 /// The port the copy's own roll leaves by, 0 up to 1.
 pub const RANDOM_PORT: &str = "random";
 
-/// Whether `graph` holds a Clone index that is switched on.
 #[must_use]
 pub fn present(graph: &LayerGraph) -> bool {
     graph
@@ -91,7 +86,6 @@ fn in_layer(doc: &Document, layer: &Layer, seen: &mut Vec<Uuid>) -> bool {
     applied(doc, &layer.effects, seen)
 }
 
-/// The node graphs a stack's Node graph effects apply.
 fn applied(doc: &Document, effects: &[EffectInstance], seen: &mut Vec<Uuid>) -> bool {
     effects
         .iter()
@@ -124,7 +118,6 @@ fn in_comp(doc: &Document, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
     })
 }
 
-/// Clone index's behaviour.
 pub struct CloneIndexDef;
 
 impl EffectDef for CloneIndexDef {

@@ -22,8 +22,6 @@ struct Params {
     paint: u32,
 };
 
-// ---- The SICELIOT texture helpers: the same text in every SICELIOT texture ----
-
 // A point in layer pixels turned by -angle about centre: the pattern turns.
 fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     let d = px - centre;
@@ -31,7 +29,6 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -50,7 +47,6 @@ fn cm_ring(q: vec2<f32>, c: vec2<f32>) -> vec2<f32> {
 }
 
 fn cm_lit(across: f32) -> vec4<f32> {
-    // A round wire seen from above: brightest along its middle.
     let n = sqrt(max(1.0 - across * across, 0.0));
     let k = mix(1.0, 0.25 + 0.75 * n, p.shading / 100.0);
     let c = lumit_premult(p.metal);
@@ -84,7 +80,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             if (fract(atan2(d.y, d.x) / 1.5707963) < 0.5) {
                 out = mix(out, cm_lit(a.y), a.x);
             } else {
-                // Under: drawn only where no B wire covers it.
                 var under = 0.0;
                 for (var m = -1; m <= 1; m += 1) {
                     for (var n = -1; n <= 1; n += 1) {

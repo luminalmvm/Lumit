@@ -1,5 +1,3 @@
-//! The commands themselves: the table, and one function each.
-
 mod comps;
 mod effects;
 mod grade;
@@ -45,8 +43,6 @@ macro_rules! time {
         r#"{"oneOf":[{"type":"integer","description":"A frame on the comp's rate"},{"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false,"description":"Exact seconds"}]}"#
     };
 }
-// How a key meets the curve on one side, and an ease as After Effects gives
-// one.
 macro_rules! ease {
     () => {
         r#"{"type":"object","properties":{"speed":{"type":"number","description":"Units a second"},"influence":{"type":"number","minimum":0.1,"maximum":100,"description":"Per cent of the span"}},"additionalProperties":false}"#
@@ -63,7 +59,6 @@ macro_rules! side {
         )
     };
 }
-// One key whose value is `$value`.
 macro_rules! key {
     ($value:literal) => {
         concat!(
@@ -84,7 +79,6 @@ macro_rules! expression {
         r#"{"type":"string","description":"A JavaScript expression, as After Effects writes them"}"#
     };
 }
-// One `layer.keys` form: the properties named, and the value each takes.
 macro_rules! keys_form {
     ($names:literal, $value:literal) => {
         concat!(
@@ -109,8 +103,6 @@ macro_rules! rate {
         r#"{"description":"1 to 999 frames a second","oneOf":[{"type":"integer","minimum":1,"maximum":999},{"type":"object","properties":{"num":{"type":"integer","minimum":1},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false}]}"#
     };
 }
-// Controls and the values to set them to, as `comp.controls` and
-// `layer.values` take them.
 macro_rules! control_values {
     () => {
         r#"{"type":"object","description":"Control, by id or label, to its value: a number, a point as [x, y], a colour as #RRGGBB or [r, g, b, a] scene-linear, true or false, a menu option's name or number from 0, text, a font as {family, face}, or a footage item's or comp's id or name"}"#
@@ -128,7 +120,6 @@ macro_rules! comp_settings {
     };
 }
 
-/// Every command, in the order a list of them reads best.
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "project.info",
@@ -772,7 +763,6 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
     })
 }
 
-/// The layer `id` of comp `comp` as the store now holds it.
 fn layer_now(store: &DocumentStore, comp: Uuid, id: Uuid) -> Result<Value, ScriptError> {
     let doc = store.snapshot();
     let comp = doc

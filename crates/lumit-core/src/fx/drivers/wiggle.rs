@@ -18,7 +18,6 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Wiggle's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "wiggle",
@@ -43,10 +42,8 @@ pub struct Wiggle {
     pub frequency: f32,
 }
 
-/// The port Wiggle's number leaves by.
 pub const VALUE_PORT: &str = "value";
 
-/// Wiggle's behaviour.
 pub struct WiggleDef;
 
 impl EffectDef for WiggleDef {

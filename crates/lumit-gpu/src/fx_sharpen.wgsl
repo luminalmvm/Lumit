@@ -84,7 +84,6 @@ fn sharpen_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     let o = textureLoad(orig, xy, 0);
     let b = textureLoad(src, xy, 0).rgb;
     let u = unpremult(o);
-    // The matte scales Amount per pixel: less detail added back.
     var amount = p.amount;
     if (p.matte_on != 0.0) {
         amount = amount * matte_k(xy);

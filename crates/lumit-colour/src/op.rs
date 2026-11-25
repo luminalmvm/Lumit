@@ -59,7 +59,6 @@ pub struct LogParams {
 }
 
 impl LogParams {
-    /// `LogTransform`: plain `log_base(x)`.
     #[must_use]
     pub fn plain(base: f32) -> Self {
         Self {
@@ -86,7 +85,6 @@ impl LogParams {
 pub struct GammaLogParams {
     /// The linear value the curve is odd about. Zero for HLG.
     pub mirror: f32,
-    /// The linear value the power curve gives way to the logarithm at.
     pub brk: f32,
     pub gamma_power: f32,
     pub gamma_slope: f32,
@@ -97,7 +95,6 @@ pub struct GammaLogParams {
     pub lin_offset: f32,
 }
 
-/// One ASC CDL step: slope, offset, power per channel, then saturation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CdlParams {
     pub slope: [f32; 3],
@@ -140,7 +137,6 @@ pub struct GradingRgbm {
 }
 
 impl GradingRgbm {
-    /// The same number in all four slots, which is how every default reads.
     #[must_use]
     pub fn flat(value: f64) -> Self {
         Self {
@@ -184,7 +180,6 @@ pub struct GradingPrimary {
 }
 
 impl GradingPrimary {
-    /// A style's own defaults, which is what a config's unstated keys mean.
     #[must_use]
     pub fn new(style: GradingStyle) -> Self {
         Self {
@@ -234,8 +229,6 @@ impl GradingRgbmsw {
     }
 }
 
-/// `GradingToneTransform`'s five bands and its S-shaped contrast, as the config
-/// writes them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradingToneValues {
     pub style: GradingStyle,
@@ -248,8 +241,6 @@ pub struct GradingToneValues {
 }
 
 impl GradingToneValues {
-    /// A style's own defaults. The five bands sit in different places in a log
-    /// range than in a linear one, which is what these numbers are.
     #[must_use]
     pub fn new(style: GradingStyle) -> Self {
         let (blacks, shadows, midtones, highlights, whites) = match style {
@@ -305,7 +296,6 @@ struct TonePreRender {
     sc_m: [[f32; 2]; 2],
 }
 
-/// One tone grade: the config's values, and the knots they work out to.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradingTone {
     pub values: GradingToneValues,
@@ -350,7 +340,6 @@ pub enum Negatives {
     PassThru,
 }
 
-/// One step of a resolved chain.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Matrix(Matrix34),
@@ -411,7 +400,6 @@ pub enum Op {
         params: Box<GradingPrimary>,
         dir: Direction,
     },
-    /// `GradingToneTransform`, values and pre-render together.
     GradingTone {
         params: Box<GradingTone>,
         dir: Direction,
@@ -596,8 +584,6 @@ fn gamma_log_slope(p: &GammaLogParams) -> f32 {
     p.log_slope / denom
 }
 
-/// Scene light to code value: the power curve below the break, the logarithm
-/// above it, both about the mirror point.
 fn gamma_log_forward(p: &GammaLogParams, x: f32) -> f32 {
     let mirrored = x - p.mirror;
     let e = mirrored.abs() + p.mirror;
@@ -609,8 +595,6 @@ fn gamma_log_forward(p: &GammaLogParams, x: f32) -> f32 {
     code * mirrored.signum()
 }
 
-/// And back. The break in code values is where the power curve reaches it, so
-/// the two halves meet in both directions by construction.
 fn gamma_log_inverse(p: &GammaLogParams, y: f32) -> f32 {
     let at = |x: f32| p.gamma_slope * (x + p.gamma_offset).max(0.0).powf(p.gamma_power);
     let (mirror, brk) = (at(p.mirror), at(p.brk));
@@ -633,7 +617,6 @@ fn gamma_log_inverse(p: &GammaLogParams, y: f32) -> f32 {
     e * mirrored.signum()
 }
 
-/// The Rec.2100 luma weights, which the surround op is defined with.
 const REC2100_LUMA: [f32; 3] = [0.2627, 0.6780, 0.0593];
 
 /// The luminance is floored before the power so a colour whose channels are far
@@ -726,10 +709,8 @@ fn cpp_clamp(x: f32, lo: f32, hi: f32) -> f32 {
     }
 }
 
-/// The master slot, which runs on all three channels rather than on one.
 const CH_MASTER: usize = 3;
 
-/// Apply one curve to the channel a step names, or to all three for the master.
 fn on_channels(channel: usize, out: &mut [f32; 3], f: impl Fn(f32) -> f32) {
     if channel == CH_MASTER {
         for c in out.iter_mut() {
@@ -740,8 +721,6 @@ fn on_channels(channel: usize, out: &mut [f32; 3], f: impl Fn(f32) -> f32) {
     }
 }
 
-/// The per channel numbers the primary pixel loop reads, worked out from the
-/// config's values and the direction it runs in.
 #[derive(Debug, Clone, Copy)]
 struct PrimaryComputed {
     brightness: [f32; 3],
@@ -965,8 +944,6 @@ fn primary_eval(v: &GradingPrimary, dir: Direction, rgb: [f32; 3]) -> [f32; 3] {
     p
 }
 
-// -- the tone grade ---------------------------------------------------------
-
 fn tone_channel(v: &GradingRgbmsw, channel: usize) -> f32 {
     match channel {
         0 => v.rgb[0] as f32,
@@ -1001,7 +978,6 @@ fn faux_cubic_forward(t: f64, x0: f64, x2: f64, m0: f64, m2: f64) -> f64 {
     res
 }
 
-/// The same shape read the other way: given a value, which input made it.
 fn faux_cubic_reverse(t: f64, x0: f64, x2: f64, m0: f64, m2: f64) -> f64 {
     let (y0, y2) = (x0, x2);
     let x1 = x0 + (x2 - x0) * 0.5;
@@ -1034,8 +1010,6 @@ fn band_slope(val: f64) -> f64 {
     }
 }
 
-/// Where the highlight band puts a value, used to move the white band's own
-/// start and width onto the curve the highlights have already made.
 fn highlight_forward(t: f64, start: f64, pivot: f64, val: f64) -> f64 {
     // Either side of one is the same curve run the other way round.
     let val = 2.0 - val;
@@ -1046,7 +1020,6 @@ fn highlight_forward(t: f64, start: f64, pivot: f64, val: f64) -> f64 {
     }
 }
 
-/// The shadow band's version of the same.
 fn shadow_forward(t: f64, start: f64, pivot: f64, val: f64) -> f64 {
     if val <= 1.0 {
         faux_cubic_forward(t, start, pivot, band_slope(val), 1.0)
@@ -1067,8 +1040,6 @@ fn tone_is_identity(v: &GradingToneValues) -> bool {
 
 fn tone_prerender(v: &GradingToneValues) -> TonePreRender {
     let mut p = TonePreRender::default();
-    // Where the style puts the top and bottom of the range it grades over, and
-    // the middle its S contrast turns about.
     let (top, top_sc, bottom, pivot) = match v.style {
         GradingStyle::Log | GradingStyle::Video => (1.0_f32, 1.0_f32, 0.0_f32, 0.4_f32),
         GradingStyle::Lin => (7.5, 6.5, -5.5, 0.0),
@@ -1106,7 +1077,6 @@ fn tone_prerender(v: &GradingToneValues) -> TonePreRender {
     p.whites_start = new_start;
     p.whites_width = new_end - new_start;
 
-    // And the blacks ride on the shadows the same way.
     let sh_pivot = v.shadows.width;
     p.shadows_start = if v.shadows.start < sh_pivot + 0.01 {
         sh_pivot + 0.01
@@ -1198,7 +1168,6 @@ fn tone_mids_precompute(v: &GradingToneValues, p: &mut TonePreRender, top: f32, 
     }
 }
 
-/// The shadow and highlight bands: three knots each, one curve per channel.
 fn tone_hs_precompute(v: &GradingToneValues, p: &mut TonePreRender) {
     for band in 0..2 {
         let is_shadow = band == 1;
@@ -1249,8 +1218,6 @@ fn tone_hs_precompute(v: &GradingToneValues, p: &mut TonePreRender) {
     }
 }
 
-/// The white and black bands: two knots each, a straight run whose slope the
-/// band's value sets, with a gain for the increasing case.
 fn tone_wb_precompute(v: &GradingToneValues, p: &mut TonePreRender) {
     for band in 0..2 {
         let is_black = band == 1;
@@ -1370,7 +1337,6 @@ fn tone_sc_precompute(
     }
 }
 
-/// One segment of a piecewise-quadratic run, evaluated forwards.
 fn quad_forward(t: f32, x: &[f32], y: &[f32], m: &[f32], i: usize) -> f32 {
     let step = x[i + 1] - x[i];
     let local = (t - x[i]) / step;
@@ -1742,7 +1708,6 @@ mod lin_log {
     pub const GAIN: f32 = 363.034_6;
     pub const OFFS: f32 = -7.0;
     pub const YBRK: f32 = -5.5;
-    /// The reference writes this out as 1.4426950408889634, which is log2(e).
     pub const BASE2: f32 = std::f32::consts::LOG2_E;
 }
 
@@ -1842,7 +1807,6 @@ fn range_apply(p: &RangeParams, x: f32) -> f32 {
 }
 
 impl Op {
-    /// The name this op answers to in a refusal sentence.
     #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
@@ -1863,7 +1827,6 @@ impl Op {
         }
     }
 
-    /// Apply this step to one colour.
     #[must_use]
     pub fn eval(&self, rgb: [f32; 3]) -> [f32; 3] {
         match self {
@@ -2071,8 +2034,6 @@ impl Op {
     }
 }
 
-/// A resolved chain: the flat, ordered list of steps that *is* a transform once
-/// every config-level indirection has been followed (docs/impl/ocio.md §4.2).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Chain {
     pub ops: Vec<Op>,
@@ -2112,7 +2073,6 @@ impl Chain {
         Self { ops: folded }
     }
 
-    /// The chain that does nothing.
     #[must_use]
     pub fn identity() -> Self {
         Self { ops: Vec::new() }
@@ -2123,13 +2083,11 @@ impl Chain {
         self.ops.is_empty()
     }
 
-    /// Run the whole chain, in order.
     #[must_use]
     pub fn eval(&self, rgb: [f32; 3]) -> [f32; 3] {
         self.ops.iter().fold(rgb, |c, op| op.eval(c))
     }
 
-    /// This chain backwards: the steps reversed, each one inverted.
     pub fn inverted(&self, what: &str) -> Result<Chain> {
         let mut ops = Vec::with_capacity(self.ops.len());
         for op in self.ops.iter().rev() {
@@ -2146,7 +2104,6 @@ impl Chain {
         Chain::new(self.ops)
     }
 
-    /// Whether the whole chain can bake to the cheap factorised form (§5.1).
     #[must_use]
     pub fn is_factorable(&self) -> bool {
         self.ops.iter().all(Op::is_factorable)
@@ -2237,11 +2194,11 @@ mod tests {
             0.695452,
             0.140679,
             0.163869,
-            0.0, //
+            0.0,
             0.0447946,
             0.859671,
             0.0955343,
-            0.0, //
+            0.0,
             -0.00552588,
             0.00402521,
             1.0015,

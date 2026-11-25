@@ -1,11 +1,8 @@
-//! Vibrancy (docs/08 §3.12): saturation that lifts the flat pixels hardest.
-
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
 };
 use lumit_fx_macros::Effect;
 
-/// Vibrancy's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "vibrancy",
@@ -31,7 +28,6 @@ pub struct Vibrancy {
     #[slider(min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0, unit = Percent)]
     pub amount: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -58,7 +54,6 @@ impl Vibrancy {
     }
 }
 
-/// Vibrancy's behaviour.
 pub struct VibrancyDef;
 
 impl EffectDef for VibrancyDef {

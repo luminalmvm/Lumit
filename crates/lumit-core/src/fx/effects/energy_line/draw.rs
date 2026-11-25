@@ -21,9 +21,7 @@ pub struct Look {
     /// What the halo is multiplied by. 0 is no glow at all.
     pub glow_gain: f32,
     pub glow_radius: f32,
-    /// Glow's own Falloff number.
     pub glow_falloff: f32,
-    /// How far the noise pushes the core and the glow.
     pub core_warp: f32,
     pub glow_warp: f32,
     pub field: FractalField,
@@ -94,7 +92,6 @@ pub fn core_at(x: u32, y: u32, look: &Look, p: &Pieces, b: &Bins) -> [f32; 3] {
         let dist = (ox * ox + oy * oy).sqrt();
         let along = u[0] + (u[1] - u[0]) * t;
         let r = look.core_half * (look.taper[0] + (look.taper[1] - look.taper[0]) * along);
-        // A core of no width lights nothing.
         if r <= 0.0 {
             continue;
         }

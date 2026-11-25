@@ -47,8 +47,6 @@ struct Params {
     paint: u32,
 };
 
-// ---- The SICELIOT texture helpers: the same text in every SICELIOT texture ----
-
 // A point in layer pixels turned by -angle about centre: the pattern turns.
 fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     let d = px - centre;
@@ -56,14 +54,12 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
     }
     return c;
 }
-// ---- The SICELIOT texture noise: the same text in every SICELIOT texture ----
 
 // A hash of a lattice cell and a salt, 0 to 1, seeded by Seed and the layer.
 fn sx_hash(c: vec2<i32>, salt: u32) -> f32 {
@@ -148,7 +144,6 @@ fn tp_hexagons(q: vec2<f32>) -> Tile {
         centre = q - b;
     }
     let d = abs(g);
-    // Distance from the centre to the edge along the nearest flat.
     let edge = max(d.x, dot(d, vec2<f32>(0.5, 0.8660254)));
     return Tile(vec2<i32>(floor(centre / (s * 0.5))), s * 0.5 - edge);
 }
@@ -206,11 +201,9 @@ fn tp_fancy(q: vec2<f32>) -> Tile {
     if (sx_hash(id, 11u) < 0.5) {
         f.x = 1.0 - f.x;
     }
-    // The arcs are the tile's own lines: the distance to the nearer arc.
     let a = abs(length(f) - 0.5);
     let b = abs(length(f - vec2<f32>(1.0)) - 0.5);
     let to_line = min(a, b) * s;
-    // Which side of the arcs the point is on picks the colour.
     let side = select(0, 1, length(f) > 0.5 && length(f - vec2<f32>(1.0)) > 0.5);
     return Tile(id * 2 + vec2<i32>(side, 0), to_line);
 }

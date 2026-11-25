@@ -42,19 +42,14 @@ use thiserror::Error;
 /// near it.
 pub const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
 
-/// What can go wrong on the wire.
 #[derive(Debug, Error)]
 pub enum PipeError {
-    /// The pipe itself.
     #[error("the broker pipe failed: {0}")]
     Io(#[from] std::io::Error),
-    /// A message that would not encode or would not decode.
     #[error("the broker sent a message this host cannot read: {0}")]
     Encoding(String),
-    /// A length prefix bigger than [`MAX_MESSAGE_BYTES`].
     #[error("the broker announced a {0}-byte message, which is past the limit")]
     TooLarge(usize),
-    /// The other side went away.
     #[error("the broker closed the pipe")]
     Closed,
 }
@@ -103,28 +98,17 @@ pub fn listen(name: &str) -> Result<Listener, PipeError> {
     Ok(options.create_sync()?)
 }
 
-/// Take the one connection a broker makes.
-///
-/// # Errors
-///
-/// [`PipeError::Io`].
 pub fn accept(listener: &Listener) -> Result<Stream, PipeError> {
     Ok(listener.incoming().next().ok_or(PipeError::Closed)??)
 }
 
 use interprocess::local_socket::{RecvHalf, SendHalf};
 
-/// Split a connection into its reading and writing halves.
 #[must_use]
 pub fn split(stream: Stream) -> (RecvHalf, SendHalf) {
     stream.split()
 }
 
-/// Connect to the host, from inside the broker.
-///
-/// # Errors
-///
-/// [`PipeError::Io`] if nobody is listening.
 pub fn connect(name: &str) -> Result<Stream, PipeError> {
     let stream = if cfg!(windows) {
         Stream::connect(name.to_ns_name::<GenericNamespaced>()?)?
@@ -134,11 +118,6 @@ pub fn connect(name: &str) -> Result<Stream, PipeError> {
     Ok(stream)
 }
 
-/// Write one message, length first.
-///
-/// # Errors
-///
-/// [`PipeError`] — encoding, the cap, or the pipe.
 pub fn send<W: Write, M: Serialize>(writer: &mut W, message: &M) -> Result<(), PipeError> {
     let body =
         bincode::serialize(message).map_err(|error| PipeError::Encoding(error.to_string()))?;
@@ -152,12 +131,6 @@ pub fn send<W: Write, M: Serialize>(writer: &mut W, message: &M) -> Result<(), P
     Ok(())
 }
 
-/// Read one message, blocking until it is whole.
-///
-/// # Errors
-///
-/// [`PipeError::Closed`] when the other side goes away, and the rest as
-/// [`send`].
 pub fn recv<R: Read, M: DeserializeOwned>(reader: &mut R) -> Result<M, PipeError> {
     let mut prefix = [0_u8; 4];
     read_exact(reader, &mut prefix)?;
@@ -170,8 +143,6 @@ pub fn recv<R: Read, M: DeserializeOwned>(reader: &mut R) -> Result<M, PipeError
     bincode::deserialize(&body).map_err(|error| PipeError::Encoding(error.to_string()))
 }
 
-/// `read_exact`, but an empty read is [`PipeError::Closed`] rather than an
-/// `UnexpectedEof` the caller would have to unpick.
 fn read_exact<R: Read>(reader: &mut R, buffer: &mut [u8]) -> Result<(), PipeError> {
     let mut filled = 0;
     while filled < buffer.len() {

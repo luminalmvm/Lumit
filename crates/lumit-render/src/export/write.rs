@@ -1,6 +1,3 @@
-//! The frame loop every picture export runs, and the files it writes into.
-//! Runs on the export's thread, with the writing on a thread of its own.
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -13,7 +10,6 @@ use uuid::Uuid;
 use super::{captions, frame, held, ExportEvent, ExportSpec};
 use crate::mix::mixdown::audio_samples_through;
 
-/// One file an export writes, open and ready for its frames.
 pub(super) struct Out {
     pub(super) spec: ExportSpec,
     pub(super) path: PathBuf,
@@ -81,8 +77,6 @@ pub(super) fn frames(
             .spawn_scoped(s, move || -> Result<usize, String> {
                 let mut audio_fed = 0usize;
                 for (frame_n, packed) in queued.iter().enumerate() {
-                    // Interleave: after each picture frame, the samples that cover it,
-                    // so the muxer keeps sound and picture together in the file.
                     let upto = audio_mix.map(|mix| {
                         audio_samples_through(frame_n + 1, out_fps, rate).min(mix.len() / chans)
                     });
@@ -162,7 +156,6 @@ pub(super) fn frames(
         const MOST_WANTS: usize = 8;
         const LONGEST_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
         let mut ahead = Some(crate::prefetch::Prefetcher::default());
-        // What was asked for each frame from this one on, in order.
         let mut asked = std::collections::VecDeque::new();
         let mut asked_to = 0usize;
         let mut rendered = Ok(());
@@ -233,7 +226,6 @@ pub(super) fn frames(
                 stop |= in_flight > crate::decode::DEFAULT_DECODE_CACHE_BYTES / 2;
             }
             if stop {
-                // Its threads end with it.
                 ahead = None;
             }
             // Footage a frame still to come asked for too is copied for this
@@ -275,7 +267,6 @@ pub(super) fn frames(
                 break;
             }
         }
-        // And the last, when nothing stopped the loop.
         if let Some(last) = waiting.filter(|_| rendered.is_ok() && !cancel.load(Ordering::Relaxed))
         {
             match finish(&mut *renderer, last) {
@@ -332,8 +323,6 @@ fn pack_all<T: Clone>(
     packed
 }
 
-/// A frame on its way to the files: their bytes, or at eight bits its
-/// read-back still coming off the graphics card.
 enum Rendered {
     Bytes(Vec<Vec<u8>>),
     Coming(lumit_gpu::PendingReadback),
@@ -396,8 +385,6 @@ impl Sink {
         }
     }
 
-    /// Every file this wrote: the chosen path for one file, or each still of
-    /// a sequence.
     pub(super) fn files(&self, chosen_path: &std::path::Path) -> Vec<PathBuf> {
         match self {
             Sink::Images { written, .. } => (1..=*written)

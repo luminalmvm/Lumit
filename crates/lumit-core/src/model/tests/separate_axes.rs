@@ -1,10 +1,5 @@
-//! Separate axes on a transform: loading, saving and recombining.
-
 use super::*;
 
-/// **Old projects load unchanged**. A transform written before
-/// separate axes existed carries no `axis_modes` at all, and reads as the
-/// default: both pairs combined, Scale linked.
 #[test]
 fn a_transform_without_axis_modes_reads_as_the_default() {
     let json = r#"{
@@ -26,8 +21,6 @@ fn a_transform_without_axis_modes_reads_as_the_default() {
     );
 }
 
-/// An unknown key from a newer build survives a load and save beside the
-/// new field (docs/03 §12's forward-compatibility rule).
 #[test]
 fn an_unknown_transform_field_survives_beside_the_axis_modes() {
     let mut group = TransformGroup::default();
@@ -45,9 +38,6 @@ fn an_unknown_transform_field_survives_beside_the_axis_modes() {
     );
 }
 
-/// **Coming back together does not move the picture**. Two axes
-/// keyed at different times gain each other's key times, and every axis
-/// reads exactly what it read before at every moment.
 #[test]
 fn recombining_unions_the_key_times_without_changing_a_value() {
     use crate::anim::{Animation, Keyframe, SideInterp};

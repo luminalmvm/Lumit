@@ -23,9 +23,6 @@ const PASS_PAIRS: usize = 3;
 /// that could produce NaN has no business in a matte.
 const ALPHA_EPS: f32 = 1e-6;
 
-/// Where each of a pixel's four forward steps sits in its row of the step
-/// table: the side step right, the side step down, and the two diagonals down.
-/// Every step the scans take is one of these, read from one end or the other.
 const RIGHT: usize = 0;
 const DOWN: usize = 1;
 const DOWN_RIGHT: usize = 2;
@@ -87,26 +84,9 @@ pub(crate) fn alpha_raw(
     }
 }
 
-/// The price of every step, `sqrt(geo + γ²·‖ΔI‖²)`, worked out once a frame.
-///
-/// It depends on the frame alone, and the twelve scans over the two distances
-/// would otherwise take the same square root twelve times over. `geo` is the
-/// squared geometric length of the step, 1 for a side and 2 for a diagonal,
-/// kept squared because the colour term is squared too and the one root
-/// covers both. A step off the frame is priced at infinity and never taken.
-///
-/// ponytail: the ceiling here is **leaks through low-contrast gaps** — a
-/// subject touching a same-coloured wall costs nothing to walk into, so the
-/// distance runs straight through the join and the matte swallows the wall.
-/// That is the classical algorithm's known failure and the reason the
-/// correction loop exists; the upgrade path is an evidence-bearing pairwise
-/// term (graph cut, or a learned cost) on the seed seam of §9, not more passes.
-/// Observable trigger: a solve whose matte includes a region joined to the
-/// subject by a boundary with no colour step, as the dumbbell test pins.
 fn step_prices(frame: FrameRgb<'_>, g2: f32, steps: &mut [[f32; 4]]) {
     let w = frame.width() as usize;
     let h = frame.height() as usize;
-    // Off the frame there is no neighbour to price.
     let price = |on: bool, i: usize, j: usize, geo: f32| {
         if !on {
             return f32::INFINITY;
@@ -132,8 +112,6 @@ fn step_prices(frame: FrameRgb<'_>, g2: f32, steps: &mut [[f32; 4]]) {
     }
 }
 
-/// Top-left to bottom-right, each pixel relaxing over its four causal
-/// neighbours above and to the left.
 fn forward(steps: &[[f32; 4]], w: usize, h: usize, d_f: &mut [f32], d_b: &mut [f32]) {
     for y in 0..h {
         for x in 0..w {
@@ -161,7 +139,6 @@ fn forward(steps: &[[f32; 4]], w: usize, h: usize, d_f: &mut [f32], d_b: &mut [f
     }
 }
 
-/// The mirror of [`forward`], over the four neighbours below and to the right.
 fn backward(steps: &[[f32; 4]], w: usize, h: usize, d_f: &mut [f32], d_b: &mut [f32]) {
     for y in (0..h).rev() {
         for x in (0..w).rev() {
@@ -189,8 +166,6 @@ fn backward(steps: &[[f32; 4]], w: usize, h: usize, d_f: &mut [f32], d_b: &mut [
     }
 }
 
-/// Offer a pixel the price of reaching each kind of seed through one
-/// neighbour. An unreachable neighbour offers infinity, which never wins.
 #[inline]
 fn relax(f: &mut f32, b: &mut f32, from_f: f32, from_b: f32, step: f32) {
     let via_f = from_f + step;

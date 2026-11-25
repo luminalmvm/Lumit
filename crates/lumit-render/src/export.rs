@@ -59,7 +59,6 @@ impl ExportHandle {
     }
 }
 
-/// Everything the export thread needs about one footage item.
 #[derive(Clone)]
 pub struct ItemInfo {
     /// Where the pixels come from: one file, or the numbered run of stills the
@@ -93,7 +92,6 @@ pub enum ExportPreset {
     Vertical1080p60,
 }
 
-/// The parameter row one preset stamps into the export dialogue.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PresetParams {
     pub size: (u32, u32),
@@ -104,9 +102,7 @@ pub struct PresetParams {
     pub peak_bps: i64,
 }
 
-/// Audio on all delivery presets: AAC 320 kbps, 48 kHz (docs/06 §7.5).
 pub const PRESET_AUDIO_BPS: i64 = 320_000;
-/// Export audio sample rate (docs/06 §7.5: 48 kHz on delivery presets).
 pub const EXPORT_AUDIO_RATE: u32 = 48_000;
 
 impl ExportPreset {
@@ -134,7 +130,6 @@ impl ExportPreset {
         use lumit_media::encode::VideoCodec;
         match self {
             ExportPreset::Custom => None,
-            // H.264 high, VBR 16 target / 24 peak (docs/06 §7.5).
             ExportPreset::Youtube1080p60 => Some(PresetParams {
                 size: (1920, 1080),
                 codec: VideoCodec::H264,
@@ -157,7 +152,6 @@ impl ExportPreset {
                 target_bps: 45_000_000,
                 peak_bps: 60_000_000,
             }),
-            // The vertical variant of the 1080p60 preset (docs/06 §7.5).
             ExportPreset::Vertical1080p60 => Some(PresetParams {
                 size: (1080, 1920),
                 codec: VideoCodec::H264,
@@ -167,7 +161,6 @@ impl ExportPreset {
         }
     }
 
-    /// Suggested file name for the save dialogue.
     pub fn default_file_name(self) -> &'static str {
         match self {
             ExportPreset::Custom => "export.mp4",
@@ -195,12 +188,8 @@ pub const EXPORT_AUDIO_RATES: &[u32] = &[44_100, EXPORT_AUDIO_RATE, 96_000];
 /// all (see [`format::FormatCaps::audio_depths`]).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum AudioDepth {
-    /// Sixteen bits a sample — CD resolution, and what every delivery file
-    /// has always carried.
     #[default]
     Sixteen,
-    /// Twenty-four bits a sample — the master resolution, where the extra
-    /// headroom is wanted for further work.
     TwentyFour,
 }
 
@@ -215,13 +204,11 @@ impl AudioDepth {
     }
 }
 
-/// How many channels the written file carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum AudioLayout {
     /// One channel: the comp's stereo mix folded down (see
     /// [`lumit_audio::mix::downmix_to_mono`], which states the law).
     Mono,
-    /// Two channels — the comp's mix as it is mixed and as it is played back.
     #[default]
     Stereo,
 }
@@ -238,15 +225,12 @@ impl AudioLayout {
     }
 }
 
-/// Which channels the written file carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum Channels {
     /// Colour only — the alpha channel is written opaque, so what a viewer
     /// sees is the comp over its own background.
     #[default]
     Rgb,
-    /// Colour and the composite's own coverage, for a file that will be
-    /// layered over something else.
     RgbAlpha,
 }
 
@@ -255,12 +239,8 @@ pub enum Channels {
 /// premultiplied is a pass-through and straight is a division.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum AlphaMode {
-    /// Colour already multiplied by coverage — the working form, and what
-    /// most compositors expect back.
     #[default]
     Premultiplied,
-    /// Colour un-multiplied, full-strength wherever there is any coverage at
-    /// all. What paint programs and some delivery specs ask for.
     Straight,
 }
 
@@ -301,11 +281,6 @@ pub enum ColourSpace {
     /// (SMPTE EG 432-1 primaries, IEC 61966-2-1 curve): what Apple's displays
     /// and the wide-gamut web want.
     DisplayP3,
-    /// A named output space from an OCIO config (docs/06 §2, post-v1). Kept in
-    /// the model so a project written today names its space the same way it
-    /// will then; an export that asks for one before OCIO exists is refused,
-    /// because a wrong colour space in a delivered file is worse than an
-    /// export that did not run.
     Ocio(String),
 }
 
@@ -333,7 +308,6 @@ impl ColourSpace {
         !matches!(self, ColourSpace::Ocio(_))
     }
 
-    /// The config's name, if this is one of its spaces.
     #[must_use]
     pub fn ocio_name(&self) -> Option<&str> {
         match self {
@@ -384,7 +358,6 @@ impl ColourSpace {
         }
     }
 
-    /// What the container is stamped with, so the file states its own colour.
     pub fn tags(&self) -> lumit_media::encode::ColourTags {
         use lumit_media::encode::ColourTags;
         match self {
@@ -446,7 +419,6 @@ impl ColourSpace {
 // derivation against BT.709's own printed matrix.
 // ---------------------------------------------------------------------------
 
-/// CIE 1931 xy chromaticities: red, green, blue, white.
 type Primaries = [[f64; 2]; 4];
 
 /// ITU-R BT.709-6, Table 1. Also IEC 61966-2-1's sRGB primaries — sRGB and
@@ -474,10 +446,8 @@ const DISPLAY_P3_PRIMARIES: Primaries = [
     [0.3127, 0.3290], // D65
 ];
 
-/// The transfer function a space encodes its linear light with.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Transfer {
-    /// None at all: the code value *is* the light.
     Linear,
     /// IEC 61966-2-1 (sRGB).
     Srgb,
@@ -542,10 +512,8 @@ fn srgb_to_linear(v: f64) -> f64 {
 /// scale each primary's chromaticity vector so the three together sum to the
 /// white point at Y = 1.
 fn rgb_to_xyz(p: &Primaries) -> [[f64; 3]; 3] {
-    // Each primary as an unscaled XYZ direction (Y = 1).
     let dir = |xy: [f64; 2]| [xy[0] / xy[1], 1.0, (1.0 - xy[0] - xy[1]) / xy[1]];
     let (r, g, b, w) = (dir(p[0]), dir(p[1]), dir(p[2]), dir(p[3]));
-    // Columns r, g, b; solve M.s = w for the three scale factors.
     let m = [[r[0], g[0], b[0]], [r[1], g[1], b[1]], [r[2], g[2], b[2]]];
     let s = mul3(&invert3(&m), w);
     [
@@ -569,7 +537,6 @@ fn primaries_change(from: &Primaries, to: &Primaries) -> [[f64; 3]; 3] {
     out
 }
 
-/// 3×3 matrix times a column vector.
 fn mul3(m: &[[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
     [
         m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
@@ -745,11 +712,8 @@ impl Crop {
     }
 }
 
-/// The video bitrate, chosen or worked out (docs/06 §7.5).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum Bitrate {
-    /// Work a high default out from the resolution and the rate — what the
-    /// dialog's *Auto* face means.
     #[default]
     Auto,
     /// Set no bitrate at all and let the encoder pick its own quality. What a
@@ -765,16 +729,10 @@ pub enum Bitrate {
     },
 }
 
-/// How the video bitrate is spent (docs/06 §7.5): varying with the picture
-/// up to a peak, or held constant throughout, as a stream or a broadcast
-/// wants.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum RateControl {
-    /// Variable: the target on average, more where the picture is busy, up to
-    /// the peak.
     #[default]
     Vbr,
-    /// Constant: the target throughout.
     Cbr,
 }
 
@@ -827,10 +785,8 @@ pub fn auto_bitrate(
 /// ones the user *is* working with. Off is the honest default.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum DiskCachePolicy {
-    /// Neither read nor written — the export renderer's own state today.
     #[default]
     Off,
-    /// Read frames already banked, but bank nothing new.
     ReadOnly,
 }
 
@@ -868,8 +824,6 @@ pub enum MotionBlurOverride {
 /// export, and offering both would be a picker where one option does nothing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum RetimeBlendOverride {
-    /// *Current settings*: each layer's (and each Sequence clip's) own policy
-    /// stands. The default.
     #[default]
     CompSetting,
     /// *Off for all layers*: every layer and every clip falls back to
@@ -879,8 +833,6 @@ pub enum RetimeBlendOverride {
     OffForAll,
 }
 
-/// What the export does to the composition on the way through — the render
-/// settings the export drawing puts beside the output format.
 #[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct RenderOptions {
@@ -889,8 +841,6 @@ pub struct RenderOptions {
     /// export wants and what it gets unless something else is asked for.
     pub quality: crate::plan::Quality,
     pub disk_cache: DiskCachePolicy,
-    /// Run each layer's effect stack. Off exports the layers unaffected —
-    /// the export-time twin of the per-layer fx switch (docs/08 §1.5).
     pub effects: bool,
     /// Honour solo switches. Off exports every visible layer even
     /// when one is soloed for working on — an export of a soloed comp is
@@ -901,11 +851,7 @@ pub struct RenderOptions {
     /// the file, at every depth. On overrides that for the one export that
     /// wants the reference in the picture.
     pub render_guides: bool,
-    /// Force motion blur one way for the whole walk, or leave the
-    /// compositions' own settings alone ([`MotionBlurOverride`]).
     pub motion_blur: MotionBlurOverride,
-    /// Force Retime blend off for the whole walk, or leave each layer's own
-    /// policy alone ([`RetimeBlendOverride`]).
     pub retime_blend: RetimeBlendOverride,
     /// Read the proxies instead of the originals. **Off by default,
     /// whatever the project is set to**: a proxy is a working convenience, and
@@ -948,7 +894,6 @@ impl RenderOptions {
     }
 }
 
-/// Whether any comp in `doc` holds a guide layer.
 fn has_guide_layer(doc: &Document) -> bool {
     doc.items.iter().any(|item| {
         matches!(item, ProjectItem::Composition(c) if c.layers.iter().any(|l| l.switches.guide))
@@ -1068,14 +1013,11 @@ fn apply_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Docu
     Some(Arc::new(copy))
 }
 
-/// What happens the moment an export finishes (docs/07 §11's *When done*).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum WhenDone {
     #[default]
     Nothing,
-    /// Play a short sound, so a long export can be left to run.
     MakeANoise,
-    /// Show the finished file in the file browser.
     OpenFolder,
 }
 
@@ -1333,8 +1275,6 @@ pub struct ExportSpec {
     /// The video bitrate: worked out from the size and rate, or the number
     /// that was typed. Meaningless — and unread — for the lossless formats.
     pub bitrate: Bitrate,
-    /// Whether that bitrate is held constant or allowed to vary up to its
-    /// peak.
     pub rate_control: RateControl,
     /// Output frame rate; None = the composition's own. A different
     /// rate resamples by nearest comp frame — the honest thing without optical
@@ -1356,7 +1296,6 @@ pub struct ExportSpec {
     /// One channel or two. Mono folds the comp's stereo mix down; the law is
     /// stated on [`lumit_audio::mix::downmix_to_mono`].
     pub audio_layout: AudioLayout,
-    /// Bits per channel in the written file.
     pub depth: BitDepth,
     pub channels: Channels,
     pub alpha: AlphaMode,
@@ -1367,21 +1306,15 @@ pub struct ExportSpec {
     /// Pixels taken off each edge on the way out, already resolved from the
     /// region of interest where that was asked for ([`crop_for`]).
     pub crop: Crop,
-    /// What is written into the container about the file.
     pub metadata: lumit_media::encode::Metadata,
-    /// How the composition is rendered for this export.
     pub render: RenderOptions,
     pub when_done: WhenDone,
     /// Dither, palette and plays. Unread by every format but GIF.
     pub gif: lumit_media::encode::gif::GifOptions,
-    /// What happens to the comp's caption layers.
     pub captions: captions::CaptionsOut,
     /// The loudness the sound is made to, or None for the mix as it stands.
     pub loudness: Option<format::ExportLoudness>,
-    /// Each top-level bus also written to a file of its own beside this one.
     pub stems: bool,
-    /// Other files written beside this one from the same frames, in other
-    /// formats ([`outputs`]).
     pub also: Vec<outputs::AlsoWrite>,
 }
 
@@ -1544,7 +1477,6 @@ impl ExportSpec {
             _ => return None,
         };
         Some(match self.bitrate {
-            // No bitrate at all: the encoder chooses its own quality.
             Bitrate::EncoderDefault => return None,
             Bitrate::Auto => {
                 let (w, h) = self.target.unwrap_or(size);
@@ -1677,7 +1609,6 @@ fn run(
     outputs::check(spec)?;
     let overridden = apply_render_overrides(doc, &spec.render_options());
     let doc = overridden.as_ref().unwrap_or(doc);
-    // The chosen file first, then each written beside it.
     let specs: Vec<ExportSpec> = std::iter::once(spec.clone())
         .chain(spec.also.iter().map(|also| outputs::spec_for(spec, also)))
         .collect();
@@ -1929,7 +1860,6 @@ fn open_sink(
                 size: (tw, th),
             }
         }
-        // Handled above: sound with no picture never reaches the frame loop.
         ExportFormat::Audio(_) => return Err("audio-only export took the picture path".into()),
     };
     Ok(sink)
@@ -2116,7 +2046,6 @@ mod tests {
             lumit_core::fx::builtins::instantiate("gradient").expect("gradient is a built-in");
         for p in &mut fx.params {
             let set = match p.id.as_str() {
-                // White at the top row to black at the bottom, straight down.
                 "start_x" | "start_y" | "end_x" => 0.0,
                 "end_y" => f64::from(h),
                 _ => continue,
@@ -2171,8 +2100,6 @@ mod tests {
         }
     }
 
-    /// The chosen rate is stamped as an exact rational, never a rounded whole
-    /// number — 29.97 must not quietly become 30 (docs/impl/rational-time).
     #[test]
     fn fps_rational_keeps_fractional_rates_exact() {
         assert_eq!(fps_rational(60.0), (60, 1));
@@ -2181,8 +2108,6 @@ mod tests {
         assert_eq!(fps_rational(0.0), (1, 1), "clamped, never zero");
     }
 
-    /// An explicit range exports exactly its frames — here comp frames 10..20
-    /// as a PNG sequence, so the file count *is* the assertion.
     #[test]
     fn an_explicit_range_exports_exactly_its_frames_as_stills() {
         let (doc, comp) = solid_doc(32, 16);
@@ -2210,9 +2135,6 @@ mod tests {
         );
     }
 
-    /// A setting the chosen format cannot honour is refused before a frame is
-    /// rendered — never silently dropped, which would deliver a file that is
-    /// not what was asked for.
     #[test]
     fn a_spec_the_format_cannot_honour_is_refused() {
         use lumit_media::encode::ImageFormat;
@@ -2231,7 +2153,6 @@ mod tests {
         };
         assert!(transparent.check().is_err(), "mp4 cannot carry alpha");
 
-        // The same two settings are fine on a PNG sequence.
         let stills = ExportSpec {
             format: ExportFormat::Images(ImageFormat::Png),
             depth: BitDepth::Sixteen,
@@ -2240,8 +2161,6 @@ mod tests {
         };
         stills.check().expect("a PNG carries both");
 
-        // An OCIO space is refused until OCIO exists: a wrong colour space in
-        // a delivered file is worse than an export that did not run.
         let ocio = ExportSpec {
             colour_space: ColourSpace::Ocio("ACES - ACEScg".into()),
             ..base
@@ -2315,11 +2234,8 @@ mod tests {
         );
     }
 
-    /// A whole space transform, end to end, against values worked by hand.
     #[test]
     fn each_colour_space_transforms_known_values() {
-        // The default is a pass-through — no transform object at all, so an
-        // export naming it is byte-for-byte the export it always was.
         assert!(ColourSpace::SrgbRec709.transform().is_none());
         assert!(ColourSpace::Ocio("x".into()).transform().is_none());
 
@@ -2346,7 +2262,6 @@ mod tests {
             for v in t.apply([0.0, 0.0, 0.0]) {
                 assert!(v.abs() < 1e-9, "{} moved black", space.label());
             }
-            // Grey stays grey — all three channels equal — in every space.
             let g = t.apply([0.5, 0.5, 0.5]);
             assert!(
                 (g[0] - g[1]).abs() < 1e-9 && (g[1] - g[2]).abs() < 1e-9,
@@ -2374,12 +2289,9 @@ mod tests {
         );
         assert!(p3_red[0] < 1.0, "P3 red: {p3_red:?}");
 
-        // Deterministic: the same input gives the same bits, every time.
         assert_eq!(r2020.apply([0.3, 0.6, 0.9]), r2020.apply([0.3, 0.6, 0.9]));
     }
 
-    /// Crop arithmetic, in pixels at composition size: the size it
-    /// leaves, the window it keeps, and the pixels it actually copies.
     #[test]
     fn crop_maths_keeps_the_window_it_says_it_keeps() {
         let crop = Crop {
@@ -2393,8 +2305,6 @@ mod tests {
         assert!(Crop::NONE.is_none());
         assert_eq!(Crop::NONE.output_size(10, 10), (10, 10));
 
-        // Insets that meet leave one pixel rather than none — a slip of the
-        // fingers is not a reason to fail an export.
         let silly = Crop {
             top: 99,
             left: 99,
@@ -2406,7 +2316,6 @@ mod tests {
         assert_eq!((w, h), (1, 1));
         assert!(x < 10 && y < 10, "the window stays inside the frame");
 
-        // The pixels: a 4×3 frame of one byte per pixel, numbered by position.
         let frame: Vec<u8> = (0..12).collect();
         let one_off_each_side = Crop {
             top: 1,
@@ -2415,7 +2324,6 @@ mod tests {
             right: 1,
         };
         assert_eq!(one_off_each_side.apply(frame.clone(), 4, 3, 1), vec![5, 6]);
-        // Four bytes a pixel, the real shape.
         let rgba: Vec<u8> = (0..(4 * 2 * 2)).collect();
         let right_half = Crop {
             top: 0,
@@ -2427,8 +2335,6 @@ mod tests {
             right_half.apply(rgba, 2, 2, 4),
             vec![4, 5, 6, 7, 12, 13, 14, 15]
         );
-        // No crop is the frame itself, and a buffer too small comes back
-        // whole rather than panicking mid-export.
         assert_eq!(Crop::NONE.apply(frame.clone(), 4, 3, 1), frame);
         assert_eq!(
             one_off_each_side.apply(vec![1, 2, 3], 4, 3, 1),
@@ -2443,30 +2349,22 @@ mod tests {
             .is_empty());
     }
 
-    /// The pack stage: what each channel/alpha choice does to the finished
-    /// pixels, on the CPU, without a graphics card in sight.
     #[test]
     fn the_pack_stage_writes_what_each_choice_asks_for() {
-        // One half-covered premultiplied pixel and one opaque one.
         let src = [100u8, 50, 0, 128, 10, 20, 30, 255];
 
-        // RGB: alpha forced opaque, colour untouched.
         let rgb = pack_frame(&src, Channels::Rgb, AlphaMode::Premultiplied, None);
         assert_eq!(rgb, [100, 50, 0, 255, 10, 20, 30, 255]);
 
-        // Premultiplied RGBA: exactly what the compositor produced.
         let pre = pack_frame(&src, Channels::RgbAlpha, AlphaMode::Premultiplied, None);
         assert_eq!(pre, src);
 
-        // Straight RGBA: colour divided back up by its coverage.
         let straight = pack_frame(&src, Channels::RgbAlpha, AlphaMode::Straight, None);
         assert_eq!(straight[3], 128, "coverage itself is unchanged");
         assert_eq!(straight[0], 199, "100 / (128/255) rounds to 199");
         assert_eq!(straight[1], 100);
         assert_eq!(&straight[4..], &src[4..], "an opaque pixel is untouched");
 
-        // A colour beyond its own coverage clamps rather than overflowing,
-        // and zero coverage has no colour to recover.
         let odd = [200u8, 0, 0, 100, 9, 9, 9, 0];
         let straight = pack_frame(&odd, Channels::RgbAlpha, AlphaMode::Straight, None);
         assert_eq!(straight[0], 255);
@@ -2484,8 +2382,6 @@ mod tests {
             .collect();
         assert_eq!(samples, deep, "premultiplied sixteen-bit is a copy");
 
-        // Straight alpha at sixteen bits divides by sixteen-bit full scale,
-        // and a value past its own coverage still clamps.
         let straight16 = pack_frame(&deep, Channels::RgbAlpha, AlphaMode::Straight, None);
         let first: Vec<u16> = straight16[..8]
             .chunks_exact(2)
@@ -2503,8 +2399,6 @@ mod tests {
         );
     }
 
-    /// Auto versus manual is stored in the settings and resolved at the last
-    /// moment, against the frame actually being written.
     #[test]
     fn the_bitrate_choice_resolves_auto_manual_and_neither() {
         use lumit_media::encode::ImageFormat;
@@ -2515,7 +2409,6 @@ mod tests {
             Some((16_000_000, Some(24_000_000)))
         );
 
-        // A typed number with no peak takes the 1.5× fallback.
         let manual = ExportSpec {
             bitrate: Bitrate::Manual {
                 target_bps: 10_000_000,
@@ -2528,7 +2421,6 @@ mod tests {
             Some((10_000_000, Some(15_000_000)))
         );
 
-        // No target named: the composition's own size decides the auto rate.
         let comp_sized = ExportSpec {
             target: None,
             ..auto.clone()
@@ -2538,7 +2430,6 @@ mod tests {
             Some((4_000_000, Some(6_000_000)))
         );
 
-        // Lossless and audio-only formats have no video bitrate at all.
         let stills = ExportSpec {
             format: ExportFormat::Images(ImageFormat::Png),
             ..auto.clone()
@@ -2551,12 +2442,9 @@ mod tests {
         assert_eq!(sound.resolved_bitrate((1920, 1080), 60.0), None);
     }
 
-    /// The document-shaped render options act on the export's own snapshot,
-    /// through nested comps, and leave the original untouched.
     #[test]
     fn render_overrides_clear_fx_and_solo_everywhere_or_nothing_at_all() {
         let (doc, comp_id) = solid_doc(32, 16);
-        // Give the one layer both switches something to clear.
         let mut seeded = Document::clone(&doc);
         for item in &mut seeded.items {
             if let ProjectItem::Composition(c) = item {
@@ -2568,8 +2456,6 @@ mod tests {
         }
         let seeded = Arc::new(seeded);
 
-        // Defaults change nothing, and say so by answering None rather than
-        // cloning a whole document to alter nothing.
         assert!(apply_render_overrides(&seeded, &RenderOptions::default()).is_none());
 
         let off = RenderOptions {
@@ -2581,11 +2467,9 @@ mod tests {
         let layer = &patched.comp(comp_id).unwrap().layers[0];
         assert!(!layer.switches.fx, "effects off clears the fx switch");
         assert!(!layer.switches.solo, "solo ignored clears the solo switch");
-        // The snapshot the export was handed is untouched.
         let original = &seeded.comp(comp_id).unwrap().layers[0];
         assert!(original.switches.fx && original.switches.solo);
 
-        // Each half acts on its own.
         let fx_only = RenderOptions {
             effects: false,
             ..RenderOptions::default()
@@ -2595,10 +2479,6 @@ mod tests {
         assert!(!layer.switches.fx && layer.switches.solo);
     }
 
-    /// A two-level document for the guide-layer tests: an outer comp holding
-    /// a (non-collapsed) Precomp of [`solid_doc`]'s comp plus a guide layer of
-    /// its own, and a second guide layer inside the nested comp. Answers the
-    /// outer comp, the outer guide layer and the nested one.
     fn nested_guide_doc() -> (Arc<Document>, Uuid, Uuid, Uuid) {
         use lumit_core::model::{Composition, LayerKind, LinearColour};
         use lumit_core::time::{Duration as CompDuration, FrameRate, Rational};
@@ -2625,7 +2505,6 @@ mod tests {
             }
         }
 
-        // The outer comp: a guide layer over the nested comp.
         let outer_guide = Uuid::now_v7();
         let mut precomp = template.clone();
         precomp.transform.opacity = lumit_core::anim::Property::fixed(100.0);
@@ -2663,7 +2542,6 @@ mod tests {
         (Arc::new(doc), outer_id, outer_guide, inner_guide)
     }
 
-    /// The nested comp of [`nested_guide_doc`].
     fn nested_comp_of(doc: &Arc<Document>, outer: Uuid) -> Uuid {
         doc.comp(outer)
             .unwrap()
@@ -2754,16 +2632,10 @@ mod tests {
         crate::build::motion_blur::samples(comp, &comp.layers[0], 0.5, (10.0, 10.0), context).len()
     }
 
-    /// *Motion blur* is the export's own answer, at every depth: *on for
-    /// checked layers* turns the master on in every comp in the walk and
-    /// leaves the checks alone, *off for all layers* shuts both, and *current
-    /// settings* copies nothing at all.
     #[test]
     fn the_motion_blur_override_reaches_every_comp_in_the_walk() {
         let (doc, outer_id, inner_id) = checked_blur_doc();
 
-        // Current settings is the default and changes nothing: no clone, and
-        // the checked layer does not smear because its comp master is off.
         assert!(
             apply_render_overrides(&doc, &RenderOptions::default()).is_none(),
             "the comp's own setting is passthrough, so nothing is copied"
@@ -2787,12 +2659,9 @@ mod tests {
                 .motion_blur,
             "the per-layer checks are what the phrase honours, so they stand"
         );
-        // The picture, not the switch: the checked layer now smears.
         assert_eq!(blur_samples(&delivery, inner_id), 16);
-        // And the snapshot the export was handed is untouched.
         assert!(!doc.comp(inner_id).unwrap().motion_blur.enabled);
 
-        // Off for all layers, against a document where the master IS on.
         let mut seeded = Document::clone(&delivery);
         for item in &mut seeded.items {
             if let ProjectItem::Composition(c) = item {
@@ -2890,9 +2759,6 @@ mod tests {
         (Arc::new(doc), comp_id, probes)
     }
 
-    /// Whether the decode plan the one walk builds asks for a blended
-    /// pair of source frames — the picture Retime blend makes, read where both
-    /// the preview and the export read it.
     fn plan_blends(
         doc: &Document,
         comp_id: Uuid,
@@ -2904,8 +2770,6 @@ mod tests {
             .any(|job| job.blend.is_some())
     }
 
-    /// *Retime blend* off falls every layer back to Nearest, and the default
-    /// leaves each layer's own policy — and the document — exactly alone.
     #[test]
     fn the_retime_blend_override_stops_the_blend_and_the_default_never_copies() {
         let (doc, comp_id, probes) = blending_footage_doc();
@@ -2932,15 +2796,12 @@ mod tests {
             !plan_blends(&delivery, comp_id, &probes),
             "off for all layers asks the decoder for whole source frames"
         );
-        // The project keeps the policy the editor chose.
         assert_eq!(
             doc.comp(comp_id).unwrap().layers[0].interpolation,
             Interpolation::Blend
         );
     }
 
-    /// Depth of field's Zebra is part of the picture: an export with it on has
-    /// the stripes, and with it off is the plain layer.
     #[test]
     fn an_export_draws_the_focus_zebra_only_when_it_is_on() {
         let (doc, comp_id) = solid_doc(32, 16);
@@ -2985,9 +2846,6 @@ mod tests {
         assert_ne!(on, plain, "the stripes are in the file");
     }
 
-    /// Preview equals export with a guide layer present: the file an export
-    /// writes is the file it would have written had the guide layer never been
-    /// in the document — byte for byte, at both depths.
     #[test]
     fn an_export_writes_the_same_file_as_if_the_guide_layers_were_not_there() {
         let (with_guides, outer_id, outer_guide, inner_guide) = nested_guide_doc();
@@ -3080,7 +2938,6 @@ mod tests {
             "and the solo the mixer counts is still there"
         );
 
-        // A file with a picture keeps every one of them.
         let video = with_settings(ExportFormat::Video(lumit_media::encode::VideoCodec::H264));
         assert_eq!(video.render_options(), picture_settings);
         let patched = apply_render_overrides(&seeded, &video.render_options())
@@ -3088,9 +2945,6 @@ mod tests {
         assert!(!patched.comp(comp_id).unwrap().layers[0].switches.solo);
     }
 
-    /// Every sample rate, sample width and channel layout the dialog offers,
-    /// end to end through `run` and probed back off disk. The engine's answer
-    /// and the file's own header have to be the same answer.
     #[test]
     fn the_audio_options_reach_the_written_file() {
         let (doc, comp) = solid_doc(32, 16);
@@ -3101,7 +2955,7 @@ mod tests {
                     for layout in AudioLayout::ALL {
                         let mut sp = spec(ExportFormat::Audio(format), 32, 16);
                         sp.include_audio = true;
-                        sp.range = Some((0, 30)); // one second of a 30 fps comp
+                        sp.range = Some((0, 30));
                         sp.audio_rate = rate;
                         sp.audio_depth = depth;
                         sp.audio_layout = layout;
@@ -3156,9 +3010,6 @@ mod tests {
         }
     }
 
-    /// A crop really crops: the same comp exported with and without one
-    /// differs by exactly the pixels the crop took off, and the still's own
-    /// size is the assertion.
     #[test]
     fn a_crop_decides_the_exported_frame_size() {
         let (doc, comp) = solid_doc(64, 32);
@@ -3190,8 +3041,6 @@ mod tests {
         );
     }
 
-    /// A sixteen-bit, alpha-carrying still export runs the whole way through
-    /// — the pack stage, the wide encoder, and a file our own probe reads.
     #[test]
     fn a_sixteen_bit_still_export_runs_end_to_end() {
         let (doc, comp) = solid_doc(32, 16);
@@ -3320,7 +3169,6 @@ mod tests {
         // and carries 709 numbers is exactly the lie the tag exists to stop.
         assert_ne!(bytes, wide_bytes, "the transform reached the picture");
 
-        // And it is deterministic: the same spec writes the same file.
         let again = dir.path().join("rec2020-again.mp4");
         run_now(&doc, comp, &again, &sp)
             .expect("the pipeline was there a moment ago")

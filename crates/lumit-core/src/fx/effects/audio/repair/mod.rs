@@ -35,7 +35,6 @@ mod wpe;
 
 use crate::fx::params::ParamId;
 
-/// What `id` holds this block, or `default` where the bake sent nothing.
 fn row(values: &[(ParamId, f64)], id: ParamId, default: f64) -> f64 {
     values
         .iter()
@@ -64,7 +63,6 @@ fn to_grid(power: &[f64], bin_hz: f64, grid: &[f64]) -> Vec<f64> {
     let bins = power.len();
     let at = |k: usize| power.get(k).copied().unwrap_or(0.0);
     let edge = |i: usize| -> f64 {
-        // The geometric midpoint between neighbouring points.
         let a = grid.get(i.saturating_sub(1)).copied().unwrap_or(1.0);
         let b = grid.get(i).copied().unwrap_or(a);
         (a * b).sqrt()
@@ -121,7 +119,6 @@ fn from_grid(db: &[f64], grid: &[f64], bins: usize, bin_hz: f64) -> Vec<f64> {
         .collect()
 }
 
-/// `count` points spaced evenly in log frequency from `low` to `high` Hz.
 fn log_grid(low: f64, high: f64, count: usize) -> Vec<f64> {
     let steps = count.saturating_sub(1).max(1) as f64;
     (0..count)

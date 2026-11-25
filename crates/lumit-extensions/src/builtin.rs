@@ -8,7 +8,6 @@
 use crate::{lfx_effect, parse};
 use lumit_core::fx::lfx::LfxEffect;
 
-/// A shader's file name and its text, from `builtin/<extension>/`.
 macro_rules! shader {
     ($extension:literal, $name:literal) => {
         (
@@ -18,7 +17,6 @@ macro_rules! shader {
     };
 }
 
-/// Each manifest, and its shaders by file name.
 const BUILTIN: &[(&str, &[(&str, &str)])] = &[
     (
         include_str!("../builtin/siceliot/extension.json"),
@@ -92,9 +90,6 @@ pub fn effects() -> Vec<LfxEffect> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
-    /// Every effect that comes with Lumit reads, finds its shader, files
-    /// under one of Lumit's headings and compiles. Guards projects that use
-    /// them opening with the effects missing.
     #[test]
     fn every_built_in_effect_loads_and_compiles() {
         let effects = super::effects();

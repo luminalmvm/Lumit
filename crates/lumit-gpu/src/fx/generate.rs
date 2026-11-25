@@ -10,8 +10,6 @@ use crate::GpuContext;
 
 use super::{work_texture, FxEngine};
 
-/// One resolved Fill (docs/08 §3.34). Mirrors the arguments of
-/// `lumit_core::fx::cpu::fill`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FillOp {
     /// Scene-linear RGB; the layer's own alpha supplies the coverage.
@@ -74,7 +72,6 @@ struct GradientParams {
     radial: u32,
     /// 1 = clip the ramp to the layer's coverage and leave its alpha.
     clip_to_alpha: u32,
-    /// How many of `mid` are in use.
     mids: u32,
     mid: [[f32; 4]; 3],
 }
@@ -324,8 +321,6 @@ impl FxEngine {
 /// `the_lightning_segment_cap_matches_the_core` in the fx tests.
 pub const LIGHTNING_SEGMENTS: usize = 192;
 
-/// One resolved Beam (docs/08 §3.73). Mirrors `lumit_core::fx::cpu::BeamParams`
-/// field-for-field.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BeamOp {
     /// Where the beam starts, raster pixels.
@@ -336,13 +331,11 @@ pub struct BeamOp {
     pub inv_len2: f32,
     /// The tail and the head, as fractions of the axis.
     pub u0: f32,
-    /// See [`u0`](Self::u0).
     pub u1: f32,
     /// `1 ÷ (u1 − u0)`, floored.
     pub inv_span: f32,
     /// The half-thickness at the tail, raster pixels.
     pub half0: f32,
-    /// And at the head.
     pub half1: f32,
     /// Softness ÷ 100, floored above zero.
     pub soft: f32,
@@ -489,8 +482,6 @@ struct RadioWavesParams {
     _pad2: u32,
 }
 
-/// One resolved Vegas (docs/08 §3.76). Mirrors
-/// `lumit_core::fx::cpu::VegasParams` field-for-field.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VegasOp {
     /// True to read the alpha rather than the perceptual luma.
@@ -570,7 +561,6 @@ pub struct PathDrawOp {
     pub wiggle_freq: f32,
     /// Where in the wobble's evolution this frame sits, taken host-side.
     pub wiggle_tick: f32,
-    /// The wobble's seed.
     pub seed: u32,
     /// The drawing's colour, scene-linear RGB.
     pub colour: [f32; 3],

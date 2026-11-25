@@ -1,5 +1,3 @@
-//! A text animator's numbers as ports on its layer's Source box.
-
 use super::{glyph_xforms_near, GlyphXform, SelectorKind, SpokenWord, TextAnimator};
 use crate::anim::Property;
 
@@ -7,13 +5,11 @@ use crate::anim::Property;
 /// `text.<animator>.<number>`, the animator by its place in the list.
 pub const TEXT_PORT_PREFIX: &str = "text.";
 
-/// The Source box port of animator `index`'s number `name`.
 #[must_use]
 pub fn animator_port(index: usize, name: &str) -> String {
     format!("{TEXT_PORT_PREFIX}{index}.{name}")
 }
 
-/// The animator and number a Source box port names.
 #[must_use]
 pub fn parse_animator_port(port: &str) -> Option<(usize, &str)> {
     let rest = port.strip_prefix(TEXT_PORT_PREFIX)?;
@@ -88,8 +84,6 @@ impl TextAnimator {
         out
     }
 
-    /// The keyable number `name` names, the way [`Self::wireable_numbers`]
-    /// calls it.
     pub fn number_mut(&mut self, name: &str) -> Option<&mut Property> {
         if let Some(tag) = name.strip_prefix("axis.") {
             return self

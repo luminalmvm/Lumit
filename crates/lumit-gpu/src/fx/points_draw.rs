@@ -22,7 +22,6 @@ use super::{
     FxEngine,
 };
 
-/// Where one points pass lays its points.
 #[derive(Clone, Copy)]
 enum Lay<'a> {
     /// Over the target as it stands, premultiplied `over`.
@@ -70,7 +69,6 @@ impl FieldTest {
     }
 }
 
-/// One point, as the generic draw reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawPoint {
     /// px in the layer's three axes, **unprojected** — the camera is
@@ -122,7 +120,6 @@ impl Default for SpriteFit {
     }
 }
 
-/// One generic points draw.
 #[derive(Debug, Clone, Copy)]
 pub struct PointsDrawOp<'a> {
     pub points: &'a [DrawPoint],
@@ -349,7 +346,6 @@ impl FxEngine {
         if count == 0 {
             return Vec::new();
         }
-        // A square-ish target with a pixel per point.
         let pw = ((count as f64).sqrt().ceil() as u32).max(1);
         let ph = (count as u32).div_ceil(pw).max(1);
         let target = work_texture(ctx, pw, ph, "fx-points-stood");
@@ -402,7 +398,6 @@ impl FxEngine {
                 let Some(px) = data.get(at..at + bytes as usize) else {
                     continue;
                 };
-                // Whichever of the three working formats the target is.
                 for (c, v) in out.iter_mut().enumerate() {
                     *v = match bytes {
                         16 => px
@@ -448,16 +443,6 @@ impl FxEngine {
             .and_then(|most| op.points.get(..most))
             .unwrap_or(op.points);
         let count = u32::try_from(points.len()).unwrap_or(u32::MAX);
-        // The stream layout Particulate's compaction writes, filled from the
-        // host instead: the regions the draw reads carry the points, and the
-        // ones only a data consumer would read stay nought. The strides are
-        // the kernel's own `r_*` functions, in words, for a capacity of
-        // `count`.
-        //
-        // ponytail: the whole set is uploaded every frame — 68 bytes a point,
-        // well under a megabyte at the default caps. Give the generators a
-        // compute pass of their own if a profile ever shows this copy costing
-        // more than the closed forms it saves.
         let cap = u64::from(count);
         let mut words = vec![0u32; (cap * STREAM_WORDS) as usize];
         let region = |k: u64| (k * cap) as usize;
@@ -619,7 +604,6 @@ impl FxEngine {
     }
 }
 
-/// A copy of `src` for the points to be drawn over.
 fn points_copy(ctx: &GpuContext, src: &wgpu::Texture, w: u32, h: u32) -> wgpu::Texture {
     let out = work_texture(ctx, w, h, "fx-points-out");
     let mut enc = ctx.encoder("fx-points-copy");

@@ -58,9 +58,7 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
     let (a, b) = (wave(300, 0.05), wave(300, 0.11));
     let plan = MixPlan {
         clips: vec![
-            // Starts before the comp does.
             clip(&a, -20, 0, 100),
-            // A gap, then two clips crossing under opposed ramps.
             PlacedClip {
                 envelope: ramp(vec![[1.0, 0.9], [0.7, 0.6], [0.2, 0.1], [0.0, 0.0]]),
                 ..clip(&a, 200, 30, 48)
@@ -70,7 +68,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
                 node: 1,
                 ..clip(&b, 216, 10, 48)
             },
-            // Two loud clips at once: over the ceiling.
             PlacedClip {
                 gain: [1.5, 1.5],
                 ..clip(&a, 300, 100, 60)
@@ -80,8 +77,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
                 node: NONE,
                 ..clip(&b, 310, 100, 60)
             },
-            // The file, across the seam between its first two blocks, and
-            // the same file again a little later and overlapping.
             PlacedClip {
                 gain: [0.9, 0.7],
                 node: 1,
@@ -128,8 +123,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
         plan.mix_block(at, out, &mut work, &mut DrySource, acc, None)
     };
 
-    // Before anything of the file is decoded: its clips are silence, and
-    // the mix says how much of them was due.
     let mut out = vec![1.0f32; plan.total_frames * 2];
     assert_eq!(
         mix(0, &mut out, None),
@@ -140,7 +133,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
     assert!(out.chunks_exact(2).map(|f| (f[0], f[1])).eq(cold.clone()));
     assert_eq!(cold[450], (0.0, 0.0));
 
-    // Filled, as the thread that fills ahead leaves it.
     plan.warm(0, plan.total_frames);
     let want = frames_of(&plan);
     assert_ne!(want[450], (0.0, 0.0), "the file sounds once it is there");
@@ -151,7 +143,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
         "the hot overlap reached the ceiling"
     );
 
-    // From an odd place in stretches of odd lengths.
     let mut at = 137;
     for len in [1usize, 7, 64, 3, 250, 99] {
         let len = len.min(plan.total_frames - at);
@@ -167,8 +158,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
         at += len;
     }
 
-    // And the blocks are the file: the same plan over the file decoded
-    // whole is the same sound.
     let decoded = whole(
         RATE,
         lumit_media::audio::decode_all(&path, RATE).unwrap().samples,
@@ -180,11 +169,6 @@ fn the_buffer_mix_is_the_frame_mix_over_gaps_overlaps_and_a_seek() {
     assert!(frames_of(&over_whole) == want);
 }
 
-/// A layer routed to a bus, with a pre-fader and a post-fader send to a
-/// second bus, reaches the master at the gains the desk says. Each node's
-/// meter reads its own sum after its fader, a bus's included. Switching the
-/// layer's output off silences that edge only: the sends still play and the
-/// first bus falls silent.
 #[test]
 fn a_layer_reaches_the_master_through_its_bus_and_sends() {
     let layer = whole(48_000, vec![0.4; 64 * 2]);
@@ -239,8 +223,6 @@ fn a_layer_reaches_the_master_through_its_bus_and_sends() {
     };
     let near = |got: f32, want: f32| (got - want).abs() < 1e-6;
 
-    // Through the bus 0.4 × 0.5 × 0.8; pre send 0.4 × 0.25; post send
-    // 0.4 × 0.5 × 0.1; all through the master's half.
     let (out, meters) = run(plan.clone());
     assert!(
         out.iter().all(|v| near(*v, (0.16 + 0.1 + 0.02) * 0.5)),

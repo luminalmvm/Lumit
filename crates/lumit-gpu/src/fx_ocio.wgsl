@@ -20,7 +20,6 @@ struct FxParams {
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var<uniform> fxp: FxParams;
-// The baked table, as `ocio_sample.wgsl` reads it.
 @group(0) @binding(3) var curve: texture_2d<f32>;
 @group(0) @binding(4) var cube: texture_3d<f32>;
 @group(0) @binding(5) var<uniform> p: OcioParams;

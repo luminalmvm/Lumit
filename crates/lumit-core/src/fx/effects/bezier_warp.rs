@@ -183,7 +183,6 @@ pub struct BezierWarp {
     #[counter(min = 1, max = 12, default = 8, hard_min = 1, hard_max = 12, unit = Raw)]
     pub quality: i32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -235,7 +234,6 @@ impl BezierWarp {
     }
 }
 
-/// Bezier warp's behaviour.
 pub struct BezierWarpDef;
 
 impl EffectDef for BezierWarpDef {

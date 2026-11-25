@@ -54,8 +54,6 @@ use super::fx_colour::Fx;
 use super::props::{child, group};
 use super::Conv;
 
-/// What the report calls the family when a row is about the group rather than
-/// about one style.
 const FAMILY: &str = "Layer styles";
 
 /// After Effects' `ADBE Layer Styles` group, mapped
@@ -103,7 +101,6 @@ pub(crate) fn styles(
         return out;
     }
 
-    // §1's invariants, restored rather than assumed: one of each, in order.
     lumit_core::fx::styles::normalise_styles(&mut out);
 
     // The Blending Options subgroup is v1's one wholly unmapped part of the
@@ -200,10 +197,6 @@ fn one(
     }
     .flatten()
 }
-
-// ---------------------------------------------------------------------------
-// The nine
-// ---------------------------------------------------------------------------
 
 fn drop_shadow(
     conv: &mut Conv<'_>,
@@ -331,7 +324,6 @@ fn stroke(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
     fx.done()
 }
 
-/// Satin — **modelled and imported, not drawn in this version** (§8).
 fn satin(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -352,8 +344,6 @@ fn satin(
     fx.done()
 }
 
-/// Bevel and emboss — **modelled and imported, not drawn in this version**
-/// (§8), on exactly Satin's terms.
 fn bevel(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -404,10 +394,6 @@ fn bevel(
     fx.done()
 }
 
-// ---------------------------------------------------------------------------
-// The pieces several of them share
-// ---------------------------------------------------------------------------
-
 /// A style's **light angle**: `270° − a`, and a report row when After Effects
 /// was following the composition's global light.
 ///
@@ -453,8 +439,6 @@ fn glow_colour(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str, lumit_id: &str)
     }
 }
 
-/// The glow dials Lumit has no counterpart for: the edge-finding technique, the
-/// range the falloff is measured over, the jitter, and the ramp's smoothness.
 fn glow_extras(fx: &mut Fx<'_>, conv: &mut Conv<'_>, slot: &str) {
     let mut named = Vec::new();
     if fx
@@ -489,7 +473,6 @@ fn noise(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
     }
 }
 
-/// An **interior** style's blend mode onto the injected Blend row.
 fn interior_blend(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
     if let Some(mode) = fx
         .still(conv, ae_id)
@@ -528,7 +511,6 @@ fn outer_blend(fx: &mut Fx<'_>, conv: &mut Conv<'_>, ae_id: &str) {
     );
 }
 
-/// A style Lumit keeps whole and does not draw (§8).
 fn unrendered(fx: &mut Fx<'_>, conv: &mut Conv<'_>) {
     fx.differs(
         conv,
@@ -536,20 +518,6 @@ fn unrendered(fx: &mut Fx<'_>, conv: &mut Conv<'_>) {
     );
 }
 
-/// After Effects' layer-style blend list, which is Photoshop's — **including
-/// its four separators**, which occupy an index each.
-///
-/// Two of the indices are pinned by the golden capture's own defaults: a drop
-/// shadow arrives at 5, which Photoshop calls Multiply, and a glow at 11, which
-/// is Screen. The rest is Photoshop's published order counted through from
-/// there.
-// ponytail: the list is read off Photoshop's documented order with two indices
-// confirmed against a real capture, rather than off Adobe's enumeration.
-// Ceiling: an index this table does not know imports as Normal and says so,
-// which is a wrong mode on one style rather than a wrong picture everywhere.
-// Upgrade: read the enumeration off a live After Effects. Trigger: a report row
-// naming an unmapped index, or a side-by-side comparison where a style's mode
-// is wrong.
 fn blend_mode(index: i64) -> Option<BlendMode> {
     Some(match index {
         1 => BlendMode::Normal,

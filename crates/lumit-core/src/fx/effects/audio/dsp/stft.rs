@@ -31,7 +31,6 @@ use std::sync::Arc;
 use realfft::num_complex::Complex;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
-/// The rate frame sizes are quoted at.
 pub const QUOTED_RATE: f64 = 48_000.0;
 
 /// A frame size of `at_48k` samples at 48 kHz, scaled to `rate`.
@@ -72,7 +71,6 @@ pub fn size_at(rate: u32, at_48k: usize) -> usize {
     base
 }
 
-/// The square root of a periodic Hann window of `n` points.
 #[must_use]
 pub fn sqrt_hann(n: usize) -> Vec<f32> {
     hann(n).into_iter().map(f32::sqrt).collect()
@@ -107,7 +105,6 @@ pub struct Fft {
 }
 
 impl Fft {
-    /// Plan a transform of `n` real samples.
     #[must_use]
     pub fn new(n: usize) -> Self {
         let mut planner = RealFftPlanner::<f32>::new();
@@ -122,7 +119,6 @@ impl Fft {
         }
     }
 
-    /// Samples in a frame.
     #[must_use]
     pub fn len(&self) -> usize {
         self.n
@@ -140,7 +136,6 @@ impl Fft {
         self.n / 2 + 1
     }
 
-    /// A spectrum's worth of zeros, for the caller to hold.
     #[must_use]
     pub fn spectrum(&self) -> Vec<Complex<f32>> {
         vec![Complex::new(0.0, 0.0); self.bins()]
@@ -258,7 +253,6 @@ impl Framer {
         self.n - 1
     }
 
-    /// Samples between one frame and the next.
     #[must_use]
     pub fn hop(&self) -> usize {
         self.hop
@@ -311,7 +305,6 @@ impl Framer {
         }
     }
 
-    /// One whole frame: window, hand over, window again, add up, move on.
     fn turn(&mut self, frame: &mut impl FnMut(u64, &mut [Vec<f32>])) {
         let hop = self.hop;
         for (work, fifo) in self.work.iter_mut().zip(&self.fifo_in) {
@@ -367,7 +360,6 @@ pub fn frame_at(
     let n = window.len();
     let channels = channels.max(1);
     let len = interleaved.len() / channels;
-    // Where the frame starts, which may be before the span does.
     let start = (j * hop + hop) as i64 - n as i64;
     for (i, (slot, w)) in out.iter_mut().zip(window).enumerate() {
         let t = start + i as i64;
@@ -381,7 +373,6 @@ pub fn frame_at(
     }
 }
 
-/// The mono mix of frame `j` of an interleaved span, windowed, into `out`.
 pub fn mono_frame_at(
     interleaved: &[f32],
     channels: usize,
@@ -461,7 +452,6 @@ mod tests {
                 }
             }
 
-            // The same framing over the whole span, one channel.
             let hop = n / 4;
             let window = sqrt_hann(n);
             let scale = hann_overlap_scale(n, hop);

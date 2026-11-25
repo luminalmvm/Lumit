@@ -1,9 +1,3 @@
-//! Temporary by-hand probe: what does the FIRST preview cost, before any
-//! footage is involved? Run with:
-//!   cargo run --release -p lumit-render --features shared-texture --example first_frame_probe
-//! Needs no media at all — the whole point is that a brand-new empty comp in a
-//! brand-new project takes noticeable time to show anything, so this times the
-//! startup that stands between "worker started" and "first frame out".
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{Composition, Document, LinearColour, ProjectItem};
@@ -49,7 +43,6 @@ fn ms(at: Instant) -> f64 {
 }
 
 fn main() {
-    // --- 1. The parts of a renderer, one at a time. ---
     let t = Instant::now();
     let gpu = lumit_gpu::GpuContext::headless().expect("gpu");
     println!("{:44} {:8.1} ms", "GpuContext::headless", ms(t));
@@ -74,7 +67,6 @@ fn main() {
     let _scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
     println!("{:44} {:8.1} ms", "ScopeEngine::new", ms(t));
 
-    // --- 2. The whole thing, as the worker builds it. ---
     let t = Instant::now();
     let mut r = HeadlessRenderer::new().expect("gpu");
     println!(
@@ -83,7 +75,6 @@ fn main() {
         ms(t)
     );
 
-    // --- 3. The first frame of an empty comp, then the ones after it. ---
     let (doc, comp) = empty_doc();
     let q = Quality {
         draft: false,

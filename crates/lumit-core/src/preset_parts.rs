@@ -34,14 +34,12 @@ const ROWS: [TransformProp; 16] = [
     TransformProp::Opacity,
 ];
 
-/// One keyed transform row, in layer-local time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KeyedRow {
     pub prop: TransformProp,
     pub animation: Animation,
 }
 
-/// The two lists, as they sit in the file beside `effects`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresetParts {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -118,7 +116,6 @@ fn animator_rows(animator: &mut TextAnimator) -> Vec<&mut Property> {
     rows
 }
 
-/// The same numbers, to read.
 #[must_use]
 pub fn animator_values(a: &TextAnimator) -> Vec<&Property> {
     let mut rows = vec![
@@ -163,7 +160,6 @@ impl PresetParts {
         self.transform.is_empty() && self.animators.is_empty()
     }
 
-    /// `preset`, a preset's JSON text, with these parts written into it.
     pub fn written_into(&self, preset: &str) -> Result<String, String> {
         if self.is_empty() {
             return Ok(preset.to_owned());

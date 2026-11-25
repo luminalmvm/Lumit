@@ -31,7 +31,6 @@ struct Params {
 @group(0) @binding(3) var src: texture_2d<f32>;
 @group(0) @binding(4) var dst: texture_storage_2d<rgba16float, write>;
 
-// == draw::render, and draw::covered inside it.
 @compute @workgroup_size(8, 8)
 fn audio_spectrum(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= p.w || gid.y >= p.h) {

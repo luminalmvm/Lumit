@@ -45,23 +45,24 @@ use super::props::{from_node, group};
 use super::time::TimeBase;
 use super::{Conv, ItemKind, Items};
 
-/// The match name a layer's Essential Properties sit under.
 const OVERRIDES: &str = "ADBE Layer Overrides";
 
-/// How a copy's value for one control is turned into Lumit's.
 enum How {
     /// Transform rows. `shift` is how far each Lumit row sits from After
     /// Effects' number: a Shape or Text layer's anchor moves on import.
-    Transform { shift: Vec<f64> },
-    /// Rows of the effect at `at` in the layer's stack.
-    Effect { at: usize, rows: Vec<String> },
-    /// A paint row of the shape at `item` among the layer's shapes.
-    Shape { item: usize, row: ShapeRow },
-    /// A mask's number, as it is.
+    Transform {
+        shift: Vec<f64>,
+    },
+    Effect {
+        at: usize,
+        rows: Vec<String>,
+    },
+    Shape {
+        item: usize,
+        row: ShapeRow,
+    },
     Mask,
-    /// A Text layer's words.
     Text,
-    /// What a layer shows.
     Media,
 }
 
@@ -75,8 +76,6 @@ struct Made<'a> {
     roads: Vec<Option<(usize, How)>>,
 }
 
-/// Give every composition with Essential Graphics its template, and every
-/// layer placing one the values it set.
 pub(super) fn apply(
     doc: &mut Document,
     report: &mut ImportReport,
@@ -124,13 +123,11 @@ pub(super) fn apply(
     }
 }
 
-/// The After Effects stacking index an imported layer was given.
 fn ae_index(layer: &Layer) -> Option<u32> {
     let index = layer.extra.get("ae")?.get("index")?.as_u64()?;
     u32::try_from(index).ok()
 }
 
-/// What a report row calls a controller's source: its last match name.
 fn source_name(controller: &Controller) -> String {
     let last = controller.path.last().and_then(|s| s.match_name.as_deref());
     match (last, controller.kind.as_deref()) {
@@ -140,7 +137,6 @@ fn source_name(controller: &Controller) -> String {
     }
 }
 
-/// One composition's controllers as a template.
 fn template<'a>(
     report: &mut ImportReport,
     comp: &'a Comp,
@@ -158,10 +154,6 @@ fn template<'a>(
             continue;
         }
         let label = controller.name.clone().unwrap_or_default();
-        // ponytail: a controller whose source is in a composition nested
-        // inside this one is reported. Scripting refuses to make one, so no
-        // file was to hand. When one is, it is a `Target::Copy` on the layer
-        // placing the nested composition.
         let found = (controller.comp_id.is_none() || controller.comp_id == comp.id)
             .then(|| control(comp, controller, built, items))
             .flatten();
@@ -192,8 +184,6 @@ fn template<'a>(
     }
 }
 
-/// The conversion's state standing on one layer of `comp`, as
-/// [`super::layers::map_layer`] leaves it for that layer's effects.
 fn conv_on<'r>(
     report: &'r mut ImportReport,
     comp: &Comp,
@@ -241,7 +231,6 @@ fn conv_on<'r>(
     conv
 }
 
-/// The node at `path` under `props`, where the capture has one.
 fn node_at<'a>(props: &'a [Property], path: &[Step]) -> Option<&'a Property> {
     let (step, rest) = path.split_first()?;
     let node = props.get(place(props, step)?)?;
@@ -281,7 +270,6 @@ fn with_leaf(props: &[Property], path: &[Step], leaf: &Property) -> Option<Vec<P
     Some(out)
 }
 
-/// A property's still value: its own, or its first key's.
 fn still_of(leaf: &Property) -> Option<&serde_json::Value> {
     leaf.value
         .as_ref()
@@ -352,13 +340,11 @@ fn nudged(leaf: &Property) -> Vec<Property> {
     }
 }
 
-/// The effect at `at` in a layer's stack, mapped with nothing reported.
 fn effect_at(conv: &mut Conv<'_>, props: &[Property], at: usize) -> Option<EffectInstance> {
     let node = group(props, "ADBE Effect Parade").get(at)?;
     Some(map_effect(conv, &ItemPath::default(), node).instance())
 }
 
-/// The rows of `was` that hold something else in `now`.
 fn moved(was: &EffectInstance, now: &EffectInstance) -> Vec<String> {
     was.params
         .iter()
@@ -367,7 +353,6 @@ fn moved(was: &EffectInstance, now: &EffectInstance) -> Vec<String> {
         .collect()
 }
 
-/// A shape's paint rows, each as numbers: what tells two mappings apart.
 fn paint(item: &ShapeItem) -> [(ShapeRow, Vec<f64>); 4] {
     let colour = |c: &Option<[LumProperty; 4]>| -> Vec<f64> {
         c.iter().flatten().map(|p| p.value_at(0.0)).collect()
@@ -380,8 +365,6 @@ fn paint(item: &ShapeItem) -> [(ShapeRow, Vec<f64>); 4] {
     ]
 }
 
-/// The control one controller makes, without its id, label and group, and
-/// the road a copy's values take. `None` when Lumit has no row for it.
 fn control(
     comp: &Comp,
     controller: &Controller,
@@ -540,13 +523,11 @@ fn control(
             }
             let point = matches!(source.value_type.as_deref(), Some("point" | "point3"));
             let rows: Vec<String> = match tries.as_slice() {
-                // A point Lumit keeps as two rows: each axis moved its own.
                 [x, y] if point && x.len() == 1 && y.len() == 1 && x != y => {
                     vec![x.first()?.clone(), y.first()?.clone()]
                 }
                 [x, y] if point && x.len() == 1 && x == y => x.clone(),
                 _ if point => return None,
-                // The first try that moved one row and no other.
                 tries => tries.iter().find(|rows| rows.len() == 1)?.clone(),
             };
             let param = |id: &String| Target::Param {
@@ -609,11 +590,6 @@ fn control(
             if was.len() != now.len() || was.len() != ours.len() {
                 return None;
             }
-            // Every paint row that moved. A fill shared by two paths moves
-            // two, and one control names one row.
-            // ponytail: paint only. A rectangle's size and corners are not
-            // kept as rows by the shape import, so those controllers are
-            // reported. Carry them once it keeps a shape's own numbers.
             let mut hits = Vec::new();
             for (item, (a, b)) in was.iter().zip(&now).enumerate() {
                 for ((row, before), (_, after)) in paint(a).into_iter().zip(paint(b)) {
@@ -644,13 +620,10 @@ fn control(
                 },
             ))
         }
-        // ponytail: Time Remap, audio levels and anything else After Effects
-        // offers are reported. Each needs an arm here and a road in `set_one`.
         _ => None,
     }
 }
 
-/// The leaves under a layer's Essential Properties, groups opened, in order.
 fn leaves<'a>(nodes: &'a [Property], out: &mut Vec<&'a Property>) {
     for node in nodes {
         if node.group.is_some() {
@@ -661,8 +634,6 @@ fn leaves<'a>(nodes: &'a [Property], out: &mut Vec<&'a Property>) {
     }
 }
 
-/// What one layer placing a template set for itself, or `None` for a layer
-/// that set nothing.
 fn copy(
     doc: &Document,
     report: &mut ImportReport,
@@ -686,7 +657,6 @@ fn copy(
         if leaf.overridden != Some(true) {
             continue;
         }
-        // By After Effects' own id where the file has one, else by its place.
         let at = match leaf.controller_id.as_deref() {
             Some(id) => controllers.iter().position(|c| c.id.as_deref() == Some(id)),
             None => Some(place),
@@ -723,7 +693,6 @@ fn copy(
     (!is_bare(&values)).then_some(values)
 }
 
-/// The name of the composition a capture composition imported as.
 fn layer_comp_name(doc: &Document, comp: &Comp, items: &Items) -> String {
     comp.id
         .and_then(|id| items.get(id))
@@ -732,8 +701,6 @@ fn layer_comp_name(doc: &Document, comp: &Comp, items: &Items) -> String {
         .unwrap_or_default()
 }
 
-/// Keep `rows` on a copy as its own: the control's value at the copy's first
-/// moment, then each row as it moves.
 fn keep(values: &mut EffectInstance, control: &Control, rows: Vec<LumProperty>) -> Option<()> {
     let ids = row_ids(control);
     let first: Vec<f64> = rows.iter().map(|p| p.value_at(0.0)).collect();
@@ -757,8 +724,6 @@ fn keep(values: &mut EffectInstance, control: &Control, rows: Vec<LumProperty>) 
     Some(())
 }
 
-/// One Essential Property a layer set, written into the copy's values.
-/// `None` when it could not be read as the control's kind.
 #[allow(clippy::too_many_arguments)]
 fn set_one(
     values: &mut EffectInstance,

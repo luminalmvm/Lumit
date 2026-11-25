@@ -52,7 +52,6 @@ fn sx_turn(px: vec2<f32>, centre: vec2<f32>, degrees: f32) -> vec2<f32> {
     return vec2<f32>(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
 }
 
-// The finished colour, kept inside the layer when Paint asks for it.
 fn sx_paint(c: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     if (p.paint == 0u) {
         return c * lumit_sample(uv).a;
@@ -109,23 +108,17 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     // x runs along the trunk, y across it.
     let q = sx_turn(lumit_px(uv), p.centre, p.rotation);
     let along = q.x / max(p.trunk_wobble_length, 1.0);
-    // The trunk drifts sideways and toward the plank as it grows.
     let sway = p.trunk_wobble * vec2<f32>(sx_perlin(vec2<f32>(along, 0.5), 1u), sx_perlin(vec2<f32>(along, 7.5), 2u));
     let cross = vec2<f32>(q.y + sway.x, p.depth + sway.y);
     var r = length(cross);
-    // Rings are not quite round: their radius changes with the angle.
     let ang = atan2(cross.y, cross.x);
     r *= 1.0 + 0.15 * p.angular_wobble / 100.0 * sx_perlin(vec2<f32>(ang * 2.0, along * 3.0), 3u);
     let spacing = max(p.ring_spacing, 1.0);
     var rings = r / spacing;
-    // Uneven: some years grew more than others.
     rings += p.unevenness / 100.0 * 2.0 * sx_perlin(vec2<f32>(rings * 0.15, 0.25), 4u);
     rings += p.ring_noise / 100.0 * sx_fbm(q / max(p.ring_noise_size, 1.0), 3, 0.5, 5u);
-    // Each ring rises slowly through the light early wood and drops sharply
-    // at the dark late wood.
     let f = fract(rings);
     var t = pow(f, mix(1.0, 8.0, p.sharpness / 100.0)) * p.ring_intensity / 100.0;
-    // Grain: fine streaks along the plank, stretched forty times.
     let g = sx_fbm(vec2<f32>(q.x / (max(p.grain_size, 0.5) * 40.0), q.y / max(p.grain_size, 0.5)), 2, 0.5, 6u);
     t = clamp(t + g * 0.5 * p.graininess / 100.0, 0.0, 1.0);
     let c = mix(lumit_premult(p.light), lumit_premult(p.dark), t);

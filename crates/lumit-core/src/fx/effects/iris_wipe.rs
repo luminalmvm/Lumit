@@ -21,14 +21,12 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// An inner radius means nothing until the star is switched on.
 pub const IRIS_WIPE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
     param: "inner_radius",
     on: "use_inner_radius",
     cond: EnabledCond::BoolIs(true),
 }];
 
-/// Iris wipe's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "iris_wipe",
@@ -115,7 +113,6 @@ pub struct IrisWipe {
     #[slider(min = 0.0, max = 500.0, default = 0.0, hard_min = 0.0, unit = Px)]
     pub feather: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -172,7 +169,6 @@ impl IrisWipe {
     }
 }
 
-/// Iris wipe's behaviour.
 pub struct IrisWipeDef;
 
 impl EffectDef for IrisWipeDef {

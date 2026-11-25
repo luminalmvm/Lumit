@@ -20,20 +20,14 @@
 
 use super::{mel::HOP, tokens::Tokens};
 
-/// Encoder positions a second.
 const PER_SECOND: f64 = 50.0;
-/// The median filter's width, in encoder positions.
 const MEDIAN: usize = 7;
 /// How far an edge may move to find quiet, in 10 ms frames.
 const SNAP: isize = 6;
-/// Punctuation that belongs to the word after it.
 const OPENING: &str = "\"'\u{201c}\u{00bf}([{-";
-/// Punctuation that belongs to the word before it.
 const CLOSING: &str = "\"'.\u{3002},\u{ff0c}!\u{ff01}?\u{ff1f}:\u{ff1a}\u{201d})]}\u{3001}";
-/// Languages written without spaces between words.
 const UNSPACED: [&str; 6] = ["zh", "ja", "th", "lo", "my", "yue"];
 
-/// One word, timed within its window.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Timed {
     /// The word, with any leading space it was written with.
@@ -46,7 +40,6 @@ pub struct Timed {
     pub probability: f32,
 }
 
-/// What [`align`] reads.
 #[derive(Debug)]
 pub struct Attention<'a> {
     /// One matrix per timing head, `rows` by `columns`.
@@ -287,7 +280,6 @@ fn fold_punctuation(mut timed: Vec<Timed>) -> Vec<Timed> {
     timed
 }
 
-/// Whether `word` is one of the characters in `set`.
 fn is_in(word: &str, set: &str) -> bool {
     let mut chars = word.chars();
     matches!((chars.next(), chars.next()), (Some(c), None) if set.contains(c))

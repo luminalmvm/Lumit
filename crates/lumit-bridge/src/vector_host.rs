@@ -19,7 +19,6 @@ use uuid::Uuid;
 /// rather than a queue of them.
 pub(crate) static PREVIEW_EPOCH: AtomicU64 = AtomicU64::new(0);
 
-/// The host one export runs with.
 pub(crate) struct Host {
     /// Every footage item's source, resolved while the project was locked.
     sources: BTreeMap<Uuid, Source>,
@@ -30,7 +29,6 @@ pub(crate) struct Host {
     to_rec709: Option<lumit_colour::matrix::Matrix34>,
 }
 
-/// Where a footage item's picture comes from.
 struct Source {
     #[cfg(feature = "media")]
     media: Option<lumit_media::sequence::MediaSource>,
@@ -38,8 +36,6 @@ struct Source {
 }
 
 impl Host {
-    /// A host for `doc`, its footage found from `project`, the file the
-    /// project is saved in.
     pub(crate) fn new(project: Option<&Path>, doc: &Document, epoch: Option<u64>) -> Host {
         let sources = doc
             .items
@@ -98,7 +94,6 @@ fn source_of(_project: Option<&Path>, _f: &lumit_core::model::FootageItem) -> So
     Source { still: false }
 }
 
-/// A still image, or a layered file whose layers are stills.
 #[cfg(feature = "media")]
 fn is_still_file(path: &Path) -> bool {
     if lumit_media::sequence::is_still(path) {
@@ -150,7 +145,6 @@ impl lumit_lottie::Host for Host {
 fn still_of(frame: lumit_media::decode::DecodedFrame) -> lumit_lottie::Still {
     let rgba = match frame.format {
         lumit_media::decode::PixelFormat::Srgb8 => frame.rgba,
-        // A deep file decodes to linear floats; the file wants eight bits.
         lumit_media::decode::PixelFormat::LinearF32 => (0..frame.rgba.len() / 16)
             .flat_map(|n| {
                 let px = lumit_core::pixels::f32_px(&frame.rgba, n);
@@ -164,8 +158,6 @@ fn still_of(frame: lumit_media::decode::DecodedFrame) -> lumit_lottie::Still {
         rgba,
     }
 }
-
-// ---- Memory: how each comp was last exported --------------------------------
 
 /// What the window opens on for a comp it has exported before: where the file
 /// went and the settings it went with. A person's own preference, so it lives
@@ -225,7 +217,6 @@ struct Memory {
     comps: Vec<(Uuid, Remembered)>,
 }
 
-/// How many comps are remembered.
 const KEPT: usize = 256;
 
 fn memory_path() -> Option<PathBuf> {
@@ -243,7 +234,6 @@ fn read_memory() -> Memory {
         .unwrap_or_default()
 }
 
-/// How `comp` was last exported, if it has been.
 pub(crate) fn remembered(comp: Uuid) -> Option<Remembered> {
     read_memory()
         .comps

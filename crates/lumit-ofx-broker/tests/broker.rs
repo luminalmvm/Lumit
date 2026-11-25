@@ -26,7 +26,6 @@ use lumit_ofx::{
     ipc::broker::BrokerError,
 };
 
-/// The plugin this whole file is about.
 const PASSTHROUGH: &str = "com.lumitlab.testplug.passthrough";
 
 /// The frame size every test works at. Small on purpose: the ring is sized from
@@ -34,9 +33,6 @@ const PASSTHROUGH: &str = "com.lumitlab.testplug.passthrough";
 /// allocator.
 const FRAME: (usize, usize) = (8, 8);
 
-// ------------------------------------------------------------ the scaffold --
-
-/// The test plugin's file name on this platform.
 fn test_plugin_file_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_ofx_testplug.dll"
@@ -47,7 +43,6 @@ fn test_plugin_file_name() -> &'static str {
     }
 }
 
-/// Where Cargo put the test plugin, if it built it.
 fn test_plugin() -> Option<PathBuf> {
     let name = test_plugin_file_name();
     let exe = std::env::current_exe().ok()?;
@@ -66,8 +61,6 @@ fn test_plugin() -> Option<PathBuf> {
     None
 }
 
-/// Lay the test plugin out as a real bundle, and answer with the binary inside
-/// it. `None` means the plugin was not built and the caller skips.
 fn a_bundle_in(root: &Path) -> Option<PathBuf> {
     let source = test_plugin()?;
     let dir = root
@@ -80,7 +73,6 @@ fn a_bundle_in(root: &Path) -> Option<PathBuf> {
     Some(binary)
 }
 
-/// Say why a test did nothing, by name, so a skip is never silent.
 fn skipped(test: &str) {
     eprintln!(
         "{test}: skipped — {} was not found in the target directory. \
@@ -89,8 +81,6 @@ fn skipped(test: &str) {
     );
 }
 
-/// A broker over the test bundle, with short deadlines and whatever
-/// environment the case wants the plugin to misbehave under.
 fn a_broker(root: &Path, env: &[(&str, &str)]) -> Option<(Broker, u32)> {
     let binary = a_bundle_in(root)?;
     let mut config = BrokerConfig::new(binary, FRAME);
@@ -100,7 +90,6 @@ fn a_broker(root: &Path, env: &[(&str, &str)]) -> Option<(Broker, u32)> {
     // the mechanism, not a test hook.
     config.quirks.render_timeout = Duration::from_millis(400);
     config.quirks.control_timeout = Duration::from_secs(5);
-    // A hang on a first frame waits this out, once per strike.
     config.quirks.warm_up_timeout = Duration::from_secs(2);
     config.exe = Some(PathBuf::from(env!("CARGO_BIN_EXE_lumit-ofx-broker")));
     config.env = env
@@ -118,19 +107,14 @@ fn a_broker(root: &Path, env: &[(&str, &str)]) -> Option<(Broker, u32)> {
     Some((broker, index as u32))
 }
 
-/// A frame every pixel of which is the same value, so a test can say what came
-/// back in one number.
 fn a_flat_frame(value: f32) -> Frame16 {
     let pixels = vec![value; FRAME.0 * FRAME.1 * 4];
     Frame16::from_f32(FRAME.0, FRAME.1, &pixels).expect("a frame")
 }
 
-/// The first channel of the first pixel.
 fn first(frame: &Frame16) -> f32 {
     frame.pixel(0, 0)[0]
 }
-
-// ---------------------------------------------------------------- the tests --
 
 #[test]
 fn a_crash_on_a_frame_restarts_the_broker_and_the_session_carries_on() {
@@ -153,7 +137,6 @@ fn a_crash_on_a_frame_restarts_the_broker_and_the_session_carries_on() {
         .render(instance, &request, &|_, _| None)
         .expect("a frame back");
 
-    // The Gate-4 demo (docs/16): the frame is lost, and nothing else is.
     assert!(rendered.errored, "the dead frame must say so");
     assert_eq!(
         first(&rendered.frame),
@@ -166,9 +149,6 @@ fn a_crash_on_a_frame_restarts_the_broker_and_the_session_carries_on() {
         "the broker must have been restarted"
     );
 
-    // And the session carries on: the next frame renders for real, through a
-    // process that did not exist a moment ago, with an instance nobody had to
-    // rebuild by hand.
     let next = RenderRequest::filter(101.0, a_flat_frame(0.5));
     let rendered = broker
         .render(instance, &next, &|_, _| None)
@@ -204,7 +184,6 @@ fn a_hang_trips_the_deadline_and_the_third_strike_disables_the_plugin() {
         broker.is_disabled(),
         "three consecutive failures put the plugin away for the session"
     );
-    // And it stays away: the fourth attempt does not start a fourth process.
     let restarts = broker.restarts();
     let rendered = broker
         .render(
@@ -247,7 +226,6 @@ fn neighbours_shipped_with_the_frame_reach_the_plugin_without_a_prefetch() {
         .filter(|offset| *offset != 0)
         .map(|offset| (offset, a_flat_frame(value_at(20.0 + f64::from(offset)))))
         .collect();
-    // Nothing to fetch from: every frame the plugin wants is already across.
     let rendered = broker
         .render(instance, &request, &|_, _| None)
         .expect("a frame back");
@@ -277,8 +255,6 @@ fn a_frame_crosses_the_ring_unchanged() {
         "the note's triple buffering is the floor"
     );
 
-    // A frame with every pixel different, so a slot written half way or a row
-    // written twice cannot pass.
     let pixels: Vec<f32> = (0..FRAME.0 * FRAME.1 * 4)
         .map(|index| index as f32 / 64.0)
         .collect();
@@ -291,14 +267,11 @@ fn a_frame_crosses_the_ring_unchanged() {
     assert_eq!(header.bounds, bounds);
     assert!(header.premultiplied);
 
-    // Read through a *second* mapping of the same block, which is what the
-    // broker process has.
     let read = Ring::open(written.spec()).expect("the same ring");
     let (seen, back) = read.read_frame(2).expect("read back");
     assert_eq!(seen, header, "the header crosses whole");
     assert_eq!(back, frame, "and so do the pixels");
 
-    // A slot nobody wrote is empty rather than plausible.
     assert!(read.read_frame(1).is_err());
 }
 
@@ -349,7 +322,6 @@ fn a_plugin_that_will_not_stop_talking_does_not_fill_the_host() {
         )
         .expect("a frame back");
 
-    // Five hundred messages, and the frame still rendered.
     assert!(!rendered.errored);
     assert!((first(&rendered.frame) - 0.5).abs() < 1e-2);
     assert!(
@@ -362,9 +334,6 @@ fn a_plugin_that_will_not_stop_talking_does_not_fill_the_host() {
     );
 }
 
-/// A press crosses the pipe with its frame, waits for the plugin however long
-/// it takes, and comes back with every value the plugin holds, its own writes
-/// included. That is the whole road a look built in a plugin's window takes.
 #[test]
 fn a_press_comes_back_with_what_the_plugin_wrote() {
     let root = tempfile::tempdir().expect("a temp dir");
@@ -428,7 +397,6 @@ fn a_frame_bigger_than_the_ring_regrows_it() {
     assert_eq!(rendered.frame.width(), width);
     assert!((first(&rendered.frame) - 0.5).abs() < 1e-2);
 
-    // The small frame still fits the bigger ring.
     let rendered = broker
         .render(
             instance,
@@ -439,8 +407,6 @@ fn a_frame_bigger_than_the_ring_regrows_it() {
     assert!(!rendered.errored, "{:?}", rendered.error);
     assert!((first(&rendered.frame) - 0.25).abs() < 1e-2);
 }
-
-// ------------------------------------------------------- who is on the pipe --
 
 /// A broker started without a credential on its standard input refuses to go on
 /// — it does not fall back to an unauthenticated session.
@@ -458,8 +424,6 @@ fn a_broker_with_no_credential_does_not_start() {
         return;
     };
 
-    // Run the broker by hand, the way an impostor would have to: a pipe name it
-    // was given, and nothing on standard input.
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_lumit-ofx-broker"))
         .arg(&binary)
         .arg("lumit-ofx-nobody-is-listening.sock")
@@ -537,11 +501,8 @@ fn a_frame_drawn_on_the_graphics_card_matches_the_cpu() {
     }
 }
 
-/// Set by the cancelling thread in the test below.
 static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// A frame cancelled while a slow plugin renders it stops at the plugin's next
-/// `abort`, rather than at the deadline, and is no strike against it.
 #[test]
 fn a_cancelled_frame_stops_a_plugin_that_polls_abort() {
     let root = tempfile::tempdir().expect("a temp dir");
@@ -602,13 +563,10 @@ fn a_parked_broker_wakes_for_its_next_frame_and_renders_as_before() {
         .expect("a frame back");
     assert!(!before.errored);
 
-    // Parked, as the scan leaves every bundle: no process, the description
-    // and the instance kept.
     broker.park();
     assert!(broker.is_parked(), "no process while parked");
     assert!(!broker.descriptors().is_empty(), "the description stays");
 
-    // The next frame starts a process, makes the instance again and renders.
     let after = broker
         .render(
             instance,
@@ -622,7 +580,6 @@ fn a_parked_broker_wakes_for_its_next_frame_and_renders_as_before() {
     assert_eq!(broker.restarts(), 0, "waking is not a restart");
     assert_eq!(broker.strikes(), 0, "nor a failure");
 
-    // An instance destroyed while parked needs no process at all.
     broker.park();
     broker.destroy(instance).expect("destroyed");
     assert!(broker.is_parked(), "destroying did not wake it");

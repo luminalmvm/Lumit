@@ -13,7 +13,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// The Point control's one control, as its two halves.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "point_control",
@@ -33,12 +32,10 @@ pub struct PointControl {
     #[slider(min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub point_x: f32,
 
-    /// px@comp; see [`point_x`](Self::point_x).
     #[slider(min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub point_y: f32,
 }
 
-/// The Point control's behaviour: none, by design.
 pub struct PointControlDef;
 
 impl EffectDef for PointControlDef {

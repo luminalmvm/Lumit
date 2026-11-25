@@ -12,7 +12,6 @@ use crate::fx::cpu;
 use crate::fx::params::CurvePoints;
 use crate::fx::shape_points::{ShapePoints, SHAPE_MAX_POINTS};
 
-/// Entries in one curve table.
 pub const TABLE: usize = cpu::CURVE_TABLE;
 
 /// Curve tables in [`Packed::data`]: Luma, Red, Green, Blue, then Hue v hue,
@@ -22,10 +21,8 @@ pub const TABLES: usize = 10;
 /// Where the window outlines start in [`Packed::data`], as `x, y` pairs.
 pub const POLY_AT: usize = TABLES * TABLE;
 
-/// Lines a smooth polygon's span is cut into.
 pub const SMOOTH_STEPS: usize = 4;
 
-/// The most outline points one window can hold once cut into lines.
 pub const POLY_MAX: usize = SHAPE_MAX_POINTS * SMOOTH_STEPS;
 
 /// Midtone detail's blur, px at comp size.
@@ -34,10 +31,8 @@ pub const DETAIL_PX: f32 = 20.0;
 /// Denoise's blur at 100, px at comp size.
 pub const DENOISE_PX: f32 = 5.0;
 
-/// The hue curves' rest: the flat line through the middle.
 pub const HUE_FLAT: [[f32; 2]; 2] = [[0.0, 0.5], [1.0, 0.5]];
 
-/// The qualifier, ready to key with.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Qualifier {
     /// 0 off, 1 HSL, 2 RGB, 3 Luma, 4 3D.
@@ -78,7 +73,6 @@ pub struct Qualifier {
     pub samples_at: u32,
 }
 
-/// One window, ready to draw.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Window {
     /// 0 off, 1 ellipse, 2 rectangle, 3 polygon, 4 gradient. A polygon of
@@ -105,7 +99,6 @@ pub struct Window {
     pub bbox: [f32; 4],
 }
 
-/// Everything one Correction draws with.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Packed {
     /// 0 Video, 1 Log, 2 Linear.
@@ -123,7 +116,6 @@ pub struct Packed {
     pub shadow: [f32; 3],
     pub midtone: [f32; 3],
     pub highlight: [f32; 3],
-    /// Low range and high range.
     pub range: [f32; 2],
     pub lum_mix: f32,
     pub contrast: f32,
@@ -156,13 +148,11 @@ pub struct Packed {
 pub const WORDS: usize = 24 + 5 * 4 + HDR_WORDS + 2;
 
 impl Packed {
-    /// Whether the qualifier keys anything.
     #[must_use]
     pub fn qualifier_on(&self) -> bool {
         self.qual.mode != 0
     }
 
-    /// Whether any window is on.
     #[must_use]
     pub fn windows_on(&self) -> bool {
         self.windows.iter().any(|w| w.shape != 0)
@@ -319,7 +309,6 @@ fn periodic_table(points: &CurvePoints) -> [f32; TABLE] {
     out
 }
 
-/// A curve that leaves everything alone: every point on the middle line.
 fn flat(points: &CurvePoints) -> bool {
     points.points().iter().all(|p| p[1] == 0.5)
 }

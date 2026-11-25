@@ -34,15 +34,12 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// The rate Freeverb's tunings are counted in samples at.
 const TUNED_AT: f64 = 44_100.0;
 
-/// The eight comb lengths, in samples at [`TUNED_AT`].
 const COMBS: [f64; 8] = [
     1_116.0, 1_188.0, 1_277.0, 1_356.0, 1_422.0, 1_491.0, 1_557.0, 1_617.0,
 ];
 
-/// The four all-pass lengths, in samples at [`TUNED_AT`].
 const ALL_PASSES: [f64; 4] = [556.0, 441.0, 341.0, 225.0];
 
 /// What the right channel adds to every length, so the two banks are not the
@@ -66,21 +63,12 @@ const ROOM_OFFSET: f64 = 0.7;
 /// row of damping still lets some top end round the loop.
 const DAMPING_SCALE: f64 = 0.4;
 
-/// The longest pre-delay the row offers, in milliseconds.
 const MAX_PRE_DELAY_MS: f64 = 200.0;
 
-/// How long a reverb's tail may be, in seconds.
-///
-/// ponytail: a flat ceiling rather than a measured decay. A hall at the top of
-/// the Room size row takes twenty seconds to reach the silence floor and a
-/// rate change stretches that; thirty seconds is more than any of it and short
-/// enough that a mistake costs a second of render rather than a minute.
 const TAIL_CEILING_S: f64 = 30.0;
 
-/// How fast the gains follow their rows.
 const GLIDE_MS: f64 = 20.0;
 
-/// A room around the sound: eight combs and four all-passes a channel.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "audio_reverb",
@@ -89,15 +77,11 @@ const GLIDE_MS: f64 = 20.0;
     category = Audio,
     cost = Trivial,
     roi = Exact,
-    // Sound in, sound out: no picture to dissolve, and so no matte row
-    // (docs/impl/audio-effects.md §2).
     matte = false,
 )]
 pub struct AudioReverb {
-    /// How long the room holds on to the sound.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub room_size: f32,
-    /// How much top end the walls take out of each reflection.
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub damping: f32,
     /// How far apart the two channels' rooms are heard. At nought the tail is
@@ -108,7 +92,6 @@ pub struct AudioReverb {
     /// This is what keeps a voice in front of its own reverb.
     #[bounded(min = 0.0, max = 200.0, default = 20.0, unit = Raw, label = "Pre-delay")]
     pub pre_delay: f32,
-    /// A low pass over the tail alone, for a room with soft walls.
     #[bounded(
         min = 500.0,
         max = 20_000.0,
@@ -117,15 +100,12 @@ pub struct AudioReverb {
         unit = Raw
     )]
     pub high_cut: f32,
-    /// How much of the sound itself reaches the output.
     #[bounded(min = 0.0, max = 100.0, default = 100.0, unit = Percent)]
     pub dry: f32,
-    /// How much of the room reaches it.
     #[bounded(min = 0.0, max = 100.0, default = 30.0, unit = Percent)]
     pub wet: f32,
 }
 
-/// The reverb's behaviour: sound, and no picture at all.
 pub struct AudioReverbDef;
 
 impl EffectDef for AudioReverbDef {
@@ -153,13 +133,11 @@ impl EffectDef for AudioReverbDef {
     }
 }
 
-/// One damped comb: a ring whose feedback passes a one pole.
 struct Comb {
     line: DelayLine,
     /// The read that makes the loop exactly `len` frames long, given that the
     /// line has not been pushed this frame yet.
     read: f64,
-    /// The one pole's memory.
     store: f32,
 }
 
@@ -181,7 +159,6 @@ impl Comb {
     }
 }
 
-/// One all-pass: everything comes back, only later and out of order.
 struct AllPass {
     line: DelayLine,
     read: f64,
@@ -203,15 +180,12 @@ impl AllPass {
     }
 }
 
-/// One channel's room.
 struct Bank {
     combs: [Comb; 8],
     all_passes: [AllPass; 4],
 }
 
 impl Bank {
-    /// The bank for channel `channel`, its lengths scaled from 44.1 kHz to
-    /// `rate` and the right one spread away from the left.
     fn new(rate: f64, channel: usize) -> Self {
         let scale = rate / TUNED_AT;
         let spread = if channel == 0 { 0.0 } else { SPREAD };
@@ -225,7 +199,6 @@ impl Bank {
         }
     }
 
-    /// One frame of room, out of one frame of sound.
     fn process(&mut self, input: f32, feedback: f32, damping: f32) -> f32 {
         // The combs sum, which is what makes the early reflections; the
         // all-passes then run in series, which is what stops any one of them
@@ -241,12 +214,10 @@ impl Bank {
     }
 }
 
-/// The live reverb.
 struct ReverbState {
     bank: [Bank; 2],
     pre: [DelayLine; 2],
     cut: [Biquad; 2],
-    /// The comb feedback the Room size row asks for.
     feedback: Smoother,
     damping: Smoother,
     width: Smoother,
@@ -254,13 +225,10 @@ struct ReverbState {
     pre_frames: Smoother,
     dry: Smoother,
     wet: Smoother,
-    /// What the high cut was last set for, so the coefficients are worked out
-    /// only when the row has moved.
     cut_hz: f64,
     primed: bool,
 }
 
-/// One open reverb.
 pub struct AudioReverbProcessor {
     rate: f64,
     tail: u32,
@@ -268,7 +236,6 @@ pub struct AudioReverbProcessor {
 }
 
 impl AudioReverbProcessor {
-    /// Open one from the values the chain's first block holds.
     fn new(values: &[(ParamId, f64)], rate: f64) -> Self {
         let room = held(value_of(values, AudioReverb::ROOM_SIZE, 50.0), 0.0, 100.0) / 100.0;
         let pre = held(
@@ -305,8 +272,6 @@ fn feedback_of_room(room: f64) -> f64 {
     room * ROOM_SCALE + ROOM_OFFSET
 }
 
-/// Frames between the input stopping and the tail falling under the silence
-/// floor.
 fn tail_frames(feedback: f64, longest: f64, pre: f64, rate: f64) -> u32 {
     // The longest comb is the slowest to die, so it is the one the tail has
     // to outlast. Damping only makes the real decay quicker, which is the
@@ -333,7 +298,6 @@ impl AudioProcessor for AudioReverbProcessor {
         };
         let state = &mut *guard;
 
-        // This block's numbers, worked out once at its start.
         let room = held(value_of(values, AudioReverb::ROOM_SIZE, 50.0), 0.0, 100.0) / 100.0;
         let damping = held(value_of(values, AudioReverb::DAMPING, 50.0), 0.0, 100.0) / 100.0;
         let width = held(value_of(values, AudioReverb::WIDTH, 100.0), 0.0, 100.0) / 100.0;
@@ -460,7 +424,6 @@ mod tests {
             .unwrap_or_else(|| Arc::new(AudioReverbProcessor::new(values, f64::from(RATE))))
     }
 
-    /// A block of noise, then silence for as long as the caller asks.
     fn burst(blocks: usize) -> Vec<f32> {
         let mut input = vec![0.0; blocks * AUDIO_BLOCK_SAMPLES];
         let sound = noise(AUDIO_BLOCK_FRAMES);
@@ -483,8 +446,6 @@ mod tests {
         assert_eq!(whole, split);
     }
 
-    /// Plan 3, the reverb's own: the room keeps sounding after the sound has
-    /// stopped, and has stopped itself by the tail it reported.
     #[test]
     fn the_room_rings_on_and_is_quiet_by_the_end_of_its_tail() {
         // The smallest room, so the tail is a second rather than twenty.
@@ -500,14 +461,12 @@ mod tests {
         let input = burst(blocks);
         let out = play_all(processor.as_ref(), &input, &values);
 
-        // Halfway through the tail the room is still answering.
         let middle = peak(
             out.get(tail..tail + AUDIO_BLOCK_SAMPLES)
                 .unwrap_or_default(),
         );
         assert!(middle > 1e-4, "the room went quiet at once ({middle})");
 
-        // By the end of it there is nothing left.
         let after = peak(out.get(tail * 2..).unwrap_or_default());
         assert!(after < 1e-5, "the tail was still sounding at {after}");
     }

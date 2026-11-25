@@ -87,7 +87,6 @@ fn shaper_forward_signed(x: f32) -> f32 {
     return 0.5 - 0.5 * shaper_forward(-x);
 }
 
-/// One sample of one stage's table.
 fn curve_at(stage: u32, i: u32) -> vec3<f32> {
     let k = i + stage * p.curve_rows * CURVE_WIDTH;
     return textureLoad(curve, vec2<i32>(i32(k % CURVE_WIDTH), i32(k / CURVE_WIDTH)), 0).rgb;
@@ -118,7 +117,6 @@ fn curve_sample(stage: u32, t: vec3<f32>) -> vec3<f32> {
     return a + f * (b - a);
 }
 
-/// One stage: fold through the signed shaper, then read the table.
 fn curve_stage(stage: u32, rgb: vec3<f32>) -> vec3<f32> {
     let t = vec3<f32>(
         shaper_forward_signed(rgb.x),
@@ -196,7 +194,6 @@ fn cube_sample(rgb: vec3<f32>) -> vec3<f32> {
     return c000 + wa * (a - c000) + wb * (b - a) + wc * (c111 - b);
 }
 
-/// `Artefact::eval`, on the card.
 fn ocio_apply(rgb: vec3<f32>) -> vec3<f32> {
     if (p.mode == 2u) {
         return cube_sample(vec3<f32>(

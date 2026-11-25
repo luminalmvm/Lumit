@@ -16,23 +16,17 @@ mod similarity;
 use crate::stabilise::analysis::Step;
 use crate::stabilise::motion::{apply, from_rows, from_similarity, Mat3, IDENTITY};
 
-/// What the frame's motion is fitted as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Model {
-    /// A slide.
     Position,
-    /// A slide, a turn and a growth.
     Similarity,
-    /// The four-corner stretch.
     Perspective,
 }
 
-/// How the path is smoothed, frame by frame.
 pub struct Smoothing<'a> {
     /// The Gaussian's standard deviation in frames, one per analysed frame.
     /// Nought leaves the frame where it was.
     pub sigma: &'a [f64],
-    /// No motion: lock every frame to this analysed frame instead of smoothing.
     pub lock: Option<u32>,
     /// Leave the picture's growth alone, so walking towards something does not
     /// read as a zoom to be undone.
@@ -57,7 +51,6 @@ impl Pose {
         p: [0.0, 0.0],
     };
 
-    /// The pose as a matrix about centre `c`.
     fn matrix(&self, c: [f64; 2]) -> Mat3 {
         let s = self.ls.exp();
         let (a, b) = (s * self.th.cos(), s * self.th.sin());
@@ -82,7 +75,6 @@ fn segments(steps: &[Step], frames: usize) -> Vec<usize> {
     start
 }
 
-/// The last analysed frame of each frame's shot, given each one's first.
 fn ends(seg: &[usize]) -> Vec<usize> {
     let mut end = vec![0usize; seg.len()];
     let mut e = seg.len().saturating_sub(1);
@@ -131,12 +123,10 @@ pub fn sigma_frames(percent: f64, fps: f64) -> f64 {
     }
 }
 
-/// The Gaussian weight of a frame `k` away, for `sigma` in frames.
 fn gauss(k: f64, sigma: f64) -> f64 {
     (-(k * k) / (2.0 * sigma * sigma)).exp()
 }
 
-/// How far either side a Gaussian of `sigma` frames is worth reading.
 fn reach(sigma: f64) -> usize {
     if sigma.is_finite() && sigma > 0.0 {
         (3.0 * sigma).ceil().min(100_000.0) as usize
@@ -218,7 +208,6 @@ fn fade(out: &mut [Mat3], steps: &[Step], perspective: bool, sigma: &[f64]) {
 struct Rate {
     /// ln of the growth.
     ls: f64,
-    /// The turn.
     th: f64,
     /// Where the centre went.
     e: [f64; 2],
@@ -237,7 +226,6 @@ impl Rate {
         }
     }
 
-    /// The similarity doing this about `c`.
     fn matrix(&self, c: [f64; 2]) -> Mat3 {
         Pose {
             ls: self.ls,
@@ -247,7 +235,6 @@ impl Rate {
         .matrix(c)
     }
 
-    /// `u` of the way from `self` to `other`.
     fn towards(&self, other: &Rate, u: f64) -> Rate {
         let mix = |a: f64, b: f64| a + (b - a) * u;
         Rate {
@@ -277,7 +264,6 @@ fn motions(steps: &[Step], frames: usize, perspective: bool, c: [f64; 2]) -> Vec
         }
     };
     let mut out: Vec<Option<Mat3>> = (0..count).map(|k| steps.get(k).and_then(own)).collect();
-    // The nearest usable step before each one, within its shot.
     let mut before: Vec<Option<usize>> = vec![None; count];
     let mut last: Option<usize> = None;
     for k in 0..count {
@@ -315,7 +301,6 @@ fn motions(steps: &[Step], frames: usize, perspective: bool, c: [f64; 2]) -> Vec
     out
 }
 
-/// The product of two complex numbers.
 fn cmul(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
     [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]
 }
@@ -325,7 +310,6 @@ fn cmul(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
 struct Hop {
     /// The complex growth and turn.
     s: [f64; 2],
-    /// Its inverse.
     g: [f64; 2],
     /// Where the centre went.
     e: [f64; 2],
@@ -417,7 +401,6 @@ fn wanted(target: Pose, s: &Smoothing<'_>) -> Pose {
     }
 }
 
-/// `m`, or no correction at all where an entry is not finite.
 fn finite(m: Mat3) -> Mat3 {
     if m.iter().flatten().all(|v| v.is_finite()) {
         m
@@ -433,7 +416,6 @@ fn finite(m: Mat3) -> Mat3 {
 /// same growth and turn as the chained product.
 type Placed = [f64; 6];
 
-/// A frame placed in itself.
 const UNMOVED: Placed = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
 
 /// Frames `lo..=hi` of one shot placed in frame `t`, chained outward from
@@ -477,7 +459,6 @@ fn place(
     }
 }
 
-/// The similarity `at` places a frame by, as a matrix about centre `c`.
 fn placing(at: &Placed, c: [f64; 2]) -> Mat3 {
     let (a, b) = (at[4], at[5]);
     [
@@ -508,14 +489,12 @@ fn weighted<T, const N: usize>(
         }
         wsum += w;
     };
-    // Inside the shot, nearest first on either side.
     for (w, v) in weights.iter().zip(vals.iter().skip(i)) {
         add(*w, of(v));
     }
     for (w, v) in weights.iter().skip(1).zip(vals.iter().take(i).rev()) {
         add(*w, of(v));
     }
-    // Past the shot's ends, reflected.
     let at = |j: usize| j.checked_sub(lo).and_then(|i| vals.get(i)).map(&of);
     let ti = t as i64;
     let past = ((ti - r as i64)..(first as i64)).chain((last as i64 + 1)..=(ti + r as i64));
@@ -634,7 +613,6 @@ mod tests {
                 C,
                 CORNERS,
             );
-            // Frame 15 is five slides past frame 10, the shot's first.
             let p = apply(&w[15], [500.0, 500.0]).unwrap();
             assert!(
                 (p[0] - 515.0).abs() < 1e-6 && (p[1] - 500.0).abs() < 1e-6,
@@ -645,8 +623,6 @@ mod tests {
 
     #[test]
     fn a_steady_pan_is_kept_and_its_jitter_is_not() {
-        // 4 px a frame to the right with a ±2 px rattle on top. Smoothed, the
-        // correction undoes the rattle and leaves the pan.
         let steps: Vec<Step> = (0..120)
             .map(|i| slide(4.0 + if i % 2 == 0 { 2.0 } else { -2.0 }, 0.0))
             .collect();
@@ -663,8 +639,6 @@ mod tests {
             C,
             CORNERS,
         );
-        // Mid-clip, a frame's correction is about the rattle's size, never the
-        // pan's accumulated distance.
         for m in &w[30..90] {
             let p = apply(m, C).unwrap();
             assert!((p[0] - C[0]).abs() < 3.0, "{p:?}");
@@ -709,7 +683,6 @@ mod tests {
         // of up to 1.5 px on top. Smoothed over about 20 frames either side,
         // which spans a half turn, the correction only takes the rattle out.
         let jitter = |t: f64| [1.5 * (2.3 * t).sin(), 1.5 * (1.7 * t).cos()];
-        // Where the camera has a point of the first frame on frame t.
         let camera = |t: usize| -> Mat3 {
             let (th, j) = ((3.0 * t as f64).to_radians(), jitter(t as f64));
             let d = [C[0] + 2.0 * t as f64 + j[0], C[1] + j[1]];
@@ -746,8 +719,6 @@ mod tests {
                 C,
                 CORNERS,
             );
-            // Every corner moves by a few times the rattle at most, so the
-            // picture needs next to no zoom to cover the frame.
             for (t, m) in w.iter().enumerate() {
                 for q in CORNERS {
                     let p = apply(m, q).unwrap();
@@ -762,8 +733,6 @@ mod tests {
 
     #[test]
     fn a_steady_pan_needs_no_correction_at_the_ends_of_the_shot() {
-        // Smoothing a pan that never changes speed changes nothing, at the
-        // first and last frames as much as in the middle.
         let steps: Vec<Step> = (0..59).map(|_| slide(4.0, -1.0)).collect();
         let sigma = vec![10.0; 60];
         for model in [Model::Similarity, Model::Perspective] {

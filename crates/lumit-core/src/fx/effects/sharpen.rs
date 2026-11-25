@@ -20,7 +20,6 @@ use lumit_fx_macros::Effect;
     cost = Cheap,
     // Radius' own hard maximum: 100 px@comp.
     roi = PaddedPx(100.0),
-    // §2.2: operates on unpremultiplied colour.
     premultiplied = false,
     // The matte scales the amount, inside the kernel (the owner's rule for
     // mattes); the generic strength dissolve does not also run.
@@ -64,7 +63,6 @@ pub struct Sharpen {
     #[toggle(default = true)]
     pub luminance_only: bool,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -94,7 +92,6 @@ impl Sharpen {
     }
 }
 
-/// The Unsharp mask's behaviour.
 pub struct SharpenDef;
 
 impl EffectDef for SharpenDef {

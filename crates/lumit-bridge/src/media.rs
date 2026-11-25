@@ -1,22 +1,3 @@
-//! Probing footage and decoding frames — gated behind the `media` feature.
-//!
-//! # In plain terms
-//!
-//! When a project imports or opens footage, the bridge reads the file's vital
-//! statistics (resolution, frame rate, frame count) so the panels can show them,
-//! and later it decodes individual frames for the Viewer. That work needs
-//! FFmpeg, wired in through `lumit-media`. The `media` cargo feature (default on)
-//! pulls it; `--no-default-features` drops it, and then nothing probes — every
-//! footage item simply reports status "unprobed" and the crate still builds and
-//! tests without FFmpeg (CI parity).
-//!
-//! The *results* of probing are plain data ([`MediaStatus`]), always compiled,
-//! so the snapshot code embeds them the same way whether the feature is on or
-//! off. Probing runs **synchronously** on the calling thread at this phase (the
-//! egui frontend probes on a background thread; the bridge will follow once the
-//! command surface stabilises) — acceptable while the first files are small and
-//! imported one at a time.
-
 #[cfg(feature = "media")]
 use std::collections::HashMap;
 #[cfg(feature = "media")]
@@ -70,23 +51,11 @@ impl MediaCache {
         self.thumbs.clear();
     }
 
-    /// A cached thumbnail for `(id, max_edge)`, if one was decoded already.
     #[cfg(feature = "media")]
     fn thumb_get(&self, key: ThumbKey) -> Option<Thumb> {
         self.thumbs.get(&key).cloned()
     }
 
-    /// Store a decoded thumbnail for `(id, max_edge)`.
-    ///
-    /// Past [`THUMB_BUDGET_BYTES`] the **scrubbed** frames go and the poster
-    /// frames stay: frame zero is what every Project row and every Timeline
-    /// clip draws, so throwing those away would make a panel redecode itself,
-    /// while a scrub the pointer has left is worth nothing to anybody.
-    ///
-    /// ponytail: a whole-cache sweep of everything past frame zero, not an LRU.
-    /// The scrub that is happening at the time is the one that pays, and it
-    /// pays by decoding again on the way back. Give it recency ordering if that
-    /// ever shows up as a stutter.
     #[cfg(feature = "media")]
     fn thumb_put(&mut self, key: ThumbKey, w: u32, h: u32, rgba: Vec<u8>) {
         self.thumbs.insert(key, (w, h, rgba));
@@ -163,7 +132,6 @@ pub(crate) fn thumb_decode(
     // frame never lands in memory at full size. Portrait media comes back
     // taller than `max_edge`, which the box filter below still trims.
     let decoded = decode_frame(src, frame.max(0).unsigned_abs(), Some(max_edge))?;
-    // A deep source decodes to linear floats, and a thumbnail is eight bit.
     let rgba = match decoded.format {
         lumit_media::decode::PixelFormat::Srgb8 => decoded.rgba,
         lumit_media::decode::PixelFormat::LinearF32 => (0..decoded.rgba.len() / 16)
@@ -181,7 +149,6 @@ pub(crate) fn thumb_decode(
     ))
 }
 
-/// Remember a decoded thumbnail.
 #[cfg(feature = "media")]
 pub(crate) fn thumb_store(
     cache: &mut MediaCache,
@@ -232,7 +199,6 @@ fn downscale_to_max_edge(sw: u32, sh: u32, src: &[u8], max_edge: u32) -> (u32, u
     let mut out = vec![0u8; dw as usize * dh as usize * 4];
     let (sw_u, sh_u, dw_u, dh_u) = (sw as usize, sh as usize, dw as usize, dh as usize);
     for dy in 0..dh_u {
-        // The source-row band this destination row averages over.
         let y0 = dy * sh_u / dh_u;
         let y1 = (((dy + 1) * sh_u).div_ceil(dh_u)).min(sh_u).max(y0 + 1);
         for dx in 0..dw_u {
@@ -273,11 +239,10 @@ mod tests {
     fn a_thumbnail_is_decoded_small() {
         let dir = tempfile::tempdir().expect("temp dir");
         let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            return; // no ffmpeg on this machine
+            return;
         };
         let src = lumit_media::sequence::MediaSource::file(clip);
 
-        // The fixture is 320x240, so 64 across the long edge is 64x48.
         let decoded = decode_frame(&src, 0, Some(64)).expect("the fixture decodes");
         assert_eq!(
             (decoded.width, decoded.height),

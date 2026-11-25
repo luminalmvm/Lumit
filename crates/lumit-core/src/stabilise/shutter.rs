@@ -81,7 +81,6 @@ fn vec4(m: [f64; 4]) -> Value {
     Value::Vec4(m.map(|v| v as f32))
 }
 
-/// Hand the warp the frame's motion and the read time `r` along `axis`.
 pub fn push(push: &mut dyn FnMut(ParamId, Value), motion: [f64; 4], r: f64, axis: f64) {
     push(DERIVED_MOTION, vec4(motion));
     push(DERIVED_READOUT, vec4([r, axis, 0.0, 0.0]));
@@ -130,7 +129,6 @@ pub fn params(
     })
 }
 
-/// Neighbour `k`'s motion in the raster, as [`params`] reads the frame's.
 #[must_use]
 pub fn neighbour(p: Params<'_>, k: usize, s: f32, off: [f32; 2]) -> [f32; 4] {
     NEIGHBOUR_MOTION

@@ -1,5 +1,3 @@
-//! A Light layer's rows: reading and setting them, and a fresh light's.
-
 use super::{LightDef, LightFalloff, LightKind, LightSettings, Property, TransformProp};
 
 impl LightDef {
@@ -26,8 +24,6 @@ impl LightDef {
         Property::fixed(100.0)
     }
 
-    /// The light's own channel that `prop` names, or `None` for one it does
-    /// not have.
     #[must_use]
     pub fn channel(&self, prop: TransformProp) -> Option<&Property> {
         Some(match prop {

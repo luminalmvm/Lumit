@@ -45,26 +45,21 @@ use crate::fx::{
 use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
 
-/// The most cells along either side, as in After Effects.
 pub const MAX_CELLS: u32 = 31;
 
-/// The most crossings a mesh has: (31 + 1) × (31 + 1).
 pub const MAX_VERTICES: usize = ((MAX_CELLS + 1) * (MAX_CELLS + 1)) as usize;
 
 /// The six rows of one crossing, by the end of their id: where it is, how far
 /// its row handle reaches, how far its column handle reaches.
 pub const AXES: [&str; 6] = ["x", "y", "hx", "hy", "vx", "vy"];
 
-/// Mesh warp's controls. The crossings themselves are derived rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "mesh_warp",
     label = "Mesh warp",
     version = 1,
     category = Distortion,
-    // A few Newton steps a pixel, each a sixteen-point patch and its slope.
     cost = Moderate,
-    // Any output pixel can be drawn from anywhere in the layer.
     roi = FullFrame,
     premultiplied = true,
 )]
@@ -75,7 +70,6 @@ pub struct MeshWarp {
     /// Cells across the layer. A new number starts a new, flat grid.
     #[counter(min = 1, max = 31, default = 7, hard_min = 1, hard_max = 31, unit = Raw)]
     pub columns: i32,
-    /// How many Newton steps each pixel takes to find where it came from.
     #[counter(min = 1, max = 12, default = 8, hard_min = 1, hard_max = 12, unit = Raw)]
     pub quality: i32,
     /// After Effects' stopwatch on Distortion Mesh: on, a drag in the Viewer
@@ -86,7 +80,6 @@ pub struct MeshWarp {
     /// not a value; the panel does it.
     #[action(label = "Reset mesh")]
     pub reset_mesh: (),
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -98,21 +91,17 @@ pub struct MeshWarp {
     pub mix: f32,
 }
 
-/// The grid's size, held to what a mesh can be.
 #[must_use]
 pub fn clamp_grid(rows: i64, columns: i64) -> (u32, u32) {
     let side = |n: i64| n.clamp(1, i64::from(MAX_CELLS)) as u32;
     (side(rows), side(columns))
 }
 
-/// The id of one crossing's `axis` (one of [`AXES`]), on a grid of `rows` by
-/// `columns` cells, `r` lines down and `c` across.
 #[must_use]
 pub fn vertex_id(rows: u32, columns: u32, r: u32, c: u32, axis: &str) -> String {
     format!("mesh_{rows}x{columns}_r{r}c{c}_{axis}")
 }
 
-/// Whether `id` is one of a mesh's rows, of any grid.
 #[must_use]
 pub fn is_vertex_id(id: &str) -> bool {
     id.starts_with("mesh_")
@@ -137,7 +126,6 @@ pub fn rest_handles(rows: u32, columns: u32) -> (f64, f64) {
     )
 }
 
-/// What `axis` of crossing `(r, c)` holds on a flat grid, per cent.
 #[must_use]
 pub fn rest_value(rows: u32, columns: u32, r: u32, c: u32, axis: &str) -> f64 {
     let (x, y) = rest(rows, columns, r, c);
@@ -170,7 +158,6 @@ pub fn grid_of(inst: &EffectInstance) -> (u32, u32) {
     clamp_grid(read("rows", 7), read("columns", 7))
 }
 
-/// Every grid this process has derived rows for, by its size.
 type RowCache = RwLock<HashMap<(u32, u32), &'static [ParamSchema]>>;
 
 fn cache() -> &'static RowCache {
@@ -221,7 +208,6 @@ pub fn rows_for(rows: u32, columns: u32) -> &'static [ParamSchema] {
     built
 }
 
-/// One resolved Mesh warp.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MeshWarpParams {
     pub rows: u32,
@@ -243,7 +229,6 @@ pub struct MeshWarpParams {
 }
 
 impl MeshWarpParams {
-    /// A flat grid of `rows` by `columns` cells.
     #[must_use]
     pub fn flat(rows: u32, columns: u32) -> Self {
         let n = ((rows + 1) * (columns + 1)) as usize;
@@ -267,8 +252,6 @@ impl MeshWarpParams {
         }
     }
 
-    /// Whether every crossing and handle is where a flat grid has it, so the
-    /// effect changes nothing.
     #[must_use]
     pub fn is_flat(&self) -> bool {
         let flat = Self::flat(self.rows, self.columns);
@@ -281,7 +264,6 @@ impl MeshWarpParams {
         near(&self.pts, &flat.pts) && near(&self.hs, &flat.hs) && near(&self.vs, &flat.vs)
     }
 
-    /// Whether the lists hold one entry for every crossing of the grid.
     #[must_use]
     pub fn is_whole(&self) -> bool {
         let n = ((self.rows + 1) * (self.columns + 1)) as usize;
@@ -290,7 +272,6 @@ impl MeshWarpParams {
 }
 
 impl MeshWarp {
-    /// The op whose parameters are `p`, as both kernels read it.
     #[must_use]
     pub fn packed_in(p: Params<'_>) -> MeshWarpParams {
         let s = Self::read(p);
@@ -338,7 +319,6 @@ impl MeshWarp {
     }
 }
 
-/// The four cubic Bernstein weights at `t`, and their slopes.
 fn bernstein(t: f32) -> ([f32; 4], [f32; 4]) {
     let s = 1.0 - t;
     (
@@ -419,16 +399,13 @@ pub fn surface(p: &MeshWarpParams, u: f32, v: f32) -> ([f32; 2], [f32; 2], [f32;
     (s, su, sv)
 }
 
-/// The narrowest slope determinant Newton divides by.
 const MIN_DET: f32 = 1e-12;
 
 /// How far the solved point may still be from the pixel, raster pixels.
 const MAX_RESIDUAL_PX: f32 = 1.0;
 
-/// How near its own centre a sample has to land to be snapped to it.
 const SNAP_PX: f32 = 1e-3;
 
-/// Newton from `(u, v)` toward the frame fraction `(tx, ty)`.
 fn solve(p: &MeshWarpParams, mut u: f32, mut v: f32, tx: f32, ty: f32) -> (f32, f32) {
     for _ in 0..p.steps {
         let (s, du, dv) = surface(p, u, v);
@@ -445,7 +422,6 @@ fn solve(p: &MeshWarpParams, mut u: f32, mut v: f32, tx: f32, ty: f32) -> (f32, 
     (u, v)
 }
 
-/// Whether `(u, v)` is on the grid and lands within the residual of the pixel.
 fn lands(p: &MeshWarpParams, u: f32, v: f32, tx: f32, ty: f32, fw: f32, fh: f32) -> bool {
     if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
         return false;
@@ -454,8 +430,6 @@ fn lands(p: &MeshWarpParams, u: f32, v: f32, tx: f32, ty: f32, fw: f32, fh: f32)
     ((s[0] - tx) * fw).abs().max(((s[1] - ty) * fh).abs()) <= MAX_RESIDUAL_PX
 }
 
-/// Where on the grid the pixel at frame fraction `(tx, ty)` came from, or
-/// `None` where no part of the grid reaches.
 #[must_use]
 pub fn source_of(p: &MeshWarpParams, tx: f32, ty: f32, fw: f32, fh: f32) -> Option<(f32, f32)> {
     // From its own place first: a flat grid's answer, and near it for most
@@ -530,7 +504,6 @@ pub fn mesh_warp(rgba: &mut [f32], w: u32, h: u32, p: &MeshWarpParams) {
     }
 }
 
-/// Mesh warp's behaviour.
 pub struct MeshWarpDef;
 
 impl EffectDef for MeshWarpDef {
@@ -593,9 +566,7 @@ mod tests {
     #[test]
     fn a_handle_bends_the_line_it_lies_on() {
         let mut p = MeshWarpParams::flat(1, 2);
-        // The middle crossing of the top line, its row handle tipped down.
         p.hs[1] = [p.hs[1][0], 0.2];
-        // The handle reaches down on its right and, mirrored, up on its left.
         let (right, _, _) = surface(&p, 0.75, 0.0);
         assert!(
             right[1] > 0.01,

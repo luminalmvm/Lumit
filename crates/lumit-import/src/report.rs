@@ -523,7 +523,6 @@ fn plain(value: &serde_json::Value) -> String {
     }
 }
 
-/// One line of the report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReportRow {
     pub path: ItemPath,
@@ -550,7 +549,6 @@ pub struct ImportReport {
     pub rows: Vec<ReportRow>,
 }
 
-/// The four counts a summary line shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Summary {
     pub imported: usize,
@@ -570,7 +568,6 @@ impl std::fmt::Display for Summary {
 }
 
 impl ImportReport {
-    /// Note something that came across whole.
     pub fn imported(&mut self) {
         self.imported = self.imported.saturating_add(1);
     }
@@ -612,7 +609,6 @@ impl ImportReport {
         );
     }
 
-    /// The counts behind docs/11 §9's summary line.
     #[must_use]
     pub fn summary(&self) -> Summary {
         let count = |wanted: Outcome| self.rows.iter().filter(|r| r.outcome == wanted).count();
@@ -624,14 +620,11 @@ impl ImportReport {
         }
     }
 
-    /// Every row of one grade — the report panel's filter.
     #[must_use]
     pub fn of(&self, outcome: Outcome) -> Vec<&ReportRow> {
         self.rows.iter().filter(|r| r.outcome == outcome).collect()
     }
 
-    /// Whether any row carries this reason. Mostly for tests and for the panel's
-    /// "are there any expressions to work through?" question.
     #[must_use]
     pub fn has(&self, reason: &Reason) -> bool {
         self.rows.iter().any(|r| &r.reason == reason)

@@ -65,7 +65,6 @@ fn main() -> ExitCode {
     }
 }
 
-/// Everything, once the arguments are known.
 fn run(bundle_path: &std::ffi::OsStr, pipe_name: &str) -> Result<(), String> {
     // The credential, first thing, before the pipe and long before the plugin.
     // It arrives on standard input rather than on the command line, which every
@@ -124,20 +123,16 @@ fn run(bundle_path: &std::ffi::OsStr, pipe_name: &str) -> Result<(), String> {
     session.serve()
 }
 
-/// Write one message.
 fn say(sender: &mut SendHalf, message: &BrokerMessage) -> Result<(), String> {
     pipe::send(sender, message).map_err(|error| error.to_string())
 }
 
-/// One plugin's instance, and which plugin it is.
 struct Live {
     plugin: usize,
     instance: Instance,
-    /// The graphics card path its plugin declared and this broker opened.
     gpu: Option<GpuRender>,
 }
 
-/// The broker's whole state. One bundle, one pipe, one ring.
 struct Session {
     bundle: Bundle,
     receiver: RecvHalf,
@@ -147,13 +142,10 @@ struct Session {
     /// bundle. The index into this list is what the host names.
     described: Vec<(usize, PluginDescriptor)>,
     instances: BTreeMap<InstanceId, Live>,
-    /// How many frames each plugin, by its place in the bundle, has failed on
-    /// the card. At [`GPU_FAILURES_ALLOWED`] it stays on the CPU.
     gpu_failures: BTreeMap<usize, u32>,
 }
 
 impl Session {
-    /// Read messages until the host stops asking or the pipe closes.
     fn serve(&mut self) -> Result<(), String> {
         loop {
             let message: HostMessage = match pipe::recv(&mut self.receiver) {
@@ -169,7 +161,6 @@ impl Session {
         }
     }
 
-    /// One message.
     fn handle(&mut self, message: HostMessage) -> Result<(), String> {
         match message {
             // The handshake happened before the bundle was opened, in `run`. A
@@ -288,8 +279,6 @@ impl Session {
         }
     }
 
-    /// Describe every plugin in the bundle, keeping the ones that succeeded,
-    /// and say why each of the others was turned away.
     fn describe_all(&mut self) -> (Vec<PluginDescriptor>, Vec<String>) {
         self.described.clear();
         let mut refused = Vec::new();
@@ -310,7 +299,6 @@ impl Session {
         (plugins, refused)
     }
 
-    /// Make one instance.
     fn create(
         &mut self,
         instance: InstanceId,
@@ -341,7 +329,6 @@ impl Session {
         }
     }
 
-    /// Build a render request out of the slots the host named.
     fn request(
         &self,
         time: f64,
@@ -375,8 +362,6 @@ impl Session {
         }
     }
 
-    /// Drive one render, fetching whatever `getFramesNeeded` asks for in one
-    /// go, and put the answer in the ring.
     fn render(
         &mut self,
         instance: InstanceId,
@@ -411,7 +396,6 @@ impl Session {
 
         let mut prefetch = |wanted: &[FrameWanted]| fetch(sender, receiver, ring, wanted);
 
-        // On the card when the plugin can and has not kept failing there.
         let failures = self.gpu_failures.get(&live.plugin).copied().unwrap_or(0);
         request.gpu = live.gpu.filter(|_| failures < GPU_FAILURES_ALLOWED);
         let on_card = request.gpu.is_some();
@@ -482,7 +466,6 @@ impl Session {
         say(&mut self.sender, message)
     }
 
-    /// Say that something did not work, in a sentence the host can badge.
     fn failed(&mut self, action: &str, message: &str) -> Result<(), String> {
         self.reply(&BrokerMessage::Failed {
             action: action.to_owned(),
@@ -491,7 +474,6 @@ impl Session {
     }
 }
 
-/// Ask the host for frames, and wait for the one shipment that answers.
 fn fetch(
     sender: &mut SendHalf,
     receiver: &mut RecvHalf,

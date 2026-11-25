@@ -12,16 +12,13 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-/// Twirl's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "twirl",
     label = "Twirl",
     version = 1,
     category = Distortion,
-    // One sine/cosine pair and one bilinear tap a pixel.
     cost = Cheap,
-    // The circle can span the whole frame.
     roi = FullFrame,
     premultiplied = true,
     // The matte scales the displacement, inside the kernel (the owner's rule
@@ -62,7 +59,6 @@ pub struct Twirl {
     #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -95,7 +91,6 @@ impl Twirl {
     }
 }
 
-/// Twirl's behaviour.
 pub struct TwirlDef;
 
 impl EffectDef for TwirlDef {

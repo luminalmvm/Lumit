@@ -34,7 +34,6 @@ pub fn bench_dir() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("lumit-ofx-bench"))
 }
 
-/// The bundles already in `dir`, by name.
 fn bundles_in(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -95,7 +94,6 @@ pub fn ensure(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(found)
 }
 
-/// openfx-misc: Natron's plugin set, built with its own CMake project.
 fn openfx_misc(work: &Path, into: &Path) -> Result<(), String> {
     // The compiler is asked for **before** the download: a hundred megabytes of
     // somebody else's source, fetched and then found to be unbuildable, is a
@@ -172,7 +170,6 @@ fn ntsc_rs(work: &Path, into: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// What a shared library is called at the end on this platform.
 const fn library_extension() -> &'static str {
     if cfg!(target_os = "windows") {
         "dll"
@@ -197,7 +194,6 @@ const fn arch_dir() -> &'static str {
     }
 }
 
-/// Clone `url` into `work/name`, or reuse the checkout that is already there.
 fn clone(work: &Path, name: &str, url: &str) -> Result<PathBuf, String> {
     let into = work.join(name);
     if into.join(".git").is_dir() {
@@ -279,7 +275,6 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Whether a command-line tool answers at all.
 fn tool(name: &str) -> Result<(), String> {
     let answered = Command::new(name)
         .arg("--version")
@@ -293,7 +288,6 @@ fn tool(name: &str) -> Result<(), String> {
     }
 }
 
-/// Run one command, keeping its output for the message when it fails.
 fn run(command: &mut Command) -> Result<(), String> {
     let described = format!("{command:?}");
     let output = command

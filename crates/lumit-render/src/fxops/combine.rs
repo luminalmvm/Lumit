@@ -13,7 +13,6 @@ use lumit_gpu::GpuContext;
 
 use super::{LayerInput, Tex};
 
-/// The op a packed Correction draws with, over its own uniform.
 fn op<'a>(pk: &'a Packed, words: &'a [[f32; 4]]) -> CorrectionOp<'a> {
     CorrectionOp {
         words,
@@ -47,7 +46,6 @@ pub(super) fn key_limit(ops: &ResolvedStack, mattes: &[LayerInput], limit: usize
         .map_or(limit, |i| limit.min(i))
 }
 
-/// Where a run stands as `run_ops` walks a stack.
 #[derive(Default)]
 pub(super) struct Run {
     /// The picture the run's first node read, while a node below joins it.
@@ -55,7 +53,6 @@ pub(super) struct Run {
     /// What the run had made before the joining node now drawing.
     acc: Option<Tex>,
     combine: Combine,
-    /// Keys a wire further down reads, by the node that made them.
     keys: Vec<(uuid::Uuid, Tex)>,
 }
 
@@ -135,7 +132,6 @@ impl Run {
         shown
     }
 
-    /// The node's grade `out` joined to what the run made, `acc`.
     #[allow(clippy::too_many_arguments)]
     fn join(
         &self,
@@ -191,8 +187,6 @@ impl Run {
         }
     }
 
-    /// Keep the key of `node`, drawn from `given` with its prepared `matte`,
-    /// when a wire in `mattes` reads it.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn keep_key(
         &mut self,
@@ -218,7 +212,6 @@ impl Run {
         self.keys.push((node.instance, key));
     }
 
-    /// The key `from` made, for the matte a wire feeds.
     pub(super) fn key_of(&self, from: &uuid::Uuid) -> Option<&Tex> {
         self.keys.iter().find(|(id, _)| id == from).map(|(_, t)| t)
     }
@@ -245,7 +238,6 @@ mod tests {
         EffectValue::Colour([r, g, b, Property::fixed(1.0)])
     }
 
-    /// An effect at this raster with `rows` set.
     fn effect(name: &str, rows: &[(&str, EffectValue)]) -> EffectInstance {
         let mut e =
             lumit_core::fx::builtins::instantiate_for_raster(name, f64::from(W), f64::from(H))
@@ -277,7 +269,6 @@ mod tests {
             .collect()
     }
 
-    /// A small hard ellipse in the middle of the picture.
     fn window() -> Vec<(&'static str, EffectValue)> {
         vec![
             ("win1_shape", EffectValue::Choice(1)),
@@ -296,9 +287,6 @@ mod tests {
         px
     }
 
-    /// Serial, then a Parallel node, then a Layer node keyed by a window and
-    /// laid on through Add at Mix 70: the card and the CPU draw the same
-    /// picture, and Combine changes it.
     #[test]
     fn parallel_and_layer_runs_draw_the_same_on_both_paths() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
@@ -360,7 +348,6 @@ mod tests {
                 .any(|(a, b)| (a - b).abs() > 1e-2),
             "Combine changed nothing"
         );
-        // Parallel adds what each node changed to the same input.
         let input = picture();
         let a = cpu(&resolve(&stack(1, 2)[..1]));
         let b = cpu(&resolve(&stack(1, 2)[1..2]));
@@ -375,8 +362,6 @@ mod tests {
         }
     }
 
-    /// A Correction's key wired into Exposure's Matte: Exposure lands inside
-    /// the window and nowhere else, walked fresh and from a warm cache.
     #[test]
     fn a_key_wire_gates_a_later_effect() {
         let Some(ctx) = lumit_gpu::test_support::lease() else {

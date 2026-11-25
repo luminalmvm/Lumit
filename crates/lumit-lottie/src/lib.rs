@@ -42,8 +42,6 @@ pub mod svg;
 pub mod time;
 pub mod walk;
 
-/// A finished export, in memory: what the window previews and what
-/// [`write`](Exported::bytes) puts on disk.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Exported {
     /// The file: Lottie JSON text, a `.lottie` zip, or SVG text.
@@ -52,7 +50,6 @@ pub struct Exported {
     pub beside: Vec<(String, Vec<u8>)>,
     /// What won't come across, left out first.
     pub issues: Vec<check::Issue>,
-    /// How many frames a player shows.
     pub frames: u32,
     pub fps: f64,
     pub width: u32,
@@ -68,27 +65,22 @@ pub struct Still {
     pub rgba: Vec<u8>,
 }
 
-/// What a footage item is to a vector export.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Picture {
-    /// A still, ready to embed.
     Still(Still),
     /// A moving picture, which no player draws.
     Video,
-    /// The file can't be read.
     Missing,
 }
 
 /// What the caller supplies that this crate can't do itself: decoding
 /// footage, the project's colour, and being told to stop.
 pub trait Host {
-    /// A footage item's picture, through Lumit's own decode and interpretation.
     fn picture(&self, item: Uuid) -> Picture;
     /// Working-space linear RGB as display sRGB, encoded, 0 to 1.
     fn display(&self, linear: [f64; 3]) -> [f64; 3] {
         colour::rec709_display(linear)
     }
-    /// True once the export is no longer wanted.
     fn cancelled(&self) -> bool {
         false
     }
@@ -96,7 +88,6 @@ pub trait Host {
     fn progress(&self, _done: f32) {}
 }
 
-/// Why an export or an import could not finish.
 #[derive(Debug, thiserror::Error)]
 pub enum LottieError {
     #[error("There is no composition to export.")]
@@ -115,7 +106,6 @@ pub enum LottieError {
     TooLarge(String),
 }
 
-/// `comp` of `doc` as `settings` ask, in memory.
 pub fn export(
     doc: &Arc<Document>,
     comp: Uuid,

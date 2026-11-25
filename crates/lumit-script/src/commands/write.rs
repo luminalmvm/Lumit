@@ -1,7 +1,3 @@
-//! Layers and comps read and written in the form a .lum file keeps them, so a
-//! script reaches everything a project can hold, not only what the other
-//! commands name.
-
 use lumit_core::anim::Property;
 use lumit_core::edits;
 use lumit_core::model::{
@@ -44,7 +40,6 @@ fn merge(onto: &mut Value, patch: Value) {
     }
 }
 
-/// `value` with `patch` laid over it, read back as its own type.
 fn patched<T: serde::Serialize + serde::de::DeserializeOwned>(
     value: &T,
     patch: Value,

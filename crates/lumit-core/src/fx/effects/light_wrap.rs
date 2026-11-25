@@ -22,7 +22,6 @@
 use crate::fx::{registry::EffectDef, registry::EffectMetadata, schema::EffectSchema};
 use lumit_fx_macros::Effect;
 
-/// Light wrap's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "light_wrap",
@@ -66,7 +65,6 @@ pub struct LightWrap {
     #[slider(min = 0.0, max = 3.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,

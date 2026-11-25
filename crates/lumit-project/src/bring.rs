@@ -20,12 +20,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use uuid::Uuid;
 
-/// What [`bring`] worked out.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Brought {
     /// The new composition for each one asked for, in the order asked.
     pub comps: Vec<Uuid>,
-    /// What adds them and everything they place.
     pub ops: Vec<Op>,
 }
 
@@ -78,7 +76,6 @@ pub fn bring(
         added.push((item, value));
     }
 
-    // The names compositions have here, and each arrival's as it is given.
     let mut taken: BTreeSet<String> = doc
         .items
         .iter()
@@ -117,9 +114,6 @@ pub fn bring(
     Ok(Brought { comps, ops })
 }
 
-/// The items of `from` that `comps` need, by id, each as what it serialises
-/// to: the compositions themselves and every item one of them names, however
-/// deep the nesting goes. An id that names no composition refuses the call.
 pub(crate) fn needed(
     from: &Document,
     comps: &[Uuid],
@@ -189,7 +183,6 @@ fn same_file(a: &FootageItem, b: &FootageItem) -> bool {
         && a.colour_space == b.colour_space
 }
 
-/// Hand `f` every string in `value`.
 fn strings(value: &Value, f: &mut impl FnMut(&str)) {
     match value {
         Value::String(text) => f(text),
@@ -279,7 +272,6 @@ mod tests {
             .collect()
     }
 
-    /// Every id written anywhere in `items`, defined or only named.
     fn written(items: &[ProjectItem]) -> BTreeSet<String> {
         let mut found = BTreeSet::new();
         strings(&serde_json::to_value(items).unwrap(), &mut |text| {
@@ -290,18 +282,12 @@ mod tests {
         found
     }
 
-    /// Every id `items` define.
     fn owned(items: &[ProjectItem]) -> BTreeSet<String> {
         let mut ids = BTreeMap::new();
         defined(&serde_json::to_value(items).unwrap(), &mut ids);
         ids.into_keys().collect()
     }
 
-    /// The other project. Its first composition, Titles, has a layer of each
-    /// kind of thing a layer can point at: a nested composition, a solid, the
-    /// plate and the sky. The sky's layer has a parent and a matte, and the
-    /// last layer has an effect that names another layer. A third composition
-    /// is in the file and in nothing.
     fn other() -> Document {
         let mut doc = stress_document(&StressParams::TINY);
         let (comps, footage) = (ids_of(&doc, true), ids_of(&doc, false));
@@ -373,8 +359,6 @@ mod tests {
         doc
     }
 
-    /// The open project: Titles as it has become, under the ids it always
-    /// had, and the plate under an id and a path of its own.
     fn mine(other: &Document) -> Document {
         let (comps, footage) = (ids_of(other, true), ids_of(other, false));
         let Some(ProjectItem::Footage(plate)) = other.item(footage[2]) else {
@@ -393,9 +377,6 @@ mod tests {
 
     #[test]
     fn a_composition_comes_in_whole_and_names_only_its_own_copies() {
-        // The other project as its file gives it: saved, read, its footage
-        // found. The sky is on disk where the file says. The plate is not, so
-        // it is told by its fingerprint alone.
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("earlier.lum");
         save(&other(), &file).unwrap();
@@ -412,20 +393,14 @@ mod tests {
         let brought = bring(&before, &from, &[titles], "Before the regrade").unwrap();
         let after = store.commit(Op::Batch { ops: brought.ops }).unwrap();
 
-        // What was there is as it was, and nothing moved but the items and
-        // the one colour tag.
         let (had, new) = after.items.split_at(before.items.len());
         assert_eq!(had, before.items);
         let mut expected = before.clone();
         expected.items.clone_from(&after.items);
         expected.item_labels.clone_from(&after.item_labels);
         assert_eq!(*after, expected);
-        // The sky, Titles, the composition nested in it and the solid. Not
-        // the plate, which the project has, nor the composition in nothing.
         assert_eq!(new.len(), 4);
 
-        // Every id written in what came in is one it defines, or the plate's.
-        // None is the other file's, which are also the ids Titles has here.
         let (own, named) = (owned(new), written(new));
         let stray: Vec<&String> = named
             .difference(&own)
@@ -434,8 +409,6 @@ mod tests {
         assert!(stray.is_empty(), "names something outside: {stray:?}");
         assert!(named.is_disjoint(&written(&from.items)));
 
-        // The project has a Titles, so this one says where it came from. The
-        // composition nested in it has a name nothing here has, and keeps it.
         let comp = after.comp(brought.comps[0]).unwrap();
         assert_eq!(comp.name, "Titles (Before the regrade)");
         assert_eq!(after.item_label(comp.id), 3);
@@ -471,13 +444,9 @@ mod tests {
         assert_eq!(l[3].matte.map(|m| m.layer), Some(l[1].id));
         assert_eq!(l[4].effects[0].layer_ref("depth"), Some(l[2].id));
 
-        // One step back takes all of it away, and one forward brings it back.
         assert_eq!(*store.undo().unwrap().unwrap(), before);
         assert_eq!(store.redo().unwrap().unwrap(), after);
 
-        // A second time is a second copy that shares nothing with the first
-        // but footage. The sky is in the project now, so it is not added.
-        // Both names are taken by now, and the nested one's too.
         let again = bring(&after, &from, &[titles], "Before the regrade").unwrap();
         assert_ne!(again.comps, brought.comps);
         let twice = store.commit(Op::Batch { ops: again.ops }).unwrap();
@@ -494,8 +463,6 @@ mod tests {
             BTreeSet::from(["Titles (Before the regrade) 2", nested_again.as_str()])
         );
 
-        // Into a project with no Titles it keeps its name, which is the usual
-        // case: it is brought back because it was deleted.
         let alone = bring(&Document::new(), &from, &[titles], "Before the regrade").unwrap();
         let alone = DocumentStore::new(Document::new())
             .commit(Op::Batch { ops: alone.ops })
@@ -516,8 +483,6 @@ mod tests {
         );
     }
 
-    /// An id the other project has not got, and one that is footage there.
-    /// Neither gives any ops, so there is nothing to commit.
     #[test]
     fn an_id_that_names_no_composition_is_refused() {
         let from = other();

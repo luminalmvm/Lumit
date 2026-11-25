@@ -26,7 +26,7 @@ struct Params {
     edge: u32,          // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,       // 0..1, blended against `orig` (1 on the h-pass)
     matte_on: f32,      // 1 = scale the radius by the matte's luma, 2 = by `field`
-    _pad0: f32,         // was Invert; applied once at the seam
+    _pad0: f32,
     // Camera depth of field, the layer seen from the eye with the view down +z:
     // [0].xyz and [1].xyz are one texel's step along x and y, [2].xyz is where
     // texel (0, 0)'s corner is, [0].w is the aperture over twice the focus
@@ -126,7 +126,7 @@ fn finish(xy: vec2<i32>, r: i32, acc: vec4<f32>, wsum: f32) {
 //
 // The host dispatches (ceil(w / TILE), ceil(h / LINES)) for the horizontal
 // pass and (ceil(w / LINES), ceil(h / TILE)) for the vertical one.
-@compute @workgroup_size(128) // TILE
+@compute @workgroup_size(128)
 fn blur_pass(
     @builtin(workgroup_id) wg: vec3<u32>,
     @builtin(local_invocation_index) lid: u32,
@@ -137,7 +137,6 @@ fn blur_pass(
     let t = i32(lid);
     let first = i32(select(wg.y, wg.x, across_x)) * TILE;
     let line0 = i32(select(wg.x, wg.y, across_x)) * LINES;
-    // This thread's pixel on the first line, and the step to the next line.
     var xy0 = vec2<i32>(line0, first + t);
     var next = vec2<i32>(1, 0);
     if (across_x) {
@@ -242,7 +241,6 @@ fn blur_pass(
         }
         workgroupBarrier();
     }
-    // Without a matte the four lines share one sum of weights.
     if (fixed) {
         wsum = vec4<f32>(wsum.x);
     }

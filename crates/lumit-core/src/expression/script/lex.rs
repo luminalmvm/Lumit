@@ -1,5 +1,3 @@
-//! Turning expression text into tokens.
-
 /// One piece of a template literal: the text between the `${…}` holes, and the
 /// source inside each hole, which the parser reads as an expression of its own.
 #[derive(Debug, Clone, PartialEq)]
@@ -211,7 +209,6 @@ fn escape(chars: &[char], i: &mut usize, line: u32) -> Result<Option<char>, Stri
         'v' => Some('\u{b}'),
         'x' => return hex(i, 2),
         'u' => return hex(i, 4),
-        // A backslash before a line break carries the text on.
         '\n' | '\r' => None,
         other => Some(other),
     })

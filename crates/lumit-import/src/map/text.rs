@@ -1,6 +1,3 @@
-//! Text layers: the words and how they are set, and where After Effects'
-//! origin for them falls inside the raster Lumit lays them into.
-
 use lumit_core::model::TextDocument;
 
 use crate::capture::Property;
@@ -9,7 +6,6 @@ use crate::report::{ItemPath, Outcome, Reason};
 use super::props::{axis_of, child, display_name, group, match_name_of, still};
 use super::{linear_colour, Conv};
 
-/// The Source Text value as the script wrote it, or null when there is none.
 pub(super) fn source_text(props: &[Property]) -> &serde_json::Value {
     child(group(props, "ADBE Text Properties"), "ADBE Text Document")
         .and_then(|node| node.value.as_ref())
@@ -24,7 +20,6 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
 
     let parts = group(props, "ADBE Text Properties");
     let node = child(parts, "ADBE Text Document");
-    // The project file's own reader cannot decode a text document yet.
     if let Some(node) = node.filter(|node| node.unreadable.is_some()) {
         conv.report.row(
             path.property(display_name(node, "Source Text")),
@@ -101,8 +96,6 @@ pub(super) fn text(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> 
         expression: None,
         size: number("fontSize").unwrap_or(72.0),
         fill: colour("fillColor").unwrap_or(lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0])),
-        // After Effects' text-on-a-path rides in the layer's own mask list,
-        // which the importer does not read yet: an imported title lays straight.
         path: None,
         path_offset: lumit_core::anim::Property::zero(),
         animators: Vec::new(),

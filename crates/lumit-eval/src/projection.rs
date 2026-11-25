@@ -65,7 +65,6 @@ pub(super) fn feed_projections(
     Some(())
 }
 
-/// Where `layer` is at comp time `t`.
 fn feed_placed(
     h: &mut blake3::Hasher,
     doc: &Arc<Document>,
@@ -121,8 +120,6 @@ mod tests {
         }
     }
 
-    /// A Model layer holding its own picture, or two holding each other's,
-    /// still has a name, rather than overflowing the stack looking for it.
     #[test]
     fn a_hold_loop_has_a_name() {
         let mut doc = Document::new();
@@ -170,11 +167,6 @@ mod tests {
         assert!(named(&a, &b).is_some(), "holding each other");
     }
 
-    /// Moving a camera that isn't the comp's own moves what the model shows,
-    /// so a frame drawn before can't stand in for it. It isn't the active one
-    /// here because a layer above it is, and only its pose says what changed.
-    /// Under Hold, moving the model at the Hold frame does the same, with the
-    /// model where it was at the playhead.
     #[test]
     fn a_projecting_camera_names_the_frame() {
         let mut doc = Document::new();

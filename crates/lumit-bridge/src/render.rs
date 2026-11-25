@@ -33,9 +33,7 @@ use uuid::Uuid;
 /// calm terminal state for a machine with no GPU adapter (or a device that would
 /// not open): once there, every render returns null without retrying.
 enum Slot {
-    /// Not yet asked to render — the adapter has not been touched.
     Uninit,
-    /// Adapter acquisition or device open failed once; stay here.
     Failed,
     /// A live renderer, holding its GPU context, engines and decoder pool.
     /// Boxed: the renderer is far larger than the empty variants, so the enum
@@ -168,8 +166,6 @@ pub(crate) fn thumbnail(
     frame: u64,
     scale: f32,
 ) -> Option<(Vec<u8>, u32, u32)> {
-    // A picture read back off the graphics card is waited for, and the page
-    // can't wait. The browser build goes without thumbnails for now.
     if cfg!(target_arch = "wasm32") {
         return None;
     }
@@ -199,7 +195,6 @@ pub(crate) fn linear_still(
     }
     with_ready(|renderer| {
         renderer.sync_colour(doc);
-        // The comp's backdrop is not part of the shot.
         renderer.set_transparent_background(true);
         let out = renderer
             .render_preview_linear(doc, comp, frame, quality_for(scale))
@@ -246,7 +241,6 @@ fn still(
             stills.remove(at);
             return landed.ok().map(|rgba| (rgba, width, height));
         }
-        // A handful asked and never collected is as many as are kept.
         if stills.len() >= 16 {
             stills.remove(0);
         }
@@ -341,8 +335,6 @@ pub(crate) fn with_export_inputs(
 mod tests {
     use super::{preview_rung, quality_for};
 
-    /// A rung is never below what was asked for, so snapping can only ever make
-    /// the picture sharper than the request, never softer.
     #[test]
     fn a_rung_is_never_below_the_scale_it_was_asked_for() {
         let mut scale = 0.001_f32;
@@ -370,8 +362,6 @@ mod tests {
     /// That storm is what took the editor down; the ladder is what bounds it.
     #[test]
     fn a_seam_drag_asks_for_a_handful_of_sizes_not_one_per_layout() {
-        // A Viewer growing from a third of an HD comp to two thirds, a pixel of
-        // pointer movement at a time — the drag that was reported.
         let asked: Vec<f32> = (0..640).map(|i| 0.33 + i as f32 * 0.0005).collect();
         let mut raw: Vec<u32> = asked.iter().map(|s| (s * 1920.0).round() as u32).collect();
         raw.sort_unstable();
@@ -395,7 +385,6 @@ mod tests {
         );
     }
 
-    /// A scale that means nothing still renders something, and at full.
     #[test]
     fn a_nonsense_scale_falls_back_to_comp_resolution() {
         for bad in [0.0, -1.0, f32::NAN, f32::INFINITY] {

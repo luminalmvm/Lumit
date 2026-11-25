@@ -60,7 +60,6 @@ pub const CUBE_SIZE: usize = 65;
 /// signed, so 0.5 is linear zero. See [`Shaper::forward_signed`].
 pub const CURVE_DOMAIN: [f32; 2] = [0.0, 1.0];
 
-/// How scene-linear light is squeezed into the 0–1 a cube can index.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shaper {
     /// The lg2 allocation: `y = (log2(x + offset) − min) / (max − min)`.
@@ -69,8 +68,10 @@ pub enum Shaper {
         max_log2: f32,
         offset: f32,
     },
-    /// A plain linear squeeze, for a config whose space declares `allocation: uniform`.
-    Uniform { min: f32, max: f32 },
+    Uniform {
+        min: f32,
+        max: f32,
+    },
 }
 
 impl Shaper {
@@ -82,7 +83,6 @@ impl Shaper {
         offset: 0.003_906_25,
     };
 
-    /// Squeeze one linear value into `[0, 1]`.
     #[must_use]
     pub fn forward(&self, x: f32) -> f32 {
         let y = match *self {
@@ -140,7 +140,6 @@ impl Shaper {
         }
     }
 
-    /// And back: the map the bake walks to find each grid point's linear input.
     #[must_use]
     pub fn inverse_signed(&self, t: f32) -> f32 {
         let t = if t.is_nan() { 0.5 } else { t.clamp(0.0, 1.0) };
@@ -151,8 +150,6 @@ impl Shaper {
         }
     }
 
-    /// And back out again — the map the cube bake walks to find each grid
-    /// point's linear input.
     #[must_use]
     pub fn inverse(&self, y: f32) -> f32 {
         let y = if y.is_nan() { 0.0 } else { y.clamp(0.0, 1.0) };
@@ -167,7 +164,6 @@ impl Shaper {
     }
 }
 
-/// One stage of a factorised artefact.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stage {
     Curve(CurveStage),
@@ -188,7 +184,6 @@ pub enum Stage {
 pub struct CurveStage {
     /// Indexed over `[0, 1]` in **shaper space**, not in linear light.
     pub table: Curve,
-    /// The map from linear light to this table's index.
     pub shaper: Shaper,
 }
 
@@ -203,7 +198,6 @@ impl CurveStage {
     }
 }
 
-/// What a resolved chain bakes down to — the one thing the pipeline executes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Artefact {
     Factorised { stages: Vec<Stage> },
@@ -257,8 +251,6 @@ impl Artefact {
     }
 }
 
-/// Bake a resolved chain: factorised where the chain allows it, a shaper and a
-/// cube otherwise (§5.1).
 pub fn bake(chain: &Chain, shaper: Shaper) -> Result<Artefact> {
     if chain.is_factorable() {
         let factorised = factorise(chain)?;
@@ -273,8 +265,6 @@ pub fn bake(chain: &Chain, shaper: Shaper) -> Result<Artefact> {
     bake_cube(chain, shaper)
 }
 
-/// The factorised form: consecutive channel-independent steps collapse into one
-/// sampled curve, consecutive matrices multiply into one matrix.
 pub fn factorise(chain: &Chain) -> Result<Artefact> {
     let mut stages: Vec<Stage> = Vec::new();
     let mut pending: Vec<Op> = Vec::new();
@@ -319,8 +309,6 @@ pub fn factorise(chain: &Chain) -> Result<Artefact> {
     Ok(Artefact::Factorised { stages })
 }
 
-/// The shaper + cube form: walk the grid, undo the shaper to find each point's
-/// linear input, and record what the chain makes of it.
 pub fn bake_cube(chain: &Chain, shaper: Shaper) -> Result<Artefact> {
     let last = (CUBE_SIZE - 1) as f32;
     let mut data = Vec::with_capacity(CUBE_SIZE * CUBE_SIZE * CUBE_SIZE);
@@ -387,7 +375,6 @@ impl VendoredArtefact {
         Ok(s)
     }
 
-    /// Read one back.
     pub fn from_text(what: &str, text: &str) -> Result<Self> {
         let bad = |reason: String| ColourError::Parse {
             what: what.to_string(),
@@ -551,14 +538,11 @@ mod tests {
 
     #[test]
     fn linear_zero_lands_on_a_grid_sample_rather_than_between_two() {
-        // Black is the one value a display transform must not smear, so the
-        // sample count is odd and the signed shaper puts zero at exactly 0.5.
         assert_eq!(CURVE_SAMPLES % 2, 1);
         assert_eq!(CURVE_SHAPER.forward_signed(0.0), 0.5);
         let index = 0.5 * (CURVE_SAMPLES - 1) as f32;
         assert_eq!(index, index.floor(), "zero must be a grid point");
 
-        // And it goes through the bake exactly, not nearly.
         let chain = srgb_chain();
         let baked = bake(&chain, Shaper::DEFAULT).expect("bakes");
         assert_eq!(baked.eval([0.0; 3]), chain.eval([0.0; 3]));
@@ -566,8 +550,6 @@ mod tests {
 
     #[test]
     fn a_chain_that_will_not_fit_the_fixed_shape_takes_the_cube_instead() {
-        // Curve, matrix, curve, matrix: factorable on paper, but more stages
-        // than the render passes execute, so the bake picks the other form.
         let curve = Op::Exponent {
             exp: [2.0; 3],
             dir: Direction::Forward,
@@ -582,14 +564,11 @@ mod tests {
             matches!(baked, Artefact::ShaperCube { .. }),
             "expected the cube form, got {baked:?}"
         );
-        // And everything the passes do execute reports its three slots.
         let fitted = bake(&srgb_chain(), Shaper::DEFAULT).expect("bakes");
         let (pre, _, post) = fitted.fixed_shape().expect("fits");
         assert!(pre.is_some() && post.is_none());
     }
 
-    /// A chain that mixes channels, so it cannot factorise — and smooth, so
-    /// §5.4's in-domain bound is the thing being measured rather than a clamp.
     fn mixing_chain() -> Chain {
         Chain::new(vec![Op::Cdl {
             params: CdlParams {
@@ -602,9 +581,6 @@ mod tests {
         }])
     }
 
-    /// The shape a real view transform has: a primaries matrix, a smooth tone
-    /// curve that brings scene light into 0–1, then a display encode. No hard
-    /// corners, output bounded — which is what §5.4's bound is stated for.
     fn view_chain() -> Chain {
         let n = 4096;
         let tone: Vec<[f32; 3]> = (0..n)
@@ -650,8 +626,6 @@ mod tests {
         // scene-linear inputs inside the shaper's domain — neutrals and the
         // ordinary colours a picture is mostly made of.
         let chain = view_chain();
-        // The chain factorises on paper (matrix, curve, curve), so the cube is
-        // asked for by name: this test is about the cube form's own error.
         let baked = bake_cube(&chain, Shaper::DEFAULT).expect("bakes");
         let neutrals = (0..=200).map(|i| {
             let x = 32.0 * i as f32 / 200.0;
@@ -669,8 +643,6 @@ mod tests {
 
     #[test]
     fn baking_twice_gives_the_same_bytes() {
-        // Determinism (docs/14 §3): nothing in the bake reads a clock, a hash
-        // order or a thread, so two bakes of one chain are the same table.
         let chain = mixing_chain();
         let a = bake(&chain, Shaper::DEFAULT).expect("bakes");
         let b = bake(&chain, Shaper::DEFAULT).expect("bakes");

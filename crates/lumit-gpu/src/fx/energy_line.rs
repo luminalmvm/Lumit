@@ -1,7 +1,3 @@
-//! Energy line's passes (`fx_energy_line.wgsl`): the core from the pieces the
-//! host laid out, the shared exponential halo over it, then the light laid
-//! over the picture.
-
 use std::sync::{Mutex, OnceLock};
 
 use crate::{compiling::Compiling, GpuContext};

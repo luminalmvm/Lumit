@@ -55,7 +55,6 @@ pub const MATTE_KEY_GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// Matte key's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "matte_key",
@@ -272,7 +271,6 @@ pub struct MatteKey {
     #[colour(default = [0.5, 0.5, 0.5, 1.0], max = 4.0)]
     pub replace_colour: [f32; 4],
 
-    /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
         max = 100.0,
@@ -328,15 +326,12 @@ impl MatteKey {
     /// id.
     pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
 
-    /// This instance's raster factor, read back out of a resolved bag so no
-    /// caller has to know the id.
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
     }
 }
 
-/// Matte key's behaviour.
 pub struct MatteKeyDef;
 
 impl EffectDef for MatteKeyDef {
@@ -361,8 +356,6 @@ impl EffectDef for MatteKeyDef {
         cpu::matte_key_spatial(rgba, w, h, &MatteKey::read(p).packed(), &blank, &blank);
     }
 
-    /// The raster factor, so the garbage mattes are filled where their masks
-    /// are drawn.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(MatteKey::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }

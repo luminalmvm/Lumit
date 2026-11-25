@@ -23,44 +23,32 @@ use serde_json::Value;
 use uuid::Uuid;
 use web_time::{SystemTime, UNIX_EPOCH};
 
-/// The longest two of a person's edits can be apart, in seconds, and still be
-/// one sitting.
 const GAP: u64 = 10 * 60;
 
-/// The most sittings kept. The oldest go first.
 const SITTINGS: usize = 200;
 
-/// The most compositions one sitting is said to have touched.
 const COMPS: usize = 32;
 
 /// The longest name kept, in characters, which is what a person's name is
 /// cut to everywhere in a shared project.
 const NAME: usize = 64;
 
-/// The most notes kept. The oldest go first.
 const NOTES: usize = 200;
 
-/// The longest a note's words are, in characters.
 pub const NOTE_LENGTH: usize = 500;
 
-/// The most notes one batch carries.
 pub(crate) const NOTES_A_BATCH: usize = 8;
 
-/// Some words a person left in a project kept online, with where they were
-/// when they wrote them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     /// Tells one note from another, so that one sent twice is kept once.
     pub id: Uuid,
-    /// Whose it is, as [`Sitting::who`] says whose a sitting is.
     pub who: Uuid,
     pub name: String,
     /// When it was written, by the clock of the machine it was written on,
     /// in seconds since 1970.
     pub at: u64,
     pub text: String,
-    /// The composition its writer had open, where their playhead was in
-    /// it, and the layer they had chosen, for each that there was.
     #[serde(default)]
     pub comp: Option<Uuid>,
     #[serde(default)]
@@ -70,7 +58,6 @@ pub struct Note {
     /// Where it stands in the order. 0 while it waits to be sent.
     #[serde(default)]
     pub last: u64,
-    /// It came while this machine was catching up, as [`Sitting::new`].
     #[serde(skip)]
     pub new: bool,
     /// The note this one takes down, when that is all it is for. It has no
@@ -82,7 +69,6 @@ pub struct Note {
 }
 
 impl Note {
-    /// Cut down to size, whoever wrote it, and standing at `last`.
     fn tidied(mut self, last: u64) -> Note {
         self.name = self.name.chars().take(NAME).collect();
         self.text = self.text.chars().take(NOTE_LENGTH).collect();
@@ -125,8 +111,6 @@ pub(crate) fn note(list: &mut Vec<Note>, note: Note) {
     }
 }
 
-/// The notes as a snapshot at `seq` holds them, as [`stored`] reads the
-/// sittings.
 pub(crate) fn stored_notes(list: Option<Value>, seq: u64) -> Vec<Note> {
     let list = list.and_then(|list| serde_json::from_value::<Vec<Note>>(list).ok());
     let mut list = list.unwrap_or_default();
@@ -142,7 +126,6 @@ pub(crate) fn stored_notes(list: Option<Value>, seq: u64) -> Vec<Note> {
     stored
 }
 
-/// One person's edits at one sitting.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sitting {
     /// Whose it is: the id of their own copy of the project. A name does not
@@ -157,7 +140,6 @@ pub struct Sitting {
     /// The compositions the edits were in, in the order they were first
     /// touched.
     pub comps: Vec<Uuid>,
-    /// Where the last of its edits stands in the order.
     pub last: u64,
     /// It has edits this machine was not there for: they came while it was
     /// catching up, on joining, opening its copy again or coming back from
@@ -166,8 +148,6 @@ pub struct Sitting {
     pub new: bool,
 }
 
-/// Who made a batch and when, by its own account, and the compositions its
-/// edits name.
 #[derive(Default)]
 pub(crate) struct By {
     pub(crate) who: Uuid,
@@ -196,7 +176,6 @@ impl By {
     }
 }
 
-/// This machine's clock, in seconds since 1970.
 pub(crate) fn now() -> u64 {
     let since = SystemTime::now().duration_since(UNIX_EPOCH);
     since.map_or(0, |since| since.as_secs())
@@ -283,7 +262,6 @@ pub(crate) fn stored(list: Option<Value>, seq: u64) -> Vec<Sitting> {
     list
 }
 
-/// The list on one machine, and how much of it the person there has seen.
 #[derive(Default)]
 pub(crate) struct Activity {
     /// Oldest first, in the order the sittings began in.
@@ -291,7 +269,6 @@ pub(crate) struct Activity {
     /// How far along the order the person here has seen. Kept with the
     /// copy, so that it opens knowing what is new since.
     pub(crate) seen: u64,
-    /// The notes people have left, oldest first, as the order has them.
     pub(crate) notes: Vec<Note>,
     /// Notes written here that the order has not got yet, oldest first.
     /// They wait while this machine is away, and with a copy that closes.
@@ -335,7 +312,6 @@ impl Activity {
         self.keep_up(head);
     }
 
-    /// Take in the notes of a batch as it happens, standing at `last`.
     pub(crate) fn noted(&mut self, notes: Vec<Note>, last: u64) {
         for one in notes {
             note(&mut self.notes, one);
@@ -352,7 +328,6 @@ impl Activity {
         room
     }
 
-    /// The first `count` notes waiting went into the order at `head`.
     pub(crate) fn sent(&mut self, count: usize, head: u64) {
         let sent: Vec<Note> = self
             .waiting
@@ -364,7 +339,6 @@ impl Activity {
         );
     }
 
-    /// The person has been shown the lists, with the machine at `head`.
     pub(crate) fn see(&mut self, head: u64) {
         for sitting in &mut self.list {
             sitting.new = false;
@@ -375,8 +349,6 @@ impl Activity {
         self.seen = self.seen.max(head);
     }
 
-    /// With nothing new waiting to be seen, the person is as far along as
-    /// the machine is.
     fn keep_up(&mut self, head: u64) {
         let new = self.list.iter().any(|sitting| sitting.new);
         if !new && !self.notes.iter().any(|note| note.new) {

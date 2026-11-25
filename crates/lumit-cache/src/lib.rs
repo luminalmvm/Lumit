@@ -62,12 +62,8 @@ pub struct ByteLru<K, V> {
     budget: usize,
     used: usize,
     tick: u64,
-    /// Evicted entries the owner asked to see ([`ByteLru::collect_evictions`]),
-    /// waiting to be drained. Empty — and never filled — unless it did.
     evicted: Vec<(K, V, u32)>,
     collect_evicted: bool,
-    /// The governor's account of what this store holds, once somebody has
-    /// registered it ([`ByteLru::account_against`]).
     account: Option<Account>,
 }
 
@@ -141,9 +137,6 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         self.resync();
     }
 
-    /// How close the tier this store is accounted in is to its ceiling, or
-    /// `None` when nobody has registered it. The reading the degradation ladder
-    /// steps on (docs/13 §4).
     #[must_use]
     pub fn pressure(&self) -> Option<lumit_budget::Pressure> {
         self.account.as_ref().map(|a| a.ledger.pressure(a.tier))
@@ -173,8 +166,6 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         if want < have {
             match account.held.as_mut() {
                 Some(held) if want > 0 => held.shrink_to(want),
-                // Nothing held any more, so nothing to hold it with: dropping
-                // the reservation gives the whole of it back at once.
                 _ => drop(account.held.take()),
             }
             return;
@@ -221,8 +212,6 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         std::mem::take(&mut self.evicted)
     }
 
-    /// The highest-scoring evictable (non-pinned) key, or None when every
-    /// remaining entry is pinned. O(n) scan (see the type's note).
     fn victim(&self) -> Option<K> {
         let now = self.tick;
         self.map
@@ -250,12 +239,10 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         }
     }
 
-    /// Evict non-pinned entries by eviction score until within budget, or until
-    /// only pinned entries remain (then stop — a pin is never dropped).
     fn evict_to_fit(&mut self) {
         while self.used > self.budget {
             let Some(victim) = self.victim() else {
-                break; // only pins left; accept the bounded overage (§5.3)
+                break;
             };
             self.evict(&victim);
         }
@@ -270,8 +257,6 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         })
     }
 
-    /// Insert with a uniform recompute cost (size-aware LRU). See
-    /// [`Self::insert_with_cost`] to supply a measured cost.
     pub fn insert(&mut self, key: K, value: V) -> bool {
         self.insert_with_cost(key, value, 1)
     }
@@ -293,7 +278,7 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         // Make room before admitting, so the newcomer is never its own victim.
         while self.used + bytes > self.budget {
             let Some(victim) = self.victim() else {
-                break; // only pins remain; accept the bounded overage (§5.3)
+                break;
             };
             self.evict(&victim);
         }
@@ -311,7 +296,6 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         true
     }
 
-    /// Take an entry out and hand its value over.
     pub fn remove(&mut self, key: &K) -> Option<V> {
         let entry = self.map.remove(key)?;
         self.used -= entry.bytes;
@@ -326,8 +310,6 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         self.map.contains_key(key)
     }
 
-    /// Change the byte budget, evicting by eviction score until the store fits
-    /// (Settings → Performance resizes the RAM cache live). Pins are respected.
     pub fn set_budget(&mut self, budget_bytes: usize) {
         self.budget = budget_bytes;
         self.evict_to_fit();
@@ -362,12 +344,10 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         self.pins.insert(key);
     }
 
-    /// Lift a pin, letting the key be evicted again. Idempotent.
     pub fn unpin(&mut self, key: &K) {
         self.pins.remove(key);
     }
 
-    /// Whether a key is currently pinned (present or not).
     pub fn is_pinned(&self, key: &K) -> bool {
         self.pins.contains(key)
     }
@@ -437,7 +417,6 @@ mod tests {
         let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
         assert!(lru.insert("a", v(40)));
         assert!(lru.insert("b", v(40)));
-        // Touch "a" so "b" is the oldest.
         assert!(lru.get(&"a").is_some());
         assert!(lru.insert("c", v(40)));
         assert!(lru.used_bytes() <= 100);
@@ -446,10 +425,6 @@ mod tests {
         assert!(lru.get(&"c").is_some());
     }
 
-    /// **The governor's ledger follows the contents** (docs/13 §3: "the ledger
-    /// MUST equal reality"), through every way they can change — an insert, an
-    /// eviction that insert caused, a replacement, a lowered budget, and the
-    /// store being emptied.
     #[test]
     fn an_accounted_store_tells_the_ledger_exactly_what_it_holds() {
         let ledger = lumit_budget::Ledger::with_budgets(10_000, 10_000);
@@ -461,7 +436,6 @@ mod tests {
         assert!(lru.insert("a", v(60)));
         assert_eq!(used(), 60);
 
-        // The insert that evicts: the ledger is told the net, not the gross.
         assert!(lru.insert("b", v(60)));
         assert_eq!(lru.used_bytes(), 60, "\"a\" made room for \"b\"");
         assert_eq!(used(), 60);
@@ -479,9 +453,6 @@ mod tests {
         assert_eq!(used(), 0, "and emptying it gives back the whole of it");
     }
 
-    /// The ladder's second rung, as the store itself: about half goes, by the
-    /// store's own order, the budget comes straight back, and an empty store
-    /// answers that nothing went.
     #[test]
     fn evicting_the_cold_half_gives_back_about_half_and_keeps_the_budget() {
         let mut lru: ByteLru<u32, Vec<u8>> = ByteLru::new(1000);
@@ -496,29 +467,22 @@ mod tests {
         assert!(lru.insert(99, v(100)), "and the store fills again");
     }
 
-    /// docs §5.3 "cheap-to-recompute": a dear entry resists eviction even when
-    /// it is the *older* one. "dear" is inserted first (so it is staler), yet
-    /// its high recompute cost keeps it while the cheap, newer entry goes.
     #[test]
     fn cost_aware_eviction_keeps_the_dear_frame() {
         let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
         assert!(lru.insert_with_cost("dear", v(40), 100));
         assert!(lru.insert_with_cost("cheap", v(40), 1));
-        assert!(lru.insert("c", v(40))); // forces one eviction
+        assert!(lru.insert("c", v(40)));
         assert!(
             lru.contains_key(&"dear") && !lru.contains_key(&"cheap"),
             "the cheap-to-recompute frame is evicted before the dear one"
         );
     }
 
-    /// docs §5.3's demotion ladder needs eviction to be *visible*: the tier
-    /// below cannot take a frame it never hears about. Opt-in, so a store whose
-    /// owner does not drain keeps behaving exactly as before.
     #[test]
     fn evictions_can_be_collected_for_the_tier_below() {
         let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
         lru.collect_evictions();
-        // Equal cost, so plain staleness decides: "a" is the stalest and goes.
         assert!(lru.insert_with_cost("a", v(40), 7));
         assert!(lru.insert_with_cost("b", v(40), 7));
         lru.get(&"b");
@@ -535,41 +499,33 @@ mod tests {
         );
         assert!(lru.take_evicted().is_empty(), "drained once, not twice");
 
-        // Lowering the budget is an eviction too — the frames squeezed out
-        // should fall downstairs rather than vanish.
         lru.set_budget(40);
         assert_eq!(lru.take_evicted().len(), 1);
 
-        // Clearing on purpose is NOT: the user asked for the tier to be empty.
         assert!(lru.insert("d", v(40)));
-        lru.take_evicted(); // "d" displaced the survivor; that is an eviction
+        lru.take_evicted();
         lru.clear();
         assert!(
             lru.take_evicted().is_empty(),
             "an explicit clear means gone, not demoted"
         );
 
-        // Replacing a key is a replacement, not an eviction.
         assert!(lru.insert("e", v(20)));
         assert!(lru.insert("e", v(30)));
         assert!(lru.take_evicted().is_empty());
     }
 
-    /// docs §5.3 pinning: a pinned key is never the victim, so the eviction
-    /// falls on a non-pinned entry instead — even though the pinned one would
-    /// otherwise be chosen (it is the stalest here).
     #[test]
     fn pinned_entries_survive_eviction() {
         let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
         assert!(lru.insert("a", v(40)));
         assert!(lru.insert("b", v(40)));
-        lru.pin("a"); // "a" is the stalest, the natural victim
+        lru.pin("a");
         assert!(lru.insert("c", v(40)));
         assert!(
             lru.contains_key(&"a") && !lru.contains_key(&"b"),
             "the pin protects the stalest frame; a non-pinned one goes instead"
         );
-        // Lifting the pin lets it be evicted normally again.
         lru.unpin(&"a");
         assert!(lru.insert("d", v(40)));
         assert!(!lru.contains_key(&"a"), "unpinned, the stale frame can go");

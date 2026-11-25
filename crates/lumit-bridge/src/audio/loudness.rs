@@ -1,5 +1,3 @@
-//! The master's loudness, for the desk to read and to start afresh.
-
 use super::{lock, Device};
 use lumit_audio::meter::LoudnessReading;
 
@@ -19,7 +17,6 @@ pub(crate) fn loudness() -> LoudnessReading {
     }
 }
 
-/// Start the integrated loudness and the true peak afresh.
 pub(crate) fn reset_loudness() {
     let st = lock();
     if let Device::Ready { meters, .. } = &st.device {

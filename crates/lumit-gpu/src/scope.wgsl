@@ -24,10 +24,10 @@ struct Params {
     grid: u32,       // always GRID; carried so the shader reads no literal size
     n_cols: u32,     // sampled columns = ceil(width / sx)
     n_rows: u32,     // sampled rows    = ceil(height / sy)
-    sx: u32,         // x sample stride
-    sy: u32,         // y sample stride
-    width: u32,      // source width in pixels
-    height: u32,     // source height in pixels
+    sx: u32,
+    sy: u32,
+    width: u32,
+    height: u32,
     count_len: u32,  // populated length of `counts` for this kind
     _p0: u32,
     _p1: u32,
@@ -39,7 +39,6 @@ struct Params {
     blue: vec4<f32>,
 };
 
-// ---- bin + peak bindings (read-write atomics) -----------------------------
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var<storage, read_write> counts: array<atomic<u32>>;
 @group(0) @binding(2) var<storage, read_write> peak: atomic<u32>;
@@ -61,7 +60,6 @@ fn luma8(rgb: vec3<u32>) -> f32 {
     return (0.2126 * f32(rgb.x) + 0.7152 * f32(rgb.y) + 0.0722 * f32(rgb.z)) / 255.0;
 }
 
-// The parade's three cells: each channel gets a third of the columns.
 const THIRD: u32 = GRID / 3u;
 
 // Map a 0..1 value to a grid row: 1.0 (bright) at row 0, 0.0 at the bottom.
@@ -114,11 +112,11 @@ fn bin(@builtin(global_invocation_id) gid: vec3<u32>) {
     let bx = min((x * GRID) / p.width, GRID - 1u);
 
     switch (p.kind) {
-        case 0u: { // luma waveform
+        case 0u: {
             let by = value_row(luma8(rgb));
             atomicAdd(&counts[by * GRID + bx], 1u);
         }
-        case 1u: { // rgb waveform: one grid per channel
+        case 1u: {
             for (var c = 0u; c < 3u; c = c + 1u) {
                 let by = value_row(f32(rgb[c]) / 255.0);
                 atomicAdd(&counts[c * GRID * GRID + by * GRID + bx], 1u);
@@ -143,7 +141,7 @@ fn bin(@builtin(global_invocation_id) gid: vec3<u32>) {
                 atomicAdd(&counts[u32(py) * GRID + u32(px)], 1u);
             }
         }
-        case 6u: { // CIE 1931 xy
+        case 6u: {
             let c = chromaticity(rgb);
             if (c.z >= XY_DARK) {
                 let fx = (c.x - XY_MIN) / XY_SPAN * f32(GRID);
@@ -153,18 +151,18 @@ fn bin(@builtin(global_invocation_id) gid: vec3<u32>) {
                 }
             }
         }
-        case 4u: { // parade: each channel's waveform in its own third
+        case 4u: {
             let col = min((x * THIRD) / p.width, THIRD - 1u);
             for (var c = 0u; c < 3u; c = c + 1u) {
                 let by = value_row(f32(rgb[c]) / 255.0);
                 atomicAdd(&counts[by * GRID + c * THIRD + col], 1u);
             }
         }
-        case 5u: { // luma histogram: one count per brightness
+        case 5u: {
             let bin_idx = min(u32(floor(luma8(rgb) * 255.0 + 0.5)), GRID - 1u);
             atomicAdd(&counts[bin_idx], 1u);
         }
-        default: { // histogram: per-channel byte counts
+        default: {
             for (var c = 0u; c < 3u; c = c + 1u) {
                 let bin_idx = (rgb[c] * (GRID - 1u)) / 255u;
                 atomicAdd(&counts[c * GRID + bin_idx], 1u);
@@ -221,7 +219,7 @@ fn colourise(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= GRID || gid.y >= GRID) {
         return;
     }
-    let cx = gid.x; // column / histogram bin
+    let cx = gid.x;
     let cy = gid.y; // row (0 = top)
     let cell = cy * GRID + cx;
     let peak_v = peak_ro[0];
@@ -229,39 +227,39 @@ fn colourise(@builtin(global_invocation_id) gid: vec3<u32>) {
     var px = vec3<u32>(u32(cp.bg.x), u32(cp.bg.y), u32(cp.bg.z));
 
     switch (cp.kind) {
-        case 0u: { // luma waveform
+        case 0u: {
             let f = intensity(counts_ro[cell], peak_v);
             if (f > 0.0) { add_trace(&px, cp.trace, f); }
         }
-        case 1u: { // rgb waveform
+        case 1u: {
             let cols = array<vec4<f32>, 3>(cp.red, cp.green, cp.blue);
             for (var c = 0u; c < 3u; c = c + 1u) {
                 let f = intensity(counts_ro[c * GRID * GRID + cell], peak_v);
                 if (f > 0.0) { add_trace(&px, cols[c], f); }
             }
         }
-        case 2u, 6u, 7u: { // vectorscope and CIE xy: one point per cell
+        case 2u, 6u, 7u: {
             let f = intensity(counts_ro[cell], peak_v);
             if (f > 0.0) { add_trace(&px, cp.trace, f); }
         }
-        case 4u: { // parade: the cell says which channel's colour
+        case 4u: {
             let cols = array<vec4<f32>, 3>(cp.red, cp.green, cp.blue);
             let c = min(cx / THIRD, 2u);
             let f = intensity(counts_ro[cell], peak_v);
             if (f > 0.0) { add_trace(&px, cols[c], f); }
         }
-        case 5u: { // luma histogram: one filled column per bin
+        case 5u: {
             let h = u32(floor(intensity(counts_ro[cx], peak_v) * (f32(GRID) - 1.0) + 0.5));
             if (cy + h >= GRID - 1u) {
                 add_trace(&px, cp.trace, 0.7);
             }
         }
-        default: { // histogram: column height ∝ count, filled bottom-up
+        default: {
             let cols = array<vec4<f32>, 3>(cp.red, cp.green, cp.blue);
             for (var c = 0u; c < 3u; c = c + 1u) {
                 let count = counts_ro[c * GRID + cx];
                 let h = u32(floor(intensity(count, peak_v) * (f32(GRID) - 1.0) + 0.5));
-                if (cy + h >= GRID - 1u) { // cy >= (GRID-1) - h
+                if (cy + h >= GRID - 1u) {
                     add_trace(&px, cols[c], 0.7);
                 }
             }
